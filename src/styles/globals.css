@@ -1,0 +1,281 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Premium black-gold fintech theme - DARK ONLY */
+    --base-900: 220 15% 6%;
+    --base-800: 220 12% 10%;
+    --base-700: 220 10% 15%;
+    --muted-700: 220 8% 25%;
+    
+    --gold: 45 90% 55%;
+    --gold-600: 45 85% 48%;
+    --gold-muted: 45 40% 35%;
+    
+    --accent-emerald: 142 76% 45%;
+    --accent-red: 0 72% 55%;
+    
+    --background: var(--base-900);
+    --foreground: 0 0% 98%;
+
+    --card: var(--base-800);
+    --card-foreground: 0 0% 98%;
+
+    --popover: var(--base-800);
+    --popover-foreground: 0 0% 98%;
+
+    --primary: var(--gold);
+    --primary-foreground: var(--base-900);
+
+    --secondary: var(--base-700);
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: var(--muted-700);
+    --muted-foreground: 0 0% 70%;
+
+    --accent: var(--gold);
+    --accent-foreground: var(--base-900);
+
+    --destructive: var(--accent-red);
+    --destructive-foreground: 0 0% 98%;
+
+    --border: var(--base-700);
+    --input: var(--base-700);
+    --ring: var(--gold);
+
+    --radius: 1rem;
+
+    --sidebar-background: var(--base-800);
+    --sidebar-foreground: 0 0% 92%;
+    --sidebar-primary: var(--gold);
+    --sidebar-primary-foreground: var(--base-900);
+    --sidebar-accent: var(--base-700);
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: var(--base-700);
+    --sidebar-ring: var(--gold);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  
+  /* Fix for white background issues */
+  html,
+  body,
+  #root {
+    background-color: hsl(var(--base-900));
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .shadow-premium {
+    box-shadow: 
+      0 10px 40px -10px hsl(var(--base-900) / 0.8),
+      0 0 80px -20px hsl(var(--gold) / 0.1);
+  }
+  
+  .shadow-luxury {
+    box-shadow: 
+      0 20px 60px -15px hsl(var(--base-900) / 0.9),
+      0 0 100px -30px hsl(var(--gold) / 0.15),
+      inset 0 1px 0 hsl(var(--gold) / 0.05);
+  }
+  
+  .shadow-glow-gold {
+    box-shadow: 
+      0 0 30px hsl(var(--gold) / 0.2),
+      0 0 60px hsl(var(--gold) / 0.1);
+  }
+  
+  .transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .hover-glow {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .hover-glow:hover {
+    box-shadow: 
+      0 0 30px hsl(var(--gold) / 0.4), 
+      0 0 60px hsl(var(--gold) / 0.2),
+      0 10px 40px -10px hsl(var(--gold) / 0.3);
+    transform: translateY(-2px);
+  }
+  
+  /* ✅ FIXED: Removed backdrop-filter and made background solid */
+  .glass-card {
+    background: linear-gradient(135deg, hsl(var(--base-800)) 0%, hsl(var(--base-900)) 100%);
+    border: 1px solid hsl(var(--gold) / 0.1);
+  }
+  
+  .gradient-shine {
+    background: linear-gradient(
+      135deg,
+      transparent 0%,
+      hsl(var(--gold) / 0.05) 40%,
+      hsl(var(--gold) / 0.1) 50%,
+      hsl(var(--gold) / 0.05) 60%,
+      transparent 100%
+    );
+    background-size: 200% 200%;
+    animation: shine 3s ease-in-out infinite;
+  }
+  
+  @keyframes shine {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  
+  .text-gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(var(--gold-600)) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  
+  .border-gradient-gold {
+    border: 1px solid transparent;
+    background: linear-gradient(var(--base-900), var(--base-900)) padding-box,
+                linear-gradient(135deg, hsl(var(--gold) / 0.5), hsl(var(--gold) / 0.1)) border-box;
+  }
+}
+
+/* ============================================
+   PREMIUM SCROLLBAR STYLING
+   ============================================ */
+
+/* Modern scrollbar for all elements */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--gold) / 0.3) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.4) 0%,
+    hsl(var(--gold) / 0.25) 50%,
+    hsl(var(--gold) / 0.4) 100%
+  );
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.6) 0%,
+    hsl(var(--gold) / 0.45) 50%,
+    hsl(var(--gold) / 0.6) 100%
+  );
+  box-shadow: 0 0 8px hsl(var(--gold) / 0.3);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.8) 0%,
+    hsl(var(--gold) / 0.65) 50%,
+    hsl(var(--gold) / 0.8) 100%
+  );
+}
+
+/* Custom scrollbar class for extra premium feel */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--base-900) / 0.5);
+  border-radius: 12px;
+  margin: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.5) 0%,
+    hsl(var(--gold) / 0.3) 50%,
+    hsl(var(--gold) / 0.5) 100%
+  );
+  border-radius: 12px;
+  border: 2px solid hsl(var(--base-900) / 0.5);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.7) 0%,
+    hsl(var(--gold) / 0.5) 50%,
+    hsl(var(--gold) / 0.7) 100%
+  );
+  box-shadow: 
+    0 0 10px hsl(var(--gold) / 0.4),
+    inset 0 0 5px hsl(var(--gold) / 0.2);
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
+   SIDEBAR STYLING
+   ============================================ */
+
+/* Sidebar should use base-800 background */
+aside,
+nav[class*="flex-col"] {
+  background-color: hsl(var(--sidebar-background));
+}
+
+/* Sidebar hover and active states */
+aside a:hover,
+aside button:hover,
+nav[class*="flex-col"] a:hover,
+nav[class*="flex-col"] button:hover {
+  background-color: hsl(var(--gold) / 0.05);
+}
+
+aside a.active,
+aside button.active,
+nav[class*="flex-col"] a.active,
+nav[class*="flex-col"] button.active {
+  background-color: hsl(var(--gold) / 0.1);
+  border-left: 2px solid hsl(var(--gold));
+}

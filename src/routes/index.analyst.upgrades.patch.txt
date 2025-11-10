@@ -1,0 +1,3 @@
+// Add the following lines where you register routers (usually in server/src/index.ts or server/src/routes/index.ts)
+// import analystUpgradesRouter from "./analyst.upgrades";
+// app.use("/api/analyst/upgrades", analystUpgradesRouter);

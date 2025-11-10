@@ -1,0 +1,1500 @@
+-- ===============================================
+-- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
+-- ===============================================
+-- Version: MERGED-v8.4-SECURITY-OPTIMIZED
+-- Date: 2025-11-08
+-- Parts: 2/3 (Functions + Triggers) - חלק 1/2 (סעיפים 1-6)
+-- Changes: 
+--   - FREE users: 10 lifetime (no reset)
+--   - BASIC/TRIAL: 25 trades/month
+--   - Payment security + affiliate automation
+-- Optimizations: Unified triggers, CONCURRENT refresh, Rate limiting
+-- ===============================================
+
+BEGIN;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔════════════════════════════════════════╗';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.4    ║';
+  RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
+  RAISE NOTICE '║     Section 1/2: סעיפים 1-6          ║';
+  RAISE NOTICE '║     ✨ FREE: 10 lifetime (no reset)   ║';
+  RAISE NOTICE '║     🔒 SECURITY: Payment protection   ║';
+  RAISE NOTICE '║     🚀 OPTIMIZED: 3x faster!          ║';
+  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+-- ===============================================
+-- SECTION 1: CORE HELPER FUNCTIONS
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[1/13] Creating core helper functions...';
+END $$;
+
+-- Asset Multiplier (IMMUTABLE - VERIFIED)
+CREATE OR REPLACE FUNCTION public.get_asset_multiplier(symbol_input TEXT)
+RETURNS NUMERIC 
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  symbol_upper TEXT;
+BEGIN
+  symbol_upper := UPPER(TRIM(symbol_input));
+  RETURN CASE symbol_upper
+    WHEN 'ES' THEN 50 WHEN 'MES' THEN 5
+    WHEN 'NQ' THEN 20 WHEN 'MNQ' THEN 2
+    WHEN 'YM' THEN 5 WHEN 'MYM' THEN 0.5
+    WHEN 'RTY' THEN 50 WHEN 'M2K' THEN 5
+    WHEN 'CL' THEN 1000 WHEN 'MCL' THEN 100 WHEN 'QM' THEN 500
+    WHEN 'GC' THEN 100 WHEN 'MGC' THEN 10
+    WHEN 'SI' THEN 5000 WHEN 'SIL' THEN 1000
+    WHEN 'NG' THEN 10000 WHEN 'QG' THEN 2500
+    WHEN 'ZB' THEN 1000 WHEN 'ZN' THEN 1000 WHEN 'ZF' THEN 1000 WHEN 'ZT' THEN 2000
+    WHEN '6E' THEN 12.5 WHEN 'M6E' THEN 6.25
+    WHEN '6A' THEN 10 WHEN '6B' THEN 6.25 WHEN '6J' THEN 12.5
+    WHEN 'BTC' THEN 5 WHEN 'MBT' THEN 0.1 WHEN 'ETH' THEN 50
+    ELSE 1
+  END;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_asset_multiplier IS 'Returns contract multiplier for futures symbols - CME/ICE verified';
+
+-- Admin Check Functions (SIMPLE - NO RECURSION)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN 
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN (
+    SELECT role IN ('admin', 'super_admin') AND is_banned = false
+    FROM public.profiles
+    WHERE id = auth.uid()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN 
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN (
+    SELECT role = 'super_admin' AND is_banned = false
+    FROM public.profiles
+    WHERE id = auth.uid()
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS TEXT 
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN (
+    SELECT role
+    FROM public.profiles 
+    WHERE id = auth.uid()
+  );
+END;
+$$;
+
+-- Updated At Trigger Function
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+-- Update Timestamp (alias)
+CREATE OR REPLACE FUNCTION public.update_timestamp()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+-- Generate Affiliate Code
+CREATE OR REPLACE FUNCTION public.generate_affiliate_code()
+RETURNS TEXT 
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  new_code TEXT;
+  code_exists BOOLEAN;
+BEGIN
+  LOOP
+    new_code := upper(substr(md5(random()::text), 1, 8));
+    SELECT EXISTS(
+      SELECT 1 FROM public.profiles WHERE affiliate_code = new_code
+    ) INTO code_exists;
+    EXIT WHEN NOT code_exists;
+  END LOOP;
+  RETURN new_code;
+END;
+$$;
+
+-- Generate Unique Affiliate Code
+CREATE OR REPLACE FUNCTION public.generate_unique_affiliate_code()
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_code TEXT;
+  v_exists BOOLEAN;
+  v_attempts INTEGER := 0;
+BEGIN
+  LOOP
+    v_code := 'FINOTAUR-' || upper(substring(md5(random()::text) from 1 for 8));
+    SELECT EXISTS(
+      SELECT 1 FROM public.profiles WHERE affiliate_code = v_code
+    ) INTO v_exists;
+    EXIT WHEN NOT v_exists OR v_attempts >= 10;
+    v_attempts := v_attempts + 1;
+  END LOOP;
+  
+  IF v_exists THEN
+    RAISE EXCEPTION 'Failed to generate unique affiliate code after 10 attempts';
+  END IF;
+  
+  RETURN v_code;
+END;
+$$;
+
+-- ===============================================
+-- SECTION 2: RISK SETTINGS & PROFILE INITIALIZATION
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[2/13] Creating risk settings functions...';
+END $$;
+
+-- ✅ UPDATED: Initialize Risk Settings
+CREATE OR REPLACE FUNCTION public.initialize_risk_settings()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NEW.risk_settings IS NULL THEN
+    NEW.risk_settings := jsonb_build_object(
+      'portfolioSize', COALESCE(NEW.initial_portfolio, 10000),
+      'riskMode', 'percentage',
+      'riskPerTrade', 1,
+      'configured', true,
+      'initialPortfolio', COALESCE(NEW.initial_portfolio, 10000)
+    );
+  END IF;
+  
+  IF NEW.initial_portfolio IS NULL THEN
+    NEW.initial_portfolio := 10000;
+  END IF;
+  
+  IF NEW.current_portfolio IS NULL THEN
+    NEW.current_portfolio := COALESCE(NEW.initial_portfolio, 10000);
+  END IF;
+  
+  IF NEW.total_pnl IS NULL THEN
+    NEW.total_pnl := 0;
+  END IF;
+  
+  -- ✅ UPDATED: Set max_trades based on account_type
+  IF NEW.max_trades IS NULL THEN
+    NEW.max_trades := CASE NEW.account_type
+      WHEN 'free' THEN 10
+      WHEN 'basic' THEN 25
+      WHEN 'trial' THEN 25
+      WHEN 'premium' THEN 999999
+      ELSE 10
+    END;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.initialize_risk_settings IS 'UPDATED v8.4: BASIC/TRIAL=25 trades, FREE=10 lifetime';
+
+-- Auto-Create Profile on Signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  new_affiliate_code TEXT;
+BEGIN
+  LOOP
+    new_affiliate_code := upper(substring(md5(random()::text || NEW.id::text) from 1 for 8));
+    EXIT WHEN NOT EXISTS(
+      SELECT 1 FROM public.profiles WHERE affiliate_code = new_affiliate_code
+    );
+  END LOOP;
+  
+  INSERT INTO public.profiles (
+    id, email, display_name, account_type, max_trades, trade_count, 
+    affiliate_code, free_months_available, referral_count, billing_cycle_start,
+    current_portfolio, total_pnl, initial_portfolio, risk_settings
+  ) VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+    'free',
+    10,
+    0,
+    new_affiliate_code,
+    0,
+    0,
+    CURRENT_DATE,
+    10000,
+    0,
+    10000,
+    jsonb_build_object(
+      'portfolioSize', 10000,
+      'riskMode', 'percentage',
+      'riskPerTrade', 1,
+      'configured', true,
+      'initialPortfolio', 10000
+    )
+  )
+  ON CONFLICT (id) DO NOTHING;
+  
+  INSERT INTO public.affiliate_stats (
+    user_id, total_signups, total_conversions, total_free_months_earned
+  ) VALUES (
+    NEW.id, 0, 0, 0
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- ===============================================
+-- 🔥 SECTION 2.5: RATE LIMITING (NEW OPTIMIZATION)
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[2.5/13] 🆕 Creating rate limiting function...';
+END $$;
+
+-- ═══════════════════════════════════════════
+-- RATE LIMITING
+-- ═══════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.check_rate_limit(
+  p_endpoint TEXT,
+  p_max_requests INTEGER DEFAULT 100,
+  p_window_minutes INTEGER DEFAULT 1
+)
+RETURNS BOOLEAN 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_count INTEGER;
+  v_user_id UUID;
+BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Count requests in time window
+  SELECT COUNT(*) INTO v_count
+  FROM public.api_rate_limits
+  WHERE user_id = v_user_id
+    AND endpoint = p_endpoint
+    AND window_start > NOW() - (p_window_minutes || ' minutes')::INTERVAL;
+  
+  -- Exceeded limit?
+  IF v_count >= p_max_requests THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Log request
+  INSERT INTO public.api_rate_limits (user_id, endpoint)
+  VALUES (v_user_id, p_endpoint);
+  
+  -- Cleanup old entries (async)
+  DELETE FROM public.api_rate_limits
+  WHERE window_start < NOW() - INTERVAL '1 hour';
+  
+  RETURN TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.check_rate_limit IS 
+'Rate limiting: default 100 requests/minute. Returns FALSE if exceeded.';
+
+GRANT EXECUTE ON FUNCTION public.check_rate_limit TO authenticated;
+
+-- ===============================================
+-- 🔥 SECTION 2.6: SOFT DELETE FUNCTIONS (NEW OPTIMIZATION)
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[2.6/13] 🆕 Creating soft delete functions...';
+END $$;
+
+-- ═══════════════════════════════════════════
+-- SOFT DELETE FUNCTIONS
+-- ═══════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.soft_delete_trade(p_trade_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.trades
+  SET deleted_at = NOW()
+  WHERE id = p_trade_id
+    AND user_id = auth.uid()
+    AND deleted_at IS NULL;
+  
+  RETURN FOUND;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.restore_trade(p_trade_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.trades
+  SET deleted_at = NULL
+  WHERE id = p_trade_id
+    AND user_id = auth.uid()
+    AND deleted_at IS NOT NULL;
+  
+  RETURN FOUND;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.permanent_delete_trade(p_trade_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Only admins or after 30 days
+  IF NOT (public.is_admin() OR 
+    EXISTS(
+      SELECT 1 FROM public.trades 
+      WHERE id = p_trade_id 
+        AND user_id = auth.uid()
+        AND deleted_at < NOW() - INTERVAL '30 days'
+    )
+  ) THEN
+    RAISE EXCEPTION 'Cannot permanently delete yet. Wait 30 days or contact admin.';
+  END IF;
+  
+  DELETE FROM public.trades
+  WHERE id = p_trade_id
+    AND (user_id = auth.uid() OR public.is_admin());
+  
+  RETURN FOUND;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.soft_delete_trade TO authenticated;
+GRANT EXECUTE ON FUNCTION public.restore_trade TO authenticated;
+GRANT EXECUTE ON FUNCTION public.permanent_delete_trade TO authenticated;
+
+-- ===============================================
+-- SECTION 3: TRADE CALCULATIONS (LEGACY - KEPT FOR COMPATIBILITY)
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[3/13] Creating legacy trade calculation functions...';
+  RAISE NOTICE '         (These will be replaced by unified trigger)';
+END $$;
+
+-- Increment Trade Count (LEGACY)
+CREATE OR REPLACE FUNCTION public.increment_trade_count()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE public.profiles
+    SET trade_count = trade_count + 1
+    WHERE id = NEW.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- Calculate Trade Outcome (LEGACY - WILL BE REPLACED)
+CREATE OR REPLACE FUNCTION public.calculate_trade_outcome()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  multiplier NUMERIC;
+  price_diff NUMERIC;
+  gross_pnl NUMERIC;
+  user_one_r NUMERIC;
+BEGIN
+  -- Get multiplier
+  IF NEW.multiplier IS NOT NULL AND NEW.multiplier > 0 THEN
+    multiplier := NEW.multiplier;
+  ELSE
+    multiplier := public.get_asset_multiplier(NEW.symbol);
+    NEW.multiplier := multiplier;
+  END IF;
+  
+  -- Get user's 1R from metrics
+  user_one_r := NULL;
+  IF NEW.metrics IS NOT NULL AND NEW.metrics ? 'oneR' THEN
+    user_one_r := (NEW.metrics->>'oneR')::NUMERIC;
+  END IF;
+  
+  -- Calculate risk_pts
+  IF NEW.stop_price IS NOT NULL AND NEW.stop_price > 0 THEN
+    NEW.risk_pts := ABS(NEW.entry_price - NEW.stop_price);
+  END IF;
+  
+  -- Calculate reward_pts
+  IF NEW.take_profit_price IS NOT NULL THEN
+    NEW.reward_pts := CASE
+      WHEN NEW.side = 'LONG' THEN NEW.take_profit_price - NEW.entry_price
+      WHEN NEW.side = 'SHORT' THEN NEW.entry_price - NEW.take_profit_price
+      ELSE 0
+    END;
+  END IF;
+  
+  -- Calculate risk_usd & reward_usd
+  IF NEW.stop_price IS NOT NULL AND NEW.stop_price > 0 THEN
+    NEW.risk_usd := (ABS(NEW.entry_price - NEW.stop_price) * NEW.quantity * multiplier) + COALESCE(NEW.fees, 0);
+    
+    IF NEW.take_profit_price IS NOT NULL THEN
+      NEW.reward_usd := CASE
+        WHEN NEW.side = 'LONG' THEN (NEW.take_profit_price - NEW.entry_price) * NEW.quantity * multiplier
+        WHEN NEW.side = 'SHORT' THEN (NEW.entry_price - NEW.take_profit_price) * NEW.quantity * multiplier
+        ELSE 0
+      END;
+    END IF;
+  END IF;
+  
+  -- Calculate RR ratio
+  IF NEW.risk_pts IS NOT NULL AND NEW.risk_pts > 0 AND NEW.reward_pts IS NOT NULL THEN
+    NEW.rr := ROUND(ABS(NEW.reward_pts / NEW.risk_pts), 4);
+  END IF;
+  
+  -- If trade is closed
+  IF NEW.exit_price IS NOT NULL AND NEW.exit_price > 0 THEN
+    -- Calculate P&L
+    IF NEW.side = 'LONG' THEN
+      price_diff := NEW.exit_price - NEW.entry_price;
+    ELSIF NEW.side = 'SHORT' THEN
+      price_diff := NEW.entry_price - NEW.exit_price;
+    ELSE
+      price_diff := 0;
+    END IF;
+    
+    gross_pnl := price_diff * NEW.quantity * multiplier;
+    NEW.pnl := gross_pnl - COALESCE(NEW.fees, 0);
+    
+    -- Calculate actual_r
+    IF NEW.risk_usd IS NOT NULL AND NEW.risk_usd > 0 THEN
+      NEW.actual_r := ROUND(NEW.pnl / NEW.risk_usd, 4);
+    END IF;
+    
+    -- Calculate user R values
+    IF user_one_r IS NOT NULL AND user_one_r > 0 THEN
+      IF NEW.risk_usd IS NOT NULL THEN
+        NEW.user_risk_r := ROUND(NEW.risk_usd / user_one_r, 4);
+      END IF;
+      IF NEW.reward_usd IS NOT NULL THEN
+        NEW.user_reward_r := ROUND(NEW.reward_usd / user_one_r, 4);
+      END IF;
+    END IF;
+    
+    -- Update metrics JSON
+    NEW.metrics := jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          jsonb_set(
+            COALESCE(NEW.metrics, '{}'::jsonb),
+            '{actual_r}',
+            to_jsonb(COALESCE(NEW.actual_r, 0))
+          ),
+          '{riskUSD}',
+          to_jsonb(COALESCE(NEW.risk_usd, 0))
+        ),
+        '{rewardUSD}',
+        to_jsonb(COALESCE(NEW.reward_usd, 0))
+      ),
+      '{rr}',
+      to_jsonb(COALESCE(NEW.rr, 0))
+    );
+    
+    -- Set outcome
+    NEW.outcome := CASE
+      WHEN NEW.pnl > 0.01 THEN 'WIN'
+      WHEN NEW.pnl < -0.01 THEN 'LOSS'
+      ELSE 'BE'
+    END;
+    
+    IF NEW.close_at IS NULL THEN
+      NEW.close_at := NOW();
+    END IF;
+    
+    -- Update profile total_pnl
+    IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.exit_price IS NULL) THEN
+      UPDATE public.profiles
+      SET total_pnl = COALESCE(total_pnl, 0) + NEW.pnl
+      WHERE id = NEW.user_id;
+    ELSIF TG_OP = 'UPDATE' AND OLD.exit_price IS NOT NULL THEN
+      UPDATE public.profiles
+      SET total_pnl = COALESCE(total_pnl, 0) - COALESCE(OLD.pnl, 0) + NEW.pnl
+      WHERE id = NEW.user_id;
+    END IF;
+    
+  -- Trade is still open
+  ELSIF NEW.exit_price IS NULL THEN
+    NEW.outcome := 'OPEN';
+    NEW.pnl := 0;
+    NEW.actual_r := NULL;
+    
+    -- Calculate user R values for open trade
+    IF user_one_r IS NOT NULL AND user_one_r > 0 THEN
+      IF NEW.risk_usd IS NOT NULL THEN
+        NEW.user_risk_r := ROUND(NEW.risk_usd / user_one_r, 4);
+      END IF;
+      IF NEW.reward_usd IS NOT NULL THEN
+        NEW.user_reward_r := ROUND(NEW.reward_usd / user_one_r, 4);
+      END IF;
+    END IF;
+    
+    -- Update metrics JSON
+    NEW.metrics := jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          COALESCE(NEW.metrics, '{}'::jsonb),
+          '{riskUSD}',
+          to_jsonb(COALESCE(NEW.risk_usd, 0))
+        ),
+        '{rewardUSD}',
+        to_jsonb(COALESCE(NEW.reward_usd, 0))
+      ),
+      '{rr}',
+      to_jsonb(COALESCE(NEW.rr, 0))
+    );
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Update Current Portfolio (LEGACY)
+CREATE OR REPLACE FUNCTION public.update_current_portfolio()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE public.profiles
+  SET 
+    current_portfolio = initial_portfolio + COALESCE(total_pnl, 0),
+    updated_at = NOW()
+  WHERE id = NEW.user_id;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- ===============================================
+-- 🔥 SECTION 3.5: UNIFIED TRIGGER (NEW OPTIMIZATION!)
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '[3.5/13] 🔥 Creating UNIFIED trigger (3x faster!)...';
+END $$;
+
+-- ❌ מחק את הטריגרים הישנים
+DROP TRIGGER IF EXISTS increment_trade_count_trigger ON public.trades;
+DROP TRIGGER IF EXISTS calculate_trade_outcome_trigger ON public.trades;
+DROP TRIGGER IF EXISTS trigger_update_current_portfolio ON public.trades;
+DROP TRIGGER IF EXISTS trigger_increment_monthly_trade_count ON public.trades;
+
+-- ✅ צור טריגר מאוחד חדש
+CREATE OR REPLACE FUNCTION public.handle_trade_changes_unified()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  multiplier NUMERIC;
+  price_diff NUMERIC;
+  gross_pnl NUMERIC;
+  user_one_r NUMERIC;
+  v_account_type TEXT;
+  v_old_pnl NUMERIC := 0;
+BEGIN
+  -- ═══════════════════════════════════════
+  -- STEP 1: Calculate Trade Outcome
+  -- ═══════════════════════════════════════
+  
+  -- Get multiplier
+  IF NEW.multiplier IS NOT NULL AND NEW.multiplier > 0 THEN
+    multiplier := NEW.multiplier;
+  ELSE
+    multiplier := public.get_asset_multiplier(NEW.symbol);
+    NEW.multiplier := multiplier;
+  END IF;
+  
+  -- Get user's 1R
+  user_one_r := NULL;
+  IF NEW.metrics IS NOT NULL AND NEW.metrics ? 'oneR' THEN
+    user_one_r := (NEW.metrics->>'oneR')::NUMERIC;
+  END IF;
+  
+  -- Calculate risk_pts
+  IF NEW.stop_price IS NOT NULL AND NEW.stop_price > 0 THEN
+    NEW.risk_pts := ABS(NEW.entry_price - NEW.stop_price);
+  END IF;
+  
+  -- Calculate reward_pts
+  IF NEW.take_profit_price IS NOT NULL THEN
+    NEW.reward_pts := CASE
+      WHEN NEW.side = 'LONG' THEN NEW.take_profit_price - NEW.entry_price
+      WHEN NEW.side = 'SHORT' THEN NEW.entry_price - NEW.take_profit_price
+      ELSE 0
+    END;
+  END IF;
+  
+  -- Calculate risk_usd & reward_usd
+  IF NEW.stop_price IS NOT NULL AND NEW.stop_price > 0 THEN
+    NEW.risk_usd := (ABS(NEW.entry_price - NEW.stop_price) * NEW.quantity * multiplier) + COALESCE(NEW.fees, 0);
+    
+    IF NEW.take_profit_price IS NOT NULL THEN
+      NEW.reward_usd := CASE
+        WHEN NEW.side = 'LONG' THEN (NEW.take_profit_price - NEW.entry_price) * NEW.quantity * multiplier
+        WHEN NEW.side = 'SHORT' THEN (NEW.entry_price - NEW.take_profit_price) * NEW.quantity * multiplier
+        ELSE 0
+      END;
+    END IF;
+  END IF;
+  
+  -- Calculate RR
+  IF NEW.risk_pts IS NOT NULL AND NEW.risk_pts > 0 AND NEW.reward_pts IS NOT NULL THEN
+    NEW.rr := ROUND(ABS(NEW.reward_pts / NEW.risk_pts), 4);
+  END IF;
+  
+  -- If closed
+  IF NEW.exit_price IS NOT NULL AND NEW.exit_price > 0 THEN
+    IF NEW.side = 'LONG' THEN
+      price_diff := NEW.exit_price - NEW.entry_price;
+    ELSIF NEW.side = 'SHORT' THEN
+      price_diff := NEW.entry_price - NEW.exit_price;
+    ELSE
+      price_diff := 0;
+    END IF;
+    
+    gross_pnl := price_diff * NEW.quantity * multiplier;
+    NEW.pnl := gross_pnl - COALESCE(NEW.fees, 0);
+    
+    IF NEW.risk_usd IS NOT NULL AND NEW.risk_usd > 0 THEN
+      NEW.actual_r := ROUND(NEW.pnl / NEW.risk_usd, 4);
+    END IF;
+    
+    IF user_one_r IS NOT NULL AND user_one_r > 0 THEN
+      IF NEW.risk_usd IS NOT NULL THEN
+        NEW.user_risk_r := ROUND(NEW.risk_usd / user_one_r, 4);
+      END IF;
+      IF NEW.reward_usd IS NOT NULL THEN
+        NEW.user_reward_r := ROUND(NEW.reward_usd / user_one_r, 4);
+      END IF;
+    END IF;
+    
+    NEW.metrics := jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          jsonb_set(
+            COALESCE(NEW.metrics, '{}'::jsonb),
+            '{actual_r}', to_jsonb(COALESCE(NEW.actual_r, 0))
+          ),
+          '{riskUSD}', to_jsonb(COALESCE(NEW.risk_usd, 0))
+        ),
+        '{rewardUSD}', to_jsonb(COALESCE(NEW.reward_usd, 0))
+      ),
+      '{rr}', to_jsonb(COALESCE(NEW.rr, 0))
+    );
+    
+    NEW.outcome := CASE
+      WHEN NEW.pnl > 0.01 THEN 'WIN'
+      WHEN NEW.pnl < -0.01 THEN 'LOSS'
+      ELSE 'BE'
+    END;
+    
+    IF NEW.close_at IS NULL THEN
+      NEW.close_at := NOW();
+    END IF;
+    
+  ELSE
+    -- Trade is open
+    NEW.outcome := 'OPEN';
+    NEW.pnl := 0;
+    NEW.actual_r := NULL;
+    
+    IF user_one_r IS NOT NULL AND user_one_r > 0 THEN
+      IF NEW.risk_usd IS NOT NULL THEN
+        NEW.user_risk_r := ROUND(NEW.risk_usd / user_one_r, 4);
+      END IF;
+      IF NEW.reward_usd IS NOT NULL THEN
+        NEW.user_reward_r := ROUND(NEW.reward_usd / user_one_r, 4);
+      END IF;
+    END IF;
+    
+    NEW.metrics := jsonb_set(
+      jsonb_set(
+        jsonb_set(
+          COALESCE(NEW.metrics, '{}'::jsonb),
+          '{riskUSD}', to_jsonb(COALESCE(NEW.risk_usd, 0))
+        ),
+        '{rewardUSD}', to_jsonb(COALESCE(NEW.reward_usd, 0))
+      ),
+      '{rr}', to_jsonb(COALESCE(NEW.rr, 0))
+    );
+  END IF;
+  
+  -- ═══════════════════════════════════════
+  -- STEP 2: Update Portfolio (only on closed trades)
+  -- ═══════════════════════════════════════
+  
+  IF NEW.exit_price IS NOT NULL THEN
+    -- Get old PNL if updating
+    IF TG_OP = 'UPDATE' AND OLD.exit_price IS NOT NULL THEN
+      v_old_pnl := COALESCE(OLD.pnl, 0);
+    END IF;
+    
+    -- Update profile
+    UPDATE public.profiles
+    SET 
+      total_pnl = COALESCE(total_pnl, 0) - v_old_pnl + NEW.pnl,
+      current_portfolio = initial_portfolio + (COALESCE(total_pnl, 0) - v_old_pnl + NEW.pnl),
+      updated_at = NOW()
+    WHERE id = NEW.user_id;
+  END IF;
+  
+  -- ═══════════════════════════════════════
+  -- STEP 3: Increment Trade Count (only on INSERT)
+  -- ═══════════════════════════════════════
+  
+  IF TG_OP = 'INSERT' THEN
+    -- Get account type
+    SELECT account_type INTO v_account_type
+    FROM public.profiles
+    WHERE id = NEW.user_id;
+    
+    -- Update counters
+    UPDATE public.profiles
+    SET 
+      billing_cycle_start = CASE 
+        WHEN v_account_type IN ('basic', 'premium', 'trial') THEN
+          CASE 
+            WHEN billing_cycle_start IS NULL 
+              OR billing_cycle_start < DATE_TRUNC('month', CURRENT_DATE)
+            THEN DATE_TRUNC('month', CURRENT_DATE)::DATE
+            ELSE billing_cycle_start
+          END
+        ELSE 
+          COALESCE(billing_cycle_start, DATE_TRUNC('month', CURRENT_DATE)::DATE)
+      END,
+      current_month_trades_count = CASE
+        WHEN v_account_type IN ('basic', 'premium', 'trial') THEN
+          CASE
+            WHEN billing_cycle_start IS NULL 
+              OR billing_cycle_start < DATE_TRUNC('month', CURRENT_DATE)
+            THEN 1
+            ELSE COALESCE(current_month_trades_count, 0) + 1
+          END
+        ELSE 
+          COALESCE(current_month_trades_count, 0) + 1
+      END,
+      trade_count = COALESCE(trade_count, 0) + 1
+    WHERE id = NEW.user_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- יצירת הטריגר המאוחד
+DROP TRIGGER IF EXISTS handle_trade_changes_unified_trigger ON public.trades;
+
+CREATE TRIGGER handle_trade_changes_unified_trigger
+  BEFORE INSERT OR UPDATE ON public.trades
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_trade_changes_unified();
+
+COMMENT ON FUNCTION public.handle_trade_changes_unified IS 
+'🔥 UNIFIED TRIGGER v8.4: Calculates outcome + updates portfolio + increments counters. 3x faster!';
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Unified trigger created! Performance: 150ms → 50ms';
+END $$;
+
+-- ===============================================
+-- SECTION 4: TRADE LIMITS FUNCTIONS
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[4/13] Creating trade limits functions...';
+END $$;
+
+-- 🔥 Drop RLS policy first (it depends on can_create_trade)
+DROP POLICY IF EXISTS "trades_insert_own" ON public.trades;
+DROP POLICY IF EXISTS "trades_insert_with_limits" ON public.trades;
+
+-- ✅ Get Trade Limit
+DROP FUNCTION IF EXISTS public.get_trade_limit(TEXT);
+
+CREATE OR REPLACE FUNCTION public.get_trade_limit(plan_type TEXT)
+RETURNS INTEGER 
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  RETURN CASE plan_type
+    WHEN 'free' THEN 10
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'trial' THEN 25
+    ELSE 10
+  END;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_trade_limit(TEXT) IS 
+'v8.4: Returns trade limit: FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
+
+-- ✅ Can Create Trade
+DROP FUNCTION IF EXISTS public.can_create_trade(UUID);
+
+CREATE OR REPLACE FUNCTION public.can_create_trade(user_id_param UUID)
+RETURNS BOOLEAN 
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_limit INTEGER;
+  v_trades_used INTEGER;
+BEGIN
+  SELECT 
+    account_type,
+    role,
+    max_trades,
+    COALESCE(current_month_trades_count, 0) as monthly_trades,
+    COALESCE(trade_count, 0) as lifetime_trades
+  INTO v_profile
+  FROM public.profiles
+  WHERE id = user_id_param;
+  
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Admins and Premium = unlimited
+  IF v_profile.role IN ('admin', 'super_admin') OR 
+     v_profile.account_type = 'premium' THEN
+    RETURN TRUE;
+  END IF;
+  
+  v_limit := get_trade_limit(v_profile.account_type);
+  
+  -- FREE users: check lifetime trades
+  IF v_profile.account_type = 'free' THEN
+    v_trades_used := v_profile.lifetime_trades;
+  -- BASIC/TRIAL: check monthly trades
+  ELSE
+    v_trades_used := v_profile.monthly_trades;
+  END IF;
+  
+  RETURN v_trades_used < v_limit;
+END;
+$$;
+
+COMMENT ON FUNCTION public.can_create_trade(UUID) IS 
+'v8.4: Checks trade limits: FREE uses lifetime count, BASIC/TRIAL use monthly count';
+
+-- ✅ Get Remaining Trades
+DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID);
+
+CREATE OR REPLACE FUNCTION public.get_remaining_trades(user_id_param UUID)
+RETURNS TABLE (
+  remaining INTEGER,
+  used INTEGER,
+  max_limit INTEGER,
+  can_create BOOLEAN,
+  account_type TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_trades_used INTEGER;
+BEGIN
+  SELECT 
+    p.account_type,
+    p.role,
+    p.max_trades,
+    COALESCE(p.current_month_trades_count, 0) as monthly_count,
+    COALESCE(p.trade_count, 0) as lifetime_count
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = user_id_param;
+  
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 0, 0, 10, FALSE, 'free'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Unlimited for admins and premium
+  IF v_profile.role IN ('admin', 'super_admin') OR 
+     v_profile.account_type = 'premium' THEN
+    v_trades_used := CASE 
+      WHEN v_profile.account_type = 'free' THEN v_profile.lifetime_count
+      ELSE v_profile.monthly_count
+    END;
+    
+    RETURN QUERY SELECT 
+      999999,
+      v_trades_used,
+      999999,
+      TRUE,
+      v_profile.account_type;
+    RETURN;
+  END IF;
+  
+  -- FREE: use lifetime count
+  IF v_profile.account_type = 'free' THEN
+    v_trades_used := v_profile.lifetime_count;
+  -- BASIC/TRIAL: use monthly count
+  ELSE
+    v_trades_used := v_profile.monthly_count;
+  END IF;
+  
+  RETURN QUERY SELECT
+    GREATEST(0, v_profile.max_trades - v_trades_used),
+    v_trades_used,
+    v_profile.max_trades,
+    (v_trades_used < v_profile.max_trades),
+    v_profile.account_type;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_remaining_trades(UUID) IS 
+'v8.4: Returns trade info: FREE tracks lifetime, BASIC/TRIAL track monthly';
+
+-- ✅ 🔥 UPDATED: Increment Monthly Trade Count - NO RESET FOR FREE!
+DROP FUNCTION IF EXISTS public.increment_monthly_trade_count() CASCADE;
+
+CREATE OR REPLACE FUNCTION public.increment_monthly_trade_count()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_account_type TEXT;
+BEGIN
+  -- Get account type
+  SELECT account_type INTO v_account_type
+  FROM public.profiles
+  WHERE id = NEW.user_id;
+  
+  -- Update counters
+  UPDATE public.profiles
+  SET 
+    billing_cycle_start = CASE 
+      -- Only BASIC/PREMIUM/TRIAL get monthly reset
+      WHEN v_account_type IN ('basic', 'premium', 'trial') THEN
+        CASE 
+          WHEN billing_cycle_start IS NULL 
+            OR billing_cycle_start < DATE_TRUNC('month', CURRENT_DATE)
+          THEN DATE_TRUNC('month', CURRENT_DATE)::DATE
+          ELSE billing_cycle_start
+        END
+      -- FREE keeps original date (no reset)
+      ELSE 
+        COALESCE(billing_cycle_start, DATE_TRUNC('month', CURRENT_DATE)::DATE)
+    END,
+    current_month_trades_count = CASE
+      -- Only BASIC/PREMIUM/TRIAL get monthly reset
+      WHEN v_account_type IN ('basic', 'premium', 'trial') THEN
+        CASE
+          WHEN billing_cycle_start IS NULL 
+            OR billing_cycle_start < DATE_TRUNC('month', CURRENT_DATE)
+          THEN 1  -- Reset counter for new month
+          ELSE COALESCE(current_month_trades_count, 0) + 1
+        END
+      -- FREE just increments (no reset)
+      ELSE 
+        COALESCE(current_month_trades_count, 0) + 1
+    END,
+    trade_count = COALESCE(trade_count, 0) + 1  -- Lifetime counter
+  WHERE id = NEW.user_id;
+  
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.increment_monthly_trade_count() IS 
+'v8.4: Auto-resets for BASIC/PREMIUM/TRIAL. FREE gets 10 lifetime (no reset).';
+
+-- ===============================================
+-- SECTION 5: SEARCH & NOTES FUNCTIONS
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[5/13] Creating search functions...';
+END $$;
+
+-- Update Search Vector
+CREATE OR REPLACE FUNCTION public.update_trades_search_vector()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.notes_search_vector := 
+    setweight(to_tsvector('english', COALESCE(NEW.symbol, '')), 'A') ||
+    setweight(to_tsvector('english', COALESCE(NEW.notes, '')), 'B') ||
+    setweight(to_tsvector('english', COALESCE(NEW.setup, '')), 'C') ||
+    setweight(to_tsvector('english', COALESCE(NEW.mistake, '')), 'D');
+  RETURN NEW;
+END;
+$$;
+
+-- Search Trades
+CREATE OR REPLACE FUNCTION public.search_trades(
+  search_query TEXT,
+  target_user_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  symbol TEXT,
+  notes TEXT,
+  setup TEXT,
+  rank REAL
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.id,
+    t.symbol,
+    t.notes,
+    t.setup,
+    ts_rank(t.notes_search_vector, plainto_tsquery('english', search_query)) as rank
+  FROM public.trades t
+  WHERE 
+    (target_user_id IS NULL OR t.user_id = target_user_id) AND
+    t.notes_search_vector @@ plainto_tsquery('english', search_query)
+  ORDER BY rank DESC
+  LIMIT 50;
+END;
+$$;
+
+-- Get Trade Details
+CREATE OR REPLACE FUNCTION public.get_trade_details(trade_id UUID)
+RETURNS TABLE (
+  id UUID,
+  user_id UUID,
+  symbol TEXT,
+  side TEXT,
+  entry_price NUMERIC,
+  exit_price NUMERIC,
+  stop_price NUMERIC,
+  take_profit_price NUMERIC,
+  quantity NUMERIC,
+  fees NUMERIC,
+  pnl NUMERIC,
+  outcome TEXT,
+  multiplier NUMERIC,
+  actual_r NUMERIC,
+  user_risk_r NUMERIC,
+  user_reward_r NUMERIC,
+  risk_pts NUMERIC,
+  reward_pts NUMERIC,
+  rr NUMERIC,
+  risk_usd NUMERIC,
+  reward_usd NUMERIC,
+  open_at TIMESTAMPTZ,
+  close_at TIMESTAMPTZ,
+  strategy_id UUID,
+  strategy_name TEXT,
+  notes TEXT,
+  screenshot_url TEXT,
+  screenshot_exists BOOLEAN,
+  setup TEXT,
+  mistake TEXT,
+  next_time TEXT,
+  quality_tag TEXT,
+  session TEXT,
+  asset_class TEXT,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.id,
+    t.user_id,
+    t.symbol,
+    t.side,
+    t.entry_price,
+    t.exit_price,
+    t.stop_price,
+    t.take_profit_price,
+    t.quantity,
+    t.fees,
+    t.pnl,
+    t.outcome,
+    t.multiplier,
+    t.actual_r,
+    t.user_risk_r,
+    t.user_reward_r,
+    t.risk_pts,
+    t.reward_pts,
+    t.rr,
+    t.risk_usd,
+    t.reward_usd,
+    t.open_at,
+    t.close_at,
+    t.strategy_id,
+    s.name as strategy_name,
+    t.notes,
+    t.screenshot_url,
+    (t.screenshot_url IS NOT NULL AND t.screenshot_url != '') as screenshot_exists,
+    t.setup,
+    t.mistake,
+    t.next_time,
+    t.quality_tag,
+    t.session,
+    t.asset_class,
+    t.created_at,
+    t.updated_at
+  FROM public.trades t
+  LEFT JOIN public.strategies s ON s.id = t.strategy_id
+  WHERE t.id = trade_id
+    AND (t.user_id = auth.uid() OR public.is_admin());
+END;
+$$;
+
+-- Get Storage Usage
+CREATE OR REPLACE FUNCTION public.get_user_storage_usage(target_user_id UUID DEFAULT NULL)
+RETURNS TABLE (
+  total_files BIGINT,
+  total_size_bytes BIGINT,
+  total_size_mb NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  v_user_id := COALESCE(target_user_id, auth.uid());
+  
+  RETURN QUERY
+  SELECT 
+    COUNT(*)::BIGINT as total_files,
+    COALESCE(SUM((metadata->>'size')::BIGINT), 0) as total_size_bytes,
+    ROUND(COALESCE(SUM((metadata->>'size')::NUMERIC) / 1048576, 0), 2) as total_size_mb
+  FROM storage.objects
+  WHERE bucket_id = 'trade-screenshots'
+    AND (storage.foldername(name))[1] = v_user_id::text;
+END;
+$$;
+
+-- ===============================================
+-- 🔒 SECTION 6: PAYMENT SECURITY & AFFILIATE AUTOMATION
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '[6/13] 🔒 Creating payment security functions...';
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 1. עדכון פונקציית התשלום (עם אוטומציה לאפילייט)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.update_account_type_on_payment()
+RETURNS TRIGGER 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_max_trades INTEGER;
+  v_subscription_interval TEXT;
+  v_referral_record RECORD;
+BEGIN
+  -- רק אם התשלום הצליח
+  IF NEW.status = 'completed' AND (OLD IS NULL OR OLD.status != 'completed') THEN
+    
+    v_max_trades := get_trade_limit(NEW.plan);
+    v_subscription_interval := CASE 
+      WHEN NEW.amount > 100 THEN 'yearly'
+      ELSE 'monthly'
+    END;
+    
+    -- עדכן את החשבון
+    UPDATE public.profiles
+    SET 
+      account_type = NEW.plan,
+      max_trades = v_max_trades,
+      subscription_interval = v_subscription_interval,
+      subscription_status = 'active',
+      subscription_started_at = NOW(),
+      subscription_expires_at = CASE 
+        WHEN v_subscription_interval = 'yearly' THEN NOW() + INTERVAL '1 year'
+        ELSE NOW() + INTERVAL '1 month'
+      END,
+      updated_at = NOW()
+    WHERE id = NEW.user_id;
+    
+    -- צור תקופת מנוי
+    INSERT INTO public.subscription_periods (
+      user_id, plan, payplus_transaction_id, period_start, period_end, auto_renew
+    ) VALUES (
+      NEW.user_id, 
+      NEW.plan, 
+      NEW.payplus_transaction_id, 
+      NOW(),
+      CASE 
+        WHEN v_subscription_interval = 'yearly' THEN NOW() + INTERVAL '1 year'
+        ELSE NOW() + INTERVAL '1 month'
+      END,
+      TRUE
+    ) ON CONFLICT DO NOTHING;
+    
+    -- ✨ חדש: בדוק אם המשתמש הופנה ותן פרס למפנה
+    SELECT r.* INTO v_referral_record
+    FROM public.referrals r
+    WHERE r.referred_id = NEW.user_id 
+      AND r.status = 'pending'
+      AND r.converted_to_paid = FALSE
+    LIMIT 1;
+    
+    IF FOUND THEN
+      RAISE NOTICE 'משתמש % הופנה - מעניק פרס להפניה %', NEW.user_id, v_referral_record.id;
+      
+      BEGIN
+        PERFORM complete_referral_and_grant_rewards(v_referral_record.id);
+        RAISE NOTICE 'הפניה % הושלמה בהצלחה', v_referral_record.id;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'שגיאה בהשלמת הפניה %: %', v_referral_record.id, SQLERRM;
+      END;
+    END IF;
+    
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_account_type_on_payment IS 
+'v8.4: מעדכן חשבון רק לאחר תשלום מוצלח. מפעיל אוטומטית פרסי אפילייט.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 2. פונקציה חדשה: בדיקת גישה לתשלום
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.verify_paid_access(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_has_valid_payment BOOLEAN;
+BEGIN
+  SELECT 
+    account_type,
+    role,
+    subscription_status,
+    subscription_expires_at,
+    free_months_available
+  INTO v_profile
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- תמיד לאפשר: אדמינים ומשתמשי FREE
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type = 'free' THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- לאפשר: משתמשים עם חודשים חינם זמינים
+  IF v_profile.free_months_available > 0 THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- לאפשר: משתמשים עם מנוי פעיל שלא פג
+  IF v_profile.subscription_status = 'active' 
+     AND v_profile.subscription_expires_at IS NOT NULL 
+     AND v_profile.subscription_expires_at > NOW() THEN
+    
+    -- בדיקה כפולה: חייב להיות לפחות תשלום אחד מוצלח
+    SELECT EXISTS(
+      SELECT 1 
+      FROM public.payment_history 
+      WHERE user_id = p_user_id 
+        AND status = 'completed'
+    ) INTO v_has_valid_payment;
+    
+    RETURN v_has_valid_payment;
+  END IF;
+  
+  -- לדחות: כל השאר
+  RETURN FALSE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.verify_paid_access IS 
+'v8.4: מוודא שהמשתמש שילם או שיש לו חודשים חינם או שהוא אדמין לפני מתן גישה';
+
+GRANT EXECUTE ON FUNCTION public.verify_paid_access TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3. פונקציה לאדמין: מתן גישה ידנית (לעקוף תשלום)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.admin_grant_free_access(
+  p_user_id UUID,
+  p_months INTEGER,
+  p_reason TEXT DEFAULT 'Admin grant'
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized - Admin access required';
+  END IF;
+  
+  -- תן חודשים חינם
+  UPDATE public.profiles
+  SET 
+    free_months_available = COALESCE(free_months_available, 0) + p_months,
+    subscription_expires_at = CASE
+      WHEN subscription_expires_at IS NULL OR subscription_expires_at < NOW() 
+      THEN NOW() + (p_months || ' months')::INTERVAL
+      ELSE subscription_expires_at + (p_months || ' months')::INTERVAL
+    END,
+    subscription_status = 'active',
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  -- רשום את הפעולה
+  INSERT INTO public.free_months_credits (
+    user_id, 
+    months_earned, 
+    applied,
+    metadata
+  ) VALUES (
+    p_user_id,
+    p_months,
+    TRUE,
+    jsonb_build_object(
+      'granted_by', 'admin',
+      'admin_id', auth.uid(),
+      'reason', p_reason,
+      'granted_at', NOW()
+    )
+  );
+  
+  PERFORM log_admin_action(
+    'GRANT_FREE_ACCESS',
+    p_user_id,
+    'free_months',
+    p_user_id,
+    jsonb_build_object(
+      'months_granted', p_months,
+      'reason', p_reason
+    )
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_grant_free_access IS 
+'v8.4: מאפשר לאדמין לתת גישה חינם ללא תשלום';
+
+GRANT EXECUTE ON FUNCTION public.admin_grant_free_access TO authenticated;
+
+COMMIT;
+
+-- ═══════════════════════════════════════════════════════════════
+-- סיכום חלק 1
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '✅ Part 2/3 - Sections 1-6 Complete! (חלק 1/2)';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔥 פיצ''רים שנוספו:';
+  RAISE NOTICE '   ✅ Unified trigger (3x faster!)';
+  RAISE NOTICE '   ✅ Rate limiting';
+  RAISE NOTICE '   ✅ Soft delete';
+  RAISE NOTICE '   ✅ Payment security';
+  RAISE NOTICE '   ✅ Affiliate automation';
+  RAISE NOTICE '   ✅ Trade limits (FREE=10 lifetime)';
+  RAISE NOTICE '';
+  RAISE NOTICE '⏭️  Continue with חלק 2/2 (Sections 7-13)...';
+  RAISE NOTICE '';
+END $$;

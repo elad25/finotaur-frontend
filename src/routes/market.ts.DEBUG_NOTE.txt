@@ -1,0 +1,9 @@
+// src/routes/market.ts (debug helper - optional)
+/*
+marketRouter.use((req, _res, next) => {
+  if (req.path === "/quote") {
+    console.log("[marketRouter] HIT /api/quote", req.query.symbol);
+  }
+  next();
+});
+*/

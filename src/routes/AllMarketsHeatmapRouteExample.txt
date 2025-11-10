@@ -1,0 +1,16 @@
+// 1) Import (at top of App.tsx)
+import HeatmapKeepAllMarketsRedirects from "@/routes/HeatmapKeepAllMarketsRedirects";
+
+// 2) Inside your <Routes> (preferably near the top, before any old /app/*/heatmap routes):
+<HeatmapKeepAllMarketsRedirects />
+
+// 3) Inside your "/app" nested routes block:
+<Route path="all-markets/heatmap" element={<HeatmapPage />} />
+
+// 4) Anywhere you have a link/button to a market heatmap, point to the single URL:
+/*
+<Link to="/app/all-markets/heatmap?m=stocks">Heatmap</Link>
+<Link to="/app/all-markets/heatmap?m=crypto">Heatmap</Link>
+// or programmatically:
+navigate("/app/all-markets/heatmap?m=futures");
+*/

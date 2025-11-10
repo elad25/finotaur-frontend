@@ -1,0 +1,32 @@
+// src/components/markets/WatchlistTable.tsx (drop-in replacement snippet for the effect)
+/*
+useEffect(() => {
+  let cancel = false;
+  (async () => {
+    const data: Row[] = [];
+    for (const sym of items) {
+      const q = await fetchQuote(sym);
+      if (cancel) return;
+      data.push({ sym, q });
+    }
+    if (!cancel) setRows(data);
+  })();
+  return () => { cancel = true; };
+}, [items]);
+*/
+\n// refreshed effect with polling
+useEffect(() => {
+  let cancel = false;
+  const load = async () => {
+    const data: Row[] = [];
+    for (const sym of items) {
+      const q = await fetchQuote(sym);
+      if (cancel) return;
+      data.push({ sym, q });
+    }
+    if (!cancel) setRows(data);
+  };
+  load();
+  const iv = setInterval(load, 5000);
+  return () => { cancel = true; clearInterval(iv); };
+}, [items]);

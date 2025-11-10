@@ -1,0 +1,97 @@
+/* Calendar Animations - Finotaur Style */
+
+/* Fade-up animation for sections */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Pulse animation for special days */
+@keyframes pulse-gold {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(201, 166, 70, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(201, 166, 70, 0);
+  }
+}
+
+/* Shimmer effect for charts */
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Smooth grow animation */
+@keyframes grow {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Custom classes */
+.calendar-section-enter {
+  animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.chart-loading {
+  background: linear-gradient(90deg, transparent, rgba(201, 166, 70, 0.1), transparent);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+.day-tile-special {
+  animation: pulse-gold 2s infinite;
+}
+
+/* Hover glow effect */
+.glow-gold {
+  box-shadow: 0 0 25px rgba(201, 166, 70, 0.5);
+  border-color: rgba(201, 166, 70, 0.8);
+}
+
+/* Chart tooltip custom styles */
+.recharts-tooltip-wrapper {
+  z-index: 1000;
+}
+
+.recharts-default-tooltip {
+  backdrop-filter: blur(10px);
+  border-radius: 12px !important;
+}
+
+/* Stagger delay utilities */
+.delay-100 {
+  animation-delay: 100ms;
+}
+
+.delay-200 {
+  animation-delay: 200ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+.delay-400 {
+  animation-delay: 400ms;
+}
+
+.delay-500 {
+  animation-delay: 500ms;
+}

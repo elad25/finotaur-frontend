@@ -1,0 +1,10 @@
+
+/* Bloomberg-style AI button glow + helpers */
+.ai-btn:hover {
+  background: #C6A35D !important;
+  color: #000 !important;
+  box-shadow: 0 0 8px rgba(198,163,93,0.4);
+}
+/* subtle fade */
+@keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+.animate-fadein { animation: fadein .2s ease-in-out }

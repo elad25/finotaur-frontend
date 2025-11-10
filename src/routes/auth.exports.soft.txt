@@ -1,0 +1,14 @@
+// === Soft export block (no-throw, TS-safe) ===
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Router as __ExpressRouter } from "express";
+
+declare const authRouter: __ExpressRouter | any;
+declare const router: __ExpressRouter | any;
+
+const __maybeAuth: any =
+  (typeof authRouter !== "undefined" && authRouter) ? authRouter :
+  (typeof router !== "undefined" && router) ? router :
+  undefined;
+
+export default __maybeAuth as any;
+export { __maybeAuth as authRouter };

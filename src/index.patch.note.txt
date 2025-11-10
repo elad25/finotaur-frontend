@@ -1,0 +1,7 @@
+
+// Mount reminder in src/index.js (ESM):
+// import overviewRouter from './routes/overview.js';
+// app.use('/api', overviewRouter);
+//
+// Then test providers:
+//   curl "http://127.0.0.1:3000/api/health"

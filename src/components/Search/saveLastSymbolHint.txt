@@ -1,0 +1,2 @@
+When you navigate to Summary from your global search/command palette, also persist the symbol:
+localStorage.setItem("ft_last_symbol", symbol.toUpperCase());

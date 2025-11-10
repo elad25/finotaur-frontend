@@ -1,0 +1,244 @@
+// src/types/admin.ts
+// ============================================
+// COMPLETE & FIXED VERSION
+// ============================================
+
+export type UserRole = 'user' | 'admin' | 'super_admin';
+export type AccountType = 'free' | 'basic' | 'premium';
+export type SubscriptionInterval = 'monthly' | 'yearly';
+export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
+
+// ============================================
+// User Management Types
+// ============================================
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  role: UserRole;
+  account_type: AccountType;
+  subscription_interval: SubscriptionInterval | null;
+  trade_count: number;
+  max_trades: number;
+  subscription_status: SubscriptionStatus;
+  subscription_started_at: string | null;
+  subscription_expires_at: string | null;
+  trial_ends_at: string | null;
+  is_banned: boolean;
+  ban_reason: string | null;
+  banned_at: string | null;
+  last_login_at: string | null;
+  login_count: number;
+  created_at: string;
+  updated_at: string;
+  
+  // ✅ NEW: Affiliate fields
+  affiliate_code?: string | null;
+  referred_by?: string | null;
+  free_months_available?: number;
+  subscription_paused_until?: string | null;
+}
+
+export interface UserWithStats extends AdminUser {
+  total_pnl: number;
+  win_rate: number;
+  total_trades: number;
+  active_trades: number;
+  strategies_count: number;
+  last_trade_date: string | null;
+}
+
+// ============================================
+// Admin Analytics Types
+// ============================================
+
+export interface AdminStats {
+  totalUsers: number;
+  activeUsers: number; // logged in last 30 days
+  newUsersToday: number;
+  newUsersThisWeek: number;
+  newUsersThisMonth: number;
+  
+  // Subscriptions
+  freeUsers: number;
+  basicUsers: number;
+  premiumUsers: number;
+  proUsers?: number; // ✅ FIXED: Optional for backwards compatibility
+  trialUsers: number;
+  
+  // Subscription intervals
+  basicMonthlyUsers: number;
+  basicYearlyUsers: number;
+  premiumMonthlyUsers: number;
+  premiumYearlyUsers: number;
+  
+  // Revenue estimates
+  estimatedMonthlyRevenue: number;
+  estimatedYearlyRevenue: number;
+  
+  // Trades
+  totalTrades: number;
+  tradesThisWeek: number;
+  tradesThisMonth: number;
+  averageTradesPerUser: number;
+  
+  // Engagement
+  dailyActiveUsers: number;
+  weeklyActiveUsers: number;
+  monthlyActiveUsers: number;
+  
+  // Conversion
+  freeToPayingConversionRate: number;
+  trialToPayingConversionRate: number;
+}
+
+export interface UserGrowthData {
+  date: string;
+  newUsers: number;
+  totalUsers: number;
+  activeUsers: number;
+}
+
+export interface SubscriptionBreakdown {
+  accountType: AccountType;
+  interval: SubscriptionInterval | null;
+  count: number;
+  percentage: number;
+  revenue: number;
+}
+
+export interface TradeVolumeData {
+  date: string;
+  tradeCount: number;
+  uniqueUsers: number;
+}
+
+// ============================================
+// Referral System Types (Infrastructure)
+// ============================================
+
+export interface ReferralCode {
+  id: string;
+  user_id: string;
+  code: string;
+  uses_count: number;
+  max_uses: number | null;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface Referral {
+  id: string;
+  referrer_id: string;
+  referred_id: string;
+  referral_code: string;
+  status: 'pending' | 'completed' | 'expired' | 'cancelled';
+  reward_granted_to_referrer: boolean;
+  reward_granted_to_referred: boolean;
+  reward_type: 'free_month' | 'discount' | 'custom';
+  reward_value: number;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface ReferralStats {
+  totalReferrals: number;
+  completedReferrals: number;
+  pendingReferrals: number;
+  totalRewardsGranted: number;
+  conversionRate: number;
+  topReferrers: {
+    user_id: string;
+    email: string;
+    referral_count: number;
+  }[];
+}
+
+// ============================================
+// Admin Actions Types
+// ============================================
+
+export interface UpdateUserSubscriptionPayload {
+  userId: string;
+  account_type: AccountType;
+  subscription_interval: SubscriptionInterval;
+  subscription_status: SubscriptionStatus;
+  subscription_expires_at: string | null;
+  reason: string; // Admin note
+}
+
+export interface BanUserPayload {
+  userId: string;
+  reason: string;
+  bannedBy: string;
+}
+
+export interface UnbanUserPayload {
+  userId: string;
+}
+
+export interface ManualReferralRewardPayload {
+  userId: string;
+  rewardMonths: number;
+  reason: string;
+}
+
+// ============================================
+// Admin Audit Log Types
+// ============================================
+
+export type AdminActionType = 
+  | 'USER_UPDATE'
+  | 'SUBSCRIPTION_CHANGE'
+  | 'BAN_USER'
+  | 'UNBAN_USER'
+  | 'MANUAL_REWARD'
+  | 'DELETE_TRADE'
+  | 'DELETE_USER';
+
+export interface AdminAuditLog {
+  id: string;
+  admin_id: string;
+  admin_email: string;
+  action_type: AdminActionType;
+  target_user_id: string | null;
+  target_user_email: string | null;
+  old_data?: Record<string, any> | null;
+  new_data?: Record<string, any> | null;
+  reason?: string | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+// ============================================
+// Filter & Pagination Types
+// ============================================
+
+export interface UserFilters {
+  search?: string; // email or display_name
+  role?: UserRole;
+  account_type?: AccountType;
+  subscription_interval?: SubscriptionInterval;
+  subscription_status?: SubscriptionStatus;
+  is_banned?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface PaginationParams {
+  page: number;
+  pageSize: number;
+  sortBy?: 'created_at' | 'last_login_at' | 'trade_count' | 'email';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}

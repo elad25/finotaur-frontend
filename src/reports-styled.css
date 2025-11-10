@@ -1,0 +1,4 @@
+
+/* reports-styled additions */
+@keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+.animate-fadein { animation: fadein .2s ease-in-out }

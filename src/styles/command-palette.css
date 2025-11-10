@@ -1,0 +1,17 @@
+
+.fin-cmdp-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(2px);z-index:60;display:grid;place-items:start center;padding-top:10vh}
+.fin-cmdp-panel{width:min(720px,92vw);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(17,17,17,.98);box-shadow:0 14px 44px rgba(0,0,0,.6)}
+.fin-cmdp-input-wrap{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+.fin-cmdp-input{width:100%;font-size:16px;line-height:24px;color:#fff;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;outline:none}
+.fin-cmdp-list{max-height:52vh;overflow:auto}
+.fin-cmdp-empty{padding:16px;font-size:12px;color:#a1a1aa}
+.fin-cmdp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.fin-cmdp-row.is-active{background:rgba(255,255,255,.04)}
+.fin-cmdp-cell{display:flex;align-items:center;gap:8px;min-width:0}
+.fin-cmdp-symbol{color:#fff;font-weight:600}
+.fin-cmdp-name{color:#a1a1aa;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fin-cmdp-actions{display:flex;gap:8px}
+.fin-cmdp-btn{font-size:11px;color:#e5e7eb;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 10px}
+.fin-cmdp-btn:hover{background:rgba(255,255,255,.06)}
+.fin-cmdp-btn--primary{color:#fef3c7;background:rgba(245,158,11,.18);border-color:rgba(245,158,11,.36)}
+.fin-cmdp-btn--primary:hover{background:rgba(245,158,11,.26)}

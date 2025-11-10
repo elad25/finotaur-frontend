@@ -1,0 +1,20 @@
+/* src/styles/chart-helpers.css
+   Safe, optional helpers for the All Markets → Chart page.
+   These do not change global design; only used if classes are applied by the layout.
+*/
+
+/* If you can add class="w-watchlist-narrow" to the watchlist container,
+   it will keep it compact and give the chart more room. */
+.w-watchlist-narrow {
+  max-width: 320px;
+  width: 320px;
+  flex: 0 0 320px;
+}
+
+/* If the chart wrapper can receive this class,
+   it will ensure the canvas expands and never gets clipped. */
+.h-chart-fill {
+  height: calc(100vh - 112px);
+  min-height: 640px;
+  overflow: hidden;
+}

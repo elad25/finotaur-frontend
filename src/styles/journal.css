@@ -1,0 +1,7 @@
+/* Optional thin gold scrollbar for notes */
+.scrollbar-thin::-webkit-scrollbar { width: 8px; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background-color: rgba(201,166,70,0.35); border-radius: 8px; }
+
+/* Tiny gold divider utility used in your layout */
+.lux-title-divider { height: 1px; background-color: rgba(201,166,70,0.25); margin: 8px 0 14px; }
+.lux-section-title { font-size: 11px; letter-spacing: .14em; color: #C9A646; }

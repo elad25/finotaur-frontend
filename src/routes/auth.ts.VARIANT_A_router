@@ -1,0 +1,17 @@
+// finotaur-server/src/routes/auth.ts
+// VARIANT A — use this if your router is declared as: const router = Router();
+
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+
+const router = Router();
+
+// --- your existing routes go here ---
+// router.post("/login", ...);
+// router.post("/register", ...);
+// ... keep all your logic as-is ...
+
+// Exports: keep named export (optional) + provide default export so
+// `import authRouter from "./routes/auth"` works in server.ts
+export { router as authRouter };
+export default router;

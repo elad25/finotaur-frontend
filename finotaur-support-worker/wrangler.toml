@@ -1,0 +1,10 @@
+name = "finotaur-support"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+# No variables needed
+
+[[routes]]
+pattern = "support.finotaur.com/api/support"
+zone_name = "finotaur.com"

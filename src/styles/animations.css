@@ -1,0 +1,228 @@
+/* ============================================
+   FINOTAUR LANDING PAGE - ANIMATIONS & EFFECTS
+   ============================================ */
+
+/* ============================================
+   1. GOLD BREATHING EFFECT (Hero Background)
+   ============================================ */
+
+@keyframes goldPulse {
+  0% { 
+    box-shadow: 0 0 0 0 rgba(201, 166, 70, 0.06); 
+  }
+  50% { 
+    box-shadow: 0 0 40px 20px rgba(201, 166, 70, 0.035); 
+  }
+  100% { 
+    box-shadow: 0 0 0 0 rgba(201, 166, 70, 0.06); 
+  }
+}
+
+.hero-glow {
+  animation: goldPulse 6s ease-in-out infinite;
+}
+
+/* Apply to hero background orbs */
+.hero-background-orb {
+  animation: goldPulse 6s ease-in-out infinite;
+}
+
+/* ============================================
+   2. CARD HOVER EFFECTS (Gold Edge)
+   ============================================ */
+
+.luxury-card {
+  @apply bg-gradient-to-br from-slate-900/50 via-slate-900/80 to-slate-950 backdrop-blur-xl rounded-2xl;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.luxury-card:hover {
+  border: 1.5px solid #C9A646;
+  transform: translateY(-6px) scale(1.01);
+  box-shadow: 
+    0 10px 40px -12px rgba(201, 166, 70, 0.3),
+    0 0 0 1px rgba(201, 166, 70, 0.1);
+}
+
+/* Feature cards specific hover */
+.feature-card {
+  @apply luxury-card;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.feature-card:hover {
+  border-color: #C9A646;
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 
+    0 8px 30px -10px rgba(201, 166, 70, 0.4),
+    0 0 20px rgba(201, 166, 70, 0.15);
+}
+
+/* ============================================
+   3. BUTTON MICRO-INTERACTIONS
+   ============================================ */
+
+/* Ripple effect on click */
+.button-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.button-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.button-ripple:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+/* CTA gold gradient fill on hover */
+.cta-primary {
+  @apply relative overflow-hidden;
+  background: linear-gradient(90deg, #EAB308 0%, #F59E0B 50%, #EAB308 100%);
+  background-size: 200% auto;
+  transition: all 0.5s ease;
+}
+
+.cta-primary:hover {
+  background-position: right center;
+  transform: scale(1.05);
+  box-shadow: 0 10px 40px rgba(234, 179, 8, 0.5);
+}
+
+/* ============================================
+   4. GRADIENT ANIMATIONS
+   ============================================ */
+
+@keyframes gradient-x {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-gradient-x {
+  background-size: 200% auto;
+  animation: gradient-x 3s ease infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes subtle-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.animate-subtle-glow {
+  animation: subtle-glow 4s ease-in-out infinite;
+}
+
+/* ============================================
+   5. ICON ANIMATIONS
+   ============================================ */
+
+.feature-icon {
+  @apply w-12 h-12 rounded-xl;
+  @apply bg-gradient-to-br from-primary/20 to-primary/5;
+  @apply border border-primary/20;
+  @apply flex items-center justify-center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.feature-icon:hover {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 0 20px rgba(201, 166, 70, 0.4);
+  border-color: #C9A646;
+}
+
+/* ============================================
+   6. SCROLL REVEAL ANIMATIONS
+   ============================================ */
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scroll-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ============================================
+   7. UTILITY CLASSES
+   ============================================ */
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #C9A646 0%, #F59E0B 50%, #EAB308 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass-effect {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(201, 166, 70, 0.1);
+}
+
+.shadow-gold {
+  box-shadow: 
+    0 4px 20px rgba(201, 166, 70, 0.15),
+    0 0 40px rgba(201, 166, 70, 0.1);
+}
+
+/* ============================================
+   8. MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .luxury-card:hover {
+    transform: translateY(-3px) scale(1.005);
+  }
+  
+  .feature-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+}
+
+/* ============================================
+   9. ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.luxury-card:focus-visible,
+.cta-primary:focus-visible {
+  outline: 2px solid #C9A646;
+  outline-offset: 4px;
+}

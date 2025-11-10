@@ -1,0 +1,564 @@
+/* ============================================
+   FINOTAUR LANDING PAGE - ENHANCED ANIMATIONS
+   Complete implementation of all prompt requirements
+   ============================================ */
+
+/* ============================================
+   1. GOLD BREATHING EFFECT (Enhanced)
+   ============================================ */
+
+@keyframes goldPulse {
+  0% { 
+    box-shadow: 0 0 0 0 rgba(201, 166, 70, 0.06); 
+    opacity: 0.6;
+  }
+  50% { 
+    box-shadow: 0 0 60px 30px rgba(201, 166, 70, 0.05); 
+    opacity: 0.8;
+  }
+  100% { 
+    box-shadow: 0 0 0 0 rgba(201, 166, 70, 0.06); 
+    opacity: 0.6;
+  }
+}
+
+.hero-glow {
+  animation: goldPulse 6s ease-in-out infinite;
+}
+
+.hero-background-orb {
+  animation: goldPulse 6s ease-in-out infinite;
+  will-change: box-shadow, opacity;
+}
+
+/* ============================================
+   2. CARD HOVER EFFECTS (Enhanced Gold Edge)
+   ============================================ */
+
+.luxury-card {
+  @apply bg-gradient-to-br from-slate-900/50 via-slate-900/80 to-slate-950 backdrop-blur-xl rounded-2xl;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.luxury-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(135deg, transparent, #C9A646, transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.luxury-card:hover {
+  border-color: #C9A646;
+  transform: translateY(-6px) scale(1.01);
+  box-shadow: 
+    0 10px 40px -12px rgba(201, 166, 70, 0.3),
+    0 0 0 1px rgba(201, 166, 70, 0.1),
+    0 0 60px rgba(201, 166, 70, 0.15);
+}
+
+.luxury-card:hover::before {
+  opacity: 1;
+}
+
+/* ============================================
+   3. BUTTON MICRO-INTERACTIONS
+   ============================================ */
+
+/* Ripple effect on click */
+.button-ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.button-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s, opacity 0.6s;
+  opacity: 0;
+}
+
+.button-ripple:active::after {
+  width: 300px;
+  height: 300px;
+  opacity: 1;
+}
+
+/* CTA gold gradient fill on hover */
+.cta-primary {
+  @apply relative overflow-hidden;
+  background: linear-gradient(90deg, #EAB308 0%, #F59E0B 50%, #EAB308 100%);
+  background-size: 200% auto;
+  transition: all 0.5s ease;
+  box-shadow: 0 10px 30px rgba(234, 179, 8, 0.3);
+}
+
+.cta-primary:hover {
+  background-position: right center;
+  transform: scale(1.05);
+  box-shadow: 0 15px 50px rgba(234, 179, 8, 0.5);
+}
+
+.cta-primary:active {
+  transform: scale(0.98);
+}
+
+/* ============================================
+   4. SCROLL REVEAL ANIMATIONS
+   ============================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes goldUnderline {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+  to {
+    width: 100%;
+    opacity: 1;
+  }
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.scroll-reveal.revealed {
+  animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.scroll-reveal-left.revealed {
+  animation: fadeInLeft 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.scroll-reveal-right.revealed {
+  animation: fadeInRight 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Gold underline reveal */
+.gold-underline {
+  position: relative;
+  display: inline-block;
+}
+
+.gold-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  height: 2px;
+  width: 0;
+  background: linear-gradient(90deg, #C9A646, #F59E0B);
+  opacity: 0;
+}
+
+.gold-underline.revealed::after {
+  animation: goldUnderline 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* ============================================
+   5. CALENDAR HOVER TOOLTIPS
+   ============================================ */
+
+.calendar-day {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.calendar-day:hover {
+  transform: translateY(-2px) scale(1.05);
+  z-index: 10;
+}
+
+.calendar-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(201, 166, 70, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 200px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.calendar-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(201, 166, 70, 0.3);
+}
+
+.calendar-day:hover .calendar-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+  pointer-events: auto;
+}
+
+/* P&L Breakdown in Tooltip */
+.tooltip-pnl-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.tooltip-pnl-positive {
+  color: #10b981;
+}
+
+.tooltip-pnl-negative {
+  color: #ef4444;
+}
+
+.tooltip-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201, 166, 70, 0.3), transparent);
+  margin: 8px 0;
+}
+
+/* ============================================
+   6. ICON ANIMATIONS (Enhanced)
+   ============================================ */
+
+.feature-icon {
+  @apply w-12 h-12 rounded-xl;
+  @apply bg-gradient-to-br from-primary/20 to-primary/5;
+  @apply border border-primary/20;
+  @apply flex items-center justify-center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.feature-icon::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  background: radial-gradient(circle, rgba(201, 166, 70, 0.2) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: inherit;
+}
+
+.feature-icon:hover {
+  transform: scale(1.1) rotate(5deg);
+  box-shadow: 0 0 30px rgba(201, 166, 70, 0.5);
+  border-color: #C9A646;
+}
+
+.feature-icon:hover::before {
+  opacity: 1;
+}
+
+/* ============================================
+   7. GRADIENT ANIMATIONS
+   ============================================ */
+
+@keyframes gradient-x {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes gradient-y {
+  0% { background-position: 50% 0%; }
+  50% { background-position: 50% 100%; }
+  100% { background-position: 50% 0%; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes subtle-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.6; }
+}
+
+.animate-gradient-x {
+  background-size: 200% auto;
+  animation: gradient-x 3s ease infinite;
+}
+
+.animate-gradient-y {
+  background-size: auto 200%;
+  animation: gradient-y 3s ease infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-subtle-glow {
+  animation: subtle-glow 4s ease-in-out infinite;
+}
+
+/* ============================================
+   8. TYPING ANIMATION (AI Bubble)
+   ============================================ */
+
+@keyframes typing-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.typing-cursor {
+  animation: typing-cursor 1s step-end infinite;
+}
+
+@keyframes ai-thinking {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.ai-thinking-dot {
+  animation: ai-thinking 1.4s ease-in-out infinite;
+}
+
+.ai-thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ai-thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ============================================
+   9. TESTIMONIAL ANIMATIONS
+   ============================================ */
+
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.testimonial-card {
+  animation: slideInFromBottom 0.6s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+.testimonial-card:nth-child(1) { animation-delay: 0.1s; }
+.testimonial-card:nth-child(2) { animation-delay: 0.2s; }
+.testimonial-card:nth-child(3) { animation-delay: 0.3s; }
+.testimonial-card:nth-child(4) { animation-delay: 0.4s; }
+
+/* ============================================
+   10. PRICING CARD PULSE GLOW
+   ============================================ */
+
+@keyframes pricing-pulse {
+  0%, 100% {
+    box-shadow: 
+      0 0 40px rgba(201, 166, 70, 0.3),
+      0 0 80px rgba(201, 166, 70, 0.2);
+  }
+  50% {
+    box-shadow: 
+      0 0 60px rgba(201, 166, 70, 0.4),
+      0 0 120px rgba(201, 166, 70, 0.3);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pricing-pulse 3s ease-in-out infinite;
+}
+
+/* ============================================
+   11. UTILITY CLASSES
+   ============================================ */
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #C9A646 0%, #F59E0B 50%, #EAB308 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% auto;
+}
+
+.gold-text-gradient-animated {
+  animation: gradient-x 3s ease infinite;
+}
+
+.glass-effect {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(201, 166, 70, 0.1);
+}
+
+.shadow-gold {
+  box-shadow: 
+    0 4px 20px rgba(201, 166, 70, 0.15),
+    0 0 40px rgba(201, 166, 70, 0.1);
+}
+
+.shadow-gold-lg {
+  box-shadow: 
+    0 10px 40px rgba(201, 166, 70, 0.3),
+    0 0 80px rgba(201, 166, 70, 0.2);
+}
+
+/* ============================================
+   12. ANNOTATION ANIMATIONS
+   ============================================ */
+
+@keyframes annotationPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.annotation-dot {
+  animation: annotationPulse 2s ease-in-out infinite;
+}
+
+@keyframes annotationLineGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.annotation-line {
+  transform-origin: left center;
+  animation: annotationLineGrow 0.5s ease-out forwards;
+}
+
+/* ============================================
+   13. MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .luxury-card:hover {
+    transform: translateY(-3px) scale(1.005);
+  }
+  
+  .feature-card:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .calendar-tooltip {
+    min-width: 150px;
+    font-size: 11px;
+  }
+
+  .hero-background-orb {
+    animation-duration: 8s;
+  }
+}
+
+/* ============================================
+   14. ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus states for keyboard navigation */
+.luxury-card:focus-visible,
+.cta-primary:focus-visible,
+.feature-icon:focus-visible {
+  outline: 2px solid #C9A646;
+  outline-offset: 4px;
+}
+
+/* ============================================
+   15. LOADING STATES
+   ============================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(201, 166, 70, 0.1),
+    transparent
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}

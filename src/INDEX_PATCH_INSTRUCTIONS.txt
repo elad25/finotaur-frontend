@@ -1,0 +1,9 @@
+// NOTE: Add the following lines to your existing src/index.js after app initialization:
+// const priceRoutes = require("./routes/price");
+// const eventsRoutes = require("./routes/events");
+// const profileRoutes = require("./routes/profile");
+// const newsRoutes = require("./routes/news");
+// app.use("/api", priceRoutes);
+// app.use("/api", eventsRoutes);
+// app.use("/api", profileRoutes);
+// app.use("/api", newsRoutes);
