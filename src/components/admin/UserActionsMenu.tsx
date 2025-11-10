@@ -1,11 +1,7 @@
 // src/components/admin/UserActionsMenu.tsx
-// ============================================
-// User Actions Dropdown Menu (3 dots)
-// ✅ NOW SUPPORTS IMPERSONATION
-// ============================================
-
 import { useState } from 'react';
-import { MoreVertical, Eye, Edit, Gift, Mail, Ban, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MoreVertical, Eye, Edit, Gift, Mail, Ban, Trash2, UserCheck } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +16,7 @@ import GrantPremiumModal from './GrantPremiumModal';
 import SendEmailModal from './SendEmailModal';
 import BanUserModal from './BanUserModal';
 import DeleteUserModal from './DeleteUserModal';
+import UnbanUserModal from './UnbanUserModal'; // 🆕 NEW
 
 interface UserActionsMenuProps {
   user: UserWithStats;
@@ -27,11 +24,13 @@ interface UserActionsMenuProps {
 }
 
 export default function UserActionsMenu({ user, onActionComplete }: UserActionsMenuProps) {
+  const navigate = useNavigate();
   const { startImpersonation } = useImpersonation();
   const [showChangeSubscription, setShowChangeSubscription] = useState(false);
   const [showGrantPremium, setShowGrantPremium] = useState(false);
   const [showSendEmail, setShowSendEmail] = useState(false);
   const [showBanUser, setShowBanUser] = useState(false);
+  const [showUnbanUser, setShowUnbanUser] = useState(false); // 🆕 NEW
   const [showDeleteUser, setShowDeleteUser] = useState(false);
 
   const handleSuccess = () => {
@@ -40,8 +39,11 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
     }
   };
 
-  // 🔥 NEW: Handle impersonation (View as User)
-  const handleViewAsUser = async () => {
+  const handleViewUserDetails = () => {
+    navigate(`/app/journal/admin/users/${user.id}`);
+  };
+
+  const handleImpersonate = async () => {
     await startImpersonation(
       user.id,
       user.email,
@@ -64,13 +66,12 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
           align="end" 
           className="w-56 bg-[#111111] border-gray-800"
         >
-          {/* 🔥 UPDATED: Now uses impersonation instead of navigation */}
           <DropdownMenuItem
-            onClick={handleViewAsUser}
+            onClick={handleViewUserDetails}
             className="cursor-pointer hover:bg-[#1a1a1a] text-gray-300 hover:text-white"
           >
             <Eye className="w-4 h-4 mr-2" />
-            View as User
+            View User Details
           </DropdownMenuItem>
           
           <DropdownMenuItem
@@ -101,13 +102,24 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
 
           <DropdownMenuSeparator className="bg-gray-800" />
           
-          <DropdownMenuItem
-            onClick={() => setShowBanUser(true)}
-            className="cursor-pointer hover:bg-red-500/10 text-red-400 hover:text-red-300"
-          >
-            <Ban className="w-4 h-4 mr-2" />
-            Ban User
-          </DropdownMenuItem>
+          {/* 🆕 Conditional: Show UNBAN or BAN based on user status */}
+          {user.is_banned ? (
+            <DropdownMenuItem
+              onClick={() => setShowUnbanUser(true)}
+              className="cursor-pointer hover:bg-green-500/10 text-green-400 hover:text-green-300"
+            >
+              <UserCheck className="w-4 h-4 mr-2" />
+              Unban User
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => setShowBanUser(true)}
+              className="cursor-pointer hover:bg-red-500/10 text-red-400 hover:text-red-300"
+            >
+              <Ban className="w-4 h-4 mr-2" />
+              Ban User
+            </DropdownMenuItem>
+          )}
           
           <DropdownMenuItem
             onClick={() => setShowDeleteUser(true)}
@@ -147,6 +159,15 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
         <BanUserModal
           user={user}
           onClose={() => setShowBanUser(false)}
+          onSuccess={handleSuccess}
+        />
+      )}
+
+      {/* 🆕 NEW: Unban Modal */}
+      {showUnbanUser && (
+        <UnbanUserModal
+          user={user}
+          onClose={() => setShowUnbanUser(false)}
           onSuccess={handleSuccess}
         />
       )}

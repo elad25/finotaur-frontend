@@ -1,10 +1,10 @@
 // src/components/admin/GrantPremiumModal.tsx
 import { useState } from 'react';
-import { X, Gift, AlertCircle } from 'lucide-react';
-import { UserWithStats } from '@/types/admin';
+import { X, Gift, Loader2 } from 'lucide-react';
 import { grantFreeAccess } from '@/services/adminService';
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { UserWithStats } from '@/types/admin';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'react-hot-toast';
 
 interface GrantPremiumModalProps {
   user: UserWithStats;
@@ -13,41 +13,35 @@ interface GrantPremiumModalProps {
 }
 
 export default function GrantPremiumModal({ user, onClose, onSuccess }: GrantPremiumModalProps) {
+  const { user: currentUser } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [months, setMonths] = useState(1);
   const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
-  async function handleGrant() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    
+    if (!currentUser) {
+      toast.error('You must be logged in');
+      return;
+    }
+
     try {
       setLoading(true);
-      setError('');
       
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) throw new Error('Not authenticated');
-
-      // Call the new grantFreeAccess function
       await grantFreeAccess(
         user.id,
         months,
-        reason || `Free premium granted for ${months} month(s)`,
+        reason || `Admin granted ${months} month(s) of free premium access`,
         currentUser.id
       );
 
-      toast.success(`✅ נתתי ${months} חודש${months > 1 ? 'ים' : ''} חינם ל-${user.email}`);
-      
-      // ✅ CRITICAL FIX: Call onSuccess to refresh data
+      toast.success(`✅ Granted ${months} month(s) to ${user.email}`);
       onSuccess();
-      
-      // Small delay to ensure DB update is complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       onClose();
     } catch (error: any) {
-      console.error('❌ Error granting premium:', error);
-      const errorMessage = error.message || 'Failed to grant premium';
-      setError(errorMessage);
-      toast.error(`❌ ${errorMessage}`);
+      console.error('❌ Error granting free access:', error);
+      toast.error(error.message || 'Failed to grant free access');
     } finally {
       setLoading(false);
     }
@@ -55,10 +49,13 @@ export default function GrantPremiumModal({ user, onClose, onSuccess }: GrantPre
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#111111] border border-gray-800 rounded-lg max-w-md w-full">
+      <div className="bg-[#111111] border border-gray-800 rounded-lg p-6 max-w-md w-full">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
-          <h2 className="text-xl font-bold text-white">🎁 Grant Free Premium</h2>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Gift className="w-5 h-5 text-[#D4AF37]" />
+            <h2 className="text-xl font-bold text-white">Grant Free Premium</h2>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white transition-colors"
@@ -67,128 +64,116 @@ export default function GrantPremiumModal({ user, onClose, onSuccess }: GrantPre
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm text-red-400">{error}</p>
-              </div>
-            </div>
-          )}
+        {/* User Info */}
+        <div className="bg-[#0A0A0A] border border-gray-800 rounded-lg p-4 mb-6">
+          <p className="text-sm text-gray-400 mb-1">User</p>
+          <p className="text-white font-semibold">{user.email}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Current: {user.account_type} • {user.free_months_available || 0} free months
+          </p>
+        </div>
 
-          {/* User Info */}
-          <div className="bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-lg p-4">
-            <p className="text-sm text-gray-300">
-              Granting premium to: <span className="text-white font-medium">{user.email}</span>
-            </p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-              <div>
-                Current: <span className="text-[#D4AF37] uppercase">{user.account_type}</span>
-              </div>
-              <div>
-                Free months: <span className="text-[#D4AF37]">{user.free_months_available || 0}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Duration */}
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Months */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Duration (months):
+              Number of Months *
             </label>
             <input
               type="number"
               min="1"
-              max="1200"
+              max="120"
               value={months}
-              onChange={(e) => setMonths(parseInt(e.target.value) || 1)}
-              className="w-full px-3 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-[#D4AF37]"
+              onChange={(e) => setMonths(parseInt(e.target.value))}
+              className="w-full px-4 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-[#D4AF37]"
+              required
             />
-            <div className="mt-2 space-y-1">
-              <p className="text-xs text-gray-400">
-                📅 Expires: {new Date(new Date().setMonth(new Date().getMonth() + months)).toLocaleDateString('en-US', { 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </p>
-              <p className="text-xs text-[#D4AF37]">
-                💡 Quick: 1=month | 12=year | 120=decade | 1200=lifetime
-              </p>
-            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              User will get {months} month(s) of premium access for free
+            </p>
           </div>
 
           {/* Reason */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Reason (optional):
+              Reason (Optional)
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g., Friend of founder, Beta tester, Support gesture..."
+              className="w-full px-4 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-[#D4AF37] resize-none"
               rows={3}
-              className="w-full px-3 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] resize-none"
+              placeholder="e.g., Friend of admin, Compensation, Beta tester..."
             />
           </div>
 
-          {/* What will happen */}
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-            <p className="text-xs text-blue-300 font-medium mb-2">✨ What will happen:</p>
-            <ul className="text-xs text-gray-400 space-y-1.5">
-              <li className="flex items-start gap-2">
-                <span className="text-green-400 shrink-0">✓</span>
-                <span>User gets <strong className="text-white">{months}</strong> free month{months > 1 ? 's' : ''}</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-400 shrink-0">✓</span>
-                <span>Full premium access (unlimited trades, strategies, analytics)</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-400 shrink-0">✓</span>
-                <span>No payment required</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-400 shrink-0">✓</span>
-                <span>Action logged in audit trail</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-400 shrink-0">⚠</span>
-                <span>User keeps <strong className="text-white">FREE</strong> account type (but with premium features)</span>
-              </li>
-            </ul>
+          {/* Quick Buttons */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMonths(1)}
+              className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+                months === 1
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'bg-[#0A0A0A] border border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              1 Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setMonths(6)}
+              className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+                months === 6
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'bg-[#0A0A0A] border border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              6 Months
+            </button>
+            <button
+              type="button"
+              onClick={() => setMonths(12)}
+              className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+                months === 12
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'bg-[#0A0A0A] border border-gray-700 text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              1 Year
+            </button>
           </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center gap-3 p-6 border-t border-gray-800">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 px-4 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white hover:bg-gray-900 transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleGrant}
-            disabled={loading}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-[#D4AF37] text-black font-medium rounded-lg hover:bg-[#E5C158] transition-colors disabled:opacity-50"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                Granting...
-              </>
-            ) : (
-              <>
-                <Gift className="w-4 h-4" />
-                Grant {months} Month{months > 1 ? 's' : ''}
-              </>
-            )}
-          </button>
-        </div>
+          {/* Buttons */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-[#D4AF37] text-black font-semibold rounded-lg hover:bg-[#E5C158] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Granting...
+                </>
+              ) : (
+                <>
+                  <Gift className="w-4 h-4" />
+                  Grant {months} Month(s)
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

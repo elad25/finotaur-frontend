@@ -1,6 +1,6 @@
 // src/types/admin.ts
 // ============================================
-// COMPLETE & FIXED VERSION
+// COMPLETE & FIXED VERSION v8.5.0
 // ============================================
 
 export type UserRole = 'user' | 'admin' | 'super_admin';
@@ -34,7 +34,7 @@ export interface AdminUser {
   created_at: string;
   updated_at: string;
   
-  // ✅ NEW: Affiliate fields
+  // ✅ Affiliate fields
   affiliate_code?: string | null;
   referred_by?: string | null;
   free_months_available?: number;
@@ -51,45 +51,49 @@ export interface UserWithStats extends AdminUser {
 }
 
 // ============================================
+// 🆕 v8.5.0: Archive System Types
+// ============================================
+
+export interface ArchivedUser extends UserWithStats {
+  archived_at: string;
+  archived_by: string | null;
+  days_in_archive: number;
+}
+
+// ============================================
 // Admin Analytics Types
 // ============================================
 
 export interface AdminStats {
   totalUsers: number;
-  activeUsers: number; // logged in last 30 days
+  activeUsers: number;
   newUsersToday: number;
   newUsersThisWeek: number;
   newUsersThisMonth: number;
   
-  // Subscriptions
   freeUsers: number;
   basicUsers: number;
   premiumUsers: number;
-  proUsers?: number; // ✅ FIXED: Optional for backwards compatibility
+  proUsers?: number;
   trialUsers: number;
   
-  // Subscription intervals
   basicMonthlyUsers: number;
   basicYearlyUsers: number;
   premiumMonthlyUsers: number;
   premiumYearlyUsers: number;
   
-  // Revenue estimates
   estimatedMonthlyRevenue: number;
   estimatedYearlyRevenue: number;
   
-  // Trades
   totalTrades: number;
   tradesThisWeek: number;
   tradesThisMonth: number;
   averageTradesPerUser: number;
   
-  // Engagement
   dailyActiveUsers: number;
   weeklyActiveUsers: number;
   monthlyActiveUsers: number;
   
-  // Conversion
   freeToPayingConversionRate: number;
   trialToPayingConversionRate: number;
 }
@@ -116,7 +120,7 @@ export interface TradeVolumeData {
 }
 
 // ============================================
-// Referral System Types (Infrastructure)
+// Referral System Types
 // ============================================
 
 export interface ReferralCode {
@@ -167,7 +171,7 @@ export interface UpdateUserSubscriptionPayload {
   subscription_interval: SubscriptionInterval;
   subscription_status: SubscriptionStatus;
   subscription_expires_at: string | null;
-  reason: string; // Admin note
+  reason: string;
 }
 
 export interface BanUserPayload {
@@ -197,7 +201,10 @@ export type AdminActionType =
   | 'UNBAN_USER'
   | 'MANUAL_REWARD'
   | 'DELETE_TRADE'
-  | 'DELETE_USER';
+  | 'DELETE_USER'
+  | 'SOFT_DELETE_USER'              // 🆕 v8.5.0
+  | 'RESTORE_USER_FROM_ARCHIVE'     // 🆕 v8.5.0
+  | 'PERMANENT_DELETE_FROM_ARCHIVE'; // 🆕 v8.5.0
 
 export interface AdminAuditLog {
   id: string;
@@ -218,7 +225,7 @@ export interface AdminAuditLog {
 // ============================================
 
 export interface UserFilters {
-  search?: string; // email or display_name
+  search?: string;
   role?: UserRole;
   account_type?: AccountType;
   subscription_interval?: SubscriptionInterval;

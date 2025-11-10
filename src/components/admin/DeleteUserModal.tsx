@@ -1,6 +1,6 @@
 // src/components/admin/DeleteUserModal.tsx
 import { useState } from 'react';
-import { X, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { X, Trash2, AlertTriangle } from 'lucide-react';
 import { UserWithStats } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
 
@@ -35,7 +35,7 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
         return;
       }
 
-      // ✅ NEW: Call the soft delete function
+      // ✅ Call the soft delete function
       const { data, error: deleteError } = await supabase.rpc('admin_soft_delete_user', {
         p_user_id: user.id,
         p_reason: reason || 'Admin deleted user via dashboard'
@@ -80,8 +80,8 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
               <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-yellow-400 text-sm font-medium mb-1">Soft Delete</p>
-                <p className="text-yellow-300/80 text-sm">
-                  User will be hidden and marked as deleted. All data is preserved and can be restored within 30 days. After 30 days, data will be permanently removed.
+                <p className="text-yellow-300/80 text-xs">
+                  Hidden for 30 days, then permanently removed.
                 </p>
               </div>
             </div>

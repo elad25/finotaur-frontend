@@ -29,16 +29,23 @@ export default function ChangeSubscriptionModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🚀 [MODAL] handleSubmit started');
     setLoading(true);
     setError('');
 
     try {
+      console.log('🔐 [MODAL] Getting current user...');
       // Get current admin user ID
       const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log('👤 [MODAL] Current user:', currentUser?.email);
+      
       if (!currentUser) throw new Error('Not authenticated');
 
+      console.log('🛡️ [MODAL] Checking protection...');
       // ✅ PROTECTION: Check if admin is trying to downgrade themselves
       if (currentUser.id === user.id) {
+        console.log('⚠️ [MODAL] Admin editing own profile');
+        
         // Get current user's profile to check role
         const { data: currentProfile } = await supabase
           .from('profiles')
@@ -46,19 +53,33 @@ export default function ChangeSubscriptionModal({
           .eq('id', currentUser.id)
           .single();
 
+        console.log('📊 [MODAL] Current profile:', currentProfile);
+
         if (currentProfile?.role === 'admin' || currentProfile?.role === 'super_admin') {
           // Check if downgrading from premium/basic to free
           const isDowngrade = 
             (currentProfile.account_type === 'premium' || currentProfile.account_type === 'basic') &&
             accountType === 'free';
 
+          console.log('🔍 [MODAL] Is downgrade?', isDowngrade);
+
           if (isDowngrade) {
+            console.log('🛑 [MODAL] Downgrade blocked!');
             setError('⛔ Admins cannot downgrade their own subscription to Free. Please contact another admin.');
             setLoading(false);
             return;
           }
         }
       }
+
+      console.log('📝 [MODAL] Calling updateUserSubscription with:', {
+        userId: user.id,
+        account_type: accountType,
+        subscription_interval: interval,
+        subscription_status: status,
+        subscription_expires_at: expiresAt,
+        adminId: currentUser.id
+      });
 
       await updateUserSubscription(
         {
@@ -72,12 +93,15 @@ export default function ChangeSubscriptionModal({
         currentUser.id
       );
       
+      console.log('✅ [MODAL] updateUserSubscription completed!');
       onSuccess();
       onClose();
     } catch (err: any) {
+      console.error('❌ [MODAL] Error:', err);
       setError(err.message || 'Failed to update subscription');
     } finally {
       setLoading(false);
+      console.log('🏁 [MODAL] handleSubmit finished');
     }
   };
 

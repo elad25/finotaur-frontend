@@ -2,6 +2,7 @@
 // ============================================
 // OPTIMIZED FOR 5000+ CONCURRENT USERS
 // ============================================
+// Version: v8.5.0-WITH-ARCHIVE-SYSTEM
 // Performance improvements:
 // ✅ React Query integration via query keys
 // ✅ Request deduplication via cachedQuery wrapper
@@ -10,7 +11,11 @@
 // ✅ Optimistic updates for instant UI
 // ✅ Memory leak prevention
 // ✅ Type-safe query key factory
-// ✅ Grant free access function (NEW!)
+// ✅ Grant free access function
+// ✅ FIXED: Admin audit log via RPC (v8.4.5)
+// ✅ FIXED: Admin subscription update via RPC (v8.4.7)
+// ✅ NEW v8.4.10: UNBAN user function using RPC
+// ✅ NEW v8.5.0: SOFT DELETE with 30-day archive system
 
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
 import {
@@ -32,6 +37,16 @@ import {
 } from '@/types/admin';
 
 // ============================================
+// TYPES - Archive System
+// ============================================
+
+export interface ArchivedUser extends UserWithStats {
+  archived_at: string;
+  archived_by: string | null;
+  days_in_archive: number;
+}
+
+// ============================================
 // CONSTANTS & CONFIGURATION
 // ============================================
 
@@ -48,11 +63,12 @@ const PRICING = {
 
 // Cache TTLs (Time To Live)
 const CACHE_TTL = {
-  STATS: 5 * 60 * 1000,      // 5 minutes - admin stats don't change often
-  USERS_LIST: 2 * 60 * 1000,  // 2 minutes - user list can be cached briefly
-  USER_DETAIL: 1 * 60 * 1000, // 1 minute - individual user details
-  AUDIT_LOGS: 5 * 60 * 1000,  // 5 minutes - audit logs are append-only
-  CHARTS: 10 * 60 * 1000,     // 10 minutes - chart data changes slowly
+  STATS: 5 * 60 * 1000,      // 5 minutes
+  USERS_LIST: 2 * 60 * 1000,  // 2 minutes
+  USER_DETAIL: 1 * 60 * 1000, // 1 minute
+  AUDIT_LOGS: 5 * 60 * 1000,  // 5 minutes
+  CHARTS: 10 * 60 * 1000,     // 10 minutes
+  ARCHIVE: 5 * 60 * 1000,     // 5 minutes
 } as const;
 
 // ============================================
@@ -74,6 +90,8 @@ export const adminQueryKeys = {
     [...adminQueryKeys.all, 'user-growth', days] as const,
   tradeVolume: (days: number) => 
     [...adminQueryKeys.all, 'trade-volume', days] as const,
+  archivedUsers: () => 
+    [...adminQueryKeys.all, 'archived-users'] as const,
 } as const;
 
 // ============================================
@@ -89,6 +107,7 @@ export function invalidateUserCaches(userId?: string) {
   }
   supabaseCache.invalidate('admin-users');
   supabaseCache.invalidate('admin-stats');
+  supabaseCache.invalidate('archived-users');
 }
 
 /**
@@ -107,9 +126,6 @@ export function invalidateStatsCaches() {
 
 /**
  * ⚡ OPTIMIZED: Uses admin_users_list_view + cachedQuery wrapper
- * Before: 1 query + N queries for stats = 51 queries for 50 users
- * After: 1 query with caching = instant on subsequent loads
- * Performance: 50x faster + instant cache hits
  */
 export async function getAllUsers(
   filters?: UserFilters,
@@ -169,13 +185,6 @@ export async function getAllUsers(
       if (error) throw error;
 
       console.timeEnd('⚡ getAllUsers');
-      console.log('✅ getAllUsers - Success:', {
-        total: count,
-        returned: data?.length || 0,
-        page,
-        pageSize,
-        cached: false,
-      });
 
       const usersWithStats: UserWithStats[] = (data || []).map(user => ({
         ...user,
@@ -245,54 +254,18 @@ export async function updateUserSubscription(
     subscription_interval,
     subscription_status, 
     subscription_expires_at, 
-    reason 
   } = payload;
 
-  // 🔥 Get old data for audit log (from cache if available)
-  const oldUser = await getUserById(userId);
-
-  // Determine max_trades based on account type
-  let max_trades = 10; // free default
-  if (account_type === 'basic' || account_type === 'premium') {
-    max_trades = 999999; // unlimited
-  }
-
-  // Update user subscription
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({
-      account_type,
-      subscription_interval: account_type !== 'free' ? subscription_interval : null,
-      subscription_status,
-      subscription_expires_at,
-      max_trades,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
+  // Use RPC function to bypass RLS
+  const { data, error: updateError } = await supabase.rpc('admin_update_subscription', {
+    p_user_id: userId,
+    p_account_type: account_type,
+    p_subscription_interval: account_type !== 'free' ? subscription_interval : null,
+    p_subscription_status: subscription_status,
+    p_subscription_expires_at: subscription_expires_at,
+  });
 
   if (updateError) throw updateError;
-
-  // Log audit trail
-  await logAdminAction({
-    admin_id: adminId,
-    action_type: 'SUBSCRIPTION_CHANGE',
-    target_user_id: userId,
-    old_data: oldUser ? {
-      account_type: oldUser.account_type,
-      subscription_interval: oldUser.subscription_interval,
-      subscription_status: oldUser.subscription_status,
-      subscription_expires_at: oldUser.subscription_expires_at,
-      max_trades: oldUser.max_trades,
-    } : undefined,
-    new_data: { 
-      account_type, 
-      subscription_interval,
-      subscription_status, 
-      subscription_expires_at, 
-      max_trades 
-    },
-    reason,
-  });
 
   // 🔥 Invalidate all related caches
   invalidateUserCaches(userId);
@@ -303,7 +276,6 @@ export async function updateUserSubscription(
 
 /**
  * 🎁 Grant free premium access to a user without payment
- * Uses the admin_grant_free_access database function
  */
 export async function grantFreeAccess(
   userId: string,
@@ -314,24 +286,19 @@ export async function grantFreeAccess(
   console.time('⚡ grantFreeAccess');
   
   try {
-    // Call the database function
-const { data, error } = await supabase.rpc('grant_free_access', {
-  p_user_id: userId,
-  p_months: months,
-  p_reason: reason || `Free access granted for ${months} month(s)`,
-  p_admin_id: adminId
-});
+    const { data, error } = await supabase.rpc('grant_free_access', {
+      p_user_id: userId,
+      p_months: months,
+      p_reason: reason || `Free access granted for ${months} month(s)`,
+      p_admin_id: adminId
+    });
 
     if (error) {
       console.error('❌ Error granting free access:', error);
       throw error;
     }
 
-    console.log('✅ Free access granted successfully:', {
-      userId,
-      months,
-      reason,
-    });
+    console.log('✅ Free access granted successfully');
 
     // 🔥 Invalidate all related caches
     invalidateUserCaches(userId);
@@ -372,65 +339,177 @@ export async function banUser(payload: BanUserPayload): Promise<void> {
   console.log('✅ User banned:', userId);
 }
 
+/**
+ * 🆕 v8.4.10: UNBAN USER - Restore user access
+ */
 export async function unbanUser(payload: UnbanUserPayload, adminId: string): Promise<void> {
   const { userId } = payload;
 
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      is_banned: false,
-      ban_reason: null,
-      banned_at: null,
-      banned_by: null,
-    })
-    .eq('id', userId);
+  console.time('⚡ unbanUser');
 
-  if (error) throw error;
+  try {
+    // Use the toggle function
+    const { error } = await supabase.rpc('admin_toggle_user_ban', {
+      p_user_id: userId,
+      p_ban_reason: null,
+    });
 
-  await logAdminAction({
-    admin_id: adminId,
-    action_type: 'UNBAN_USER',
-    target_user_id: userId,
-  });
+    if (error) {
+      console.error('❌ Error unbanning user:', error);
+      throw error;
+    }
 
-  // 🔥 Invalidate caches
-  invalidateUserCaches(userId);
+    console.log('✅ User unbanned successfully:', userId);
 
-  console.log('✅ User unbanned:', userId);
+    // 🔥 Invalidate caches
+    invalidateUserCaches(userId);
+    invalidateStatsCaches();
+
+    console.timeEnd('⚡ unbanUser');
+  } catch (error) {
+    console.error('❌ unbanUser failed:', error);
+    throw error;
+  }
 }
 
+/**
+ * 🗑️ v8.5.0: SOFT DELETE USER
+ * Marks user as deleted. After 30 days, auto-archived by cron job.
+ */
 export async function deleteUser(userId: string, adminId: string): Promise<void> {
-  const { error } = await supabase
-    .from('profiles')
-    .delete()
-    .eq('id', userId);
+  console.time('⚡ deleteUser (soft delete)');
 
-  if (error) throw error;
+  try {
+    // ✅ SOFT DELETE: Mark as deleted
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: adminId,
+        is_banned: true, // Also revoke access immediately
+        ban_reason: 'Account deleted by admin',
+      })
+      .eq('id', userId);
 
-  await logAdminAction({
-    admin_id: adminId,
-    action_type: 'DELETE_USER',
-    target_user_id: userId,
-    reason: 'User deleted by admin',
-  });
+    if (error) {
+      console.error('❌ Error soft-deleting user:', error);
+      throw error;
+    }
 
-  // 🔥 Invalidate all caches
-  invalidateUserCaches(userId);
-  invalidateStatsCaches();
+    await logAdminAction({
+      admin_id: adminId,
+      action_type: 'SOFT_DELETE_USER',
+      target_user_id: userId,
+      reason: 'User soft-deleted (30-day grace period before archival)',
+    });
 
-  console.log('✅ User deleted:', userId);
+    // 🔥 Invalidate all caches
+    invalidateUserCaches(userId);
+    invalidateStatsCaches();
+
+    console.log('✅ User soft-deleted:', userId);
+    console.log('ℹ️  Will be archived after 30 days');
+    console.timeEnd('⚡ deleteUser (soft delete)');
+  } catch (error) {
+    console.error('❌ deleteUser failed:', error);
+    throw error;
+  }
+}
+
+// ============================================
+// 📦 ARCHIVE SYSTEM FUNCTIONS
+// ============================================
+
+/**
+ * 📦 Get all archived users
+ */
+export async function getArchivedUsers(): Promise<ArchivedUser[]> {
+  return cachedQuery(
+    'archived-users',
+    async () => {
+      const { data, error } = await supabase
+        .from('archived_users_view')
+        .select('*')
+        .order('archived_at', { ascending: false });
+
+      if (error) throw error;
+
+      return (data || []) as ArchivedUser[];
+    },
+    CACHE_TTL.ARCHIVE
+  );
+}
+
+/**
+ * 🔄 Restore user from archive
+ */
+export async function restoreUserFromArchive(
+  userId: string,
+  adminId: string
+): Promise<void> {
+  console.time('⚡ restoreUserFromArchive');
+
+  try {
+    const { data, error } = await supabase.rpc('restore_user_from_archive', {
+      p_user_id: userId,
+      p_admin_id: adminId,
+    });
+
+    if (error) {
+      console.error('❌ Error restoring user from archive:', error);
+      throw error;
+    }
+
+    console.log('✅ User restored from archive:', userId);
+
+    // 🔥 Invalidate all caches
+    invalidateUserCaches(userId);
+    invalidateStatsCaches();
+
+    console.timeEnd('⚡ restoreUserFromArchive');
+  } catch (error) {
+    console.error('❌ restoreUserFromArchive failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * ⚠️ Permanently delete user from archive (super admin only)
+ */
+export async function permanentDeleteFromArchive(
+  userId: string,
+  adminId: string
+): Promise<void> {
+  console.time('⚡ permanentDeleteFromArchive');
+
+  try {
+    const { data, error } = await supabase.rpc('permanent_delete_from_archive', {
+      p_user_id: userId,
+      p_admin_id: adminId,
+    });
+
+    if (error) {
+      console.error('❌ Error permanently deleting from archive:', error);
+      throw error;
+    }
+
+    console.log('⚠️ User permanently deleted from archive:', userId);
+
+    // 🔥 Invalidate all caches
+    invalidateUserCaches(userId);
+    invalidateStatsCaches();
+
+    console.timeEnd('⚡ permanentDeleteFromArchive');
+  } catch (error) {
+    console.error('❌ permanentDeleteFromArchive failed:', error);
+    throw error;
+  }
 }
 
 // ============================================
 // ANALYTICS - HEAVILY OPTIMIZED
 // ============================================
 
-/**
- * ⚡ OPTIMIZED: Uses database view + aggressive caching
- * Before: ~2-5 seconds with 22 queries
- * After: ~100-300ms first load, instant on cache hits
- * Cache: 5 minutes (stats don't change rapidly)
- */
 export async function getAdminStats(): Promise<AdminStats> {
   return cachedQuery(
     'admin-stats',
@@ -448,7 +527,6 @@ export async function getAdminStats(): Promise<AdminStats> {
       }
 
       console.timeEnd('⚡ getAdminStats');
-      console.log('✅ Admin stats loaded successfully');
 
       return {
         totalUsers: data.total_users || 0,
@@ -481,9 +559,6 @@ export async function getAdminStats(): Promise<AdminStats> {
   );
 }
 
-/**
- * ⚡ OPTIMIZED: Pre-aggregated data + caching
- */
 export async function getSubscriptionBreakdown(): Promise<SubscriptionBreakdown[]> {
   return cachedQuery(
     'subscription-breakdown',
@@ -522,9 +597,6 @@ export async function getSubscriptionBreakdown(): Promise<SubscriptionBreakdown[
   );
 }
 
-/**
- * ⚡ OPTIMIZED: Pre-aggregated + long cache
- */
 export async function getUserGrowthData(days: number = 30): Promise<UserGrowthData[]> {
   return cachedQuery(
     `user-growth-${days}`,
@@ -552,9 +624,6 @@ export async function getUserGrowthData(days: number = 30): Promise<UserGrowthDa
   );
 }
 
-/**
- * ⚡ OPTIMIZED: Pre-aggregated + long cache
- */
 export async function getTradeVolumeData(days: number = 30): Promise<TradeVolumeData[]> {
   return cachedQuery(
     `trade-volume-${days}`,
@@ -582,61 +651,36 @@ export async function getTradeVolumeData(days: number = 30): Promise<TradeVolume
 }
 
 // ============================================
-// AUDIT LOGGING - OPTIMIZED
+// AUDIT LOGGING
 // ============================================
 
-/**
- * ⚡ OPTIMIZED: Batch lookup for emails in one query
- */
 async function logAdminAction(
   log: Omit<AdminAuditLog, 'id' | 'created_at' | 'admin_email' | 'target_user_email' | 'ip_address'>
 ) {
   try {
-    // ✅ Batch lookup - one query for both emails
-    const userIds = [log.admin_id, log.target_user_id].filter(Boolean);
-    
-    const { data: users } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .in('id', userIds);
-
-    const usersMap = new Map(users?.map(u => [u.id, u.email]) || []);
-    const adminEmail = usersMap.get(log.admin_id);
-    const targetEmail = log.target_user_id ? usersMap.get(log.target_user_id) : null;
-
-    // Insert into admin_audit_log table
-    const { error } = await supabase
-      .from('admin_audit_log')
-      .insert({
-        admin_id: log.admin_id,
-        action: log.action_type,
-        target_user_id: log.target_user_id,
-        target_type: 'user',
-        target_id: log.target_user_id,
-        details: {
-          old_data: log.old_data,
-          new_data: log.new_data,
-          reason: log.reason,
-          admin_email: adminEmail,
-          target_user_email: targetEmail,
-        },
-      });
+    const { error } = await supabase.rpc('log_admin_action', {
+      p_action: log.action_type,
+      p_target_user_id: log.target_user_id || null,
+      p_target_type: 'user',
+      p_target_id: log.target_user_id || null,
+      p_details: {
+        old_data: log.old_data || null,
+        new_data: log.new_data || null,
+        reason: log.reason || null,
+      }
+    });
 
     if (error) {
-      console.error('❌ Error inserting audit log:', error);
+      console.error('❌ Error logging admin action:', error);
+      return;
     }
 
-    console.log('📝 Admin action logged:', log.action_type);
+    console.log('✅ Admin action logged');
   } catch (error) {
-    console.error('❌ Error logging admin action:', error);
+    console.error('❌ Exception in logAdminAction:', error);
   }
 }
 
-/**
- * ⚡ OPTIMIZED: Uses enriched view + caching
- * Before: 1 query + 2N queries for emails = 201 queries for 100 logs
- * After: 1 query with caching
- */
 export async function getAdminAuditLogs(
   limit: number = 100,
   offset: number = 0
@@ -682,17 +726,12 @@ export async function getAdminAuditLogs(
 // 🔥 BATCH OPERATIONS
 // ============================================
 
-/**
- * Batch update multiple users at once
- * Useful for bulk subscription updates
- */
 export async function batchUpdateUsers(
   updates: Array<{ userId: string; data: Partial<AdminUser> }>,
   adminId: string
 ): Promise<void> {
   console.time('⚡ batchUpdateUsers');
   
-  // Execute all updates in parallel
   const promises = updates.map(async ({ userId, data }) => {
     return supabase
       .from('profiles')
@@ -702,14 +741,12 @@ export async function batchUpdateUsers(
 
   const results = await Promise.allSettled(promises);
   
-  // Log failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
       console.error(`❌ Failed to update user ${updates[index].userId}:`, result.reason);
     }
   });
 
-  // Invalidate caches
   updates.forEach(({ userId }) => invalidateUserCaches(userId));
   invalidateStatsCaches();
 
@@ -717,11 +754,8 @@ export async function batchUpdateUsers(
   console.log(`✅ Batch updated ${updates.length} users`);
 }
 
-/**
- * Prefetch user details for faster navigation
- */
 export async function prefetchUserDetails(userIds: string[]): Promise<void> {
-  const promises = userIds.slice(0, 10).map(userId => getUserById(userId)); // Limit to 10
+  const promises = userIds.slice(0, 10).map(userId => getUserById(userId));
   await Promise.allSettled(promises);
   console.log(`✅ Prefetched ${userIds.length} user details`);
 }

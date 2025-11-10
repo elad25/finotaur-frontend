@@ -18,21 +18,6 @@ const Footer = () => {
           <p className="text-xl text-muted-foreground mb-12">
             Join thousands of traders who've transformed their performance with FINOTAUR
           </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link to="/auth/register">
-              <Button variant="hero" size="lg" className="group">
-                Join Now
-                <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
-              </Button>
-            </Link>
-            <Link to="/app/journal/overview">
-              <Button variant="hero-outline" size="lg" className="group">
-                <Play className="mr-2 h-5 w-5" />
-                Watch Demo
-              </Button>
-            </Link>
-          </div>
         </div>
       </section>
 
