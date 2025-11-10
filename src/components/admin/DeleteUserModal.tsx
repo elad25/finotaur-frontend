@@ -1,6 +1,6 @@
 // src/components/admin/DeleteUserModal.tsx
 import { useState } from 'react';
-import { X, Trash2, AlertTriangle } from 'lucide-react';
+import { X, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
 import { UserWithStats } from '@/types/admin';
 import { supabase } from '@/lib/supabase';
 
@@ -14,6 +14,7 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
   const [confirmText, setConfirmText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [reason, setReason] = useState('');
 
   const isConfirmed = confirmText === 'DELETE';
 
@@ -34,37 +35,26 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
         return;
       }
 
-      // Delete user's trades
-      const { error: tradesError } = await supabase
-        .from('trades')
-        .delete()
-        .eq('user_id', user.id);
+      // ✅ NEW: Call the soft delete function
+      const { data, error: deleteError } = await supabase.rpc('admin_soft_delete_user', {
+        p_user_id: user.id,
+        p_reason: reason || 'Admin deleted user via dashboard'
+      });
 
-      if (tradesError) throw tradesError;
+      if (deleteError) throw deleteError;
 
-      // Delete user's strategies
-      const { error: strategiesError } = await supabase
-        .from('strategies')
-        .delete()
-        .eq('user_id', user.id);
+      // Check if the function returned success
+      if (!data?.success) {
+        throw new Error(data?.error || 'Failed to delete user');
+      }
 
-      if (strategiesError) throw strategiesError;
-
-      // Delete user profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', user.id);
-
-      if (profileError) throw profileError;
-
-      console.log('✅ User deleted:', user.id);
+      console.log('✅ User soft deleted:', data.data);
       
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error deleting user:', error);
-      setError('Failed to delete user. Please try again.');
+      setError(error.message || 'Failed to delete user. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -84,13 +74,14 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+          {/* Warning Box */}
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-red-400 text-sm font-medium mb-1">Permanent Action</p>
-                <p className="text-red-300/80 text-sm">
-                  This will permanently delete the user and all their data including trades, strategies, and settings. This action cannot be undone.
+                <p className="text-yellow-400 text-sm font-medium mb-1">Soft Delete</p>
+                <p className="text-yellow-300/80 text-sm">
+                  User will be hidden and marked as deleted. All data is preserved and can be restored within 30 days. After 30 days, data will be permanently removed.
                 </p>
               </div>
             </div>
@@ -102,6 +93,7 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
             </div>
           )}
 
+          {/* User Info */}
           <div className="bg-[#0A0A0A] border border-gray-800 rounded-lg p-4 space-y-2">
             <p className="text-sm text-gray-300">
               User: <span className="text-white font-medium">{user.email}</span>
@@ -112,6 +104,20 @@ export default function DeleteUserModal({ user, onClose, onSuccess }: DeleteUser
             <p className="text-sm text-gray-300">
               Strategies: <span className="text-white font-medium">{user.strategies_count}</span>
             </p>
+          </div>
+
+          {/* Reason (Optional) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Reason (optional):
+            </label>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g., User requested deletion, Policy violation..."
+              className="w-full px-3 py-2 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#C9A646]"
+            />
           </div>
 
           {/* Confirmation */}
