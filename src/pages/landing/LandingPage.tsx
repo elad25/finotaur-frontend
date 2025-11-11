@@ -13,6 +13,7 @@ import Pricing from "@/components/landing-new/Pricing";
 import Testimonials from "@/components/landing-new/Testimonials";
 import Vision from "@/components/landing-new/Vision";
 import Footer from "@/components/landing-new/Footer";
+import { LegalFooter } from "@/components/legal";
 
 /**
  * ✨ UPGRADED LANDING PAGE
@@ -32,6 +33,7 @@ import Footer from "@/components/landing-new/Footer";
  * 9. Testimonials - Social proof with 4 cards
  * 10. Vision - Future roadmap
  * 11. Footer - Final CTA
+ * 12. LegalFooter - Legal documents links (NEW!)
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
@@ -78,6 +80,9 @@ const LandingPage = () => {
       <Testimonials />
       <Vision />
       <Footer />
+      
+      {/* ⚖️ Legal Footer - Black bar with all legal document links */}
+      <LegalFooter />
     </div>
   );
 };

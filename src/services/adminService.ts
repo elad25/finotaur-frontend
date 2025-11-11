@@ -2,7 +2,7 @@
 // ============================================
 // OPTIMIZED FOR 5000+ CONCURRENT USERS
 // ============================================
-// Version: v8.5.0-WITH-ARCHIVE-SYSTEM
+// Version: v8.5.0-WITH-ARCHIVE-SYSTEM + SUBSCRIBERS
 // Performance improvements:
 // ✅ React Query integration via query keys
 // ✅ Request deduplication via cachedQuery wrapper
@@ -16,6 +16,7 @@
 // ✅ FIXED: Admin subscription update via RPC (v8.4.7)
 // ✅ NEW v8.4.10: UNBAN user function using RPC
 // ✅ NEW v8.5.0: SOFT DELETE with 30-day archive system
+// ✅ NEW v8.6.0: SUBSCRIBERS management functions
 
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
 import {
@@ -34,6 +35,8 @@ import {
   TradeVolumeData,
   AccountType,
   SubscriptionInterval,
+  SubscriberStats,
+  Subscriber,
 } from '@/types/admin';
 
 // ============================================
@@ -69,6 +72,7 @@ const CACHE_TTL = {
   AUDIT_LOGS: 5 * 60 * 1000,  // 5 minutes
   CHARTS: 10 * 60 * 1000,     // 10 minutes
   ARCHIVE: 5 * 60 * 1000,     // 5 minutes
+  SUBSCRIBERS: 5 * 60 * 1000, // 5 minutes
 } as const;
 
 // ============================================
@@ -92,6 +96,10 @@ export const adminQueryKeys = {
     [...adminQueryKeys.all, 'trade-volume', days] as const,
   archivedUsers: () => 
     [...adminQueryKeys.all, 'archived-users'] as const,
+  subscriberStats: () =>
+    [...adminQueryKeys.all, 'subscriber-stats'] as const,
+  subscribersList: () =>
+    [...adminQueryKeys.all, 'subscribers-list'] as const,
 } as const;
 
 // ============================================
@@ -108,6 +116,8 @@ export function invalidateUserCaches(userId?: string) {
   supabaseCache.invalidate('admin-users');
   supabaseCache.invalidate('admin-stats');
   supabaseCache.invalidate('archived-users');
+  supabaseCache.invalidate('subscriber-stats');
+  supabaseCache.invalidate('subscribers-list');
 }
 
 /**
@@ -118,6 +128,7 @@ export function invalidateStatsCaches() {
   supabaseCache.invalidate('subscription-breakdown');
   supabaseCache.invalidate('user-growth');
   supabaseCache.invalidate('trade-volume');
+  supabaseCache.invalidate('subscriber-stats');
 }
 
 // ============================================
@@ -648,6 +659,208 @@ export async function getTradeVolumeData(days: number = 30): Promise<TradeVolume
     },
     CACHE_TTL.CHARTS
   );
+}
+
+// ============================================
+// 🆕 v8.6.0: SUBSCRIBERS MANAGEMENT
+// ============================================
+
+/**
+ * Get subscriber statistics
+ */
+export async function getSubscriberStats(): Promise<SubscriberStats> {
+  return cachedQuery(
+    'subscriber-stats',
+    async () => {
+      console.time('⚡ getSubscriberStats');
+
+      // Get all subscribers (users with active subscriptions)
+      // ✅ Exclude admins from subscribers list
+      const { data: subscribers, error } = await supabase
+        .from('profiles')
+        .select('account_type, subscription_interval, subscription_status, subscription_started_at, updated_at, role')
+        .in('account_type', ['basic', 'premium'])
+        .not('account_type', 'is', null)
+        .neq('role', 'admin')
+        .neq('role', 'super_admin');
+
+      if (error) throw error;
+
+      // Calculate stats
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const activeSubscribers = subscribers?.filter(
+        s => s.subscription_status === 'active'
+      ) || [];
+
+      const newThisMonth = subscribers?.filter(
+        s => new Date(s.subscription_started_at || s.updated_at) >= firstOfMonth
+      ) || [];
+
+      // Plan breakdown
+      const basicSubs = subscribers?.filter(s => s.account_type === 'basic') || [];
+      const premiumSubs = subscribers?.filter(s => s.account_type === 'premium') || [];
+
+      // Billing cycle breakdown
+      const basicMonthly = basicSubs.filter(s => s.subscription_interval === 'monthly').length;
+      const basicYearly = basicSubs.filter(s => s.subscription_interval === 'yearly').length;
+      const premiumMonthly = premiumSubs.filter(s => s.subscription_interval === 'monthly').length;
+      const premiumYearly = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
+
+      // Revenue calculation (based on your pricing)
+      const BASIC_MONTHLY_PRICE = 49;
+      const BASIC_YEARLY_PRICE = 490; // 10 months
+      const PREMIUM_MONTHLY_PRICE = 99;
+      const PREMIUM_YEARLY_PRICE = 990; // 10 months
+
+      const basicMRR = 
+        (basicMonthly * BASIC_MONTHLY_PRICE) + 
+        (basicYearly * (BASIC_YEARLY_PRICE / 12));
+      
+      const premiumMRR = 
+        (premiumMonthly * PREMIUM_MONTHLY_PRICE) + 
+        (premiumYearly * (PREMIUM_YEARLY_PRICE / 12));
+
+      const totalMRR = basicMRR + premiumMRR;
+      const totalARR = totalMRR * 12;
+
+      // Calculate churn (simplified - last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { data: cancelledSubs } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('subscription_status', 'cancelled')
+        .gte('updated_at', thirtyDaysAgo.toISOString());
+
+      const churnRate = cancelledSubs && subscribers 
+        ? (cancelledSubs.length / subscribers.length) * 100 
+        : 0;
+
+      console.timeEnd('⚡ getSubscriberStats');
+
+      return {
+        totalSubscribers: subscribers?.length || 0,
+        activeSubscribers: activeSubscribers.length,
+        newSubscribersThisMonth: newThisMonth.length,
+        
+        basicSubscribers: basicSubs.length,
+        premiumSubscribers: premiumSubs.length,
+        
+        basicMonthly,
+        basicYearly,
+        premiumMonthly,
+        premiumYearly,
+        
+        basicMRR: Math.round(basicMRR),
+        premiumMRR: Math.round(premiumMRR),
+        totalMRR: Math.round(totalMRR),
+        totalARR: Math.round(totalARR),
+        
+        churnRate: Math.round(churnRate * 10) / 10,
+      };
+    },
+    CACHE_TTL.SUBSCRIBERS
+  );
+}
+
+/**
+ * Get list of all subscribers
+ */
+export async function getSubscribersList(): Promise<Subscriber[]> {
+  return cachedQuery(
+    'subscribers-list',
+    async () => {
+      console.time('⚡ getSubscribersList');
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, display_name, account_type, subscription_status, subscription_interval, subscription_started_at, subscription_expires_at')
+        .in('account_type', ['basic', 'premium'])
+        .order('subscription_started_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Calculate monthly revenue for each subscriber
+      const BASIC_MONTHLY = 49;
+      const BASIC_YEARLY = 490;
+      const PREMIUM_MONTHLY = 99;
+      const PREMIUM_YEARLY = 990;
+
+      const subscribers = (data || []).map(profile => {
+        let monthlyRevenue = 0;
+        
+        if (profile.account_type === 'basic') {
+          monthlyRevenue = profile.subscription_interval === 'monthly' 
+            ? BASIC_MONTHLY 
+            : BASIC_YEARLY / 12;
+        } else if (profile.account_type === 'premium') {
+          monthlyRevenue = profile.subscription_interval === 'monthly' 
+            ? PREMIUM_MONTHLY 
+            : PREMIUM_YEARLY / 12;
+        }
+
+        return {
+          user_id: profile.id,
+          email: profile.email || '',
+          full_name: profile.display_name,
+          subscription_plan: profile.account_type as 'basic' | 'premium',
+          subscription_status: (profile.subscription_status || 'active') as 'active' | 'cancelled' | 'past_due' | 'trial',
+          billing_cycle: (profile.subscription_interval || 'monthly') as 'monthly' | 'yearly',
+          subscription_start_date: profile.subscription_started_at || profile.subscription_started_at || new Date().toISOString(),
+          subscription_end_date: profile.subscription_expires_at,
+          monthly_revenue: Math.round(monthlyRevenue),
+          total_paid: 0, // TODO: Calculate from payment history
+          payment_method: null, // TODO: Get from payment provider
+        };
+      });
+
+      console.timeEnd('⚡ getSubscribersList');
+      
+      return subscribers;
+    },
+    CACHE_TTL.SUBSCRIBERS
+  );
+}
+
+/**
+ * Export subscribers to CSV
+ */
+export async function exportSubscribers(): Promise<string> {
+  const subscribers = await getSubscribersList();
+  
+  const headers = [
+    'User ID',
+    'Email',
+    'Name',
+    'Plan',
+    'Billing Cycle',
+    'Status',
+    'Start Date',
+    'End Date',
+    'Monthly Revenue',
+  ];
+
+  const rows = subscribers.map(sub => [
+    sub.user_id,
+    sub.email,
+    sub.full_name || '',
+    sub.subscription_plan,
+    sub.billing_cycle,
+    sub.subscription_status,
+    sub.subscription_start_date,
+    sub.subscription_end_date || '',
+    sub.monthly_revenue,
+  ]);
+
+  const csv = [
+    headers.join(','),
+    ...rows.map(row => row.join(','))
+  ].join('\n');
+
+  return csv;
 }
 
 // ============================================

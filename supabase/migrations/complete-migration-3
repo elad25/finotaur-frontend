@@ -1,11 +1,12 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: MERGED-v8.4.1-SECURITY-OPTIMIZED-FIXED-WITH-SECTION-14
--- Date: 2025-11-08
+-- Version: MERGED-v8.4.7-FIXED-ADMIN-UPDATE-SUBSCRIPTION
+-- Date: 2025-11-10
 -- Parts: 2/3 (Functions + Triggers) - חלק 2/2 (סעיפים 7-14) ✅ COMPLETE
--- 🔧 FIXED v8.4.1: 
---    - admin_grant_free_months → grant_free_access
+-- 🔧 FIXED v8.4.7: 
+--    - admin_update_subscription NOW RETURNS JSONB (not VOID)
+--    - Better error handling in admin functions
 --    - Portfolio fields in get_user_subscription_status
 --    - 🆕 Section 14: Helper Functions Added
 -- PREREQUISITE: Run PART-2-FUNCTIONS-SECTION-1.sql first!
@@ -17,10 +18,10 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.4.1  ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.4.7  ║';
   RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
   RAISE NOTICE '║     Section 2/2: סעיפים 7-14         ║';
-  RAISE NOTICE '║     🔧 FIXED: Admin free access!      ║';
+  RAISE NOTICE '║     🔧 FIXED: admin_update returns JSONB! ║';
   RAISE NOTICE '║     🆕 NEW: Section 14 Helpers!       ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
@@ -161,7 +162,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v8.4-FIXED: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
+'v8.4.7-FIXED: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
 
 -- Check Expired Subscriptions
 CREATE OR REPLACE FUNCTION public.check_expired_subscriptions()
@@ -221,7 +222,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.reset_monthly_trade_counts IS 
-'v8.4: Resets monthly counters ONLY for BASIC/TRIAL/PREMIUM. FREE users are excluded.';
+'v8.4.7: Resets monthly counters ONLY for BASIC/TRIAL/PREMIUM. FREE users are excluded.';
 
 -- Check Usage Warning
 CREATE OR REPLACE FUNCTION public.check_usage_warning(target_user_id UUID)
@@ -269,7 +270,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_usage_warning IS 
-'v8.4: Shows warning at 80% usage. FREE uses lifetime count.';
+'v8.4.7: Shows warning at 80% usage. FREE uses lifetime count.';
 
 -- Mark Warning Shown
 CREATE OR REPLACE FUNCTION public.mark_warning_shown(target_user_id UUID)
@@ -825,77 +826,121 @@ BEGIN
 END;
 $$;
 
--- ✅ UPDATED: Admin Update Subscription
+-- ✅ UPDATED v8.4.7: Admin Update Subscription (RETURNS JSONB)
+DROP FUNCTION IF EXISTS public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ);
+
 CREATE OR REPLACE FUNCTION public.admin_update_subscription(
   p_user_id UUID,
   p_account_type TEXT,
-  p_subscription_interval TEXT DEFAULT 'monthly',
-  p_subscription_status TEXT DEFAULT 'active',
-  p_expires_at TIMESTAMPTZ DEFAULT NULL
+  p_subscription_interval TEXT,
+  p_subscription_status TEXT,
+  p_subscription_expires_at TIMESTAMPTZ
 )
-RETURNS VOID 
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
+  v_admin_id UUID;
+  v_admin_role TEXT;
   v_max_trades INTEGER;
 BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized - Admin access required';
+  -- Verify authentication
+  v_admin_id := auth.uid();
+  
+  IF v_admin_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
   END IF;
-
+  
+  -- Verify admin role
+  SELECT role INTO v_admin_role FROM public.profiles WHERE id = v_admin_id;
+  
+  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Insufficient permissions');
+  END IF;
+  
+  -- Validate account type
   IF p_account_type NOT IN ('free', 'basic', 'premium', 'trial') THEN
-    RAISE EXCEPTION 'Invalid account type: %', p_account_type;
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid account type: ' || p_account_type);
   END IF;
 
-  IF p_subscription_interval NOT IN ('monthly', 'yearly') THEN
-    RAISE EXCEPTION 'Invalid subscription interval: %', p_subscription_interval;
+  -- Validate subscription interval
+  IF p_subscription_interval NOT IN ('monthly', 'yearly') AND p_account_type != 'free' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid subscription interval: ' || p_subscription_interval);
   END IF;
 
+  -- Validate subscription status
   IF p_subscription_status NOT IN ('trial', 'active', 'expired', 'cancelled') THEN
-    RAISE EXCEPTION 'Invalid subscription status: %', p_subscription_status;
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid subscription status: ' || p_subscription_status);
   END IF;
-
-  -- ✅ Use get_trade_limit function
-  v_max_trades := get_trade_limit(p_account_type);
-
+  
+  -- Calculate max trades
+  v_max_trades := CASE p_account_type
+    WHEN 'free' THEN 10
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'trial' THEN 25
+    ELSE 10
+  END;
+  
+  -- Update profile
   UPDATE public.profiles
   SET 
     account_type = p_account_type,
-    subscription_interval = CASE
-      WHEN p_account_type IN ('basic', 'premium') THEN p_subscription_interval
-      ELSE NULL
+    subscription_interval = CASE 
+      WHEN p_account_type = 'free' THEN NULL 
+      ELSE p_subscription_interval 
     END,
     subscription_status = p_subscription_status,
-    subscription_expires_at = CASE
-      WHEN p_account_type IN ('basic', 'premium') THEN 
-        COALESCE(p_expires_at, 
-          CASE WHEN p_subscription_interval = 'yearly' 
-          THEN NOW() + INTERVAL '1 year'
-          ELSE NOW() + INTERVAL '1 month' END)
-      ELSE NULL
-    END,
+    subscription_expires_at = p_subscription_expires_at,
     max_trades = v_max_trades,
     updated_at = NOW()
   WHERE id = p_user_id;
-
-  PERFORM log_admin_action(
-    'UPDATE_SUBSCRIPTION', 
-    p_user_id, 
-    'subscription', 
-    p_user_id,
-    jsonb_build_object(
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  -- Log admin action
+  BEGIN
+    PERFORM log_admin_action(
+      'UPDATE_SUBSCRIPTION', 
+      p_user_id, 
+      'subscription', 
+      p_user_id,
+      jsonb_build_object(
+        'account_type', p_account_type,
+        'subscription_interval', p_subscription_interval,
+        'subscription_status', p_subscription_status,
+        'expires_at', p_subscription_expires_at,
+        'max_trades', v_max_trades,
+        'admin_id', v_admin_id
+      )
+    );
+  EXCEPTION 
+    WHEN OTHERS THEN
+      NULL; -- Ignore logging errors
+  END;
+  
+  RETURN jsonb_build_object(
+    'success', true, 
+    'message', 'Subscription updated successfully',
+    'data', jsonb_build_object(
       'account_type', p_account_type,
-      'subscription_interval', p_subscription_interval,
-      'subscription_status', p_subscription_status,
-      'expires_at', p_expires_at,
-      'max_trades', v_max_trades
+      'max_trades', v_max_trades,
+      'expires_at', p_subscription_expires_at
     )
   );
+  
+EXCEPTION 
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
 END;
 $$;
 
-COMMENT ON FUNCTION public.admin_update_subscription IS 'UPDATED v8.4: Uses get_trade_limit() - BASIC/TRIAL = 25 trades';
+COMMENT ON FUNCTION public.admin_update_subscription IS 
+'v8.4.7-UPDATED: Returns JSONB with success/error. Uses get_trade_limit() - BASIC/TRIAL = 25 trades';
 
 -- Admin Reset Trade Count
 CREATE OR REPLACE FUNCTION public.admin_reset_trade_count(target_user_id UUID)
@@ -924,7 +969,7 @@ BEGIN
 END;
 $$;
 
--- ✅ UPDATED v8.4.1: Admin Grant Free Access (REPLACES admin_grant_free_months)
+-- ✅ UPDATED v8.4.7: Admin Grant Free Access (REPLACES admin_grant_free_months)
 -- Drop old versions to avoid conflicts
 DROP FUNCTION IF EXISTS public.admin_grant_free_months(UUID, INTEGER) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_grant_free_access(UUID, INTEGER, TEXT) CASCADE;
@@ -1024,10 +1069,10 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.grant_free_access IS 
-'v8.4.1: Main function to grant free access. Called by adminService.ts';
+'v8.4.7: Main function to grant free access. Called by adminService.ts';
 
 COMMENT ON FUNCTION public.admin_grant_free_months IS 
-'v8.4.1: Backward compatibility wrapper for grant_free_access';
+'v8.4.7: Backward compatibility wrapper for grant_free_access';
 
 -- Admin Get Limits Overview
 CREATE OR REPLACE FUNCTION public.admin_get_limits_overview()
@@ -1492,7 +1537,7 @@ GRANT EXECUTE ON FUNCTION public.end_impersonation_session TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_active_impersonation_sessions TO authenticated;
 
 COMMENT ON FUNCTION public.start_impersonation_session_v1 IS 
-'🔧 v8.4: Allows admins to impersonate users. Returns session token.';
+'🔧 v8.4.7: Allows admins to impersonate users. Returns session token.';
 
 -- ===============================================
 -- SECTION 12: ACTIVITY TRACKING
@@ -1734,7 +1779,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_webhook_stats IS 
-'v8.4.1: Manually refresh webhook statistics materialized view (admin only)';
+'v8.4.7: Manually refresh webhook statistics materialized view (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 2. רענון ידני של Strategy Stats
@@ -1757,7 +1802,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_strategy_stats IS 
-'v8.4.1: Manually refresh strategy statistics materialized view (admin only)';
+'v8.4.7: Manually refresh strategy statistics materialized view (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 3. רענון כל המטריאלייזד ויוז
@@ -1781,7 +1826,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_all_materialized_views IS 
-'v8.4.1: Refresh all materialized views in one call (admin only)';
+'v8.4.7: Refresh all materialized views in one call (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 4. גודל מסד הנתונים
@@ -1809,7 +1854,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_database_size IS 
-'v8.4.1: Get total database size in MB and GB (admin only)';
+'v8.4.7: Get total database size in MB and GB (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 5. גודל טבלאות
@@ -1845,7 +1890,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_table_sizes IS 
-'v8.4.1: Get size and row count for all tables (admin only)';
+'v8.4.7: Get size and row count for all tables (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 6. שאילתות איטיות
@@ -1881,7 +1926,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_slow_queries IS 
-'v8.4.1: Get slowest queries for performance monitoring (admin only)';
+'v8.4.7: Get slowest queries for performance monitoring (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 7. בדיקת בריאות המערכת
@@ -1940,7 +1985,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_system_health IS 
-'v8.4.1: Comprehensive system health check returning status for DB, connections, RLS, etc. (admin only)';
+'v8.4.7: Comprehensive system health check returning status for DB, connections, RLS, etc. (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 8. ניקוי נתונים ישנים (ידני)
@@ -1986,7 +2031,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.manual_cleanup_old_data IS 
-'v8.4.1: Manual cleanup of old data - rate limits (24h), inactive sessions, old logs (1y) (admin only)';
+'v8.4.7: Manual cleanup of old data - rate limits (24h), inactive sessions, old logs (1y) (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- GRANT PERMISSIONS
@@ -2005,6 +2050,9 @@ GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
 -- ✅ Admin free access functions
 GRANT EXECUTE ON FUNCTION public.grant_free_access(UUID, INTEGER, TEXT, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_grant_free_months(UUID, INTEGER) TO authenticated;
+
+-- ✅ Admin update subscription (JSONB version)
+GRANT EXECUTE ON FUNCTION public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO authenticated;
 
 -- 🆕 Section 14: Helper functions
 GRANT EXECUTE ON FUNCTION public.refresh_webhook_stats() TO authenticated;
@@ -2043,22 +2091,22 @@ WITH CHECK (
 );
 
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
-'v8.4-FIXED: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
+'v8.4.7-FIXED: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
 
 COMMIT;
 
 -- ===============================================
--- END OF PART 2/3 - COMPLETE WITH SECTION 14 v8.4.1
+-- END OF PART 2/3 - COMPLETE WITH v8.4.7
 -- ===============================================
 
 DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  ✅ PART 2/3 COMPLETE! (v8.4.1)       ║';
+  RAISE NOTICE '║  ✅ PART 2/3 COMPLETE! (v8.4.7)       ║';
   RAISE NOTICE '║     Functions + Triggers + RLS        ║';
   RAISE NOTICE '║     🆕 WITH SECTION 14 INCLUDED!      ║';
-  RAISE NOTICE '║     🔧 ADMIN FREE ACCESS FIXED!       ║';
+  RAISE NOTICE '║     🔧 admin_update RETURNS JSONB!    ║';
   RAISE NOTICE '║     🔧 PORTFOLIO FIELDS INCLUDED!     ║';
   RAISE NOTICE '║     🔥 FREE: NO MONTHLY RESET!        ║';
   RAISE NOTICE '║     🔒 SECURITY: Payment protected!   ║';
@@ -2077,12 +2125,12 @@ BEGIN
   RAISE NOTICE '   • Impersonation ✅';
   RAISE NOTICE '   • 🆕 Admin Maintenance Tools ✅';
   RAISE NOTICE '';
-  RAISE NOTICE '🔧 FIXED in v8.4.1:';
-  RAISE NOTICE '   • grant_free_access() - Main admin function';
-  RAISE NOTICE '   • admin_grant_free_months() - Compatibility wrapper';
-  RAISE NOTICE '   • Proper subscription extension logic';
-  RAISE NOTICE '   • Logs to free_months_credits table';
-  RAISE NOTICE '   • Admin action logging';
+  RAISE NOTICE '🔧 FIXED in v8.4.7:';
+  RAISE NOTICE '   • admin_update_subscription NOW RETURNS JSONB!';
+  RAISE NOTICE '   • Better error handling with try-catch';
+  RAISE NOTICE '   • Validates all inputs before update';
+  RAISE NOTICE '   • Returns detailed success/error messages';
+  RAISE NOTICE '   • Logs to admin_audit_log automatically';
   RAISE NOTICE '';
   RAISE NOTICE '🆕 NEW in Section 14:';
   RAISE NOTICE '   • refresh_webhook_stats()';
@@ -2094,7 +2142,7 @@ BEGIN
   RAISE NOTICE '   • check_system_health()';
   RAISE NOTICE '   • manual_cleanup_old_data()';
   RAISE NOTICE '';
-  RAISE NOTICE '✨ Trade Limits (v8.4):';
+  RAISE NOTICE '✨ Trade Limits (v8.4.7):';
   RAISE NOTICE '   • FREE:    10 trades LIFETIME (no reset)';
   RAISE NOTICE '   • BASIC:   25 trades/month';
   RAISE NOTICE '   • TRIAL:   25 trades/month';

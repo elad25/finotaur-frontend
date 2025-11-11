@@ -27,6 +27,19 @@ import NotFound from "./pages/NotFound";
 
 // 🔥 NEW: Pricing Selection Page
 import PricingSelection from "@/pages/app/journal/PricingSelection";
+
+// ⚖️ LEGAL PAGES - Load immediately (no lazy)
+import {
+  TermsOfUse,
+  PrivacyPolicy,
+  Disclaimer,
+  Copyright,
+  CookiePolicy,
+  RiskDisclosure,
+  RefundPolicy,
+  DMCA,
+} from "@/components/legal";
+
 // ===============================================
 // LAZY LOADED PAGES - All domains
 // ===============================================
@@ -35,6 +48,7 @@ import PricingSelection from "@/pages/app/journal/PricingSelection";
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/app/journal/admin/Users"));
 const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"));
+const AdminSubscribers = lazy(() => import("@/pages/app/journal/admin/Subscribers"));
 const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"));
 const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
 const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
@@ -227,6 +241,16 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
         
+        {/* ⚖️ LEGAL ROUTES */}
+        <Route path="/legal/terms" element={<TermsOfUse />} />
+        <Route path="/legal/privacy" element={<PrivacyPolicy />} />
+        <Route path="/legal/disclaimer" element={<Disclaimer />} />
+        <Route path="/legal/copyright" element={<Copyright />} />
+        <Route path="/legal/cookies" element={<CookiePolicy />} />
+        <Route path="/legal/risk-disclosure" element={<RiskDisclosure />} />
+        <Route path="/legal/refund" element={<RefundPolicy />} />
+        <Route path="/legal/dmca" element={<DMCA />} />
+        
         {/* 🔥 NEW: Pricing Selection Route */}
         <Route path="/pricing-selection" element={<PricingSelection />} />
         
@@ -361,6 +385,7 @@ function AppContent() {
           <Route path="journal/admin/users" element={<ProtectedAdminRoute><SuspenseRoute><AdminUsers /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/users/:userId" element={<ProtectedAdminRoute><SuspenseRoute><UserDetails /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/analytics" element={<ProtectedAdminRoute><SuspenseRoute><AdminAnalytics /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="journal/admin/subscribers" element={<ProtectedAdminRoute><SuspenseRoute><AdminSubscribers /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
           

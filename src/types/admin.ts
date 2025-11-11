@@ -249,3 +249,46 @@ export interface PaginatedResponse<T> {
   pageSize: number;
   totalPages: number;
 }
+
+// ============================================
+// 🆕 SUBSCRIBERS MANAGEMENT TYPES
+// ============================================
+
+export interface SubscriberStats {
+  totalSubscribers: number;
+  activeSubscribers: number;
+  newSubscribersThisMonth: number;
+  
+  // Plan breakdown
+  basicSubscribers: number;
+  premiumSubscribers: number;
+  
+  // Billing cycle breakdown
+  basicMonthly: number;
+  basicYearly: number;
+  premiumMonthly: number;
+  premiumYearly: number;
+  
+  // Revenue metrics
+  basicMRR: number;
+  premiumMRR: number;
+  totalMRR: number;
+  totalARR: number;
+  
+  // Health metrics
+  churnRate: number;
+}
+
+export interface Subscriber {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  subscription_plan: 'basic' | 'premium';
+  subscription_status: 'active' | 'cancelled' | 'past_due' | 'trial';
+  billing_cycle: 'monthly' | 'yearly';
+  subscription_start_date: string;
+  subscription_end_date: string | null;
+  monthly_revenue: number;
+  total_paid: number;
+  payment_method: string | null;
+}
