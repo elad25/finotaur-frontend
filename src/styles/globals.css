@@ -279,3 +279,96 @@ nav[class*="flex-col"] button.active {
   background-color: hsl(var(--gold) / 0.1);
   border-left: 2px solid hsl(var(--gold));
 }
+
+/* ============================================
+   TICKER AUTOCOMPLETE DROPDOWN STYLING
+   ============================================ */
+
+/* Custom scrollbar for ticker dropdown */
+.ticker-dropdown-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ticker-dropdown-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--gold) / 0.05);
+  border-radius: 3px;
+}
+
+.ticker-dropdown-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.4) 0%,
+    hsl(var(--gold) / 0.25) 50%,
+    hsl(var(--gold) / 0.4) 100%
+  );
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.ticker-dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    hsl(var(--gold) / 0.6) 0%,
+    hsl(var(--gold) / 0.45) 50%,
+    hsl(var(--gold) / 0.6) 100%
+  );
+  box-shadow: 0 0 6px hsl(var(--gold) / 0.3);
+}
+
+/* Ticker dropdown animation */
+@keyframes dropdown-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ticker-dropdown-animate {
+  animation: dropdown-slide-in 0.2s ease-out;
+}
+
+/* Ticker item hover effect with gold glow */
+.ticker-item-hover {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ticker-item-hover:hover {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--gold) / 0.08) 0%,
+    hsl(var(--gold) / 0.12) 50%,
+    hsl(var(--gold) / 0.08) 100%
+  );
+  border-left: 2px solid hsl(var(--gold));
+  padding-left: calc(1rem - 2px);
+}
+
+/* Ticker badge styles */
+.ticker-badge {
+  background: linear-gradient(
+    135deg,
+    hsl(var(--gold) / 0.15) 0%,
+    hsl(var(--gold) / 0.25) 100%
+  );
+  color: hsl(var(--gold));
+  font-weight: 600;
+  letter-spacing: 0.025em;
+}
+
+/* Loading spinner for ticker search */
+@keyframes ticker-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ticker-loading-spinner {
+  animation: ticker-spin 0.8s linear infinite;
+}

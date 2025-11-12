@@ -1,5 +1,5 @@
 // ================================================
-// OPTIMIZED NEW TRADE PAGE - FINAL FIX v3
+// OPTIMIZED NEW TRADE PAGE - FINAL FIX v4
 // ✅ Dynamic R calculation based on user settings
 // ✅ Performance optimized for 5000 concurrent users
 // ✅ Perfect Supabase integration
@@ -9,6 +9,8 @@
 // ✅ FIXED: Subscription limits check - no more blocking
 // 🔥 CRITICAL FIX: Metrics at top level (not nested!)
 // 🔥 NEW: Using centralized createTrade/updateTrade functions
+// 🎯 NEW: TickerAutocomplete with database integration
+// 🎨 NEW: Beautiful date/time picker modal
 // ================================================
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -23,7 +25,7 @@ import { formatNumber } from "@/utils/smartCalc";
 import { detectSessionByLocal } from "@/utils/session";
 import UploadZone from "@/components/journal/UploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X } from "lucide-react";
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
@@ -33,7 +35,8 @@ import { UsageWarningModal } from '@/components/subscription/UsageWarningModal';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
 import { useCreateTrade, useUpdateTrade } from '@/hooks/useTradesData';
 import { useCommissions } from '@/hooks/useRiskSettings';
-import { createTrade, updateTrade } from '@/lib/trades'; // 🔥 NEW: Centralized functions
+import { createTrade, updateTrade } from '@/lib/trades';
+import { TickerAutocomplete } from '@/components/TickerAutocomplete';
 
 // Dynamic import for canvas-confetti
 let confetti: any = null;
@@ -80,6 +83,182 @@ function getAssetMultiplier(symbol: string): number {
   return found ? found.mult : 1;
 }
 
+// 🎨 Beautiful Date/Time Picker Modal Component
+function DateTimePickerModal({ 
+  isOpen, 
+  onClose, 
+  value, 
+  onChange 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  value?: string; 
+  onChange: (value: string) => void;
+}) {
+  const [tempDate, setTempDate] = useState("");
+  const [tempTime, setTempTime] = useState("");
+
+  useEffect(() => {
+    if (isOpen && value) {
+      const date = new Date(value);
+      setTempDate(date.toISOString().split('T')[0]);
+      setTempTime(date.toTimeString().slice(0, 5));
+    } else if (isOpen) {
+      const now = new Date();
+      setTempDate(now.toISOString().split('T')[0]);
+      setTempTime(now.toTimeString().slice(0, 5));
+    }
+  }, [isOpen, value]);
+
+  const handleSave = () => {
+    if (tempDate && tempTime) {
+      const combined = new Date(`${tempDate}T${tempTime}`);
+      onChange(combined.toISOString());
+      onClose();
+      toast.success("Date & time updated");
+    }
+  };
+
+  const handleToday = () => {
+    const now = new Date();
+    setTempDate(now.toISOString().split('T')[0]);
+    setTempTime(now.toTimeString().slice(0, 5));
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 rounded-2xl border border-yellow-200/20 shadow-[0_0_60px_rgba(201,166,70,0.15)] w-full max-w-md mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-yellow-200/10 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-yellow-400" />
+            <h3 className="text-lg font-semibold text-white">Select Date & Time</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-zinc-400" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Quick Actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleToday}
+              className="px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm font-medium hover:bg-yellow-500/20 transition-all"
+            >
+              Today
+            </button>
+            <button
+              onClick={() => {
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                setTempDate(yesterday.toISOString().split('T')[0]);
+              }}
+              className="px-4 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-700 transition-all"
+            >
+              Yesterday
+            </button>
+          </div>
+
+          {/* Date Input */}
+          <div>
+            <Label className="text-xs text-zinc-400 mb-2 block">Date</Label>
+            <div className="relative">
+              <Input
+                type="date"
+                value={tempDate}
+                onChange={(e) => setTempDate(e.target.value)}
+                className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-14 text-zinc-200 text-lg font-medium pl-4 pr-12"
+              />
+              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 pointer-events-none" />
+            </div>
+            {tempDate && (
+              <p className="text-xs text-zinc-500 mt-2">
+                {new Date(tempDate).toLocaleDateString('en-GB', { 
+                  weekday: 'long',
+                  day: 'numeric', 
+                  month: 'long', 
+                  year: 'numeric' 
+                })}
+              </p>
+            )}
+          </div>
+
+          {/* Time Input */}
+          <div>
+            <Label className="text-xs text-zinc-400 mb-2 block">Time</Label>
+            <div className="relative">
+              <Input
+                type="time"
+                value={tempTime}
+                onChange={(e) => setTempTime(e.target.value)}
+                className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-14 text-zinc-200 text-lg font-medium tabular-nums pl-4 pr-12"
+              />
+              <Clock className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 pointer-events-none" />
+            </div>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => {
+                  const now = new Date();
+                  setTempTime(now.toTimeString().slice(0, 5));
+                }}
+                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors"
+              >
+                Use current time
+              </button>
+            </div>
+          </div>
+
+          {/* Preview */}
+          {tempDate && tempTime && (
+            <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/5 to-yellow-500/10 border border-yellow-500/20">
+              <p className="text-xs text-zinc-400 mb-1">Preview</p>
+              <p className="text-lg font-semibold text-white">
+                {new Date(`${tempDate}T${tempTime}`).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false
+                })}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-yellow-200/10 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 rounded-xl text-sm font-medium text-zinc-400 border border-zinc-700 hover:bg-zinc-800 transition-all"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!tempDate || !tempTime}
+            className="px-6 py-2.5 rounded-xl text-sm font-bold text-black transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ 
+              background: tempDate && tempTime
+                ? 'linear-gradient(135deg, #B8944E, #E6C675)' 
+                : 'linear-gradient(135deg, #555, #666)'
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function New() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -89,6 +268,7 @@ export default function New() {
   const st = useJournalStore();
   const [tab, setTab] = useState<"notes" | "screenshot" | "mistakes">("notes");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   
   const { 
     canAddTrade, 
@@ -256,17 +436,25 @@ export default function New() {
     return () => clearInterval(timer);
   }, []);
 
-  // Auto Session detection
+  // Auto Session detection (debounced)
   useEffect(() => {
-    if (st.openAt) {
+    if (!st.openAt) return;
+    
+    // Debounce: only detect after user finishes selecting date/time
+    const timer = setTimeout(() => {
       const session = detectSessionByLocal(st.openAt);
       if (session !== "Off") st.setSession(session);
-    }
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, [st.openAt]);
 
-  // Auto Fees detection
+  // Auto Fees detection (debounced)
   useEffect(() => {
-    if (st.feesMode === "auto" && st.assetClass) {
+    if (st.feesMode !== "auto" || !st.assetClass) return;
+    
+    // Debounce: only calculate after user stops typing for 500ms
+    const timer = setTimeout(() => {
       const singleSideFee = calculateCommission(
         st.assetClass,
         st.entryPrice, 
@@ -274,7 +462,9 @@ export default function New() {
         st.multiplier
       );
       st.setFees(singleSideFee * 2);
-    }
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, [st.entryPrice, st.quantity, st.assetClass, st.multiplier, st.feesMode, calculateCommission]);
 
   // ✅ Auto Multiplier detection
@@ -293,16 +483,24 @@ export default function New() {
     console.log(`🔧 Auto-detected multiplier for ${st.symbol}: ${multiplier}`);
   }, [st.symbol]);
 
-  // Auto Direction from TP
+  // Auto Direction from TP (debounced to prevent interference while typing)
   useEffect(() => {
     const entry = st.entryPrice;
     const tp = st.takeProfitPrice;
     const stop = st.stopPrice;
     
-    if (entry && tp && stop) {
-      if (tp > entry && stop < entry) st.setSide("LONG");
-      else if (tp < entry && stop > entry) st.setSide("SHORT");
-    }
+    if (!entry || !tp || !stop) return;
+    
+    // Debounce: only update after user stops typing for 500ms
+    const timer = setTimeout(() => {
+      if (tp > entry && stop < entry && st.side !== "LONG") {
+        st.setSide("LONG");
+      } else if (tp < entry && stop > entry && st.side !== "SHORT") {
+        st.setSide("SHORT");
+      }
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, [st.entryPrice, st.takeProfitPrice, st.stopPrice]);
 
   // ✅ Calculate user's R multiples
@@ -675,6 +873,20 @@ export default function New() {
     return "text-emerald-400";
   };
 
+  // 🎯 Ticker selection handler
+  const handleTickerSelect = (ticker: any) => {
+    console.log('🎯 Ticker selected:', ticker);
+    st.setSymbol(ticker.symbol);
+    st.setMultiplier(ticker.multiplier);
+    
+    // Auto-set asset class if available
+    if (ticker.asset_class) {
+      st.setAssetClass(ticker.asset_class as any);
+    }
+    
+    toast.success(`Selected ${ticker.symbol} (x${ticker.multiplier})`);
+  };
+
   return (
     <>
       <style>
@@ -796,32 +1008,48 @@ export default function New() {
 
             {/* Grid: Symbol, Date/Time */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* 🎯 TickerAutocomplete */}
               <div>
                 <Label htmlFor="symbol" className="text-xs text-zinc-400 mb-2 block">
                   Symbol * {st.assetClass && <span className="text-yellow-400 ml-1">({st.assetClass})</span>}
+                  {st.multiplier > 1 && <span className="text-emerald-400 ml-1">x{st.multiplier}</span>}
                 </Label>
-                <Input
-                  id="symbol"
+                <TickerAutocomplete
                   value={st.symbol}
-                  onChange={(e) => st.setSymbol(e.target.value)}
-                  placeholder="AAPL, NQ, ES, BTCUSDT..."
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 transition-all"
-                  required
+                  onSelect={handleTickerSelect}
+                  placeholder="AAPL, ES, NQ, BTCUSDT..."
                 />
               </div>
 
+              {/* 🎨 Beautiful date/time button */}
               <div>
                 <Label htmlFor="openAt" className="text-xs text-zinc-400 mb-2 block">
                   Date & Time *
                 </Label>
-                <Input
-                  id="openAt"
-                  type="datetime-local"
-                  value={st.openAt?.slice(0, 16) || ""}
-                  onChange={(e) => st.setOpenAt(e.target.value ? new Date(e.target.value).toISOString() : undefined)}
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200"
-                  required
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(true)}
+                  className="w-full bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 px-4 flex items-center justify-between hover:border-yellow-200/30 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium">
+                      {st.openAt ? new Date(st.openAt).toLocaleDateString('en-GB', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric' 
+                      }) : 'Select Date'}
+                    </span>
+                    <span className="text-yellow-400">•</span>
+                    <span className="text-sm font-medium tabular-nums">
+                      {st.openAt ? new Date(st.openAt).toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: false 
+                      }) : '--:--'}
+                    </span>
+                  </div>
+                  <Clock className="w-4 h-4 text-zinc-500" />
+                </button>
               </div>
             </div>
 
@@ -930,9 +1158,27 @@ export default function New() {
                 <Input
                   id="quantity"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.quantity || ""}
-                  onChange={(e) => st.setQuantity(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow empty string for deleting
+                    if (value === "") {
+                      st.setQuantity(0);
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      st.setQuantity(num);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Format on blur only
+                    const num = parseFloat(e.target.value);
+                    if (!isNaN(num)) {
+                      st.setQuantity(num);
+                    }
+                  }}
                   placeholder="100"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
                   required
@@ -946,9 +1192,19 @@ export default function New() {
                 <Input
                   id="entryPrice"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.entryPrice || ""}
-                  onChange={(e) => st.setEntryPrice(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      st.setEntryPrice(0);
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      st.setEntryPrice(num);
+                    }
+                  }}
                   placeholder="150.50"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
                   required
@@ -965,9 +1221,19 @@ export default function New() {
                 <Input
                   id="stopPrice"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.stopPrice || ""}
-                  onChange={(e) => st.setStopPrice(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      st.setStopPrice(0);
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      st.setStopPrice(num);
+                    }
+                  }}
                   placeholder="149.30"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
                   required
@@ -981,9 +1247,19 @@ export default function New() {
                 <Input
                   id="takeProfitPrice"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.takeProfitPrice || ""}
-                  onChange={(e) => st.setTakeProfitPrice(parseFloat(e.target.value) || undefined)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      st.setTakeProfitPrice(undefined);
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      st.setTakeProfitPrice(num);
+                    }
+                  }}
                   placeholder="155.00"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
                 />
@@ -1002,12 +1278,20 @@ export default function New() {
                 <Input
                   id="fees"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.fees || ""}
                   onChange={(e) => {
-                    const val = parseFloat(e.target.value) || 0;
-                    st.setFees(val);
-                    st.setFeesMode("manual");
+                    const value = e.target.value;
+                    if (value === "") {
+                      st.setFees(0);
+                      st.setFeesMode("manual");
+                      return;
+                    }
+                    const val = parseFloat(value);
+                    if (!isNaN(val)) {
+                      st.setFees(val);
+                      st.setFeesMode("manual");
+                    }
                   }}
                   placeholder="2.50"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
@@ -1021,9 +1305,19 @@ export default function New() {
                 <Input
                   id="exitPrice"
                   type="number"
-                  step="0.01"
+                  step="any"
                   value={st.exitPrice || ""}
-                  onChange={(e) => st.setExitPrice(parseFloat(e.target.value) || undefined)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      st.setExitPrice(undefined);
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    if (!isNaN(num)) {
+                      st.setExitPrice(num);
+                    }
+                  }}
                   placeholder="152.00"
                   className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
                 />
@@ -1083,7 +1377,7 @@ export default function New() {
                 </div>
               </div>
 
-              {/* 🔥🔥🔥 USER'S PERSONAL R DISPLAY 🔥🔥🔥 */}
+              {/* 🔥 USER'S PERSONAL R DISPLAY */}
               {oneRValue > 0 && userRiskR !== undefined && (
                 <div className="mt-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-xl p-5 border border-purple-500/30">
                   <div className="flex items-center justify-between mb-3">
@@ -1315,6 +1609,14 @@ export default function New() {
           </div>
         </section>
       </main>
+
+      {/* 🎨 Date/Time Picker Modal */}
+      <DateTimePickerModal
+        isOpen={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        value={st.openAt}
+        onChange={(value) => st.setOpenAt(value)}
+      />
 
       {/* Insight Popup */}
       {currentInsight && (

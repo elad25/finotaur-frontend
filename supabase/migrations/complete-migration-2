@@ -1,8 +1,8 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: MERGED-v8.4.4-FIXED-RISK-COLUMNS-v5
--- Date: 2025-11-10
+-- Version: MERGED-v8.5.0-SNAPTRADE-INTEGRATED
+-- Date: 2025-11-10 (Updated: 2025-01-15)
 -- Parts: 2/3 (Functions + Triggers) - חלק 1/2 (סעיפים 1-6)
 -- Changes: 
 --   - FREE users: 10 lifetime (no reset)
@@ -10,6 +10,7 @@
 --   - Payment security + affiliate automation
 --   - 🔥 FIXED: Risk settings use new columns (NOT JSONB)
 --   - 🔥 FIXED: All SELECT INTO with ORDER BY issues
+--   - 🆕 SNAPTRADE: Full integration with triggers & helpers
 -- Optimizations: Unified triggers, CONCURRENT refresh, Rate limiting
 -- ===============================================
 
@@ -19,13 +20,14 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.4.4  ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.5.0  ║';
   RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
   RAISE NOTICE '║     Section 1/2: סעיפים 1-6          ║';
   RAISE NOTICE '║     ✨ FREE: 10 lifetime (no reset)   ║';
   RAISE NOTICE '║     🔒 SECURITY: Payment protection   ║';
   RAISE NOTICE '║     🚀 OPTIMIZED: 3x faster!          ║';
   RAISE NOTICE '║     🔧 FIXED: All syntax errors       ║';
+  RAISE NOTICE '║     🆕 SNAPTRADE: Full integration    ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
 END $$;
@@ -312,6 +314,69 @@ $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
 'v8.4.4-FIXED: Creates profile with new risk columns (NOT JSONB)';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 SNAPTRADE SECTION 2A: TRIGGER FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[2A/13] 🆕 Creating SnapTrade trigger functions...';
+END $$;
+
+-- Auto-update updated_at for snaptrade_users
+CREATE OR REPLACE FUNCTION update_snaptrade_users_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION update_snaptrade_users_updated_at IS 
+'v8.5.0: Auto-updates updated_at column on snaptrade_users table';
+
+-- Create trigger
+DROP TRIGGER IF EXISTS trigger_update_snaptrade_users_updated_at ON public.snaptrade_users;
+
+CREATE TRIGGER trigger_update_snaptrade_users_updated_at
+    BEFORE UPDATE ON public.snaptrade_users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_snaptrade_users_updated_at();
+
+-- Auto-set imported_at and validate SnapTrade imports
+CREATE OR REPLACE FUNCTION set_imported_at_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only set imported_at for non-manual trades if not already set
+    IF NEW.import_source != 'manual' AND NEW.imported_at IS NULL THEN
+        NEW.imported_at = NOW();
+    END IF;
+    
+    -- If import_source is 'snaptrade', ensure we have required fields
+    IF NEW.import_source = 'snaptrade' AND NEW.snaptrade_activity_id IS NULL THEN
+        RAISE EXCEPTION 'snaptrade_activity_id is required for import_source = snaptrade';
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION set_imported_at_timestamp IS 
+'v8.5.0: Auto-sets imported_at for non-manual trades and validates SnapTrade imports';
+
+-- Create trigger
+DROP TRIGGER IF EXISTS trigger_set_imported_at ON public.trades;
+
+CREATE TRIGGER trigger_set_imported_at
+    BEFORE INSERT ON public.trades
+    FOR EACH ROW
+    EXECUTE FUNCTION set_imported_at_timestamp();
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ SnapTrade trigger functions created';
+END $$;
 
 -- ===============================================
 -- 🔥 SECTION 2.5: RATE LIMITING (NEW OPTIMIZATION)
@@ -1275,6 +1340,221 @@ BEGIN
     AND (storage.foldername(name))[1] = v_user_id::text;
 END;
 $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 SNAPTRADE SECTION 5A: SYNC LOG HELPER FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[5A/13] 🆕 Creating SnapTrade sync log functions...';
+END $$;
+
+-- Get latest sync for a user
+CREATE OR REPLACE FUNCTION get_latest_sync_for_user(p_user_id UUID)
+RETURNS public.snaptrade_sync_log AS $$
+    SELECT * 
+    FROM public.snaptrade_sync_log
+    WHERE user_id = p_user_id
+    ORDER BY created_at DESC
+    LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_latest_sync_for_user IS 
+'v8.5.0: Gets the most recent sync log entry for a user';
+
+-- Get sync stats for a user
+CREATE OR REPLACE FUNCTION get_user_sync_stats(p_user_id UUID)
+RETURNS TABLE (
+    total_syncs BIGINT,
+    successful_syncs BIGINT,
+    failed_syncs BIGINT,
+    total_trades_imported BIGINT,
+    last_sync_at TIMESTAMPTZ,
+    avg_sync_duration_seconds NUMERIC
+) AS $$
+    SELECT 
+        COUNT(*)::BIGINT as total_syncs,
+        COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as successful_syncs,
+        COUNT(*) FILTER (WHERE status = 'failed')::BIGINT as failed_syncs,
+        COALESCE(SUM(trades_imported), 0)::BIGINT as total_trades_imported,
+        MAX(created_at) as last_sync_at,
+        ROUND(AVG(duration_seconds)::NUMERIC, 2) as avg_sync_duration_seconds
+    FROM public.snaptrade_sync_log
+    WHERE user_id = p_user_id;
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_user_sync_stats IS 
+'v8.5.0: Gets aggregated sync statistics for a user';
+
+-- Cleanup old sync logs (keep last 100 per user)
+CREATE OR REPLACE FUNCTION cleanup_old_sync_logs()
+RETURNS INT AS $$
+DECLARE
+    deleted_count INT;
+BEGIN
+    WITH logs_to_keep AS (
+        SELECT id
+        FROM (
+            SELECT id, 
+                   ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
+            FROM public.snaptrade_sync_log
+        ) ranked
+        WHERE rn <= 100
+    )
+    DELETE FROM public.snaptrade_sync_log
+    WHERE id NOT IN (SELECT id FROM logs_to_keep);
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION cleanup_old_sync_logs IS 
+'v8.5.0: Deletes old sync logs, keeping only the last 100 per user';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 SNAPTRADE SECTION 5B: STATUS FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[5B/13] 🆕 Creating SnapTrade status functions...';
+END $$;
+
+-- Check if user has SnapTrade connected
+CREATE OR REPLACE FUNCTION is_snaptrade_connected(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+    SELECT EXISTS (
+        SELECT 1 
+        FROM snaptrade_users 
+        WHERE user_id = p_user_id
+    );
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION is_snaptrade_connected IS 
+'v8.5.0: Returns true if user has SnapTrade connected';
+
+-- Get last successful sync date
+CREATE OR REPLACE FUNCTION get_last_successful_sync_date(p_user_id UUID)
+RETURNS TIMESTAMPTZ AS $$
+    SELECT MAX(sync_completed_at)
+    FROM snaptrade_sync_log
+    WHERE user_id = p_user_id
+    AND status = 'completed';
+$$ LANGUAGE sql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_last_successful_sync_date IS 
+'v8.5.0: Returns the date of the last successful sync';
+
+-- Count pending trades
+CREATE OR REPLACE FUNCTION count_pending_snaptrade_trades(p_user_id UUID)
+RETURNS INT AS $$
+DECLARE
+    last_sync_record RECORD;
+    imported_count INT;
+BEGIN
+    -- Get last sync attempt
+    SELECT * INTO last_sync_record
+    FROM snaptrade_sync_log
+    WHERE user_id = p_user_id
+    AND status = 'running'
+    ORDER BY sync_started_at DESC
+    LIMIT 1;
+    
+    IF last_sync_record IS NULL THEN
+        RETURN 0;
+    END IF;
+    
+    -- Count trades imported during this sync
+    SELECT COUNT(*) INTO imported_count
+    FROM trades
+    WHERE user_id = p_user_id
+    AND import_source = 'snaptrade'
+    AND imported_at >= last_sync_record.sync_started_at;
+    
+    RETURN imported_count;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION count_pending_snaptrade_trades IS 
+'v8.5.0: Counts trades from current running sync';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 SNAPTRADE SECTION 5C: ANALYTICS FUNCTIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[5C/13] 🆕 Creating SnapTrade analytics functions...';
+END $$;
+
+-- Get SnapTrade import statistics for a date range
+CREATE OR REPLACE FUNCTION get_snaptrade_import_stats(
+    p_user_id UUID,
+    p_start_date DATE DEFAULT NULL,
+    p_end_date DATE DEFAULT NULL
+)
+RETURNS TABLE (
+    total_imports INT,
+    unique_symbols INT,
+    total_commission NUMERIC,
+    buy_count INT,
+    sell_count INT,
+    avg_trade_size NUMERIC,
+    date_range_start DATE,
+    date_range_end DATE
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COUNT(*)::INT as total_imports,
+        COUNT(DISTINCT symbol)::INT as unique_symbols,
+        ROUND(SUM(fees)::NUMERIC, 2) as total_commission,
+        COUNT(*) FILTER (WHERE side = 'LONG')::INT as buy_count,
+        COUNT(*) FILTER (WHERE side = 'SHORT')::INT as sell_count,
+        ROUND(AVG(quantity * entry_price)::NUMERIC, 2) as avg_trade_size,
+        COALESCE(p_start_date, MIN(open_at::DATE)) as date_range_start,
+        COALESCE(p_end_date, MAX(open_at::DATE)) as date_range_end
+    FROM trades
+    WHERE user_id = p_user_id
+    AND import_source = 'snaptrade'
+    AND (p_start_date IS NULL OR open_at::DATE >= p_start_date)
+    AND (p_end_date IS NULL OR open_at::DATE <= p_end_date);
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION get_snaptrade_import_stats IS 
+'v8.5.0: Gets detailed statistics for SnapTrade imports in a date range';
+
+-- Find duplicate SnapTrade activities
+CREATE OR REPLACE FUNCTION find_duplicate_snaptrade_activities(p_user_id UUID)
+RETURNS TABLE (
+    snaptrade_activity_id TEXT,
+    duplicate_count BIGINT,
+    trade_ids UUID[]
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        t.snaptrade_activity_id,
+        COUNT(*)::BIGINT as duplicate_count,
+        ARRAY_AGG(t.id) as trade_ids
+    FROM trades t
+    WHERE t.user_id = p_user_id
+    AND t.snaptrade_activity_id IS NOT NULL
+    GROUP BY t.snaptrade_activity_id
+    HAVING COUNT(*) > 1;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+COMMENT ON FUNCTION find_duplicate_snaptrade_activities IS 
+'v8.5.0: Finds any duplicate SnapTrade imports (should be none)';
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ SnapTrade helper functions created';
+END $$;
 
 -- ===============================================
 -- 🔒 SECTION 6: PAYMENT SECURITY & AFFILIATE AUTOMATION
@@ -2393,6 +2673,34 @@ COMMENT ON FUNCTION public.admin_grant_free_access IS
 
 GRANT EXECUTE ON FUNCTION public.admin_grant_free_access TO authenticated;
 
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 SNAPTRADE SECTION 6A: GRANT FUNCTION PERMISSIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[6A/13] 🔑 Granting SnapTrade function permissions...';
+END $$;
+
+-- Sync log functions
+GRANT EXECUTE ON FUNCTION get_latest_sync_for_user(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_sync_stats(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_old_sync_logs() TO service_role;
+
+-- Status functions
+GRANT EXECUTE ON FUNCTION is_snaptrade_connected(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_last_successful_sync_date(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION count_pending_snaptrade_trades(UUID) TO authenticated;
+
+-- Analytics functions
+GRANT EXECUTE ON FUNCTION get_snaptrade_import_stats(UUID, DATE, DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION find_duplicate_snaptrade_activities(UUID) TO authenticated;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ SnapTrade function permissions granted';
+END $$;
+
 COMMIT;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -2414,6 +2722,13 @@ BEGIN
   RAISE NOTICE '   ✅ Advanced subscription management (FIXED v5)';
   RAISE NOTICE '   🔧 FIXED: Risk settings use columns (NOT JSONB)';
   RAISE NOTICE '   🔧 FIXED v5: ALL SELECT INTO with ORDER BY issues!';
+  RAISE NOTICE '';
+  RAISE NOTICE '🆕 SnapTrade Integration Added:';
+  RAISE NOTICE '   ✅ Trigger functions (auto-update, validation)';
+  RAISE NOTICE '   ✅ Sync log helpers (latest sync, stats, cleanup)';
+  RAISE NOTICE '   ✅ Status functions (connected, last sync, pending)';
+  RAISE NOTICE '   ✅ Analytics functions (import stats, duplicates)';
+  RAISE NOTICE '   ✅ All permissions granted';
   RAISE NOTICE '';
   RAISE NOTICE '⏭️  Continue with חלק 2/2 (Sections 7-13)...';
   RAISE NOTICE '';

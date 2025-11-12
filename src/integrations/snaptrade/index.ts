@@ -1,20 +1,18 @@
-/**
- * SnapTrade Integration - Main Export File
- * Import everything you need from here
- */
+// src/integrations/snaptrade/index.ts
+// Main export file for SnapTrade integration
+// ייבוא הכל מכאן במקום מכל קובץ בנפרד
 
-// Configuration
-export { SNAPTRADE_CONFIG } from './snaptradeConfig';
-export type { SnapTradeEndpoint } from './snaptradeConfig';
-
-// HTTP Client
-export { snaptradeClient } from './snaptradeClient';
-export type { SnapTradeError, RequestOptions } from './snaptradeClient';
-
-// Service Layer
+// ============================================================================
+// SERVICES
+// ============================================================================
 export { snaptradeService, SnapTradeService } from './snaptradeService';
+export { snaptradeSupabaseService, SnapTradeSupabaseService } from './snaptradeSupabase';
+export { snaptradeTradeSync } from './snaptradeTradeSync';
+export { snaptradeClient } from './snaptradeClient';
 
-// Types
+// ============================================================================
+// TYPES
+// ============================================================================
 export type {
   // User Management
   SnapTradeUser,
@@ -70,10 +68,13 @@ export type {
   
   // API Responses
   SnapTradeResponse,
+  SnapTradeError,
   PaginatedResponse,
 } from './snaptradeTypes';
 
-// React Hooks
+// ============================================================================
+// REACT HOOKS
+// ============================================================================
 export {
   useSnapTradeUser,
   useSnapTradeConnections,
@@ -85,16 +86,9 @@ export {
   useSnapTradeBrokerages,
 } from './useSnapTrade';
 
-// Supabase Integration
-export {
-  snaptradeSupabaseService,
-  SnapTradeSupabaseService,
-  initializeSnapTradeForUser,
-  getOrCreateSnapTradeCredentials,
-  removeSnapTradeIntegration,
-} from './snaptradeSupabase';
-
-// UI Components
+// ============================================================================
+// UI COMPONENTS
+// ============================================================================
 export {
   BrokerageConnectionCard,
   AccountCard,
@@ -103,5 +97,17 @@ export {
   AccountsOverview,
 } from './SnapTradeComponents';
 
-// Complete Page
-export { default as SnapTradeIntegrationPage } from './SnapTradeIntegrationPage';
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+export {
+  initializeSnapTradeForUser,
+  getOrCreateSnapTradeCredentials,
+  removeSnapTradeIntegration,
+} from './snaptradeSupabase';
+
+export {
+  syncTradesFromSnapTrade,
+  setupAutomaticSync,
+  handleManualSync,
+} from './snaptradeTradeSync';

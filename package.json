@@ -67,7 +67,7 @@
     "react-resizable-panels": "^2.1.9",
     "react-router-dom": "^6.30.1",
     "recharts": "^2.15.4",
-    "snaptrade-typescript-sdk": "^9.0.146",
+    "snaptrade-typescript-sdk": "^9.0.149",
     "sonner": "^1.7.4",
     "swr": "^2.3.6",
     "tailwind-merge": "^2.6.0",

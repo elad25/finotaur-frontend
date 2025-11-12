@@ -1,5 +1,5 @@
 // src/components/subscription/LimitReachedModal.tsx
-// ✅✅✅ UPDATED: Better messaging for 30+ trades limit
+// ✅✅✅ FIXED: Now correctly handles 25 trades for BASIC
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,9 +21,10 @@ export function LimitReachedModal({
 }: LimitReachedModalProps) {
   const navigate = useNavigate();
   
-  // ✅ Check if this is FREE (10 trades) or BASIC (30+ trades)
+  // ✅ FIXED: Correctly identify FREE (10) vs BASIC (25)
   const isFreeUser = maxTrades <= 10;
-  const isBasicUser = maxTrades > 10 && tradesUsed >= 30;
+  const isBasicUser = maxTrades > 10 && maxTrades < 999;
+  const isPremiumUser = maxTrades >= 999;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -49,7 +50,7 @@ export function LimitReachedModal({
               {tradesUsed}{isFreeUser ? `/${maxTrades}` : ''}
             </div>
             <p className="text-xs text-zinc-500 mt-1">
-              {isFreeUser ? 'free trades' : 'trades this month'}
+              {isFreeUser ? 'free trades' : `trades this month (limit: ${maxTrades})`}
             </p>
           </div>
 
@@ -59,8 +60,8 @@ export function LimitReachedModal({
               <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-zinc-300">
                 {isFreeUser 
-                  ? 'Deleting trades won\'t reset the counter.'
-                  : 'Your monthly limit resets on the 1st of next month. Upgrade to Premium for unlimited trades.'
+                  ? 'Deleting trades won\'t reset the counter. Upgrade to continue trading!'
+                  : `Your monthly limit resets on the 1st of next month. Upgrade to Premium for unlimited trades.`
                 }
               </p>
             </div>

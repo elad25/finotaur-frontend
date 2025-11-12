@@ -1,10 +1,8 @@
 // src/integrations/snaptrade/snaptradeService.ts
-// FIXED VERSION - Correct endpoint paths (snake_case)
+// ✅ COMPLETE PAY-AS-YOU-GO VERSION with registerUser support
 
 import { supabase } from '@/integrations/supabase/client';
 import type {
-  SnapTradeUser,
-  RegisterUserRequest,
   BrokerageConnection,
   AuthorizationUrl,
   GetAuthUrlRequest,
@@ -14,6 +12,7 @@ import type {
   AccountHoldings,
   Activity,
   SnapTradeCredentials,
+  SnapTradeUser,
 } from './snaptradeTypes';
 
 export class SnapTradeService {
@@ -69,46 +68,32 @@ export class SnapTradeService {
   // ============================================================================
 
   /**
-   * Register a new user with SnapTrade
+   * Register a new SnapTrade user
+   * ✅ REQUIRED for Pay-as-you-go before making any connections!
    */
-  async registerUser(request: RegisterUserRequest): Promise<SnapTradeUser> {
-    console.log('🔐 Creating SnapTrade user via Edge Function...');
+  async registerUser(userId: string): Promise<SnapTradeUser> {
+    console.log('📝 Registering SnapTrade user:', userId);
     
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('No active session');
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-snaptrade-user', {
-        body: request,
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        console.error('❌ Failed to create SnapTrade user:', error);
-        throw new Error(error.message || 'Failed to create SnapTrade user');
-      }
-
-      console.log('✅ SnapTrade user created:', data.userId);
-      return data as SnapTradeUser;
-      
-    } catch (error: any) {
-      console.error('❌ Failed to register user:', error);
-      throw error;
-    }
+    const endpoint = `/registerUser`;
+    const body = { userId };
+    
+    const response = await this.makeProxyRequest<SnapTradeUser>(endpoint, 'POST', body);
+    console.log('✅ User registered successfully');
+    
+    return response;
   }
 
   /**
-   * Delete a user from SnapTrade (stub - not available in all plans)
+   * Delete a SnapTrade user
    */
   async deleteUser(userId: string): Promise<void> {
-    console.log('⚠️ deleteUser is not available in Pay-as-you-go plan');
-    // This endpoint is typically not available, so we just log
-    // In production, you'd call the actual API if available
+    console.log('🗑️ Deleting SnapTrade user:', userId);
+    
+    const endpoint = `/deleteUser`;
+    const body = { userId };
+    
+    await this.makeProxyRequest<void>(endpoint, 'POST', body);
+    console.log('✅ User deleted successfully');
   }
 
   // ============================================================================
@@ -117,25 +102,37 @@ export class SnapTradeService {
 
   /**
    * Get authorization URL for connecting a brokerage
-   * FIXED: Uses /snap_trade/login (snake_case)
+   * ✅ Pay-as-you-go: Works WITHOUT userSecret using direct OAuth
    */
   async getAuthorizationUrl(request: GetAuthUrlRequest): Promise<AuthorizationUrl> {
     console.log('🔗 Getting authorization URL for broker:', request.broker);
     
-    // FIXED: SnapTrade API uses snake_case endpoints
-    const endpoint = '/snap_trade/login';
-    const body = {
+    // ✅ For Pay-as-you-go: Use minimal params - OAuth creates user automatically
+    const params = new URLSearchParams({
       userId: request.userId,
-      userSecret: request.userSecret,
       broker: request.broker,
-      immediateRedirect: request.immediateRedirect ?? true,
-      customRedirect: request.customRedirect,
-      reconnect: request.reconnect,
+      immediateRedirect: String(request.immediateRedirect ?? true),
       connectionType: request.connectionType ?? 'read',
       connectionPortalVersion: request.connectionPortalVersion ?? 'v4',
-    };
-
-    return this.makeProxyRequest<AuthorizationUrl>(endpoint, 'POST', body);
+    });
+    
+    // Only add userSecret if provided and not empty
+    if (request.userSecret && request.userSecret.trim() !== '') {
+      params.append('userSecret', request.userSecret);
+    }
+    
+    if (request.customRedirect) {
+      params.append('customRedirect', request.customRedirect);
+    }
+    if (request.reconnect) {
+      params.append('reconnect', request.reconnect);
+    }
+    
+    const endpoint = `/snapTrade/login?${params.toString()}`;
+    
+    console.log('📤 Request endpoint:', endpoint);
+    // POST with no body - all params in query string
+    return this.makeProxyRequest<AuthorizationUrl>(endpoint, 'POST', null);
   }
 
   /**

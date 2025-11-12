@@ -45,7 +45,7 @@ export interface GetAuthUrlRequest {
   customRedirect?: string;
   reconnect?: string;
   connectionType?: 'read' | 'trade';
-  connectionPortalVersion?: 'v2' | 'v3';
+  connectionPortalVersion?: 'v2' | 'v3' | 'v4';
 }
 
 // ============================================================================

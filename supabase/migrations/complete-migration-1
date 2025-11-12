@@ -1,8 +1,8 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: v8.4.9-PRODUCTION-FINAL
--- Date: 2025-01-10
+-- Version: v8.5.0-PRODUCTION-FINAL-WITH-SNAPTRADE
+-- Date: 2025-01-15
 -- Part: 1/4 (Tables + Indexes + RLS)
 -- ===============================================
 -- ✅ Zero duplicates
@@ -20,6 +20,7 @@
 -- 🆕 Risk calculation columns (risk_mode NOT risk_calculation_mode)
 -- 💳 Payment system enhancements INCLUDED
 -- 🔥 HOTFIX v8.4.9: Fixed infinite recursion in RLS
+-- 📊 NEW v8.5.0: SnapTrade broker integration INCLUDED
 -- ===============================================
 
 BEGIN;
@@ -32,13 +33,14 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MIGRATION v8.4.9         ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MIGRATION v8.5.0         ║';
   RAISE NOTICE '║     Part 1/4: Tables + Indexes + RLS  ║';
   RAISE NOTICE '║     ✨ PRODUCTION FINAL - WORKING!    ║';
   RAISE NOTICE '║     🔧 NO RECURSION IN RLS!           ║';
   RAISE NOTICE '║     🔒 PAYMENT PROVIDER INCLUDED!     ║';
   RAISE NOTICE '║     🆕 RISK COLUMNS FIXED!            ║';
   RAISE NOTICE '║     💳 PAYMENT ENHANCEMENTS ADDED!    ║';
+  RAISE NOTICE '║     📊 SNAPTRADE INTEGRATION ADDED!   ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
   RAISE NOTICE '[1/9] Starting nuclear cleanup...';
@@ -379,12 +381,13 @@ ALTER TABLE public.strategies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 COMMENT ON COLUMN public.strategies.deleted_at IS 'Soft delete timestamp - NULL means active';
 
 -- ===============================================
--- SECTION 4: TRADES TABLE (COMPLETE + ENHANCED)
+-- SECTION 4: TRADES TABLE (COMPLETE + ENHANCED + SNAPTRADE)
 -- ===============================================
 
 DO $$
 BEGIN
   RAISE NOTICE '[4/9] Setting up trades table...';
+  RAISE NOTICE '      📊 Adding SnapTrade integration columns...';
 END $$;
 
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS open_at TIMESTAMPTZ DEFAULT NOW();
@@ -420,6 +423,12 @@ ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS notes_search_vector tsvector;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS deleted_by UUID;
 
+-- 📊 NEW v8.5.0: SnapTrade integration columns
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS snaptrade_activity_id TEXT;
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS snaptrade_account_id TEXT;
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS import_source TEXT DEFAULT 'manual';
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+
 -- Constraints
 ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS trades_outcome_check;
 ALTER TABLE public.trades ADD CONSTRAINT trades_outcome_check 
@@ -437,12 +446,28 @@ ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS trades_deleted_by_fkey;
 ALTER TABLE public.trades ADD CONSTRAINT trades_deleted_by_fkey 
   FOREIGN KEY (deleted_by) REFERENCES public.profiles(id);
 
+-- 📊 SnapTrade constraint
+ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS check_import_source;
+ALTER TABLE public.trades ADD CONSTRAINT check_import_source 
+  CHECK (import_source IN ('manual', 'snaptrade', 'csv', 'api'));
+
+-- Update existing trades (set import_source if NULL)
+UPDATE public.trades 
+SET import_source = 'manual' 
+WHERE import_source IS NULL;
+
 -- Comments
 COMMENT ON COLUMN public.trades.multiplier IS 'Asset contract multiplier - verified against CME/ICE standards';
 COMMENT ON COLUMN public.trades.actual_r IS 'Actual R achieved: PnL / Initial Risk';
 COMMENT ON COLUMN public.trades.notes IS 'Trade thesis, feelings, and what worked - supports full-text search';
 COMMENT ON COLUMN public.trades.screenshot_url IS 'URL to compressed screenshot in Supabase Storage';
 COMMENT ON COLUMN public.trades.deleted_at IS 'Soft delete timestamp - NULL means active';
+
+-- 📊 SnapTrade comments
+COMMENT ON COLUMN public.trades.snaptrade_activity_id IS 'SnapTrade activity ID - used for deduplication (unique per import)';
+COMMENT ON COLUMN public.trades.snaptrade_account_id IS 'SnapTrade account ID - identifies which broker account this trade came from';
+COMMENT ON COLUMN public.trades.import_source IS 'Source of the trade: manual (user entered), snaptrade (broker import), csv (CSV upload), api (API import)';
+COMMENT ON COLUMN public.trades.imported_at IS 'Timestamp when this trade was imported from external source';
 
 -- ===============================================
 -- SECTION 5: ADDITIONAL TABLES
@@ -451,6 +476,7 @@ COMMENT ON COLUMN public.trades.deleted_at IS 'Soft delete timestamp - NULL mean
 DO $$
 BEGIN
   RAISE NOTICE '[5/9] Creating additional tables...';
+  RAISE NOTICE '      📊 Including SnapTrade tables...';
 END $$;
 
 -- Payment History
@@ -698,6 +724,61 @@ ON CONFLICT DO NOTHING;
 
 COMMENT ON TABLE public.pricing_config IS 'Flexible pricing configuration - allows price changes without code deployment';
 
+-- 📊 NEW v8.5.0: SnapTrade Users
+CREATE TABLE IF NOT EXISTS public.snaptrade_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  snaptrade_user_id TEXT NOT NULL,
+  snaptrade_user_secret TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  CONSTRAINT unique_user_id UNIQUE(user_id),
+  CONSTRAINT unique_snaptrade_user_id UNIQUE(snaptrade_user_id)
+);
+
+-- 📊 NEW v8.5.0: SnapTrade Sync Log
+CREATE TABLE IF NOT EXISTS public.snaptrade_sync_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  sync_started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sync_completed_at TIMESTAMPTZ,
+  duration_seconds INT GENERATED ALWAYS AS (
+    EXTRACT(EPOCH FROM (sync_completed_at - sync_started_at))::INT
+  ) STORED,
+  
+  trades_imported INT DEFAULT 0,
+  trades_skipped INT DEFAULT 0,
+  trades_failed INT DEFAULT 0,
+  
+  sync_type TEXT DEFAULT 'manual',
+  date_range_start DATE,
+  date_range_end DATE,
+  
+  status TEXT NOT NULL DEFAULT 'running',
+  error_message TEXT,
+  error_details JSONB,
+  
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  
+  CONSTRAINT check_sync_status CHECK (status IN ('running', 'completed', 'failed', 'cancelled')),
+  CONSTRAINT check_sync_type CHECK (sync_type IN ('manual', 'automatic', 'scheduled')),
+  CONSTRAINT check_completed_status CHECK (
+    (status = 'running' AND sync_completed_at IS NULL) OR
+    (status != 'running' AND sync_completed_at IS NOT NULL)
+  )
+);
+
+-- Comments for SnapTrade tables
+COMMENT ON TABLE public.snaptrade_users IS 'Stores SnapTrade API credentials for each Finotaur user';
+COMMENT ON COLUMN public.snaptrade_users.snaptrade_user_id IS 'SnapTrade userId (e.g., finotaur_{uuid})';
+COMMENT ON COLUMN public.snaptrade_users.snaptrade_user_secret IS 'SnapTrade userSecret (optional in Pay-as-you-go)';
+
+COMMENT ON TABLE public.snaptrade_sync_log IS 'Tracks SnapTrade trade synchronization history and results';
+COMMENT ON COLUMN public.snaptrade_sync_log.duration_seconds IS 'How long the sync took (computed column)';
+COMMENT ON COLUMN public.snaptrade_sync_log.sync_type IS 'manual (user clicked button), automatic (scheduled), or scheduled (cron)';
+
 -- ===============================================
 -- SECTION 6: STORAGE BUCKET
 -- ===============================================
@@ -728,6 +809,7 @@ BEGIN
   RAISE NOTICE '[7/9] Creating production-grade indexes...';
   RAISE NOTICE '      Optimized for 5000+ concurrent users';
   RAISE NOTICE '      Including payment system indexes...';
+  RAISE NOTICE '      📊 Including SnapTrade indexes...';
 END $$;
 
 -- Profiles indexes
@@ -799,6 +881,25 @@ WHERE external_id IS NOT NULL;
 -- ✨ NEW: Soft delete index for trades
 CREATE INDEX IF NOT EXISTS idx_trades_not_deleted 
 ON public.trades(user_id, id) WHERE deleted_at IS NULL;
+
+-- 📊 NEW v8.5.0: SnapTrade indexes on trades
+CREATE UNIQUE INDEX IF NOT EXISTS idx_trades_snaptrade_activity_id 
+ON public.trades(snaptrade_activity_id) 
+WHERE snaptrade_activity_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trades_snaptrade_account_id 
+ON public.trades(snaptrade_account_id)
+WHERE snaptrade_account_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trades_import_source 
+ON public.trades(import_source);
+
+CREATE INDEX IF NOT EXISTS idx_trades_imported_at 
+ON public.trades(imported_at DESC)
+WHERE imported_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trades_user_import_source 
+ON public.trades(user_id, import_source, imported_at DESC);
 
 -- Notes & Screenshots indexes
 CREATE INDEX IF NOT EXISTS idx_trades_notes_search 
@@ -881,6 +982,19 @@ CREATE INDEX IF NOT EXISTS idx_impersonation_active ON public.admin_impersonatio
 CREATE INDEX IF NOT EXISTS idx_snaptrade_activity_user_id ON public.snaptrade_activity(user_id);
 CREATE INDEX IF NOT EXISTS idx_snaptrade_activity_status ON public.snaptrade_activity(connection_status);
 
+-- 📊 NEW v8.5.0: SnapTrade tables indexes
+CREATE INDEX IF NOT EXISTS idx_snaptrade_users_user_id ON public.snaptrade_users(user_id);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_users_snaptrade_user_id ON public.snaptrade_users(snaptrade_user_id);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_users_created_at ON public.snaptrade_users(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_id ON public.snaptrade_sync_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_status ON public.snaptrade_sync_log(status);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_created_at ON public.snaptrade_sync_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_completed_at ON public.snaptrade_sync_log(sync_completed_at DESC)
+WHERE sync_completed_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_status ON public.snaptrade_sync_log(user_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_type ON public.snaptrade_sync_log(user_id, sync_type, created_at DESC);
+
 -- ✨ NEW: Rate limiting indexes
 CREATE INDEX IF NOT EXISTS idx_rate_limits_window 
 ON public.api_rate_limits(user_id, endpoint, window_start);
@@ -899,6 +1013,8 @@ ANALYZE public.api_rate_limits;
 ANALYZE public.payment_history;
 ANALYZE public.subscription_changes;
 ANALYZE public.pricing_config;
+ANALYZE public.snaptrade_users;
+ANALYZE public.snaptrade_sync_log;
 
 -- ===============================================
 -- SECTION 8: ENABLE RLS
@@ -907,6 +1023,7 @@ ANALYZE public.pricing_config;
 DO $$
 BEGIN
   RAISE NOTICE '[8/9] Enabling RLS...';
+  RAISE NOTICE '      📊 Including SnapTrade tables...';
 END $$;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -926,6 +1043,8 @@ ALTER TABLE public.snaptrade_activity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.api_rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscription_changes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snaptrade_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snaptrade_sync_log ENABLE ROW LEVEL SECURITY;
 
 -- ===============================================
 -- SECTION 9: SAFE RLS POLICIES (HOTFIX v8.4.9 - NO RECURSION!)
@@ -937,6 +1056,7 @@ BEGIN
   RAISE NOTICE '      ✅ Simple policies - no subqueries';
   RAISE NOTICE '      ✅ Admin access via SECURITY DEFINER functions';
   RAISE NOTICE '      💳 Payment system policies included';
+  RAISE NOTICE '      📊 SnapTrade policies included';
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -951,7 +1071,7 @@ TO authenticated
 USING (id = auth.uid());
 
 COMMENT ON POLICY "profiles_select_own" ON public.profiles IS 
-'v8.4.9-HOTFIX: Users see ONLY own profile. Admin access via SECURITY DEFINER functions.';
+'v8.5.0: Users see ONLY own profile. Admin access via SECURITY DEFINER functions.';
 
 -- INSERT: Only during signup
 CREATE POLICY "profiles_insert_own"
@@ -964,7 +1084,7 @@ WITH CHECK (
 );
 
 COMMENT ON POLICY "profiles_insert_own" ON public.profiles IS 
-'v8.4.9-HOTFIX: Users can create own profile during registration (FREE only).';
+'v8.5.0: Users can create own profile during registration (FREE only).';
 
 -- UPDATE: Users can update own (with restrictions)
 CREATE POLICY "profiles_update_own"
@@ -975,7 +1095,7 @@ USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
 COMMENT ON POLICY "profiles_update_own" ON public.profiles IS 
-'v8.4.9-HOTFIX: Users update own profile. Restrictions enforced at application layer.';
+'v8.5.0: Users update own profile. Restrictions enforced at application layer.';
 
 -- DELETE: Forbidden (use soft delete)
 CREATE POLICY "profiles_delete_never"
@@ -985,7 +1105,7 @@ TO authenticated
 USING (false);
 
 COMMENT ON POLICY "profiles_delete_never" ON public.profiles IS 
-'v8.4.9-HOTFIX: Direct deletion forbidden - use soft delete (deleted_at) instead.';
+'v8.5.0: Direct deletion forbidden - use soft delete (deleted_at) instead.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- TRADES - 4 SIMPLE POLICIES
@@ -998,7 +1118,7 @@ TO authenticated
 USING (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_select_own" ON public.trades IS 
-'v8.4.9-HOTFIX: Users see only own trades. Admin via functions.';
+'v8.5.0: Users see only own trades. Admin via functions.';
 
 CREATE POLICY "trades_insert_own"
 ON public.trades
@@ -1006,11 +1126,10 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   user_id = auth.uid()
-  
 );
 
 COMMENT ON POLICY "trades_insert_own" ON public.trades IS 
-'v8.4.9-HOTFIX: Users create own trades. Limits checked via can_create_trade().';
+'v8.5.0: Users create own trades. Limits checked via can_create_trade().';
 
 CREATE POLICY "trades_update_own"
 ON public.trades
@@ -1020,7 +1139,7 @@ USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_update_own" ON public.trades IS 
-'v8.4.9-HOTFIX: Users update only own trades.';
+'v8.5.0: Users update only own trades.';
 
 CREATE POLICY "trades_delete_own"
 ON public.trades
@@ -1029,7 +1148,7 @@ TO authenticated
 USING (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_delete_own" ON public.trades IS 
-'v8.4.9-HOTFIX: Users delete only own trades (or use soft delete).';
+'v8.5.0: Users delete only own trades (or use soft delete).';
 
 -- ═══════════════════════════════════════════════════════════════
 -- STRATEGIES - 4 SIMPLE POLICIES
@@ -1144,6 +1263,62 @@ TO authenticated
 USING (is_active = TRUE);
 
 -- ═══════════════════════════════════════════════════════════════
+-- 📊 SNAPTRADE TABLES - SIMPLE POLICIES
+-- ═══════════════════════════════════════════════════════════════
+
+-- SnapTrade Users
+CREATE POLICY "snaptrade_users_select_own"
+ON public.snaptrade_users
+FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+CREATE POLICY "snaptrade_users_insert_own"
+ON public.snaptrade_users
+FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "snaptrade_users_update_own"
+ON public.snaptrade_users
+FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "snaptrade_users_delete_own"
+ON public.snaptrade_users
+FOR DELETE
+TO authenticated
+USING (user_id = auth.uid());
+
+COMMENT ON POLICY "snaptrade_users_select_own" ON public.snaptrade_users IS 
+'v8.5.0: Users can only view their own SnapTrade credentials';
+
+-- SnapTrade Sync Log
+CREATE POLICY "snaptrade_sync_log_select_own"
+ON public.snaptrade_sync_log
+FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+CREATE POLICY "snaptrade_sync_log_insert_own"
+ON public.snaptrade_sync_log
+FOR INSERT
+TO authenticated
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "snaptrade_sync_log_update_own"
+ON public.snaptrade_sync_log
+FOR UPDATE
+TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+COMMENT ON POLICY "snaptrade_sync_log_select_own" ON public.snaptrade_sync_log IS 
+'v8.5.0: Users can only view their own SnapTrade sync logs';
+
+-- ═══════════════════════════════════════════════════════════════
 -- STORAGE POLICIES
 -- ═══════════════════════════════════════════════════════════════
 
@@ -1185,11 +1360,17 @@ USING (
 
 GRANT SELECT ON public.subscription_changes TO authenticated;
 GRANT SELECT ON public.pricing_config TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.snaptrade_users TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.snaptrade_sync_log TO authenticated;
+
+-- Grant to service role (for Edge Functions)
+GRANT ALL ON public.snaptrade_users TO service_role;
+GRANT ALL ON public.snaptrade_sync_log TO service_role;
 
 COMMIT;
 
 -- ===============================================
--- END OF PART 1/4 - v8.4.9-PRODUCTION-FINAL
+-- END OF PART 1/4 - v8.5.0-PRODUCTION-FINAL
 -- ===============================================
 
 DO $$
@@ -1200,16 +1381,22 @@ DECLARE
   risk_columns_exist INTEGER;
   risk_mode_exists BOOLEAN;
   payment_enhancements_exist INTEGER;
+  snaptrade_columns_exist INTEGER;
+  snaptrade_users_exists BOOLEAN;
+  snaptrade_sync_log_exists BOOLEAN;
+  snaptrade_indexes_count INTEGER;
+  snaptrade_policies_count INTEGER;
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  ✅ PART 1/4 COMPLETE! (v8.4.9)       ║';
+  RAISE NOTICE '║  ✅ PART 1/4 COMPLETE! (v8.5.0)       ║';
   RAISE NOTICE '║     Tables + Indexes + RLS            ║';
   RAISE NOTICE '║     ✨ PRODUCTION FINAL - WORKING!    ║';
   RAISE NOTICE '║     🔥 NO RECURSION IN RLS!           ║';
   RAISE NOTICE '║     🔒 PAYMENT PROVIDER INCLUDED!     ║';
   RAISE NOTICE '║     🆕 RISK COLUMNS FIXED!            ║';
   RAISE NOTICE '║     💳 PAYMENT ENHANCEMENTS ADDED!    ║';
+  RAISE NOTICE '║     📊 SNAPTRADE INTEGRATION ADDED!   ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
   
@@ -1254,6 +1441,27 @@ BEGIN
     AND table_name = 'profiles'
     AND column_name IN ('cancellation_reason', 'cancellation_requested_at', 'cancellation_effective_date', 
                         'previous_account_type', 'upgrade_date', 'prorated_credit');
+  
+  -- Check SnapTrade columns in trades
+  SELECT COUNT(*) INTO snaptrade_columns_exist
+  FROM information_schema.columns
+  WHERE table_name = 'trades' 
+  AND column_name IN ('snaptrade_activity_id', 'snaptrade_account_id', 'import_source', 'imported_at');
+  
+  -- Check SnapTrade tables
+  SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename = 'snaptrade_users') INTO snaptrade_users_exists;
+  SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename = 'snaptrade_sync_log') INTO snaptrade_sync_log_exists;
+  
+  -- Check SnapTrade indexes
+  SELECT COUNT(*) INTO snaptrade_indexes_count
+  FROM pg_indexes 
+  WHERE tablename IN ('trades', 'snaptrade_users', 'snaptrade_sync_log')
+  AND indexname LIKE '%snaptrade%';
+  
+  -- Check SnapTrade policies
+  SELECT COUNT(*) INTO snaptrade_policies_count
+  FROM pg_policies 
+  WHERE tablename IN ('snaptrade_users', 'snaptrade_sync_log');
   
   RAISE NOTICE '📊 RLS Policies Status:';
   RAISE NOTICE '   • Profiles policies: % (expected: 4)', profiles_policies_count;
@@ -1303,9 +1511,17 @@ BEGIN
   END IF;
   
   RAISE NOTICE '';
+  RAISE NOTICE '📊 SnapTrade Integration Status:';
+  RAISE NOTICE '   ├─ Trades columns added: % / 4', snaptrade_columns_exist;
+  RAISE NOTICE '   ├─ snaptrade_users table: %', CASE WHEN snaptrade_users_exists THEN '✅ EXISTS' ELSE '❌ MISSING' END;
+  RAISE NOTICE '   ├─ snaptrade_sync_log table: %', CASE WHEN snaptrade_sync_log_exists THEN '✅ EXISTS' ELSE '❌ MISSING' END;
+  RAISE NOTICE '   ├─ SnapTrade indexes: %', snaptrade_indexes_count;
+  RAISE NOTICE '   └─ RLS policies: %', snaptrade_policies_count;
+  
+  RAISE NOTICE '';
   RAISE NOTICE '📊 Database Status:';
-  RAISE NOTICE '   • Tables: 17 (including subscription_changes, pricing_config)';
-  RAISE NOTICE '   • Indexes: 80+';
+  RAISE NOTICE '   • Tables: 19 (including snaptrade_users, snaptrade_sync_log)';
+  RAISE NOTICE '   • Indexes: 90+';
   RAISE NOTICE '   • RLS Enabled: ✅';
   RAISE NOTICE '   • Storage Bucket: ✅';
   RAISE NOTICE '';
@@ -1322,6 +1538,9 @@ BEGIN
   RAISE NOTICE '   ✅ Subscription management enhancements';
   RAISE NOTICE '   ✅ Proration tracking';
   RAISE NOTICE '   ✅ Flexible pricing configuration';
+  RAISE NOTICE '   ✅ SnapTrade broker integration';
+  RAISE NOTICE '   ✅ Trade import deduplication';
+  RAISE NOTICE '   ✅ Sync logging and tracking';
   RAISE NOTICE '';
   RAISE NOTICE '⏭️  Next Steps:';
   RAISE NOTICE '   1. Run Part 2/4 (Functions 1-6)';

@@ -1,5 +1,5 @@
 // supabase/functions/snaptrade-proxy/index.ts
-// FIXED VERSION - Proper SnapTrade API integration
+// ✅ SIMPLE & WORKING VERSION - Always includes clientId and timestamp
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -16,14 +16,20 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, PUT, DELETE, OPTIONS",
 };
 
-// Generate HMAC-SHA256 signature
+// Generate HMAC-SHA256 signature using SnapTrade's format
 async function generateSignature(
-  endpoint: string,
-  clientId: string,
-  timestamp: string,
-  body: string
+  path: string,
+  query: string,
+  body: any
 ): Promise<string> {
-  const content = `${endpoint}${clientId}${timestamp}${body}`;
+  const sigObject = {
+    content: body || {},
+    path: path,
+    query: query
+  };
+  
+  const sigContent = JSON.stringify(sigObject);
+  console.log("📝 Signature content:", sigContent.substring(0, 300));
   
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -37,12 +43,11 @@ async function generateSignature(
   const signatureBuffer = await crypto.subtle.sign(
     "HMAC",
     key,
-    encoder.encode(content)
+    encoder.encode(sigContent)
   );
 
-  return Array.from(new Uint8Array(signatureBuffer))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
+  const base64Signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+  return base64Signature;
 }
 
 serve(async (req: Request) => {
@@ -78,31 +83,48 @@ serve(async (req: Request) => {
       throw new Error("Missing endpoint parameter");
     }
 
-    console.log("📍 Endpoint:", endpoint);
+    console.log("📍 Original endpoint:", endpoint);
     console.log("🔧 Method:", method);
-    console.log("📦 Body:", body ? JSON.stringify(body).substring(0, 100) : "none");
 
-    // Build URL
+    // ✅ SIMPLE APPROACH: Always add clientId and timestamp
     const timestamp = new Date().toISOString();
     
-    // Add query params
-    let fullEndpoint = endpoint;
-    const separator = endpoint.includes("?") ? "&" : "?";
-    fullEndpoint += `${separator}clientId=${SNAPTRADE_CLIENT_ID}&timestamp=${timestamp}`;
+    // Split path and query
+    const [basePath, existingQuery] = endpoint.split('?');
     
-    const fullUrl = `${SNAPTRADE_BASE_URL}${fullEndpoint}`;
+    // Build complete query string
+    let allParams = existingQuery || '';
+    
+    // Add clientId if not present
+    if (!allParams.includes('clientId=')) {
+      allParams += (allParams ? '&' : '') + `clientId=${SNAPTRADE_CLIENT_ID}`;
+    }
+    
+    // Add timestamp if not present
+    if (!allParams.includes('timestamp=')) {
+      allParams += (allParams ? '&' : '') + `timestamp=${timestamp}`;
+    }
+    
+    console.log("📍 Base path:", basePath);
+    console.log("📍 Query string for signature:", allParams);
+    
+    // Build full URL
+    const fullUrl = `${SNAPTRADE_BASE_URL}${basePath}?${allParams}`;
     console.log("🌐 Full URL:", fullUrl);
 
-    // Generate signature (use ORIGINAL endpoint without clientId/timestamp)
-    const bodyString = body ? JSON.stringify(body) : "";
-    const signature = await generateSignature(
-      endpoint,
-      SNAPTRADE_CLIENT_ID,
-      timestamp,
-      bodyString
-    );
+    // Parse body if needed
+    let bodyObject = body;
+    if (typeof body === 'string' && body) {
+      try {
+        bodyObject = JSON.parse(body);
+      } catch (e) {
+        // Keep as is
+      }
+    }
 
-    console.log("🔐 Signature generated");
+    // Generate signature
+    const signature = await generateSignature(basePath, allParams, bodyObject);
+    console.log("🔐 Signature generated (length:", signature.length, ")");
     console.log("📤 Calling SnapTrade API...");
     
     // Make request to SnapTrade
@@ -112,12 +134,26 @@ serve(async (req: Request) => {
         "Content-Type": "application/json",
         "Signature": signature,
       },
-      body: method !== "GET" && body ? bodyString : undefined,
+      body: method !== "GET" && body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
     });
 
     const responseText = await snaptradeResponse.text();
     console.log("📥 Response Status:", snaptradeResponse.status);
     console.log("📄 Response Preview:", responseText.substring(0, 200));
+
+    // Check if response is OK (200-299)
+    if (snaptradeResponse.ok) {
+      console.log("✅ Success!");
+      console.log("=".repeat(50) + "\n");
+      
+      return new Response(responseText, {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Response is NOT OK - handle errors
+    console.error("❌ SnapTrade API error");
 
     // Check if response is HTML error page
     if (responseText.trim().startsWith("<!doctype") || responseText.trim().startsWith("<html")) {
@@ -127,8 +163,7 @@ serve(async (req: Request) => {
           error: "SnapTrade API endpoint not found",
           status: snaptradeResponse.status,
           endpoint: endpoint,
-          hint: "This endpoint may not be available in your SnapTrade plan. Pay-as-you-go plans have limited endpoints.",
-          details: "Contact SnapTrade support to verify which endpoints are available in your plan.",
+          hint: "This endpoint may not be available in your SnapTrade plan.",
         }),
         {
           status: 404,
@@ -137,39 +172,27 @@ serve(async (req: Request) => {
       );
     }
 
-    // Handle non-OK responses
-    if (!snaptradeResponse.ok) {
-      console.error("❌ SnapTrade API error");
-      
-      let errorDetails = responseText;
-      try {
-        const errorJson = JSON.parse(responseText);
-        errorDetails = JSON.stringify(errorJson, null, 2);
-      } catch (e) {
-        // Keep as text if not JSON
-      }
-      
-      return new Response(
-        JSON.stringify({
-          error: `SnapTrade API error: ${snaptradeResponse.status}`,
-          status: snaptradeResponse.status,
-          details: errorDetails,
-          endpoint: endpoint,
-        }),
-        {
-          status: snaptradeResponse.status,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    // Try to parse error JSON
+    let errorDetails = responseText;
+    try {
+      const errorJson = JSON.parse(responseText);
+      errorDetails = JSON.stringify(errorJson, null, 2);
+    } catch (e) {
+      // Keep as text
     }
-
-    console.log("✅ Success!");
-    console.log("=".repeat(50) + "\n");
     
-    return new Response(responseText, {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: `SnapTrade API error: ${snaptradeResponse.status}`,
+        status: snaptradeResponse.status,
+        details: errorDetails,
+        endpoint: endpoint,
+      }),
+      {
+        status: snaptradeResponse.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
 
   } catch (error: any) {
     console.error("❌ Proxy Error:", error);

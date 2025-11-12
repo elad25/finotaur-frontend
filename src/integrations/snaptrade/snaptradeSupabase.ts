@@ -1,6 +1,6 @@
 /**
  * SnapTrade Supabase Integration
- * Handles storing and retrieving SnapTrade credentials from Supabase
+ * ✅ PAY-AS-YOU-GO VERSION with automatic user registration
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -155,28 +155,34 @@ export const snaptradeSupabaseService = new SnapTradeSupabaseService();
 
 /**
  * Initialize SnapTrade for a new user
- * Registers with SnapTrade and saves credentials to Supabase
+ * ✅ PAY-AS-YOU-GO: No API registration - OAuth creates user automatically
+ * Just creates the userId format and saves to database for tracking.
  */
 export async function initializeSnapTradeForUser(
   supabaseUserId: string,
-  snaptradeUserId: string
+  snaptradeUserId?: string
 ): Promise<SnapTradeCredentials> {
   try {
-    // Import here to avoid circular dependencies
-    const { snaptradeService } = await import('./snaptradeService');
+    console.log('🔄 Initializing SnapTrade for user (Pay-as-you-go mode - no registration needed)');
     
-    // Register user with SnapTrade
-    const snapTradeUser = await snaptradeService.registerUser({
-      userId: snaptradeUserId,
+    // For Pay-as-you-go: Just use the Finotaur user ID with prefix
+    // OAuth will create the user automatically on first connection
+    const userId = snaptradeUserId || `finotaur_${supabaseUserId}`;
+    
+    const credentials: SnapTradeCredentials = {
+      userId: userId,
+      userSecret: '', // Empty for Pay-as-you-go
+    };
+
+    // Save to Supabase for tracking
+    await snaptradeSupabaseService.saveCredentials(supabaseUserId, {
+      userId: credentials.userId,
+      userSecret: '', // Empty for Pay-as-you-go
     });
 
-    // Save credentials to Supabase
-    await snaptradeSupabaseService.saveCredentials(supabaseUserId, snapTradeUser);
-
-    return {
-      userId: snapTradeUser.userId,
-      userSecret: snapTradeUser.userSecret,
-    };
+    console.log('✅ SnapTrade initialized (user will be created automatically via OAuth)');
+    return credentials;
+    
   } catch (error) {
     console.error('Error initializing SnapTrade for user:', error);
     throw error;
@@ -185,6 +191,7 @@ export async function initializeSnapTradeForUser(
 
 /**
  * Get or create SnapTrade credentials for a user
+ * ✅ PAY-AS-YOU-GO: Auto-registers if not exists
  */
 export async function getOrCreateSnapTradeCredentials(
   supabaseUserId: string,
@@ -194,34 +201,51 @@ export async function getOrCreateSnapTradeCredentials(
   const existing = await snaptradeSupabaseService.getCredentials(supabaseUserId);
   
   if (existing) {
+    console.log('✅ Found existing SnapTrade credentials');
     return existing;
   }
 
-  // Create new credentials
+  // Create new credentials (registers with SnapTrade API)
+  console.log('🆕 Creating new SnapTrade credentials');
   const userId = snaptradeUserId || `finotaur_${supabaseUserId}`;
   return initializeSnapTradeForUser(supabaseUserId, userId);
 }
 
 /**
  * Remove SnapTrade integration for a user
+ * ✅ PAY-AS-YOU-GO: Disconnects brokers and deletes from SnapTrade
  */
 export async function removeSnapTradeIntegration(
   supabaseUserId: string
 ): Promise<void> {
   try {
+    console.log('🗑️ Removing SnapTrade integration');
+    
     // Get credentials
     const credentials = await snaptradeSupabaseService.getCredentials(supabaseUserId);
     
     if (credentials) {
-      // Import here to avoid circular dependencies
-      const { snaptradeService } = await import('./snaptradeService');
-      
-      // Delete from SnapTrade
-      await snaptradeService.deleteUser(credentials.userId);
+      try {
+        // Import here to avoid circular dependencies
+        const { snaptradeService } = await import('./snaptradeService');
+        
+        // Disconnect all broker connections (cost optimization!)
+        await snaptradeService.disconnectAllBrokerages(credentials);
+        console.log('✅ Disconnected all brokerages');
+        
+        // Delete user from SnapTrade
+        await snaptradeService.deleteUser(credentials.userId);
+        console.log('✅ Deleted user from SnapTrade');
+      } catch (error) {
+        console.error('⚠️ Error disconnecting/deleting from SnapTrade:', error);
+        // Continue anyway - we still want to clean up database
+      }
     }
 
-    // Delete from Supabase
+    // Delete credentials from Supabase database
     await snaptradeSupabaseService.deleteCredentials(supabaseUserId);
+    console.log('✅ SnapTrade credentials removed from database');
+    
   } catch (error) {
     console.error('Error removing SnapTrade integration:', error);
     throw error;

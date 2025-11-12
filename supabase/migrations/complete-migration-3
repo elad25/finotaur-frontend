@@ -1,14 +1,16 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: MERGED-v8.4.7-FIXED-ADMIN-UPDATE-SUBSCRIPTION
--- Date: 2025-11-10
--- Parts: 2/3 (Functions + Triggers) - חלק 2/2 (סעיפים 7-14) ✅ COMPLETE
+-- Version: MERGED-v8.5.0-WITH-SNAPTRADE
+-- Date: 2025-01-15
+-- Parts: 2/3 (Functions + Triggers) - חלק 2/2 (סעיפים 7-15) ✅ COMPLETE
+-- 🔥 NEW v8.5.0: SnapTrade Integration Included!
 -- 🔧 FIXED v8.4.7: 
 --    - admin_update_subscription NOW RETURNS JSONB (not VOID)
 --    - Better error handling in admin functions
 --    - Portfolio fields in get_user_subscription_status
---    - 🆕 Section 14: Helper Functions Added
+--    - Section 14: Helper Functions
+--    - 🔥 Section 15: SnapTrade Functions
 -- PREREQUISITE: Run PART-2-FUNCTIONS-SECTION-1.sql first!
 -- ===============================================
 
@@ -18,11 +20,11 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.4.7  ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.5.0  ║';
   RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
-  RAISE NOTICE '║     Section 2/2: סעיפים 7-14         ║';
+  RAISE NOTICE '║     Section 2/2: סעיפים 7-15         ║';
+  RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!    ║';
   RAISE NOTICE '║     🔧 FIXED: admin_update returns JSONB! ║';
-  RAISE NOTICE '║     🆕 NEW: Section 14 Helpers!       ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
 END $$;
@@ -33,7 +35,7 @@ END $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[7/14] Creating subscription functions...';
+  RAISE NOTICE '[7/15] Creating subscription functions...';
 END $$;
 
 -- 🔧 FIXED: Drop old function first to avoid type conflicts
@@ -162,7 +164,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v8.4.7-FIXED: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
+'v8.5.0-FIXED: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
 
 -- Check Expired Subscriptions
 CREATE OR REPLACE FUNCTION public.check_expired_subscriptions()
@@ -222,7 +224,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.reset_monthly_trade_counts IS 
-'v8.4.7: Resets monthly counters ONLY for BASIC/TRIAL/PREMIUM. FREE users are excluded.';
+'v8.5.0: Resets monthly counters ONLY for BASIC/TRIAL/PREMIUM. FREE users are excluded.';
 
 -- Check Usage Warning
 CREATE OR REPLACE FUNCTION public.check_usage_warning(target_user_id UUID)
@@ -270,7 +272,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_usage_warning IS 
-'v8.4.7: Shows warning at 80% usage. FREE uses lifetime count.';
+'v8.5.0: Shows warning at 80% usage. FREE uses lifetime count.';
 
 -- Mark Warning Shown
 CREATE OR REPLACE FUNCTION public.mark_warning_shown(target_user_id UUID)
@@ -291,7 +293,7 @@ $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[8/14] Creating portfolio functions...';
+  RAISE NOTICE '[8/15] Creating portfolio functions...';
 END $$;
 
 -- Get Portfolio Stats (OPTIMIZED - ONE QUERY)
@@ -354,7 +356,7 @@ $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[9/14] Creating TradingView webhook functions...';
+  RAISE NOTICE '[9/15] Creating TradingView webhook functions...';
 END $$;
 
 -- Close TradingView Trade (ATOMIC)
@@ -434,7 +436,7 @@ $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[10/14] Creating referral functions...';
+  RAISE NOTICE '[10/15] Creating referral functions...';
 END $$;
 
 -- Process Referral Signup
@@ -755,7 +757,7 @@ $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[11/14] Creating admin functions...';
+  RAISE NOTICE '[11/15] Creating admin functions...';
 END $$;
 
 -- Log Admin Action
@@ -940,7 +942,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.admin_update_subscription IS 
-'v8.4.7-UPDATED: Returns JSONB with success/error. Uses get_trade_limit() - BASIC/TRIAL = 25 trades';
+'v8.5.0-UPDATED: Returns JSONB with success/error. Uses get_trade_limit() - BASIC/TRIAL = 25 trades';
 
 -- Admin Reset Trade Count
 CREATE OR REPLACE FUNCTION public.admin_reset_trade_count(target_user_id UUID)
@@ -1069,10 +1071,10 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.grant_free_access IS 
-'v8.4.7: Main function to grant free access. Called by adminService.ts';
+'v8.5.0: Main function to grant free access. Called by adminService.ts';
 
 COMMENT ON FUNCTION public.admin_grant_free_months IS 
-'v8.4.7: Backward compatibility wrapper for grant_free_access';
+'v8.5.0: Backward compatibility wrapper for grant_free_access';
 
 -- Admin Get Limits Overview
 CREATE OR REPLACE FUNCTION public.admin_get_limits_overview()
@@ -1338,7 +1340,7 @@ $$;
 DO $$
 BEGIN
   RAISE NOTICE '';
-  RAISE NOTICE '[11.5/14] 🔧 Creating impersonation functions...';
+  RAISE NOTICE '[11.5/15] 🔧 Creating impersonation functions...';
 END $$;
 
 CREATE OR REPLACE FUNCTION public.start_impersonation_session_v1(
@@ -1537,7 +1539,7 @@ GRANT EXECUTE ON FUNCTION public.end_impersonation_session TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_active_impersonation_sessions TO authenticated;
 
 COMMENT ON FUNCTION public.start_impersonation_session_v1 IS 
-'🔧 v8.4.7: Allows admins to impersonate users. Returns session token.';
+'🔧 v8.5.0: Allows admins to impersonate users. Returns session token.';
 
 -- ===============================================
 -- SECTION 12: ACTIVITY TRACKING
@@ -1545,7 +1547,7 @@ COMMENT ON FUNCTION public.start_impersonation_session_v1 IS
 
 DO $$
 BEGIN
-  RAISE NOTICE '[12/14] Creating activity tracking functions...';
+  RAISE NOTICE '[12/15] Creating activity tracking functions...';
 END $$;
 
 -- Update User Login Stats
@@ -1665,7 +1667,7 @@ $$;
 
 DO $$
 BEGIN
-  RAISE NOTICE '[13/14] Creating ALL triggers + RLS...';
+  RAISE NOTICE '[13/15] Creating ALL triggers + RLS...';
 END $$;
 
 -- Profile triggers
@@ -1755,7 +1757,7 @@ CREATE TRIGGER update_snaptrade_activity_updated_at_trigger
 DO $$
 BEGIN
   RAISE NOTICE '';
-  RAISE NOTICE '[14/14] Creating helper functions for admin maintenance...';
+  RAISE NOTICE '[14/15] Creating helper functions for admin maintenance...';
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1779,7 +1781,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_webhook_stats IS 
-'v8.4.7: Manually refresh webhook statistics materialized view (admin only)';
+'v8.5.0: Manually refresh webhook statistics materialized view (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 2. רענון ידני של Strategy Stats
@@ -1802,7 +1804,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_strategy_stats IS 
-'v8.4.7: Manually refresh strategy statistics materialized view (admin only)';
+'v8.5.0: Manually refresh strategy statistics materialized view (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 3. רענון כל המטריאלייזד ויוז
@@ -1826,7 +1828,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_all_materialized_views IS 
-'v8.4.7: Refresh all materialized views in one call (admin only)';
+'v8.5.0: Refresh all materialized views in one call (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 4. גודל מסד הנתונים
@@ -1854,7 +1856,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_database_size IS 
-'v8.4.7: Get total database size in MB and GB (admin only)';
+'v8.5.0: Get total database size in MB and GB (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 5. גודל טבלאות
@@ -1890,7 +1892,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_table_sizes IS 
-'v8.4.7: Get size and row count for all tables (admin only)';
+'v8.5.0: Get size and row count for all tables (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 6. שאילתות איטיות
@@ -1926,7 +1928,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_slow_queries IS 
-'v8.4.7: Get slowest queries for performance monitoring (admin only)';
+'v8.5.0: Get slowest queries for performance monitoring (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 7. בדיקת בריאות המערכת
@@ -1985,7 +1987,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_system_health IS 
-'v8.4.7: Comprehensive system health check returning status for DB, connections, RLS, etc. (admin only)';
+'v8.5.0: Comprehensive system health check returning status for DB, connections, RLS, etc. (admin only)';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 8. ניקוי נתונים ישנים (ידני)
@@ -2031,8 +2033,233 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.manual_cleanup_old_data IS 
-'v8.4.7: Manual cleanup of old data - rate limits (24h), inactive sessions, old logs (1y) (admin only)';
+'v8.5.0: Manual cleanup of old data - rate limits (24h), inactive sessions, old logs (1y) (admin only)';
 
+-- ===============================================
+-- 🔥 SECTION 15: SNAPTRADE FUNCTIONS
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '[15/15] 🔥 Creating SnapTrade integration functions...';
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 15.1: Check SnapTrade Connection Status
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.is_snaptrade_connected(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.is_snaptrade_connected(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM snaptrade_users 
+    WHERE user_id = p_user_id
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.is_snaptrade_connected IS 
+'v8.5.0: Check if user has SnapTrade connected';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 15.2: Get User Sync Statistics
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_user_sync_stats(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_user_sync_stats(p_user_id UUID)
+RETURNS TABLE (
+  total_syncs BIGINT,
+  successful_syncs BIGINT,
+  failed_syncs BIGINT,
+  total_trades_imported BIGINT,
+  last_sync_at TIMESTAMPTZ,
+  last_sync_status TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COUNT(*)::BIGINT as total_syncs,
+    COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as successful_syncs,
+    COUNT(*) FILTER (WHERE status = 'failed')::BIGINT as failed_syncs,
+    COALESCE(SUM(trades_imported), 0)::BIGINT as total_trades_imported,
+    MAX(sync_completed_at) as last_sync_at,
+    (
+      SELECT status FROM snaptrade_sync_log 
+      WHERE user_id = p_user_id 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    )::TEXT as last_sync_status
+  FROM snaptrade_sync_log
+  WHERE user_id = p_user_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_user_sync_stats IS 
+'v8.5.0: Get comprehensive sync statistics for user';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 15.3: Get Latest Sync for User
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_latest_sync_for_user(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_latest_sync_for_user(p_user_id UUID)
+RETURNS TABLE (
+  id UUID,
+  status TEXT,
+  sync_started_at TIMESTAMPTZ,
+  sync_completed_at TIMESTAMPTZ,
+  trades_imported INTEGER,
+  error_message TEXT,
+  sync_type TEXT,
+  duration_seconds INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ssl.id,
+    ssl.status::TEXT,
+    ssl.sync_started_at,
+    ssl.sync_completed_at,
+    ssl.trades_imported,
+    ssl.error_message,
+    ssl.sync_type::TEXT,
+    ssl.duration_seconds
+  FROM snaptrade_sync_log ssl
+  WHERE ssl.user_id = p_user_id
+  ORDER BY ssl.created_at DESC
+  LIMIT 1;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_latest_sync_for_user IS 
+'v8.5.0: Get most recent sync log entry for user';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 15.4: Get SnapTrade Import Statistics
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_snaptrade_import_stats(UUID, DATE, DATE) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_snaptrade_import_stats(
+  p_user_id UUID,
+  p_start_date DATE DEFAULT NULL,
+  p_end_date DATE DEFAULT NULL
+)
+RETURNS TABLE (
+  total_imported BIGINT,
+  by_symbol JSONB,
+  by_side JSONB,
+  by_account JSONB,
+  date_range JSONB
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_start_date DATE;
+  v_end_date DATE;
+BEGIN
+  v_start_date := COALESCE(p_start_date, CURRENT_DATE - INTERVAL '30 days');
+  v_end_date := COALESCE(p_end_date, CURRENT_DATE);
+  
+  RETURN QUERY
+  WITH filtered_trades AS (
+    SELECT * FROM trades
+    WHERE user_id = p_user_id
+      AND import_source = 'snaptrade'
+      AND imported_at BETWEEN v_start_date AND v_end_date
+  )
+  SELECT 
+    COUNT(*)::BIGINT as total_imported,
+    
+    jsonb_object_agg(
+      symbol, 
+      count
+    ) as by_symbol,
+    
+    jsonb_object_agg(
+      side,
+      side_count
+    ) as by_side,
+    
+    jsonb_object_agg(
+      COALESCE(snaptrade_account_id::TEXT, 'unknown'),
+      account_count
+    ) as by_account,
+    
+    jsonb_build_object(
+      'start_date', v_start_date,
+      'end_date', v_end_date,
+      'days', v_end_date - v_start_date
+    ) as date_range
+    
+  FROM (
+    SELECT 
+      symbol,
+      COUNT(*) as count,
+      side,
+      COUNT(*) as side_count,
+      snaptrade_account_id,
+      COUNT(*) as account_count
+    FROM filtered_trades
+    GROUP BY symbol, side, snaptrade_account_id
+  ) stats;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_snaptrade_import_stats IS 
+'v8.5.0: Get detailed import statistics for date range';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 15.5: Find Duplicate SnapTrade Activities
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.find_duplicate_snaptrade_activities(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.find_duplicate_snaptrade_activities(p_user_id UUID)
+RETURNS TABLE (
+  activity_id TEXT,
+  trade_count BIGINT,
+  trade_ids UUID[]
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.snaptrade_activity_id::TEXT,
+    COUNT(*)::BIGINT as trade_count,
+    ARRAY_AGG(t.id) as trade_ids
+  FROM trades t
+  WHERE t.user_id = p_user_id
+    AND t.snaptrade_activity_id IS NOT NULL
+  GROUP BY t.snaptrade_activity_id
+  HAVING COUNT(*) > 1;
+END;
+$$;
+
+COMMENT ON FUNCTION public.find_duplicate_snaptrade_activities IS 
+'v8.5.0: Find duplicate SnapTrade activity IDs (should return empty)';
 -- ═══════════════════════════════════════════════════════════════
 -- GRANT PERMISSIONS
 -- ═══════════════════════════════════════════════════════════════
@@ -2054,7 +2281,7 @@ GRANT EXECUTE ON FUNCTION public.admin_grant_free_months(UUID, INTEGER) TO authe
 -- ✅ Admin update subscription (JSONB version)
 GRANT EXECUTE ON FUNCTION public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO authenticated;
 
--- 🆕 Section 14: Helper functions
+-- Section 14: Helper functions
 GRANT EXECUTE ON FUNCTION public.refresh_webhook_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_strategy_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_all_materialized_views() TO authenticated;
@@ -2063,6 +2290,13 @@ GRANT EXECUTE ON FUNCTION public.get_table_sizes() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_slow_queries(INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.check_system_health() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.manual_cleanup_old_data() TO authenticated;
+
+-- 🔥 Section 15: SnapTrade functions
+GRANT EXECUTE ON FUNCTION public.is_snaptrade_connected(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_sync_stats(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_latest_sync_for_user(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_snaptrade_import_stats(UUID, DATE, DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.find_duplicate_snaptrade_activities(UUID) TO authenticated;
 
 -- ═══════════════════════════════════════════════════════════
 -- UPGRADE RLS - TRADE LIMIT ENFORCEMENT
@@ -2091,21 +2325,22 @@ WITH CHECK (
 );
 
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
-'v8.4.7-FIXED: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
+'v8.5.0-FIXED: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
 
 COMMIT;
 
 -- ===============================================
--- END OF PART 2/3 - COMPLETE WITH v8.4.7
+-- END OF PART 2/3 - COMPLETE WITH v8.5.0
 -- ===============================================
 
 DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  ✅ PART 2/3 COMPLETE! (v8.4.7)       ║';
+  RAISE NOTICE '║  ✅ PART 2/3 COMPLETE! (v8.5.0)       ║';
   RAISE NOTICE '║     Functions + Triggers + RLS        ║';
-  RAISE NOTICE '║     🆕 WITH SECTION 14 INCLUDED!      ║';
+  RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!    ║';
+  RAISE NOTICE '║     🆕 SECTION 15 SNAPTRADE COMPLETE! ║';
   RAISE NOTICE '║     🔧 admin_update RETURNS JSONB!    ║';
   RAISE NOTICE '║     🔧 PORTFOLIO FIELDS INCLUDED!     ║';
   RAISE NOTICE '║     🔥 FREE: NO MONTHLY RESET!        ║';
@@ -2115,7 +2350,7 @@ BEGIN
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
   RAISE NOTICE '📊 Created:';
-  RAISE NOTICE '   • Functions: 88+ (including 8 helpers!)';
+  RAISE NOTICE '   • Functions: 93+ (including SnapTrade!)';
   RAISE NOTICE '   • Triggers: 12 (unified!)';
   RAISE NOTICE '   • RLS: Trade limit enforcement ✅';
   RAISE NOTICE '   • Rate Limiting ✅';
@@ -2123,7 +2358,15 @@ BEGIN
   RAISE NOTICE '   • Payment Security ✅';
   RAISE NOTICE '   • Affiliate Automation ✅';
   RAISE NOTICE '   • Impersonation ✅';
-  RAISE NOTICE '   • 🆕 Admin Maintenance Tools ✅';
+  RAISE NOTICE '   • Admin Maintenance Tools ✅';
+  RAISE NOTICE '   • 🔥 SnapTrade Integration ✅';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔥 NEW in Section 15 (SnapTrade):';
+  RAISE NOTICE '   • is_snaptrade_connected()';
+  RAISE NOTICE '   • get_user_sync_stats()';
+  RAISE NOTICE '   • get_latest_sync_for_user()';
+  RAISE NOTICE '   • get_snaptrade_import_stats()';
+  RAISE NOTICE '   • find_duplicate_snaptrade_activities()';
   RAISE NOTICE '';
   RAISE NOTICE '🔧 FIXED in v8.4.7:';
   RAISE NOTICE '   • admin_update_subscription NOW RETURNS JSONB!';
@@ -2132,7 +2375,7 @@ BEGIN
   RAISE NOTICE '   • Returns detailed success/error messages';
   RAISE NOTICE '   • Logs to admin_audit_log automatically';
   RAISE NOTICE '';
-  RAISE NOTICE '🆕 NEW in Section 14:';
+  RAISE NOTICE '🆕 Section 14 (Admin Maintenance):';
   RAISE NOTICE '   • refresh_webhook_stats()';
   RAISE NOTICE '   • refresh_strategy_stats()';
   RAISE NOTICE '   • refresh_all_materialized_views()';
@@ -2142,12 +2385,20 @@ BEGIN
   RAISE NOTICE '   • check_system_health()';
   RAISE NOTICE '   • manual_cleanup_old_data()';
   RAISE NOTICE '';
-  RAISE NOTICE '✨ Trade Limits (v8.4.7):';
+  RAISE NOTICE '✨ Trade Limits (v8.5.0):';
   RAISE NOTICE '   • FREE:    10 trades LIFETIME (no reset)';
   RAISE NOTICE '   • BASIC:   25 trades/month';
   RAISE NOTICE '   • TRIAL:   25 trades/month';
   RAISE NOTICE '   • PREMIUM: Unlimited';
   RAISE NOTICE '';
+  RAISE NOTICE '📈 SnapTrade Features:';
+  RAISE NOTICE '   • User connection tracking';
+  RAISE NOTICE '   • Sync job logging & statistics';
+  RAISE NOTICE '   • Import analytics by symbol/side/account';
+  RAISE NOTICE '   • Duplicate detection';
+  RAISE NOTICE '   • Date range filtering';
+  RAISE NOTICE '';
   RAISE NOTICE '⏭️  Next: Run Part 3 (Views + Permissions)';
+  RAISE NOTICE '   Then run: SNAPTRADE-PART-3-VIEWS.sql';
   RAISE NOTICE '';
 END $$;
