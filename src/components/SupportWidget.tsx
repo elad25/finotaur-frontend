@@ -1,9 +1,9 @@
 // ============================================
-// FINOTAUR SUPPORT - DIRECT CHAT START
+// FINOTAUR SUPPORT - WITH GUEST SUPPORT
 // ============================================
-// ✨ Start directly in chat with welcome message
-// 🎨 Clean, minimal, premium gold design
-// 🔥 Bloomberg Terminal quality
+// ✨ Support for both logged-in and guest users
+// 🔒 Guests can only send one message (no history)
+// 📧 Guests must provide name + email first
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -46,34 +46,45 @@ export default function SupportWidget() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+  const [showGuestForm, setShowGuestForm] = useState(false);
+  const [guestFormName, setGuestFormName] = useState('');
+  const [guestFormEmail, setGuestFormEmail] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      loadUserInfo();
-      loadUserTickets();
+      checkUserStatus();
     }
   }, [isOpen]);
 
+  // Show guest form immediately when opening as guest
+  useEffect(() => {
+    if (isGuest && isOpen && !userName && !userEmail) {
+      setShowGuestForm(true);
+    }
+  }, [isGuest, isOpen, userName, userEmail]);
+
   useEffect(() => {
     // If we have tickets, show list view. If not, show new conversation chat
-    if (tickets.length > 0) {
+    // But guests should never see list view
+    if (!isGuest && tickets.length > 0) {
       setView('list');
       setIsNewConversation(false);
     } else {
       setView('chat');
       setIsNewConversation(true);
     }
-  }, [tickets]);
+  }, [tickets, isGuest]);
 
   useEffect(() => {
     scrollToBottom();
   }, [selectedTicket?.messages, isNewConversation]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !isGuest) {
       const channel = supabase
         .channel('support-live')
         .on(
@@ -96,12 +107,11 @@ export default function SupportWidget() {
         supabase.removeChannel(channel);
       };
     }
-  }, [isOpen, selectedTicket?.id]);
+  }, [isOpen, selectedTicket?.id, isGuest]);
 
-  // Demo: Show typing indicator for 2 seconds when opening a new chat (optional)
   useEffect(() => {
     if (isNewConversation && isOpen) {
-      setIsTyping(false); // Set to true to demo the typing indicator
+      setIsTyping(false);
     }
   }, [isNewConversation, isOpen]);
 
@@ -110,6 +120,26 @@ export default function SupportWidget() {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
   };
+
+  async function checkUserStatus() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Logged in user
+        setIsGuest(false);
+        loadUserInfo();
+        loadUserTickets();
+      } else {
+        // Guest user
+        setIsGuest(true);
+        setView('chat');
+        setIsNewConversation(true);
+      }
+    } catch (error) {
+      console.error('Error checking user status:', error);
+      setIsGuest(true);
+    }
+  }
 
   async function loadUserInfo() {
     try {
@@ -208,38 +238,70 @@ export default function SupportWidget() {
     return uploadedUrls;
   }
 
+  function validateGuestForm(): boolean {
+    if (!guestFormName.trim()) {
+      toast.error('Please enter your name');
+      return false;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!guestFormEmail.trim() || !emailRegex.test(guestFormEmail)) {
+      toast.error('Please enter a valid email');
+      return false;
+    }
+    
+    return true;
+  }
+
+  function handleGuestFormSubmit() {
+    if (!validateGuestForm()) return;
+    
+    setUserName(guestFormName.trim());
+    setUserEmail(guestFormEmail.trim());
+    setShowGuestForm(false);
+    
+    // Focus on message input after form submission
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  }
+
   async function handleSendMessage() {
+    // Validation: Check if guest has filled their details
+    if (isGuest && (!userName || !userEmail)) {
+      toast.error('Please fill in your contact information first');
+      return;
+    }
+
     if (!currentMessage.trim()) return;
 
     setSending(true);
 
     try {
-      // If this is a new conversation, create the ticket first
-      if (isNewConversation) {
-        const { data: { user } } = await supabase.auth.getUser();
+      // Upload files if any
+      let uploadedUrls: string[] = [];
+      if (attachments.length > 0) {
+        setUploadingFiles(true);
+        uploadedUrls = await uploadFiles(attachments);
+        setUploadingFiles(false);
+      }
 
-        // Upload files if any
-        let uploadedUrls: string[] = [];
-        if (attachments.length > 0) {
-          setUploadingFiles(true);
-          uploadedUrls = await uploadFiles(attachments);
-          setUploadingFiles(false);
-        }
+      const newMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        type: 'customer',
+        content: currentMessage.trim(),
+        timestamp: new Date().toISOString(),
+        attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+      };
 
-        const newMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          type: 'customer',
-          content: currentMessage.trim(),
-          timestamp: new Date().toISOString(),
-          attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
-        };
-
+      // For guests, always create a new ticket
+      if (isGuest || isNewConversation) {
         const { data, error } = await supabase
           .from('support_tickets')
           .insert({
-            user_id: user?.id || null,
-            user_email: userEmail || user?.email || 'unknown@example.com',
-            user_name: userName || user?.email?.split('@')[0] || 'User',
+            user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
+            user_email: userEmail,
+            user_name: userName,
             subject: 'Support Request',
             message: currentMessage.trim(),
             messages: [newMessage],
@@ -250,13 +312,16 @@ export default function SupportWidget() {
 
         if (error) throw error;
 
-        setSelectedTicket(data);
-        setIsNewConversation(false);
+        // For guests, don't set selected ticket or update view
+        if (!isGuest) {
+          setSelectedTicket(data);
+          setIsNewConversation(false);
+          loadUserTickets();
+        }
+
         setCurrentMessage('');
         setAttachments([]);
-        inputRef.current?.focus();
-        loadUserTickets();
-
+        
         // Send email
         try {
           const { data: { session } } = await supabase.auth.getSession();
@@ -279,28 +344,21 @@ export default function SupportWidget() {
           console.error('Email error:', e);
         }
 
-        toast.success('Message sent');
+        toast.success(isGuest ? 'Message sent! We\'ll respond to your email soon.' : 'Message sent');
+        
+        // For guests, close the widget after sending
+        if (isGuest) {
+          setTimeout(() => {
+            handleClose();
+          }, 2000);
+        }
+        
+        inputRef.current?.focus();
         return;
       }
 
-      // Otherwise, add message to existing ticket
+      // For logged-in users with existing ticket
       if (!selectedTicket) return;
-
-      // Upload files if any
-      let uploadedUrls: string[] = [];
-      if (attachments.length > 0) {
-        setUploadingFiles(true);
-        uploadedUrls = await uploadFiles(attachments);
-        setUploadingFiles(false);
-      }
-
-      const newMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        type: 'customer',
-        content: currentMessage.trim(),
-        timestamp: new Date().toISOString(),
-        attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
-      };
 
       const existingMessages = Array.isArray(selectedTicket.messages) ? selectedTicket.messages : [];
       const updatedMessages = [...existingMessages, newMessage];
@@ -403,7 +461,7 @@ export default function SupportWidget() {
   const handleClose = () => {
     setIsOpen(false);
     setTimeout(() => {
-      if (tickets.length > 0) {
+      if (!isGuest && tickets.length > 0) {
         setView('list');
       } else {
         setView('chat');
@@ -411,10 +469,14 @@ export default function SupportWidget() {
       }
       setSelectedTicket(null);
       setAttachments([]);
+      setShowGuestForm(false);
+      setGuestFormName('');
+      setGuestFormEmail('');
     }, 300);
   };
 
   const handleBackToList = () => {
+    if (isGuest) return; // Guests can't go back to list
     setView('list');
     setSelectedTicket(null);
     setIsNewConversation(false);
@@ -423,6 +485,7 @@ export default function SupportWidget() {
   };
 
   const handleNewChat = () => {
+    if (isGuest) return; // Guests can't create multiple chats
     setView('chat');
     setSelectedTicket(null);
     setIsNewConversation(true);
@@ -455,8 +518,8 @@ export default function SupportWidget() {
             <MessageCircle className="h-6 w-6 text-black" strokeWidth={2} />
           </div>
           
-          {/* Unread Badge */}
-          {tickets.some(t => hasUnreadMessages(t)) && (
+          {/* Unread Badge - only for logged in users */}
+          {!isGuest && tickets.some(t => hasUnreadMessages(t)) && (
             <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 border-2 border-[#0a0a0a] animate-pulse"></div>
           )}
         </button>
@@ -477,8 +540,8 @@ export default function SupportWidget() {
               
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {/* Back Button */}
-                  {view === 'chat' && !isNewConversation && (
+                  {/* Back Button - only for logged in users */}
+                  {!isGuest && view === 'chat' && !isNewConversation && (
                     <button
                       onClick={handleBackToList}
                       className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out"
@@ -516,8 +579,75 @@ export default function SupportWidget() {
 
             {/* Content Area */}
             <div className="h-[520px] flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black">
-              {/* Conversations List View */}
-              {view === 'list' && (
+              {/* Guest Form Overlay */}
+              {showGuestForm && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                  <div className="bg-[#0f0f0f] border border-[#7F6823]/30 rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl">
+                    <div className="text-center mb-6">
+                      <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center mx-auto mb-3">
+                        <Shield className="h-6 w-6 text-black" strokeWidth={2.5} />
+                      </div>
+                      <h3 className="text-lg font-semibold text-white mb-1">Welcome! 👋</h3>
+                      <p className="text-sm text-gray-400">Let us know how to reach you</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-2">Your Name</label>
+                        <input
+                          type="text"
+                          value={guestFormName}
+                          onChange={(e) => setGuestFormName(e.target.value)}
+                          placeholder="John Doe"
+                          autoFocus
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              document.getElementById('guest-email-input')?.focus();
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-2">Your Email</label>
+                        <input
+                          id="guest-email-input"
+                          type="email"
+                          value={guestFormEmail}
+                          onChange={(e) => setGuestFormEmail(e.target.value)}
+                          placeholder="john@example.com"
+                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleGuestFormSubmit();
+                            }
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          onClick={handleClose}
+                          className="flex-1 h-11 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 text-sm font-medium transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleGuestFormSubmit}
+                          className="flex-1 h-11 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl text-black text-sm font-semibold transition-all shadow-lg"
+                        >
+                          Continue
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Conversations List View - Only for logged in users */}
+              {!isGuest && view === 'list' && (
                 <div className="flex-1 flex flex-col">
                   {/* Conversations List */}
                   <div className="flex-1 overflow-y-auto pt-3">
@@ -622,7 +752,10 @@ export default function SupportWidget() {
                                 Hey 👋
                               </p>
                               <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
-                                Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it's technical help, trade syncing, or anything else you need.
+                                {isGuest && userName 
+                                  ? `Hi ${userName}! How can we help you today? We'll respond to ${userEmail}.`
+                                  : 'Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it\'s technical help, trade syncing, or anything else you need.'
+                                }
                               </p>
                               <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
                                 {formatTime(new Date().toISOString())}
@@ -813,7 +946,10 @@ export default function SupportWidget() {
                       </button>
                     </div>
                     <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
-                      Press Ctrl+Enter to send • Max 5 files, 20MB each
+                      {isGuest 
+                        ? 'We\'ll respond to your email • Max 5 files, 20MB each'
+                        : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
+                      }
                     </p>
                   </div>
                 </>

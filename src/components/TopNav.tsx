@@ -55,13 +55,12 @@ export const TopNav = () => {
         <div className="flex items-center gap-6 lg:gap-8">
           <button 
             onClick={() => navigate('/app/journal/overview')}
-            className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
+            className="flex items-center group cursor-pointer"
           >
-            <img 
-              src="/assets/WhatsApp Image 2025-11-05 at 06.49.32 2.jpeg" 
-              alt="Finotaur" 
-              className="h-10 w-auto"
-            />
+            <span className="text-xl md:text-2xl font-bold tracking-tight">
+              <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
+              <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
+            </span>
           </button>
 
           {/* Main Tabs - More compact, hidden on mobile */}
