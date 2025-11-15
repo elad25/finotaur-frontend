@@ -1,6 +1,6 @@
 /**
  * SnapTrade Supabase Integration
- * ✅ PAY-AS-YOU-GO VERSION with automatic user registration
+ * ✅ FIXED VERSION - Properly registers users and validates userSecret
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -28,11 +28,24 @@ export class SnapTradeSupabaseService {
 
   /**
    * Save SnapTrade credentials to Supabase
+   * ✅ VALIDATES that userSecret is not empty
    */
   async saveCredentials(
     userId: string,
     credentials: SnapTradeUser
   ): Promise<void> {
+    console.log('💾 Saving credentials to DB:', {
+      userId,
+      snaptradeUserId: credentials.userId,
+      hasUserSecret: !!credentials.userSecret,
+      userSecretLength: credentials.userSecret?.length || 0
+    });
+
+    // ✅ VALIDATION: Ensure userSecret is not empty
+    if (!credentials.userSecret || credentials.userSecret.trim() === '') {
+      throw new Error('Cannot save credentials: userSecret is empty!');
+    }
+
     const { error } = await supabase
       .from(this.tableName)
       .upsert({
@@ -48,10 +61,13 @@ export class SnapTradeSupabaseService {
       console.error('Error saving SnapTrade credentials:', error);
       throw new Error(`Failed to save SnapTrade credentials: ${error.message}`);
     }
+
+    console.log('✅ Credentials saved successfully');
   }
 
   /**
    * Get SnapTrade credentials from Supabase
+   * ✅ VALIDATES that userSecret exists and is not empty
    */
   async getCredentials(userId: string): Promise<SnapTradeCredentials | null> {
     try {
@@ -67,6 +83,18 @@ export class SnapTradeSupabaseService {
       }
 
       if (!data) return null;
+
+      console.log('📖 Retrieved credentials from DB:', {
+        userId: data.snaptrade_user_id,
+        hasUserSecret: !!data.snaptrade_user_secret,
+        userSecretLength: data.snaptrade_user_secret?.length || 0
+      });
+
+      // ✅ VALIDATION: Check if userSecret is empty
+      if (!data.snaptrade_user_secret || data.snaptrade_user_secret.trim() === '') {
+        console.warn('⚠️ Found credentials with EMPTY userSecret - returning null');
+        return null;
+      }
 
       return {
         userId: data.snaptrade_user_id,
@@ -95,21 +123,12 @@ export class SnapTradeSupabaseService {
 
   /**
    * Check if user has SnapTrade credentials stored
+   * ✅ Also validates that userSecret is not empty
    */
   async hasCredentials(userId: string): Promise<boolean> {
     try {
-      const { data, error } = await supabase
-        .from(this.tableName)
-        .select('id')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error checking SnapTrade credentials:', error);
-        return false;
-      }
-
-      return !!data;
+      const credentials = await this.getCredentials(userId);
+      return credentials !== null && !!credentials.userSecret;
     } catch (error) {
       console.error('Unexpected error checking SnapTrade credentials:', error);
       return false;
@@ -130,7 +149,7 @@ export class SnapTradeSupabaseService {
     if (updates.userId) {
       updateData.snaptrade_user_id = updates.userId;
     }
-    if (updates.userSecret) {
+    if (updates.userSecret !== undefined) {
       updateData.snaptrade_user_secret = updates.userSecret;
     }
 
@@ -155,65 +174,93 @@ export const snaptradeSupabaseService = new SnapTradeSupabaseService();
 
 /**
  * Initialize SnapTrade for a new user
- * ✅ PAY-AS-YOU-GO: No API registration - OAuth creates user automatically
- * Just creates the userId format and saves to database for tracking.
+ * ✅ FIXED: Actually registers user and gets real userSecret
  */
 export async function initializeSnapTradeForUser(
   supabaseUserId: string,
   snaptradeUserId?: string
 ): Promise<SnapTradeCredentials> {
   try {
-    console.log('🔄 Initializing SnapTrade for user (Pay-as-you-go mode - no registration needed)');
+    console.log('🔄 Initializing SnapTrade for user:', supabaseUserId);
     
-    // For Pay-as-you-go: Just use the Finotaur user ID with prefix
-    // OAuth will create the user automatically on first connection
-    const userId = snaptradeUserId || `finotaur_${supabaseUserId}`;
+    const userId = snaptradeUserId || supabaseUserId;
     
-    const credentials: SnapTradeCredentials = {
-      userId: userId,
-      userSecret: '', // Empty for Pay-as-you-go
-    };
+    // ✅ CRITICAL FIX: Actually call registerUser to get userSecret!
+    console.log('📝 Registering user with SnapTrade API...');
+    
+    // Import snaptradeService here to avoid circular dependency
+    const { snaptradeService } = await import('./snaptradeService');
+    
+    try {
+      const registeredUser = await snaptradeService.registerUser(userId);
+      
+      console.log('✅ User registered successfully:', {
+        userId: registeredUser.userId,
+        hasUserSecret: !!registeredUser.userSecret,
+        userSecretLength: registeredUser.userSecret?.length || 0
+      });
 
-    // Save to Supabase for tracking
-    await snaptradeSupabaseService.saveCredentials(supabaseUserId, {
-      userId: credentials.userId,
-      userSecret: '', // Empty for Pay-as-you-go
-    });
+      // ✅ VALIDATION: Ensure we got a userSecret
+      if (!registeredUser.userSecret || registeredUser.userSecret.trim() === '') {
+        throw new Error('SnapTrade registration did not return userSecret!');
+      }
+      
+      // Save credentials with real userSecret
+      await snaptradeSupabaseService.saveCredentials(supabaseUserId, {
+        userId: registeredUser.userId,
+        userSecret: registeredUser.userSecret,
+      });
 
-    console.log('✅ SnapTrade initialized (user will be created automatically via OAuth)');
-    return credentials;
+      console.log('✅ Credentials saved to database');
+      
+      return {
+        userId: registeredUser.userId,
+        userSecret: registeredUser.userSecret,
+      };
+      
+    } catch (registerError: any) {
+      console.error('❌ Failed to register user with SnapTrade:', registerError);
+      throw registerError; // Don't save empty credentials
+    }
     
   } catch (error) {
-    console.error('Error initializing SnapTrade for user:', error);
+    console.error('❌ Error initializing SnapTrade:', error);
     throw error;
   }
 }
 
 /**
  * Get or create SnapTrade credentials for a user
- * ✅ PAY-AS-YOU-GO: Auto-registers if not exists
+ * ✅ FIXED: Properly initializes if credentials don't exist or are empty
  */
 export async function getOrCreateSnapTradeCredentials(
   supabaseUserId: string,
   snaptradeUserId?: string
 ): Promise<SnapTradeCredentials> {
+  console.log('🔍 Getting or creating SnapTrade credentials for:', supabaseUserId);
+  
   // Try to get existing credentials
   const existing = await snaptradeSupabaseService.getCredentials(supabaseUserId);
   
-  if (existing) {
-    console.log('✅ Found existing SnapTrade credentials');
+  if (existing && existing.userSecret && existing.userSecret.trim() !== '') {
+    console.log('✅ Found existing valid credentials');
     return existing;
   }
+  
+  if (existing) {
+    console.warn('⚠️ Found existing credentials WITHOUT valid userSecret - deleting and re-registering');
+    // Delete invalid credentials
+    await snaptradeSupabaseService.deleteCredentials(supabaseUserId);
+  }
 
-  // Create new credentials (registers with SnapTrade API)
-  console.log('🆕 Creating new SnapTrade credentials');
-  const userId = snaptradeUserId || `finotaur_${supabaseUserId}`;
+  // Create new credentials with proper registration
+  console.log('🆕 Creating new SnapTrade credentials with registration');
+  const userId = snaptradeUserId || supabaseUserId;
   return initializeSnapTradeForUser(supabaseUserId, userId);
 }
 
 /**
  * Remove SnapTrade integration for a user
- * ✅ PAY-AS-YOU-GO: Disconnects brokers and deletes from SnapTrade
  */
 export async function removeSnapTradeIntegration(
   supabaseUserId: string
@@ -229,20 +276,23 @@ export async function removeSnapTradeIntegration(
         // Import here to avoid circular dependencies
         const { snaptradeService } = await import('./snaptradeService');
         
-        // Disconnect all broker connections (cost optimization!)
+        // Disconnect all broker connections
         await snaptradeService.disconnectAllBrokerages(credentials);
         console.log('✅ Disconnected all brokerages');
         
         // Delete user from SnapTrade
-        await snaptradeService.deleteUser(credentials.userId);
-        console.log('✅ Deleted user from SnapTrade');
+        try {
+          await snaptradeService.deleteUser(credentials.userId, credentials.userSecret);
+          console.log('✅ Deleted user from SnapTrade');
+        } catch (deleteError) {
+          console.warn('⚠️ Could not delete user from SnapTrade');
+        }
       } catch (error) {
         console.error('⚠️ Error disconnecting/deleting from SnapTrade:', error);
-        // Continue anyway - we still want to clean up database
       }
     }
 
-    // Delete credentials from Supabase database
+    // Delete credentials from database
     await snaptradeSupabaseService.deleteCredentials(supabaseUserId);
     console.log('✅ SnapTrade credentials removed from database');
     

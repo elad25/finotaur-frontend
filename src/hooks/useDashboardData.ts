@@ -2,6 +2,8 @@
 // OPTIMIZED FOR 5000+ USERS - Ultra Performance + Impersonation Support
 // File: src/hooks/useDashboardData.ts
 // 🔥 FIXED: Added admin client support for impersonation
+// ✅ ENHANCED: Added profitFactor, avgWin, avgLoss calculations
+// ✅ NEW: Added trades array for chart data
 // ================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +18,22 @@ import dayjs from 'dayjs';
 // TYPES & INTERFACES
 // ================================================
 
+export interface Trade {
+  id: string;
+  symbol: string;
+  pnl: number;
+  rr: number | null;
+  actual_r: number | null;
+  risk_usd: number | null;
+  open_at: string;
+  close_at: string | null;
+  stop_price: number | null;
+  entry_price: number | null;
+  quantity: number | null;
+  exit_price: number | null;
+  multiplier: number | null;
+}
+
 export interface DashboardStats {
   netPnl: number;
   winrate: number;
@@ -25,6 +43,12 @@ export interface DashboardStats {
   wins: number;
   losses: number;
   breakeven: number;
+  
+  // ✅ NEW FIELDS - Added for enhanced KPI cards
+  profitFactor: number;  // Gross profit / Gross loss (>1 = profitable)
+  avgWin: number;        // Average winning trade P&L
+  avgLoss: number;       // Average losing trade P&L (negative number)
+  
   bestTrade: {
     pnl: number;
     rr: number | null;
@@ -47,6 +71,9 @@ export interface DashboardStats {
     icon: string;
     color: string;
   };
+  
+  // ✅ NEW: Array of trades for charts
+  trades: Trade[];
 }
 
 // ================================================
@@ -167,6 +194,12 @@ function computeStats(trades: any[]): DashboardStats {
   let runningPnl = 0;
   let peak = 0;
   let maxDrawdown = 0;
+  
+  // ✅ NEW: Accumulators for profit factor and avg win/loss
+  let totalWinPnl = 0;
+  let totalLossPnl = 0;
+  let winCount = 0;
+  let lossCount = 0;
 
   const tradesByDate = new Map<string, any[]>();
 
@@ -181,9 +214,19 @@ function computeStats(trades: any[]): DashboardStats {
     netPnl += pnl;
 
     // Win/Loss/Breakeven tracking
-    if (pnl > 0) wins++;
-    else if (pnl < 0) losses++;
-    else breakeven++;
+    if (pnl > 0) {
+      wins++;
+      // ✅ NEW: Track winning trades for profit factor
+      totalWinPnl += pnl;
+      winCount++;
+    } else if (pnl < 0) {
+      losses++;
+      // ✅ NEW: Track losing trades for profit factor
+      totalLossPnl += Math.abs(pnl);
+      lossCount++;
+    } else {
+      breakeven++;
+    }
 
     // RR calculation
     const calculatedRR = calculateRR(trade);
@@ -249,6 +292,11 @@ function computeStats(trades: any[]): DashboardStats {
     equitySeriesCache.set(cacheKey, equitySeries);
   }
 
+  // ✅ NEW: Calculate Profit Factor and Avg Win/Loss
+  const profitFactor = totalLossPnl > 0 ? totalWinPnl / totalLossPnl : 0;
+  const avgWin = winCount > 0 ? totalWinPnl / winCount : 0;
+  const avgLoss = lossCount > 0 ? -(totalLossPnl / lossCount) : 0; // Negative number
+
   // Final calculations
   const closedTrades = trades.length;
   const winrate = closedTrades > 0 ? wins / closedTrades : 0;
@@ -263,9 +311,15 @@ function computeStats(trades: any[]): DashboardStats {
     breakeven,
     closedTrades,
     maxDrawdown,
+    // ✅ NEW: Add profit factor and avg win/loss
+    profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+    avgWin: isFinite(avgWin) ? avgWin : 0,
+    avgLoss: isFinite(avgLoss) ? avgLoss : 0,
     bestTrade: bestTrade && bestTrade.pnl > 0 ? bestTrade : null,
     worstTrade: worstTrade && worstTrade.pnl < 0 ? worstTrade : null,
     equitySeries,
+    // ✅ NEW: Include sorted trades array for charts
+    trades: sortedTrades,
   };
 
   const result = {
@@ -279,6 +333,16 @@ function computeStats(trades: any[]): DashboardStats {
     statsCache.delete(firstKey);
   }
   statsCache.set(tradeIds, { trades, result });
+
+  console.log('📊 Dashboard stats calculated:', {
+    netPnl,
+    wins,
+    losses,
+    winrate: (winrate * 100).toFixed(1) + '%',
+    profitFactor: profitFactor.toFixed(2),
+    avgWin: avgWin.toFixed(2),
+    avgLoss: avgLoss.toFixed(2),
+  });
 
   return result;
 }

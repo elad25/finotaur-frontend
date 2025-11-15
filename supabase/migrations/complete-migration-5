@@ -1,0 +1,269 @@
+-- ============================================
+-- FINOTAUR SUPPORT EMAIL SYSTEM - COMPLETE FIX
+-- Using pg_net triggers instead of unreliable webhooks
+-- ============================================
+
+-- ============================================
+-- PART 1: CLEANUP - Remove old broken triggers
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  🧹 STEP 1: CLEANING UP OLD TRIGGERS                   ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+-- Drop the broken webhook trigger
+DROP TRIGGER IF EXISTS "support-ticket-emails-final" ON support_tickets;
+DROP TRIGGER IF EXISTS "support-emails-v2" ON support_tickets;
+DROP TRIGGER IF EXISTS "support-ticket-emails" ON support_tickets;
+
+-- Drop old function if exists
+DROP FUNCTION IF EXISTS send_support_email_trigger() CASCADE;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Removed old triggers';
+END $$;
+
+-- ============================================
+-- PART 2: ENABLE pg_net
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  📡 STEP 2: ENABLING pg_net EXTENSION                   ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ pg_net extension enabled';
+END $$;
+
+-- ============================================
+-- PART 3: CREATE NEW TRIGGER FUNCTION
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  🔧 STEP 3: CREATING NEW TRIGGER FUNCTION              ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+CREATE OR REPLACE FUNCTION send_support_email_trigger()
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  request_id bigint;
+  payload jsonb;
+  function_url text := 'https://xsgbtptkueabylkxibly.supabase.co/functions/v1/send-support-email';
+  -- 🔑 REPLACE THIS WITH YOUR ACTUAL SERVICE_ROLE_KEY!
+  -- Get it from: Supabase Dashboard → Project Settings → API → service_role (secret)
+  service_key text := 'YOUR_SERVICE_ROLE_KEY_HERE';
+BEGIN
+  -- Build the payload based on operation type
+  IF TG_OP = 'INSERT' THEN
+    payload := jsonb_build_object(
+      'type', 'INSERT',
+      'table', 'support_tickets',
+      'schema', 'public',
+      'record', to_jsonb(NEW)
+    );
+    
+    RAISE LOG 'Support email trigger: NEW ticket created (ID: %)', NEW.id;
+    
+  ELSIF TG_OP = 'UPDATE' THEN
+    payload := jsonb_build_object(
+      'type', 'UPDATE',
+      'table', 'support_tickets',
+      'schema', 'public',
+      'record', to_jsonb(NEW),
+      'old_record', to_jsonb(OLD)
+    );
+    
+    RAISE LOG 'Support email trigger: Ticket UPDATED (ID: %)', NEW.id;
+  END IF;
+
+  -- Send HTTP POST request using pg_net
+  SELECT INTO request_id net.http_post(
+    url := function_url,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_key
+    ),
+    body := payload
+  );
+
+  RAISE LOG 'Email trigger request sent: request_id=%', request_id;
+
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Log error but don't fail the transaction
+  RAISE WARNING 'Failed to send email trigger: %', SQLERRM;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Trigger function created';
+END $$;
+
+-- ============================================
+-- PART 4: CREATE THE TRIGGER
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  ⚡ STEP 4: CREATING TRIGGER                            ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+CREATE TRIGGER trigger_send_support_email
+  AFTER INSERT OR UPDATE ON support_tickets
+  FOR EACH ROW
+  EXECUTE FUNCTION send_support_email_trigger();
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Trigger created on support_tickets';
+END $$;
+
+-- ============================================
+-- PART 5: VERIFICATION
+-- ============================================
+
+DO $$
+DECLARE
+  trigger_count INTEGER;
+  extension_exists BOOLEAN;
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  ✅ STEP 5: VERIFICATION                                ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  
+  -- Check pg_net
+  SELECT EXISTS(
+    SELECT 1 FROM pg_extension WHERE extname = 'pg_net'
+  ) INTO extension_exists;
+  
+  IF extension_exists THEN
+    RAISE NOTICE '✅ pg_net extension: INSTALLED';
+  ELSE
+    RAISE NOTICE '❌ pg_net extension: NOT FOUND';
+  END IF;
+  
+  -- Check triggers
+  SELECT COUNT(*) INTO trigger_count
+  FROM information_schema.triggers
+  WHERE event_object_table = 'support_tickets'
+  AND trigger_name = 'trigger_send_support_email';
+  
+  IF trigger_count > 0 THEN
+    RAISE NOTICE '✅ Email trigger: ACTIVE (count: %)', trigger_count;
+  ELSE
+    RAISE NOTICE '❌ Email trigger: NOT FOUND';
+  END IF;
+  
+  RAISE NOTICE '';
+END $$;
+
+-- ============================================
+-- PART 6: MANUAL STEPS REQUIRED
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  ⚠️  IMPORTANT: MANUAL STEPS REQUIRED                   ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔑 STEP 1: Update the service_role_key in the function';
+  RAISE NOTICE '   1. Go to: Supabase Dashboard → Project Settings → API';
+  RAISE NOTICE '   2. Copy the service_role (secret) key';
+  RAISE NOTICE '   3. Edit PART 3 above and replace YOUR_SERVICE_ROLE_KEY_HERE';
+  RAISE NOTICE '   4. Re-run PART 3 only to update the function';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔧 STEP 2: Verify Edge Function';
+  RAISE NOTICE '   - Go to: Edge Functions → send-support-email → Details';
+  RAISE NOTICE '   - Ensure JWT Verification is DISABLED';
+  RAISE NOTICE '   - Check that RESEND_API_KEY is set in Secrets';
+  RAISE NOTICE '';
+  RAISE NOTICE '🗑️  STEP 3: Delete old webhooks (if any)';
+  RAISE NOTICE '   - Go to: Database → Webhooks';
+  RAISE NOTICE '   - Delete any webhooks on support_tickets table';
+  RAISE NOTICE '   - We are using triggers instead!';
+  RAISE NOTICE '';
+  RAISE NOTICE '📧 STEP 4: Test the system';
+  RAISE NOTICE '   - Run the TEST INSERT below';
+  RAISE NOTICE '   - Check Edge Function logs';
+  RAISE NOTICE '   - Check your email inbox';
+  RAISE NOTICE '';
+END $$;
+
+-- ============================================
+-- PART 7: TEST INSERT
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  🧪 READY TO TEST                                       ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  RAISE NOTICE 'After setting the service_role_key, run this test:';
+  RAISE NOTICE '';
+  RAISE NOTICE 'DELETE FROM support_tickets WHERE subject LIKE ''%%Test%%'';';
+  RAISE NOTICE '';
+  RAISE NOTICE 'INSERT INTO support_tickets (';
+  RAISE NOTICE '  user_email,';
+  RAISE NOTICE '  user_name,';
+  RAISE NOTICE '  subject,';
+  RAISE NOTICE '  messages';
+  RAISE NOTICE ') VALUES (';
+  RAISE NOTICE '  ''elad2550@gmail.com'',';
+  RAISE NOTICE '  ''System Test'',';
+  RAISE NOTICE '  ''Final Test - pg_net Trigger'',';
+  RAISE NOTICE '  ''[{';
+  RAISE NOTICE '    "type": "customer",';
+  RAISE NOTICE '    "content": "Testing the new pg_net trigger system!",';
+  RAISE NOTICE '    "timestamp": "2025-11-15T17:00:00Z"';
+  RAISE NOTICE '  }]''::jsonb';
+  RAISE NOTICE ');';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Expected results:';
+  RAISE NOTICE '  ✉️  Email to: finotaur.site@gmail.com (admin)';
+  RAISE NOTICE '  ✉️  Email to: elad2550@gmail.com (customer)';
+  RAISE NOTICE '  📋 Logs in: Edge Functions → send-support-email → Logs';
+  RAISE NOTICE '';
+END $$;
+
+-- ============================================
+-- SUMMARY
+-- ============================================
+
+SELECT 
+  '✅ SETUP COMPLETE' as status,
+  'Follow the manual steps above to finish configuration' as next_action;

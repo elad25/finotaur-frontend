@@ -1,7 +1,7 @@
 // src/components/admin/AdminLayout.tsx
 // ============================================
 // Admin Layout Wrapper - Consistent Tabs
-// WITH SUBSCRIBERS TAB
+// WITH SUPPORT TAB ✨
 // ============================================
 
 import { ReactNode } from 'react';
@@ -13,6 +13,7 @@ import {
   Gift,
   Trophy,
   CreditCard,
+  MessageCircle,
   ArrowLeft
 } from 'lucide-react';
 
@@ -23,7 +24,7 @@ interface AdminLayoutProps {
   showBackButton?: boolean;
 }
 
-type TabId = 'dashboard' | 'users' | 'analytics' | 'subscribers' | 'affiliate' | 'top-traders';
+type TabId = 'dashboard' | 'users' | 'analytics' | 'subscribers' | 'support' | 'affiliate' | 'top-traders';
 
 interface Tab {
   id: TabId;
@@ -58,6 +59,12 @@ const ADMIN_TABS: Tab[] = [
     path: '/app/journal/admin/subscribers',
   },
   {
+    id: 'support',
+    label: 'Support',
+    icon: MessageCircle,
+    path: '/app/journal/admin/support',
+  },
+  {
     id: 'affiliate',
     label: 'Affiliate',
     icon: Gift,
@@ -85,6 +92,7 @@ export default function AdminLayout({
     if (path.includes('/users')) return 'users';
     if (path.includes('/analytics')) return 'analytics';
     if (path.includes('/subscribers')) return 'subscribers';
+    if (path.includes('/support')) return 'support';
     if (path.includes('/affiliate')) return 'affiliate';
     if (path.includes('/top-traders')) return 'top-traders';
     return 'dashboard';

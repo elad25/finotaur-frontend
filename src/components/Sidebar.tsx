@@ -83,7 +83,8 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     <aside
       className={cn(
         'fixed left-0 top-28 z-30 h-[calc(100vh-7rem)] border-r border-border bg-base-800 transition-transform duration-300 md:sticky md:translate-x-0',
-        isOpen ? 'translate-x-0 w-64' : '-translate-x-full md:w-16'
+        // ✂️ קיצור רוחב ב-25%: w-64 (256px) → w-48 (192px) כשפתוח, w-16 (64px) → w-12 (48px) כשסגור
+        isOpen ? 'translate-x-0 w-48' : '-translate-x-full md:w-12'
       )}
     >
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">

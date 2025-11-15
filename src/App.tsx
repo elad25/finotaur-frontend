@@ -16,6 +16,11 @@ import { lazy, Suspense, memo } from "react";
 import '@/scripts/migrationRunner';
 
 // ===============================================
+// SUPPORT WIDGET
+// ===============================================
+import SupportWidget from "@/components/SupportWidget";
+
+// ===============================================
 // PUBLIC PAGES - Load immediately (no lazy)
 // ===============================================
 import LandingPage from "@/pages/landing/LandingPage";
@@ -51,6 +56,7 @@ const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"))
 const AdminSubscribers = lazy(() => import("@/pages/app/journal/admin/Subscribers"));
 const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"));
 const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
+const AdminSupportTickets = lazy(() => import("@/pages/app/journal/admin/Supporttickets"));
 const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
 
 // === Settings & Payment ===
@@ -81,8 +87,6 @@ const JournalScenarios = lazy(() => import("@/pages/app/journal/Scenarios"));
 const JournalCommunity = lazy(() => import("@/pages/app/journal/Community"));
 const JournalAcademy = lazy(() => import("@/pages/app/journal/Academy"));
 const JournalSettings = lazy(() => import("@/pages/app/journal/JournalSettings"));
-const JournalSupportPage = lazy(() => import("@/pages/app/journal/SupportPage"));
-
 // === All Markets ===
 const AllMarketsOverview = lazy(() => import("@/pages/app/all-markets/Overview"));
 const AllMarketsChart = lazy(() => import("@/pages/app/all-markets/Chart"));
@@ -364,9 +368,7 @@ function AppContent() {
           <Route path="journal/strategies/:id" element={<SuspenseRoute><StrategyDetailView /></SuspenseRoute>} />
           <Route path="journal/scenarios" element={<SuspenseRoute><JournalScenarios /></SuspenseRoute>} />
           <Route path="journal/community" element={<SuspenseRoute><JournalCommunity /></SuspenseRoute>} />
-          <Route path="journal/academy" element={<SuspenseRoute><JournalAcademy /></SuspenseRoute>} />
-          <Route path="journal/support" element={<SuspenseRoute><JournalSupportPage /></SuspenseRoute>} />
-          <Route path="journal/settings" element={<SuspenseRoute><JournalSettings /></SuspenseRoute>} />
+          <Route path="journal/academy" element={<SuspenseRoute><JournalAcademy /></SuspenseRoute>} />          <Route path="journal/settings" element={<SuspenseRoute><JournalSettings /></SuspenseRoute>} />
           <Route path="journal/:id" element={<SuspenseRoute><JournalTradeDetail /></SuspenseRoute>} />
           <Route path="journal/import" element={<SuspenseRoute><JournalImport /></SuspenseRoute>} />
           <Route path="journal/export" element={<SuspenseRoute><JournalExport /></SuspenseRoute>} />
@@ -388,6 +390,7 @@ function AppContent() {
           <Route path="journal/admin/subscribers" element={<ProtectedAdminRoute><SuspenseRoute><AdminSubscribers /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
           
           {/* 🔒 COPY TRADE - LOCKED */}
           <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><CopyTradeOverview /></LockedRoute>} />
@@ -411,6 +414,9 @@ function AppContent() {
         
         <Route path="*" element={<NotFound />} />
       </Routes>
+      
+      {/* 🎫 SUPPORT WIDGET - Shows on all protected pages */}
+      <SupportWidget />
     </>
   );
 }

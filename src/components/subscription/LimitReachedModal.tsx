@@ -100,7 +100,7 @@ export function LimitReachedModal({
 
           {/* Price */}
           <div className="text-center py-2">
-            <span className="text-3xl font-black text-white">$12.99</span>
+            <span className="text-3xl font-black text-white">$24.92</span>
             <span className="text-zinc-400">/month</span>
             <p className="text-xs text-zinc-500 mt-1">Cancel anytime • No hidden fees</p>
           </div>

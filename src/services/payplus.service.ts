@@ -278,10 +278,10 @@ class PayPlusService {
    */
   private calculateAmount(plan: PricingPlan): number {
     if (plan.interval === 'year') {
-      // Yearly: $12.99 * 12 = $155.88
-      return Math.round(plan.price * 12 * 100);
+      // Basic Yearly: $149 | Premium Yearly: $299
+      return Math.round(plan.price * 100);
     }
-    // Monthly: $15.99
+    // Basic Monthly: $19.99 | Premium Monthly: $39.99
     return Math.round(plan.price * 100);
   }
 

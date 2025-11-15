@@ -1,7 +1,7 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: MERGED-v8.5.0-SNAPTRADE-INTEGRATED
+-- Version: MERGED-v8.5.0-SNAPTRADE-INTEGRATED-FIXED
 -- Date: 2025-11-10 (Updated: 2025-01-15)
 -- Parts: 2/3 (Functions + Triggers) - חלק 1/2 (סעיפים 1-6)
 -- Changes: 
@@ -11,6 +11,7 @@
 --   - 🔥 FIXED: Risk settings use new columns (NOT JSONB)
 --   - 🔥 FIXED: All SELECT INTO with ORDER BY issues
 --   - 🆕 SNAPTRADE: Full integration with triggers & helpers
+--   - 🔧 FIXED: All DROP FUNCTION IF EXISTS added for SnapTrade
 -- Optimizations: Unified triggers, CONCURRENT refresh, Rate limiting
 -- ===============================================
 
@@ -387,10 +388,6 @@ BEGIN
   RAISE NOTICE '[2.5/13] 🆕 Creating rate limiting function...';
 END $$;
 
--- ═══════════════════════════════════════════
--- RATE LIMITING
--- ═══════════════════════════════════════════
-
 CREATE OR REPLACE FUNCTION public.check_rate_limit(
   p_endpoint TEXT,
   p_max_requests INTEGER DEFAULT 100,
@@ -447,10 +444,6 @@ DO $$
 BEGIN
   RAISE NOTICE '[2.6/13] 🆕 Creating soft delete functions...';
 END $$;
-
--- ═══════════════════════════════════════════
--- SOFT DELETE FUNCTIONS
--- ═══════════════════════════════════════════
 
 CREATE OR REPLACE FUNCTION public.soft_delete_trade(p_trade_id UUID)
 RETURNS BOOLEAN
@@ -513,7 +506,6 @@ $$;
 GRANT EXECUTE ON FUNCTION public.soft_delete_trade TO authenticated;
 GRANT EXECUTE ON FUNCTION public.restore_trade TO authenticated;
 GRANT EXECUTE ON FUNCTION public.permanent_delete_trade TO authenticated;
-
 -- ===============================================
 -- SECTION 3: TRADE CALCULATIONS (LEGACY - KEPT FOR COMPATIBILITY)
 -- ===============================================
@@ -954,7 +946,6 @@ DO $$
 BEGIN
   RAISE NOTICE '✅ Unified trigger created! Performance: 150ms → 50ms';
 END $$;
-
 -- ===============================================
 -- SECTION 4: TRADE LIMITS FUNCTIONS
 -- ===============================================
@@ -1342,7 +1333,7 @@ END;
 $$;
 
 -- ═══════════════════════════════════════════════════════════════
--- 🆕 SNAPTRADE SECTION 5A: SYNC LOG HELPER FUNCTIONS
+-- 🆕 SNAPTRADE SECTION 5A: SYNC LOG HELPER FUNCTIONS (FIXED)
 -- ═══════════════════════════════════════════════════════════════
 
 DO $$
@@ -1351,6 +1342,8 @@ BEGIN
 END $$;
 
 -- Get latest sync for a user
+DROP FUNCTION IF EXISTS get_latest_sync_for_user(UUID);
+
 CREATE OR REPLACE FUNCTION get_latest_sync_for_user(p_user_id UUID)
 RETURNS public.snaptrade_sync_log AS $$
     SELECT * 
@@ -1364,6 +1357,8 @@ COMMENT ON FUNCTION get_latest_sync_for_user IS
 'v8.5.0: Gets the most recent sync log entry for a user';
 
 -- Get sync stats for a user
+DROP FUNCTION IF EXISTS get_user_sync_stats(UUID);
+
 CREATE OR REPLACE FUNCTION get_user_sync_stats(p_user_id UUID)
 RETURNS TABLE (
     total_syncs BIGINT,
@@ -1388,6 +1383,8 @@ COMMENT ON FUNCTION get_user_sync_stats IS
 'v8.5.0: Gets aggregated sync statistics for a user';
 
 -- Cleanup old sync logs (keep last 100 per user)
+DROP FUNCTION IF EXISTS cleanup_old_sync_logs();
+
 CREATE OR REPLACE FUNCTION cleanup_old_sync_logs()
 RETURNS INT AS $$
 DECLARE
@@ -1414,7 +1411,7 @@ COMMENT ON FUNCTION cleanup_old_sync_logs IS
 'v8.5.0: Deletes old sync logs, keeping only the last 100 per user';
 
 -- ═══════════════════════════════════════════════════════════════
--- 🆕 SNAPTRADE SECTION 5B: STATUS FUNCTIONS
+-- 🆕 SNAPTRADE SECTION 5B: STATUS FUNCTIONS (FIXED)
 -- ═══════════════════════════════════════════════════════════════
 
 DO $$
@@ -1423,6 +1420,8 @@ BEGIN
 END $$;
 
 -- Check if user has SnapTrade connected
+DROP FUNCTION IF EXISTS is_snaptrade_connected(UUID);
+
 CREATE OR REPLACE FUNCTION is_snaptrade_connected(p_user_id UUID)
 RETURNS BOOLEAN AS $$
     SELECT EXISTS (
@@ -1436,6 +1435,8 @@ COMMENT ON FUNCTION is_snaptrade_connected IS
 'v8.5.0: Returns true if user has SnapTrade connected';
 
 -- Get last successful sync date
+DROP FUNCTION IF EXISTS get_last_successful_sync_date(UUID);
+
 CREATE OR REPLACE FUNCTION get_last_successful_sync_date(p_user_id UUID)
 RETURNS TIMESTAMPTZ AS $$
     SELECT MAX(sync_completed_at)
@@ -1448,6 +1449,8 @@ COMMENT ON FUNCTION get_last_successful_sync_date IS
 'v8.5.0: Returns the date of the last successful sync';
 
 -- Count pending trades
+DROP FUNCTION IF EXISTS count_pending_snaptrade_trades(UUID);
+
 CREATE OR REPLACE FUNCTION count_pending_snaptrade_trades(p_user_id UUID)
 RETURNS INT AS $$
 DECLARE
@@ -1481,7 +1484,7 @@ COMMENT ON FUNCTION count_pending_snaptrade_trades IS
 'v8.5.0: Counts trades from current running sync';
 
 -- ═══════════════════════════════════════════════════════════════
--- 🆕 SNAPTRADE SECTION 5C: ANALYTICS FUNCTIONS
+-- 🆕 SNAPTRADE SECTION 5C: ANALYTICS FUNCTIONS (FIXED)
 -- ═══════════════════════════════════════════════════════════════
 
 DO $$
@@ -1490,6 +1493,8 @@ BEGIN
 END $$;
 
 -- Get SnapTrade import statistics for a date range
+DROP FUNCTION IF EXISTS get_snaptrade_import_stats(UUID, DATE, DATE);
+
 CREATE OR REPLACE FUNCTION get_snaptrade_import_stats(
     p_user_id UUID,
     p_start_date DATE DEFAULT NULL,
@@ -1528,6 +1533,8 @@ COMMENT ON FUNCTION get_snaptrade_import_stats IS
 'v8.5.0: Gets detailed statistics for SnapTrade imports in a date range';
 
 -- Find duplicate SnapTrade activities
+DROP FUNCTION IF EXISTS find_duplicate_snaptrade_activities(UUID);
+
 CREATE OR REPLACE FUNCTION find_duplicate_snaptrade_activities(p_user_id UUID)
 RETURNS TABLE (
     snaptrade_activity_id TEXT,
@@ -1555,7 +1562,6 @@ DO $$
 BEGIN
   RAISE NOTICE '✅ SnapTrade helper functions created';
 END $$;
-
 -- ===============================================
 -- 🔒 SECTION 6: PAYMENT SECURITY & AFFILIATE AUTOMATION
 -- ===============================================
@@ -1783,6 +1789,11 @@ BEGIN
 END;
 $$;
 
+COMMENT ON FUNCTION public.admin_grant_free_access IS 
+'v8.4: מאפשר לאדמין לתת גישה חינם ללא תשלום';
+
+GRANT EXECUTE ON FUNCTION public.admin_grant_free_access TO authenticated;
+
 -- ===============================================
 -- 🆕 SECTION 6.5: ADVANCED SUBSCRIPTION MANAGEMENT
 -- ===============================================
@@ -1835,12 +1846,12 @@ BEGIN
   
   -- Fallback to hardcoded prices if not found
   RETURN CASE
-    WHEN p_plan = 'basic' AND p_interval = 'monthly' THEN 15.99
-    WHEN p_plan = 'basic' AND p_interval = 'yearly' THEN 155.88
-    WHEN p_plan = 'premium' AND p_interval = 'monthly' THEN 24.99
-    WHEN p_plan = 'premium' AND p_interval = 'yearly' THEN 239.88
-    ELSE 0
-  END;
+  WHEN p_plan = 'basic' AND p_interval = 'monthly' THEN 19.99
+  WHEN p_plan = 'basic' AND p_interval = 'yearly' THEN 149.00
+  WHEN p_plan = 'premium' AND p_interval = 'monthly' THEN 39.99
+  WHEN p_plan = 'premium' AND p_interval = 'yearly' THEN 299.00
+  ELSE 0
+END;
 END;
 $$;
 
@@ -2668,11 +2679,6 @@ BEGIN
   RAISE NOTICE '';
 END $$;
 
-COMMENT ON FUNCTION public.admin_grant_free_access IS 
-'v8.4: מאפשר לאדמין לתת גישה חינם ללא תשלום';
-
-GRANT EXECUTE ON FUNCTION public.admin_grant_free_access TO authenticated;
-
 -- ═══════════════════════════════════════════════════════════════
 -- 🆕 SNAPTRADE SECTION 6A: GRANT FUNCTION PERMISSIONS
 -- ═══════════════════════════════════════════════════════════════
@@ -2702,6 +2708,395 @@ BEGIN
 END $$;
 
 COMMIT;
+-- ═══════════════════════════════════════════════════════════════
+-- 🎯 SECTION 6B: TICKER SYMBOLS SEARCH & AUTOCOMPLETE
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '[6B/13] 🎯 Creating Ticker Symbols search functions...';
+  RAISE NOTICE '         🔍 Fast autocomplete with multipliers';
+  RAISE NOTICE '         📊 Support for all asset classes';
+  RAISE NOTICE '         🚀 Optimized for real-time search';
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 1. Search Ticker Symbols (Main Autocomplete Function)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, INTEGER);
+
+CREATE OR REPLACE FUNCTION public.search_ticker_symbols(
+  search_text TEXT,
+  limit_count INTEGER DEFAULT 10
+)
+RETURNS TABLE(
+  symbol TEXT,
+  name TEXT,
+  asset_class TEXT,
+  multiplier NUMERIC,
+  exchange TEXT,
+  popularity_rank INTEGER
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Normalize search text
+  search_text := UPPER(TRIM(COALESCE(search_text, '')));
+  
+  -- If empty search, return top popular symbols
+  IF search_text = '' OR search_text IS NULL THEN
+    RETURN QUERY
+    SELECT 
+      t.symbol,
+      t.name,
+      t.asset_class,
+      t.multiplier,
+      t.exchange,
+      t.popularity_rank
+    FROM public.ticker_symbols t
+    WHERE t.is_active = TRUE
+    ORDER BY t.popularity_rank ASC
+    LIMIT LEAST(limit_count, 20);
+    
+    RETURN;
+  END IF;
+  
+  -- Search by symbol (prefix match) or name (contains)
+  RETURN QUERY
+  SELECT 
+    t.symbol,
+    t.name,
+    t.asset_class,
+    t.multiplier,
+    t.exchange,
+    t.popularity_rank
+  FROM public.ticker_symbols t
+  WHERE 
+    t.is_active = TRUE
+    AND (
+      -- Exact match (highest priority)
+      t.symbol = search_text
+      -- Prefix match on symbol (e.g., "T" matches "TSLA", "TQQQ")
+      OR t.symbol LIKE search_text || '%'
+      -- Contains match on name (e.g., "tesla" matches "Tesla Inc.")
+      OR t.name ILIKE '%' || search_text || '%'
+    )
+  ORDER BY 
+    -- Prioritize exact matches
+    CASE WHEN t.symbol = search_text THEN 0 ELSE 1 END,
+    -- Then prefix matches
+    CASE WHEN t.symbol LIKE search_text || '%' THEN 0 ELSE 1 END,
+    -- Then by popularity
+    t.popularity_rank ASC,
+    -- Finally alphabetically
+    t.symbol ASC
+  LIMIT LEAST(limit_count, 50);
+END;
+$$;
+
+COMMENT ON FUNCTION public.search_ticker_symbols IS 
+'v8.5.1: Ultra-fast ticker symbol search for autocomplete. Returns symbols with accurate multipliers sorted by relevance and popularity.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 2. Get Ticker Multiplier (Direct Lookup)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_ticker_multiplier(TEXT);
+
+CREATE OR REPLACE FUNCTION public.get_ticker_multiplier(p_symbol TEXT)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_multiplier NUMERIC;
+  v_found BOOLEAN := FALSE;
+BEGIN
+  -- Normalize symbol
+  p_symbol := UPPER(TRIM(p_symbol));
+  
+  -- Lookup in ticker_symbols table
+  SELECT multiplier INTO v_multiplier
+  FROM public.ticker_symbols
+  WHERE symbol = p_symbol
+    AND is_active = TRUE
+  LIMIT 1;
+  
+  -- If found, return it
+  IF FOUND THEN
+    RETURN v_multiplier;
+  END IF;
+  
+  -- Fallback to legacy function for backwards compatibility
+  RETURN public.get_asset_multiplier(p_symbol);
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_ticker_multiplier IS 
+'v8.5.1: Get multiplier for a ticker symbol. Uses ticker_symbols table first, falls back to legacy get_asset_multiplier().';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3. Search Tickers by Asset Class
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.search_tickers_by_asset_class(TEXT, TEXT, INTEGER);
+
+CREATE OR REPLACE FUNCTION public.search_tickers_by_asset_class(
+  p_asset_class TEXT,
+  search_text TEXT DEFAULT NULL,
+  limit_count INTEGER DEFAULT 20
+)
+RETURNS TABLE(
+  symbol TEXT,
+  name TEXT,
+  asset_class TEXT,
+  multiplier NUMERIC,
+  exchange TEXT,
+  popularity_rank INTEGER
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Normalize inputs
+  p_asset_class := LOWER(TRIM(p_asset_class));
+  search_text := UPPER(TRIM(COALESCE(search_text, '')));
+  
+  -- Search within asset class
+  RETURN QUERY
+  SELECT 
+    t.symbol,
+    t.name,
+    t.asset_class,
+    t.multiplier,
+    t.exchange,
+    t.popularity_rank
+  FROM public.ticker_symbols t
+  WHERE 
+    t.is_active = TRUE
+    AND t.asset_class = p_asset_class
+    AND (
+      search_text = '' 
+      OR t.symbol LIKE search_text || '%'
+      OR t.name ILIKE '%' || search_text || '%'
+    )
+  ORDER BY 
+    t.popularity_rank ASC,
+    t.symbol ASC
+  LIMIT LEAST(limit_count, 100);
+END;
+$$;
+
+COMMENT ON FUNCTION public.search_tickers_by_asset_class IS 
+'v8.5.1: Search tickers filtered by asset class (stock, futures, crypto, forex, etf)';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 4. Get Popular Tickers (Top 50)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_popular_tickers(INTEGER);
+
+CREATE OR REPLACE FUNCTION public.get_popular_tickers(
+  limit_count INTEGER DEFAULT 50
+)
+RETURNS TABLE(
+  symbol TEXT,
+  name TEXT,
+  asset_class TEXT,
+  multiplier NUMERIC,
+  exchange TEXT,
+  popularity_rank INTEGER
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.symbol,
+    t.name,
+    t.asset_class,
+    t.multiplier,
+    t.exchange,
+    t.popularity_rank
+  FROM public.ticker_symbols t
+  WHERE t.is_active = TRUE
+  ORDER BY t.popularity_rank ASC
+  LIMIT LEAST(limit_count, 100);
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_popular_tickers IS 
+'v8.5.1: Returns most popular tickers across all asset classes';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 5. Get Ticker Details (Full Info)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_ticker_details(TEXT);
+
+CREATE OR REPLACE FUNCTION public.get_ticker_details(p_symbol TEXT)
+RETURNS TABLE(
+  symbol TEXT,
+  name TEXT,
+  asset_class TEXT,
+  multiplier NUMERIC,
+  exchange TEXT,
+  popularity_rank INTEGER,
+  metadata JSONB,
+  created_at TIMESTAMPTZ
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Normalize symbol
+  p_symbol := UPPER(TRIM(p_symbol));
+  
+  RETURN QUERY
+  SELECT 
+    t.symbol,
+    t.name,
+    t.asset_class,
+    t.multiplier,
+    t.exchange,
+    t.popularity_rank,
+    t.metadata,
+    t.created_at
+  FROM public.ticker_symbols t
+  WHERE t.symbol = p_symbol
+    AND t.is_active = TRUE
+  LIMIT 1;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_ticker_details IS 
+'v8.5.1: Get complete details for a specific ticker symbol';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 6. Bulk Lookup Tickers (For Trade Import)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.bulk_lookup_tickers(TEXT[]);
+
+CREATE OR REPLACE FUNCTION public.bulk_lookup_tickers(p_symbols TEXT[])
+RETURNS TABLE(
+  symbol TEXT,
+  name TEXT,
+  multiplier NUMERIC,
+  asset_class TEXT,
+  found BOOLEAN
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH input_symbols AS (
+    SELECT UPPER(TRIM(unnest(p_symbols))) as input_symbol
+  )
+  SELECT 
+    i.input_symbol as symbol,
+    t.name,
+    COALESCE(t.multiplier, public.get_asset_multiplier(i.input_symbol)) as multiplier,
+    t.asset_class,
+    (t.symbol IS NOT NULL) as found
+  FROM input_symbols i
+  LEFT JOIN public.ticker_symbols t 
+    ON t.symbol = i.input_symbol 
+    AND t.is_active = TRUE;
+END;
+$$;
+
+COMMENT ON FUNCTION public.bulk_lookup_tickers IS 
+'v8.5.1: Batch lookup for multiple ticker symbols. Returns multipliers for all, even if not in database (uses fallback).';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 7. Count Tickers by Asset Class (Stats)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_ticker_stats();
+
+CREATE OR REPLACE FUNCTION public.get_ticker_stats()
+RETURNS TABLE(
+  asset_class TEXT,
+  total_count BIGINT,
+  active_count BIGINT,
+  top_exchange TEXT
+) 
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.asset_class,
+    COUNT(*)::BIGINT as total_count,
+    COUNT(*) FILTER (WHERE t.is_active = TRUE)::BIGINT as active_count,
+    MODE() WITHIN GROUP (ORDER BY t.exchange) as top_exchange
+  FROM public.ticker_symbols t
+  GROUP BY t.asset_class
+  ORDER BY total_count DESC;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_ticker_stats IS 
+'v8.5.1: Get statistics about ticker symbols in the database by asset class';
+
+-- ═══════════════════════════════════════════════════════════════
+-- GRANT PERMISSIONS
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '[6B/13] 🔑 Granting Ticker Symbols function permissions...';
+END $$;
+
+-- Core functions - accessible to all authenticated users
+GRANT EXECUTE ON FUNCTION public.search_ticker_symbols(TEXT, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.search_ticker_symbols(TEXT, INTEGER) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_ticker_multiplier(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_ticker_multiplier(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_ticker_details(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_ticker_details(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_popular_tickers(INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_popular_tickers(INTEGER) TO anon;
+
+-- Advanced functions
+GRANT EXECUTE ON FUNCTION public.search_tickers_by_asset_class(TEXT, TEXT, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.bulk_lookup_tickers(TEXT[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_ticker_stats() TO authenticated;
+
+-- Service role (for backend operations)
+GRANT EXECUTE ON FUNCTION public.search_ticker_symbols(TEXT, INTEGER) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_ticker_multiplier(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_lookup_tickers(TEXT[]) TO service_role;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '✅ Ticker Symbols search functions created!';
+  RAISE NOTICE '   • search_ticker_symbols() - Main autocomplete (PUBLIC)';
+  RAISE NOTICE '   • get_ticker_multiplier() - Direct lookup (PUBLIC)';
+  RAISE NOTICE '   • search_tickers_by_asset_class() - Filter by type';
+  RAISE NOTICE '   • get_popular_tickers() - Top 50 most popular (PUBLIC)';
+  RAISE NOTICE '   • get_ticker_details() - Full ticker info (PUBLIC)';
+  RAISE NOTICE '   • bulk_lookup_tickers() - Batch import helper';
+  RAISE NOTICE '   • get_ticker_stats() - Database statistics';
+  RAISE NOTICE '';
+  RAISE NOTICE '🚀 Ready for React integration!';
+  RAISE NOTICE '';
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════
 -- סיכום חלק 1
@@ -2722,6 +3117,7 @@ BEGIN
   RAISE NOTICE '   ✅ Advanced subscription management (FIXED v5)';
   RAISE NOTICE '   🔧 FIXED: Risk settings use columns (NOT JSONB)';
   RAISE NOTICE '   🔧 FIXED v5: ALL SELECT INTO with ORDER BY issues!';
+  RAISE NOTICE '   🔧 FIXED v6: ALL SnapTrade functions with DROP IF EXISTS';
   RAISE NOTICE '';
   RAISE NOTICE '🆕 SnapTrade Integration Added:';
   RAISE NOTICE '   ✅ Trigger functions (auto-update, validation)';
@@ -2729,6 +3125,7 @@ BEGIN
   RAISE NOTICE '   ✅ Status functions (connected, last sync, pending)';
   RAISE NOTICE '   ✅ Analytics functions (import stats, duplicates)';
   RAISE NOTICE '   ✅ All permissions granted';
+  RAISE NOTICE '   ✅ All DROP FUNCTION IF EXISTS added';
   RAISE NOTICE '';
   RAISE NOTICE '⏭️  Continue with חלק 2/2 (Sections 7-13)...';
   RAISE NOTICE '';

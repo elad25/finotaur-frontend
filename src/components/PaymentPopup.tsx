@@ -24,15 +24,15 @@ export default function PaymentPopup({ isOpen, onClose, planId, billingInterval 
   const planDetails = {
     basic: {
       name: 'Basic',
-      monthlyPrice: 15.99,
-      yearlyPrice: 155.88,
-      yearlyMonthlyEquivalent: 12.99
+      monthlyPrice: 19.99,
+      yearlyPrice: 149,
+      yearlyMonthlyEquivalent: 12.42
     },
     premium: {
       name: 'Premium',
-      monthlyPrice: 24.99,
-      yearlyPrice: 239.88,
-      yearlyMonthlyEquivalent: 19.99
+      monthlyPrice: 39.99,
+      yearlyPrice: 299,
+      yearlyMonthlyEquivalent: 24.92
     }
   };
 
@@ -210,7 +210,7 @@ export default function PaymentPopup({ isOpen, onClose, planId, billingInterval 
               <div className="flex justify-between items-center mb-2">
                 <span className="text-zinc-300">Price</span>
                 <span className="font-semibold">
-                  ${displayPrice}/month
+                  ${displayPrice.toFixed(2)}/month
                   {billingInterval === 'yearly' && (
                     <span className="text-xs text-zinc-400 ml-1">
                       (${totalPrice}/year)

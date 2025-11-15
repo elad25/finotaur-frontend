@@ -7,16 +7,16 @@ export const SUBSCRIPTION_LIMITS = {
     price: 0,
   },
   basic: {
-    max_trades: 25,  // ✅ 25 כמו שרצית
+    max_trades: 25,
     name: 'Basic Plan',
     reset: 'monthly' as const,
-    price: 6.99,
+    price: 19.99,  
   },
   premium: {
     max_trades: Infinity,
     name: 'Premium Plan',
     reset: 'never' as const,
-    price: 12.99,
+    price: 39.99,  
   },
 } as const;
 

@@ -56,9 +56,9 @@ const plans: Plan[] = [
   {
     id: "basic",
     name: "Basic",
-    monthlyPrice: "$15.99",
-    yearlyPrice: "$155.88",
-    yearlyMonthlyEquivalent: "$12.99",
+    monthlyPrice: "$19.99",
+    yearlyPrice: "$149",
+    yearlyMonthlyEquivalent: "$12.42",
     description: "Essential tools + automatic broker sync",
     features: [
       "Everything in Free, plus:",
@@ -75,14 +75,14 @@ const plans: Plan[] = [
     ],
     cta: "Upgrade to Basic",
     featured: false,
-    savings: "Save 19%"
+    savings: "Save 38%"
   },
   {
     id: "premium",
     name: "Premium",
-    monthlyPrice: "$24.99",
-    yearlyPrice: "$239.88",
-    yearlyMonthlyEquivalent: "$19.99",
+    monthlyPrice: "$39.99",
+    yearlyPrice: "$299",
+    yearlyMonthlyEquivalent: "$24.92",
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
@@ -98,7 +98,7 @@ const plans: Plan[] = [
     ],
     cta: "Upgrade to Premium",
     featured: true,
-    savings: "Save 20%"
+    savings: "Save 38%"
   }
 ];
 
@@ -372,7 +372,7 @@ const UpgradePlanModal = ({
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  Save up to 20%
+                  Save up to 38%
                 </span>
               </button>
             </div>
@@ -529,7 +529,6 @@ const UpgradePlanModal = ({
     </div>
   );
 };
-
 // ============================================
 // 🔥 SAFE NUMBER HELPER - Global
 // ============================================

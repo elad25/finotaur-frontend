@@ -301,7 +301,7 @@ export default function JournalScenarios() {
   if (loading) {
     return (
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
-        <PageTitle title="Scenarios & Plans" subtitle="Plan your trading day ahead" />
+        <PageTitle title="Gameplan" subtitle="Plan your trading day ahead" />
         <div className="flex items-center justify-center h-64">
           <div className="text-zinc-500">Loading data...</div>
         </div>
@@ -312,7 +312,7 @@ export default function JournalScenarios() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
-        <PageTitle title="Scenarios & Plans" subtitle="Plan your trading day ahead" />
+        <PageTitle title="Gameplan" subtitle="Plan your trading day ahead" />
         <button
           onClick={saveScenario}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-zinc-900 font-medium hover:bg-[#B8941F] transition-all text-sm"

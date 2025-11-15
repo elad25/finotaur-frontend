@@ -1,7 +1,7 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: v8.5.0-PRODUCTION-FINAL-WITH-SNAPTRADE
+-- Version: v8.5.1-PRODUCTION-FINAL-WITH-SNAPTRADE-AND-TICKERS
 -- Date: 2025-01-15
 -- Part: 1/4 (Tables + Indexes + RLS)
 -- ===============================================
@@ -21,6 +21,7 @@
 -- 💳 Payment system enhancements INCLUDED
 -- 🔥 HOTFIX v8.4.9: Fixed infinite recursion in RLS
 -- 📊 NEW v8.5.0: SnapTrade broker integration INCLUDED
+-- 🎯 NEW v8.5.1: Comprehensive Ticker Symbols table with multipliers
 -- ===============================================
 
 BEGIN;
@@ -33,7 +34,7 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MIGRATION v8.5.0         ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MIGRATION v8.5.1         ║';
   RAISE NOTICE '║     Part 1/4: Tables + Indexes + RLS  ║';
   RAISE NOTICE '║     ✨ PRODUCTION FINAL - WORKING!    ║';
   RAISE NOTICE '║     🔧 NO RECURSION IN RLS!           ║';
@@ -41,9 +42,10 @@ BEGIN
   RAISE NOTICE '║     🆕 RISK COLUMNS FIXED!            ║';
   RAISE NOTICE '║     💳 PAYMENT ENHANCEMENTS ADDED!    ║';
   RAISE NOTICE '║     📊 SNAPTRADE INTEGRATION ADDED!   ║';
+  RAISE NOTICE '║     🎯 TICKER SYMBOLS MASTER TABLE!   ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
-  RAISE NOTICE '[1/9] Starting nuclear cleanup...';
+  RAISE NOTICE '[1/10] Starting nuclear cleanup...';
 END $$;
 
 -- Drop ALL views (in correct order)
@@ -144,6 +146,8 @@ DROP FUNCTION IF EXISTS public.restore_trade(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.permanent_delete_trade(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.grant_free_access(UUID, INTEGER, TEXT, UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.verify_and_activate_subscription(UUID, TEXT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS public.get_ticker_multiplier(TEXT) CASCADE;
 
 -- Drop ALL RLS policies
 DO $$
@@ -176,7 +180,7 @@ DROP POLICY IF EXISTS "Users can delete own trade screenshots" ON storage.object
 
 DO $$
 BEGIN
-  RAISE NOTICE '[2/9] Setting up profiles table...';
+  RAISE NOTICE '[2/10] Setting up profiles table...';
   RAISE NOTICE '      🆕 Adding risk calculation columns...';
   RAISE NOTICE '      🔧 Using risk_mode (NOT risk_calculation_mode)';
   RAISE NOTICE '      💳 Adding payment system enhancements...';
@@ -372,7 +376,7 @@ COMMENT ON COLUMN public.profiles.prorated_credit IS 'Credit from unused portion
 
 DO $$
 BEGIN
-  RAISE NOTICE '[3/9] Setting up strategies table...';
+  RAISE NOTICE '[3/10] Setting up strategies table...';
 END $$;
 
 -- ✨ NEW: Soft delete support
@@ -386,7 +390,7 @@ COMMENT ON COLUMN public.strategies.deleted_at IS 'Soft delete timestamp - NULL 
 
 DO $$
 BEGIN
-  RAISE NOTICE '[4/9] Setting up trades table...';
+  RAISE NOTICE '[4/10] Setting up trades table...';
   RAISE NOTICE '      📊 Adding SnapTrade integration columns...';
 END $$;
 
@@ -470,12 +474,375 @@ COMMENT ON COLUMN public.trades.import_source IS 'Source of the trade: manual (u
 COMMENT ON COLUMN public.trades.imported_at IS 'Timestamp when this trade was imported from external source';
 
 -- ===============================================
--- SECTION 5: ADDITIONAL TABLES
+-- SECTION 5: 🎯 TICKER SYMBOLS - MASTER TABLE
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[5/9] Creating additional tables...';
+  RAISE NOTICE '[5/10] Creating Ticker Symbols Master Table...';
+  RAISE NOTICE '      🎯 Comprehensive list: Stocks, Futures, Crypto, Forex, ETFs';
+  RAISE NOTICE '      📊 Accurate multipliers for all asset classes';
+  RAISE NOTICE '      🚀 Fast autocomplete with popularity ranking';
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.ticker_symbols (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  symbol TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  asset_class TEXT NOT NULL CHECK (asset_class IN ('stock', 'futures', 'options', 'crypto', 'forex', 'etf')),
+  multiplier NUMERIC(10,2) NOT NULL DEFAULT 1,
+  exchange TEXT,
+  popularity_rank INTEGER DEFAULT 999,
+  is_active BOOLEAN DEFAULT TRUE,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for ultra-fast autocomplete
+CREATE INDEX IF NOT EXISTS idx_ticker_symbols_search 
+ON public.ticker_symbols(symbol text_pattern_ops)
+WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_ticker_symbols_popularity 
+ON public.ticker_symbols(popularity_rank, symbol)
+WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_ticker_symbols_asset_class 
+ON public.ticker_symbols(asset_class, popularity_rank)
+WHERE is_active = TRUE;
+
+-- Comments
+COMMENT ON TABLE public.ticker_symbols IS 'Master list of tradeable symbols with accurate multipliers and metadata for autocomplete';
+COMMENT ON COLUMN public.ticker_symbols.symbol IS 'Ticker symbol (e.g., AAPL, ES, BTCUSDT)';
+COMMENT ON COLUMN public.ticker_symbols.name IS 'Full name of the asset';
+COMMENT ON COLUMN public.ticker_symbols.asset_class IS 'Type: stock, futures, options, crypto, forex, etf';
+COMMENT ON COLUMN public.ticker_symbols.multiplier IS 'Contract multiplier - CRITICAL for P&L calculations (e.g., ES=50, NQ=20)';
+COMMENT ON COLUMN public.ticker_symbols.exchange IS 'Exchange or broker (e.g., NASDAQ, CME, BINANCE)';
+COMMENT ON COLUMN public.ticker_symbols.popularity_rank IS 'Lower = more popular (for autocomplete sorting)';
+COMMENT ON COLUMN public.ticker_symbols.is_active IS 'FALSE if symbol is delisted/deprecated';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🎯 INSERT COMPREHENSIVE TICKER DATA
+-- ═══════════════════════════════════════════════════════════════
+
+-- 📈 TOP US STOCKS (Rank 1-100)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('AAPL', 'Apple Inc.', 'stock', 1, 'NASDAQ', 1),
+  ('MSFT', 'Microsoft Corporation', 'stock', 1, 'NASDAQ', 2),
+  ('GOOGL', 'Alphabet Inc. Class A', 'stock', 1, 'NASDAQ', 3),
+  ('AMZN', 'Amazon.com Inc.', 'stock', 1, 'NASDAQ', 4),
+  ('TSLA', 'Tesla Inc.', 'stock', 1, 'NASDAQ', 5),
+  ('META', 'Meta Platforms Inc.', 'stock', 1, 'NASDAQ', 6),
+  ('NVDA', 'NVIDIA Corporation', 'stock', 1, 'NASDAQ', 7),
+  ('BRK.B', 'Berkshire Hathaway Inc. Class B', 'stock', 1, 'NYSE', 8),
+  ('JNJ', 'Johnson & Johnson', 'stock', 1, 'NYSE', 9),
+  ('V', 'Visa Inc.', 'stock', 1, 'NYSE', 10),
+  ('WMT', 'Walmart Inc.', 'stock', 1, 'NYSE', 11),
+  ('JPM', 'JPMorgan Chase & Co.', 'stock', 1, 'NYSE', 12),
+  ('PG', 'Procter & Gamble Co.', 'stock', 1, 'NYSE', 13),
+  ('MA', 'Mastercard Inc.', 'stock', 1, 'NYSE', 14),
+  ('UNH', 'UnitedHealth Group Inc.', 'stock', 1, 'NYSE', 15),
+  ('HD', 'The Home Depot Inc.', 'stock', 1, 'NYSE', 16),
+  ('DIS', 'The Walt Disney Company', 'stock', 1, 'NYSE', 17),
+  ('BAC', 'Bank of America Corporation', 'stock', 1, 'NYSE', 18),
+  ('ADBE', 'Adobe Inc.', 'stock', 1, 'NASDAQ', 19),
+  ('NFLX', 'Netflix Inc.', 'stock', 1, 'NASDAQ', 20),
+  ('CRM', 'Salesforce Inc.', 'stock', 1, 'NYSE', 21),
+  ('XOM', 'Exxon Mobil Corporation', 'stock', 1, 'NYSE', 22),
+  ('CSCO', 'Cisco Systems Inc.', 'stock', 1, 'NASDAQ', 23),
+  ('PFE', 'Pfizer Inc.', 'stock', 1, 'NYSE', 24),
+  ('KO', 'The Coca-Cola Company', 'stock', 1, 'NYSE', 25),
+  ('PEP', 'PepsiCo Inc.', 'stock', 1, 'NASDAQ', 26),
+  ('INTC', 'Intel Corporation', 'stock', 1, 'NASDAQ', 27),
+  ('AVGO', 'Broadcom Inc.', 'stock', 1, 'NASDAQ', 28),
+  ('COST', 'Costco Wholesale Corporation', 'stock', 1, 'NASDAQ', 29),
+  ('ORCL', 'Oracle Corporation', 'stock', 1, 'NYSE', 30),
+  ('AMD', 'Advanced Micro Devices Inc.', 'stock', 1, 'NASDAQ', 31),
+  ('NKE', 'Nike Inc.', 'stock', 1, 'NYSE', 32),
+  ('ABT', 'Abbott Laboratories', 'stock', 1, 'NYSE', 33),
+  ('TMO', 'Thermo Fisher Scientific Inc.', 'stock', 1, 'NYSE', 34),
+  ('MRK', 'Merck & Co. Inc.', 'stock', 1, 'NYSE', 35),
+  ('ACN', 'Accenture plc', 'stock', 1, 'NYSE', 36),
+  ('CVX', 'Chevron Corporation', 'stock', 1, 'NYSE', 37),
+  ('LLY', 'Eli Lilly and Company', 'stock', 1, 'NYSE', 38),
+  ('TXN', 'Texas Instruments Inc.', 'stock', 1, 'NASDAQ', 39),
+  ('QCOM', 'QUALCOMM Inc.', 'stock', 1, 'NASDAQ', 40),
+  ('NEE', 'NextEra Energy Inc.', 'stock', 1, 'NYSE', 41),
+  ('DHR', 'Danaher Corporation', 'stock', 1, 'NYSE', 42),
+  ('UNP', 'Union Pacific Corporation', 'stock', 1, 'NYSE', 43),
+  ('BMY', 'Bristol-Myers Squibb Company', 'stock', 1, 'NYSE', 44),
+  ('PM', 'Philip Morris International Inc.', 'stock', 1, 'NYSE', 45),
+  ('HON', 'Honeywell International Inc.', 'stock', 1, 'NASDAQ', 46),
+  ('LOW', 'Lowe''s Companies Inc.', 'stock', 1, 'NYSE', 47),
+  ('UPS', 'United Parcel Service Inc.', 'stock', 1, 'NYSE', 48),
+  ('AMGN', 'Amgen Inc.', 'stock', 1, 'NASDAQ', 49),
+  ('RTX', 'Raytheon Technologies Corporation', 'stock', 1, 'NYSE', 50),
+  ('BA', 'The Boeing Company', 'stock', 1, 'NYSE', 51),
+  ('CAT', 'Caterpillar Inc.', 'stock', 1, 'NYSE', 52),
+  ('SBUX', 'Starbucks Corporation', 'stock', 1, 'NASDAQ', 53),
+  ('GS', 'The Goldman Sachs Group Inc.', 'stock', 1, 'NYSE', 54),
+  ('IBM', 'International Business Machines Corporation', 'stock', 1, 'NYSE', 55),
+  ('PYPL', 'PayPal Holdings Inc.', 'stock', 1, 'NASDAQ', 56),
+  ('BKNG', 'Booking Holdings Inc.', 'stock', 1, 'NASDAQ', 57),
+  ('GILD', 'Gilead Sciences Inc.', 'stock', 1, 'NASDAQ', 58),
+  ('MMM', '3M Company', 'stock', 1, 'NYSE', 59),
+  ('AXP', 'American Express Company', 'stock', 1, 'NYSE', 60),
+  ('NOW', 'ServiceNow Inc.', 'stock', 1, 'NYSE', 61),
+  ('SYK', 'Stryker Corporation', 'stock', 1, 'NYSE', 62),
+  ('ISRG', 'Intuitive Surgical Inc.', 'stock', 1, 'NASDAQ', 63),
+  ('SPGI', 'S&P Global Inc.', 'stock', 1, 'NYSE', 64),
+  ('TJX', 'The TJX Companies Inc.', 'stock', 1, 'NYSE', 65),
+  ('ZTS', 'Zoetis Inc.', 'stock', 1, 'NYSE', 66),
+  ('BLK', 'BlackRock Inc.', 'stock', 1, 'NYSE', 67),
+  ('ADP', 'Automatic Data Processing Inc.', 'stock', 1, 'NASDAQ', 68),
+  ('MDLZ', 'Mondelez International Inc.', 'stock', 1, 'NASDAQ', 69),
+  ('CI', 'Cigna Corporation', 'stock', 1, 'NYSE', 70),
+  ('TMUS', 'T-Mobile US Inc.', 'stock', 1, 'NASDAQ', 71),
+  ('MO', 'Altria Group Inc.', 'stock', 1, 'NYSE', 72),
+  ('LMT', 'Lockheed Martin Corporation', 'stock', 1, 'NYSE', 73),
+  ('USB', 'U.S. Bancorp', 'stock', 1, 'NYSE', 74),
+  ('SCHW', 'The Charles Schwab Corporation', 'stock', 1, 'NYSE', 75),
+  ('CB', 'Chubb Limited', 'stock', 1, 'NYSE', 76),
+  ('DE', 'Deere & Company', 'stock', 1, 'NYSE', 77),
+  ('DUK', 'Duke Energy Corporation', 'stock', 1, 'NYSE', 78),
+  ('SO', 'The Southern Company', 'stock', 1, 'NYSE', 79),
+  ('BSX', 'Boston Scientific Corporation', 'stock', 1, 'NYSE', 80),
+  ('C', 'Citigroup Inc.', 'stock', 1, 'NYSE', 81),
+  ('MS', 'Morgan Stanley', 'stock', 1, 'NYSE', 82),
+  ('CVS', 'CVS Health Corporation', 'stock', 1, 'NYSE', 83),
+  ('BDX', 'Becton Dickinson and Company', 'stock', 1, 'NYSE', 84),
+  ('CL', 'Colgate-Palmolive Company', 'stock', 1, 'NYSE', 85),
+  ('CME', 'CME Group Inc.', 'stock', 1, 'NASDAQ', 86),
+  ('EOG', 'EOG Resources Inc.', 'stock', 1, 'NYSE', 87),
+  ('FIS', 'Fidelity National Information Services Inc.', 'stock', 1, 'NYSE', 88),
+  ('GE', 'General Electric Company', 'stock', 1, 'NYSE', 89),
+  ('ITW', 'Illinois Tool Works Inc.', 'stock', 1, 'NYSE', 90),
+  ('MMC', 'Marsh & McLennan Companies Inc.', 'stock', 1, 'NYSE', 91),
+  ('NSC', 'Norfolk Southern Corporation', 'stock', 1, 'NYSE', 92),
+  ('PLD', 'Prologis Inc.', 'stock', 1, 'NYSE', 93),
+  ('SLB', 'Schlumberger Limited', 'stock', 1, 'NYSE', 94),
+  ('TGT', 'Target Corporation', 'stock', 1, 'NYSE', 95),
+  ('WM', 'Waste Management Inc.', 'stock', 1, 'NYSE', 96),
+  ('SQ', 'Block Inc. (Square)', 'stock', 1, 'NYSE', 97),
+  ('SHOP', 'Shopify Inc.', 'stock', 1, 'NYSE', 98),
+  ('UBER', 'Uber Technologies Inc.', 'stock', 1, 'NYSE', 99),
+  ('LYFT', 'Lyft Inc.', 'stock', 1, 'NASDAQ', 100)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 📊 FUTURES - CME/ICE/EUREX (Rank 101-200)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('ES', 'E-mini S&P 500', 'futures', 50, 'CME', 101),
+  ('NQ', 'E-mini NASDAQ-100', 'futures', 20, 'CME', 102),
+  ('YM', 'E-mini Dow Jones', 'futures', 5, 'CME', 103),
+  ('RTY', 'E-mini Russell 2000', 'futures', 50, 'CME', 104),
+  ('MES', 'Micro E-mini S&P 500', 'futures', 5, 'CME', 105),
+  ('MNQ', 'Micro E-mini NASDAQ-100', 'futures', 2, 'CME', 106),
+  ('M2K', 'Micro E-mini Russell 2000', 'futures', 5, 'CME', 107),
+  ('MYM', 'Micro E-mini Dow Jones', 'futures', 0.5, 'CME', 108),
+  ('CL', 'Crude Oil (WTI)', 'futures', 1000, 'NYMEX', 109),
+  ('GC', 'Gold', 'futures', 100, 'COMEX', 110),
+  ('SI', 'Silver', 'futures', 5000, 'COMEX', 111),
+  ('NG', 'Natural Gas', 'futures', 10000, 'NYMEX', 112),
+  ('HG', 'Copper', 'futures', 25000, 'COMEX', 113),
+  ('ZC', 'Corn', 'futures', 50, 'CBOT', 114),
+  ('ZS', 'Soybeans', 'futures', 50, 'CBOT', 115),
+  ('ZW', 'Wheat', 'futures', 50, 'CBOT', 116),
+  ('ZN', '10-Year T-Note', 'futures', 1000, 'CBOT', 117),
+  ('ZB', '30-Year T-Bond', 'futures', 1000, 'CBOT', 118),
+  ('ZF', '5-Year T-Note', 'futures', 1000, 'CBOT', 119),
+  ('ZT', '2-Year T-Note', 'futures', 2000, 'CBOT', 120),
+  ('6E', 'Euro FX', 'futures', 125000, 'CME', 121),
+  ('6J', 'Japanese Yen', 'futures', 12500000, 'CME', 122),
+  ('6B', 'British Pound', 'futures', 62500, 'CME', 123),
+  ('6C', 'Canadian Dollar', 'futures', 100000, 'CME', 124),
+  ('6A', 'Australian Dollar', 'futures', 100000, 'CME', 125),
+  ('HE', 'Lean Hogs', 'futures', 40000, 'CME', 126),
+  ('LE', 'Live Cattle', 'futures', 40000, 'CME', 127),
+  ('GF', 'Feeder Cattle', 'futures', 50000, 'CME', 128),
+  ('PA', 'Palladium', 'futures', 100, 'NYMEX', 129),
+  ('PL', 'Platinum', 'futures', 50, 'NYMEX', 130),
+  ('KC', 'Coffee', 'futures', 37500, 'ICE', 131),
+  ('CT', 'Cotton', 'futures', 50000, 'ICE', 132),
+  ('SB', 'Sugar #11', 'futures', 112000, 'ICE', 133),
+  ('CC', 'Cocoa', 'futures', 10, 'ICE', 134),
+  ('OJ', 'Orange Juice', 'futures', 15000, 'ICE', 135),
+  ('BTC', 'Bitcoin Futures (CME)', 'futures', 5, 'CME', 136),
+  ('ETH', 'Ethereum Futures (CME)', 'futures', 50, 'CME', 137),
+  ('VX', 'VIX Futures', 'futures', 1000, 'CFE', 138),
+  ('GE', 'Eurodollar', 'futures', 2500, 'CME', 139),
+  ('SR1', 'SOFR 1-Month', 'futures', 4167, 'CME', 140)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 💰 CRYPTOCURRENCY (Rank 201-250)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('BTCUSDT', 'Bitcoin', 'crypto', 1, 'BINANCE', 201),
+  ('ETHUSDT', 'Ethereum', 'crypto', 1, 'BINANCE', 202),
+  ('BNBUSDT', 'Binance Coin', 'crypto', 1, 'BINANCE', 203),
+  ('XRPUSDT', 'Ripple', 'crypto', 1, 'BINANCE', 204),
+  ('ADAUSDT', 'Cardano', 'crypto', 1, 'BINANCE', 205),
+  ('SOLUSDT', 'Solana', 'crypto', 1, 'BINANCE', 206),
+  ('DOGEUSDT', 'Dogecoin', 'crypto', 1, 'BINANCE', 207),
+  ('DOTUSDT', 'Polkadot', 'crypto', 1, 'BINANCE', 208),
+  ('MATICUSDT', 'Polygon', 'crypto', 1, 'BINANCE', 209),
+  ('TRXUSDT', 'TRON', 'crypto', 1, 'BINANCE', 210),
+  ('AVAXUSDT', 'Avalanche', 'crypto', 1, 'BINANCE', 211),
+  ('LINKUSDT', 'Chainlink', 'crypto', 1, 'BINANCE', 212),
+  ('UNIUSDT', 'Uniswap', 'crypto', 1, 'BINANCE', 213),
+  ('LTCUSDT', 'Litecoin', 'crypto', 1, 'BINANCE', 214),
+  ('ATOMUSDT', 'Cosmos', 'crypto', 1, 'BINANCE', 215),
+  ('ETCUSDT', 'Ethereum Classic', 'crypto', 1, 'BINANCE', 216),
+  ('XLMUSDT', 'Stellar', 'crypto', 1, 'BINANCE', 217),
+  ('XMRUSDT', 'Monero', 'crypto', 1, 'BINANCE', 218),
+  ('ALGOUSDT', 'Algorand', 'crypto', 1, 'BINANCE', 219),
+  ('VETUSDT', 'VeChain', 'crypto', 1, 'BINANCE', 220),
+  ('ICPUSDT', 'Internet Computer', 'crypto', 1, 'BINANCE', 221),
+  ('FILUSDT', 'Filecoin', 'crypto', 1, 'BINANCE', 222),
+  ('SANDUSDT', 'The Sandbox', 'crypto', 1, 'BINANCE', 223),
+  ('MANAUSDT', 'Decentraland', 'crypto', 1, 'BINANCE', 224),
+  ('AXSUSDT', 'Axie Infinity', 'crypto', 1, 'BINANCE', 225)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 💱 FOREX PAIRS (Rank 251-300)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('EURUSD', 'Euro / US Dollar', 'forex', 100000, 'FOREX', 251),
+  ('GBPUSD', 'British Pound / US Dollar', 'forex', 100000, 'FOREX', 252),
+  ('USDJPY', 'US Dollar / Japanese Yen', 'forex', 100000, 'FOREX', 253),
+  ('USDCHF', 'US Dollar / Swiss Franc', 'forex', 100000, 'FOREX', 254),
+  ('AUDUSD', 'Australian Dollar / US Dollar', 'forex', 100000, 'FOREX', 255),
+  ('USDCAD', 'US Dollar / Canadian Dollar', 'forex', 100000, 'FOREX', 256),
+  ('NZDUSD', 'New Zealand Dollar / US Dollar', 'forex', 100000, 'FOREX', 257),
+  ('EURGBP', 'Euro / British Pound', 'forex', 100000, 'FOREX', 258),
+  ('EURJPY', 'Euro / Japanese Yen', 'forex', 100000, 'FOREX', 259),
+  ('GBPJPY', 'British Pound / Japanese Yen', 'forex', 100000, 'FOREX', 260),
+  ('EURCHF', 'Euro / Swiss Franc', 'forex', 100000, 'FOREX', 261),
+  ('AUDJPY', 'Australian Dollar / Japanese Yen', 'forex', 100000, 'FOREX', 262),
+  ('CADJPY', 'Canadian Dollar / Japanese Yen', 'forex', 100000, 'FOREX', 263),
+  ('NZDJPY', 'New Zealand Dollar / Japanese Yen', 'forex', 100000, 'FOREX', 264),
+  ('EURAUD', 'Euro / Australian Dollar', 'forex', 100000, 'FOREX', 265),
+  ('GBPAUD', 'British Pound / Australian Dollar', 'forex', 100000, 'FOREX', 266),
+  ('AUDNZD', 'Australian Dollar / New Zealand Dollar', 'forex', 100000, 'FOREX', 267),
+  ('AUDCAD', 'Australian Dollar / Canadian Dollar', 'forex', 100000, 'FOREX', 268),
+  ('GBPCAD', 'British Pound / Canadian Dollar', 'forex', 100000, 'FOREX', 269),
+  ('EURCAD', 'Euro / Canadian Dollar', 'forex', 100000, 'FOREX', 270)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 📊 LEVERAGED ETFs (תעודות סל ממונפות) (Rank 301-350)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('TQQQ', 'ProShares UltraPro QQQ (3x NASDAQ)', 'etf', 1, 'NASDAQ', 301),
+  ('SQQQ', 'ProShares UltraPro Short QQQ (3x Inverse NASDAQ)', 'etf', 1, 'NASDAQ', 302),
+  ('UPRO', 'ProShares UltraPro S&P500 (3x S&P 500)', 'etf', 1, 'NYSE', 303),
+  ('SPXU', 'ProShares UltraPro Short S&P500 (3x Inverse S&P 500)', 'etf', 1, 'NYSE', 304),
+  ('TNA', 'Direxion Daily Small Cap Bull 3X (3x Russell 2000)', 'etf', 1, 'NYSE', 305),
+  ('TZA', 'Direxion Daily Small Cap Bear 3X (3x Inverse Russell 2000)', 'etf', 1, 'NYSE', 306),
+  ('UDOW', 'ProShares UltraPro Dow30 (3x Dow Jones)', 'etf', 1, 'NYSE', 307),
+  ('SDOW', 'ProShares UltraPro Short Dow30 (3x Inverse Dow)', 'etf', 1, 'NYSE', 308),
+  ('TECL', 'Direxion Daily Technology Bull 3X', 'etf', 1, 'NYSE', 309),
+  ('TECS', 'Direxion Daily Technology Bear 3X', 'etf', 1, 'NYSE', 310),
+  ('FAS', 'Direxion Daily Financial Bull 3X', 'etf', 1, 'NYSE', 311),
+  ('FAZ', 'Direxion Daily Financial Bear 3X', 'etf', 1, 'NYSE', 312),
+  ('SOXL', 'Direxion Daily Semiconductor Bull 3X', 'etf', 1, 'NYSE', 313),
+  ('SOXS', 'Direxion Daily Semiconductor Bear 3X', 'etf', 1, 'NYSE', 314),
+  ('LABU', 'Direxion Daily S&P Biotech Bull 3X', 'etf', 1, 'NYSE', 315),
+  ('LABD', 'Direxion Daily S&P Biotech Bear 3X', 'etf', 1, 'NYSE', 316),
+  ('NUGT', 'Direxion Daily Gold Miners Bull 2X', 'etf', 1, 'NYSE', 317),
+  ('DUST', 'Direxion Daily Gold Miners Bear 2X', 'etf', 1, 'NYSE', 318),
+  ('ERX', 'Direxion Daily Energy Bull 2X', 'etf', 1, 'NYSE', 319),
+  ('ERY', 'Direxion Daily Energy Bear 2X', 'etf', 1, 'NYSE', 320),
+  ('UCO', 'ProShares Ultra Bloomberg Crude Oil (2x Oil)', 'etf', 1, 'NYSE', 321),
+  ('SCO', 'ProShares UltraShort Bloomberg Crude Oil (2x Inverse Oil)', 'etf', 1, 'NYSE', 322),
+  ('UGL', 'ProShares Ultra Gold (2x Gold)', 'etf', 1, 'NYSE', 323),
+  ('GLL', 'ProShares UltraShort Gold (2x Inverse Gold)', 'etf', 1, 'NYSE', 324),
+  ('AGQ', 'ProShares Ultra Silver (2x Silver)', 'etf', 1, 'NYSE', 325)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 📊 REGULAR ETFs (Popular) (Rank 351-400)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('SPY', 'SPDR S&P 500 ETF', 'etf', 1, 'NYSE', 351),
+  ('QQQ', 'Invesco QQQ Trust (NASDAQ-100)', 'etf', 1, 'NASDAQ', 352),
+  ('IWM', 'iShares Russell 2000 ETF', 'etf', 1, 'NYSE', 353),
+  ('DIA', 'SPDR Dow Jones Industrial Average ETF', 'etf', 1, 'NYSE', 354),
+  ('VTI', 'Vanguard Total Stock Market ETF', 'etf', 1, 'NYSE', 355),
+  ('VOO', 'Vanguard S&P 500 ETF', 'etf', 1, 'NYSE', 356),
+  ('VEA', 'Vanguard FTSE Developed Markets ETF', 'etf', 1, 'NYSE', 357),
+  ('VWO', 'Vanguard FTSE Emerging Markets ETF', 'etf', 1, 'NYSE', 358),
+  ('AGG', 'iShares Core U.S. Aggregate Bond ETF', 'etf', 1, 'NYSE', 359),
+  ('BND', 'Vanguard Total Bond Market ETF', 'etf', 1, 'NASDAQ', 360),
+  ('GLD', 'SPDR Gold Shares', 'etf', 1, 'NYSE', 361),
+  ('SLV', 'iShares Silver Trust', 'etf', 1, 'NYSE', 362),
+  ('USO', 'United States Oil Fund', 'etf', 1, 'NYSE', 363),
+  ('XLE', 'Energy Select Sector SPDR Fund', 'etf', 1, 'NYSE', 364),
+  ('XLF', 'Financial Select Sector SPDR Fund', 'etf', 1, 'NYSE', 365),
+  ('XLK', 'Technology Select Sector SPDR Fund', 'etf', 1, 'NYSE', 366),
+  ('XLV', 'Health Care Select Sector SPDR Fund', 'etf', 1, 'NYSE', 367),
+  ('XLI', 'Industrial Select Sector SPDR Fund', 'etf', 1, 'NYSE', 368),
+  ('XLP', 'Consumer Staples Select Sector SPDR Fund', 'etf', 1, 'NYSE', 369),
+  ('XLY', 'Consumer Discretionary Select Sector SPDR Fund', 'etf', 1, 'NYSE', 370),
+  ('XLB', 'Materials Select Sector SPDR Fund', 'etf', 1, 'NYSE', 371),
+  ('XLU', 'Utilities Select Sector SPDR Fund', 'etf', 1, 'NYSE', 372),
+  ('XLRE', 'Real Estate Select Sector SPDR Fund', 'etf', 1, 'NYSE', 373),
+  ('VIG', 'Vanguard Dividend Appreciation ETF', 'etf', 1, 'NYSE', 374),
+  ('VYM', 'Vanguard High Dividend Yield ETF', 'etf', 1, 'NYSE', 375),
+  ('SCHD', 'Schwab U.S. Dividend Equity ETF', 'etf', 1, 'NYSE', 376),
+  ('ARKK', 'ARK Innovation ETF', 'etf', 1, 'NYSE', 377),
+  ('ARKW', 'ARK Next Generation Internet ETF', 'etf', 1, 'NYSE', 378),
+  ('ARKG', 'ARK Genomic Revolution ETF', 'etf', 1, 'NYSE', 379),
+  ('TLT', 'iShares 20+ Year Treasury Bond ETF', 'etf', 1, 'NASDAQ', 380)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- 🔥 ADDITIONAL POPULAR STOCKS (Tech, Finance, Energy)
+INSERT INTO public.ticker_symbols (symbol, name, asset_class, multiplier, exchange, popularity_rank) VALUES
+  ('T', 'AT&T Inc.', 'stock', 1, 'NYSE', 401),
+  ('VZ', 'Verizon Communications Inc.', 'stock', 1, 'NYSE', 402),
+  ('F', 'Ford Motor Company', 'stock', 1, 'NYSE', 403),
+  ('GM', 'General Motors Company', 'stock', 1, 'NYSE', 404),
+  ('RIVN', 'Rivian Automotive Inc.', 'stock', 1, 'NASDAQ', 405),
+  ('LCID', 'Lucid Group Inc.', 'stock', 1, 'NASDAQ', 406),
+  ('NIO', 'NIO Inc.', 'stock', 1, 'NYSE', 407),
+  ('XPEV', 'XPeng Inc.', 'stock', 1, 'NYSE', 408),
+  ('LI', 'Li Auto Inc.', 'stock', 1, 'NASDAQ', 409),
+  ('PLTR', 'Palantir Technologies Inc.', 'stock', 1, 'NYSE', 410),
+  ('SNOW', 'Snowflake Inc.', 'stock', 1, 'NYSE', 411),
+  ('COIN', 'Coinbase Global Inc.', 'stock', 1, 'NASDAQ', 412),
+  ('RBLX', 'Roblox Corporation', 'stock', 1, 'NYSE', 413),
+  ('U', 'Unity Software Inc.', 'stock', 1, 'NYSE', 414),
+  ('DKNG', 'DraftKings Inc.', 'stock', 1, 'NASDAQ', 415),
+  ('PINS', 'Pinterest Inc.', 'stock', 1, 'NYSE', 416),
+  ('SNAP', 'Snap Inc.', 'stock', 1, 'NYSE', 417),
+  ('TWTR', 'Twitter Inc.', 'stock', 1, 'NYSE', 418),
+  ('SPOT', 'Spotify Technology S.A.', 'stock', 1, 'NYSE', 419),
+  ('ZM', 'Zoom Video Communications Inc.', 'stock', 1, 'NASDAQ', 420),
+  ('DOCU', 'DocuSign Inc.', 'stock', 1, 'NASDAQ', 421),
+  ('TWLO', 'Twilio Inc.', 'stock', 1, 'NYSE', 422),
+  ('OKTA', 'Okta Inc.', 'stock', 1, 'NASDAQ', 423),
+  ('NET', 'Cloudflare Inc.', 'stock', 1, 'NYSE', 424),
+  ('DDOG', 'Datadog Inc.', 'stock', 1, 'NASDAQ', 425),
+  ('CRWD', 'CrowdStrike Holdings Inc.', 'stock', 1, 'NASDAQ', 426),
+  ('ZS', 'Zscaler Inc.', 'stock', 1, 'NASDAQ', 427),
+  ('PANW', 'Palo Alto Networks Inc.', 'stock', 1, 'NASDAQ', 428),
+  ('FTNT', 'Fortinet Inc.', 'stock', 1, 'NASDAQ', 429),
+  ('MDB', 'MongoDB Inc.', 'stock', 1, 'NASDAQ', 430),
+  ('TEAM', 'Atlassian Corporation', 'stock', 1, 'NASDAQ', 431),
+  ('WDAY', 'Workday Inc.', 'stock', 1, 'NASDAQ', 432),
+  ('ABNB', 'Airbnb Inc.', 'stock', 1, 'NASDAQ', 433),
+  ('DASH', 'DoorDash Inc.', 'stock', 1, 'NYSE', 434),
+  ('MELI', 'MercadoLibre Inc.', 'stock', 1, 'NASDAQ', 435)
+ON CONFLICT (symbol) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════
+-- GRANT PERMISSIONS
+-- ═══════════════════════════════════════════════════════════════
+
+GRANT SELECT ON public.ticker_symbols TO authenticated;
+GRANT SELECT ON public.ticker_symbols TO anon;
+
+-- ===============================================
+-- SECTION 6: ADDITIONAL TABLES
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[6/10] Creating additional tables...';
   RAISE NOTICE '      📊 Including SnapTrade tables...';
 END $$;
 
@@ -780,12 +1147,12 @@ COMMENT ON COLUMN public.snaptrade_sync_log.duration_seconds IS 'How long the sy
 COMMENT ON COLUMN public.snaptrade_sync_log.sync_type IS 'manual (user clicked button), automatic (scheduled), or scheduled (cron)';
 
 -- ===============================================
--- SECTION 6: STORAGE BUCKET
+-- SECTION 7: STORAGE BUCKET
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[6/9] Setting up storage bucket...';
+  RAISE NOTICE '[7/10] Setting up storage bucket...';
 END $$;
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -801,15 +1168,16 @@ ON CONFLICT (id) DO UPDATE SET
   allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp']::text[];
 
 -- ===============================================
--- SECTION 7: PRODUCTION-OPTIMIZED INDEXES
+-- SECTION 8: PRODUCTION-OPTIMIZED INDEXES
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[7/9] Creating production-grade indexes...';
+  RAISE NOTICE '[8/10] Creating production-grade indexes...';
   RAISE NOTICE '      Optimized for 5000+ concurrent users';
   RAISE NOTICE '      Including payment system indexes...';
   RAISE NOTICE '      📊 Including SnapTrade indexes...';
+  RAISE NOTICE '      🎯 Including Ticker Symbols indexes...';
 END $$;
 
 -- Profiles indexes
@@ -993,7 +1361,15 @@ CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_created_at ON public.snaptrade
 CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_completed_at ON public.snaptrade_sync_log(sync_completed_at DESC)
 WHERE sync_completed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_status ON public.snaptrade_sync_log(user_id, status, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_type ON public.snaptrade_sync_log(user_id, sync_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_snaptrade_sync_log_user_sync_type ON public.snaptrade_sync_log(user_id, sync_type, created_at DESC);
+
+-- ✨ NEW: Rate limiting indexes
+CREATE INDEX IF NOT EXISTS idx_rate_limits_window 
+ON public.api_rate_limits(user_id, endpoint, window_start);
+
+-- Cleanup index without NOW() in predicate
+CREATE INDEX IF NOT EXISTS idx_rate_limits_cleanup
+ON public.api_rate_limits(window_start);
 
 -- ✨ NEW: Rate limiting indexes
 CREATE INDEX IF NOT EXISTS idx_rate_limits_window 
@@ -1015,15 +1391,17 @@ ANALYZE public.subscription_changes;
 ANALYZE public.pricing_config;
 ANALYZE public.snaptrade_users;
 ANALYZE public.snaptrade_sync_log;
+ANALYZE public.ticker_symbols;
 
 -- ===============================================
--- SECTION 8: ENABLE RLS
+-- SECTION 9: ENABLE RLS
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[8/9] Enabling RLS...';
+  RAISE NOTICE '[9/10] Enabling RLS...';
   RAISE NOTICE '      📊 Including SnapTrade tables...';
+  RAISE NOTICE '      🎯 Including Ticker Symbols...';
 END $$;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -1045,18 +1423,20 @@ ALTER TABLE public.subscription_changes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pricing_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snaptrade_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snaptrade_sync_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ticker_symbols ENABLE ROW LEVEL SECURITY;
 
 -- ===============================================
--- SECTION 9: SAFE RLS POLICIES (HOTFIX v8.4.9 - NO RECURSION!)
+-- SECTION 10: SAFE RLS POLICIES (HOTFIX v8.4.9 - NO RECURSION!)
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[9/9] Creating SAFE RLS policies (NO RECURSION!)...';
+  RAISE NOTICE '[10/10] Creating SAFE RLS policies (NO RECURSION!)...';
   RAISE NOTICE '      ✅ Simple policies - no subqueries';
   RAISE NOTICE '      ✅ Admin access via SECURITY DEFINER functions';
   RAISE NOTICE '      💳 Payment system policies included';
   RAISE NOTICE '      📊 SnapTrade policies included';
+  RAISE NOTICE '      🎯 Ticker Symbols policies included';
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1071,7 +1451,7 @@ TO authenticated
 USING (id = auth.uid());
 
 COMMENT ON POLICY "profiles_select_own" ON public.profiles IS 
-'v8.5.0: Users see ONLY own profile. Admin access via SECURITY DEFINER functions.';
+'v8.5.1: Users see ONLY own profile. Admin access via SECURITY DEFINER functions.';
 
 -- INSERT: Only during signup
 CREATE POLICY "profiles_insert_own"
@@ -1084,7 +1464,7 @@ WITH CHECK (
 );
 
 COMMENT ON POLICY "profiles_insert_own" ON public.profiles IS 
-'v8.5.0: Users can create own profile during registration (FREE only).';
+'v8.5.1: Users can create own profile during registration (FREE only).';
 
 -- UPDATE: Users can update own (with restrictions)
 CREATE POLICY "profiles_update_own"
@@ -1095,7 +1475,7 @@ USING (id = auth.uid())
 WITH CHECK (id = auth.uid());
 
 COMMENT ON POLICY "profiles_update_own" ON public.profiles IS 
-'v8.5.0: Users update own profile. Restrictions enforced at application layer.';
+'v8.5.1: Users update own profile. Restrictions enforced at application layer.';
 
 -- DELETE: Forbidden (use soft delete)
 CREATE POLICY "profiles_delete_never"
@@ -1105,7 +1485,7 @@ TO authenticated
 USING (false);
 
 COMMENT ON POLICY "profiles_delete_never" ON public.profiles IS 
-'v8.5.0: Direct deletion forbidden - use soft delete (deleted_at) instead.';
+'v8.5.1: Direct deletion forbidden - use soft delete (deleted_at) instead.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- TRADES - 4 SIMPLE POLICIES
@@ -1118,7 +1498,7 @@ TO authenticated
 USING (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_select_own" ON public.trades IS 
-'v8.5.0: Users see only own trades. Admin via functions.';
+'v8.5.1: Users see only own trades. Admin via functions.';
 
 CREATE POLICY "trades_insert_own"
 ON public.trades
@@ -1129,7 +1509,7 @@ WITH CHECK (
 );
 
 COMMENT ON POLICY "trades_insert_own" ON public.trades IS 
-'v8.5.0: Users create own trades. Limits checked via can_create_trade().';
+'v8.5.1: Users create own trades. Limits checked via can_create_trade().';
 
 CREATE POLICY "trades_update_own"
 ON public.trades
@@ -1139,7 +1519,7 @@ USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_update_own" ON public.trades IS 
-'v8.5.0: Users update only own trades.';
+'v8.5.1: Users update only own trades.';
 
 CREATE POLICY "trades_delete_own"
 ON public.trades
@@ -1148,7 +1528,7 @@ TO authenticated
 USING (user_id = auth.uid());
 
 COMMENT ON POLICY "trades_delete_own" ON public.trades IS 
-'v8.5.0: Users delete only own trades (or use soft delete).';
+'v8.5.1: Users delete only own trades (or use soft delete).';
 
 -- ═══════════════════════════════════════════════════════════════
 -- STRATEGIES - 4 SIMPLE POLICIES
@@ -1293,7 +1673,7 @@ TO authenticated
 USING (user_id = auth.uid());
 
 COMMENT ON POLICY "snaptrade_users_select_own" ON public.snaptrade_users IS 
-'v8.5.0: Users can only view their own SnapTrade credentials';
+'v8.5.1: Users can only view their own SnapTrade credentials';
 
 -- SnapTrade Sync Log
 CREATE POLICY "snaptrade_sync_log_select_own"
@@ -1316,7 +1696,39 @@ USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
 COMMENT ON POLICY "snaptrade_sync_log_select_own" ON public.snaptrade_sync_log IS 
-'v8.5.0: Users can only view their own SnapTrade sync logs';
+'v8.5.1: Users can only view their own SnapTrade sync logs';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🎯 TICKER SYMBOLS - PUBLIC READ ACCESS
+-- ═══════════════════════════════════════════════════════════════
+
+-- All authenticated users can read ticker symbols
+CREATE POLICY "ticker_symbols_public_read"
+ON public.ticker_symbols
+FOR SELECT
+TO authenticated
+USING (is_active = TRUE);
+
+COMMENT ON POLICY "ticker_symbols_public_read" ON public.ticker_symbols IS 
+'v8.5.1: All authenticated users can read active ticker symbols for autocomplete';
+
+-- Anonymous users can also read (for landing pages)
+CREATE POLICY "ticker_symbols_anon_read"
+ON public.ticker_symbols
+FOR SELECT
+TO anon
+USING (is_active = TRUE);
+
+-- Only admins can modify (via SECURITY DEFINER functions)
+CREATE POLICY "ticker_symbols_admin_only"
+ON public.ticker_symbols
+FOR ALL
+TO authenticated
+USING (false)
+WITH CHECK (false);
+
+COMMENT ON POLICY "ticker_symbols_admin_only" ON public.ticker_symbols IS 
+'v8.5.1: Only admins can modify ticker symbols via SECURITY DEFINER functions';
 
 -- ═══════════════════════════════════════════════════════════════
 -- STORAGE POLICIES
@@ -1362,21 +1774,26 @@ GRANT SELECT ON public.subscription_changes TO authenticated;
 GRANT SELECT ON public.pricing_config TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.snaptrade_users TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.snaptrade_sync_log TO authenticated;
+GRANT SELECT ON public.ticker_symbols TO authenticated;
+GRANT SELECT ON public.ticker_symbols TO anon;
 
 -- Grant to service role (for Edge Functions)
 GRANT ALL ON public.snaptrade_users TO service_role;
 GRANT ALL ON public.snaptrade_sync_log TO service_role;
+GRANT ALL ON public.ticker_symbols TO service_role;
 
 COMMIT;
 
 -- ===============================================
--- END OF PART 1/4 - v8.5.0-PRODUCTION-FINAL
+-- END OF PART 1/4 - v8.5.1-PRODUCTION-FINAL
 -- ===============================================
 
 DO $$
 DECLARE 
   trade_policies_count INTEGER;
   profiles_policies_count INTEGER;
+  ticker_symbols_count INTEGER;
+  ticker_policies_count INTEGER;
   payment_provider_exists BOOLEAN;
   risk_columns_exist INTEGER;
   risk_mode_exists BOOLEAN;
@@ -1386,10 +1803,11 @@ DECLARE
   snaptrade_sync_log_exists BOOLEAN;
   snaptrade_indexes_count INTEGER;
   snaptrade_policies_count INTEGER;
+  ticker_table_exists BOOLEAN;
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  ✅ PART 1/4 COMPLETE! (v8.5.0)       ║';
+  RAISE NOTICE '║  ✅ PART 1/4 COMPLETE! (v8.5.1)       ║';
   RAISE NOTICE '║     Tables + Indexes + RLS            ║';
   RAISE NOTICE '║     ✨ PRODUCTION FINAL - WORKING!    ║';
   RAISE NOTICE '║     🔥 NO RECURSION IN RLS!           ║';
@@ -1397,6 +1815,7 @@ BEGIN
   RAISE NOTICE '║     🆕 RISK COLUMNS FIXED!            ║';
   RAISE NOTICE '║     💳 PAYMENT ENHANCEMENTS ADDED!    ║';
   RAISE NOTICE '║     📊 SNAPTRADE INTEGRATION ADDED!   ║';
+  RAISE NOTICE '║     🎯 TICKER SYMBOLS MASTER TABLE!   ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
   
@@ -1408,6 +1827,16 @@ BEGIN
   SELECT COUNT(*) INTO profiles_policies_count
   FROM pg_policies
   WHERE schemaname = 'public' AND tablename = 'profiles';
+  
+  SELECT COUNT(*) INTO ticker_policies_count
+  FROM pg_policies
+  WHERE schemaname = 'public' AND tablename = 'ticker_symbols';
+  
+  -- Check ticker_symbols table
+  SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename = 'ticker_symbols') INTO ticker_table_exists;
+  
+  -- Count ticker symbols
+  SELECT COUNT(*) INTO ticker_symbols_count FROM public.ticker_symbols;
   
   -- Check payment_provider column
   SELECT EXISTS (
@@ -1466,15 +1895,35 @@ BEGIN
   RAISE NOTICE '📊 RLS Policies Status:';
   RAISE NOTICE '   • Profiles policies: % (expected: 4)', profiles_policies_count;
   RAISE NOTICE '   • Trades policies: % (expected: 4)', trade_policies_count;
+  RAISE NOTICE '   • Ticker symbols policies: % (expected: 3)', ticker_policies_count;
   
-  IF profiles_policies_count = 4 AND trade_policies_count = 4 THEN
+  IF profiles_policies_count = 4 AND trade_policies_count = 4 AND ticker_policies_count = 3 THEN
     RAISE NOTICE '   ✅ All policies created - NO RECURSION!';
     RAISE NOTICE '      - Simple USING/WITH CHECK conditions';
     RAISE NOTICE '      - No subqueries to profiles table';
     RAISE NOTICE '      - Admin access via SECURITY DEFINER functions';
   ELSE
-    RAISE WARNING '   ⚠️  Expected 4 policies each, found profiles:% trades:%', 
-      profiles_policies_count, trade_policies_count;
+    RAISE WARNING '   ⚠️  Expected profiles:4 trades:4 tickers:3, found profiles:% trades:% tickers:%', 
+      profiles_policies_count, trade_policies_count, ticker_policies_count;
+  END IF;
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '🎯 Ticker Symbols Master Table:';
+  RAISE NOTICE '   • Table exists: %', CASE WHEN ticker_table_exists THEN '✅ YES' ELSE '❌ NO' END;
+  RAISE NOTICE '   • Total tickers loaded: %', ticker_symbols_count;
+  RAISE NOTICE '   • RLS policies: %', ticker_policies_count;
+  
+  IF ticker_symbols_count >= 400 THEN
+    RAISE NOTICE '   ✅ Comprehensive ticker database loaded!';
+    RAISE NOTICE '      ✓ US Stocks (Top 100)';
+    RAISE NOTICE '      ✓ Futures (CME, NYMEX, CBOT, ICE)';
+    RAISE NOTICE '      ✓ Cryptocurrency (Top 25)';
+    RAISE NOTICE '      ✓ Forex Pairs (Major & Cross)';
+    RAISE NOTICE '      ✓ Leveraged ETFs (3x, 2x)';
+    RAISE NOTICE '      ✓ Regular ETFs (SPY, QQQ, etc.)';
+    RAISE NOTICE '      ✓ Accurate multipliers for all assets';
+  ELSE
+    RAISE WARNING '   ⚠️  Expected 400+ tickers, found %', ticker_symbols_count;
   END IF;
   
   RAISE NOTICE '';
@@ -1520,8 +1969,8 @@ BEGIN
   
   RAISE NOTICE '';
   RAISE NOTICE '📊 Database Status:';
-  RAISE NOTICE '   • Tables: 19 (including snaptrade_users, snaptrade_sync_log)';
-  RAISE NOTICE '   • Indexes: 90+';
+  RAISE NOTICE '   • Tables: 20 (including ticker_symbols)';
+  RAISE NOTICE '   • Indexes: 95+';
   RAISE NOTICE '   • RLS Enabled: ✅';
   RAISE NOTICE '   • Storage Bucket: ✅';
   RAISE NOTICE '';
@@ -1541,6 +1990,8 @@ BEGIN
   RAISE NOTICE '   ✅ SnapTrade broker integration';
   RAISE NOTICE '   ✅ Trade import deduplication';
   RAISE NOTICE '   ✅ Sync logging and tracking';
+  RAISE NOTICE '   ✅ 🎯 Ticker Symbols Master Table';
+  RAISE NOTICE '   ✅ 🚀 Fast autocomplete with multipliers';
   RAISE NOTICE '';
   RAISE NOTICE '⏭️  Next Steps:';
   RAISE NOTICE '   1. Run Part 2/4 (Functions 1-6)';

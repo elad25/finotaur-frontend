@@ -184,10 +184,9 @@ export const domains: Record<string, Domain> = {
       { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
-      { label: 'Scenarios & Plans', path: '/app/journal/scenarios', icon: ListChecks },
+      { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks }, // ✅ שונה מ-"Scenarios & Plans"
       { label: 'Community Blog', path: '/app/journal/community', icon: Users },
       { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
-      { label: 'Support', path: '/app/journal/support', icon: HeadphonesIcon },
       { label: 'Settings', path: '/app/journal/settings', icon: SettingsIcon },
     ],
   },

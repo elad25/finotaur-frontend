@@ -26,7 +26,7 @@ export interface SubscriptionPlan {
   features: string[];
   max_trades: number;
   popular?: boolean;
-  savings?: string; // e.g., "Save 19%"
+  savings?: string; // e.g., "Save 38%"
 }
 
 export interface UserSubscriptionDetails extends UserLimits {
@@ -69,19 +69,19 @@ export interface TradeAuditLog {
 // Pricing constants
 export const SUBSCRIPTION_PRICES = {
   basic: {
-    monthly: 15.99,
-    yearly: 12.99, // per month when billed yearly
-    yearlyTotal: 155.88, // 12.99 * 12
+    monthly: 19.99,
+    yearly: 12.42, // per month when billed yearly
+    yearlyTotal: 149, // $149/year
   },
   premium: {
-    monthly: 24.99,
-    yearly: 19.99, // per month when billed yearly
-    yearlyTotal: 239.88, // 19.99 * 12
+    monthly: 39.99,
+    yearly: 24.92, // per month when billed yearly
+    yearlyTotal: 299, // $299/year
   },
 } as const;
 
 // Calculate savings percentage
 export const YEARLY_SAVINGS = {
-  basic: Math.round(((15.99 - 12.99) / 15.99) * 100), // ~19%
-  premium: Math.round(((24.99 - 19.99) / 24.99) * 100), // ~20%
+  basic: Math.round(((19.99 - 12.42) / 19.99) * 100), // ~38%
+  premium: Math.round(((39.99 - 24.92) / 39.99) * 100), // ~38%
 } as const;

@@ -1148,11 +1148,11 @@ BEGIN
   FROM public.profiles 
   WHERE account_type = 'premium' AND subscription_interval = 'yearly';
 
-  v_monthly_revenue := 
-    (v_basic_monthly * 15.99) + 
-    (v_basic_yearly * 12.99) + 
-    (v_premium_monthly * 24.99) + 
-    (v_premium_yearly * 19.99);
+ v_monthly_revenue := 
+  (v_basic_monthly * 19.99) + 
+  (v_basic_yearly * 12.42) +  -- 149/12 = 12.42
+  (v_premium_monthly * 39.99) + 
+  (v_premium_yearly * 24.92);  -- 299/12 = 24.92
     
   v_yearly_revenue := v_monthly_revenue * 12;
 
@@ -1252,13 +1252,13 @@ BEGIN
       p.account_type,
       COALESCE(p.subscription_interval, 'none') as subscription_interval,
       COUNT(*) as user_count,
-      CASE 
-        WHEN p.account_type = 'basic' AND p.subscription_interval = 'monthly' THEN 15.99
-        WHEN p.account_type = 'basic' AND p.subscription_interval = 'yearly' THEN 12.99
-        WHEN p.account_type = 'premium' AND p.subscription_interval = 'monthly' THEN 24.99
-        WHEN p.account_type = 'premium' AND p.subscription_interval = 'yearly' THEN 19.99
-        ELSE 0
-      END as monthly_price
+CASE 
+  WHEN p.account_type = 'basic' AND p.subscription_interval = 'monthly' THEN 19.99
+  WHEN p.account_type = 'basic' AND p.subscription_interval = 'yearly' THEN 12.42
+  WHEN p.account_type = 'premium' AND p.subscription_interval = 'monthly' THEN 39.99
+  WHEN p.account_type = 'premium' AND p.subscription_interval = 'yearly' THEN 24.92
+  ELSE 0
+END as monthly_price
     FROM public.profiles p
     GROUP BY p.account_type, p.subscription_interval
   )
@@ -1323,10 +1323,10 @@ BEGIN
     ds.basic_yearly::INTEGER,
     ds.premium_monthly::INTEGER,
     ds.premium_yearly::INTEGER,
-    ((ds.basic_monthly * 15.99) + (ds.basic_yearly * 12.99) + 
-     (ds.premium_monthly * 24.99) + (ds.premium_yearly * 19.99))::NUMERIC as daily_revenue,
-    SUM((ds.basic_monthly * 15.99) + (ds.basic_yearly * 12.99) + 
-        (ds.premium_monthly * 24.99) + (ds.premium_yearly * 19.99)) 
+((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) + 
+     (ds.premium_monthly * 39.99) + (ds.premium_yearly * 24.92))::NUMERIC as daily_revenue,
+    SUM((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) +
+        (ds.premium_monthly * 39.99) + (ds.premium_yearly * 24.92)) 
     OVER (ORDER BY ds.date)::NUMERIC as cumulative_revenue
   FROM daily_stats ds
   ORDER BY ds.date;

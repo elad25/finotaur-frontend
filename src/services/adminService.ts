@@ -55,12 +55,12 @@ export interface ArchivedUser extends UserWithStats {
 
 const PRICING = {
   basic: {
-    monthly: 15.99,
-    yearly: 12.99,
+    monthly: 19.99,
+    yearly: 12.42,
   },
   premium: {
-    monthly: 24.99,
-    yearly: 19.99,
+    monthly: 39.99,
+    yearly: 24.92,
   },
 } as const;
 
@@ -709,10 +709,10 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
       const premiumYearly = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
 
       // Revenue calculation (based on your pricing)
-      const BASIC_MONTHLY_PRICE = 49;
-      const BASIC_YEARLY_PRICE = 490; // 10 months
-      const PREMIUM_MONTHLY_PRICE = 99;
-      const PREMIUM_YEARLY_PRICE = 990; // 10 months
+      const BASIC_MONTHLY_PRICE = 19.99;
+      const BASIC_YEARLY_PRICE = 149;
+      const PREMIUM_MONTHLY_PRICE = 39.99;
+      const PREMIUM_YEARLY_PRICE = 299;
 
       const basicMRR = 
         (basicMonthly * BASIC_MONTHLY_PRICE) + 
@@ -784,10 +784,10 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
       if (error) throw error;
 
       // Calculate monthly revenue for each subscriber
-      const BASIC_MONTHLY = 49;
-      const BASIC_YEARLY = 490;
-      const PREMIUM_MONTHLY = 99;
-      const PREMIUM_YEARLY = 990;
+      const BASIC_MONTHLY = 19.99;
+      const BASIC_YEARLY = 149;
+      const PREMIUM_MONTHLY = 39.99;
+      const PREMIUM_YEARLY = 299;
 
       const subscribers = (data || []).map(profile => {
         let monthlyRevenue = 0;

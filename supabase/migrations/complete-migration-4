@@ -524,13 +524,13 @@ COMMENT ON VIEW public.active_subscriptions IS
 -- 2.5: Pricing Info View
 -- ═══════════════════════════════════════════════════════════════
 CREATE OR REPLACE VIEW public.pricing_info AS
-SELECT 'basic' as plan, 'monthly' as interval, 15.99 as price, 15.99 as monthly_equivalent
+SELECT 'basic' as plan, 'monthly' as interval, 19.99 as price, 19.99 as monthly_equivalent
 UNION ALL
-SELECT 'basic' as plan, 'yearly' as interval, 155.88 as price, 12.99 as monthly_equivalent
+SELECT 'basic' as plan, 'yearly' as interval, 149.00 as price, 12.42 as monthly_equivalent
 UNION ALL
-SELECT 'premium' as plan, 'monthly' as interval, 24.99 as price, 24.99 as monthly_equivalent
+SELECT 'premium' as plan, 'monthly' as interval, 39.99 as price, 39.99 as monthly_equivalent
 UNION ALL
-SELECT 'premium' as plan, 'yearly' as interval, 239.88 as price, 19.99 as monthly_equivalent;
+SELECT 'premium' as plan, 'yearly' as interval, 299.00 as price, 24.92 as monthly_equivalent;
 
 COMMENT ON VIEW public.pricing_info IS 
 'Static pricing information for subscription plans';

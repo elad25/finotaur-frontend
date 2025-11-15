@@ -1,5 +1,5 @@
 // src/integrations/snaptrade/snaptradeService.ts
-// ✅ COMPLETE PAY-AS-YOU-GO VERSION with registerUser support
+// ✅ FIXED VERSION - Properly sends credentials to Edge Function
 
 import { supabase } from '@/integrations/supabase/client';
 import type {
@@ -18,11 +18,13 @@ import type {
 export class SnapTradeService {
   /**
    * Make request through Edge Function proxy
+   * ✅ FIXED: Sends userId/userSecret at root level of request body
    */
   private async makeProxyRequest<T>(
     endpoint: string,
     method: string = 'GET',
-    body?: any
+    body?: any,
+    credentials?: SnapTradeCredentials
   ): Promise<T> {
     console.log(`[SnapTrade Service] ${method} ${endpoint}`);
     
@@ -33,12 +35,43 @@ export class SnapTradeService {
         throw new Error('No active session');
       }
 
+      console.log('🔑 Sending request with auth token');
+
+      // ✅ FIX: Build request body with userId/userSecret at root level
+      const requestBody: any = {
+        endpoint,
+        method,
+      };
+
+      // Add credentials if provided (at ROOT level, not nested in body)
+      if (credentials) {
+        requestBody.userId = credentials.userId;
+        requestBody.userSecret = credentials.userSecret;
+        console.log('✅ Added credentials:', {
+          userId: credentials.userId,
+          hasUserSecret: !!credentials.userSecret
+        });
+      }
+
+      // Add actual body data (if any)
+      if (body && Object.keys(body).length > 0) {
+        // Remove userId/userSecret from body if they exist
+        const { userId, userSecret, ...cleanBody } = body;
+        if (Object.keys(cleanBody).length > 0) {
+          requestBody.body = cleanBody;
+        }
+      }
+
+      console.log('📤 Request to Edge Function:', {
+        endpoint: requestBody.endpoint,
+        method: requestBody.method,
+        hasUserId: !!requestBody.userId,
+        hasUserSecret: !!requestBody.userSecret,
+        hasBody: !!requestBody.body
+      });
+
       const { data, error } = await supabase.functions.invoke('snaptrade-proxy', {
-        body: {
-          endpoint,
-          method,
-          body,
-        },
+        body: requestBody,
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
@@ -69,31 +102,72 @@ export class SnapTradeService {
 
   /**
    * Register a new SnapTrade user
-   * ✅ REQUIRED for Pay-as-you-go before making any connections!
+   * ✅ This endpoint doesn't need userSecret, only userId in body
    */
   async registerUser(userId: string): Promise<SnapTradeUser> {
     console.log('📝 Registering SnapTrade user:', userId);
     
-    const endpoint = `/registerUser`;
-    const body = { userId };
+    const endpoint = `/snapTrade/registerUser`;
     
-    const response = await this.makeProxyRequest<SnapTradeUser>(endpoint, 'POST', body);
-    console.log('✅ User registered successfully');
-    
-    return response;
+    // ✅ Call Edge Function directly with special handling for registerUser
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      console.log('📤 Sending registerUser request to Edge Function');
+
+      const { data, error } = await supabase.functions.invoke('snaptrade-proxy', {
+        body: {
+          endpoint,
+          method: 'POST',
+          body: { userId }  // userId goes in body for registerUser
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error) {
+        console.error('❌ Edge function error:', error);
+        throw new Error(error.message || 'Edge function invocation failed');
+      }
+
+      if (data?.error) {
+        console.error('❌ API error:', data);
+        throw new Error(data.error || data.details || 'API request failed');
+      }
+
+      console.log('✅ User registered successfully:', data);
+      return data as SnapTradeUser;
+      
+    } catch (error: any) {
+      console.error('❌ Failed to register user:', error);
+      throw error;
+    }
   }
 
   /**
    * Delete a SnapTrade user
    */
-  async deleteUser(userId: string): Promise<void> {
+  async deleteUser(userId: string, userSecret: string): Promise<void> {
     console.log('🗑️ Deleting SnapTrade user:', userId);
     
-    const endpoint = `/deleteUser`;
-    const body = { userId };
-    
-    await this.makeProxyRequest<void>(endpoint, 'POST', body);
-    console.log('✅ User deleted successfully');
+    try {
+      const endpoint = `/deleteUser`;
+      
+      await this.makeProxyRequest<void>(
+        endpoint, 
+        'POST', 
+        undefined,
+        { userId, userSecret }
+      );
+      console.log('✅ User deleted successfully');
+    } catch (error: any) {
+      console.warn('⚠️ Could not delete user:', error.message);
+    }
   }
 
   // ============================================================================
@@ -102,45 +176,51 @@ export class SnapTradeService {
 
   /**
    * Get authorization URL for connecting a brokerage
-   * ✅ Pay-as-you-go: Works WITHOUT userSecret using direct OAuth
+   * ✅ Uses /snapTrade/login endpoint (POST)
    */
   async getAuthorizationUrl(request: GetAuthUrlRequest): Promise<AuthorizationUrl> {
     console.log('🔗 Getting authorization URL for broker:', request.broker);
     
-    // ✅ For Pay-as-you-go: Use minimal params - OAuth creates user automatically
-    const params = new URLSearchParams({
+    const endpoint = `/snapTrade/login`;
+    
+    const credentials: SnapTradeCredentials = {
       userId: request.userId,
+      userSecret: request.userSecret
+    };
+
+    const requestBody = {
       broker: request.broker,
-      immediateRedirect: String(request.immediateRedirect ?? true),
+      immediateRedirect: request.immediateRedirect ?? true,
+      customRedirect: request.customRedirect,
+      reconnect: request.reconnect,
       connectionType: request.connectionType ?? 'read',
       connectionPortalVersion: request.connectionPortalVersion ?? 'v4',
+    };
+    
+    console.log('📤 Request body:', {
+      ...requestBody,
+      customRedirect: requestBody.customRedirect ? '✅' : '❌'
     });
     
-    // Only add userSecret if provided and not empty
-    if (request.userSecret && request.userSecret.trim() !== '') {
-      params.append('userSecret', request.userSecret);
-    }
-    
-    if (request.customRedirect) {
-      params.append('customRedirect', request.customRedirect);
-    }
-    if (request.reconnect) {
-      params.append('reconnect', request.reconnect);
-    }
-    
-    const endpoint = `/snapTrade/login?${params.toString()}`;
-    
-    console.log('📤 Request endpoint:', endpoint);
-    // POST with no body - all params in query string
-    return this.makeProxyRequest<AuthorizationUrl>(endpoint, 'POST', null);
+    return this.makeProxyRequest<AuthorizationUrl>(
+      endpoint, 
+      'POST', 
+      requestBody,
+      credentials
+    );
   }
 
   /**
    * List all brokerage connections for a user
    */
   async listConnections(credentials: SnapTradeCredentials): Promise<BrokerageConnection[]> {
-    const endpoint = `/connections?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<BrokerageConnection[]>(endpoint, 'GET');
+    const endpoint = `/connections`;
+    return this.makeProxyRequest<BrokerageConnection[]>(
+      endpoint, 
+      'GET', 
+      undefined,
+      credentials
+    );
   }
 
   /**
@@ -150,8 +230,13 @@ export class SnapTradeService {
     credentials: SnapTradeCredentials,
     connectionId: string
   ): Promise<void> {
-    const endpoint = `/connections/${connectionId}?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<void>(endpoint, 'DELETE');
+    const endpoint = `/connections/${connectionId}`;
+    return this.makeProxyRequest<void>(
+      endpoint, 
+      'DELETE', 
+      undefined,
+      credentials
+    );
   }
 
   /**
@@ -161,8 +246,13 @@ export class SnapTradeService {
     credentials: SnapTradeCredentials,
     connectionId: string
   ): Promise<any> {
-    const endpoint = `/connections/${connectionId}/refresh?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<any>(endpoint, 'POST');
+    const endpoint = `/connections/${connectionId}/refresh`;
+    return this.makeProxyRequest<any>(
+      endpoint, 
+      'POST', 
+      undefined,
+      credentials
+    );
   }
 
   // ============================================================================
@@ -171,6 +261,7 @@ export class SnapTradeService {
 
   /**
    * Get list of all available brokerages
+   * ✅ This endpoint doesn't need credentials
    */
   async listBrokerages(): Promise<Brokerage[]> {
     console.log('📋 Fetching available brokerages...');
@@ -186,8 +277,13 @@ export class SnapTradeService {
    * List all accounts for a user
    */
   async listAccounts(credentials: SnapTradeCredentials): Promise<Account[]> {
-    const endpoint = `/accounts?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<Account[]>(endpoint, 'GET');
+    const endpoint = `/accounts`;
+    return this.makeProxyRequest<Account[]>(
+      endpoint, 
+      'GET', 
+      undefined,
+      credentials
+    );
   }
 
   /**
@@ -197,8 +293,13 @@ export class SnapTradeService {
     credentials: SnapTradeCredentials,
     accountId: string
   ): Promise<Account> {
-    const endpoint = `/accounts/${accountId}?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<Account>(endpoint, 'GET');
+    const endpoint = `/accounts/${accountId}`;
+    return this.makeProxyRequest<Account>(
+      endpoint, 
+      'GET', 
+      undefined,
+      credentials
+    );
   }
 
   // ============================================================================
@@ -212,16 +313,26 @@ export class SnapTradeService {
     credentials: SnapTradeCredentials,
     accountId: string
   ): Promise<Position[]> {
-    const endpoint = `/accounts/${accountId}/holdings?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<Position[]>(endpoint, 'GET');
+    const endpoint = `/accounts/${accountId}/holdings`;
+    return this.makeProxyRequest<Position[]>(
+      endpoint, 
+      'GET', 
+      undefined,
+      credentials
+    );
   }
 
   /**
    * Get all holdings across all accounts
    */
   async getAllHoldings(credentials: SnapTradeCredentials): Promise<AccountHoldings[]> {
-    const endpoint = `/holdings?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<AccountHoldings[]>(endpoint, 'GET');
+    const endpoint = `/holdings`;
+    return this.makeProxyRequest<AccountHoldings[]>(
+      endpoint, 
+      'GET', 
+      undefined,
+      credentials
+    );
   }
 
   // ============================================================================
@@ -240,14 +351,13 @@ export class SnapTradeService {
       type?: string;
     }
   ): Promise<Activity[]> {
-    let endpoint = `/activities?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    
-    if (params?.startDate) endpoint += `&startDate=${params.startDate}`;
-    if (params?.endDate) endpoint += `&endDate=${params.endDate}`;
-    if (params?.accounts) endpoint += `&accounts=${params.accounts}`;
-    if (params?.type) endpoint += `&type=${params.type}`;
-    
-    return this.makeProxyRequest<Activity[]>(endpoint, 'GET');
+    const endpoint = `/activities`;
+    return this.makeProxyRequest<Activity[]>(
+      endpoint, 
+      'GET', 
+      params,
+      credentials
+    );
   }
 
   /**
@@ -261,12 +371,13 @@ export class SnapTradeService {
       endDate?: string;
     }
   ): Promise<any[]> {
-    let endpoint = `/accounts/${accountId}/transactions?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    
-    if (params?.startDate) endpoint += `&startDate=${params.startDate}`;
-    if (params?.endDate) endpoint += `&endDate=${params.endDate}`;
-    
-    return this.makeProxyRequest<any[]>(endpoint, 'GET');
+    const endpoint = `/accounts/${accountId}/transactions`;
+    return this.makeProxyRequest<any[]>(
+      endpoint, 
+      'GET', 
+      params,
+      credentials
+    );
   }
 
   // ============================================================================
@@ -285,13 +396,13 @@ export class SnapTradeService {
       endDate?: string;
     }
   ): Promise<any[]> {
-    let endpoint = `/accounts/${accountId}/orders?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    
-    if (params?.status) endpoint += `&status=${params.status}`;
-    if (params?.startDate) endpoint += `&startDate=${params.startDate}`;
-    if (params?.endDate) endpoint += `&endDate=${params.endDate}`;
-    
-    return this.makeProxyRequest<any[]>(endpoint, 'GET');
+    const endpoint = `/accounts/${accountId}/orders`;
+    return this.makeProxyRequest<any[]>(
+      endpoint, 
+      'GET', 
+      params,
+      credentials
+    );
   }
 
   /**
@@ -302,8 +413,13 @@ export class SnapTradeService {
     accountId: string,
     orderRequest: any
   ): Promise<any> {
-    const endpoint = `/accounts/${accountId}/orders?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<any>(endpoint, 'POST', orderRequest);
+    const endpoint = `/accounts/${accountId}/orders`;
+    return this.makeProxyRequest<any>(
+      endpoint, 
+      'POST', 
+      orderRequest,
+      credentials
+    );
   }
 
   /**
@@ -314,20 +430,30 @@ export class SnapTradeService {
     accountId: string,
     orderId: string
   ): Promise<any> {
-    const endpoint = `/accounts/${accountId}/orders/${orderId}/cancel?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<any>(endpoint, 'POST');
+    const endpoint = `/accounts/${accountId}/orders/${orderId}/cancel`;
+    return this.makeProxyRequest<any>(
+      endpoint, 
+      'POST', 
+      undefined,
+      credentials
+    );
   }
 
   /**
-   * Get performance data (stub - may not be available in all plans)
+   * Get performance data
    */
   async getPerformance(
     credentials: SnapTradeCredentials,
     request: any
   ): Promise<any> {
     console.log('⚠️ getPerformance may not be available in all plans');
-    const endpoint = `/performance?userId=${credentials.userId}&userSecret=${credentials.userSecret}`;
-    return this.makeProxyRequest<any>(endpoint, 'GET', request);
+    const endpoint = `/performance`;
+    return this.makeProxyRequest<any>(
+      endpoint, 
+      'GET', 
+      request,
+      credentials
+    );
   }
 
   // ============================================================================

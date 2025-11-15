@@ -1,1 +1,18 @@
 project_id = "dnnevwlzpurhbkzjocnp"
+
+[functions.snaptrade-proxy]
+enabled = true
+verify_jwt = true
+import_map = "./functions/snaptrade-proxy/deno.json"
+entrypoint = "./functions/snaptrade-proxy/index.ts"
+
+[functions.test-register-user]
+enabled = true
+verify_jwt = true
+import_map = "./functions/test-register-user/deno.json"
+entrypoint = "./functions/test-register-user/index.ts"
+
+# ✅ NEW: Public test function (no auth required)
+[functions.test-register-public]
+enabled = true
+verify_jwt = false  # ← This makes it public!

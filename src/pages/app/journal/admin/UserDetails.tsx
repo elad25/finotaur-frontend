@@ -117,10 +117,10 @@ export default function UserDetails() {
   function getSubscriptionPrice(accountType: string, interval: string | null) {
     if (accountType === 'free') return '$0';
     if (accountType === 'basic') {
-      return interval === 'yearly' ? '$12.99/mo' : '$15.99/mo';
+      return interval === 'yearly' ? '$12.42/mo' : '$19.99/mo';
     }
     if (accountType === 'premium') {
-      return interval === 'yearly' ? '$19.99/mo' : '$24.99/mo';
+      return interval === 'yearly' ? '$24.92/mo' : '$39.99/mo';
     }
     return 'N/A';
   }

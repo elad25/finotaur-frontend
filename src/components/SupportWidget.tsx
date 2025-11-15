@@ -1,0 +1,830 @@
+// ============================================
+// FINOTAUR SUPPORT - DIRECT CHAT START
+// ============================================
+// ✨ Start directly in chat with welcome message
+// 🎨 Clean, minimal, premium gold design
+// 🔥 Bloomberg Terminal quality
+// ============================================
+
+import { useState, useEffect, useRef } from 'react';
+import { X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, Paperclip, Image as ImageIcon, ChevronRight, Upload } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+
+interface ChatMessage {
+  id: string;
+  type: 'customer' | 'admin' | 'system';
+  content: string;
+  timestamp: string;
+  attachments?: string[];
+}
+
+interface Ticket {
+  id: string;
+  user_id: string | null;
+  user_email: string;
+  user_name: string;
+  subject: string;
+  messages: ChatMessage[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export default function SupportWidget() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [view, setView] = useState<'list' | 'chat'>('chat');
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [isNewConversation, setIsNewConversation] = useState(true);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadUserInfo();
+      loadUserTickets();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    // If we have tickets, show list view. If not, show new conversation chat
+    if (tickets.length > 0) {
+      setView('list');
+      setIsNewConversation(false);
+    } else {
+      setView('chat');
+      setIsNewConversation(true);
+    }
+  }, [tickets]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [selectedTicket?.messages, isNewConversation]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const channel = supabase
+        .channel('support-live')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'support_tickets',
+          },
+          () => {
+            loadUserTickets();
+            if (selectedTicket) {
+              loadTicketById(selectedTicket.id);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [isOpen, selectedTicket?.id]);
+
+  // Demo: Show typing indicator for 2 seconds when opening a new chat (optional)
+  useEffect(() => {
+    if (isNewConversation && isOpen) {
+      setIsTyping(false); // Set to true to demo the typing indicator
+    }
+  }, [isNewConversation, isOpen]);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  async function loadUserInfo() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Try to get name from user_metadata first
+        if (user.user_metadata?.full_name) {
+          setUserName(user.user_metadata.full_name);
+          setUserEmail(user.email || '');
+          return;
+        }
+
+        // Try profile table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile?.full_name) {
+          setUserName(profile.full_name);
+          setUserEmail(profile.email || user.email || '');
+        } else {
+          // Fallback to email username
+          setUserName(user.email?.split('@')[0] || 'Trader');
+          setUserEmail(user.email || '');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user info:', error);
+      setUserName('Trader');
+    }
+  }
+
+  async function loadUserTickets() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (data) {
+        setTickets(data);
+      }
+    } catch (error) {
+      console.error('Error loading tickets:', error);
+    }
+  }
+
+  async function loadTicketById(ticketId: string) {
+    try {
+      const { data } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('id', ticketId)
+        .single();
+
+      if (data) {
+        setSelectedTicket(data);
+      }
+    } catch (error) {
+      console.error('Error loading ticket:', error);
+    }
+  }
+
+  async function uploadFiles(files: File[]): Promise<string[]> {
+    const uploadedUrls: string[] = [];
+    
+    for (const file of files) {
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const filePath = `support-attachments/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('public')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('public')
+          .getPublicUrl(filePath);
+
+        uploadedUrls.push(publicUrl);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    return uploadedUrls;
+  }
+
+  async function handleSendMessage() {
+    if (!currentMessage.trim()) return;
+
+    setSending(true);
+
+    try {
+      // If this is a new conversation, create the ticket first
+      if (isNewConversation) {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Upload files if any
+        let uploadedUrls: string[] = [];
+        if (attachments.length > 0) {
+          setUploadingFiles(true);
+          uploadedUrls = await uploadFiles(attachments);
+          setUploadingFiles(false);
+        }
+
+        const newMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          type: 'customer',
+          content: currentMessage.trim(),
+          timestamp: new Date().toISOString(),
+          attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+        };
+
+        const { data, error } = await supabase
+          .from('support_tickets')
+          .insert({
+            user_id: user?.id || null,
+            user_email: userEmail || user?.email || 'unknown@example.com',
+            user_name: userName || user?.email?.split('@')[0] || 'User',
+            subject: 'Support Request',
+            message: currentMessage.trim(),
+            messages: [newMessage],
+            status: 'open',
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        setSelectedTicket(data);
+        setIsNewConversation(false);
+        setCurrentMessage('');
+        setAttachments([]);
+        inputRef.current?.focus();
+        loadUserTickets();
+
+        // Send email
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token || ''}`,
+              },
+              body: JSON.stringify({
+                type: 'new_ticket',
+                record: data,
+              }),
+            }
+          );
+        } catch (e) {
+          console.error('Email error:', e);
+        }
+
+        toast.success('Message sent');
+        return;
+      }
+
+      // Otherwise, add message to existing ticket
+      if (!selectedTicket) return;
+
+      // Upload files if any
+      let uploadedUrls: string[] = [];
+      if (attachments.length > 0) {
+        setUploadingFiles(true);
+        uploadedUrls = await uploadFiles(attachments);
+        setUploadingFiles(false);
+      }
+
+      const newMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        type: 'customer',
+        content: currentMessage.trim(),
+        timestamp: new Date().toISOString(),
+        attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+      };
+
+      const existingMessages = Array.isArray(selectedTicket.messages) ? selectedTicket.messages : [];
+      const updatedMessages = [...existingMessages, newMessage];
+
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .update({
+          messages: updatedMessages,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedTicket.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setSelectedTicket(data);
+      setCurrentMessage('');
+      setAttachments([]);
+      inputRef.current?.focus();
+      loadUserTickets();
+    } catch (error: any) {
+      console.error('Error:', error);
+      toast.error('Failed to send');
+    } finally {
+      setSending(false);
+      setUploadingFiles(false);
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    
+    // Validate file size (max 20MB per file)
+    const maxSize = 20 * 1024 * 1024;
+    const validFiles = files.filter(file => {
+      if (file.size > maxSize) {
+        toast.error(`${file.name} is too large (max 20MB)`);
+        return false;
+      }
+      return true;
+    });
+
+    // Limit to 5 files
+    if (attachments.length + validFiles.length > 5) {
+      toast.error('Maximum 5 files allowed');
+      return;
+    }
+
+    setAttachments(prev => [...prev, ...validFiles]);
+    
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function formatTime(timestamp: string) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit'
+    });
+  }
+
+  function formatRelativeTime(timestamp: string) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m`;
+    if (hours < 24) return `${hours}h`;
+    return `${days}d`;
+  }
+
+  function getLastMessage(ticket: Ticket): string {
+    if (!ticket.messages || !Array.isArray(ticket.messages) || ticket.messages.length === 0) {
+      return 'No messages';
+    }
+    const lastMsg = ticket.messages[ticket.messages.length - 1];
+    return lastMsg.content.substring(0, 60) + (lastMsg.content.length > 60 ? '...' : '');
+  }
+
+  function hasUnreadMessages(ticket: Ticket): boolean {
+    if (!ticket.messages || !Array.isArray(ticket.messages) || ticket.messages.length === 0) {
+      return false;
+    }
+    const lastMsg = ticket.messages[ticket.messages.length - 1];
+    return lastMsg.type === 'admin';
+  }
+
+  const handleClose = () => {
+    setIsOpen(false);
+    setTimeout(() => {
+      if (tickets.length > 0) {
+        setView('list');
+      } else {
+        setView('chat');
+        setIsNewConversation(true);
+      }
+      setSelectedTicket(null);
+      setAttachments([]);
+    }, 300);
+  };
+
+  const handleBackToList = () => {
+    setView('list');
+    setSelectedTicket(null);
+    setIsNewConversation(false);
+    setAttachments([]);
+    loadUserTickets();
+  };
+
+  const handleNewChat = () => {
+    setView('chat');
+    setSelectedTicket(null);
+    setIsNewConversation(true);
+    setAttachments([]);
+  };
+
+  return (
+    <>
+      {/* Hidden File Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,.pdf,.doc,.docx,.txt"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      {/* Floating Button */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-8 right-8 z-50 group"
+        >
+          {/* Glow */}
+          <div className="absolute inset-0 rounded-full bg-[#D4AF37] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
+          
+          {/* Button */}
+          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out">
+            <MessageCircle className="h-6 w-6 text-black" strokeWidth={2} />
+          </div>
+          
+          {/* Unread Badge */}
+          {tickets.some(t => hasUnreadMessages(t)) && (
+            <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 border-2 border-[#0a0a0a] animate-pulse"></div>
+          )}
+        </button>
+      )}
+
+      {/* Main Window */}
+      {isOpen && (
+        <div className="fixed bottom-8 right-8 z-50 w-[440px] animate-in slide-in-from-bottom-4 fade-in duration-200">
+          {/* Subtle Glow */}
+          <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
+          
+          {/* Main Container */}
+          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30">
+            {/* Header */}
+            <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20">
+              {/* Thin Gold Line */}
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+              
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {/* Back Button */}
+                  {view === 'chat' && !isNewConversation && (
+                    <button
+                      onClick={handleBackToList}
+                      className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out"
+                    >
+                      <ArrowLeft className="h-4 w-4 text-gray-400 hover:text-white transition-colors" />
+                    </button>
+                  )}
+                  
+                  {/* Icon */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-[#D4AF37] opacity-20 blur-lg rounded-lg"></div>
+                    <div className="relative h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                      <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-sm font-semibold text-white tracking-tight font-['Inter',sans-serif]">
+                      {view === 'chat' ? (isNewConversation ? 'New Conversation' : 'Conversation') : 'Finotaur Support'}
+                    </h3>
+                    <p className="text-[10px] text-[#D4AF37] font-medium mt-0.5 font-['Inter',sans-serif]">
+                      Professional Trading Assistance
+                    </p>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleClose}
+                  className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out group"
+                >
+                  <X className="h-4 w-4 text-gray-400 group-hover:text-white transition-colors" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div className="h-[520px] flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black">
+              {/* Conversations List View */}
+              {view === 'list' && (
+                <div className="flex-1 flex flex-col">
+                  {/* Conversations List */}
+                  <div className="flex-1 overflow-y-auto pt-3">
+                    {tickets.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full p-8">
+                        <div className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                          <MessageCircle className="h-7 w-7 text-gray-600" strokeWidth={2} />
+                        </div>
+                        <p className="text-sm text-gray-500 text-center font-['Inter',sans-serif]">
+                          No conversations yet
+                        </p>
+                        <p className="text-xs text-gray-600 text-center mt-2 font-['Inter',sans-serif]">
+                          Start a new conversation to get help
+                        </p>
+                      </div>
+                    ) : (
+                      tickets.map((ticket) => {
+                        const hasUnread = hasUnreadMessages(ticket);
+                        return (
+                          <button
+                            key={ticket.id}
+                            onClick={() => {
+                              setSelectedTicket(ticket);
+                              setView('chat');
+                              setIsNewConversation(false);
+                            }}
+                            className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
+                          >
+                            <div className="flex items-start gap-3">
+                              {/* Avatar */}
+                              <div className="relative flex-shrink-0">
+                                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                  <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                                </div>
+                                {hasUnread && (
+                                  <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-black"></div>
+                                )}
+                              </div>
+
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-1">
+                                  <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
+                                    Support Team
+                                  </h4>
+                                  <span className="text-[11px] text-[#E6C77D] opacity-40 group-hover:opacity-60 transition-opacity">
+                                    {formatRelativeTime(ticket.updated_at)}
+                                  </span>
+                                </div>
+                                <p className={`text-xs line-clamp-2 ${hasUnread ? 'text-gray-300' : 'text-gray-500'}`}>
+                                  {getLastMessage(ticket)}
+                                </p>
+                              </div>
+
+                              {/* Chevron */}
+                              <div className="flex items-center">
+                                <ChevronRight className="h-[18px] w-[18px] text-[#E6C77D] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* New Chat Button - Bottom of List */}
+                  <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                    <button
+                      onClick={handleNewChat}
+                      className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
+                    >
+                      <Plus className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
+                      <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
+                        NEW CHAT
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Chat View */}
+              {view === 'chat' && (
+                <>
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto p-5 space-y-2">
+                    {isNewConversation ? (
+                      // Welcome message for new conversation
+                      <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                        <div className="flex justify-start">
+                          <div className="max-w-[70%]">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                              </div>
+                              <span className="text-xs font-medium text-[#D4AF37]">
+                                Support Team
+                              </span>
+                            </div>
+                            
+                            <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                              <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
+                                Hey 👋
+                              </p>
+                              <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
+                                Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it's technical help, trade syncing, or anything else you need.
+                              </p>
+                              <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                {formatTime(new Date().toISOString())}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : !selectedTicket?.messages || !Array.isArray(selectedTicket.messages) || selectedTicket.messages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="text-center space-y-3">
+                          <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center mx-auto">
+                            <MessageCircle className="h-6 w-6 text-gray-600" />
+                          </div>
+                          <p className="text-sm text-gray-500 font-['Inter',sans-serif]">
+                            No messages yet
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      selectedTicket.messages.map((msg, idx) => (
+                        <div
+                          key={msg.id || idx}
+                          className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200 mb-2`}
+                        >
+                          <div className="max-w-[70%]">
+                            {msg.type === 'admin' && (
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                  <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                </div>
+                                <span className="text-xs font-medium text-[#D4AF37]">
+                                  Support Team
+                                </span>
+                              </div>
+                            )}
+                            
+                            {msg.type === 'customer' && (
+                              <div className="flex items-center gap-2 mb-2 justify-end">
+                                <span className="text-xs font-medium text-[#D4AF37]">
+                                  {userName || 'You'}
+                                </span>
+                              </div>
+                            )}
+                            
+                            <div
+                              className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
+                                msg.type === 'customer'
+                                  ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
+                                  : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
+                              }`}
+                            >
+                              <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
+                                msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
+                              }`}>
+                                {msg.content}
+                              </p>
+
+                              {/* Attachments */}
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="mt-2 space-y-2">
+                                  {msg.attachments.map((url, i) => {
+                                    const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                    return (
+                                      <div key={i}>
+                                        {isImage ? (
+                                          <img
+                                            src={url}
+                                            alt="Attachment"
+                                            className="max-w-full rounded-lg border border-white/10"
+                                          />
+                                        ) : (
+                                          <a
+                                            href={url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-xs text-[#D4AF37] hover:text-[#C19A2F] transition-colors"
+                                          >
+                                            <Paperclip className="h-3 w-3" />
+                                            View attachment
+                                          </a>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                {formatTime(msg.timestamp)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    
+                    {/* Typing Indicator */}
+                    {isTyping && (
+                      <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
+                        <div className="max-w-[70%]">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                              <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                            </div>
+                            <span className="text-xs font-medium text-[#D4AF37]">
+                              Support Team
+                            </span>
+                          </div>
+                          
+                          <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                            <div className="flex gap-1">
+                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
+                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
+                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div ref={messagesEndRef} />
+                  </div>
+                  
+                  {/* Input */}
+                  <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                    {/* Attachments Preview */}
+                    {attachments.length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {attachments.map((file, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
+                          >
+                            <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
+                            <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
+                              {file.name}
+                            </span>
+                            <button
+                              onClick={() => removeAttachment(idx)}
+                              className="ml-1 text-gray-400 hover:text-white transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-3">
+                      {/* Upload Button */}
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={sending || attachments.length >= 5}
+                        className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
+                        title="Upload file (max 20MB)"
+                      >
+                        <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
+                        <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
+                          Upload
+                        </span>
+                      </button>
+
+                      <Textarea
+                        ref={inputRef}
+                        value={currentMessage}
+                        onChange={(e) => setCurrentMessage(e.target.value)}
+                        placeholder="Type your message..."
+                        className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
+                        disabled={sending}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={!currentMessage.trim() || sending || uploadingFiles}
+                        className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
+                      >
+                        {sending || uploadingFiles ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                        ) : (
+                          <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
+                      Press Ctrl+Enter to send • Max 5 files, 20MB each
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Bottom Thin Gold Line */}
+            <div className="h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

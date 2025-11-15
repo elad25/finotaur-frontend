@@ -179,8 +179,8 @@ export default function ChangeSubscriptionModal({
                 }}
                 className="w-full bg-[#0A0A0A] border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-[#D4AF37]"
               >
-                <option value="monthly">Monthly - ${accountType === 'basic' ? '15.99' : '24.99'}/mo</option>
-                <option value="yearly">Yearly - ${accountType === 'basic' ? '12.99' : '19.99'}/mo (billed ${accountType === 'basic' ? '$155.88' : '$239.88'}/yr)</option>
+                <option value="monthly">Monthly - ${accountType === 'basic' ? '19.99' : '39.99'}/mo</option>
+                <option value="yearly">Yearly - ${accountType === 'basic' ? '12.42' : '24.92'}/mo (billed ${accountType === 'basic' ? '$149' : '$299'}/yr)</option>
               </select>
             </div>
           )}
@@ -239,12 +239,12 @@ export default function ChangeSubscriptionModal({
                 {' - '}
                 {interval === 'monthly' ? (
                   <>
-                    ${accountType === 'basic' ? '15.99' : '24.99'}/month
+                    ${accountType === 'basic' ? '19.99' : '39.99'}/month
                   </>
                 ) : (
                   <>
-                    ${accountType === 'basic' ? '12.99' : '19.99'}/month
-                    <span className="text-xs text-gray-500"> (billed ${accountType === 'basic' ? '$155.88' : '$239.88'} yearly)</span>
+                    ${accountType === 'basic' ? '12.42' : '24.92'}/month
+                    <span className="text-xs text-gray-500"> (billed ${accountType === 'basic' ? '$149' : '$299'} yearly)</span>
                   </>
                 )}
               </p>
