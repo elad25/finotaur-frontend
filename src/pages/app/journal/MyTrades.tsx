@@ -9,6 +9,12 @@
  * ✅ Same UI/UX - ZERO visual changes
  * ✅ FIXED: Using useEffectiveUser for admin impersonation
  * ✅ NEW: Centralized trade operations from @/lib/trades
+ * ✅ NEW: Multi-screenshot support (1-4 images per trade)
+ * ✅ CRITICAL FIX: Now passing userId to useTrades() hook!
+ * ✅ NEW: Timezone support with formatTradeDate
+ * ✅ NEW: Session badges with formatSessionDisplay + getSessionColor
+ * ✅ UPDATED: Trade row cards show session + side badges
+ * ✅ UPDATED: Dialog shows session in header and position section
  * ===============================================
  */
 
@@ -43,6 +49,11 @@ import {
 // 🔥 IMPORT CENTRALIZED TRADE OPERATIONS
 import { updateTrade, deleteTrade } from "@/lib/trades";
 
+// 🔥 NEW: Import timezone utilities + session formatting
+import { useTimezone } from '@/contexts/TimezoneContext';
+import { formatTradeDate } from '@/utils/dateFormatter';
+import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+
 interface Trade {
   id: string;
   symbol: string;
@@ -55,12 +66,13 @@ interface Trade {
   fees: number;
   open_at: string;
   close_at?: string;
-  session?: string;
+  session?: string; // 🔥 Session field
   strategy_id?: string;
   strategy_name?: string;
   setup?: string;
   notes?: string;
   screenshot_url?: string;
+  screenshots?: string[];
   asset_class?: string;
   outcome?: "WIN" | "LOSS" | "BE" | "OPEN";
   pnl?: number;
@@ -189,16 +201,18 @@ const StatsCard = memo(({
 
 StatsCard.displayName = 'StatsCard';
 
-// 🚀 OPTIMIZATION: Memoized TradeRow Component
+// 🚀 OPTIMIZATION: Memoized TradeRow Component - 🔥 UPDATED WITH SESSION!
 const TradeRow = memo(({ 
   trade,
   oneR,
+  timezone,
   onOpen, 
   onEdit, 
   onDelete 
 }: { 
   trade: Trade;
   oneR: number;
+  timezone: string;
   onOpen: (trade: Trade) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
@@ -221,7 +235,7 @@ const TradeRow = memo(({
       onClick={handleClick}
     >
       <TableCell className="text-zinc-400">
-        {new Date(trade.open_at).toLocaleDateString()}
+        {formatTradeDate(trade.open_at, timezone)}
       </TableCell>
       <TableCell className="font-medium text-white">
         {trade.symbol}
@@ -233,6 +247,19 @@ const TradeRow = memo(({
         >
           {trade.side}
         </Badge>
+      </TableCell>
+      {/* 🔥 NEW: Session Badge Column */}
+      <TableCell>
+        {trade.session ? (
+          <Badge 
+            variant="outline"
+            className={`text-xs ${getSessionColor(trade.session)}`}
+          >
+            {formatSessionDisplay(trade.session)}
+          </Badge>
+        ) : (
+          <span className="text-zinc-500">—</span>
+        )}
       </TableCell>
       <TableCell className="text-zinc-300">
         ${formatNumber(trade.entry_price, 2)}
@@ -336,12 +363,15 @@ export default function MyTrades() {
   // 🔥 FIXED: Now using useEffectiveUser for admin impersonation support
   const { id: userId, isImpersonating } = useEffectiveUser();
   
+  // 🔥 NEW: Timezone context
+  const timezone = useTimezone();
+  
   // 🔥 Load global 1R from settings
   const { oneR, loading: riskLoading } = useRiskSettings();
   
-  // ✅ 🚀 OPTIMIZED: Now uses React Query with caching and optimistic updates
-  // The userId will automatically switch when admin impersonates
-  const { data: trades = [], isLoading, error, refetch } = useTrades();
+  // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
+  // This ensures we load the correct user's trades when admin impersonates
+  const { data: trades = [], isLoading, error, refetch } = useTrades(userId);
   
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
@@ -420,7 +450,8 @@ export default function MyTrades() {
         trade.symbol.toLowerCase().includes(query) ||
         (trade.strategy_name && trade.strategy_name.toLowerCase().includes(query)) ||
         trade.setup?.toLowerCase().includes(query) ||
-        trade.notes?.toLowerCase().includes(query);
+        trade.notes?.toLowerCase().includes(query) ||
+        (trade.session && formatSessionDisplay(trade.session).toLowerCase().includes(query));
       
       if (!matchesSearch) return false;
       
@@ -503,8 +534,8 @@ export default function MyTrades() {
     }
 
     const headers = [
-      "Date", "Symbol", "Side", "Entry Price", "Exit Price", "Stop Price", "Take Profit",
-      "Quantity", "P&L", "Outcome", "Actual R", "Quality", "Session", "Strategy", "Setup",
+      "Date", "Symbol", "Side", "Session", "Entry Price", "Exit Price", "Stop Price", "Take Profit",
+      "Quantity", "P&L", "Outcome", "Actual R", "Quality", "Strategy", "Setup",
       "Notes", "Fees", "Multiplier", "Risk USD"
     ];
 
@@ -512,9 +543,10 @@ export default function MyTrades() {
       const { pnl, actualR, outcome, multiplier, riskUSD } = getTradeData(trade, oneR);
       
       return [
-        new Date(trade.open_at).toLocaleDateString(),
+        formatTradeDate(trade.open_at, timezone),
         trade.symbol,
         trade.side,
+        trade.session ? formatSessionDisplay(trade.session) : "",
         trade.entry_price,
         trade.exit_price || "",
         trade.stop_price,
@@ -524,7 +556,6 @@ export default function MyTrades() {
         outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open",
         actualR !== null ? actualR.toFixed(2) + "R" : "",
         trade.quality_tag || "",
-        trade.session || "",
         trade.strategy_name || "",
         trade.setup || "",
         trade.notes?.replace(/,/g, ";") || "",
@@ -548,7 +579,7 @@ export default function MyTrades() {
     document.body.removeChild(link);
     
     toast.success(`Exported ${filteredTrades.length} trades`);
-  }, [filteredTrades, oneR]);
+  }, [filteredTrades, oneR, timezone]);
 
   // ✅ 7. Loading state - ONLY AFTER ALL HOOKS!
   if (riskLoading || isLoading) {
@@ -622,7 +653,7 @@ export default function MyTrades() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <Input
-                placeholder="Search symbol, strategy, setup..."
+                placeholder="Search symbol, strategy, session..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-zinc-900/50 border-zinc-800"
@@ -702,6 +733,7 @@ export default function MyTrades() {
                 <TableHead className="text-zinc-500">Date</TableHead>
                 <TableHead className="text-zinc-500">Symbol</TableHead>
                 <TableHead className="text-zinc-500">Side</TableHead>
+                <TableHead className="text-zinc-500">Session</TableHead>
                 <TableHead className="text-zinc-500">Entry</TableHead>
                 <TableHead className="text-zinc-500">Exit</TableHead>
                 <TableHead className="text-zinc-500">P&L</TableHead>
@@ -718,6 +750,7 @@ export default function MyTrades() {
                   key={trade.id}
                   trade={trade}
                   oneR={oneR}
+                  timezone={timezone}
                   onOpen={openTrade}
                   onEdit={handleEditTrade}
                   onDelete={handleDeleteClick}
@@ -751,6 +784,15 @@ export default function MyTrades() {
                       >
                         {selectedTrade.side}
                       </Badge>
+                      {/* 🔥 NEW: Session badge in header */}
+                      {selectedTrade.session && (
+                        <Badge 
+                          variant="outline"
+                          className={`text-xs ${getSessionColor(selectedTrade.session)}`}
+                        >
+                          {formatSessionDisplay(selectedTrade.session)}
+                        </Badge>
+                      )}
                     </div>
                     {outcome && (
                       <Badge 
@@ -760,6 +802,10 @@ export default function MyTrades() {
                         {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
                       </Badge>
                     )}
+                  </div>
+                  {/* 🔥 NEW: Show formatted date with timezone */}
+                  <div className="text-xs text-zinc-500 mt-2">
+                    {formatTradeDate(selectedTrade.open_at, timezone)}
                   </div>
                 </div>
 
@@ -926,7 +972,7 @@ export default function MyTrades() {
                     </div>
                   </div>
 
-                  {/* Position Details */}
+                  {/* Position Details - 🔥 UPDATED WITH SESSION */}
                   <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
                     <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider">Position</h3>
                     <div className="grid grid-cols-2 gap-3">
@@ -939,7 +985,12 @@ export default function MyTrades() {
                       {selectedTrade.session && (
                         <div>
                           <div className="text-[11px] text-zinc-500 mb-1">Session</div>
-                          <div className="text-base font-semibold text-white">{selectedTrade.session}</div>
+                          <Badge 
+                            variant="outline"
+                            className={`text-xs ${getSessionColor(selectedTrade.session)}`}
+                          >
+                            {formatSessionDisplay(selectedTrade.session)}
+                          </Badge>
                         </div>
                       )}
                       {selectedTrade.strategy_name && (
@@ -998,61 +1049,82 @@ export default function MyTrades() {
                     </div>
                   </div>
 
-                  {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) */}
+                  {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) - 🔥 UPDATED! */}
                   <div className="rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">
                     <h3 className="text-sm font-bold text-blue-400 mb-4 uppercase tracking-wider flex items-center gap-2">
                       <Image className="w-5 h-5" />
-                      📸 TRADE SCREENSHOT
+                      📸 TRADE SCREENSHOT{(selectedTrade.screenshots && selectedTrade.screenshots.length > 1) ? 'S' : ''}
                     </h3>
                     
-                    {selectedTrade.screenshot_url ? (
-                      <div className="space-y-3">
-                        <div className="bg-zinc-950 rounded-xl border-2 border-blue-500/30 overflow-hidden shadow-2xl group relative">
-                          <img 
-                            src={selectedTrade.screenshot_url} 
-                            alt={`${selectedTrade.symbol} trade screenshot`}
-                            className="w-full h-auto transition-all duration-300 cursor-zoom-in group-hover:scale-[1.02]"
-                            onClick={() => window.open(selectedTrade.screenshot_url, '_blank')}
-                            loading="lazy"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder-chart.png';
-                              console.error('Failed to load screenshot');
-                            }}
-                          />
-                          
-                          {/* Hover overlay */}
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-                          
-                          {/* Hover action */}
-                          <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <div className="bg-black/90 backdrop-blur-sm rounded-lg px-4 py-2.5 text-xs text-zinc-300 flex items-center justify-between">
-                              <span className="font-medium">Click to view full size</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
+                    {(selectedTrade.screenshots && selectedTrade.screenshots.length > 0) || selectedTrade.screenshot_url ? (
+                      <div className="space-y-4">
+                        {/* 🔥 תמיכה לאחור - אם יש רק screenshot_url ישן */}
+                        {!selectedTrade.screenshots && selectedTrade.screenshot_url && (
+                          <div className="bg-zinc-950 rounded-xl border-2 border-blue-500/30 overflow-hidden shadow-2xl group relative">
+                            <img 
+                              src={selectedTrade.screenshot_url} 
+                              alt={`${selectedTrade.symbol} trade screenshot`}
+                              className="w-full h-auto transition-all duration-300 cursor-zoom-in group-hover:scale-[1.02]"
+                              onClick={() => window.open(selectedTrade.screenshot_url, '_blank')}
+                              loading="lazy"
+                              onError={(e) => {
+                                e.currentTarget.src = '/placeholder-chart.png';
+                              }}
+                            />
+                            
+                            {/* Hover overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                            
+                            {/* Hover action */}
+                            <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              <div className="bg-black/90 backdrop-blur-sm rounded-lg px-4 py-2.5 text-xs text-zinc-300 flex items-center justify-between">
+                                <span className="font-medium">Click to view full size</span>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                         
-                        <div className="flex items-center justify-between text-xs text-zinc-500 bg-zinc-900/50 rounded-lg px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-3 h-3" />
-                            Captured {new Date(selectedTrade.created_at || selectedTrade.open_at).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+                        {/* 🔥 תצוגת מערך תמונות חדש */}
+                        {selectedTrade.screenshots && selectedTrade.screenshots.length > 0 && (
+                          <div className={`grid gap-3 ${
+                            selectedTrade.screenshots.length === 1 ? 'grid-cols-1' :
+                            selectedTrade.screenshots.length === 2 ? 'grid-cols-2' :
+                            'grid-cols-3'
+                          }`}>
+                            {selectedTrade.screenshots.map((url, idx) => (
+                              <div 
+                                key={idx}
+                                className="relative bg-zinc-950 rounded-xl border-2 border-blue-500/30 overflow-hidden shadow-2xl group cursor-pointer"
+                                onClick={() => window.open(url, '_blank')}
+                              >
+                                {/* Screenshot Number Badge */}
+                                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-full bg-yellow-500 text-black text-xs font-bold">
+                                  {idx + 1}/{selectedTrade.screenshots.length}
+                                </div>
+                                
+                                {/* Image */}
+                                <img 
+                                  src={url} 
+                                  alt={`Screenshot ${idx + 1}`}
+                                  className="w-full h-auto transition-all duration-300 hover:scale-105"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    e.currentTarget.src = '/placeholder-chart.png';
+                                  }}
+                                />
+                                
+                                {/* Hover overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                              </div>
+                            ))}
                           </div>
-                          <button
-                            onClick={() => window.open(selectedTrade.screenshot_url, '_blank')}
-                            className="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
-                          >
-                            <span>Open</span>
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </button>
+                        )}
+                        
+                        <div className="text-xs text-zinc-500 text-center bg-zinc-900/50 rounded-lg px-3 py-2">
+                          📸 {selectedTrade.screenshots?.length || 1} screenshot(s) • Click to enlarge
                         </div>
                       </div>
                     ) : (
@@ -1060,9 +1132,9 @@ export default function MyTrades() {
                         <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
                           <Image className="w-8 h-8 text-blue-400/50" />
                         </div>
-                        <div className="text-zinc-500 text-sm font-medium mb-2">No screenshot added</div>
+                        <div className="text-zinc-500 text-sm font-medium mb-2">No screenshots added</div>
                         <div className="text-zinc-600 text-xs max-w-sm mx-auto leading-relaxed">
-                          📸 Visual documentation helps you identify patterns and improve your edge
+                          📸 Visual documentation helps you identify patterns
                         </div>
                       </div>
                     )}

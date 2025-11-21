@@ -11,7 +11,6 @@ import { formatNumber } from "@/utils/smartCalc";
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
-import { useTimezoneSettings } from "@/hooks/useTimezoneSettings";
 import { useTrades } from "@/hooks/useTrades";
 
 type BillingInterval = 'monthly' | 'yearly';
@@ -556,7 +555,6 @@ export default function JournalSettings() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   const { settings: riskSettings, oneR, loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
-  const { timezone, updateTimezone, saveTimezone } = useTimezoneSettings();
   const { trades } = useTrades(); // Pre-cached for export
 
   // Local UI state
@@ -615,10 +613,6 @@ export default function JournalSettings() {
   const handleSaveCommissions = useCallback(() => {
     saveCommissionsSettings();
   }, [saveCommissionsSettings]);
-
-  const handleSaveTimezone = useCallback(() => {
-    saveTimezone();
-  }, [saveTimezone]);
 
   // 🚀 OPTIMIZED EXPORT - Uses cached trades
   const handleExportTrades = useCallback(async () => {
@@ -887,7 +881,7 @@ export default function JournalSettings() {
 
             {/* Subscription Status */}
             {profile?.account_type !== 'free' && (
-              <div className="flex items-center justify-between py-4 border-b border-zinc-800">
+              <div className="flex items-center justify-between py-4">
                 <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>
                   <p className="text-xs text-zinc-500 mt-1">Current subscription status</p>
@@ -903,38 +897,6 @@ export default function JournalSettings() {
                 </span>
               </div>
             )}
-
-            {/* Timezone */}
-            <div className="flex items-center justify-between py-4">
-              <div>
-                <label className="text-sm font-medium text-zinc-300">Timezone</label>
-                <p className="text-xs text-zinc-500 mt-1">Used for trade timestamps and reports</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select 
-                  value={timezone}
-                  onChange={(e) => updateTimezone(e.target.value)}
-                  className="min-w-[240px] px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-zinc-300 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="system">System Default</option>
-                  <option value="UTC">UTC</option>
-                  <option value="America/New_York">Eastern Time (ET)</option>
-                  <option value="America/Chicago">Central Time (CT)</option>
-                  <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                  <option value="Europe/London">London (GMT)</option>
-                  <option value="Europe/Paris">Central European Time</option>
-                  <option value="Asia/Jerusalem">Israel (Jerusalem)</option>
-                  <option value="Asia/Tokyo">Tokyo</option>
-                  <option value="Asia/Dubai">Dubai</option>
-                </select>
-                <button 
-                  onClick={handleSaveTimezone}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 

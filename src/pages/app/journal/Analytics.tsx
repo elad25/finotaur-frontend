@@ -7,10 +7,12 @@ import {
   LineChart, Info, Sparkles, ArrowUpRight, ArrowDownRight, 
   Shield, AlertCircle, ChevronUp, ChevronDown, Lightbulb, 
   Heart, Focus, Filter, Download, RefreshCw,
-  Flame, BarChart2, Users, Layers, Grid3x3
+  Flame, BarChart2, Users, Layers, Grid3x3, TrendingUpIcon
 } from "lucide-react";
 import { useAnalyticsData } from "@/hooks/useAnalyticsData";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { useTimezone } from "@/contexts/TimezoneContext";
+import { formatSessionDisplay } from "@/constants/tradingSessions";
 import { EquityCurveOptimized } from "@/components/EquityCurveOptimized";
 import { 
   findBestCombinations, 
@@ -36,6 +38,9 @@ export default function AnalyticsDashboard() {
 
   // 🚀 שימוש ב-useEffectiveUser במקום useAuth
   const { id: userId, isImpersonating } = useEffectiveUser();
+
+  // 🚀 Timezone context for session display
+  const timezone = useTimezone();
 
   // 🚀 כל הלוגיקה והחישובים במקום אחד
   const analytics = useAnalyticsData(timeRange);
@@ -137,6 +142,7 @@ export default function AnalyticsDashboard() {
           <BreakdownTab 
             breakdown={analytics.breakdown}
             trades={analytics.filteredTrades as Trade[]}
+            timezone={timezone}
           />
         )}
         
@@ -319,7 +325,15 @@ function OverviewTab({
   );
 }
 
-function BreakdownTab({ breakdown, trades }: { breakdown: BreakdownData; trades: Trade[] }) {
+function BreakdownTab({ 
+  breakdown, 
+  trades,
+  timezone 
+}: { 
+  breakdown: BreakdownData; 
+  trades: Trade[];
+  timezone: string;
+}) {
   const bestCombinations = useMemo(() => 
     findBestCombinations(trades),
     [trades]
@@ -327,23 +341,312 @@ function BreakdownTab({ breakdown, trades }: { breakdown: BreakdownData; trades:
 
   return (
     <div className="space-y-6">
-      <SmartInsightsPanel combinations={bestCombinations} breakdown={breakdown} />
+      <SmartInsightsPanel combinations={bestCombinations} breakdown={breakdown} timezone={timezone} />
       <BreakdownSection title="By Strategy" data={breakdown.byStrategy || []} />
       <BreakdownSection title="By Asset" data={breakdown.byAsset || []} />
-      <BreakdownSection title="By Session" data={breakdown.bySession || []} />
+      <BreakdownSection title="By Session" data={breakdown.bySession || []} timezone={timezone} />
+      <StrategySessionOptimalPerformance trades={trades} timezone={timezone} />
       <DayOfWeekHeatmap data={breakdown.byDayOfWeek || []} />
-      <ExpandableCombinationAnalysis trades={trades} />
+      <ExpandableCombinationAnalysis trades={trades} timezone={timezone} />
       <BreakdownSection title="By Direction (Long/Short)" data={breakdown.byDirection || []} />
     </div>
   );
 }
 
+// ==========================================
+// 🆕 Strategy-Session Visual Heat Matrix with Timezone
+// ==========================================
+
+function StrategySessionOptimalPerformance({ 
+  trades,
+  timezone 
+}: { 
+  trades: Trade[];
+  timezone: string;
+}) {
+  const matrixData = useMemo(() => {
+    const combinationMap = new Map<string, { trades: Trade[]; stats: StrategyStats }>();
+    
+    trades.forEach(trade => {
+      const strategy = trade.strategy_name || getStrategyName(trade.strategy) || 'No Strategy';
+      const session = trade.session || 'No Session';
+      const key = `${strategy}___${session}`;
+      
+      if (!combinationMap.has(key)) {
+        combinationMap.set(key, { trades: [], stats: {} as StrategyStats });
+      }
+      
+      combinationMap.get(key)!.trades.push(trade);
+    });
+    
+    combinationMap.forEach((value) => {
+      value.stats = calculateAllStats(value.trades);
+    });
+    
+    const strategies = Array.from(new Set(trades.map(t => 
+      t.strategy_name || getStrategyName(t.strategy) || 'No Strategy'
+    ))).sort();
+    
+    const sessions = Array.from(new Set(trades.map(t => 
+      t.session || 'No Session'
+    ))).sort();
+    
+    let maxR = -Infinity;
+    let minR = Infinity;
+    let bestCombo = { strategy: '', session: '', r: -Infinity, data: null as any };
+    
+    combinationMap.forEach((value, key) => {
+      const r = value.stats.totalR;
+      if (r > maxR) maxR = r;
+      if (r < minR) minR = r;
+      if (r > bestCombo.r && value.trades.length >= 1) {
+        const [strategy, session] = key.split('___');
+        bestCombo = { strategy, session, r, data: value };
+      }
+    });
+    
+    return { combinationMap, strategies, sessions, maxR, minR, bestCombo };
+  }, [trades]);
+
+  if (matrixData.strategies.length === 0 || matrixData.sessions.length === 0) {
+    return null;
+  }
+
+  const range = matrixData.maxR - matrixData.minR || 1;
+
+  return (
+    <div 
+      className="rounded-xl overflow-hidden"
+      style={{
+        background: '#0E0E0E',
+        border: '1px solid rgba(201,166,70,0.15)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+      }}
+    >
+      {/* Header */}
+      <div 
+        className="p-6 pb-5"
+        style={{
+          borderBottom: '1px solid rgba(201,166,70,0.1)',
+        }}
+      >
+        <div className="flex items-center gap-3 mb-2">
+          <div 
+            className="p-2.5 rounded-lg"
+            style={{
+              background: 'rgba(201,166,70,0.12)',
+              border: '1px solid rgba(201,166,70,0.2)',
+            }}
+          >
+            <BarChart2 className="w-5 h-5" style={{ color: '#C9A646' }} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold" style={{ color: '#EAEAEA' }}>
+              Strategy × Session Performance
+            </h3>
+            <p className="text-xs" style={{ color: '#9A9A9A' }}>
+              Identify optimal strategy-timing combinations
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Matrix Container */}
+      <div className="p-6">
+        <div className="w-full">
+          {/* Grid */}
+          <div className="grid gap-3" style={{ 
+            gridTemplateColumns: `140px repeat(${matrixData.sessions.length}, 1fr)` 
+          }}>
+            {/* Top-left corner - empty */}
+            <div />
+            
+            {/* Session Headers */}
+            {matrixData.sessions.map((session, idx) => (
+              <div 
+                key={idx}
+                className="text-center py-2"
+                style={{
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.15)',
+                  borderRadius: '8px',
+                }}
+              >
+                <span className="text-xs font-bold" style={{ color: '#C9A646' }}>
+                  {formatSessionDisplay(session)}
+                </span>
+              </div>
+            ))}
+
+            {/* Strategy Rows */}
+            {matrixData.strategies.map((strategy) => (
+              <>
+                {/* Strategy Label */}
+                <div 
+                  className="flex items-center px-3 py-2"
+                  style={{
+                    background: 'rgba(201,166,70,0.08)',
+                    border: '1px solid rgba(201,166,70,0.15)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <span className="text-xs font-bold truncate" style={{ color: '#EAEAEA' }}>
+                    {strategy}
+                  </span>
+                </div>
+
+                {/* Performance Cells */}
+                {matrixData.sessions.map((session) => {
+                  const key = `${strategy}___${session}`;
+                  const data = matrixData.combinationMap.get(key);
+                  
+                  if (!data || data.trades.length === 0) {
+                    return (
+                      <div 
+                        key={session}
+                        className="flex flex-col items-center justify-center py-3"
+                        style={{
+                          background: 'rgba(30,30,30,0.4)',
+                          border: '1px solid rgba(255,255,255,0.03)',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <span className="text-xl" style={{ color: '#404040' }}>—</span>
+                      </div>
+                    );
+                  }
+
+                  const totalR = data.stats.totalR;
+                  const winRate = data.stats.winRate;
+                  const tradesCount = data.trades.length;
+                  const intensity = Math.abs(totalR - matrixData.minR) / range;
+                  const isPositive = totalR >= 0;
+                  const isBest = strategy === matrixData.bestCombo.strategy && 
+                                 session === matrixData.bestCombo.session;
+
+                  return (
+                    <div 
+                      key={session}
+                      className="flex flex-col items-center justify-center py-3 px-2"
+                      style={{
+                        background: isBest
+                          ? 'linear-gradient(135deg, rgba(201,166,70,0.25), rgba(201,166,70,0.1))'
+                          : isPositive 
+                            ? `rgba(0,196,108,${0.12 + intensity * 0.35})`
+                            : `rgba(228,69,69,${0.12 + intensity * 0.35})`,
+                        border: isBest 
+                          ? '2px solid #C9A646'
+                          : '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '8px',
+                        position: 'relative',
+                      }}
+                    >
+                      {isBest && (
+                        <div 
+                          className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded text-xs font-bold"
+                          style={{
+                            background: '#C9A646',
+                            color: '#000',
+                            fontSize: '9px',
+                          }}
+                        >
+                          ★
+                        </div>
+                      )}
+                      
+                      <div 
+                        className="text-lg font-bold mb-0.5"
+                        style={{ color: isPositive ? '#00C46C' : '#E44545' }}
+                      >
+                        {totalR >= 0 ? '+' : ''}{totalR.toFixed(1)}R
+                      </div>
+                      
+                      <div 
+                        className="text-xs mb-0.5"
+                        style={{ color: winRate >= 50 ? '#00C46C' : '#E44545' }}
+                      >
+                        {winRate.toFixed(0)}%
+                      </div>
+                      
+                      <div className="text-xs" style={{ color: '#7A7A7A' }}>
+                        {tradesCount}T
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            ))}
+          </div>
+        </div>
+
+        {/* Best Combo Highlight */}
+        {matrixData.bestCombo.r > 0 && matrixData.bestCombo.data && (
+          <div 
+            className="mt-5 p-4 rounded-lg"
+            style={{
+              background: 'rgba(201,166,70,0.08)',
+              border: '1px solid rgba(201,166,70,0.2)',
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="w-4 h-4" style={{ color: '#C9A646' }} />
+                  <span className="text-sm font-bold" style={{ color: '#C9A646' }}>
+                    Best Combination
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed" style={{ color: '#9A9A9A' }}>
+                  <span style={{ color: '#EAEAEA', fontWeight: 'bold' }}>
+                    {matrixData.bestCombo.strategy}
+                  </span>
+                  {' during '}
+                  <span style={{ color: '#EAEAEA', fontWeight: 'bold' }}>
+                    {formatSessionDisplay(matrixData.bestCombo.session)}
+                  </span>
+                </p>
+              </div>
+              
+              <div className="flex gap-4 text-center">
+                <div>
+                  <div className="text-xs mb-1" style={{ color: '#7A7A7A' }}>Total R</div>
+                  <div className="text-lg font-bold" style={{ color: '#00C46C' }}>
+                    +{matrixData.bestCombo.r.toFixed(1)}R
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs mb-1" style={{ color: '#7A7A7A' }}>Win Rate</div>
+                  <div className="text-lg font-bold" style={{ color: '#00C46C' }}>
+                    {matrixData.bestCombo.data.stats.winRate.toFixed(0)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs mb-1" style={{ color: '#7A7A7A' }}>Trades</div>
+                  <div className="text-lg font-bold" style={{ color: '#EAEAEA' }}>
+                    {matrixData.bestCombo.data.trades.length}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// Smart Insights Panel with Timezone
+// ==========================================
+
 function SmartInsightsPanel({ 
   combinations, 
-  breakdown 
+  breakdown,
+  timezone 
 }: { 
   combinations: any; 
   breakdown: BreakdownData;
+  timezone: string;
 }) {
   return (
     <div 
@@ -379,7 +682,7 @@ function SmartInsightsPanel({
           <RecommendationCard
             icon={<Target className="w-5 h-5" />}
             title="Best Time to Trade"
-            subtitle={`${combinations.assetSession.asset} during ${combinations.assetSession.session}`}
+            subtitle={`${combinations.assetSession.asset} during ${formatSessionDisplay(combinations.assetSession.session)}`}
             metric={`+${combinations.assetSession.totalR.toFixed(1)}R`}
             metricColor="#00C46C"
             details={`${combinations.assetSession.trades} trades • ${combinations.assetSession.winRate.toFixed(0)}% WR`}
@@ -391,7 +694,7 @@ function SmartInsightsPanel({
           <RecommendationCard
             icon={<Layers className="w-5 h-5" />}
             title="Best Strategy Timing"
-            subtitle={`${combinations.strategySession.strategy} in ${combinations.strategySession.session}`}
+            subtitle={`${combinations.strategySession.strategy} in ${formatSessionDisplay(combinations.strategySession.session)}`}
             metric={`+${combinations.strategySession.totalR.toFixed(1)}R`}
             metricColor="#00C46C"
             details={`${combinations.strategySession.trades} trades • ${combinations.strategySession.winRate.toFixed(0)}% WR`}
@@ -495,7 +798,17 @@ function RecommendationCard({
   );
 }
 
-function ExpandableCombinationAnalysis({ trades }: { trades: Trade[] }) {
+// ==========================================
+// Expandable Combination Analysis with Timezone
+// ==========================================
+
+function ExpandableCombinationAnalysis({ 
+  trades,
+  timezone 
+}: { 
+  trades: Trade[];
+  timezone: string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [activeMatrix, setActiveMatrix] = useState<'asset_session' | 'strategy_session' | 'strategy_asset'>('asset_session');
 
@@ -597,6 +910,7 @@ function ExpandableCombinationAnalysis({ trades }: { trades: Trade[] }) {
           rowType="asset"
           colType="session"
           title="Asset × Session Performance"
+          timezone={timezone}
         />
       )}
       {activeMatrix === 'strategy_session' && (
@@ -605,6 +919,7 @@ function ExpandableCombinationAnalysis({ trades }: { trades: Trade[] }) {
           rowType="strategy"
           colType="session"
           title="Strategy × Session Performance"
+          timezone={timezone}
         />
       )}
       {activeMatrix === 'strategy_asset' && (
@@ -613,22 +928,29 @@ function ExpandableCombinationAnalysis({ trades }: { trades: Trade[] }) {
           rowType="strategy"
           colType="asset"
           title="Strategy × Asset Performance"
+          timezone={timezone}
         />
       )}
     </div>
   );
 }
 
+// ==========================================
+// Compact Combination Matrix with Timezone
+// ==========================================
+
 function CompactCombinationMatrix({
   trades,
   rowType,
   colType,
-  title
+  title,
+  timezone
 }: {
   trades: Trade[];
   rowType: 'asset' | 'session' | 'strategy';
   colType: 'asset' | 'session' | 'strategy';
   title: string;
+  timezone: string;
 }) {
   const { combinationMap, rowValues, colValues, bestCombo, maxR, minR } = useMemo(() => {
     const combinationMap = new Map<string, { trades: Trade[]; stats: StrategyStats }>();
@@ -705,7 +1027,7 @@ function CompactCombinationMatrix({
                   className="p-2 text-center text-xs font-semibold"
                   style={{ color: '#9A9A9A' }}
                 >
-                  {col}
+                  {colType === 'session' ? formatSessionDisplay(col) : col}
                 </th>
               ))}
             </tr>
@@ -717,7 +1039,7 @@ function CompactCombinationMatrix({
                   className="p-2 text-xs font-semibold sticky left-0 z-10"
                   style={{ background: '#0E0E0E', color: '#EAEAEA' }}
                 >
-                  {row}
+                  {rowType === 'session' ? formatSessionDisplay(row) : row}
                 </td>
                 {colValues.map((col, colIdx) => {
                   const key = `${row}___${col}`;
@@ -777,7 +1099,7 @@ function CompactCombinationMatrix({
                         }}
                       >
                         <div className="text-xs font-bold mb-2" style={{ color: '#C9A646' }}>
-                          {row} × {col}
+                          {rowType === 'session' ? formatSessionDisplay(row) : row} × {colType === 'session' ? formatSessionDisplay(col) : col}
                         </div>
                         <div className="space-y-1 text-xs">
                           <div className="flex justify-between">
@@ -809,6 +1131,12 @@ function CompactCombinationMatrix({
     </div>
   );
 }
+
+// Continue in next message due to length...
+
+// ==========================================
+// ADVANCED TAB
+// ==========================================
 
 function AdvancedTab({ stats, trades }: { stats: StrategyStats; trades: Trade[] }) {
   const hitting1RPercent = stats.totalTrades > 0 ? (stats.tradesHitting1R! / stats.totalTrades) * 100 : 0;
@@ -986,6 +1314,10 @@ function AdvancedTab({ stats, trades }: { stats: StrategyStats; trades: Trade[] 
     </div>
   );
 }
+
+// ==========================================
+// PSYCHOLOGY TAB
+// ==========================================
 
 function PsychologyTab({ stats, trades }: { stats: StrategyStats; trades: Trade[] }) {
   const emotionalControl = Math.min(100, Math.max(0, 100 - ((stats.maxConsecutiveLosses || 0) * 15)));
@@ -1486,7 +1818,15 @@ function DistributionPieChart({ trades }: { trades: Trade[] }) {
   );
 }
 
-function BreakdownSection({ title, data }: { title: string; data: { name: string; stats: StrategyStats }[] }) {
+function BreakdownSection({ 
+  title, 
+  data,
+  timezone 
+}: { 
+  title: string; 
+  data: { name: string; stats: StrategyStats }[];
+  timezone?: string;
+}) {
   if (!data || data.length === 0) {
     return (
       <div 
@@ -1509,6 +1849,8 @@ function BreakdownSection({ title, data }: { title: string; data: { name: string
       </div>
     );
   }
+
+  const isSessionBreakdown = title.includes('Session');
 
   return (
     <div 
@@ -1545,7 +1887,9 @@ function BreakdownSection({ title, data }: { title: string; data: { name: string
                 className="hover:bg-white/5 transition-colors"
                 style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}
               >
-                <td className="py-2 px-3 font-medium text-sm" style={{ color: '#EAEAEA' }}>{item.name}</td>
+                <td className="py-2 px-3 font-medium text-sm" style={{ color: '#EAEAEA' }}>
+                  {isSessionBreakdown && timezone ? formatSessionDisplay(item.name) : item.name}
+                </td>
                 <td className="text-right py-2 px-3 text-sm" style={{ color: '#9A9A9A' }}>{item.stats.totalTrades}</td>
                 <td className="text-right py-2 px-3 text-sm font-semibold" style={{ 
                   color: item.stats.winRate >= 50 ? '#00C46C' : '#E44545' 

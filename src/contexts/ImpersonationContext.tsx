@@ -1,11 +1,14 @@
 // src/contexts/ImpersonationContext.tsx
 // ================================================
-// OPTIMIZED IMPERSONATION CONTEXT - FIXED v1.4
-// ✅ Doesn't sign out on validation failure during refresh
+// OPTIMIZED IMPERSONATION CONTEXT - v2.0 WITH ADMIN MODE
+// ✅ Supports admin_mode flag for RLS bypass
+// ✅ Doesn't sign out on validation failure
+// ✅ Better error handling
 // ================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +24,7 @@ interface ImpersonationContextType {
   startImpersonation: (userId: string, userEmail: string, userName?: string) => Promise<void>;
   stopImpersonation: () => Promise<void>;
   refreshSession: () => Promise<void>;
+  enableAdminMode: () => Promise<boolean>; // 🔥 NEW
 }
 
 const ImpersonationContext = createContext<ImpersonationContextType | undefined>(undefined);
@@ -45,6 +49,32 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const validationInProgress = useRef(false);
+
+  // 🔥 NEW: Function to enable admin mode
+  const enableAdminMode = useCallback(async (): Promise<boolean> => {
+    if (!supabaseAdmin) {
+      console.error('❌ No admin client available for admin_mode');
+      return false;
+    }
+
+    try {
+      console.log('🔓 Enabling admin_mode...');
+      
+      // Call the enable_admin_mode() function
+      const { error } = await supabaseAdmin.rpc('enable_admin_mode');
+      
+      if (error) {
+        console.error('❌ Failed to enable admin_mode:', error);
+        return false;
+      }
+      
+      console.log('✅ admin_mode enabled successfully');
+      return true;
+    } catch (err) {
+      console.error('❌ Error enabling admin_mode:', err);
+      return false;
+    }
+  }, []);
 
   const validateSession = useCallback(async () => {
     if (validationInProgress.current) {
@@ -72,7 +102,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
           setState({
             isImpersonating: true,
             impersonatedUser: userData,
-            originalAdminId: null, // We'll get this from validation
+            originalAdminId: null,
             isValidating: false,
           });
         } catch (err) {
@@ -89,7 +119,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
 
       if (error || !data || data.length === 0) {
         console.warn('⚠️ Session validation failed:', error);
-        // 🔥 DON'T cleanup immediately - validation might have failed due to network
         setState(prev => ({ ...prev, isValidating: false }));
         return;
       }
@@ -123,7 +152,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
 
     } catch (error) {
       console.error('Error validating session:', error);
-      // 🔥 DON'T cleanup on error - just mark as not validating
       setState(prev => ({ ...prev, isValidating: false }));
     } finally {
       validationInProgress.current = false;
@@ -253,6 +281,12 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         isValidating: false,
       });
 
+      // 🔥 Enable admin mode immediately after starting impersonation
+      if (supabaseAdmin) {
+        console.log('🔓 Enabling admin_mode for impersonation...');
+        await enableAdminMode();
+      }
+
       toast.success(`Now viewing as ${userEmail}`, {
         description: 'Session expires in 2 hours'
       });
@@ -273,7 +307,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       console.error('Error starting impersonation:', error);
       toast.error('Failed to start impersonation');
     }
-  }, [navigate, queryClient]);
+  }, [navigate, queryClient, enableAdminMode]);
 
   const stopImpersonation = useCallback(async () => {
     try {
@@ -339,7 +373,8 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         originalAdminId: state.originalAdminId,
         startImpersonation,
         stopImpersonation,
-        refreshSession
+        refreshSession,
+        enableAdminMode, // 🔥 NEW
       }}
     >
       {children}

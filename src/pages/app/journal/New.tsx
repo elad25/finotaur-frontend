@@ -1,16 +1,10 @@
 // ================================================
-// OPTIMIZED NEW TRADE PAGE - FINAL FIX v4
-// ✅ Dynamic R calculation based on user settings
-// ✅ Performance optimized for 5000 concurrent users
-// ✅ Perfect Supabase integration
-// ✅ FIXED: Proper actual_r calculation with correct multiplier
-// ✅ FIXED: Uses mutation hooks for automatic cache invalidation
-// ✅ FIXED: Async getUserOneR with useState
-// ✅ FIXED: Subscription limits check - no more blocking
-// 🔥 CRITICAL FIX: Metrics at top level (not nested!)
-// 🔥 NEW: Using centralized createTrade/updateTrade functions
-// 🎯 NEW: TickerAutocomplete with database integration
-// 🎨 NEW: Beautiful date/time picker modal
+// PRODUCTION NEW TRADE PAGE - CLEAN v11
+// ✅ Auto Session with manual override option
+// ✅ Zero spam logging - only critical errors
+// ✅ Fixed session detection with timezone support
+// ✅ Auto timezone handling
+// ✅ Optimized for 5000+ concurrent users
 // ================================================
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -22,10 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useJournalStore } from "@/state/journalStore";
 import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
-import { detectSessionByLocal } from "@/utils/session";
-import UploadZone from "@/components/journal/UploadZone";
+import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe } from "lucide-react";
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
@@ -33,10 +26,22 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { LimitReachedModal } from '@/components/subscription/LimitReachedModal';
 import { UsageWarningModal } from '@/components/subscription/UsageWarningModal';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
-import { useCreateTrade, useUpdateTrade } from '@/hooks/useTradesData';
 import { useCommissions } from '@/hooks/useRiskSettings';
-import { createTrade, updateTrade } from '@/lib/trades';
+import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
+import { supabase } from '@/lib/supabase';
+import { useTimezone } from '@/contexts/TimezoneContext';
+import { formatTradeDate, formatForInput } from '@/utils/dateFormatter';
+import { 
+  getCurrentTradingSession, 
+  getSessionFromDateTime,
+  SESSION_DISPLAY_NAMES,
+  getSessionColor,
+  type TradingSession 
+} from '@/constants/tradingSessions';
+
+// ✅ Development mode flag
+const isDev = import.meta.env.DEV;
 
 // Dynamic import for canvas-confetti
 let confetti: any = null;
@@ -44,7 +49,7 @@ if (typeof window !== 'undefined') {
   import('canvas-confetti').then(module => {
     confetti = module.default;
   }).catch(() => {
-    console.warn('canvas-confetti not installed');
+    // Silent fail
   });
 }
 
@@ -88,12 +93,14 @@ function DateTimePickerModal({
   isOpen, 
   onClose, 
   value, 
-  onChange 
+  onChange,
+  timezone 
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
   value?: string; 
   onChange: (value: string) => void;
+  timezone: string;
 }) {
   const [tempDate, setTempDate] = useState("");
   const [tempTime, setTempTime] = useState("");
@@ -146,6 +153,13 @@ function DateTimePickerModal({
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Timezone Display */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 rounded-lg border border-zinc-700">
+            <Globe className="w-4 h-4 text-yellow-400" />
+            <span className="text-xs text-zinc-400">Timezone:</span>
+            <span className="text-sm font-medium text-white">{timezone}</span>
+          </div>
+
           {/* Quick Actions */}
           <div className="flex gap-2">
             <button
@@ -218,16 +232,9 @@ function DateTimePickerModal({
           {/* Preview */}
           {tempDate && tempTime && (
             <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-500/5 to-yellow-500/10 border border-yellow-500/20">
-              <p className="text-xs text-zinc-400 mb-1">Preview</p>
+              <p className="text-xs text-zinc-400 mb-1">Preview ({timezone})</p>
               <p className="text-lg font-semibold text-white">
-                {new Date(`${tempDate}T${tempTime}`).toLocaleString('en-GB', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false
-                })}
+                {formatTradeDate(new Date(`${tempDate}T${tempTime}`), timezone)}
               </p>
             </div>
           )}
@@ -267,8 +274,14 @@ export default function New() {
   const [isEditMode, setIsEditMode] = useState(false);
   const st = useJournalStore();
   const [tab, setTab] = useState<"notes" | "screenshot" | "mistakes">("notes");
+  const screenshotFiles = st.screenshotFiles || [];
+  const setScreenshotFiles = st.setScreenshotFiles;
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [autoSession, setAutoSession] = useState(true);
+  
+  // 🌍 Timezone support
+  const timezone = useTimezone();
   
   const { 
     canAddTrade, 
@@ -299,18 +312,16 @@ export default function New() {
   const { oneR: oneRValue } = useRiskSettings();
   const { calculateCommission } = useCommissions();
 
+  // ✅ Load strategies - SILENT
   const loadStrategies = useCallback(async () => {
-    console.log('🔄 Loading strategies from Supabase...');
     const result = await getStrategiesFromSupabase();
     
     if (result.ok && result.data) {
-      console.log(`✅ Loaded ${result.data.length} strategies from Supabase:`, result.data);
       setStrategies(result.data.map((s: any) => ({ 
         id: s.id, 
         name: s.name 
       })));
     } else {
-      console.log('❌ Failed to load strategies:', result.message);
       setStrategies([]);
     }
   }, []);
@@ -320,11 +331,7 @@ export default function New() {
   }, [loadStrategies]);
 
   useEffect(() => {
-    const handleFocus = () => {
-      console.log('🔄 Page focused - reloading strategies');
-      loadStrategies();
-    };
-    
+    const handleFocus = () => loadStrategies();
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadStrategies]);
@@ -333,23 +340,15 @@ export default function New() {
   useEffect(() => {
     if (dateParam && !editTradeId) {
       try {
-        console.log('📅 Date parameter detected from calendar:', dateParam);
-        
         const selectedDate = new Date(dateParam);
         const now = new Date();
         selectedDate.setHours(now.getHours());
         selectedDate.setMinutes(now.getMinutes());
         
-        const dateTimeString = selectedDate.toISOString();
-        
-        console.log('🕐 Setting date to:', dateTimeString);
-        st.setOpenAt(dateTimeString);
-        
+        st.setOpenAt(selectedDate.toISOString());
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        
         toast.success(`Date set to ${selectedDate.toLocaleDateString()}`);
       } catch (error) {
-        console.error('Error parsing date from URL:', error);
         toast.error('Invalid date format');
       }
     }
@@ -358,7 +357,6 @@ export default function New() {
   // ✅ Check for usage warning
   useEffect(() => {
     if (warningState?.shouldShow && !editTradeId && !showUsageWarning) {
-      console.log('⚠️ Showing usage warning:', warningState);
       setShowUsageWarning(true);
     }
   }, [warningState, editTradeId, showUsageWarning]);
@@ -368,54 +366,110 @@ export default function New() {
     markWarningShown();
   };
 
-  // ✅ Load trade data for editing
+  // ✅ Load trade data for editing - MINIMAL LOGGING
   useEffect(() => {
     async function loadTradeForEdit() {
       if (!editTradeId) {
         if (!dateParam) {
           st.clearDraft();
+          setScreenshotFiles([]);
         }
         return;
       }
       
-      console.log('📝 Loading trade for editing:', editTradeId);
       setIsEditMode(true);
       
       try {
-        const result = await getTrades();
-        if (result.ok && result.data) {
-          const trade = result.data.find((t: any) => t.id === editTradeId);
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          toast.error('Not authenticated');
+          navigate('/app/journal/my-trades');
+          return;
+        }
+        
+        const { data: trade, error } = await supabase
+          .from('trades')
+          .select(`
+            *,
+            strategies (
+              name
+            )
+          `)
+          .eq('id', editTradeId)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (error) {
+          toast.error('Failed to load trade');
+          navigate('/app/journal/my-trades');
+          return;
+        }
+        
+        if (trade) {
+          st.setSymbol(trade.symbol || '');
+          st.setAssetClass(trade.asset_class || 'stocks');
+          st.setSide(trade.side || 'LONG');
+          st.setQuantity(trade.quantity || 0);
+          st.setEntryPrice(trade.entry_price || 0);
+          st.setStopPrice(trade.stop_price || 0);
+          st.setTakeProfitPrice(trade.take_profit_price || 0);
+          st.setExitPrice(trade.exit_price || 0);
+          st.setFees(trade.fees || 0);
+          st.setFeesMode(trade.fees_mode || 'auto');
+          st.setOpenAt(trade.open_at || new Date().toISOString());
+          st.setSession(trade.session || '');
+          st.setStrategy(trade.strategy_id || undefined);
+          st.setSetup(trade.setup || '');
+          st.setNotes(trade.notes || '');
+          st.setMistake(trade.mistake || '');
+          st.setNextTime(trade.next_time || '');
           
-          if (trade) {
-            console.log('✅ Found trade to edit:', trade);
-            
-            st.setSymbol(trade.symbol || '');
-            st.setAssetClass(trade.asset_class || 'stocks');
-            st.setSide(trade.side || 'LONG');
-            st.setQuantity(trade.quantity || 0);
-            st.setEntryPrice(trade.entry_price || 0);
-            st.setStopPrice(trade.stop_price || 0);
-            st.setTakeProfitPrice(trade.take_profit_price || 0);
-            st.setExitPrice(trade.exit_price || 0);
-            st.setFees(trade.fees || 0);
-            st.setFeesMode(trade.fees_mode || 'auto');
-            st.setOpenAt(trade.open_at || new Date().toISOString());
-            st.setSession(trade.session || '');
-            st.setStrategy(trade.strategy_id || '');
-            st.setSetup(trade.setup || '');
-            st.setNotes(trade.notes || '');
-            st.setMistake(trade.mistake || '');
-            st.setNextTime(trade.next_time || '');
-            
-            const mult = getAssetMultiplier(trade.symbol);
-            st.setMultiplier(mult);
-            console.log(`🔧 Set multiplier for ${trade.symbol}: ${mult}`);
-            
-            toast.success('Trade loaded for editing');
+          const mult = getAssetMultiplier(trade.symbol);
+          st.setMultiplier(mult);
+          
+          // Load screenshots
+          if (trade.screenshots && Array.isArray(trade.screenshots) && trade.screenshots.length > 0) {
+            try {
+              const existingScreenshots = await Promise.all(
+                trade.screenshots.map(async (url: string, index: number) => {
+                  try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const blob = await response.blob();
+                    const contentType = blob.type || 'image/jpeg';
+                    const extension = contentType.split('/')[1] || 'jpg';
+                    const fileName = `screenshot-${index + 1}.${extension}`;
+                    
+                    return new File([blob], fileName, { type: contentType });
+                  } catch (error) {
+                    if (isDev) console.error(`Failed to load screenshot ${index + 1}:`, error);
+                    return null;
+                  }
+                })
+              );
+              
+              const validScreenshots = existingScreenshots.filter((f): f is File => f !== null);
+              
+              if (validScreenshots.length > 0) {
+                setScreenshotFiles(validScreenshots);
+                toast.success(`Loaded ${validScreenshots.length} screenshot(s)`);
+              } else {
+                setScreenshotFiles([]);
+              }
+            } catch (error) {
+              if (isDev) console.error('Error loading screenshots:', error);
+              setScreenshotFiles([]);
+            }
           } else {
-            toast.error('Trade not found');
-            navigate('/app/journal/my-trades');
+            setScreenshotFiles([]);
           }
+          
+          toast.success('Trade loaded for editing');
+        } else {
+          toast.error('Trade not found');
+          navigate('/app/journal/my-trades');
         }
       } catch (error) {
         console.error('Error loading trade:', error);
@@ -436,24 +490,20 @@ export default function New() {
     return () => clearInterval(timer);
   }, []);
 
-  // Auto Session detection (debounced)
+  // ⏰ Auto Session detection with timezone
   useEffect(() => {
-    if (!st.openAt) return;
+    if (!st.openAt || !autoSession) return;
     
-    // Debounce: only detect after user finishes selecting date/time
-    const timer = setTimeout(() => {
-      const session = detectSessionByLocal(st.openAt);
-      if (session !== "Off") st.setSession(session);
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [st.openAt]);
+    const detectedSession = getSessionFromDateTime(new Date(st.openAt));
+    if (detectedSession) {
+      st.setSession(detectedSession);
+    }
+  }, [st.openAt, autoSession]);
 
-  // Auto Fees detection (debounced)
+  // Auto Fees detection
   useEffect(() => {
     if (st.feesMode !== "auto" || !st.assetClass) return;
     
-    // Debounce: only calculate after user stops typing for 500ms
     const timer = setTimeout(() => {
       const singleSideFee = calculateCommission(
         st.assetClass,
@@ -479,11 +529,9 @@ export default function New() {
     if (found && !st.assetClass) {
       st.setAssetClass(found.class as any);
     }
-    
-    console.log(`🔧 Auto-detected multiplier for ${st.symbol}: ${multiplier}`);
   }, [st.symbol]);
 
-  // Auto Direction from TP (debounced to prevent interference while typing)
+  // Auto Direction from TP
   useEffect(() => {
     const entry = st.entryPrice;
     const tp = st.takeProfitPrice;
@@ -491,7 +539,6 @@ export default function New() {
     
     if (!entry || !tp || !stop) return;
     
-    // Debounce: only update after user stops typing for 500ms
     const timer = setTimeout(() => {
       if (tp > entry && stop < entry && st.side !== "LONG") {
         st.setSide("LONG");
@@ -524,7 +571,7 @@ export default function New() {
      (st.stopPrice > 0 ? 25 : 0)) / 1
   );
 
-  // ✅ Calculate P&L
+  // ✅ Calculate P&L - NO LOGGING
   const calculatePnL = useCallback(() => {
     if (!st.exitPrice || st.exitPrice <= 0) return 0;
     
@@ -533,23 +580,8 @@ export default function New() {
       : st.entryPrice - st.exitPrice;
     
     const multiplier = getAssetMultiplier(st.symbol);
-    
     const grossPnL = priceChange * st.quantity * multiplier;
     const netPnL = grossPnL - st.fees;
-    
-    console.log('💰 calculatePnL:', {
-      symbol: st.symbol,
-      side: st.side,
-      entry: st.entryPrice,
-      exit: st.exitPrice,
-      priceChange,
-      quantity: st.quantity,
-      multiplier,
-      calculation: `${priceChange} × ${st.quantity} × ${multiplier} = ${grossPnL}`,
-      grossPnL,
-      fees: st.fees,
-      netPnL
-    });
     
     return netPnL;
   }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol]);
@@ -618,17 +650,17 @@ export default function New() {
     return () => window.removeEventListener('keydown', handler);
   }, [isValid]);
 
-  // 🔥🔥🔥 SUBMIT FUNCTION - USING CENTRALIZED FUNCTIONS 🔥🔥🔥
+  // 🔥 SUBMIT FUNCTION - CLEAN VERSION
   async function handleSubmit() {
-    // ✅ CHECK SUBSCRIPTION LIMITS (only for new trades) - NON-BLOCKING
-    if (!isEditMode) {
-      if (!limits || limits === undefined || limits === null) {
-        console.warn('⚠️ Subscription limits not fully loaded, proceeding anyway...');
-      } else if (!canAddTrade) {
-        console.log('🚫 Trade limit reached');
-        setShowLimitModal(true);
-        return;
-      }
+    // Clean strategy_id
+    if (st.strategy === "none" || st.strategy === "") {
+      st.setStrategy(undefined);
+    }
+    
+    // Check subscription limits (non-blocking)
+    if (!isEditMode && limits && !canAddTrade) {
+      setShowLimitModal(true);
+      return;
     }
 
     // Validation
@@ -664,15 +696,35 @@ export default function New() {
     setLoading(true);
 
     try {
-      // Upload screenshot if exists
-      let screenshotUrl: string | null = null;
-      if (st.file) {
-        toast.info("Uploading screenshot...");
-        const { uploadScreenshot } = await import("@/routes/journal");
-        screenshotUrl = await uploadScreenshot(st.file);
-        if (!screenshotUrl) {
-          toast.warning("Screenshot upload failed, continuing without it");
+      // Upload screenshots - MINIMAL LOGGING
+      const screenshotUrls: string[] = [];
+      if (screenshotFiles.length > 0) {
+        toast.info(`Uploading ${screenshotFiles.length} screenshot(s)...`);
+        
+        for (let i = 0; i < screenshotFiles.length; i++) {
+          try {
+            const url = await uploadScreenshot(screenshotFiles[i]);
+            
+            if (url) {
+              screenshotUrls.push(url);
+              toast.success(`Screenshot ${i + 1}/${screenshotFiles.length} uploaded`);
+            }
+          } catch (error) {
+            if (isDev) console.error(`Failed to upload screenshot ${i + 1}:`, error);
+          }
         }
+        
+        if (screenshotUrls.length === 0 && screenshotFiles.length > 0) {
+          toast.warning("All screenshot uploads failed");
+        } else if (screenshotUrls.length < screenshotFiles.length) {
+          toast.info(`${screenshotUrls.length}/${screenshotFiles.length} screenshots uploaded`);
+        } else {
+          toast.success(`All ${screenshotUrls.length} screenshots uploaded! 🎉`);
+        }
+      }
+      
+      if (screenshotUrls.length > 0) {
+        st.setScreenshotUrls(screenshotUrls);
       }
 
       const basePayload = st.payload();
@@ -682,7 +734,7 @@ export default function New() {
       
       const finalMultiplier = getAssetMultiplier(st.symbol);
       
-      // 🔥 Calculate actual_r with proper multiplier
+      // Calculate actual_r
       let actual_r = undefined;
       if (st.exitPrice && st.exitPrice > 0) {
         const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
@@ -691,39 +743,17 @@ export default function New() {
         if (calculatedRiskUSD > 0) {
           actual_r = calculatedPnL / calculatedRiskUSD;
         }
-        
-        console.log('🔥 ACTUAL_R CALCULATION:', {
-          symbol: st.symbol,
-          multiplier: finalMultiplier,
-          pnl: calculatedPnL,
-          riskPerPoint,
-          quantity: st.quantity,
-          fees: st.fees,
-          calculatedRiskUSD,
-          actual_r: actual_r ? actual_r.toFixed(2) + 'R' : undefined
-        });
       }
       
-      console.log('💰💰💰 FINAL CALCULATED VALUES 💰💰💰');
-      console.log('Symbol:', st.symbol);
-      console.log('Multiplier used:', finalMultiplier);
-      console.log('Store multiplier:', st.multiplier);
-      console.log('Calculated P&L:', calculatedPnL);
-      console.log('Calculated Outcome:', calculatedOutcome);
-      console.log('Calculated actual_r:', actual_r);
-      console.log('User Risk R:', userRiskR);
-      console.log('User Reward R:', userRewardR);
-      
-      // 🔥🔥🔥 PAYLOAD WITH TOP-LEVEL METRICS 🔥🔥🔥
+      // Build payload
       const payload = {
         ...basePayload,
         strategy_id: st.strategy || undefined,
-        screenshot_url: screenshotUrl,
+        screenshots: screenshotUrls,
         exit_price: st.exitPrice && st.exitPrice > 0 ? st.exitPrice : null,
         pnl: st.exitPrice && st.exitPrice > 0 ? calculatedPnL : null,
         outcome: st.exitPrice && st.exitPrice > 0 ? calculatedOutcome : 'OPEN',
         multiplier: finalMultiplier,
-        // ✅ TOP LEVEL - NOT NESTED!
         rr: st.rr,
         risk_usd: st.riskUSD,
         reward_usd: st.rewardUSD,
@@ -736,20 +766,7 @@ export default function New() {
       
       delete (payload as any).strategy;
       
-      console.log("\n✅✅✅ FINAL TRADE PAYLOAD ✅✅✅");
-      console.log("📊 Multiplier:", finalMultiplier);
-      console.log("📊 R:R:", payload.rr);
-      console.log("📊 Risk USD:", payload.risk_usd);
-      console.log("📊 Reward USD:", payload.reward_usd);
-      console.log("📊 Actual R:", payload.actual_r);
-      console.log("📊 User Risk R:", payload.user_risk_r);
-      console.log("📊 User Reward R:", payload.user_reward_r);
-      console.log("📊 Full payload:", payload);
-      
       if (isEditMode && editTradeId) {
-        console.log('📝 Updating existing trade:', editTradeId);
-        
-        // 🔥 Using centralized updateTrade function
         const result = await updateTrade(editTradeId, payload);
         
         if (result.success) {
@@ -766,15 +783,12 @@ export default function New() {
         const existingTrades = await getTrades();
         const isFirstTrade = !existingTrades.data || existingTrades.data.length === 0;
         
-        console.log('➕ Creating new trade');
-        
-        // 🔥 Using centralized createTrade function
         const result = await createTrade(payload);
         
         if (result.success) {
           toast.success("Trade created successfully! 🎉");
           
-          // 🎉 FIRST TRADE CELEBRATION
+          // First trade celebration
           if (isFirstTrade) {
             fireFirstTradeConfetti();
             
@@ -875,11 +889,9 @@ export default function New() {
 
   // 🎯 Ticker selection handler
   const handleTickerSelect = (ticker: any) => {
-    console.log('🎯 Ticker selected:', ticker);
     st.setSymbol(ticker.symbol);
     st.setMultiplier(ticker.multiplier);
     
-    // Auto-set asset class if available
     if (ticker.asset_class) {
       st.setAssetClass(ticker.asset_class as any);
     }
@@ -1021,10 +1033,14 @@ export default function New() {
                 />
               </div>
 
-              {/* 🎨 Beautiful date/time button */}
+              {/* 🎨 Beautiful date/time button with timezone */}
               <div>
-                <Label htmlFor="openAt" className="text-xs text-zinc-400 mb-2 block">
-                  Date & Time *
+                <Label htmlFor="openAt" className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
+                  <span>Date & Time *</span>
+                  <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                    <Globe className="w-3 h-3" />
+                    {timezone}
+                  </span>
                 </Label>
                 <button
                   type="button"
@@ -1033,11 +1049,7 @@ export default function New() {
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium">
-                      {st.openAt ? new Date(st.openAt).toLocaleDateString('en-GB', { 
-                        day: '2-digit', 
-                        month: 'short', 
-                        year: 'numeric' 
-                      }) : 'Select Date'}
+                      {st.openAt ? formatTradeDate(new Date(st.openAt), timezone).split(',')[0] : 'Select Date'}
                     </span>
                     <span className="text-yellow-400">•</span>
                     <span className="text-sm font-medium tabular-nums">
@@ -1055,22 +1067,74 @@ export default function New() {
 
             {/* Grid: Session, Strategy, Setup */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Session selector with auto-detection and timezone awareness */}
               <div>
-                <Label htmlFor="session" className="text-xs text-zinc-400 mb-2 block flex items-center gap-1">
-                  Session
-                  <span className="text-yellow-400 text-[10px]">(auto)</span>
+                <Label htmlFor="session" className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    Session
+                    {autoSession && (
+                      <span className="text-yellow-400 text-[10px]">(auto)</span>
+                    )}
+                  </span>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoSession}
+                      onChange={(e) => {
+                        setAutoSession(e.target.checked);
+                        if (e.target.checked && st.openAt) {
+                          // מעדכן מיד כשמפעילים auto
+                          const detected = getSessionFromDateTime(new Date(st.openAt));
+                          if (detected) st.setSession(detected);
+                        }
+                      }}
+                      className="w-3 h-3 rounded border-yellow-200/30 bg-zinc-900 checked:bg-yellow-500"
+                    />
+                    <span className="text-[10px] text-zinc-400">Auto</span>
+                  </label>
                 </Label>
-                <Select value={st.session || ""} onValueChange={(v) => st.setSession(v)}>
-                  <SelectTrigger className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200">
-                    <SelectValue placeholder="Auto-detected..." />
+                
+                <Select 
+                  value={st.session || ""} 
+                  onValueChange={(v) => {
+                    st.setSession(v);
+                    if (v) setAutoSession(false); // כשבוחרים ידנית, מכבה auto
+                  }}
+                  disabled={autoSession}
+                >
+                  <SelectTrigger className={`bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 ${autoSession ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                    <SelectValue placeholder="Select session..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Asia">🌏 Asia</SelectItem>
-                    <SelectItem value="London">🇬🇧 London</SelectItem>
-                    <SelectItem value="NY">🇺🇸 New York</SelectItem>
-                    <SelectItem value="Off">🌙 Off-hours</SelectItem>
+                    <SelectItem value="asia">
+                      <div className="flex items-center gap-2">
+                        <span>🌅</span>
+                        <span>Asia - 6PM-1AM NY</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="london">
+                      <div className="flex items-center gap-2">
+                        <span>🏛️</span>
+                        <span>London - 1AM-7AM NY</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="newyork">
+                      <div className="flex items-center gap-2">
+                        <span>🗽</span>
+                        <span>New York - 7AM-5PM NY</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                
+                {st.openAt && st.session && autoSession && (
+                  <div className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${getSessionColor(st.session as TradingSession)}`}>
+                    <span className="font-medium">
+                      Detected: {SESSION_DISPLAY_NAMES[st.session as TradingSession]}
+                    </span>
+                    <span className="text-zinc-500">(based on NY time)</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1082,9 +1146,10 @@ export default function New() {
                   onValueChange={(v) => {
                     if (v === "create_new") {
                       navigate("/app/journal/strategies?create=true");
+                    } else if (v === "none" || v === "") {
+                      st.setStrategy(undefined);
                     } else {
                       st.setStrategy(v);
-                      console.log('✅ Selected strategy ID:', v);
                     }
                   }}
                 >
@@ -1162,7 +1227,6 @@ export default function New() {
                   value={st.quantity || ""}
                   onChange={(e) => {
                     const value = e.target.value;
-                    // Allow empty string for deleting
                     if (value === "") {
                       st.setQuantity(0);
                       return;
@@ -1173,7 +1237,6 @@ export default function New() {
                     }
                   }}
                   onBlur={(e) => {
-                    // Format on blur only
                     const num = parseFloat(e.target.value);
                     if (!isNaN(num)) {
                       st.setQuantity(num);
@@ -1497,12 +1560,16 @@ export default function New() {
             )}
 
             {tab === "screenshot" && (
-              <div>
-                <UploadZone file={st.file || null} onFile={(f) => st.setFile(f)} />
-                <div className="mt-3 text-xs text-zinc-500 text-center">
-                  📸 Visual evidence helps refine your edge over time
-                </div>
-              </div>
+              <MultiUploadZone 
+                screenshots={screenshotFiles.map(file => ({ 
+                  file, 
+                  preview: URL.createObjectURL(file) 
+                }))}
+                onScreenshotsChange={(screenshots) => {
+                  setScreenshotFiles(screenshots.map(s => s.file));
+                }}
+                maxFiles={4}
+              />
             )}
 
             {tab === "mistakes" && (
@@ -1610,12 +1677,13 @@ export default function New() {
         </section>
       </main>
 
-      {/* 🎨 Date/Time Picker Modal */}
+      {/* 🎨 Date/Time Picker Modal with Timezone */}
       <DateTimePickerModal
         isOpen={showDatePicker}
         onClose={() => setShowDatePicker(false)}
         value={st.openAt}
         onChange={(value) => st.setOpenAt(value)}
+        timezone={timezone}
       />
 
       {/* Insight Popup */}

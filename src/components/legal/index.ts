@@ -12,3 +12,4 @@ export { default as RiskDisclosure } from './RiskDisclosure';
 export { default as RefundPolicy } from './RefundPolicy';
 export { default as DMCA } from './DMCA';
 export { default as LegalFooter } from './LegalFooter';
+export { LegalPageLayout } from './LegalPageLayout';

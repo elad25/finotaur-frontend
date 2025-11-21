@@ -1,9 +1,11 @@
+// src/App.tsx - FULL & UPDATED WITH BACKTEST PROTECTION
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppQueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { TimezoneProvider } from "@/contexts/TimezoneContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimeProvider";
@@ -11,7 +13,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
-import { lazy, Suspense, memo } from "react";
+import { lazy, Suspense, memo, useEffect, useState } from "react";
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
 
 import '@/scripts/migrationRunner';
 
@@ -32,6 +36,10 @@ import NotFound from "./pages/NotFound";
 
 // 🔥 NEW: Pricing Selection Page
 import PricingSelection from "@/pages/app/journal/PricingSelection";
+
+// 📄 ABOUT & CONTACT PAGES
+import AboutPage from "@/pages/AboutPage";
+import ContactPage from "@/pages/ContactPage";
 
 // ⚖️ LEGAL PAGES - Load immediately (no lazy)
 import {
@@ -71,8 +79,8 @@ const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
 
 // === Journal Pages ===
 const JournalOverview = lazy(() => import("@/pages/app/journal/Overview"));
+const New = lazy(() => import("@/pages/app/journal/New"));
 const JournalMyTrades = lazy(() => import("@/pages/app/journal/MyTrades"));
-const JournalNew = lazy(() => import("@/pages/app/journal/New"));
 const JournalTradeDetail = lazy(() => import("@/pages/app/journal/TradeDetail"));
 const JournalImport = lazy(() => import("@/pages/app/journal/Import"));
 const JournalExport = lazy(() => import("@/pages/app/journal/Export"));
@@ -87,6 +95,21 @@ const JournalScenarios = lazy(() => import("@/pages/app/journal/Scenarios"));
 const JournalCommunity = lazy(() => import("@/pages/app/journal/Community"));
 const JournalAcademy = lazy(() => import("@/pages/app/journal/Academy"));
 const JournalSettings = lazy(() => import("@/pages/app/journal/JournalSettings"));
+
+// 🧪 === Backtest Pages === 
+const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
+const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overview"));
+const BacktestChart = lazy(() => import("@/pages/app/journal/backtest/Chart"));
+const BacktestResults = lazy(() => import("@/pages/app/journal/backtest/Results"));
+const BacktestBuilder = lazy(() => import("@/pages/app/journal/backtest/Builder"));
+const BacktestData = lazy(() => import("@/pages/app/journal/backtest/Data"));
+const BacktestAnalytics = lazy(() => import("@/pages/app/journal/backtest/Analytics"));
+const BacktestAIInsights = lazy(() => import("@/pages/app/journal/backtest/Aiinsights"));
+const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Montecarlo"));
+const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
+const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
+const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
+
 // === All Markets ===
 const AllMarketsOverview = lazy(() => import("@/pages/app/all-markets/Overview"));
 const AllMarketsChart = lazy(() => import("@/pages/app/all-markets/Chart"));
@@ -228,6 +251,52 @@ const LockedRoute = memo(({ domainId, children }: { domainId: string; children: 
 LockedRoute.displayName = 'LockedRoute';
 
 // ===============================================
+// 🧪 BACKTEST PROTECTION - Premium Only
+// ===============================================
+const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  const [accountType, setAccountType] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function checkAccess() {
+      if (!user?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('account_type')
+        .eq('id', user.id)
+        .single();
+
+      setAccountType(data?.account_type || 'free');
+      setIsLoading(false);
+    }
+
+    checkAccess();
+  }, [user?.id]);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  // אם אין Premium - הצג Landing
+  if (accountType !== 'premium') {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <BacktestLanding />
+      </Suspense>
+    );
+  }
+
+  // אם יש Premium - הצג את הדף המבוקש
+  return <SuspenseRoute>{children}</SuspenseRoute>;
+});
+BacktestRoute.displayName = 'BacktestRoute';
+
+// ===============================================
 // 🔥 APP CONTENT - ALL ROUTES
 // ===============================================
 function AppContent() {
@@ -244,6 +313,10 @@ function AppContent() {
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
+        
+        {/* 📄 ABOUT & CONTACT PAGES */}
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
         
         {/* ⚖️ LEGAL ROUTES */}
         <Route path="/legal/terms" element={<TermsOfUse />} />
@@ -362,13 +435,14 @@ function AppContent() {
           
           {/* ✅ JOURNAL - UNLOCKED */}
           <Route path="journal/overview" element={<SuspenseRoute><JournalOverview /></SuspenseRoute>} />
+          <Route path="journal/new" element={<SuspenseRoute><New /></SuspenseRoute>} />
           <Route path="journal/my-trades" element={<SuspenseRoute><JournalMyTrades /></SuspenseRoute>} />
-          <Route path="journal/new" element={<SuspenseRoute><JournalNew /></SuspenseRoute>} />
           <Route path="journal/strategies" element={<SuspenseRoute><Strategies /></SuspenseRoute>} />
           <Route path="journal/strategies/:id" element={<SuspenseRoute><StrategyDetailView /></SuspenseRoute>} />
           <Route path="journal/scenarios" element={<SuspenseRoute><JournalScenarios /></SuspenseRoute>} />
           <Route path="journal/community" element={<SuspenseRoute><JournalCommunity /></SuspenseRoute>} />
-          <Route path="journal/academy" element={<SuspenseRoute><JournalAcademy /></SuspenseRoute>} />          <Route path="journal/settings" element={<SuspenseRoute><JournalSettings /></SuspenseRoute>} />
+          <Route path="journal/academy" element={<SuspenseRoute><JournalAcademy /></SuspenseRoute>} />          
+          <Route path="journal/settings" element={<SuspenseRoute><JournalSettings /></SuspenseRoute>} />
           <Route path="journal/:id" element={<SuspenseRoute><JournalTradeDetail /></SuspenseRoute>} />
           <Route path="journal/import" element={<SuspenseRoute><JournalImport /></SuspenseRoute>} />
           <Route path="journal/export" element={<SuspenseRoute><JournalExport /></SuspenseRoute>} />
@@ -381,6 +455,19 @@ function AppContent() {
           <Route path="journal/payment/success" element={<SuspenseRoute><PaymentSuccessPage /></SuspenseRoute>} />
           <Route path="journal/payment/failure" element={<SuspenseRoute><PaymentFailurePage /></SuspenseRoute>} />
           <Route path="journal/prop-firms" element={<SuspenseRoute><PropFirmsPage /></SuspenseRoute>} />
+          
+          {/* 🧪 BACKTEST ROUTES - Premium Only Protection */}
+          <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
+          <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
+          <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
+          <Route path="journal/backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
+          <Route path="journal/backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
+          <Route path="journal/backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
+          <Route path="journal/backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
+          <Route path="journal/backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
+          <Route path="journal/backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
+          <Route path="journal/backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
+          <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
 
           {/* 🔐 JOURNAL ADMIN */}
           <Route path="journal/admin" element={<ProtectedAdminRoute><SuspenseRoute><AdminDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -391,6 +478,19 @@ function AppContent() {
           <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+          
+          {/* 🧪 BACKTEST - Backward Compatibility Routes (for old links) */}
+          <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
+          <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
+          <Route path="backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
+          <Route path="backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
+          <Route path="backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
+          <Route path="backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />
+          <Route path="backtest/ai-insights" element={<BacktestRoute><BacktestAIInsights /></BacktestRoute>} />
+          <Route path="backtest/monte-carlo" element={<BacktestRoute><BacktestMonteCarlo /></BacktestRoute>} />
+          <Route path="backtest/walk-forward" element={<BacktestRoute><BacktestWalkForward /></BacktestRoute>} />
+          <Route path="backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
+          <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* 🔒 COPY TRADE - LOCKED */}
           <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><CopyTradeOverview /></LockedRoute>} />
@@ -432,11 +532,13 @@ export const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <RiskSettingsRealtimeProvider>
-              <ImpersonationProvider>
-                <AppContent />
-              </ImpersonationProvider>
-            </RiskSettingsRealtimeProvider>
+            <TimezoneProvider>  {/* 👈 הוסף כאן */}
+              <RiskSettingsRealtimeProvider>
+                <ImpersonationProvider>
+                  <AppContent />
+                </ImpersonationProvider>
+              </RiskSettingsRealtimeProvider>
+            </TimezoneProvider>  {/* 👈 וסגור כאן */}
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

@@ -37,6 +37,9 @@ type State = {
   nextTime?: string;
   tags: string[];
   file?: File | null;
+  // 🔥 הוסף את השדות החדשים!
+  screenshotFiles?: File[];      // 🔥 מערך קבצי תמונות
+  screenshotUrls?: string[];     // 🔥 מערך URLs שהועלו
   multiplier: number;
   rr: number;
   riskUSD: number;
@@ -67,6 +70,9 @@ type Actions = {
   setNextTime: (v?: string) => void;
   toggleTag: (t: string) => void;
   setFile: (f?: File | null) => void;
+  // 🔥 הוסף את הפונקציות החדשות!
+  setScreenshotFiles: (files: File[]) => void;    // 🔥
+  setScreenshotUrls: (urls: string[]) => void;    // 🔥
   setMultiplier: (v: number) => void;
   recompute: () => void;
   payload: () => any;
@@ -98,6 +104,9 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   nextTime: "",
   tags: [],
   file: null,
+  // 🔥 אתחול השדות החדשים!
+  screenshotFiles: [],    // 🔥
+  screenshotUrls: [],     // 🔥
   multiplier: 1,
   rr: 0,
   riskUSD: 0,
@@ -231,6 +240,19 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     get().saveDraft();
   },
   
+  // 🔥🔥🔥 הפונקציות החדשות לניהול screenshots! 🔥🔥🔥
+  setScreenshotFiles: (files) => {
+    console.log('📸 Store: Setting screenshot files:', files.length);
+    set({ screenshotFiles: files });
+    get().saveDraft();
+  },
+  
+  setScreenshotUrls: (urls) => {
+    console.log('🔗 Store: Setting screenshot URLs:', urls.length);
+    set({ screenshotUrls: urls });
+    get().saveDraft();
+  },
+  
   setMultiplier: (v) => {
     set({ multiplier: v });
     get().recompute();
@@ -276,14 +298,6 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       oneRValue,
     });
     
-    console.log('🔄 Recompute:', {
-      symbol: s.symbol,
-      multiplier: mult,
-      oneR: oneRValue,
-      user_risk_r: result.user_risk_r,
-      user_reward_r: result.user_reward_r,
-    });
-    
     set({
       side,
       multiplier: mult,
@@ -297,11 +311,11 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     });
   },
 
-  // 🔥🔥🔥 CRITICAL FIX: Include multiplier in payload!
+  // 🔥🔥🔥 PAYLOAD - הוסף screenshots! 🔥🔥🔥
   payload: () => {
     const s = get();
     
-    console.log('📦 Creating payload with multiplier:', s.multiplier);
+    console.log('📦 Creating payload with screenshots:', s.screenshotUrls?.length || 0);
     
     return {
       open_at: s.openAt,
@@ -322,7 +336,8 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       mistake: s.mistake,
       next_time: s.nextTime,
       tags: s.tags,
-      multiplier: s.multiplier, // 🔥 CRITICAL: Include multiplier!
+      multiplier: s.multiplier,
+      screenshots: s.screenshotUrls || [],  // 🔥 הוסף את זה!
       metrics: {
         rr: s.rr,
         riskUSD: s.riskUSD,
@@ -359,6 +374,8 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         nextTime: s.nextTime,
         tags: s.tags,
         multiplier: s.multiplier,
+        // 🔥 שמור גם את screenshot URLs (לא את הקבצים!)
+        screenshotUrls: s.screenshotUrls,  // 🔥
       });
       
       if (draft.length > 100000) {
@@ -398,6 +415,41 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   clearDraft: () => {
     try {
       localStorage.removeItem(DRAFT_KEY);
+      
+      // 🔥 Reset all state to initial values
+      set({
+        openAt: new Date().toISOString(),
+        symbol: "",
+        assetClass: undefined,
+        side: "LONG",
+        quantity: 0,
+        entryPrice: 0,
+        stopPrice: 0,
+        takeProfitPrice: undefined,
+        exitPrice: undefined,
+        fees: 0,
+        feesMode: "auto",
+        session: undefined,
+        strategyId: undefined,
+        strategy: undefined,
+        setup: undefined,
+        notes: "",
+        mistake: "",
+        nextTime: "",
+        tags: [],
+        file: null,
+        // 🔥 נקה גם screenshots!
+        screenshotFiles: [],   // 🔥
+        screenshotUrls: [],    // 🔥
+        multiplier: 1,
+        rr: 0,
+        riskUSD: 0,
+        rewardUSD: 0,
+        riskPts: 0,
+        rewardPts: 0,
+        user_risk_r: undefined,
+        user_reward_r: undefined,
+      });
     } catch (e) {
       console.warn("Failed to clear draft", e);
     }

@@ -5,6 +5,7 @@
 // ✅ Profit Factor & Avg Win/Loss Trade KPIs
 // ✅ NEW: Trade Time & Duration Performance Charts
 // ✅ UPDATED: Trade Duration locked for FREE users without SnapTrade
+// ✅ UPDATED: Timezone support & Trading Session indicators
 // ✅ Production ready for 5000+ users
 // ================================================
 
@@ -32,6 +33,14 @@ import { DAYS_MAP, BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES, type DaysRange } 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettingsData } from "@/lib/queryClient";
 import { DashboardKpiCard } from "@/components/DashboardKpiCard";
+
+// ================================================
+// NEW: TIMEZONE & TRADING SESSION IMPORTS
+// ================================================
+import { useTimezone } from '@/contexts/TimezoneContext';
+import { formatTradeDate } from '@/utils/dateFormatter';
+import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+import TradingSessionIndicator from '@/components/TradingSessionIndicator';
 
 // ================================================
 // LAZY LOAD HEAVY COMPONENTS
@@ -606,7 +615,7 @@ const Shortcut = React.memo(({
 ));
 Shortcut.displayName = 'Shortcut';
 
-const BestWorstTrades = React.memo(({ stats }: { stats: DashboardStats }) => {
+const BestWorstTrades = React.memo(({ stats, timezone }: { stats: DashboardStats; timezone: string }) => {
   if (!stats.bestTrade || !stats.worstTrade) return null;
   
   return (
@@ -634,8 +643,15 @@ const BestWorstTrades = React.memo(({ stats }: { stats: DashboardStats }) => {
             </span>
           )}
         </div>
-        <div className="text-xs text-[#A0A0A0] mt-2 font-light">
-          {stats.bestTrade.symbol} • {dayjs(stats.bestTrade.open_at).format("MMM DD")}
+        <div className="flex items-center gap-2 mt-2">
+          {stats.bestTrade.session && (
+            <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.bestTrade.session)}`}>
+              {formatSessionDisplay(stats.bestTrade.session)}
+            </span>
+          )}
+          <span className="text-xs text-[#A0A0A0] font-light">
+            {stats.bestTrade.symbol} • {formatTradeDate(stats.bestTrade.open_at, timezone)}
+          </span>
         </div>
       </div>
 
@@ -662,8 +678,15 @@ const BestWorstTrades = React.memo(({ stats }: { stats: DashboardStats }) => {
             </span>
           )}
         </div>
-        <div className="text-xs text-[#A0A0A0] mt-2 font-light">
-          {stats.worstTrade.symbol} • {dayjs(stats.worstTrade.open_at).format("MMM DD")}
+        <div className="flex items-center gap-2 mt-2">
+          {stats.worstTrade.session && (
+            <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.worstTrade.session)}`}>
+              {formatSessionDisplay(stats.worstTrade.session)}
+            </span>
+          )}
+          <span className="text-xs text-[#A0A0A0] font-light">
+            {stats.worstTrade.symbol} • {formatTradeDate(stats.worstTrade.open_at, timezone)}
+          </span>
         </div>
       </div>
     </div>
@@ -719,6 +742,9 @@ AIInsight.displayName = 'AIInsight';
 
 function JournalOverviewContent() {
   const navigate = useNavigate();
+  
+  // ✅ NEW: Timezone context
+  const timezone = useTimezone();
   
   const [range, setRange] = useState<DaysRange>('30D');
   const [showReferModal, setShowReferModal] = useState(false);
@@ -812,11 +838,17 @@ function JournalOverviewContent() {
       <style>{ANIMATION_STYLES}</style>
       
       <div className="p-6 space-y-6">
+        {/* ✅ UPDATED: Header with Trading Session Indicator */}
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <PageTitle 
-            title="Dashboard" 
-            subtitle="Track your performance and manage your trading journey" 
-          />
+          <div className="flex-1">
+            <PageTitle 
+              title="Dashboard" 
+              subtitle="Track your performance and manage your trading journey" 
+            />
+          </div>
+          
+          {/* ✅ NEW: Trading Session Indicator */}
+          <TradingSessionIndicator />
           
           <div className="flex items-center gap-3">
             {isImpersonating && (
@@ -988,7 +1020,8 @@ function JournalOverviewContent() {
               />
             </div>
 
-            <BestWorstTrades stats={stats} />
+            {/* ✅ UPDATED: Best/Worst trades with timezone and session */}
+            <BestWorstTrades stats={stats} timezone={timezone} />
 
             <ErrorBoundary fallback={
               <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">

@@ -1,21 +1,24 @@
 // ================================================
 // 🔥 OPTIMIZED: useTradesData - Ultra Performance
 // ================================================
-// ✅ Optimized VIEW usage with pagination support
+// ✅ Optimized trades fetching with screenshots support
 // ✅ Stable references (no unnecessary recalculations)
 // ✅ Smart refetch strategy
 // ✅ Minimal DB load
-// ✅ IMPERSONATION SUPPORT
+// ✅ IMPERSONATION SUPPORT WITH ADMIN CLIENT
+// ✅ FIXED: Use supabaseAdmin when impersonating
 // ================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { queryKeys } from '@/lib/queryClient';
-import { useEffectiveUser } from '@/hooks/useEffectiveUser';  // ✅ FIXED PATH
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
 
 // ================================================
-// 🎯 TYPES (אותם types כמו שהיה)
+// 🎯 TYPES
 // ================================================
 
 export interface Trade {
@@ -42,6 +45,7 @@ export interface Trade {
   mistake?: string;
   next_time?: string;
   screenshot_url?: string;
+  screenshots?: string[];
   asset_class?: string;
   quality_tag?: string;
   broker?: string;
@@ -72,65 +76,79 @@ export interface TradeStats {
 }
 
 // ================================================
-// 🔥 OPTIMIZED FETCH - With Smart Pagination
+// 🔥 FETCH ALL TRADES - FIXED: Use supabaseAdmin when impersonating
 // ================================================
 
-async function fetchAllTrades(userId: string): Promise<Trade[]> {
+async function fetchAllTrades(userId: string, isImpersonating: boolean = false): Promise<Trade[]> {
   if (!userId) {
     console.log('❌ No user ID - skipping trades fetch');
     return [];
   }
 
-  console.log('📊 Fetching trades for user:', userId);
+  console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating);
 
-  // 🚀 OPTIMIZED: Fetch from VIEW but with explicit columns
-  // This helps Postgres optimizer to only calculate what we need
-  const { data, error } = await supabase
-    .from('trades_with_metrics')
-    .select(`
-      id, user_id, symbol, side, entry_price, exit_price,
-      stop_price, take_profit_price, quantity, fees, fees_mode,
-      pnl, outcome, open_at, close_at, session,
-      strategy_id, strategy_name, setup, notes, mistake, next_time,
-      screenshot_url, asset_class, quality_tag, broker, external_id,
-      multiplier, metrics, created_at, updated_at,
-      actual_r, risk_usd, rr
-    `)
-    .eq('user_id', userId)
-    .order('open_at', { ascending: false });
+  try {
+    // 🔥 CRITICAL FIX: Use admin client when impersonating to bypass RLS
+    const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
+    
+    console.log(`✅ Using ${isImpersonating ? 'ADMIN' : 'REGULAR'} client for trades fetch`);
 
-  if (error) {
-    console.error('❌ Error fetching trades:', error);
+    const { data, error } = await client
+      .from('trades')
+      .select(`
+        *,
+        strategies (
+          name
+        )
+      `)
+      .eq('user_id', userId)
+      .order('open_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching trades:', error);
+      throw error;
+    }
+
+    console.log(`✅ Fetched ${data?.length || 0} trades`);
+    
+    // 🔥 בדוק אם screenshots קיים
+    if (data && data.length > 0) {
+      console.log('📸 Sample trade data:', {
+        id: data[0].id,
+        symbol: data[0].symbol,
+        screenshots: data[0].screenshots,
+        screenshot_url: data[0].screenshot_url,
+      });
+    }
+
+    // 🚀 Process trades with strategy name
+    return (data || []).map(trade => ({
+      ...trade,
+      strategy_name: (trade.strategies as any)?.name || null,
+      multiplier: trade.multiplier || 1,
+      screenshots: trade.screenshots || [],
+    })) as Trade[];
+  } catch (error) {
+    console.error('❌ Failed to fetch trades:', error);
     throw error;
   }
-
-  console.log(`✅ Fetched ${data?.length || 0} trades`);
-
-  // 🚀 OPTIMIZED: Minimal processing
-  return (data || []).map(trade => ({
-    ...trade,
-    multiplier: trade.multiplier || 1,
-    actual_r: trade.actual_r || null,
-    risk_usd: trade.risk_usd || 0,
-    rr: trade.rr || null,
-    metrics: trade.metrics || {},
-  })) as Trade[];
 }
 
 // ================================================
 // 🔥 PRIMARY HOOK - All Trades - WITH IMPERSONATION SUPPORT
 // ================================================
 
-export function useTrades(userId?: string) {  // ✅ ADDED userId parameter
-  const { id: effectiveUserId } = useEffectiveUser();  // ✅ FIXED destructuring
+export function useTrades(userId?: string) {
+  const { id: effectiveUserId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
   
   // Use provided userId or fallback to effectiveUserId
   const targetUserId = userId || effectiveUserId;
 
   return useQuery({
-    queryKey: queryKeys.trades(targetUserId || ''),
-    queryFn: () => fetchAllTrades(targetUserId!),
-    enabled: !!targetUserId,  // ✅ FIXED
+    queryKey: [...queryKeys.trades(targetUserId || ''), isImpersonating ? 'admin' : 'user'],
+    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating),
+    enabled: !!targetUserId,
     
     // 🚀 PERFORMANCE: Aggressive caching
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -242,22 +260,39 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
 // ================================================
 
 export function useTrade(tradeId: string | null) {
-  const { id: userId } = useEffectiveUser();  // ✅ FIXED destructuring
+  const { id: userId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
 
   return useQuery({
-    queryKey: queryKeys.tradeDetail(tradeId || ''),
+    queryKey: [...queryKeys.tradeDetail(tradeId || ''), isImpersonating ? 'admin' : 'user'],
     queryFn: async () => {
       if (!tradeId || !userId) throw new Error('No trade ID or user ID');
 
-      const { data, error } = await supabase
-        .from('trades_with_metrics')
-        .select('*')
+      // 🔥 Use admin client when impersonating
+      const client = isImpersonating && supabaseAdmin ? supabaseAdmin : supabase;
+      
+      console.log(`✅ Fetching single trade with ${isImpersonating ? 'ADMIN' : 'REGULAR'} client`);
+
+      const { data, error } = await client
+        .from('trades')
+        .select(`
+          *,
+          strategies (
+            name
+          )
+        `)
         .eq('id', tradeId)
         .eq('user_id', userId)
         .single();
 
       if (error) throw error;
-      return data as Trade;
+      
+      // 🔥 Process with strategy name and screenshots
+      return {
+        ...data,
+        strategy_name: (data.strategies as any)?.name || null,
+        screenshots: data.screenshots || [],
+      } as Trade;
     },
     enabled: !!tradeId && !!userId,
     staleTime: 5 * 60 * 1000,
@@ -270,7 +305,8 @@ export function useTrade(tradeId: string | null) {
 
 export function useCreateTrade() {
   const queryClient = useQueryClient();
-  const { id: userId } = useEffectiveUser();  // ✅ FIXED destructuring
+  const { id: userId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
 
   return useMutation({
     mutationFn: async (tradeData: Partial<Trade>) => {
@@ -278,31 +314,35 @@ export function useCreateTrade() {
 
       console.log('📝 Creating trade for user:', userId);
 
+      // 🔥 Always use regular supabase for mutations (they have user context)
       const { data, error } = await supabase
         .from('trades')
         .insert([{ ...tradeData, user_id: userId }])
-        .select('id')
+        .select(`
+          *,
+          strategies (
+            name
+          )
+        `)
         .single();
 
       if (error) throw error;
 
-      // ✅ Fetch from VIEW to get calculated data
-      const { data: tradeWithMetrics, error: fetchError } = await supabase
-        .from('trades_with_metrics')
-        .select('*')
-        .eq('id', data.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
       console.log('✅ Trade created:', data.id);
-      return tradeWithMetrics as Trade;
+      
+      // 🔥 Process with strategy name and screenshots
+      return {
+        ...data,
+        strategy_name: (data.strategies as any)?.name || null,
+        screenshots: data.screenshots || [],
+      } as Trade;
     },
     
     onMutate: async (newTrade) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      await queryClient.cancelQueries({ queryKey });
 
-      const previousTrades = queryClient.getQueryData<Trade[]>(queryKeys.trades(userId || ''));
+      const previousTrades = queryClient.getQueryData<Trade[]>(queryKey);
 
       if (previousTrades) {
         const optimisticTrade: Trade = {
@@ -318,29 +358,28 @@ export function useCreateTrade() {
           outcome: 'OPEN',
           pnl: 0,
           multiplier: 1,
+          screenshots: newTrade.screenshots || [],
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           ...newTrade,
         } as Trade;
 
-        queryClient.setQueryData<Trade[]>(
-          queryKeys.trades(userId || ''),
-          [optimisticTrade, ...previousTrades]
-        );
+        queryClient.setQueryData<Trade[]>(queryKey, [optimisticTrade, ...previousTrades]);
       }
 
-      return { previousTrades };
+      return { previousTrades, queryKey };
     },
     
     onError: (err, newTrade, context) => {
-      if (context?.previousTrades) {
-        queryClient.setQueryData(queryKeys.trades(userId || ''), context.previousTrades);
+      if (context?.previousTrades && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousTrades);
       }
     },
     
     onSuccess: () => {
       // 🚀 Invalidate to trigger fresh fetch
-      queryClient.invalidateQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -351,7 +390,8 @@ export function useCreateTrade() {
 
 export function useUpdateTrade() {
   const queryClient = useQueryClient();
-  const { id: userId } = useEffectiveUser();  // ✅ FIXED destructuring
+  const { id: userId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<Trade> }) => {
@@ -359,6 +399,7 @@ export function useUpdateTrade() {
 
       console.log('✏️ Updating trade:', id);
 
+      // 🔥 Always use regular supabase for mutations
       const { error: updateError } = await supabase
         .from('trades')
         .update(data)
@@ -368,42 +409,60 @@ export function useUpdateTrade() {
       if (updateError) throw updateError;
 
       const { data: updated, error: fetchError } = await supabase
-        .from('trades_with_metrics')
-        .select('*')
+        .from('trades')
+        .select(`
+          *,
+          strategies (
+            name
+          )
+        `)
         .eq('id', id)
         .single();
 
       if (fetchError) throw fetchError;
 
       console.log('✅ Trade updated:', id);
-      return updated as Trade;
+      
+      // 🔥 Process with strategy name and screenshots
+      return {
+        ...updated,
+        strategy_name: (updated.strategies as any)?.name || null,
+        screenshots: updated.screenshots || [],
+      } as Trade;
     },
     
     onMutate: async ({ id, data }) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      await queryClient.cancelQueries({ queryKey });
 
-      const previousTrades = queryClient.getQueryData<Trade[]>(queryKeys.trades(userId || ''));
+      const previousTrades = queryClient.getQueryData<Trade[]>(queryKey);
 
       if (previousTrades) {
         queryClient.setQueryData<Trade[]>(
-          queryKeys.trades(userId || ''),
+          queryKey,
           previousTrades.map(trade =>
-            trade.id === id ? { ...trade, ...data, updated_at: new Date().toISOString() } : trade
+            trade.id === id ? { 
+              ...trade, 
+              ...data, 
+              screenshots: data.screenshots || trade.screenshots || [],
+              updated_at: new Date().toISOString() 
+            } : trade
           )
         );
       }
 
-      return { previousTrades };
+      return { previousTrades, queryKey };
     },
     
     onError: (err, variables, context) => {
-      if (context?.previousTrades) {
-        queryClient.setQueryData(queryKeys.trades(userId || ''), context.previousTrades);
+      if (context?.previousTrades && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousTrades);
       }
     },
     
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -414,7 +473,8 @@ export function useUpdateTrade() {
 
 export function useDeleteTrade() {
   const queryClient = useQueryClient();
-  const { id: userId } = useEffectiveUser();  // ✅ FIXED destructuring
+  const { id: userId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
 
   return useMutation({
     mutationFn: async (tradeId: string) => {
@@ -422,6 +482,7 @@ export function useDeleteTrade() {
 
       console.log('🗑️ Deleting trade:', tradeId);
 
+      // 🔥 Always use regular supabase for mutations
       const { error } = await supabase
         .from('trades')
         .delete()
@@ -435,28 +496,27 @@ export function useDeleteTrade() {
     },
     
     onMutate: async (tradeId) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      await queryClient.cancelQueries({ queryKey });
 
-      const previousTrades = queryClient.getQueryData<Trade[]>(queryKeys.trades(userId || ''));
+      const previousTrades = queryClient.getQueryData<Trade[]>(queryKey);
 
       if (previousTrades) {
-        queryClient.setQueryData<Trade[]>(
-          queryKeys.trades(userId || ''),
-          previousTrades.filter(t => t.id !== tradeId)
-        );
+        queryClient.setQueryData<Trade[]>(queryKey, previousTrades.filter(t => t.id !== tradeId));
       }
 
-      return { previousTrades };
+      return { previousTrades, queryKey };
     },
     
     onError: (err, tradeId, context) => {
-      if (context?.previousTrades) {
-        queryClient.setQueryData(queryKeys.trades(userId || ''), context.previousTrades);
+      if (context?.previousTrades && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousTrades);
       }
     },
     
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }
@@ -511,7 +571,8 @@ export function useTradesByDateRange(startDate: string, endDate: string) {
 
 export function useBulkDeleteTrades() {
   const queryClient = useQueryClient();
-  const { id: userId } = useEffectiveUser();  // ✅ FIXED destructuring
+  const { id: userId } = useEffectiveUser();
+  const { isImpersonating } = useImpersonation();
 
   return useMutation({
     mutationFn: async (tradeIds: string[]) => {
@@ -519,6 +580,7 @@ export function useBulkDeleteTrades() {
 
       console.log('🗑️ Bulk deleting trades:', tradeIds.length);
 
+      // 🔥 Always use regular supabase for mutations
       const { error } = await supabase
         .from('trades')
         .delete()
@@ -532,29 +594,28 @@ export function useBulkDeleteTrades() {
     },
     
     onMutate: async (tradeIds) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      await queryClient.cancelQueries({ queryKey });
 
-      const previousTrades = queryClient.getQueryData<Trade[]>(queryKeys.trades(userId || ''));
+      const previousTrades = queryClient.getQueryData<Trade[]>(queryKey);
 
       if (previousTrades) {
         const tradeIdSet = new Set(tradeIds);
-        queryClient.setQueryData<Trade[]>(
-          queryKeys.trades(userId || ''),
-          previousTrades.filter(t => !tradeIdSet.has(t.id))
-        );
+        queryClient.setQueryData<Trade[]>(queryKey, previousTrades.filter(t => !tradeIdSet.has(t.id)));
       }
 
-      return { previousTrades };
+      return { previousTrades, queryKey };
     },
     
     onError: (err, tradeIds, context) => {
-      if (context?.previousTrades) {
-        queryClient.setQueryData(queryKeys.trades(userId || ''), context.previousTrades);
+      if (context?.previousTrades && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, context.previousTrades);
       }
     },
     
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.trades(userId || '') });
+      const queryKey = [...queryKeys.trades(userId || ''), isImpersonating ? 'admin' : 'user'];
+      queryClient.invalidateQueries({ queryKey });
     },
   });
 }

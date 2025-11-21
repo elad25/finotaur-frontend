@@ -3,7 +3,8 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, Shield, type LucideIcon
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, Shield, 
+  FlaskConical, PlayCircle, TrendingDown, Brain, Database, Code, type LucideIcon
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -184,10 +185,34 @@ export const domains: Record<string, Domain> = {
       { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
-      { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks }, // ✅ שונה מ-"Scenarios & Plans"
+      { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks },
       { label: 'Community Blog', path: '/app/journal/community', icon: Users },
       { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
       { label: 'Settings', path: '/app/journal/settings', icon: SettingsIcon },
+    ],
+  },
+
+  // 🧪 NEW: Backtest Domain
+  backtest: {
+    id: 'backtest',
+    label: 'Backtest',
+    subNav: [
+      { label: 'Dashboard', path: '/app/backtest/overview' },
+      { label: 'New Backtest', path: '/app/backtest/new' },
+      { label: 'Results', path: '/app/backtest/results' },
+    ],
+    sidebar: [
+      { label: 'Dashboard', path: '/app/backtest/overview', icon: LayoutDashboard },
+      { label: 'New Backtest', path: '/app/backtest/new', icon: FlaskConical },
+      { label: 'My Backtests', path: '/app/backtest/results', icon: FileText },
+      { label: 'Strategy Builder', path: '/app/backtest/builder', icon: Code },
+      { label: 'Historical Data', path: '/app/backtest/data', icon: Database },
+      { label: 'Performance Analytics', path: '/app/backtest/analytics', icon: BarChart3 },
+      { label: 'Monte Carlo', path: '/app/backtest/monte-carlo', icon: Activity },
+      { label: 'Walk Forward', path: '/app/backtest/walk-forward', icon: TrendingUp },
+      { label: 'Optimization', path: '/app/backtest/optimization', icon: Target },
+      { label: 'AI Insights', path: '/app/backtest/ai-insights', icon: Brain },
+      { label: 'Market Replay', path: '/app/backtest/replay', icon: PlayCircle },
     ],
   },
 
@@ -256,6 +281,7 @@ export const domainOrder = [
   'macro',
   'ai',
   'journal',
+  'backtest', // 🧪 NEW
   'copy-trade',
   'funding',
 ];

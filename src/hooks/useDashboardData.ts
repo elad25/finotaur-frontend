@@ -1,9 +1,9 @@
+// src/hooks/useDashboardData.ts
 // ================================================
-// OPTIMIZED FOR 5000+ USERS - Ultra Performance + Impersonation Support
-// File: src/hooks/useDashboardData.ts
-// 🔥 FIXED: Added admin client support for impersonation
-// ✅ ENHANCED: Added profitFactor, avgWin, avgLoss calculations
-// ✅ NEW: Added trades array for chart data
+// OPTIMIZED FOR 5000+ USERS - v2.1 WITH SESSION SUPPORT
+// ✅ Calls enable_admin_mode() before queries
+// ✅ Full admin client support
+// ✅ Trading session support added
 // ================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,11 +12,14 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useAuth } from '@/providers/AuthProvider';
+import { useImpersonation } from '@/contexts/ImpersonationContext';
 import dayjs from 'dayjs';
 
 // ================================================
 // TYPES & INTERFACES
 // ================================================
+
+export type TradingSession = 'asian' | 'london' | 'new_york' | 'after_hours';
 
 export interface Trade {
   id: string;
@@ -32,6 +35,7 @@ export interface Trade {
   quantity: number | null;
   exit_price: number | null;
   multiplier: number | null;
+  session?: TradingSession; // ✅ NEW: Trading session
 }
 
 export interface DashboardStats {
@@ -43,23 +47,22 @@ export interface DashboardStats {
   wins: number;
   losses: number;
   breakeven: number;
-  
-  // ✅ NEW FIELDS - Added for enhanced KPI cards
-  profitFactor: number;  // Gross profit / Gross loss (>1 = profitable)
-  avgWin: number;        // Average winning trade P&L
-  avgLoss: number;       // Average losing trade P&L (negative number)
-  
+  profitFactor: number;
+  avgWin: number;
+  avgLoss: number;
   bestTrade: {
     pnl: number;
     rr: number | null;
     symbol: string;
     open_at: string;
+    session?: TradingSession; // ✅ NEW: Added session support
   } | null;
   worstTrade: {
     pnl: number;
     rr: number | null;
     symbol: string;
     open_at: string;
+    session?: TradingSession; // ✅ NEW: Added session support
   } | null;
   equitySeries: Array<{
     date: string;
@@ -71,8 +74,6 @@ export interface DashboardStats {
     icon: string;
     color: string;
   };
-  
-  // ✅ NEW: Array of trades for charts
   trades: Trade[];
 }
 
@@ -102,7 +103,7 @@ class LRUCache<K, V> {
     if (!this.cache.has(key)) return undefined;
     const value = this.cache.get(key)!;
     this.cache.delete(key);
-    this.cache.set(key, value); // Move to end (most recent)
+    this.cache.set(key, value);
     return value;
   }
 
@@ -133,16 +134,13 @@ const statsCache = new Map<string, { trades: any[], result: DashboardStats }>();
 // ================================================
 
 function calculateRR(trade: any): number | null {
-  // Priority 1: Use existing RR fields
   if (trade.rr != null && !isNaN(trade.rr) && trade.rr > 0) return trade.rr;
   if (trade.actual_r != null && !isNaN(trade.actual_r) && trade.actual_r > 0) return trade.actual_r;
   
-  // Priority 2: Calculate from P&L and risk
   if (trade.pnl != null && trade.risk_usd && trade.risk_usd > 0) {
     return Math.abs(trade.pnl) / trade.risk_usd;
   }
   
-  // Priority 3: Calculate from trade parameters
   if (trade.stop_price && trade.entry_price && trade.quantity) {
     const risk = Math.abs(trade.entry_price - trade.stop_price);
     if (risk > 0 && trade.pnl != null) {
@@ -174,7 +172,6 @@ function calculateTier(stats: Omit<DashboardStats, 'tier'>): DashboardStats['tie
 // ================================================
 
 function computeStats(trades: any[]): DashboardStats {
-  // Check cache first
   const tradeIds = trades.map(t => t.id).join(',');
   const cached = statsCache.get(tradeIds);
   if (cached && cached.trades === trades) {
@@ -182,7 +179,6 @@ function computeStats(trades: any[]): DashboardStats {
     return cached.result;
   }
 
-  // Initialize accumulators
   let netPnl = 0;
   let wins = 0;
   let losses = 0;
@@ -194,8 +190,6 @@ function computeStats(trades: any[]): DashboardStats {
   let runningPnl = 0;
   let peak = 0;
   let maxDrawdown = 0;
-  
-  // ✅ NEW: Accumulators for profit factor and avg win/loss
   let totalWinPnl = 0;
   let totalLossPnl = 0;
   let winCount = 0;
@@ -203,45 +197,40 @@ function computeStats(trades: any[]): DashboardStats {
 
   const tradesByDate = new Map<string, any[]>();
 
-  // Sort trades chronologically
   const sortedTrades = [...trades].sort((a, b) => 
     new Date(a.close_at || a.open_at).getTime() - new Date(b.close_at || b.open_at).getTime()
   );
 
-  // Single-pass computation
   for (const trade of sortedTrades) {
     const pnl = trade.pnl || 0;
     netPnl += pnl;
 
-    // Win/Loss/Breakeven tracking
     if (pnl > 0) {
       wins++;
-      // ✅ NEW: Track winning trades for profit factor
       totalWinPnl += pnl;
       winCount++;
     } else if (pnl < 0) {
       losses++;
-      // ✅ NEW: Track losing trades for profit factor
       totalLossPnl += Math.abs(pnl);
       lossCount++;
     } else {
       breakeven++;
     }
 
-    // RR calculation
     const calculatedRR = calculateRR(trade);
     if (calculatedRR != null && !isNaN(calculatedRR) && isFinite(calculatedRR)) {
       totalRR += calculatedRR;
       rrCount++;
     }
 
-    // Best/Worst trade tracking
+    // ✅ UPDATED: Include session in best/worst trade tracking
     if (!bestTrade || pnl > bestTrade.pnl) {
       bestTrade = {
         pnl,
         rr: calculatedRR,
         symbol: trade.symbol || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
+        session: trade.session, // ✅ NEW
       };
     }
     if (!worstTrade || pnl < worstTrade.pnl) {
@@ -250,10 +239,10 @@ function computeStats(trades: any[]): DashboardStats {
         rr: calculatedRR,
         symbol: trade.symbol || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
+        session: trade.session, // ✅ NEW
       };
     }
 
-    // Group by date for equity series
     const date = dayjs(trade.close_at || trade.open_at).format('MMM DD');
     if (!tradesByDate.has(date)) {
       tradesByDate.set(date, []);
@@ -261,7 +250,6 @@ function computeStats(trades: any[]): DashboardStats {
     tradesByDate.get(date)!.push(trade);
   }
 
-  // Equity series computation with caching
   const cacheKey = trades.length > 0 
     ? `${trades.length}-${trades[0]?.id}-${trades[trades.length - 1]?.id}`
     : 'empty';
@@ -277,7 +265,6 @@ function computeStats(trades: any[]): DashboardStats {
       const dayPnl = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
       runningPnl += dayPnl;
       
-      // Drawdown calculation
       if (runningPnl > peak) peak = runningPnl;
       const drawdown = peak - runningPnl;
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
@@ -292,12 +279,10 @@ function computeStats(trades: any[]): DashboardStats {
     equitySeriesCache.set(cacheKey, equitySeries);
   }
 
-  // ✅ NEW: Calculate Profit Factor and Avg Win/Loss
   const profitFactor = totalLossPnl > 0 ? totalWinPnl / totalLossPnl : 0;
   const avgWin = winCount > 0 ? totalWinPnl / winCount : 0;
-  const avgLoss = lossCount > 0 ? -(totalLossPnl / lossCount) : 0; // Negative number
+  const avgLoss = lossCount > 0 ? -(totalLossPnl / lossCount) : 0;
 
-  // Final calculations
   const closedTrades = trades.length;
   const winrate = closedTrades > 0 ? wins / closedTrades : 0;
   const avgRR = rrCount > 0 ? totalRR / rrCount : 0;
@@ -311,14 +296,12 @@ function computeStats(trades: any[]): DashboardStats {
     breakeven,
     closedTrades,
     maxDrawdown,
-    // ✅ NEW: Add profit factor and avg win/loss
     profitFactor: isFinite(profitFactor) ? profitFactor : 0,
     avgWin: isFinite(avgWin) ? avgWin : 0,
     avgLoss: isFinite(avgLoss) ? avgLoss : 0,
     bestTrade: bestTrade && bestTrade.pnl > 0 ? bestTrade : null,
     worstTrade: worstTrade && worstTrade.pnl < 0 ? worstTrade : null,
     equitySeries,
-    // ✅ NEW: Include sorted trades array for charts
     trades: sortedTrades,
   };
 
@@ -327,7 +310,6 @@ function computeStats(trades: any[]): DashboardStats {
     tier: calculateTier(baseStats),
   };
 
-  // Cache the result
   if (statsCache.size > 50) {
     const firstKey = statsCache.keys().next().value;
     statsCache.delete(firstKey);
@@ -340,26 +322,22 @@ function computeStats(trades: any[]): DashboardStats {
     losses,
     winrate: (winrate * 100).toFixed(1) + '%',
     profitFactor: profitFactor.toFixed(2),
-    avgWin: avgWin.toFixed(2),
-    avgLoss: avgLoss.toFixed(2),
   });
 
   return result;
 }
 
 // ================================================
-// REACT HOOKS WITH IMPERSONATION SUPPORT
+// REACT HOOKS WITH ADMIN MODE SUPPORT
 // ================================================
 
 export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
   const { user } = useAuth();
+  const { enableAdminMode } = useImpersonation();
   const queryClient = useQueryClient();
   
-  // Use override if provided, otherwise use effective user
   const userId = overrideUserId || effectiveUserId;
-  
-  // ✅ ALWAYS use admin client for impersonation, regular client otherwise
   const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
 
   const query = useQuery({
@@ -367,27 +345,47 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
 
+      // 🔥 CRITICAL: Enable admin mode BEFORE query if impersonating
+      if (isImpersonating && enableAdminMode) {
+        console.log('🔓 Enabling admin_mode for impersonation query...');
+        const enabled = await enableAdminMode();
+        if (!enabled) {
+          console.warn('⚠️ Failed to enable admin_mode - query may fail');
+        } else {
+          console.log('✅ admin_mode enabled - RLS bypassed');
+        }
+      }
+
       const cutoffDate = daysBack && daysBack > 0
         ? dayjs().subtract(daysBack, 'days').toISOString()
         : null;
 
-      // ✅ Choose the right client - admin client bypasses RLS during impersonation
-      const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
-      
-      console.log('🔑 Dashboard query using:', {
-        client: shouldUseAdminClient ? 'ADMIN (bypasses RLS)' : 'REGULAR',
+      console.log('🔑 Dashboard query config:', {
         userId,
+        effectiveUserId,
         isImpersonating,
+        shouldUseAdminClient,
+        adminModeEnabled: isImpersonating,
         cutoffDate,
-        supabaseAdminExists: !!supabaseAdmin
       });
 
-      // ✅ Filter by exit_price to get closed trades (NOT NULL)
+      if (isImpersonating && !supabaseAdmin) {
+        console.error('❌ CRITICAL: Impersonating but supabaseAdmin is null!');
+        throw new Error(
+          'Admin client not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to .env file.'
+        );
+      }
+
+      const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
+      
+      console.log('📡 Query using:', shouldUseAdminClient ? '🔓 ADMIN CLIENT' : '🔒 REGULAR CLIENT');
+
+      // ✅ UPDATED: Added session to the select query
       let queryBuilder = client
         .from('trades')
-        .select('id, symbol, pnl, rr, actual_r, risk_usd, open_at, close_at, stop_price, entry_price, quantity, exit_price, multiplier')
+        .select('id, symbol, pnl, rr, actual_r, risk_usd, open_at, close_at, stop_price, entry_price, quantity, exit_price, multiplier, session')
         .eq('user_id', userId)
-        .not('exit_price', 'is', null)  // ✅ Only trades with exit price
+        .not('exit_price', 'is', null)
         .order('open_at', { ascending: true, nullsFirst: false });
 
       if (cutoffDate) {
@@ -397,19 +395,42 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
       const { data, error } = await queryBuilder;
 
       if (error) {
-        console.error('❌ Dashboard query error:', error);
+        console.error('❌ Dashboard query error:', {
+          error,
+          userId,
+          client: shouldUseAdminClient ? 'ADMIN' : 'REGULAR',
+          message: error.message,
+          code: error.code,
+        });
+        
+        if (error.code === 'PGRST116' || error.message?.includes('row-level security')) {
+          throw new Error(
+            `Access denied. ${isImpersonating ? 'Admin mode required.' : 'You can only view your own data.'}`
+          );
+        }
+        
         throw error;
       }
       
-      console.log(`✅ Loaded ${data?.length || 0} closed trades for user ${userId}`, data);
+      console.log(`✅ Successfully loaded ${data?.length || 0} trades for user ${userId}`);
+      
+      if (data && data.length > 0) {
+        console.log('📊 Sample trade:', {
+          id: data[0].id,
+          symbol: data[0].symbol,
+          pnl: data[0].pnl,
+          session: data[0].session, // ✅ NEW
+        });
+      }
+      
       return computeStats(data || []);
     },
     enabled: !!userId,
-    staleTime: 3 * 60 * 1000, // 3 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 3 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: false,
   });
 
-  // Prefetch common time ranges
   useEffect(() => {
     if (userId && query.isSuccess) {
       const ranges = [7, 30, 90];
@@ -427,12 +448,9 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
 
 export function useSnapTradeConnections(overrideUserId?: string) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
-  const { user } = useAuth();
+  const { enableAdminMode } = useImpersonation();
   
-  // Use override if provided, otherwise use effective user
   const userId = overrideUserId || effectiveUserId;
-  
-  // ✅ ALWAYS use admin client for impersonation
   const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
 
   return useQuery({
@@ -440,14 +458,13 @@ export function useSnapTradeConnections(overrideUserId?: string) {
     queryFn: async () => {
       if (!userId) return [];
 
+      // 🔥 Enable admin mode if impersonating
+      if (isImpersonating && enableAdminMode) {
+        await enableAdminMode();
+      }
+
       try {
-        // ✅ Choose the right client
         const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
-        
-        console.log('🔑 Connections query using:', {
-          client: shouldUseAdminClient ? 'ADMIN' : 'REGULAR',
-          supabaseAdminExists: !!supabaseAdmin
-        });
 
         const { data, error } = await client
           .from('broker_connections')
@@ -456,14 +473,14 @@ export function useSnapTradeConnections(overrideUserId?: string) {
           .order('created_at', { ascending: false });
         
         if (error) {
-          console.warn('⚠️ broker_connections table not found');
+          console.warn('⚠️ broker_connections query failed:', error.message);
           return [];
         }
 
-        console.log(`✅ Loaded ${data?.length || 0} broker connections for user ${userId}`);
+        console.log(`✅ Loaded ${data?.length || 0} connections for user ${userId}`);
         return data || [];
       } catch (err) {
-        console.warn('⚠️ Error loading broker connections:', err);
+        console.warn('⚠️ Error loading connections:', err);
         return [];
       }
     },
@@ -491,10 +508,6 @@ export function getPnLColor(pnl: number): string {
   if (pnl < 0) return 'text-[#E36363]';
   return 'text-[#A0A0A0]';
 }
-
-// ================================================
-// CACHE MANAGEMENT
-// ================================================
 
 export function clearDashboardCache() {
   equitySeriesCache.clear();

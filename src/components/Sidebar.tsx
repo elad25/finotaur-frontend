@@ -1,8 +1,29 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { cn } from '@/lib/utils';
-import { Building } from 'lucide-react'; // 🏢 Icon for Prop Firms
-// 🔥 ייבא את כל פונקציות ה-prefetch מ-queryClient
+import { 
+  LayoutDashboard, 
+  PlusCircle, 
+  BookOpen, 
+  Layers, 
+  BarChart3, 
+  Calendar, 
+  MessageSquare, 
+  Building, 
+  Target, 
+  Users, 
+  GraduationCap, 
+  Settings,
+  FlaskConical,
+  TrendingUp,
+  FileText,
+  Calculator,
+  PieChart,
+  Activity,
+  Shuffle,
+  Brain,
+  Play
+} from 'lucide-react';
 import { 
   prefetchSettingsData, 
   prefetchAnalytics, 
@@ -15,15 +36,68 @@ interface SidebarProps {
   isOpen: boolean;
 }
 
+// 🔥 הגדרת סוגי סביבות
+type EnvironmentType = 'journal' | 'backtest' | 'admin';
+
+// 🔥 הגדרת תפריטים שונים לכל סביבה - לפי המסלולים ב-App.tsx
+const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
+  label: string;
+  path: string;
+  icon: any;
+}>> = {
+  journal: [
+    { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
+    { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
+    { label: 'Trades Journal', path: '/app/journal/my-trades', icon: BookOpen },
+    { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
+    { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
+    { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
+    { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
+    { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
+    { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
+    { label: 'Community Blog', path: '/app/journal/community', icon: Users },
+    { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
+    { label: 'Settings', path: '/app/journal/settings', icon: Settings },
+  ],
+  backtest: [
+    { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
+    { label: 'Chart', path: '/app/journal/backtest/Chart', icon: PlusCircle },
+    { label: 'Trades Journal', path: '/app/journal/backtest/results', icon: FileText },
+    { label: 'My Strategies', path: '/app/journal/backtest/builder', icon: Layers },
+    { label: 'Statistics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
+    { label: 'Calendar', path: '/app/journal/backtest/data', icon: Calendar },
+    { label: 'AI Chat', path: '/app/journal/backtest/ai-insights', icon: Brain },
+    { label: 'Prop Firms', path: '/app/journal/backtest/monte-carlo', icon: Shuffle },
+    { label: 'Gameplan', path: '/app/journal/backtest/walk-forward', icon: Activity },
+    { label: 'Community Blog', path: '/app/journal/backtest/optimization', icon: Calculator },
+    { label: 'Academy', path: '/app/journal/backtest/replay', icon: Play },
+    { label: 'Settings', path: '/app/journal/settings', icon: Settings },
+  ],
+  admin: [
+    // 🔥 ONLY DASHBOARD - הסרתי את כל השאר
+    { label: 'Dashboard', path: '/app/journal/admin', icon: LayoutDashboard },
+  ]
+};
+
 export const Sidebar = ({ isOpen }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeDomain, isActive } = useDomain();
 
-  // ✅ FIXED: Only show sidebar in Journal section
-  const isJournalSection = location.pathname.startsWith('/app/journal');
+  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL
+  const getCurrentEnvironment = (): EnvironmentType => {
+    if (location.pathname.startsWith('/app/journal/admin')) return 'admin';
+    if (location.pathname.startsWith('/app/journal/backtest')) return 'backtest';
+    return 'journal';
+  };
+
+  const currentEnvironment = getCurrentEnvironment();
+  const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
+
+  // ✅ הצג את ה-Sidebar רק בסקשנים הרלוונטיים
+  const shouldShowSidebar = location.pathname.startsWith('/app/journal');
   
-  if (!isJournalSection) {
+  if (!shouldShowSidebar) {
     return null;
   }
 
@@ -31,8 +105,10 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     navigate(path);
   };
 
-  // 🔥 OPTIMIZED: Map paths to prefetch functions (using centralized functions)
+  // 🔥 Prefetch רק עבור Journal
   const getPrefetchFunction = (path: string): (() => Promise<void>) | undefined => {
+    if (currentEnvironment !== 'journal') return undefined;
+    
     const prefetchMap: Record<string, () => Promise<void>> = {
       '/app/journal/settings': prefetchSettingsData,
       '/app/journal/analytics': prefetchAnalytics,
@@ -44,46 +120,21 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     return prefetchMap[path];
   };
 
-  // 🔥 Safe prefetch with error handling
   const handlePrefetch = async (path: string) => {
     const prefetchFn = getPrefetchFunction(path);
     if (prefetchFn) {
       try {
         await prefetchFn();
       } catch (error) {
-        // Silent fail - prefetch is optional, don't break UX
         console.debug(`Prefetch failed for ${path}`, error);
       }
     }
   };
 
-  // 🔥 FIX: Ensure Prop Firms is in the correct position
-  const sidebarItems = [...activeDomain.sidebar];
-  
-  // Find if Prop Firms exists
-  const propFirmsIndex = sidebarItems.findIndex(item => item.path === '/app/journal/prop-firms');
-  const aiChatIndex = sidebarItems.findIndex(item => item.path === '/app/journal/ai-review');
-  
-  // If Prop Firms exists but is not right after AI Chat, move it
-  if (propFirmsIndex !== -1 && aiChatIndex !== -1 && propFirmsIndex !== aiChatIndex + 1) {
-    const [propFirmsItem] = sidebarItems.splice(propFirmsIndex, 1);
-    sidebarItems.splice(aiChatIndex + 1, 0, propFirmsItem);
-  }
-  
-  // If Prop Firms doesn't exist at all, add it after AI Chat
-  if (propFirmsIndex === -1 && aiChatIndex !== -1) {
-    sidebarItems.splice(aiChatIndex + 1, 0, {
-      label: 'Prop Firms',
-      path: '/app/journal/prop-firms',
-      icon: Building
-    });
-  }
-
   return (
     <aside
       className={cn(
         'fixed left-0 top-28 z-30 h-[calc(100vh-7rem)] border-r border-border bg-base-800 transition-transform duration-300 md:sticky md:translate-x-0',
-        // ✂️ קיצור רוחב ב-25%: w-64 (256px) → w-48 (192px) כשפתוח, w-16 (64px) → w-12 (48px) כשסגור
         isOpen ? 'translate-x-0 w-48' : '-translate-x-full md:w-12'
       )}
     >
@@ -96,7 +147,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
             <button
               key={item.path}
               onClick={() => handleNavigation(item.path)}
-              onMouseEnter={() => handlePrefetch(item.path)} // 🔥 Safe prefetch on hover
+              onMouseEnter={() => handlePrefetch(item.path)}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-smooth relative',
                 active

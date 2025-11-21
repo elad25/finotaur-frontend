@@ -13,7 +13,7 @@ import {
   useStrategiesOptimized,
   useStrategyOptimized,
   useCreateStrategyOptimized,
-  useUpdateStrategyOptimized, // ✅ הוספה!
+  useUpdateStrategyOptimized,
   useDeleteStrategyOptimized,
 } from "@/hooks/useStrategies";
 import { 
@@ -22,6 +22,9 @@ import {
   type StrategyStats as BaseStrategyStats,
 } from "@/utils/statsCalculations";
 import { toast } from "sonner";
+import { useTimezone } from '@/contexts/TimezoneContext';
+import { formatTradeDate, formatTradeDateShort } from '@/utils/dateFormatter';
+import { formatSessionDisplay } from '@/constants/tradingSessions';
 
 // ==========================================
 // 🎯 TYPES
@@ -239,7 +242,6 @@ const RDistributionChart = memo(({ rValues }: { rValues: number[] }) => {
   );
 });
 RDistributionChart.displayName = 'RDistributionChart';
-
 // ==========================================
 // 🚀 STRATEGY DETAIL VIEW - FULL VERSION
 // ==========================================
@@ -248,12 +250,14 @@ function StrategyDetailView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { id: userId, isImpersonating, isLoading: userLoading } = useEffectiveUser();
+  const timezone = useTimezone(); // ✅ הוסף timezone
 
   console.log('🔍 StrategyDetailView:', {
     strategyId: id,
     userId,
     isImpersonating,
     userLoading,
+    timezone, // ✅ log timezone
   });
   
   const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'analytics' | 'insights'>('overview');
@@ -451,6 +455,10 @@ function StrategyDetailView() {
             </button>
           ))}
         </div>
+
+        {/* ==========================================
+            📋 TAB: OVERVIEW
+            ========================================== */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <div className="grid grid-cols-4 gap-6">
@@ -558,7 +566,9 @@ function StrategyDetailView() {
             )}
           </div>
         )}
-
+        {/* ==========================================
+            📋 TAB: TRADES - עם Timezone Support ✅
+            ========================================== */}
         {activeTab === 'trades' && (
           <div>
             {strategyTrades.length > 0 ? (
@@ -639,12 +649,15 @@ function StrategyDetailView() {
                           className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/5 transition-all cursor-pointer"
                           style={{ color: '#EAEAEA' }}
                         >
+                          {/* ✅ Date עם Timezone Support */}
                           <div style={{ color: '#9A9A9A' }}>
                             {trade.entryTime 
-                              ? new Date(trade.entryTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                              ? formatTradeDateShort(trade.entryTime, timezone)
                               : 'N/A'}
                           </div>
+                          
                           <div className="font-semibold">{trade.symbol || 'N/A'}</div>
+                          
                           <div>
                             <span 
                               className="px-2 py-1 rounded text-xs font-medium"
@@ -656,14 +669,18 @@ function StrategyDetailView() {
                               {trade.side || 'N/A'}
                             </span>
                           </div>
+                          
                           <div style={{ color: '#9A9A9A' }}>${trade.entryPrice?.toFixed(2) || 'N/A'}</div>
                           <div style={{ color: '#9A9A9A' }}>${trade.exitPrice?.toFixed(2) || 'N/A'}</div>
+                          
                           <div className="text-right font-bold" style={{ color: r >= 0 ? '#00C46C' : '#E44545' }}>
                             {r >= 0 ? '+' : ''}{r.toFixed(2)}R
                           </div>
+                          
                           <div className="text-right font-bold" style={{ color: pnl >= 0 ? '#00C46C' : '#E44545' }}>
                             ${pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
                           </div>
+                          
                           <div className="text-center">
                             <span 
                               className="px-3 py-1 rounded-full text-xs font-bold"
@@ -691,6 +708,9 @@ function StrategyDetailView() {
           </div>
         )}
 
+        {/* ==========================================
+            📊 TAB: ANALYTICS
+            ========================================== */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             {stats.totalTrades > 0 ? (
@@ -900,7 +920,9 @@ function StrategyDetailView() {
             )}
           </div>
         )}
-
+        {/* ==========================================
+            🧠 TAB: INSIGHTS - עם Session Display ✅
+            ========================================== */}
         {activeTab === 'insights' && (
           <div className="space-y-6">
             <div 
@@ -983,13 +1005,12 @@ function StrategyDetailView() {
                   <p style={{ color: '#9A9A9A' }}>Setup Type:</p>
                   <p className="font-semibold" style={{ color: '#EAEAEA' }}>{strategy.setupType || 'Not specified'}</p>
                 </div>
+                {/* ✅ Session Display עם Timezone Support */}
                 <div>
                   <p style={{ color: '#9A9A9A' }}>Typical Session:</p>
                   <p className="font-semibold" style={{ color: '#EAEAEA' }}>
-                    {strategy.typicalSession === 'ny' ? '🇺🇸 New York' 
-                      : strategy.typicalSession === 'london' ? '🇬🇧 London'
-                      : strategy.typicalSession === 'asia' ? '🌏 Asia'
-                      : strategy.typicalSession === 'overlap' ? '🌍 Overlap'
+                    {strategy.typicalSession 
+                      ? formatSessionDisplay(strategy.typicalSession)
                       : 'Not specified'}
                   </p>
                 </div>
@@ -1023,19 +1044,20 @@ function StrategyDetailView() {
     </div>
   );
 }
+
 // ==========================================
-// 🎨 STRATEGY MODAL (NEW/EDIT) - ✅ מאוחד!
+// 🎨 STRATEGY MODAL (NEW/EDIT)
 // ==========================================
 
 interface StrategyModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (strategy: any) => void;
-  editingStrategy?: ExtendedStrategy | null; // ✅ פרמטר חדש!
+  editingStrategy?: ExtendedStrategy | null;
 }
 
 const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: StrategyModalProps) => {
-  const isEditMode = !!editingStrategy; // ✅ בודק אם במצב עריכה
+  const isEditMode = !!editingStrategy;
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
   
@@ -1055,7 +1077,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   const [avgRRGoal, setAvgRRGoal] = useState<number | undefined>();
   const [psychologicalNotes, setPsychologicalNotes] = useState("");
 
-  // ✅ טעינת נתונים קיימים במצב עריכה
   useEffect(() => {
     if (editingStrategy) {
       setName(editingStrategy.name || "");
@@ -1073,7 +1094,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       setAvgRRGoal(editingStrategy.avgRRGoal);
       setPsychologicalNotes(editingStrategy.psychologicalNotes || "");
     } else {
-      // איפוס במצב יצירה חדשה
       setName("");
       setDescription("");
       setAssetClasses([]);
@@ -1155,7 +1175,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
       status: 'active' as const,
     };
 
-    // ✅ אם במצב עריכה - שומר את ה-ID
     if (isEditMode) {
       strategyData.id = editingStrategy!.id;
     } else {
@@ -1202,7 +1221,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
             </div>
             <div>
               <h2 className="text-xl font-bold" style={{ color: '#EAEAEA' }}>
-                {/* ✅ כותרת דינמית */}
                 {isEditMode ? `Edit Strategy - ${stepTitles[currentStep - 1]}` : stepTitles[currentStep - 1]}
               </h2>
               <p className="text-xs" style={{ color: '#9A9A9A' }}>
@@ -1576,7 +1594,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
                 color: '#000'
               }}
             >
-              {/* ✅ כפתור דינמי */}
               {isEditMode ? 'Save Changes' : 'Create'}
             </button>
           )}
@@ -1586,7 +1603,6 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
   );
 });
 StrategyModal.displayName = 'StrategyModal';
-
 // ==========================================
 // 🚀 OPTIMIZED STRATEGY CARD
 // ==========================================
@@ -1608,7 +1624,7 @@ const StrategyCard = memo(({ strategy, stats, onView, onEdit, onDelete }: Strate
 
   const handleEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    onEdit(strategy); // ✅ עובד!
+    onEdit(strategy);
     setShowMenu(false);
   }, [onEdit, strategy]);
 
@@ -1885,7 +1901,7 @@ const DeleteConfirmDialog = memo(({ isOpen, onClose, onConfirm, strategyName }: 
 DeleteConfirmDialog.displayName = 'DeleteConfirmDialog';
 
 // ==========================================
-// 🎯 MAIN STRATEGIES PAGE - עם עריכה מלאה!
+// 🎯 MAIN STRATEGIES PAGE
 // ==========================================
 
 export default function Strategies() {
@@ -1907,7 +1923,6 @@ export default function Strategies() {
     console.log('⏳ Smart Refresh: Refreshing strategy_stats_view...');
   }
 
-  // ✅ State - כולל editingStrategy!
   const [showStrategyModal, setShowStrategyModal] = useState(false);
   const [editingStrategy, setEditingStrategy] = useState<ExtendedStrategy | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1917,7 +1932,7 @@ export default function Strategies() {
   const { data: allTrades = [], isLoading: tradesLoading } = useTrades(userId);
 
   const createStrategyMutation = useCreateStrategyOptimized();
-  const updateStrategyMutation = useUpdateStrategyOptimized(); // ✅ חדש!
+  const updateStrategyMutation = useUpdateStrategyOptimized();
   const deleteStrategyMutation = useDeleteStrategyOptimized();
 
   const loading = userLoading || strategiesLoading || tradesLoading || isViewRefreshing;
@@ -1942,7 +1957,6 @@ export default function Strategies() {
     });
   }, [strategies, allTrades]);
 
-  // ✅ Create/Update handler מאוחד
   const handleSaveStrategy = useCallback(async (strategyData: any) => {
     if (!userId) {
       toast.error('User ID is required to save a strategy');
@@ -1957,14 +1971,12 @@ export default function Strategies() {
 
     try {
       if (strategyData.id && editingStrategy) {
-        // מצב עריכה
         await updateStrategyMutation.mutateAsync({
           ...strategyData,
           user_id: userId,
         });
         toast.success('Strategy updated successfully!');
       } else {
-        // מצב יצירה חדשה
         await createStrategyMutation.mutateAsync({
           ...strategyData,
           user_id: userId,
@@ -1980,7 +1992,6 @@ export default function Strategies() {
     }
   }, [createStrategyMutation, updateStrategyMutation, userId, editingStrategy]);
 
-  // ✅ Edit handler - פותח את המודל עם הנתונים
   const handleEdit = useCallback((strategy: ExtendedStrategy) => {
     console.log('🔍 Edit strategy:', strategy);
     setEditingStrategy(strategy);
@@ -2104,7 +2115,7 @@ export default function Strategies() {
                 strategy={strategy}
                 stats={stats}
                 onView={() => navigate(`/app/journal/strategies/${strategy.id}`)}
-                onEdit={handleEdit} // ✅ עובד!
+                onEdit={handleEdit}
                 onDelete={handleDelete}
               />
             ))}
@@ -2112,7 +2123,6 @@ export default function Strategies() {
         )}
       </div>
 
-      {/* Modals */}
       <DeleteConfirmDialog
         isOpen={deleteDialogOpen}
         onClose={handleCloseDeleteDialog}
@@ -2124,7 +2134,7 @@ export default function Strategies() {
         isOpen={showStrategyModal}
         onClose={handleCloseStrategyModal}
         onSave={handleSaveStrategy}
-        editingStrategy={editingStrategy} // ✅ מעביר את האסטרטגיה לעריכה
+        editingStrategy={editingStrategy}
       />
     </div>
   );

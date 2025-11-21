@@ -2,7 +2,7 @@
 // ============================================
 // OPTIMIZED FOR 5000+ CONCURRENT USERS
 // ============================================
-// Version: v8.5.0-WITH-ARCHIVE-SYSTEM + SUBSCRIBERS
+// Version: v8.7.0-WITH-IMPERSONATION-SYSTEM
 // Performance improvements:
 // ✅ React Query integration via query keys
 // ✅ Request deduplication via cachedQuery wrapper
@@ -17,6 +17,7 @@
 // ✅ NEW v8.4.10: UNBAN user function using RPC
 // ✅ NEW v8.5.0: SOFT DELETE with 30-day archive system
 // ✅ NEW v8.6.0: SUBSCRIBERS management functions
+// ✅ NEW v8.7.0: IMPERSONATION system with session management
 
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
 import {
@@ -50,6 +51,38 @@ export interface ArchivedUser extends UserWithStats {
 }
 
 // ============================================
+// TYPES - Impersonation System
+// ============================================
+
+export interface ImpersonationSession {
+  access_token: string;
+  refresh_token: string;
+  user_data: {
+    id: string;
+    email: string;
+    display_name: string;
+    role: string;
+    account_type: string;
+    impersonated: boolean;
+    impersonated_by: string;
+  };
+}
+
+export interface ActiveImpersonationSession {
+  id: string;
+  admin_id: string;
+  admin_email: string;
+  target_user_id: string;
+  target_user_email: string;
+  target_user_name: string;
+  session_token: string;
+  created_at: string;
+  expires_at: string;
+  last_activity: string;
+  ip_address: string | null;
+}
+
+// ============================================
 // CONSTANTS & CONFIGURATION
 // ============================================
 
@@ -73,6 +106,7 @@ const CACHE_TTL = {
   CHARTS: 10 * 60 * 1000,     // 10 minutes
   ARCHIVE: 5 * 60 * 1000,     // 5 minutes
   SUBSCRIBERS: 5 * 60 * 1000, // 5 minutes
+  IMPERSONATION: 1 * 60 * 1000, // 1 minute (short cache for active sessions)
 } as const;
 
 // ============================================
@@ -100,6 +134,8 @@ export const adminQueryKeys = {
     [...adminQueryKeys.all, 'subscriber-stats'] as const,
   subscribersList: () =>
     [...adminQueryKeys.all, 'subscribers-list'] as const,
+  impersonationSessions: () =>
+    [...adminQueryKeys.all, 'impersonation-sessions'] as const,
 } as const;
 
 // ============================================
@@ -129,6 +165,13 @@ export function invalidateStatsCaches() {
   supabaseCache.invalidate('user-growth');
   supabaseCache.invalidate('trade-volume');
   supabaseCache.invalidate('subscriber-stats');
+}
+
+/**
+ * Invalidate impersonation session caches
+ */
+export function invalidateImpersonationCaches() {
+  supabaseCache.invalidate('active-impersonation-sessions');
 }
 
 // ============================================
@@ -513,6 +556,202 @@ export async function permanentDeleteFromArchive(
     console.timeEnd('⚡ permanentDeleteFromArchive');
   } catch (error) {
     console.error('❌ permanentDeleteFromArchive failed:', error);
+    throw error;
+  }
+}
+
+// ============================================
+// 🎭 IMPERSONATION SYSTEM FUNCTIONS
+// ============================================
+
+/**
+ * 🎭 Start impersonation session
+ * Creates a temporary session for admin to access user's account
+ */
+export async function startImpersonation(
+  userId: string,
+  adminEmail: string
+): Promise<ImpersonationSession> {
+  console.time('⚡ startImpersonation');
+
+  try {
+    // 🔥 CRITICAL: Call the RPC function
+    const { data, error } = await supabase.rpc('start_impersonation_session_v1', {
+      p_user_id: userId,
+      p_admin_email: adminEmail
+    });
+
+    if (error) {
+      console.error('❌ Error starting impersonation:', error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error('No session data returned from impersonation RPC');
+    }
+
+    const session = data[0];
+
+    if (!session.access_token || !session.refresh_token) {
+      throw new Error('Invalid session tokens returned');
+    }
+
+    console.log('✅ Impersonation session created:', {
+      userId,
+      adminEmail,
+      hasToken: !!session.access_token,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    });
+
+    // Invalidate impersonation caches
+    invalidateImpersonationCaches();
+
+    console.timeEnd('⚡ startImpersonation');
+
+    return session;
+  } catch (error) {
+    console.error('❌ startImpersonation failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * 🛑 End impersonation session
+ * Terminates the admin's impersonation session
+ */
+export async function endImpersonation(sessionToken: string): Promise<void> {
+  console.time('⚡ endImpersonation');
+
+  try {
+    const { error } = await supabase.rpc('end_impersonation_session', {
+      p_session_token: sessionToken
+    });
+
+    if (error) {
+      console.error('❌ Error ending impersonation:', error);
+      throw error;
+    }
+
+    console.log('✅ Impersonation session ended');
+
+    // Invalidate impersonation caches
+    invalidateImpersonationCaches();
+
+    console.timeEnd('⚡ endImpersonation');
+  } catch (error) {
+    console.error('❌ endImpersonation failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * 📋 Get active impersonation sessions (admin only)
+ * Returns list of all currently active impersonation sessions
+ */
+export async function getActiveImpersonationSessions(): Promise<ActiveImpersonationSession[]> {
+  return cachedQuery(
+    'active-impersonation-sessions',
+    async () => {
+      console.time('⚡ getActiveImpersonationSessions');
+
+      const { data, error } = await supabase
+        .rpc('get_active_impersonation_sessions');
+
+      if (error) {
+        console.error('❌ Error fetching active sessions:', error);
+        throw error;
+      }
+
+      console.timeEnd('⚡ getActiveImpersonationSessions');
+
+      return (data || []) as ActiveImpersonationSession[];
+    },
+    CACHE_TTL.IMPERSONATION
+  );
+}
+
+/**
+ * ✅ Validate impersonation session
+ * Checks if a session token is valid and not expired
+ */
+export async function validateImpersonationSession(
+  sessionToken: string
+): Promise<ActiveImpersonationSession | null> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_active_impersonation_session', {
+        p_session_token: sessionToken
+      });
+
+    if (error) {
+      console.error('❌ Error validating session:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    const session = data[0];
+
+    // Check if expired
+    if (new Date(session.expires_at) < new Date()) {
+      console.warn('⚠️ Impersonation session expired:', sessionToken);
+      return null;
+    }
+
+    return session as ActiveImpersonationSession;
+  } catch (error) {
+    console.error('❌ Error validating session:', error);
+    return null;
+  }
+}
+
+/**
+ * 🔄 Update impersonation session activity
+ * Updates the last_activity timestamp to keep session alive
+ */
+export async function updateImpersonationActivity(sessionToken: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('update_impersonation_activity', {
+      p_session_token: sessionToken
+    });
+
+    if (error) {
+      console.error('❌ Error updating session activity:', error);
+    }
+  } catch (error) {
+    console.error('❌ Exception in updateImpersonationActivity:', error);
+  }
+}
+
+/**
+ * 🧹 Cleanup expired impersonation sessions
+ * Removes sessions that have expired (called by cron or manually)
+ */
+export async function cleanupExpiredSessions(): Promise<number> {
+  console.time('⚡ cleanupExpiredSessions');
+
+  try {
+    const { data, error } = await supabase.rpc('cleanup_expired_impersonation_sessions');
+
+    if (error) {
+      console.error('❌ Error cleaning up expired sessions:', error);
+      throw error;
+    }
+
+    const cleanedCount = data || 0;
+
+    if (cleanedCount > 0) {
+      console.log(`✅ Cleaned up ${cleanedCount} expired impersonation sessions`);
+      invalidateImpersonationCaches();
+    }
+
+    console.timeEnd('⚡ cleanupExpiredSessions');
+
+    return cleanedCount;
+  } catch (error) {
+    console.error('❌ cleanupExpiredSessions failed:', error);
     throw error;
   }
 }

@@ -57,7 +57,7 @@ export const TopNav = () => {
             onClick={() => navigate('/app/journal/overview')}
             className="flex items-center group cursor-pointer"
           >
-            <span className="text-xl md:text-2xl font-bold tracking-tight">
+            <span className="text-2xl md:text-3xl font-bold tracking-tight">
               <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
               <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
             </span>

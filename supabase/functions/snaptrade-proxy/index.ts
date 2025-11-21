@@ -13,14 +13,26 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, PUT, DELETE, OPTIONS"
 };
 
+// 🔍 DEBUG: Log environment variables
+console.log("🔧 Environment check:");
+console.log("  SNAPTRADE_CLIENT_ID:", SNAPTRADE_CLIENT_ID ? `${SNAPTRADE_CLIENT_ID.substring(0, 10)}... (length: ${SNAPTRADE_CLIENT_ID.length})` : "❌ MISSING");
+console.log("  SNAPTRADE_CONSUMER_KEY:", SNAPTRADE_CONSUMER_KEY ? `${SNAPTRADE_CONSUMER_KEY.substring(0, 10)}... (length: ${SNAPTRADE_CONSUMER_KEY.length})` : "❌ MISSING");
+console.log("  SUPABASE_URL:", SUPABASE_URL ? "✅" : "❌ MISSING");
+
+/**
+ * ✅ FIXED: Stringify that matches Python's json.dumps(separators=(",", ":"), sort_keys=True)
+ */
 function sortedStringify(obj: any): string {
-  if (obj === null) return 'null';
-  if (typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) return '[' + obj.map(sortedStringify).join(',') + ']';
-  
-  const keys = Object.keys(obj).sort();
-  const pairs = keys.map(key => `"${key}":${sortedStringify(obj[key])}`);
-  return '{' + pairs.join(',') + '}';
+  return JSON.stringify(obj, (key, value) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const sorted: Record<string, any> = {};
+      Object.keys(value).sort().forEach(k => {
+        sorted[k] = value[k];
+      });
+      return sorted;
+    }
+    return value;
+  });
 }
 
 async function generateSignature(
@@ -28,24 +40,35 @@ async function generateSignature(
   query: string,
   content: any
 ): Promise<string> {
+  console.log("\n" + "=".repeat(80));
+  console.log("🔐 SIGNATURE GENERATION - DETAILED DEBUG");
+  console.log("=".repeat(80));
+  
+  // Step 1: Build signature object
   const sigObject: any = {};
   sigObject.content = content;
   
-  // ✅ CRITICAL FIX: SnapTrade expects path WITHOUT /api/v1 prefix in signature!
+  // Remove /api/v1 prefix if exists
   const pathForSignature = path.startsWith('/api/v1') 
-    ? path.substring(7)  // Remove '/api/v1' prefix
+    ? path.substring(7)
     : path;
   
   sigObject.path = pathForSignature;
   sigObject.query = query;
 
+  // Step 2: Stringify
   const sigContent = sortedStringify(sigObject);
 
-  console.log("🔐 Signature generation:");
-  console.log("  Original path:", path);
-  console.log("  Path for signature:", pathForSignature);
-  console.log("  Sig string:", sigContent);
+  console.log("📋 Signature Components:");
+  console.log("  1. Original path:", path);
+  console.log("  2. Path for signature:", pathForSignature);
+  console.log("  3. Query string:", query);
+  console.log("  4. Content:", JSON.stringify(content, null, 2));
+  console.log("  5. Final sigObject:", JSON.stringify(sigObject, null, 2));
+  console.log("  6. Stringified (for HMAC):", sigContent);
+  console.log("  7. Consumer Key (first 10 chars):", SNAPTRADE_CONSUMER_KEY?.substring(0, 10));
 
+  // Step 3: HMAC-SHA256
   const encoder = new TextEncoder();
   
   const key = await crypto.subtle.importKey(
@@ -62,11 +85,14 @@ async function generateSignature(
     encoder.encode(sigContent)
   );
   
+  // Step 4: Base64 encode
   const base64Signature = btoa(
     String.fromCharCode(...new Uint8Array(signatureBuffer))
   );
   
-  console.log("  Base64 signature:", base64Signature.substring(0, 30) + "...");
+  console.log("  8. Base64 signature:", base64Signature);
+  console.log("  9. Signature length:", base64Signature.length);
+  console.log("=".repeat(80) + "\n");
   
   return base64Signature;
 }
@@ -77,10 +103,12 @@ serve(async (req: Request) => {
   }
 
   console.log("\n" + "=".repeat(80));
-  console.log("📥 NEW REQUEST");
+  console.log("📥 NEW REQUEST TO SNAPTRADE PROXY");
   console.log("=".repeat(80));
+  console.log("⏰ Timestamp:", new Date().toISOString());
 
   try {
+    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       console.log("❌ No auth header");
@@ -105,8 +133,8 @@ serve(async (req: Request) => {
     console.log("✅ User authenticated:", user.id);
 
     const requestBody = await req.json();
+    console.log("📦 Raw request body:", JSON.stringify(requestBody, null, 2));
     
-    // ✅ FIX: Extract userId and userSecret from ROOT of request body
     const { 
       endpoint, 
       method = "GET", 
@@ -122,12 +150,12 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log("\n📍 Request Details:");
-    console.log("  Endpoint:", endpoint);
-    console.log("  Method:", method);
-    console.log("  Has userId:", !!userId);
-    console.log("  Has userSecret:", !!userSecret);
-    console.log("  Body:", body ? JSON.stringify(body, null, 2) : "null");
+    console.log("\n📍 Parsed Request Details:");
+    console.log("  endpoint:", endpoint);
+    console.log("  method:", method);
+    console.log("  userId:", userId || "NOT PROVIDED");
+    console.log("  userSecret:", userSecret ? `${userSecret.substring(0, 15)}... (length: ${userSecret.length})` : "NOT PROVIDED");
+    console.log("  body:", body ? JSON.stringify(body, null, 2) : "null");
 
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const basePath = endpoint.split('?')[0];
@@ -136,11 +164,12 @@ serve(async (req: Request) => {
       ? basePath 
       : `/api/v1${basePath}`;
     
-    // ✅ Check if this is registerUser endpoint (doesn't need userSecret)
     const isRegisterUser = basePath.includes('registerUser') || endpoint.includes('registerUser');
     
-    console.log(`📌 Endpoint type: ${isRegisterUser ? 'REGISTER USER (no userSecret needed)' : 'REGULAR'}`);
-    console.log(`   basePath: ${basePath}, endpoint: ${endpoint}`);
+    console.log("\n📌 Endpoint Analysis:");
+    console.log("  basePath:", basePath);
+    console.log("  fullPath:", fullPath);
+    console.log("  isRegisterUser:", isRegisterUser);
     
     // Build query params
     const queryParams = new URLSearchParams({
@@ -148,24 +177,24 @@ serve(async (req: Request) => {
       timestamp: timestamp
     });
     
-    // ✅ CRITICAL: For registerUser, userId goes in BODY, not query!
     let actualBody: any = null;
     
     if (isRegisterUser) {
-      // For registerUser: userId MUST be in body, NEVER in query
       actualBody = body?.userId ? { userId: body.userId } : body;
-      console.log("  ✅ registerUser: userId in BODY:", body?.userId || 'missing!');
-      // Do NOT add userId or userSecret to query params for registerUser
+      console.log("  📝 registerUser: userId in BODY:", body?.userId || '❌ MISSING');
     } else {
-      // For other endpoints: userId/userSecret in query, other data in body
       if (userId) {
         console.log("  ✅ Adding userId to query:", userId);
         queryParams.set('userId', userId);
+      } else {
+        console.log("  ⚠️ NO userId provided for non-register endpoint!");
       }
       
       if (userSecret) {
-        console.log("  ✅ Adding userSecret to query:", userSecret.substring(0, 10) + "...");
+        console.log("  ✅ Adding userSecret to query:", userSecret.substring(0, 15) + "...");
         queryParams.set('userSecret', userSecret);
+      } else {
+        console.log("  ⚠️ NO userSecret provided!");
       }
       
       actualBody = body;
@@ -174,8 +203,8 @@ serve(async (req: Request) => {
     const queryString = queryParams.toString();
     const fullUrl = `${SNAPTRADE_BASE_URL}${basePath}?${queryString}`;
     
-    console.log("\n📤 Building SnapTrade request:");
-    console.log("  Full path:", fullPath);
+    console.log("\n📤 Building SnapTrade Request:");
+    console.log("  Full URL:", fullUrl);
     console.log("  Query string:", queryString);
     console.log("  Body:", actualBody ? JSON.stringify(actualBody, null, 2) : "null");
 
@@ -186,12 +215,13 @@ serve(async (req: Request) => {
       actualBody
     );
 
-    console.log("\n🔑 Request to SnapTrade:");
+    console.log("\n🚀 Sending to SnapTrade:");
     console.log("  URL:", fullUrl);
     console.log("  Method:", method);
-    console.log("  Body:", body ? JSON.stringify(body) : "null");
-    console.log("  Signature:", signature.substring(0, 30) + "...");
-    console.log("\n⏳ Sending...");
+    console.log("  Headers:", {
+      "Content-Type": "application/json",
+      "Signature": `${signature.substring(0, 20)}...`
+    });
 
     const snaptradeResponse = await fetch(fullUrl, {
       method,
@@ -206,7 +236,8 @@ serve(async (req: Request) => {
     
     console.log("\n📥 Response from SnapTrade:");
     console.log("  Status:", snaptradeResponse.status, snaptradeResponse.statusText);
-    console.log("  Body:", responseText.substring(0, 500));
+    console.log("  Headers:", Object.fromEntries(snaptradeResponse.headers.entries()));
+    console.log("  Body:", responseText);
     console.log("=".repeat(80) + "\n");
 
     if (snaptradeResponse.ok) {
@@ -216,11 +247,19 @@ serve(async (req: Request) => {
       });
     }
 
+    // Error response
+    let errorDetails;
+    try {
+      errorDetails = JSON.parse(responseText);
+    } catch {
+      errorDetails = responseText;
+    }
+
     return new Response(
       JSON.stringify({
         error: `SnapTrade API error: ${snaptradeResponse.status}`,
         status: snaptradeResponse.status,
-        details: responseText
+        details: errorDetails
       }),
       { 
         status: snaptradeResponse.status, 
@@ -229,8 +268,13 @@ serve(async (req: Request) => {
     );
 
   } catch (error: any) {
-    console.error("❌ Function error:", error);
-    console.log("=".repeat(80) + "\n");
+    console.error("\n" + "=".repeat(80));
+    console.error("❌ CRITICAL ERROR");
+    console.error("=".repeat(80));
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+    console.error("=".repeat(80) + "\n");
+    
     return new Response(
       JSON.stringify({ 
         error: error.message || "Internal server error",

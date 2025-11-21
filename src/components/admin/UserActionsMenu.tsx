@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MoreVertical, Eye, Edit, Gift, Mail, Ban, Trash2, UserCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,12 +12,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserWithStats } from '@/types/admin';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { startImpersonation as startImpersonationService } from '@/services/adminService';
 import ChangeSubscriptionModal from './ChangeSubscriptionModal';
 import GrantPremiumModal from './GrantPremiumModal';
 import SendEmailModal from './SendEmailModal';
 import BanUserModal from './BanUserModal';
 import DeleteUserModal from './DeleteUserModal';
-import UnbanUserModal from './UnbanUserModal'; // 🆕 NEW
+import UnbanUserModal from './UnbanUserModal';
 
 interface UserActionsMenuProps {
   user: UserWithStats;
@@ -30,7 +32,7 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
   const [showGrantPremium, setShowGrantPremium] = useState(false);
   const [showSendEmail, setShowSendEmail] = useState(false);
   const [showBanUser, setShowBanUser] = useState(false);
-  const [showUnbanUser, setShowUnbanUser] = useState(false); // 🆕 NEW
+  const [showUnbanUser, setShowUnbanUser] = useState(false);
   const [showDeleteUser, setShowDeleteUser] = useState(false);
 
   const handleSuccess = () => {
@@ -44,11 +46,22 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
   };
 
   const handleImpersonate = async () => {
-    await startImpersonation(
-      user.id,
-      user.email,
-      user.display_name || undefined
-    );
+    try {
+      // 🔥 קריאה לשרת דרך adminService
+      const session = await startImpersonationService(user.id, 'elad2550@gmail.com');
+      
+      // 🔥 שמירה ב-context
+      await startImpersonation(
+        user.id,
+        user.email,
+        user.display_name || undefined
+      );
+      
+      toast.success(`Now impersonating ${user.email}`);
+    } catch (error) {
+      console.error('Failed to start impersonation:', error);
+      toast.error('Failed to impersonate user');
+    }
   };
 
   return (
@@ -73,6 +86,16 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
             <Eye className="w-4 h-4 mr-2" />
             View User Details
           </DropdownMenuItem>
+          
+          <DropdownMenuItem
+            onClick={handleImpersonate}
+            className="cursor-pointer hover:bg-[#1a1a1a] text-blue-400 hover:text-blue-300"
+          >
+            <UserCheck className="w-4 h-4 mr-2" />
+            Impersonate User
+          </DropdownMenuItem>
+          
+          <DropdownMenuSeparator className="bg-gray-800" />
           
           <DropdownMenuItem
             onClick={() => setShowChangeSubscription(true)}
@@ -102,7 +125,7 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
 
           <DropdownMenuSeparator className="bg-gray-800" />
           
-          {/* 🆕 Conditional: Show UNBAN or BAN based on user status */}
+          {/* 🔥 Conditional: Show UNBAN or BAN based on user status */}
           {user.is_banned ? (
             <DropdownMenuItem
               onClick={() => setShowUnbanUser(true)}
@@ -163,7 +186,6 @@ export default function UserActionsMenu({ user, onActionComplete }: UserActionsM
         />
       )}
 
-      {/* 🆕 NEW: Unban Modal */}
       {showUnbanUser && (
         <UnbanUserModal
           user={user}
