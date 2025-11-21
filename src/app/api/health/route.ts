@@ -6,25 +6,25 @@ export const revalidate = 0
 
 export async function GET() {
   try {
+    // בדיקה מהירה שSupabase עובד
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_KEY!
+      process.env.SUPABASE_SERVICE_KEY! || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
-    // בדיקה מהירה - אם זה עובד, הכל טוב
     const { error } = await supabase
       .from('trades')
       .select('id')
       .limit(1)
-      .single()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows, זה בסדר
+    if (error && error.code !== 'PGRST116') {
       throw error
     }
 
     return NextResponse.json({ 
       status: 'ok',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      message: 'Finotaur is running smoothly'
     })
 
   } catch (error: any) {
@@ -32,7 +32,8 @@ export async function GET() {
     
     return NextResponse.json({ 
       status: 'error',
-      message: error.message 
+      message: error.message,
+      timestamp: new Date().toISOString()
     }, { status: 500 })
   }
 }
