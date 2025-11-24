@@ -27,8 +27,8 @@ export function useTickerSearch() {
 
     try {
       const { data, error: rpcError } = await supabase.rpc('search_ticker_symbols', {
-        search_text: searchText,
-        limit_count: 10
+        p_query: searchText,  // ✅ תוקן מ-search_text
+        p_limit: 10           // ✅ תוקן מ-limit_count
       });
 
       if (rpcError) {

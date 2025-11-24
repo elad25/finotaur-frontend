@@ -8,11 +8,37 @@
 // ✅ Admin impersonation support
 // ✅ Error handling
 // 🔥 FIXED: .single() error in updateTrade
+// 🔥 FIXED: Session normalization (v12)
 // ================================================
 
 import { supabase } from '@/lib/supabase';
 import { invalidateCache } from '@/lib/smartRefresh';
 import { toast } from 'sonner';
+
+// 🔥 VALID SESSIONS - must match DB constraint!
+const VALID_SESSIONS = ['asia', 'london', 'newyork'];
+
+/**
+ * 🔥 Normalize session value for database
+ * Converts empty strings to null, validates allowed values
+ * Prevents "trades_session_check" constraint violation!
+ */
+function normalizeSession(session: string | undefined | null): string | null {
+  if (!session || session.trim() === '') {
+    return null; // Empty → NULL (passes DB constraint)
+  }
+  
+  const normalized = session.trim().toLowerCase();
+  
+  // Validate it's one of the allowed values
+  if (VALID_SESSIONS.includes(normalized)) {
+    return normalized;
+  }
+  
+  // Invalid value → return null
+  console.warn('⚠️ Invalid session value:', session, '→ using null');
+  return null;
+}
 
 /**
  * 📸 העלאת תמונת screenshot לסטורג'
@@ -131,6 +157,7 @@ async function deleteScreenshots(screenshots: string[]): Promise<void> {
  * ✅ Multi-screenshot support
  * ✅ Strategy validation
  * ✅ Multiplier support
+ * 🔥 FIXED: Session normalization!
  */
 export async function createTrade(tradeData: any) {
   try {
@@ -141,17 +168,22 @@ export async function createTrade(tradeData: any) {
       throw new Error('User not authenticated');
     }
 
+    // 🔥 CRITICAL: Normalize session before insert!
+    const normalizedSession = normalizeSession(tradeData.session);
+
     // 🔥 הוסף את user_id ל-payload
     const payload = {
       ...tradeData,
       user_id: user.id,
-      screenshots: tradeData.screenshots || [],  // ✅ תמיכה במערך תמונות (1-4)
-      strategy_id: tradeData.strategy_id || null,  // ✅ UUID או NULL
+      session: normalizedSession,  // 🔥 USE NORMALIZED SESSION!
+      screenshots: tradeData.screenshots || [],
+      strategy_id: tradeData.strategy_id || null,
     };
 
     console.log('✅ Creating trade with user_id:', user.id);
     console.log('📦 Full payload:', {
       symbol: payload.symbol,
+      session: payload.session,  // 🔥 Log normalized session
       screenshots: payload.screenshots?.length || 0,
       strategy_id: payload.strategy_id,
       multiplier: payload.multiplier,
@@ -199,6 +231,7 @@ export async function createTrade(tradeData: any) {
  * ✅ Strategy change detection
  * ✅ Screenshot cleanup on replacement
  * 🔥 FIXED: Removed .single() to prevent "Cannot coerce" error
+ * 🔥 FIXED: Session normalization!
  */
 export async function updateTrade(
   tradeId: string,
@@ -214,19 +247,25 @@ export async function updateTrade(
 
     console.log('✅ Updating trade:', tradeId);
 
+    // 🔥 CRITICAL: Normalize session before update!
+    const normalizedSession = normalizeSession(updates.session);
+
     // 🔥 וודא ש-screenshots נשמר
     const finalUpdates = {
       ...updates,
-      screenshots: updates.screenshots || [],  // ✅ תמיכה במערך תמונות
-      strategy_id: updates.strategy_id === undefined ? null : updates.strategy_id,  // ✅ Handle undefined
+      session: normalizedSession,  // 🔥 USE NORMALIZED SESSION!
+      screenshots: updates.screenshots || [],
+      strategy_id: updates.strategy_id === undefined ? null : updates.strategy_id,
     };
+
+    console.log('📦 Update payload session:', finalUpdates.session);
 
     // 1. קבל את הטרייד הנוכחי (כדי לדעת אם שינינו strategy או screenshots)
     const { data: oldTrade } = await supabase
       .from('trades')
       .select('strategy_id, broker, screenshots')
       .eq('id', tradeId)
-      .eq('user_id', user.id)  // 🔥 וודא שזה של היוזר
+      .eq('user_id', user.id)
       .single();
 
     // 2. 🗑️ אם החלפנו screenshots - מחק את הישנים
@@ -250,8 +289,8 @@ export async function updateTrade(
       .from('trades')
       .update(finalUpdates)
       .eq('id', tradeId)
-      .eq('user_id', user.id)  // 🔥 וודא שזה של היוזר
-      .select();  // 🔥 ללא .single()!
+      .eq('user_id', user.id)
+      .select();
 
     if (error) {
       console.error('❌ Update error:', error);
@@ -313,7 +352,7 @@ export async function deleteTrade(tradeId: string) {
       .from('trades')
       .select('strategy_id, broker, screenshots')
       .eq('id', tradeId)
-      .eq('user_id', user.id)  // 🔥 וודא שזה של היוזר
+      .eq('user_id', user.id)
       .single();
 
     if (fetchError) {
@@ -332,7 +371,7 @@ export async function deleteTrade(tradeId: string) {
       .from('trades')
       .delete()
       .eq('id', tradeId)
-      .eq('user_id', user.id);  // 🔥 וודא שזה של היוזר
+      .eq('user_id', user.id);
 
     if (deleteError) {
       console.error('❌ Delete error:', deleteError);

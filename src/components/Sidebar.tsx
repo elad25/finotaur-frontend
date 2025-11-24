@@ -71,7 +71,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Gameplan', path: '/app/journal/backtest/walk-forward', icon: Activity },
     { label: 'Community Blog', path: '/app/journal/backtest/optimization', icon: Calculator },
     { label: 'Academy', path: '/app/journal/backtest/replay', icon: Play },
-    { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
   admin: [
     // 🔥 ONLY DASHBOARD - הסרתי את כל השאר

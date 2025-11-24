@@ -133,7 +133,7 @@ export function computeRR(params: {
     ? params.side 
     : inferDirection(entry, sl, tp);
   
-  const cls = params.assetClass;
+  const cls = params.assetClass || "stocks";
 
   let riskPts = 0, rewardPts = 0, conflict = false;
   

@@ -283,13 +283,13 @@ export default function BacktestLanding() {
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Manual Trades</td>
                     <td className="p-6 text-center text-zinc-400">10 lifetime</td>
-                    <td className="p-6 text-center text-zinc-400">Unlimited</td>
+                    <td className="p-6 text-center text-zinc-400">25/month</td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">Unlimited</td>
                   </tr>
                   <tr className="border-b border-zinc-800">
                     <td className="p-6 text-white">Auto Broker Sync</td>
                     <td className="p-6 text-center"><Lock className="w-5 h-5 text-zinc-700 mx-auto" /></td>
-                    <td className="p-6 text-center text-zinc-400">30/month</td>
+                    <td className="p-6 text-center text-zinc-400">25/month</td>
                     <td className="p-6 text-center text-[#C9A646] font-semibold">Unlimited</td>
                   </tr>
                   <tr className="border-b border-zinc-800">
@@ -346,15 +346,6 @@ export default function BacktestLanding() {
                 <span className="text-sm font-semibold text-[#C9A646]">LIMITED TIME OFFER</span>
               </div>
               
-              <h2 className="text-4xl font-bold text-white mb-4">
-                Start Your 14-Day Premium Trial
-              </h2>
-              
-              <p className="text-xl text-zinc-300 mb-8 max-w-2xl mx-auto">
-                No credit card required. Full access to all features. 
-                <span className="text-[#C9A646] font-semibold"> Cancel anytime.</span>
-              </p>
-
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
                   onClick={handleUpgrade}

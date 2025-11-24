@@ -1,5 +1,5 @@
 // src/integrations/snaptrade/snaptradeService.ts
-// ✅ FIXED VERSION - Properly sends credentials to Edge Function
+// ✅ FIXED VERSION - Properly sends credentials to Edge Function + Public endpoint support
 
 import { supabase } from '@/integrations/supabase/client';
 import type {
@@ -24,9 +24,10 @@ export class SnapTradeService {
     endpoint: string,
     method: string = 'GET',
     body?: any,
-    credentials?: SnapTradeCredentials
+    credentials?: SnapTradeCredentials,
+    isPublic: boolean = false
   ): Promise<T> {
-    console.log(`[SnapTrade Service] ${method} ${endpoint}`);
+    console.log(`[SnapTrade Service] ${method} ${endpoint}${isPublic ? ' (public)' : ''}`);
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -37,14 +38,18 @@ export class SnapTradeService {
 
       console.log('🔑 Sending request with auth token');
 
+      // ✅ Check if this is registerUser endpoint
+      const isRegisterUser = endpoint.includes('registerUser');
+
       // ✅ FIX: Build request body with userId/userSecret at root level
       const requestBody: any = {
         endpoint,
         method,
+        isPublic
       };
 
       // Add credentials if provided (at ROOT level, not nested in body)
-      if (credentials) {
+      if (credentials && !isPublic) {
         requestBody.userId = credentials.userId;
         requestBody.userSecret = credentials.userSecret;
         console.log('✅ Added credentials:', {
@@ -55,16 +60,23 @@ export class SnapTradeService {
 
       // Add actual body data (if any)
       if (body && Object.keys(body).length > 0) {
-        // Remove userId/userSecret from body if they exist
-        const { userId, userSecret, ...cleanBody } = body;
-        if (Object.keys(cleanBody).length > 0) {
-          requestBody.body = cleanBody;
+        if (isRegisterUser) {
+          // ✅ SPECIAL CASE: For registerUser, keep userId in body
+          requestBody.body = body;
+          console.log('✅ Added body for registerUser:', body);
+        } else {
+          // For other endpoints: Remove userId/userSecret from body
+          const { userId, userSecret, ...cleanBody } = body;
+          if (Object.keys(cleanBody).length > 0) {
+            requestBody.body = cleanBody;
+          }
         }
       }
 
       console.log('📤 Request to Edge Function:', {
         endpoint: requestBody.endpoint,
         method: requestBody.method,
+        isPublic: requestBody.isPublic,
         hasUserId: !!requestBody.userId,
         hasUserSecret: !!requestBody.userSecret,
         hasBody: !!requestBody.body
@@ -102,46 +114,25 @@ export class SnapTradeService {
 
   /**
    * Register a new SnapTrade user
-   * ✅ This endpoint doesn't need userSecret, only userId in body
+   * ✅ FIXED: Sends body parameter correctly
    */
   async registerUser(userId: string): Promise<SnapTradeUser> {
     console.log('📝 Registering SnapTrade user:', userId);
     
     const endpoint = `/snapTrade/registerUser`;
     
-    // ✅ Call Edge Function directly with special handling for registerUser
+    // ✅ FIXED: Use makeProxyRequest with body parameter
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const result = await this.makeProxyRequest<SnapTradeUser>(
+        endpoint,
+        'POST',
+        { userId },  // ✅ body goes here
+        undefined,   // no credentials for registerUser
+        false        // not public
+      );
       
-      if (!session) {
-        throw new Error('No active session');
-      }
-
-      console.log('📤 Sending registerUser request to Edge Function');
-
-      const { data, error } = await supabase.functions.invoke('snaptrade-proxy', {
-        body: {
-          endpoint,
-          method: 'POST',
-          body: { userId }  // userId goes in body for registerUser
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (error) {
-        console.error('❌ Edge function error:', error);
-        throw new Error(error.message || 'Edge function invocation failed');
-      }
-
-      if (data?.error) {
-        console.error('❌ API error:', data);
-        throw new Error(data.error || data.details || 'API request failed');
-      }
-
-      console.log('✅ User registered successfully:', data);
-      return data as SnapTradeUser;
+      console.log('✅ User registered successfully:', result);
+      return result;
       
     } catch (error: any) {
       console.error('❌ Failed to register user:', error);
@@ -261,12 +252,20 @@ export class SnapTradeService {
 
   /**
    * Get list of all available brokerages
-   * ✅ This endpoint doesn't need credentials
+   * ✅ PUBLIC ENDPOINT - doesn't need credentials
    */
   async listBrokerages(): Promise<Brokerage[]> {
-    console.log('📋 Fetching available brokerages...');
+    console.log('📋 Fetching available brokerages (public endpoint)...');
     const endpoint = '/brokerages';
-    return this.makeProxyRequest<Brokerage[]>(endpoint, 'GET');
+    
+    // ✅ Call with isPublic flag - no credentials needed
+    return this.makeProxyRequest<Brokerage[]>(
+      endpoint, 
+      'GET',
+      undefined,
+      undefined,
+      true  // isPublic = true
+    );
   }
 
   // ============================================================================

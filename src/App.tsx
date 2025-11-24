@@ -1,4 +1,4 @@
-// src/App.tsx - FULL & UPDATED WITH BACKTEST PROTECTION
+// src/App.tsx - UPDATED WITH BACKTEST LANDING ROUTE
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -252,6 +252,7 @@ LockedRoute.displayName = 'LockedRoute';
 
 // ===============================================
 // 🧪 BACKTEST PROTECTION - Premium Only
+// Both FREE and BASIC users will see the landing page
 // ===============================================
 const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -282,7 +283,8 @@ const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
     return <PageLoader />;
   }
 
-  // אם אין Premium - הצג Landing
+  // 🔒 Only PREMIUM users can access Backtest
+  // Both FREE and BASIC users see the landing page
   if (accountType !== 'premium') {
     return (
       <Suspense fallback={<PageLoader />}>
@@ -291,7 +293,7 @@ const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // אם יש Premium - הצג את הדף המבוקש
+  // Premium users get the actual backtest page
   return <SuspenseRoute>{children}</SuspenseRoute>;
 });
 BacktestRoute.displayName = 'BacktestRoute';
@@ -457,6 +459,10 @@ function AppContent() {
           <Route path="journal/prop-firms" element={<SuspenseRoute><PropFirmsPage /></SuspenseRoute>} />
           
           {/* 🧪 BACKTEST ROUTES - Premium Only Protection */}
+          {/* 🔥 NEW: Dedicated Landing Page for non-premium users */}
+          <Route path="journal/backtest/landing" element={<SuspenseRoute><BacktestLanding /></SuspenseRoute>} />
+          
+          {/* Protected backtest pages - will redirect to landing if not premium */}
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
@@ -480,6 +486,7 @@ function AppContent() {
           <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
           
           {/* 🧪 BACKTEST - Backward Compatibility Routes (for old links) */}
+          <Route path="backtest/landing" element={<SuspenseRoute><BacktestLanding /></SuspenseRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
@@ -532,13 +539,13 @@ export const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <TimezoneProvider>  {/* 👈 הוסף כאן */}
+            <TimezoneProvider>
               <RiskSettingsRealtimeProvider>
                 <ImpersonationProvider>
                   <AppContent />
                 </ImpersonationProvider>
               </RiskSettingsRealtimeProvider>
-            </TimezoneProvider>  {/* 👈 וסגור כאן */}
+            </TimezoneProvider>
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

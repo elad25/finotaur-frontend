@@ -1,3 +1,16 @@
+// ================================================
+// FIXED JOURNAL STORE - FULL DB SYNC
+// File: src/state/journalStore.ts
+// ✅ All fields match database schema
+// ✅ Session normalization
+// ✅ actual_user_r calculation
+// ✅ close_at handling
+// ✅ broker & import_source defaults
+// ✅ No metrics wrapper (flattened)
+// 🔥 FIX: assetClass fallback in recompute()
+// 🔥 FIX: Normalize "stock" → "stocks" for consistency
+// ================================================
+
 import { create } from "zustand";
 import { computeRR as smartComputeRR, detectAssetClass, inferDirection } from "@/utils/smartCalc";
 import { getStrategyById } from "@/utils/storage";
@@ -6,9 +19,11 @@ import type { AssetClass } from "@/utils/smartCalc";
 export type Side = "LONG" | "SHORT";
 
 const ASSET_MULTIPLIERS: Record<string, number> = {
-  'ES': 50, 'MES': 5, 'NQ': 20, 'MNQ': 2, 'YM': 5,
-  'RTY': 50, 'CL': 1000, 'GC': 100, 'SI': 5000,
-  'ZB': 1000, 'ZN': 1000,
+  'ES': 50, 'MES': 5, 'NQ': 20, 'MNQ': 2, 'YM': 5, 'MYM': 0.5,
+  'RTY': 50, 'M2K': 5, 'CL': 1000, 'MCL': 100, 'QM': 500,
+  'GC': 100, 'MGC': 10, 'SI': 5000, 'SIL': 1000,
+  'NG': 10000, 'QG': 2500, 'ZB': 1000, 'ZN': 1000, 'ZF': 1000, 'ZT': 2000,
+  '6E': 12.5, 'M6E': 6.25, 'BTC': 5, 'MBT': 0.1,
 };
 
 function getAssetMultiplier(symbol: string): number {
@@ -16,8 +31,29 @@ function getAssetMultiplier(symbol: string): number {
   return ASSET_MULTIPLIERS[symbolUpper] || 1;
 }
 
+// 🔥 FIX: Normalize assetClass to ensure consistency
+function normalizeAssetClass(assetClass: string | undefined): AssetClass | undefined {
+  if (!assetClass) return undefined;
+  
+  const normalized = assetClass.toLowerCase().trim();
+  
+  // Handle singular/plural variations
+  if (normalized === 'stock') return 'stocks';
+  if (normalized === 'future') return 'futures';
+  if (normalized === 'option') return 'options';
+  
+  // Return as-is if already valid
+  if (['stocks', 'futures', 'forex', 'crypto', 'options'].includes(normalized)) {
+    return normalized as AssetClass;
+  }
+  
+  return undefined;
+}
+
 type State = {
+  // Core trade fields (match DB)
   openAt?: string;
+  closeAt?: string;
   symbol: string;
   assetClass?: AssetClass;
   side: Side;
@@ -36,22 +72,34 @@ type State = {
   mistake?: string;
   nextTime?: string;
   tags: string[];
-  file?: File | null;
-  // 🔥 הוסף את השדות החדשים!
-  screenshotFiles?: File[];      // 🔥 מערך קבצי תמונות
-  screenshotUrls?: string[];     // 🔥 מערך URLs שהועלו
+  
+  // Calculated fields (match DB columns)
   multiplier: number;
   rr: number;
   riskUSD: number;
   rewardUSD: number;
   riskPts: number;
   rewardPts: number;
-  user_risk_r?: number;
-  user_reward_r?: number;
+  
+  // R-multiple fields (all 4 - match DB!)
+  actualR?: number;
+  userRiskR?: number;
+  userRewardR?: number;
+  actualUserR?: number;
+  
+  // Media
+  file?: File | null;
+  screenshotFiles?: File[];
+  screenshotUrls?: string[];
+  
+  // Meta (for frontend tracking)
+  broker: string;
+  importSource: string;
 };
 
 type Actions = {
   setOpenAt: (v?: string) => void;
+  setCloseAt: (v?: string) => void;
   setSymbol: (v: string) => void;
   setAssetClass: (v?: AssetClass) => void;
   setSide: (v: Side) => void;
@@ -70,21 +118,81 @@ type Actions = {
   setNextTime: (v?: string) => void;
   toggleTag: (t: string) => void;
   setFile: (f?: File | null) => void;
-  // 🔥 הוסף את הפונקציות החדשות!
-  setScreenshotFiles: (files: File[]) => void;    // 🔥
-  setScreenshotUrls: (urls: string[]) => void;    // 🔥
+  setScreenshotFiles: (files: File[]) => void;
+  setScreenshotUrls: (urls: string[]) => void;
   setMultiplier: (v: number) => void;
   recompute: () => void;
-  payload: () => any;
+  payload: () => TradePayload;
   loadDraft: () => void;
   saveDraft: () => void;
   clearDraft: () => void;
 };
 
-const DRAFT_KEY = "finotaur_journal_draft_v2";
+// 🔥 TYPED PAYLOAD - matches DB schema exactly!
+export interface TradePayload {
+  symbol: string;
+  side: Side;
+  quantity: number;
+  entry_price: number;
+  stop_price: number;
+  open_at: string | null;
+  close_at: string | null;
+  asset_class: AssetClass | null;
+  take_profit_price: number | null;
+  exit_price: number | null;
+  fees: number;
+  fees_mode: string;
+  session: string | null;
+  strategy_id: string | null;
+  setup: string | null;
+  notes: string | null;
+  mistake: string | null;
+  next_time: string | null;
+  tags: string[];
+  multiplier: number;
+  rr: number | null;
+  risk_usd: number | null;
+  reward_usd: number | null;
+  risk_pts: number | null;
+  reward_pts: number | null;
+  actual_r: number | null;
+  user_risk_r: number | null;
+  user_reward_r: number | null;
+  actual_user_r: number | null;
+  screenshots: string[];
+  broker: string;
+  import_source: string;
+  outcome?: 'WIN' | 'LOSS' | 'BE' | 'OPEN';
+  pnl?: number | null;
+}
+
+const DRAFT_KEY = "finotaur_journal_draft_v5"; // 🔥 Bumped version for fix
+
+const VALID_SESSIONS = ['asia', 'london', 'newyork'];
+
+function normalizeSession(session: string | undefined | null): string | null {
+  if (!session || session.trim() === '') {
+    return null;
+  }
+  
+  const normalized = session.trim().toLowerCase();
+  
+  if (VALID_SESSIONS.includes(normalized)) {
+    return normalized;
+  }
+  
+  console.warn('⚠️ Invalid session value:', session, '→ using null');
+  return null;
+}
+
+function toNull<T>(value: T | undefined): T | null {
+  return value === undefined ? null : value;
+}
 
 export const useJournalStore = create<State & Actions>((set, get) => ({
+  // Initial state
   openAt: new Date().toISOString(),
+  closeAt: undefined,
   symbol: "",
   assetClass: undefined,
   side: "LONG",
@@ -104,21 +212,30 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   nextTime: "",
   tags: [],
   file: null,
-  // 🔥 אתחול השדות החדשים!
-  screenshotFiles: [],    // 🔥
-  screenshotUrls: [],     // 🔥
+  screenshotFiles: [],
+  screenshotUrls: [],
   multiplier: 1,
   rr: 0,
   riskUSD: 0,
   rewardUSD: 0,
   riskPts: 0,
   rewardPts: 0,
-  user_risk_r: undefined,
-  user_reward_r: undefined,
+  actualR: undefined,
+  userRiskR: undefined,
+  userRewardR: undefined,
+  actualUserR: undefined,
+  broker: 'manual',
+  importSource: 'manual',
 
+  // Setters
   setOpenAt: (v) => {
     set({ openAt: v });
     get().recompute();
+    get().saveDraft();
+  },
+  
+  setCloseAt: (v) => {
+    set({ closeAt: v });
     get().saveDraft();
   },
   
@@ -131,8 +248,10 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     get().saveDraft();
   },
   
+  // 🔥 FIX: Normalize assetClass when setting
   setAssetClass: (v) => {
-    set({ assetClass: v });
+    const normalized = v ? normalizeAssetClass(v as string) : undefined;
+    set({ assetClass: normalized });
     get().recompute();
     get().saveDraft();
   },
@@ -169,6 +288,11 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
   
   setExitPrice: (v) => {
     set({ exitPrice: v });
+    if (v && v > 0) {
+      set({ closeAt: new Date().toISOString() });
+    } else {
+      set({ closeAt: undefined });
+    }
     get().recompute();
     get().saveDraft();
   },
@@ -240,15 +364,12 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     get().saveDraft();
   },
   
-  // 🔥🔥🔥 הפונקציות החדשות לניהול screenshots! 🔥🔥🔥
   setScreenshotFiles: (files) => {
-    console.log('📸 Store: Setting screenshot files:', files.length);
     set({ screenshotFiles: files });
     get().saveDraft();
   },
   
   setScreenshotUrls: (urls) => {
-    console.log('🔗 Store: Setting screenshot URLs:', urls.length);
     set({ screenshotUrls: urls });
     get().saveDraft();
   },
@@ -259,6 +380,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     get().saveDraft();
   },
 
+  // 🔥🔥🔥 RECOMPUTE - FIXED VERSION 🔥🔥🔥
   recompute: () => {
     const s = get();
     const entry = s.entryPrice;
@@ -266,6 +388,10 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     const tp = s.takeProfitPrice || s.exitPrice || 0;
     const qty = s.quantity;
     const mult = s.symbol ? getAssetMultiplier(s.symbol) : s.multiplier;
+    
+    // 🔥 FIX: Normalize and ensure assetClass is ALWAYS set
+    const rawAssetClass = s.assetClass || detectAssetClass(s.symbol);
+    const assetClass = normalizeAssetClass(rawAssetClass as string) || "stocks";
     
     // Get user's 1R from localStorage
     let oneRValue = 0;
@@ -283,9 +409,11 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       console.warn('Failed to load risk settings:', e);
     }
     
+    // 🔥 FIX: Use current side if direction can't be inferred (no TP yet)
     const detectedSide = inferDirection(entry, stop, tp);
     const side = detectedSide !== "UNKNOWN" ? detectedSide : s.side;
     
+    // 🔥 FIX: Pass the guaranteed normalized assetClass
     const result = smartComputeRR({
       entry,
       sl: stop,
@@ -293,60 +421,80 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       qty,
       multiplier: mult,
       side,
-      assetClass: s.assetClass,
+      assetClass,  // 🔥 Now ALWAYS normalized ("stocks" not "stock")!
       fees: s.fees,
       oneRValue,
     });
     
+    // 🔥 Calculate actual_user_r when trade has exit price
+    let actualUserR: number | undefined = undefined;
+    if (s.exitPrice && s.exitPrice > 0 && oneRValue > 0) {
+      const priceChange = side === "LONG" 
+        ? s.exitPrice - entry
+        : entry - s.exitPrice;
+      const grossPnL = priceChange * qty * mult;
+      const netPnL = grossPnL - s.fees;
+      actualUserR = netPnL / oneRValue;
+    }
+    
+    // 🔥 FIX: Update state with normalized assetClass
     set({
       side,
       multiplier: mult,
+      assetClass,  // 🔥 Always normalized!
       rr: result.rr || 0,
       riskUSD: result.riskUSD || 0,
       rewardUSD: result.rewardUSD || 0,
       riskPts: result.riskPts || 0,
       rewardPts: result.rewardPts || 0,
-      user_risk_r: result.user_risk_r,
-      user_reward_r: result.user_reward_r,
+      userRiskR: result.user_risk_r,
+      userRewardR: result.user_reward_r,
+      actualUserR: actualUserR,
     });
   },
 
-  // 🔥🔥🔥 PAYLOAD - הוסף screenshots! 🔥🔥🔥
-  payload: () => {
+  // PAYLOAD - FULLY SYNCED WITH DB SCHEMA
+  payload: (): TradePayload => {
     const s = get();
+    const normalizedSession = normalizeSession(s.session);
     
-    console.log('📦 Creating payload with screenshots:', s.screenshotUrls?.length || 0);
+    // 🔥 FIX: Ensure assetClass in payload is normalized
+    const rawAssetClass = s.assetClass || detectAssetClass(s.symbol);
+    const assetClass = normalizeAssetClass(rawAssetClass as string) || "stocks";
     
     return {
-      open_at: s.openAt,
       symbol: s.symbol,
-      asset_class: s.assetClass,
       side: s.side,
       quantity: s.quantity,
       entry_price: s.entryPrice,
       stop_price: s.stopPrice,
-      take_profit_price: s.takeProfitPrice,
-      exit_price: s.exitPrice,
-      fees: s.fees,
+      open_at: s.openAt || new Date().toISOString(),
+      close_at: s.exitPrice && s.exitPrice > 0 ? (s.closeAt || new Date().toISOString()) : null,
+      asset_class: assetClass,  // 🔥 Always normalized!
+      take_profit_price: toNull(s.takeProfitPrice) || null,
+      exit_price: s.exitPrice && s.exitPrice > 0 ? s.exitPrice : null,
+      fees: s.fees || 0,
       fees_mode: s.feesMode,
-      session: s.session,
-      strategy_id: s.strategyId,
-      setup: s.setup,
-      notes: s.notes,
-      mistake: s.mistake,
-      next_time: s.nextTime,
-      tags: s.tags,
-      multiplier: s.multiplier,
-      screenshots: s.screenshotUrls || [],  // 🔥 הוסף את זה!
-      metrics: {
-        rr: s.rr,
-        riskUSD: s.riskUSD,
-        rewardUSD: s.rewardUSD,
-        riskPts: s.riskPts,
-        rewardPts: s.rewardPts,
-        user_risk_r: s.user_risk_r,
-        user_reward_r: s.user_reward_r,
-      },
+      session: normalizedSession,
+      strategy_id: toNull(s.strategyId),
+      setup: toNull(s.setup) || null,
+      notes: s.notes || null,
+      mistake: s.mistake || null,
+      next_time: s.nextTime || null,
+      tags: s.tags || [],
+      multiplier: s.multiplier || 1,
+      rr: s.rr || null,
+      risk_usd: s.riskUSD || null,
+      reward_usd: s.rewardUSD || null,
+      risk_pts: s.riskPts || null,
+      reward_pts: s.rewardPts || null,
+      actual_r: null,
+      user_risk_r: toNull(s.userRiskR),
+      user_reward_r: toNull(s.userRewardR),
+      actual_user_r: toNull(s.actualUserR),
+      screenshots: s.screenshotUrls || [],
+      broker: s.broker || 'manual',
+      import_source: s.importSource || 'manual',
     };
   },
 
@@ -355,6 +503,7 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
       const s = get();
       const draft = JSON.stringify({
         openAt: s.openAt,
+        closeAt: s.closeAt,
         symbol: s.symbol,
         assetClass: s.assetClass,
         side: s.side,
@@ -374,8 +523,9 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         nextTime: s.nextTime,
         tags: s.tags,
         multiplier: s.multiplier,
-        // 🔥 שמור גם את screenshot URLs (לא את הקבצים!)
-        screenshotUrls: s.screenshotUrls,  // 🔥
+        screenshotUrls: s.screenshotUrls,
+        broker: s.broker,
+        importSource: s.importSource,
       });
       
       if (draft.length > 100000) {
@@ -392,11 +542,17 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     }
   },
 
+  // 🔥 FIX: Normalize assetClass when loading draft
   loadDraft: () => {
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (!saved) return;
       const data = JSON.parse(saved);
+      
+      // 🔥 Normalize assetClass from old drafts
+      if (data.assetClass) {
+        data.assetClass = normalizeAssetClass(data.assetClass);
+      }
       
       if (data.strategyId && !data.strategy) {
         const strategyObj = getStrategyById(data.strategyId);
@@ -416,9 +572,9 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
     try {
       localStorage.removeItem(DRAFT_KEY);
       
-      // 🔥 Reset all state to initial values
       set({
         openAt: new Date().toISOString(),
+        closeAt: undefined,
         symbol: "",
         assetClass: undefined,
         side: "LONG",
@@ -438,17 +594,20 @@ export const useJournalStore = create<State & Actions>((set, get) => ({
         nextTime: "",
         tags: [],
         file: null,
-        // 🔥 נקה גם screenshots!
-        screenshotFiles: [],   // 🔥
-        screenshotUrls: [],    // 🔥
+        screenshotFiles: [],
+        screenshotUrls: [],
         multiplier: 1,
         rr: 0,
         riskUSD: 0,
         rewardUSD: 0,
         riskPts: 0,
         rewardPts: 0,
-        user_risk_r: undefined,
-        user_reward_r: undefined,
+        actualR: undefined,
+        userRiskR: undefined,
+        userRewardR: undefined,
+        actualUserR: undefined,
+        broker: 'manual',
+        importSource: 'manual',
       });
     } catch (e) {
       console.warn("Failed to clear draft", e);

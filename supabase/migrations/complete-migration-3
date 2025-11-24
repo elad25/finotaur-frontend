@@ -1,17 +1,17 @@
 -- ===============================================
 -- 🔥 FINOTAUR - COMPLETE UNIFIED MIGRATION
 -- ===============================================
--- Version: MERGED-v8.5.0-WITH-SNAPTRADE
--- Date: 2025-01-15
--- Parts: 2/3 (Functions + Triggers) - חלק 2/2 (סעיפים 7-15) ✅ COMPLETE
--- 🔥 NEW v8.5.0: SnapTrade Integration Included!
--- 🔧 FIXED v8.4.7: 
---    - admin_update_subscription NOW RETURNS JSONB (not VOID)
---    - Better error handling in admin functions
---    - Portfolio fields in get_user_subscription_status
---    - Section 14: Helper Functions
---    - 🔥 Section 15: SnapTrade Functions
--- PREREQUISITE: Run PART-2-FUNCTIONS-SECTION-1.sql first!
+-- Version: MERGED-v8.5.10-SYNC (NO AFFILIATE)
+-- Date: 2025-01-22
+-- Parts: 3/4 (Functions + Triggers) - COMPLETE FILE
+-- 🔥 v8.5.10: ALL BUGS FIXED + NEW ADDITIONS!
+-- 🔥 WITH SNAPTRADE INTEGRATION!
+-- 🔧 REMOVED: All affiliate/referral features
+-- 🔧 INCLUDES ALL v8.5.2 FIXES + v8.5.10 ADDITIONS
+-- 🔧 v9.4.2-SYNCED: Fixed subscription_end_date → subscription_expires_at
+-- 🔧 v9.4.2-SYNCED: Fixed duplicate functions
+-- 🔧 v9.4.2-SYNCED: Added subscription_cancel_at_period_end
+-- PREREQUISITE: Run PART-1-SCHEMA.sql first!
 -- ===============================================
 
 BEGIN;
@@ -20,11 +20,13 @@ DO $$
 BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.5.0  ║';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.5.10 ║';
   RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
-  RAISE NOTICE '║     Section 2/2: סעיפים 7-15         ║';
+  RAISE NOTICE '║     Section 1/2: סעיפים 7-10         ║';
   RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!    ║';
-  RAISE NOTICE '║     🔧 FIXED: admin_update returns JSONB! ║';
+  RAISE NOTICE '║     🔒 ALL BUGS FIXED!                ║';
+  RAISE NOTICE '║     ❌ NO AFFILIATE FEATURES          ║';
+  RAISE NOTICE '║     ✅ v9.4.2-SYNCED FIXES APPLIED    ║';
   RAISE NOTICE '╚════════════════════════════════════════╝';
   RAISE NOTICE '';
 END $$;
@@ -38,10 +40,10 @@ BEGIN
   RAISE NOTICE '[7/15] Creating subscription functions...';
 END $$;
 
--- 🔧 FIXED: Drop old function first to avoid type conflicts
+-- 🔧 Drop old function first to avoid type conflicts
 DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
 
--- 🆕 FIXED: Get User Subscription Status (WITH PORTFOLIO FIELDS)
+-- ✅ Get User Subscription Status (WITH PORTFOLIO FIELDS)
 CREATE OR REPLACE FUNCTION public.get_user_subscription_status(user_id_param UUID)
 RETURNS TABLE (
   remaining INT,
@@ -54,12 +56,13 @@ RETURNS TABLE (
   subscription_status TEXT,
   subscription_expires_at TIMESTAMPTZ,
   role TEXT,
-  initial_portfolio NUMERIC,      -- 🔧 ADDED
-  current_portfolio NUMERIC        -- 🔧 ADDED
+  initial_portfolio NUMERIC,
+  current_portfolio NUMERIC
 ) 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   v_profile RECORD;
@@ -77,8 +80,8 @@ BEGIN
     COALESCE(p.role, 'user') as role,
     COALESCE(p.current_month_trades_count, 0) as monthly_count,
     COALESCE(p.trade_count, 0) as lifetime_count,
-    COALESCE(p.initial_portfolio, 10000) as initial_portfolio,          -- 🔧 ADDED
-    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio  -- 🔧 ADDED
+    COALESCE(p.initial_portfolio, 10000) as initial_portfolio,
+    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio
   INTO v_profile
   FROM public.profiles p
   WHERE p.id = user_id_param;
@@ -90,14 +93,14 @@ BEGIN
       0::INT,                     -- used
       10::INT,                    -- max_trades
       'Free Plan'::TEXT,          -- plan
-      CURRENT_DATE::TEXT,         -- reset_date
+      NULL::TEXT,                 -- reset_date (FREE has no reset)
       'free'::TEXT,               -- account_type
       NULL::TEXT,                 -- subscription_interval
       'active'::TEXT,             -- subscription_status
       NULL::TIMESTAMPTZ,          -- subscription_expires_at
       'user'::TEXT,               -- role
-      10000::NUMERIC,             -- initial_portfolio 🔧 ADDED
-      10000::NUMERIC;             -- current_portfolio 🔧 ADDED
+      10000::NUMERIC,             -- initial_portfolio
+      10000::NUMERIC;             -- current_portfolio
     RETURN;
   END IF;
   
@@ -135,8 +138,8 @@ BEGIN
       v_profile.subscription_status::TEXT,            -- subscription_status
       v_profile.subscription_expires_at::TIMESTAMPTZ, -- subscription_expires_at
       v_profile.role::TEXT,                           -- role
-      v_profile.initial_portfolio::NUMERIC,           -- initial_portfolio 🔧 ADDED
-      v_profile.current_portfolio::NUMERIC;           -- current_portfolio 🔧 ADDED
+      v_profile.initial_portfolio::NUMERIC,           -- initial_portfolio
+      v_profile.current_portfolio::NUMERIC;           -- current_portfolio
     RETURN;
   END IF;
   
@@ -158,19 +161,73 @@ BEGIN
     v_profile.subscription_status::TEXT,                    -- subscription_status
     v_profile.subscription_expires_at::TIMESTAMPTZ,         -- subscription_expires_at
     v_profile.role::TEXT,                                   -- role
-    v_profile.initial_portfolio::NUMERIC,                   -- initial_portfolio 🔧 ADDED
-    v_profile.current_portfolio::NUMERIC;                   -- current_portfolio 🔧 ADDED
+    v_profile.initial_portfolio::NUMERIC,                   -- initial_portfolio
+    v_profile.current_portfolio::NUMERIC;                   -- current_portfolio
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v8.5.0-FIXED: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
+'v8.5.10: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
 
--- Check Expired Subscriptions
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ v9.4.2-SYNCED: check_subscription_status (FIXED!)
+-- Uses subscription_expires_at (NOT subscription_end_date)
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.check_subscription_status(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.check_subscription_status(p_user_id UUID)
+RETURNS TABLE (
+  is_active BOOLEAN,
+  account_type TEXT,
+  days_remaining INTEGER,
+  should_downgrade BOOLEAN,
+  subscription_status TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    p.account_type,
+    p.subscription_expires_at,  -- ✅ FIXED: was subscription_end_date
+    p.subscription_status,
+    p.subscription_cancel_at_period_end
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT FALSE, 'free'::TEXT, 0, FALSE, 'none'::TEXT;
+    RETURN;
+  END IF;
+  
+  RETURN QUERY SELECT
+    v_profile.account_type != 'free',
+    v_profile.account_type,
+    CASE 
+      WHEN v_profile.subscription_expires_at IS NOT NULL 
+      THEN GREATEST(0, EXTRACT(DAY FROM (v_profile.subscription_expires_at - NOW()))::INTEGER)
+      ELSE NULL::INTEGER
+    END,
+    (v_profile.subscription_expires_at IS NOT NULL 
+      AND v_profile.subscription_expires_at < NOW()
+      AND v_profile.account_type != 'free'),
+    COALESCE(v_profile.subscription_status, 'none')::TEXT;
+END;
+$$;
+
+COMMENT ON FUNCTION public.check_subscription_status IS 
+'v9.4.2-SYNCED: Uses subscription_expires_at (not subscription_end_date)';
+
+-- ✅ Check Expired Subscriptions
 CREATE OR REPLACE FUNCTION public.check_expired_subscriptions()
 RETURNS TABLE(user_id UUID, old_plan TEXT, email TEXT) 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -198,11 +255,108 @@ BEGIN
 END;
 $$;
 
--- ✅ UPDATED: Reset Monthly Trade Counts (ONLY FOR BASIC/TRIAL/PREMIUM)
+COMMENT ON FUNCTION public.check_expired_subscriptions IS 
+'v8.5.10: Checks and downgrades expired subscriptions to free plan';
+
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ v9.4.2-SYNCED: cancel_subscription (WITH subscription_cancel_at_period_end)
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.cancel_subscription(UUID, TEXT, BOOLEAN) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.cancel_subscription(
+  p_user_id UUID,
+  p_reason TEXT DEFAULT NULL,
+  p_immediate BOOLEAN DEFAULT FALSE
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_effective_date TIMESTAMPTZ;
+  v_days_remaining INTEGER;
+BEGIN
+  SELECT * INTO v_profile
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF v_profile.account_type = 'free' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No active subscription');
+  END IF;
+  
+  IF p_immediate THEN
+    v_effective_date := NOW();
+    
+    UPDATE public.profiles
+    SET 
+      previous_account_type = account_type,
+      account_type = 'free',
+      max_trades = 10,
+      subscription_status = 'expired',
+      subscription_interval = NULL,
+      payment_provider = NULL,
+      subscription_expires_at = NOW(),
+      subscription_cancel_at_period_end = FALSE,  -- ✅ NEW!
+      cancellation_reason = p_reason,
+      cancellation_requested_at = NOW(),
+      cancellation_effective_date = NOW(),
+      updated_at = NOW()
+    WHERE id = p_user_id;
+  ELSE
+    -- Graceful cancellation - cancel at period end
+    v_effective_date := COALESCE(v_profile.subscription_expires_at, NOW());
+    
+    UPDATE public.profiles
+    SET 
+      subscription_status = 'cancelled',
+      subscription_cancel_at_period_end = TRUE,  -- ✅ NEW!
+      cancellation_reason = p_reason,
+      cancellation_requested_at = NOW(),
+      cancellation_effective_date = v_effective_date,
+      updated_at = NOW()
+    WHERE id = p_user_id;
+  END IF;
+  
+  -- Log to subscription_changes
+  INSERT INTO public.subscription_changes (
+    user_id, change_type, from_plan, to_plan, effective_date, reason
+  ) VALUES (
+    p_user_id, 'cancel', v_profile.account_type, 'free', v_effective_date, p_reason
+  );
+  
+  v_days_remaining := GREATEST(0, EXTRACT(DAY FROM (v_effective_date - NOW()))::INTEGER);
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', CASE 
+      WHEN p_immediate THEN 'Subscription cancelled immediately'
+      ELSE format('Subscription will cancel on %s', v_effective_date::DATE)
+    END,
+    'data', jsonb_build_object(
+      'effective_date', v_effective_date,
+      'days_remaining', v_days_remaining,
+      'immediate', p_immediate
+    )
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.cancel_subscription IS 
+'v9.4.2-SYNCED: Cancel subscription with subscription_cancel_at_period_end support';
+
+-- ✅ Reset Monthly Trade Counts (ONLY FOR BASIC/TRIAL/PREMIUM)
+DROP FUNCTION IF EXISTS public.reset_monthly_trade_counts() CASCADE;
+
 CREATE OR REPLACE FUNCTION public.reset_monthly_trade_counts()
 RETURNS INTEGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   reset_count INTEGER;
@@ -224,14 +378,81 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.reset_monthly_trade_counts IS 
-'v8.5.0: Resets monthly counters ONLY for BASIC/TRIAL/PREMIUM. FREE users are excluded.';
+'v8.5.10: CRON JOB - Resets monthly counters for BASIC/TRIAL/PREMIUM only. FREE keeps lifetime count.';
 
--- Check Usage Warning
+GRANT EXECUTE ON FUNCTION public.reset_monthly_trade_counts() TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ v9.4.2-SYNCED: process_expired_subscriptions (FIXED!)
+-- Uses subscription_expires_at (NOT subscription_end_date)
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.process_expired_subscriptions() CASCADE;
+
+CREATE OR REPLACE FUNCTION public.process_expired_subscriptions()
+RETURNS TABLE(
+  downgraded_count INTEGER,
+  downgraded_emails TEXT[]
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_count INTEGER := 0;
+  v_emails TEXT[] := ARRAY[]::TEXT[];
+  v_user RECORD;
+BEGIN
+  FOR v_user IN
+    SELECT 
+      p.id,
+      p.email,
+      p.account_type
+    FROM public.profiles p
+    WHERE p.subscription_expires_at < NOW()  -- ✅ FIXED: was subscription_end_date
+      AND p.account_type IN ('basic', 'premium', 'trial')
+      AND p.subscription_status IN ('active', 'cancelled')
+      AND p.role NOT IN ('admin', 'super_admin')
+    ORDER BY p.subscription_expires_at ASC
+    LIMIT 1000
+  LOOP
+    UPDATE public.profiles
+    SET 
+      previous_account_type = v_user.account_type,
+      account_type = 'free',
+      max_trades = 10,
+      subscription_status = 'expired',
+      subscription_interval = NULL,
+      subscription_cancel_at_period_end = FALSE,
+      payment_provider = NULL,
+      updated_at = NOW()
+    WHERE id = v_user.id;
+    
+    -- Log the change
+    INSERT INTO public.subscription_changes (
+      user_id, change_type, from_plan, to_plan, effective_date
+    ) VALUES (
+      v_user.id, 'expire', v_user.account_type, 'free', NOW()
+    );
+    
+    v_emails := array_append(v_emails, v_user.email);
+    v_count := v_count + 1;
+  END LOOP;
+  
+  RETURN QUERY SELECT v_count, v_emails;
+END;
+$$;
+
+COMMENT ON FUNCTION public.process_expired_subscriptions IS 
+'v9.4.2-SYNCED: CRON job - downgrades expired subscriptions. Uses subscription_expires_at.';
+
+GRANT EXECUTE ON FUNCTION public.process_expired_subscriptions() TO service_role;
+
+-- ✅ Check Usage Warning
 CREATE OR REPLACE FUNCTION public.check_usage_warning(target_user_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   profile_record RECORD;
@@ -248,19 +469,26 @@ BEGIN
   FROM public.profiles
   WHERE id = target_user_id;
   
+  -- Premium users never get warnings
   IF profile_record.account_type = 'premium' THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Handle NULL/zero max_trades
+  IF profile_record.max_trades IS NULL OR profile_record.max_trades = 0 THEN
     RETURN FALSE;
   END IF;
   
   -- FREE uses lifetime count, others use monthly
   IF profile_record.account_type = 'free' THEN
-    trades_used := profile_record.trade_count;
+    trades_used := COALESCE(profile_record.trade_count, 0);
   ELSE
-    trades_used := profile_record.current_month_trades_count;
+    trades_used := COALESCE(profile_record.current_month_trades_count, 0);
   END IF;
   
   usage_percentage := (trades_used::NUMERIC / profile_record.max_trades::NUMERIC) * 100;
   
+  -- Show warning at 80%, max once per 24 hours
   IF usage_percentage >= 80 AND 
      (profile_record.last_warning_shown_at IS NULL OR 
       profile_record.last_warning_shown_at < NOW() - INTERVAL '24 hours') THEN
@@ -272,20 +500,26 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_usage_warning IS 
-'v8.5.0: Shows warning at 80% usage. FREE uses lifetime count.';
+'v8.5.10: Returns TRUE if user should see 80% usage warning. Max once per 24h.';
 
--- Mark Warning Shown
+-- ✅ Mark Warning Shown
 CREATE OR REPLACE FUNCTION public.mark_warning_shown(target_user_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   UPDATE public.profiles
-  SET last_warning_shown_at = NOW()
+  SET 
+    last_warning_shown_at = NOW(),
+    updated_at = NOW()
   WHERE id = target_user_id;
 END;
 $$;
+
+COMMENT ON FUNCTION public.mark_warning_shown IS 
+'v8.5.10: Updates last_warning_shown_at to prevent warning spam.';
 
 -- ===============================================
 -- SECTION 8: PORTFOLIO & STATISTICS
@@ -296,7 +530,11 @@ BEGIN
   RAISE NOTICE '[8/15] Creating portfolio functions...';
 END $$;
 
--- Get Portfolio Stats (OPTIMIZED - ONE QUERY)
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 SECURE VERSION: get_portfolio_stats (v8.5.10)
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.get_portfolio_stats(UUID) CASCADE;
+
 CREATE OR REPLACE FUNCTION public.get_portfolio_stats(p_user_id UUID)
 RETURNS TABLE (
   initial_portfolio NUMERIC,
@@ -307,6 +545,7 @@ RETURNS TABLE (
 ) 
 LANGUAGE plpgsql
 SECURITY DEFINER
+STABLE
 SET search_path = public
 AS $$
 DECLARE
@@ -315,30 +554,62 @@ DECLARE
   v_trade_count BIGINT;
   v_current_portfolio NUMERIC;
   v_growth NUMERIC;
+  v_is_admin BOOLEAN;
+  v_caller_id UUID;
 BEGIN
+  -- Get caller ID
+  v_caller_id := auth.uid();
+  
+  -- 🔒 Check permissions
+  SELECT role IN ('admin', 'super_admin') AND is_banned = FALSE
+  INTO v_is_admin
+  FROM profiles
+  WHERE id = v_caller_id;
+
+  -- Users can only view their own stats unless admin
+  IF p_user_id != v_caller_id AND NOT COALESCE(v_is_admin, FALSE) THEN
+    RAISE EXCEPTION 'Access denied: You can only view your own portfolio stats';
+  END IF;
+
+  -- 🔒 Admin enables admin mode for viewing other users
+  IF COALESCE(v_is_admin, FALSE) AND p_user_id != v_caller_id THEN
+    PERFORM set_config('app.admin_mode', 'true', true);
+  END IF;
+
+  -- Get initial portfolio
   SELECT COALESCE(profiles.initial_portfolio, 10000)
   INTO v_initial_portfolio
   FROM profiles
   WHERE profiles.id = p_user_id;
 
+  -- Default if user not found
   IF v_initial_portfolio IS NULL THEN
     v_initial_portfolio := 10000;
   END IF;
 
+  -- Calculate PnL from closed trades only
   SELECT 
     COALESCE(SUM(trades.pnl), 0),
     COUNT(*)
   INTO v_total_pnl, v_trade_count
   FROM trades
   WHERE trades.user_id = p_user_id
-    AND trades.exit_price IS NOT NULL;
+    AND trades.exit_price IS NOT NULL
+    AND trades.deleted_at IS NULL;
 
+  -- Calculate current portfolio value
   v_current_portfolio := v_initial_portfolio + v_total_pnl;
   
+  -- Calculate growth percentage
   IF v_initial_portfolio > 0 THEN
     v_growth := ((v_current_portfolio - v_initial_portfolio) / v_initial_portfolio) * 100;
   ELSE
     v_growth := 0;
+  END IF;
+
+  -- 🔒 Disable admin mode
+  IF COALESCE(v_is_admin, FALSE) THEN
+    PERFORM set_config('app.admin_mode', 'false', true);
   END IF;
 
   RETURN QUERY SELECT 
@@ -350,6 +621,9 @@ BEGIN
 END;
 $$;
 
+COMMENT ON FUNCTION public.get_portfolio_stats IS 
+'v8.5.10-SECURE: Get portfolio stats with mandatory access control. Users can only view their own stats unless admin.';
+
 -- ===============================================
 -- SECTION 9: TRADINGVIEW WEBHOOKS
 -- ===============================================
@@ -359,7 +633,7 @@ BEGIN
   RAISE NOTICE '[9/15] Creating TradingView webhook functions...';
 END $$;
 
--- Close TradingView Trade (ATOMIC)
+-- ✅ Close TradingView Trade (ATOMIC)
 CREATE OR REPLACE FUNCTION public.close_tradingview_trade(
   p_user_id UUID,
   p_symbol TEXT,
@@ -369,38 +643,47 @@ CREATE OR REPLACE FUNCTION public.close_tradingview_trade(
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_trade_id UUID;
   v_entry_price NUMERIC;
   v_outcome TEXT;
 BEGIN
+  -- Find the most recent open trade matching criteria (with lock)
   SELECT id, entry_price
   INTO v_trade_id, v_entry_price
-  FROM trades
+  FROM public.trades
   WHERE user_id = p_user_id
     AND symbol = p_symbol
     AND side = p_side
     AND exit_price IS NULL
+    AND deleted_at IS NULL
   ORDER BY open_at DESC
   LIMIT 1
   FOR UPDATE SKIP LOCKED;
 
   IF v_trade_id IS NULL THEN
-    RAISE EXCEPTION 'No open trade found';
+    RAISE EXCEPTION 'No open trade found for symbol % side %', p_symbol, p_side;
   END IF;
 
+  -- Determine outcome
   IF (p_exit_price > v_entry_price AND p_side = 'LONG') OR
      (p_exit_price < v_entry_price AND p_side = 'SHORT') THEN
     v_outcome := 'WIN';
-  ELSE
+  ELSIF (p_exit_price < v_entry_price AND p_side = 'LONG') OR
+        (p_exit_price > v_entry_price AND p_side = 'SHORT') THEN
     v_outcome := 'LOSS';
+  ELSE
+    v_outcome := 'BE';
   END IF;
 
-  UPDATE trades
+  -- Update the trade (unified trigger will calculate PnL)
+  UPDATE public.trades
   SET 
     exit_price = p_exit_price,
     outcome = v_outcome,
+    close_at = NOW(),
     updated_at = NOW()
   WHERE id = v_trade_id;
 
@@ -408,19 +691,35 @@ BEGIN
 END;
 $$;
 
--- Generate TradingView Webhook Secret
+COMMENT ON FUNCTION public.close_tradingview_trade IS 
+'v8.5.10: Atomically closes a TradingView trade with proper locking. Trigger calculates PnL.';
+
+GRANT EXECUTE ON FUNCTION public.close_tradingview_trade(UUID, TEXT, TEXT, NUMERIC) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.close_tradingview_trade(UUID, TEXT, TEXT, NUMERIC) TO service_role;
+
+-- ✅ Generate TradingView Webhook Secret
 CREATE OR REPLACE FUNCTION public.generate_tradingview_webhook()
 RETURNS TEXT 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   secret TEXT;
+  v_user_id UUID;
 BEGIN
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+  
+  -- Generate secure random secret (64 hex chars)
   secret := encode(gen_random_bytes(32), 'hex');
   
-  INSERT INTO public.user_settings (user_id, tradingview_webhook_secret)
-  VALUES (auth.uid(), secret)
+  -- Upsert into user_settings
+  INSERT INTO public.user_settings (user_id, tradingview_webhook_secret, updated_at)
+  VALUES (v_user_id, secret, NOW())
   ON CONFLICT (user_id) 
   DO UPDATE SET 
     tradingview_webhook_secret = EXCLUDED.tradingview_webhook_secret,
@@ -430,367 +729,75 @@ BEGIN
 END;
 $$;
 
--- ===============================================
--- SECTION 10: REFERRAL FUNCTIONS
--- ===============================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '[10/15] Creating referral functions...';
-END $$;
-
--- Process Referral Signup
-CREATE OR REPLACE FUNCTION public.process_referral_signup(
-  p_referred_user_id UUID,
-  p_referral_code TEXT
-)
-RETURNS JSONB 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_referrer_id UUID;
-  v_referral_id UUID;
-BEGIN
-  SELECT id INTO v_referrer_id
-  FROM public.profiles
-  WHERE affiliate_code = p_referral_code;
-  
-  IF v_referrer_id IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'message', 'Invalid referral code');
-  END IF;
-  
-  IF v_referrer_id = p_referred_user_id THEN
-    RETURN jsonb_build_object('success', false, 'message', 'Cannot refer yourself');
-  END IF;
-  
-  IF EXISTS(SELECT 1 FROM public.referrals WHERE referred_id = p_referred_user_id) THEN
-    RETURN jsonb_build_object('success', false, 'message', 'User already referred');
-  END IF;
-  
-  UPDATE public.profiles
-  SET referred_by = p_referral_code
-  WHERE id = p_referred_user_id;
-  
-  INSERT INTO public.referrals (
-    referrer_id, referred_id, referral_code, status, signed_up_at
-  ) VALUES (
-    v_referrer_id, p_referred_user_id, p_referral_code, 'pending', NOW()
-  ) RETURNING id INTO v_referral_id;
-  
-  UPDATE public.affiliate_stats
-  SET 
-    total_signups = total_signups + 1,
-    last_updated = NOW()
-  WHERE user_id = v_referrer_id;
-  
-  RETURN jsonb_build_object(
-    'success', true, 
-    'referral_id', v_referral_id, 
-    'message', 'Referral recorded successfully'
-  );
-END;
-$$;
-
--- Complete Referral and Grant Rewards
-CREATE OR REPLACE FUNCTION public.complete_referral_and_grant_rewards(
-  p_referral_id UUID
-)
-RETURNS JSONB 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_referral RECORD;
-BEGIN
-  SELECT * INTO v_referral 
-  FROM public.referrals 
-  WHERE id = p_referral_id AND status = 'pending';
-  
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'message', 'Referral not found or already completed');
-  END IF;
-  
-  IF NOT v_referral.reward_granted_to_referrer THEN
-    UPDATE public.profiles
-    SET 
-      subscription_expires_at = COALESCE(
-        CASE WHEN subscription_expires_at > NOW() 
-        THEN subscription_expires_at + INTERVAL '1 month'
-        ELSE NOW() + INTERVAL '1 month' END, 
-        NOW() + INTERVAL '1 month'
-      ),
-      account_type = CASE WHEN account_type = 'free' THEN 'premium' ELSE account_type END,
-      subscription_status = 'active',
-      free_months_available = free_months_available + 1,
-      referral_count = referral_count + 1
-    WHERE id = v_referral.referrer_id;
-    
-    INSERT INTO public.free_months_credits (
-      user_id, months_earned, earned_from_user_id, applied
-    ) VALUES (
-      v_referral.referrer_id, 1, v_referral.referred_id, true
-    );
-    
-    UPDATE public.affiliate_stats
-    SET 
-      total_conversions = total_conversions + 1,
-      total_free_months_earned = total_free_months_earned + 1,
-      last_updated = NOW()
-    WHERE user_id = v_referral.referrer_id;
-  END IF;
-  
-  IF NOT v_referral.reward_granted_to_referred THEN
-    UPDATE public.profiles
-    SET 
-      subscription_expires_at = NOW() + INTERVAL '1 month',
-      account_type = 'premium',
-      subscription_status = 'active',
-      trial_ends_at = NOW() + INTERVAL '1 month',
-      free_months_available = free_months_available + 1
-    WHERE id = v_referral.referred_id;
-    
-    INSERT INTO public.free_months_credits (
-      user_id, months_earned, earned_from_user_id, applied
-    ) VALUES (
-      v_referral.referred_id, 1, v_referral.referrer_id, true
-    );
-  END IF;
-  
-  UPDATE public.referrals
-  SET 
-    status = 'completed',
-    reward_granted_to_referrer = TRUE,
-    reward_granted_to_referred = TRUE,
-    completed_at = NOW(),
-    converted_to_paid = TRUE,
-    converted_at = NOW(),
-    reward_credited = TRUE,
-    credited_at = NOW()
-  WHERE id = p_referral_id;
-  
-  RETURN jsonb_build_object('success', true, 'message', 'Referral completed and rewards granted');
-END;
-$$;
-
--- Get User Referral Stats
-CREATE OR REPLACE FUNCTION public.get_user_referral_stats(p_user_id UUID DEFAULT NULL)
-RETURNS JSON 
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-AS $$
-DECLARE
-  v_user_id UUID;
-  stats JSON;
-BEGIN
-  v_user_id := COALESCE(p_user_id, auth.uid());
-  
-  IF v_user_id != auth.uid() AND NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized';
-  END IF;
-
-  SELECT json_build_object(
-    'referral_code', affiliate_code,
-    'total_signups', COALESCE((SELECT total_signups FROM public.affiliate_stats WHERE user_id = v_user_id), 0),
-    'total_conversions', COALESCE((SELECT total_conversions FROM public.affiliate_stats WHERE user_id = v_user_id), 0),
-    'free_months_earned', COALESCE((SELECT total_free_months_earned FROM public.affiliate_stats WHERE user_id = v_user_id), 0),
-    'free_months_available', free_months_available,
-    'referral_count', referral_count,
-    'referred_by', referred_by,
-    'pending_referrals', (SELECT COUNT(*) FROM public.referrals WHERE referrer_id = v_user_id AND status = 'pending'),
-    'completed_referrals', (SELECT COUNT(*) FROM public.referrals WHERE referrer_id = v_user_id AND status = 'completed')
-  ) INTO stats
-  FROM public.profiles
-  WHERE id = v_user_id;
-
-  RETURN stats;
-END;
-$$;
-
--- Get Admin Referral Overview
-CREATE OR REPLACE FUNCTION public.get_admin_referral_overview()
-RETURNS JSON 
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-AS $$
-BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized - Admin access required';
-  END IF;
-
-  RETURN json_build_object(
-    'total_referrals', (SELECT COUNT(*) FROM public.referrals),
-    'pending_referrals', (SELECT COUNT(*) FROM public.referrals WHERE status = 'pending'),
-    'completed_referrals', (SELECT COUNT(*) FROM public.referrals WHERE status = 'completed'),
-    'total_free_months_granted', (SELECT SUM(total_free_months_earned) FROM public.affiliate_stats),
-    'active_referrers', (SELECT COUNT(*) FROM public.affiliate_stats WHERE total_signups > 0),
-    'total_users_with_referrals', (SELECT COUNT(*) FROM public.profiles WHERE referral_count > 0),
-    'top_referrers', (
-      SELECT json_agg(row_to_json(t))
-      FROM (
-        SELECT 
-          ast.user_id, 
-          p.email, 
-          p.display_name as name, 
-          p.affiliate_code as code,
-          ast.total_signups, 
-          ast.total_conversions, 
-          ast.total_free_months_earned, 
-          p.referral_count
-        FROM public.affiliate_stats ast
-        JOIN public.profiles p ON p.id = ast.user_id
-        WHERE ast.total_signups > 0
-        ORDER BY ast.total_conversions DESC, ast.total_signups DESC
-        LIMIT 10
-      ) t
-    )
-  );
-END;
-$$;
-
--- Increment Affiliate Signups
-CREATE OR REPLACE FUNCTION public.increment_affiliate_signups(p_user_id UUID)
-RETURNS VOID 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.affiliate_stats
-  SET total_signups = total_signups + 1, last_updated = NOW()
-  WHERE user_id = p_user_id;
-  
-  IF NOT FOUND THEN
-    INSERT INTO public.affiliate_stats (user_id, total_signups, total_conversions, total_free_months_earned)
-    VALUES (p_user_id, 1, 0, 0)
-    ON CONFLICT (user_id) DO UPDATE
-    SET total_signups = public.affiliate_stats.total_signups + 1, last_updated = NOW();
-  END IF;
-END;
-$$;
-
--- Increment Affiliate Conversions
-CREATE OR REPLACE FUNCTION public.increment_affiliate_conversions(p_user_id UUID)
-RETURNS VOID 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  UPDATE public.affiliate_stats
-  SET 
-    total_conversions = total_conversions + 1,
-    total_free_months_earned = total_free_months_earned + 1,
-    last_updated = NOW()
-  WHERE user_id = p_user_id;
-  
-  IF NOT FOUND THEN
-    INSERT INTO public.affiliate_stats (user_id, total_signups, total_conversions, total_free_months_earned)
-    VALUES (p_user_id, 0, 1, 1)
-    ON CONFLICT (user_id) DO UPDATE
-    SET 
-      total_conversions = public.affiliate_stats.total_conversions + 1,
-      total_free_months_earned = public.affiliate_stats.total_free_months_earned + 1,
-      last_updated = NOW();
-  END IF;
-END;
-$$;
-
--- Increment Referral Count (ATOMIC)
-CREATE OR REPLACE FUNCTION public.increment_referral_count(p_user_id UUID)
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_new_count INTEGER;
-BEGIN
-  UPDATE public.profiles
-  SET referral_count = COALESCE(referral_count, 0) + 1
-  WHERE id = p_user_id
-  RETURNING referral_count INTO v_new_count;
-  
-  RETURN v_new_count;
-END;
-$$;
-
--- Increment Free Months (ATOMIC)
-CREATE OR REPLACE FUNCTION public.increment_free_months(p_user_id UUID, p_amount INTEGER)
-RETURNS INTEGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_new_count INTEGER;
-BEGIN
-  UPDATE public.profiles
-  SET free_months_available = COALESCE(free_months_available, 0) + p_amount
-  WHERE id = p_user_id
-  RETURNING free_months_available INTO v_new_count;
-  
-  RETURN v_new_count;
-END;
-$$;
-
--- Use Free Month (ATOMIC)
-CREATE OR REPLACE FUNCTION public.use_free_month(p_user_id UUID)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_available INTEGER;
-BEGIN
-  UPDATE public.profiles
-  SET free_months_available = GREATEST(free_months_available - 1, 0)
-  WHERE id = p_user_id
-    AND free_months_available > 0
-  RETURNING free_months_available INTO v_available;
-  
-  RETURN FOUND;
-END;
-$$;
+COMMENT ON FUNCTION public.generate_tradingview_webhook IS 
+'v8.5.10: Generates a secure 64-char hex webhook secret for TradingView integration.';
 
 -- ===============================================
--- SECTION 11: ADMIN FUNCTIONS
+-- SECTION 10: ADMIN FUNCTIONS
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[11/15] Creating admin functions...';
+  RAISE NOTICE '[10/15] Creating admin functions...';
 END $$;
 
--- Log Admin Action
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ v9.4.2-SYNCED: log_admin_action (SINGLE VERSION ONLY!)
+-- Removed all duplicate versions
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.log_admin_action(TEXT, UUID, TEXT, UUID, JSONB) CASCADE;
+DROP FUNCTION IF EXISTS public.log_admin_action(TEXT, TEXT, UUID, JSONB) CASCADE;
+DROP FUNCTION IF EXISTS public.log_admin_action CASCADE;
+
+-- ✅ Single version with 4 parameters
 CREATE OR REPLACE FUNCTION public.log_admin_action(
-  p_action TEXT,
-  p_target_user_id UUID DEFAULT NULL,
-  p_target_type TEXT DEFAULT NULL,
-  p_target_id UUID DEFAULT NULL,
+  p_action_type TEXT,
+  p_resource_type TEXT DEFAULT NULL,
+  p_resource_id UUID DEFAULT NULL,
   p_details JSONB DEFAULT '{}'::jsonb
 )
-RETURNS UUID 
+RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-  log_id UUID;
+  v_action_id UUID;
+  v_admin_id UUID;
 BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized - Admin access required';
+  v_admin_id := auth.uid();
+  
+  IF v_admin_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
   END IF;
-
-  INSERT INTO public.admin_audit_log (
-    admin_id, action, target_user_id, target_type, target_id, details
+  
+  INSERT INTO public.admin_actions (
+    action_type,
+    admin_id,
+    resource_type,
+    resource_id,
+    details,
+    created_at
   ) VALUES (
-    auth.uid(), p_action, p_target_user_id, p_target_type, p_target_id, p_details
+    p_action_type,
+    v_admin_id,
+    p_resource_type,
+    p_resource_id,
+    COALESCE(p_details, '{}'::jsonb),
+    NOW()
   )
-  RETURNING id INTO log_id;
-
-  RETURN log_id;
+  RETURNING id INTO v_action_id;
+  
+  RETURN v_action_id;
 END;
 $$;
 
--- Admin Toggle User Ban
+COMMENT ON FUNCTION public.log_admin_action IS 
+'v9.4.2-SYNCED: Single version - logs admin actions with 4 parameters';
+
+GRANT EXECUTE ON FUNCTION public.log_admin_action(TEXT, TEXT, UUID, JSONB) TO authenticated;
+
+-- ✅ Admin Toggle User Ban
 CREATE OR REPLACE FUNCTION public.admin_toggle_user_ban(
   p_user_id UUID,
   p_ban_reason TEXT DEFAULT NULL
@@ -798,38 +805,57 @@ CREATE OR REPLACE FUNCTION public.admin_toggle_user_ban(
 RETURNS VOID 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   current_ban_status BOOLEAN;
+  v_admin_id UUID;
 BEGIN
+  v_admin_id := auth.uid();
+  
+  -- Check super admin permission
   IF NOT is_super_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Super Admin access required';
   END IF;
 
+  -- Get current ban status
   SELECT is_banned INTO current_ban_status
   FROM public.profiles
   WHERE id = p_user_id;
+  
+  IF current_ban_status IS NULL THEN
+    RAISE EXCEPTION 'User not found: %', p_user_id;
+  END IF;
 
+  -- Toggle ban status
   UPDATE public.profiles
   SET 
     is_banned = NOT current_ban_status,
     ban_reason = CASE WHEN NOT current_ban_status THEN p_ban_reason ELSE NULL END,
     banned_at = CASE WHEN NOT current_ban_status THEN NOW() ELSE NULL END,
-    banned_by = CASE WHEN NOT current_ban_status THEN auth.uid() ELSE NULL END
+    banned_by = CASE WHEN NOT current_ban_status THEN v_admin_id ELSE NULL END,
+    updated_at = NOW()
   WHERE id = p_user_id;
 
+  -- Log admin action
   PERFORM log_admin_action(
     CASE WHEN NOT current_ban_status THEN 'BAN_USER' ELSE 'UNBAN_USER' END,
-    p_user_id, 
     'user', 
     p_user_id, 
-    jsonb_build_object('reason', p_ban_reason)
+    jsonb_build_object(
+      'reason', p_ban_reason,
+      'previous_status', current_ban_status
+    )
   );
 END;
 $$;
 
--- ✅ UPDATED v8.4.7: Admin Update Subscription (RETURNS JSONB)
-DROP FUNCTION IF EXISTS public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ);
+COMMENT ON FUNCTION public.admin_toggle_user_ban IS 
+'v8.5.10: Toggles user ban status. Super admin only.';
+
+-- ✅ Admin Update Subscription (RETURNS JSONB, uses get_trade_limit)
+-- ✅ v9.4.2-SYNCED: Uses subscription_expires_at (NOT subscription_end_date)
+DROP FUNCTION IF EXISTS public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.admin_update_subscription(
   p_user_id UUID,
@@ -847,6 +873,7 @@ DECLARE
   v_admin_id UUID;
   v_admin_role TEXT;
   v_max_trades INTEGER;
+  v_old_account_type TEXT;
 BEGIN
   -- Verify authentication
   v_admin_id := auth.uid();
@@ -867,8 +894,8 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid account type: ' || p_account_type);
   END IF;
 
-  -- Validate subscription interval
-  IF p_subscription_interval NOT IN ('monthly', 'yearly') AND p_account_type != 'free' THEN
+  -- Validate subscription interval (only required for non-free)
+  IF p_account_type != 'free' AND p_subscription_interval NOT IN ('monthly', 'yearly') THEN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid subscription interval: ' || p_subscription_interval);
   END IF;
 
@@ -877,16 +904,29 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Invalid subscription status: ' || p_subscription_status);
   END IF;
   
-  -- Calculate max trades
-  v_max_trades := CASE p_account_type
-    WHEN 'free' THEN 10
-    WHEN 'basic' THEN 25
-    WHEN 'premium' THEN 999999
-    WHEN 'trial' THEN 25
-    ELSE 10
+  -- Get old account type for logging
+  SELECT account_type INTO v_old_account_type 
+  FROM public.profiles WHERE id = p_user_id;
+  
+  IF v_old_account_type IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  -- Use get_trade_limit() function if it exists, otherwise fallback
+  BEGIN
+    v_max_trades := public.get_trade_limit(p_account_type);
+  EXCEPTION WHEN undefined_function THEN
+    -- Fallback if function doesn't exist
+    v_max_trades := CASE p_account_type
+      WHEN 'free' THEN 10
+      WHEN 'basic' THEN 25
+      WHEN 'premium' THEN 999999
+      WHEN 'trial' THEN 25
+      ELSE 10
+    END;
   END;
   
-  -- Update profile
+  -- Update profile (uses subscription_expires_at - FIXED!)
   UPDATE public.profiles
   SET 
     account_type = p_account_type,
@@ -895,41 +935,52 @@ BEGIN
       ELSE p_subscription_interval 
     END,
     subscription_status = p_subscription_status,
-    subscription_expires_at = p_subscription_expires_at,
+    subscription_expires_at = p_subscription_expires_at,  -- ✅ CORRECT column name
     max_trades = v_max_trades,
+    -- Reset counters when upgrading from free
+    current_month_trades_count = CASE 
+      WHEN v_old_account_type = 'free' AND p_account_type IN ('basic', 'trial', 'premium') THEN 0 
+      ELSE current_month_trades_count 
+    END,
+    billing_cycle_start = CASE 
+      WHEN v_old_account_type = 'free' AND p_account_type IN ('basic', 'trial', 'premium') THEN CURRENT_DATE 
+      ELSE billing_cycle_start 
+    END,
+    subscription_started_at = CASE
+      WHEN v_old_account_type = 'free' AND p_account_type IN ('basic', 'trial', 'premium') THEN NOW()
+      ELSE subscription_started_at
+    END,
     updated_at = NOW()
   WHERE id = p_user_id;
-  
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
   
   -- Log admin action
   BEGIN
     PERFORM log_admin_action(
-      'UPDATE_SUBSCRIPTION', 
-      p_user_id, 
+      'UPDATE_SUBSCRIPTION',
       'subscription', 
       p_user_id,
       jsonb_build_object(
-        'account_type', p_account_type,
+        'old_account_type', v_old_account_type,
+        'new_account_type', p_account_type,
         'subscription_interval', p_subscription_interval,
         'subscription_status', p_subscription_status,
         'expires_at', p_subscription_expires_at,
-        'max_trades', v_max_trades,
-        'admin_id', v_admin_id
+        'max_trades', v_max_trades
       )
     );
   EXCEPTION 
     WHEN OTHERS THEN
-      NULL; -- Ignore logging errors
+      -- Don't fail the update if logging fails
+      RAISE WARNING 'Failed to log admin action: %', SQLERRM;
   END;
   
   RETURN jsonb_build_object(
     'success', true, 
     'message', 'Subscription updated successfully',
     'data', jsonb_build_object(
-      'account_type', p_account_type,
+      'user_id', p_user_id,
+      'old_account_type', v_old_account_type,
+      'new_account_type', p_account_type,
       'max_trades', v_max_trades,
       'expires_at', p_subscription_expires_at
     )
@@ -942,182 +993,280 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.admin_update_subscription IS 
-'v8.5.0-UPDATED: Returns JSONB with success/error. Uses get_trade_limit() - BASIC/TRIAL = 25 trades';
+'v9.4.2-SYNCED: Returns JSONB with success/error. Uses subscription_expires_at. Uses get_trade_limit() with fallback.';
 
--- Admin Reset Trade Count
+GRANT EXECUTE ON FUNCTION public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO authenticated;
+
+-- ✅ Admin Reset Trade Count
 CREATE OR REPLACE FUNCTION public.admin_reset_trade_count(target_user_id UUID)
-RETURNS VOID
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
+DECLARE
+  v_admin_id UUID;
+  v_old_count INTEGER;
+  v_user_email TEXT;
 BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized: Admin access required';
+  v_admin_id := auth.uid();
+  
+  IF NOT public.is_admin() THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Admin access required');
   END IF;
 
+  -- Get old count and email for logging
+  SELECT current_month_trades_count, email 
+  INTO v_old_count, v_user_email
+  FROM public.profiles 
+  WHERE id = target_user_id;
+  
+  IF v_old_count IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- Reset the counter
   UPDATE public.profiles
   SET 
     current_month_trades_count = 0,
-    billing_cycle_start = CURRENT_DATE
+    billing_cycle_start = CURRENT_DATE,
+    updated_at = NOW()
   WHERE id = target_user_id;
   
-  PERFORM log_admin_action(
+  -- Log admin action
+  PERFORM public.log_admin_action(
     'RESET_TRADE_COUNT',
-    target_user_id,
     'profile',
     target_user_id,
-    jsonb_build_object('reset_date', CURRENT_DATE)
-  );
-END;
-$$;
-
--- ✅ UPDATED v8.4.7: Admin Grant Free Access (REPLACES admin_grant_free_months)
--- Drop old versions to avoid conflicts
-DROP FUNCTION IF EXISTS public.admin_grant_free_months(UUID, INTEGER) CASCADE;
-DROP FUNCTION IF EXISTS public.admin_grant_free_access(UUID, INTEGER, TEXT) CASCADE;
-DROP FUNCTION IF EXISTS public.grant_free_access(UUID, INTEGER, TEXT, UUID) CASCADE;
-
--- Main function to grant free access
-CREATE OR REPLACE FUNCTION public.grant_free_access(
-  p_user_id UUID,
-  p_months INTEGER,
-  p_reason TEXT,
-  p_admin_id UUID
-)
-RETURNS VOID 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_is_admin BOOLEAN;
-BEGIN
-  -- Verify admin permissions
-  SELECT role IN ('admin', 'super_admin') AND is_banned = FALSE
-  INTO v_is_admin
-  FROM public.profiles
-  WHERE id = p_admin_id;
-  
-  IF NOT COALESCE(v_is_admin, FALSE) THEN
-    RAISE EXCEPTION 'Unauthorized - Admin access required';
-  END IF;
-  
-  -- Update user profile
-  UPDATE public.profiles
-  SET 
-    free_months_available = COALESCE(free_months_available, 0) + p_months,
-    subscription_expires_at = CASE
-      -- If no active subscription or expired, start from now
-      WHEN subscription_expires_at IS NULL OR subscription_expires_at < NOW() 
-      THEN NOW() + (p_months || ' months')::INTERVAL
-      -- If active subscription, extend it
-      ELSE subscription_expires_at + (p_months || ' months')::INTERVAL
-    END,
-    subscription_status = 'active',
-    updated_at = NOW()
-  WHERE id = p_user_id;
-  
-  -- Log the credit
-  INSERT INTO public.free_months_credits (
-    user_id, 
-    months_earned, 
-    applied,
-    metadata
-  ) VALUES (
-    p_user_id,
-    p_months,
-    TRUE,
     jsonb_build_object(
-      'granted_by', 'admin',
-      'admin_id', p_admin_id,
-      'reason', p_reason,
-      'granted_at', NOW()
+      'old_count', v_old_count, 
+      'reset_date', CURRENT_DATE,
+      'user_email', v_user_email
     )
   );
   
-  -- Log admin action
-  PERFORM log_admin_action(
-    'GRANT_FREE_ACCESS',
-    p_user_id,
-    'free_months',
-    p_user_id,
-    jsonb_build_object(
-      'months_granted', p_months,
-      'reason', p_reason,
-      'admin_id', p_admin_id
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Trade count reset successfully',
+    'data', jsonb_build_object(
+      'user_id', target_user_id,
+      'user_email', v_user_email,
+      'old_count', v_old_count,
+      'new_count', 0
     )
   );
-  
-  RAISE NOTICE '✅ נתתי % חודש/ים חינם למשתמש %', p_months, p_user_id;
 END;
 $$;
 
--- Backward compatibility wrapper
-CREATE OR REPLACE FUNCTION public.admin_grant_free_months(
-  p_target_user_id UUID, 
-  p_months_to_grant INTEGER
-)
-RETURNS VOID 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  PERFORM grant_free_access(
-    p_target_user_id,
-    p_months_to_grant,
-    'Admin granted via admin_grant_free_months',
-    auth.uid()
-  );
-END;
-$$;
+COMMENT ON FUNCTION public.admin_reset_trade_count IS 
+'v8.5.10: Resets monthly trade count for a user. Admin only. Logs action.';
 
-COMMENT ON FUNCTION public.grant_free_access IS 
-'v8.5.0: Main function to grant free access. Called by adminService.ts';
+-- ✅ Admin Get Limits Overview
+-- 🔧 DROP first to avoid return type conflicts
+DROP FUNCTION IF EXISTS public.admin_get_limits_overview() CASCADE;
 
-COMMENT ON FUNCTION public.admin_grant_free_months IS 
-'v8.5.0: Backward compatibility wrapper for grant_free_access';
-
--- Admin Get Limits Overview
 CREATE OR REPLACE FUNCTION public.admin_get_limits_overview()
 RETURNS TABLE(
+  user_id UUID,
   email TEXT,
+  display_name TEXT,
   plan TEXT,
   lifetime_trades INTEGER,
   monthly_trades INTEGER,
   max_limit INTEGER,
-  can_add BOOLEAN
+  usage_percent NUMERIC,
+  can_add BOOLEAN,
+  last_trade_at TIMESTAMPTZ
 )
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
-  IF NOT is_admin() THEN
+  IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized: Admin access required';
   END IF;
 
   RETURN QUERY
   SELECT 
+    p.id as user_id,
     p.email,
+    p.display_name,
     p.account_type as plan,
-    COALESCE(p.trade_count, 0) as lifetime_trades,
-    COALESCE(p.current_month_trades_count, 0) as monthly_trades,
-    get_trade_limit(p.account_type) as max_limit,
-    can_create_trade(p.id) as can_add
+    COALESCE(p.trade_count, 0)::INTEGER as lifetime_trades,
+    COALESCE(p.current_month_trades_count, 0)::INTEGER as monthly_trades,
+    COALESCE(p.max_trades, public.get_trade_limit(p.account_type))::INTEGER as max_limit,
+    CASE 
+      WHEN COALESCE(p.max_trades, 10) = 0 THEN 0
+      WHEN p.account_type = 'free' THEN 
+        ROUND((COALESCE(p.trade_count, 0)::NUMERIC / COALESCE(p.max_trades, 10)) * 100, 1)
+      ELSE 
+        ROUND((COALESCE(p.current_month_trades_count, 0)::NUMERIC / COALESCE(p.max_trades, 25)) * 100, 1)
+    END as usage_percent,
+    public.can_create_trade(p.id) as can_add,
+    (SELECT MAX(t.open_at) FROM public.trades t WHERE t.user_id = p.id) as last_trade_at
   FROM public.profiles p
+  WHERE p.deleted_at IS NULL
   ORDER BY 
     CASE p.account_type
       WHEN 'free' THEN p.trade_count
       ELSE p.current_month_trades_count
-    END DESC;
+    END DESC
+  LIMIT 100;
 END;
 $$;
 
--- Get Platform Stats
+COMMENT ON FUNCTION public.admin_get_limits_overview IS 
+'v8.5.10: Returns overview of all users trade limits with usage percentage. Admin only.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ v9.4.2-SYNCED: search_ticker_symbols (SINGLE VERSION ONLY!)
+-- Removed all duplicate versions
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, TEXT, INTEGER) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.search_ticker_symbols(
+  p_query TEXT,
+  p_asset_class TEXT DEFAULT NULL,
+  p_limit INTEGER DEFAULT 20
+)
+RETURNS TABLE (
+  symbol TEXT,
+  name TEXT,
+  asset_class TEXT,
+  exchange TEXT,
+  multiplier NUMERIC,
+  popularity_rank INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    t.symbol,
+    t.name,
+    t.asset_class,
+    t.exchange,
+    t.multiplier,
+    t.popularity_rank
+  FROM public.ticker_symbols t
+  WHERE 
+    t.is_active = TRUE
+    AND (p_asset_class IS NULL OR t.asset_class = p_asset_class)
+    AND (
+      t.symbol ILIKE p_query || '%'
+      OR t.name ILIKE '%' || p_query || '%'
+    )
+  ORDER BY 
+    t.popularity_rank ASC,
+    CASE WHEN t.symbol ILIKE p_query THEN 0 ELSE 1 END,
+    t.symbol
+  LIMIT LEAST(p_limit, 100);
+END;
+$$;
+
+COMMENT ON FUNCTION public.search_ticker_symbols IS 
+'v9.4.2-SYNCED: Single version with 3 params (query, asset_class, limit)';
+
+GRANT EXECUTE ON FUNCTION public.search_ticker_symbols(TEXT, TEXT, INTEGER) TO authenticated, anon;
+
+-- ═══════════════════════════════════════════════════════════
+-- GRANT PERMISSIONS FOR SECTION 7-10
+-- ═══════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '🔐 Granting permissions for sections 7-10...';
+END $$;
+
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_subscription_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_expired_subscriptions() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_subscription(UUID, TEXT, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.reset_monthly_trade_counts() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.process_expired_subscriptions() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.check_usage_warning(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_warning_shown(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_portfolio_stats(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.generate_tradingview_webhook() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_toggle_user_ban(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_reset_trade_count(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_get_limits_overview() TO authenticated;
+
+COMMIT;
+
+-- ═══════════════════════════════════════════════════════════
+-- END OF PART 1/2 - Sections 7-10 Complete
+-- ═══════════════════════════════════════════════════════════
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔════════════════════════════════════════╗';
+  RAISE NOTICE '║  ✅ PART 1/2 COMPLETE! (v8.5.10)      ║';
+  RAISE NOTICE '║     Sections 7-10 - ALL BUGS FIXED!   ║';
+  RAISE NOTICE '║     🔒 SECURITY ENHANCED!              ║';
+  RAISE NOTICE '║     ❌ NO AFFILIATE FEATURES           ║';
+  RAISE NOTICE '║     ✅ v9.4.2-SYNCED FIXES APPLIED     ║';
+  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔧 v9.4.2 FIXES APPLIED:';
+  RAISE NOTICE '   • subscription_end_date → subscription_expires_at';
+  RAISE NOTICE '   • Added subscription_cancel_at_period_end';
+  RAISE NOTICE '   • Removed duplicate log_admin_action versions';
+  RAISE NOTICE '   • Removed duplicate search_ticker_symbols versions';
+  RAISE NOTICE '   • Fixed check_subscription_status';
+  RAISE NOTICE '   • Fixed process_expired_subscriptions';
+  RAISE NOTICE '   • Fixed cancel_subscription';
+  RAISE NOTICE '';
+END $$;
+-- ===============================================
+-- 🔥 FINOTAUR - PART 2/2 (Sections 11-15)
+-- ===============================================
+-- Version: MERGED-v8.5.10-SYNC (NO AFFILIATE)
+-- Date: 2025-01-22
+-- 🔧 v9.4.2-SYNCED: All fixes from Part 1 applied
+-- ===============================================
+
+BEGIN;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔════════════════════════════════════════╗';
+  RAISE NOTICE '║  🔥 FINOTAUR MERGED MIGRATION v8.5.10 ║';
+  RAISE NOTICE '║     Part 2/3: Functions + Triggers    ║';
+  RAISE NOTICE '║     Section 2/2: סעיפים 11-15        ║';
+  RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!    ║';
+  RAISE NOTICE '║     🔒 CRITICAL BUGS FIXED!           ║';
+  RAISE NOTICE '║     ❌ NO AFFILIATE FEATURES          ║';
+  RAISE NOTICE '║     ✅ v9.4.2-SYNCED FIXES APPLIED    ║';
+  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+-- ===============================================
+-- SECTION 11: ADMIN STATISTICS & ANALYTICS
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[11/15] Creating admin statistics functions...';
+END $$;
+
+-- ✅ Get Platform Stats
 CREATE OR REPLACE FUNCTION public.get_platform_stats()
 RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   stats JSON;
@@ -1132,6 +1281,7 @@ BEGIN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
 
+  -- Count subscribers by plan and interval
   SELECT COUNT(*) INTO v_basic_monthly
   FROM public.profiles 
   WHERE account_type = 'basic' AND subscription_interval = 'monthly';
@@ -1148,14 +1298,16 @@ BEGIN
   FROM public.profiles 
   WHERE account_type = 'premium' AND subscription_interval = 'yearly';
 
- v_monthly_revenue := 
-  (v_basic_monthly * 19.99) + 
-  (v_basic_yearly * 12.42) +  -- 149/12 = 12.42
-  (v_premium_monthly * 39.99) + 
-  (v_premium_yearly * 24.92);  -- 299/12 = 24.92
+  -- Calculate revenue (prices: basic monthly=$19.99, yearly=$149; premium monthly=$39.99, yearly=$299)
+  v_monthly_revenue := 
+    (v_basic_monthly * 19.99) + 
+    (v_basic_yearly * 12.42) +   -- 149/12 = 12.42
+    (v_premium_monthly * 39.99) + 
+    (v_premium_yearly * 24.92);  -- 299/12 = 24.92
     
   v_yearly_revenue := v_monthly_revenue * 12;
 
+  -- Build comprehensive stats object
   SELECT json_build_object(
     'total_users', (SELECT COUNT(*) FROM public.profiles),
     'active_users', (SELECT COUNT(*) FROM public.profiles WHERE last_login_at > NOW() - INTERVAL '30 days'),
@@ -1168,64 +1320,97 @@ BEGIN
     'basic_yearly_subscribers', v_basic_yearly,
     'premium_monthly_subscribers', v_premium_monthly,
     'premium_yearly_subscribers', v_premium_yearly,
-    'estimated_monthly_revenue', v_monthly_revenue,
-    'estimated_yearly_revenue', v_yearly_revenue,
-    'total_trades', (SELECT COUNT(*) FROM public.trades),
-    'trades_today', (SELECT COUNT(*) FROM public.trades WHERE created_at::date = CURRENT_DATE),
-    'trades_this_week', (SELECT COUNT(*) FROM public.trades WHERE created_at > NOW() - INTERVAL '7 days'),
-    'trades_this_month', (SELECT COUNT(*) FROM public.trades WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)),
-    'total_strategies', (SELECT COUNT(*) FROM public.strategies),
+    'estimated_monthly_revenue', ROUND(v_monthly_revenue, 2),
+    'estimated_yearly_revenue', ROUND(v_yearly_revenue, 2),
+    'total_trades', (SELECT COUNT(*) FROM public.trades WHERE deleted_at IS NULL),
+    'trades_today', (SELECT COUNT(*) FROM public.trades WHERE created_at::date = CURRENT_DATE AND deleted_at IS NULL),
+    'trades_this_week', (SELECT COUNT(*) FROM public.trades WHERE created_at > NOW() - INTERVAL '7 days' AND deleted_at IS NULL),
+    'trades_this_month', (SELECT COUNT(*) FROM public.trades WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND deleted_at IS NULL),
+    'total_strategies', (SELECT COUNT(*) FROM public.strategies WHERE deleted_at IS NULL),
     'new_users_today', (SELECT COUNT(*) FROM public.profiles WHERE created_at::date = CURRENT_DATE),
     'new_users_this_week', (SELECT COUNT(*) FROM public.profiles WHERE created_at > NOW() - INTERVAL '7 days'),
-    'new_users_this_month', (SELECT COUNT(*) FROM public.profiles WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE))
+    'new_users_this_month', (SELECT COUNT(*) FROM public.profiles WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)),
+    'generated_at', NOW()
   ) INTO stats;
 
   RETURN stats;
 END;
 $$;
 
--- Get User Detailed Stats
+COMMENT ON FUNCTION public.get_platform_stats IS 
+'v8.5.10: Returns comprehensive platform statistics including users, trades, and revenue estimates. Admin only.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 SECURE VERSION: get_user_detailed_stats (v8.5.10)
+-- ═══════════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.get_user_detailed_stats(UUID) CASCADE;
+
 CREATE OR REPLACE FUNCTION public.get_user_detailed_stats(p_user_id UUID)
 RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   stats JSON;
+  v_is_admin BOOLEAN;
 BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Unauthorized - Admin access required';
+  -- 🔒 Strict admin check
+  SELECT role IN ('admin', 'super_admin') AND is_banned = FALSE
+  INTO v_is_admin
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  IF NOT COALESCE(v_is_admin, FALSE) THEN
+    RAISE EXCEPTION 'Access denied: Admin access required';
   END IF;
 
+  -- 🔒 Enable admin mode for RLS bypass
+  PERFORM set_config('app.admin_mode', 'true', true);
+
+  -- Build detailed stats for the user
   SELECT json_build_object(
     'user_id', p_user_id,
-    'total_trades', (SELECT COUNT(*) FROM public.trades WHERE user_id = p_user_id),
-    'total_strategies', (SELECT COUNT(*) FROM public.strategies WHERE user_id = p_user_id),
+    'total_trades', (SELECT COUNT(*) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
+    'open_trades', (SELECT COUNT(*) FROM public.trades WHERE user_id = p_user_id AND exit_price IS NULL AND deleted_at IS NULL),
+    'closed_trades', (SELECT COUNT(*) FROM public.trades WHERE user_id = p_user_id AND exit_price IS NOT NULL AND deleted_at IS NULL),
+    'total_strategies', (SELECT COUNT(*) FROM public.strategies WHERE user_id = p_user_id AND deleted_at IS NULL),
     'win_rate', (
       SELECT CASE WHEN COUNT(*) > 0 THEN 
         ROUND((COUNT(*) FILTER (WHERE outcome = 'WIN')::NUMERIC / COUNT(*)::NUMERIC) * 100, 2)
       ELSE 0 END
       FROM public.trades 
-      WHERE user_id = p_user_id AND outcome IN ('WIN', 'LOSS')
+      WHERE user_id = p_user_id AND outcome IN ('WIN', 'LOSS') AND deleted_at IS NULL
     ),
-    'total_pnl', (SELECT COALESCE(SUM(pnl), 0) FROM public.trades WHERE user_id = p_user_id),
-    'avg_pnl', (SELECT COALESCE(AVG(pnl), 0) FROM public.trades WHERE user_id = p_user_id),
-    'best_trade', (SELECT MAX(pnl) FROM public.trades WHERE user_id = p_user_id),
-    'worst_trade', (SELECT MIN(pnl) FROM public.trades WHERE user_id = p_user_id),
-    'first_trade_date', (SELECT MIN(open_at) FROM public.trades WHERE user_id = p_user_id),
-    'last_trade_date', (SELECT MAX(open_at) FROM public.trades WHERE user_id = p_user_id),
+    'total_pnl', (SELECT COALESCE(SUM(pnl), 0) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
+    'avg_pnl', (SELECT ROUND(COALESCE(AVG(pnl), 0)::NUMERIC, 2) FROM public.trades WHERE user_id = p_user_id AND pnl IS NOT NULL AND deleted_at IS NULL),
+    'best_trade', (SELECT MAX(pnl) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
+    'worst_trade', (SELECT MIN(pnl) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
+    'first_trade_date', (SELECT MIN(open_at) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
+    'last_trade_date', (SELECT MAX(open_at) FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL),
     'most_traded_symbol', (
-      SELECT symbol FROM public.trades WHERE user_id = p_user_id 
+      SELECT symbol FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL
       GROUP BY symbol ORDER BY COUNT(*) DESC LIMIT 1
-    )
+    ),
+    'favorite_side', (
+      SELECT side FROM public.trades WHERE user_id = p_user_id AND deleted_at IS NULL
+      GROUP BY side ORDER BY COUNT(*) DESC LIMIT 1
+    ),
+    'generated_at', NOW()
   ) INTO stats;
+
+  -- 🔒 Disable admin mode
+  PERFORM set_config('app.admin_mode', 'false', true);
 
   RETURN stats;
 END;
 $$;
 
--- Get Subscription Breakdown
+COMMENT ON FUNCTION public.get_user_detailed_stats IS 
+'v8.5.10-SECURE: Admin-only function with admin_mode enforcement and strict permission checks.';
+
+-- ✅ Get Subscription Breakdown
 CREATE OR REPLACE FUNCTION public.get_subscription_breakdown()
 RETURNS TABLE (
   account_type TEXT,
@@ -1237,9 +1422,10 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
-  IF NOT is_admin() THEN
+  IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
 
@@ -1252,13 +1438,13 @@ BEGIN
       p.account_type,
       COALESCE(p.subscription_interval, 'none') as subscription_interval,
       COUNT(*) as user_count,
-CASE 
-  WHEN p.account_type = 'basic' AND p.subscription_interval = 'monthly' THEN 19.99
-  WHEN p.account_type = 'basic' AND p.subscription_interval = 'yearly' THEN 12.42
-  WHEN p.account_type = 'premium' AND p.subscription_interval = 'monthly' THEN 39.99
-  WHEN p.account_type = 'premium' AND p.subscription_interval = 'yearly' THEN 24.92
-  ELSE 0
-END as monthly_price
+      CASE 
+        WHEN p.account_type = 'basic' AND p.subscription_interval = 'monthly' THEN 19.99
+        WHEN p.account_type = 'basic' AND p.subscription_interval = 'yearly' THEN 12.42
+        WHEN p.account_type = 'premium' AND p.subscription_interval = 'monthly' THEN 39.99
+        WHEN p.account_type = 'premium' AND p.subscription_interval = 'yearly' THEN 24.92
+        ELSE 0
+      END as monthly_price
     FROM public.profiles p
     GROUP BY p.account_type, p.subscription_interval
   )
@@ -1266,7 +1452,7 @@ END as monthly_price
     b.account_type,
     b.subscription_interval,
     b.user_count,
-    ROUND((b.user_count::NUMERIC / t.total * 100), 2) as percentage,
+    ROUND((b.user_count::NUMERIC / NULLIF(t.total, 0) * 100), 2) as percentage,
     ROUND((b.user_count * b.monthly_price), 2) as monthly_revenue
   FROM breakdown b
   CROSS JOIN total_users t
@@ -1274,7 +1460,10 @@ END as monthly_price
 END;
 $$;
 
--- Get Revenue Analytics
+COMMENT ON FUNCTION public.get_subscription_breakdown IS 
+'v8.5.10: Returns subscription breakdown with revenue estimates. Admin only.';
+
+-- ✅ Get Revenue Analytics
 CREATE OR REPLACE FUNCTION public.get_revenue_analytics(p_days INTEGER DEFAULT 30)
 RETURNS TABLE (
   date DATE,
@@ -1288,12 +1477,18 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   v_start_date DATE;
 BEGIN
   IF NOT is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
+  END IF;
+
+  -- Limit to reasonable range
+  IF p_days > 365 THEN
+    p_days := 365;
   END IF;
 
   v_start_date := CURRENT_DATE - p_days;
@@ -1323,18 +1518,21 @@ BEGIN
     ds.basic_yearly::INTEGER,
     ds.premium_monthly::INTEGER,
     ds.premium_yearly::INTEGER,
-((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) + 
-     (ds.premium_monthly * 39.99) + (ds.premium_yearly * 24.92))::NUMERIC as daily_revenue,
-    SUM((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) +
+    ROUND(((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) + 
+     (ds.premium_monthly * 39.99) + (ds.premium_yearly * 24.92))::NUMERIC, 2) as daily_revenue,
+    ROUND(SUM((ds.basic_monthly * 19.99) + (ds.basic_yearly * 12.42) +
         (ds.premium_monthly * 39.99) + (ds.premium_yearly * 24.92)) 
-    OVER (ORDER BY ds.date)::NUMERIC as cumulative_revenue
+    OVER (ORDER BY ds.date)::NUMERIC, 2) as cumulative_revenue
   FROM daily_stats ds
   ORDER BY ds.date;
 END;
 $$;
 
+COMMENT ON FUNCTION public.get_revenue_analytics IS 
+'v8.5.10: Returns daily revenue analytics for specified number of days. Admin only.';
+
 -- ═══════════════════════════════════════════════════════════
--- ADMIN IMPERSONATION FUNCTIONS
+-- 🔧 ADMIN IMPERSONATION FUNCTIONS
 -- ═══════════════════════════════════════════════════════════
 
 DO $$
@@ -1342,6 +1540,9 @@ BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '[11.5/15] 🔧 Creating impersonation functions...';
 END $$;
+
+-- ✅ Start Impersonation Session
+DROP FUNCTION IF EXISTS public.start_impersonation_session_v1(UUID, TEXT) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.start_impersonation_session_v1(
   p_user_id UUID,
@@ -1354,13 +1555,14 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_admin_id UUID;
   v_session_token TEXT;
   v_impersonated_user RECORD;
 BEGIN
-  -- Verify admin
+  -- Verify admin by email
   SELECT id INTO v_admin_id
   FROM public.profiles
   WHERE email = p_admin_email
@@ -1368,7 +1570,7 @@ BEGIN
     AND is_banned = FALSE;
   
   IF v_admin_id IS NULL THEN
-    RAISE EXCEPTION 'Unauthorized: Must be admin';
+    RAISE EXCEPTION 'Unauthorized: Must be admin. Email % not found or not admin.', p_admin_email;
   END IF;
   
   -- Get target user info
@@ -1391,10 +1593,10 @@ BEGIN
     RAISE EXCEPTION 'Cannot impersonate other admins';
   END IF;
   
-  -- Generate session token
+  -- Generate secure session token
   v_session_token := encode(gen_random_bytes(32), 'hex');
   
-  -- Create impersonation session
+  -- Create impersonation session record
   INSERT INTO public.admin_impersonation_sessions (
     admin_id,
     impersonated_user_id,
@@ -1415,26 +1617,27 @@ BEGIN
     TRUE
   );
   
-  -- Log action
+  -- Log action with CORRECT admin_id
   BEGIN
     PERFORM public.log_admin_action(
       'START_IMPERSONATION',
-      p_user_id,
       'impersonation_session',
       p_user_id,
       jsonb_build_object(
+        'admin_id', v_admin_id,
         'impersonated_email', v_impersonated_user.email,
-        'session_token', v_session_token
+        'impersonated_name', v_impersonated_user.display_name,
+        'session_token_prefix', LEFT(v_session_token, 8) || '...'
       )
     );
   EXCEPTION 
     WHEN undefined_function THEN
-      NULL;
+      RAISE WARNING 'log_admin_action function not found';
     WHEN OTHERS THEN
       RAISE WARNING 'Failed to log impersonation action: %', SQLERRM;
   END;
   
-  -- Return fake tokens (for UI only)
+  -- Return session data for UI
   RETURN QUERY SELECT
     v_session_token::TEXT as access_token,
     v_session_token::TEXT as refresh_token,
@@ -1445,59 +1648,71 @@ BEGIN
       'role', v_impersonated_user.role,
       'account_type', v_impersonated_user.account_type,
       'impersonated', TRUE,
-      'impersonated_by', p_admin_email
+      'impersonated_by', p_admin_email,
+      'session_expires_at', NOW() + INTERVAL '2 hours'
     ) as user_data;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.end_impersonation_session(
-  p_session_token TEXT
-)
+COMMENT ON FUNCTION public.start_impersonation_session_v1 IS 
+'v8.5.10: Allows admins to impersonate users. Admin_id correctly logged.';
+
+GRANT EXECUTE ON FUNCTION public.start_impersonation_session_v1(UUID, TEXT) TO authenticated;
+
+-- ✅ End Impersonation Session
+CREATE OR REPLACE FUNCTION public.end_impersonation_session(p_session_token TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_session RECORD;
 BEGIN
-  -- Get session
-  SELECT 
-    admin_id,
-    impersonated_user_id,
-    is_active
+  -- Get session details
+  SELECT admin_id, impersonated_user_id, is_active, admin_email
   INTO v_session
   FROM public.admin_impersonation_sessions
   WHERE session_token = p_session_token;
   
   IF v_session.admin_id IS NULL THEN
+    RAISE WARNING 'Session not found: %', LEFT(p_session_token, 8) || '...';
     RETURN FALSE;
   END IF;
   
-  -- Verify caller
+  -- Verify caller is the admin who started the session
   IF v_session.admin_id != auth.uid() THEN
     RAISE EXCEPTION 'Unauthorized: Only the admin who started impersonation can end it';
   END IF;
   
-  -- End session
+  -- End the session
   UPDATE public.admin_impersonation_sessions
   SET 
     is_active = FALSE,
     last_activity_at = NOW()
   WHERE session_token = p_session_token;
   
-  -- Log action
+  -- Log the action
   PERFORM public.log_admin_action(
     'END_IMPERSONATION',
-    v_session.impersonated_user_id,
     'impersonation_session',
     v_session.impersonated_user_id,
-    jsonb_build_object('session_token', p_session_token)
+    jsonb_build_object(
+      'session_token_prefix', LEFT(p_session_token, 8) || '...',
+      'ended_at', NOW()
+    )
   );
   
   RETURN TRUE;
 END;
 $$;
 
+COMMENT ON FUNCTION public.end_impersonation_session IS 
+'v8.5.10: Ends an active impersonation session. Only starting admin can end it.';
+
+GRANT EXECUTE ON FUNCTION public.end_impersonation_session(TEXT) TO authenticated;
+
+-- ✅ Get Active Impersonation Sessions
 CREATE OR REPLACE FUNCTION public.get_active_impersonation_sessions()
 RETURNS TABLE (
   id UUID,
@@ -1511,6 +1726,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
@@ -1533,13 +1749,10 @@ BEGIN
 END;
 $$;
 
--- Grant permissions
-GRANT EXECUTE ON FUNCTION public.start_impersonation_session_v1 TO authenticated;
-GRANT EXECUTE ON FUNCTION public.end_impersonation_session TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_active_impersonation_sessions TO authenticated;
+COMMENT ON FUNCTION public.get_active_impersonation_sessions IS 
+'v8.5.10: Returns all active (non-expired) impersonation sessions. Admin only.';
 
-COMMENT ON FUNCTION public.start_impersonation_session_v1 IS 
-'🔧 v8.5.0: Allows admins to impersonate users. Returns session token.';
+GRANT EXECUTE ON FUNCTION public.get_active_impersonation_sessions() TO authenticated;
 
 -- ===============================================
 -- SECTION 12: ACTIVITY TRACKING
@@ -1550,79 +1763,115 @@ BEGIN
   RAISE NOTICE '[12/15] Creating activity tracking functions...';
 END $$;
 
--- Update User Login Stats
+-- ✅ Update User Login Stats (Trigger Function)
 CREATE OR REPLACE FUNCTION public.update_user_login_stats()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   UPDATE public.profiles
   SET 
     last_login_at = NOW(),
-    login_count = COALESCE(login_count, 0) + 1
+    login_count = COALESCE(login_count, 0) + 1,
+    updated_at = NOW()
   WHERE id = NEW.user_id;
   
   RETURN NEW;
 END;
 $$;
 
--- Get Broker Status
+COMMENT ON FUNCTION public.update_user_login_stats IS 
+'v8.5.10: Trigger function to update login count and timestamp.';
+
+-- ✅ Get Broker Status
 CREATE OR REPLACE FUNCTION public.get_broker_status(p_broker TEXT)
 RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   connection_status JSON;
+  v_user_id UUID;
 BEGIN
-  SELECT json_build_object(
-    'broker', broker,
-    'status', status,
-    'connected_at', connected_at,
-    'last_sync_at', last_sync_at,
-    'account_name', account_name,
-    'error_message', error_message
-  ) INTO connection_status
-  FROM public.broker_connections
-  WHERE user_id = auth.uid() AND broker = p_broker;
+  v_user_id := auth.uid();
   
-  RETURN COALESCE(connection_status, json_build_object('status', 'disconnected'));
+  IF v_user_id IS NULL THEN
+    RETURN json_build_object('status', 'not_authenticated');
+  END IF;
+
+  SELECT json_build_object(
+    'broker', bc.broker,
+    'status', bc.status,
+    'connected_at', bc.connected_at,
+    'last_sync_at', bc.last_sync_at,
+    'account_name', bc.account_name,
+    'account_id', bc.account_id,
+    'error_message', bc.error_message
+  ) INTO connection_status
+  FROM public.broker_connections bc
+  WHERE bc.user_id = v_user_id AND bc.broker = p_broker;
+  
+  RETURN COALESCE(
+    connection_status, 
+    json_build_object('status', 'disconnected', 'broker', p_broker)
+  );
 END;
 $$;
 
--- Get Trades by Broker
+COMMENT ON FUNCTION public.get_broker_status IS 
+'v8.5.10: Returns connection status for a specific broker for current user.';
+
+-- ✅ Get Trades by Broker
 CREATE OR REPLACE FUNCTION public.get_trades_by_broker()
 RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   broker_stats JSON;
+  v_user_id UUID;
 BEGIN
-  SELECT json_object_agg(broker, trade_count) INTO broker_stats
+  v_user_id := auth.uid();
+  
+  IF v_user_id IS NULL THEN
+    RETURN '{}'::json;
+  END IF;
+
+  SELECT COALESCE(json_object_agg(broker, trade_count), '{}'::json) 
+  INTO broker_stats
   FROM (
-    SELECT broker, COUNT(*) as trade_count
-    FROM public.trades
-    WHERE user_id = auth.uid()
-    GROUP BY broker
+    SELECT 
+      COALESCE(t.broker, 'manual') as broker, 
+      COUNT(*) as trade_count
+    FROM public.trades t
+    WHERE t.user_id = v_user_id
+      AND t.deleted_at IS NULL
+    GROUP BY t.broker
   ) stats;
   
-  RETURN COALESCE(broker_stats, '{}'::json);
+  RETURN broker_stats;
 END;
 $$;
 
--- Admin Get Broker Stats
+COMMENT ON FUNCTION public.get_trades_by_broker IS 
+'v8.5.10: Returns trade count grouped by broker/source for current user.';
+
+-- ✅ Admin Get Broker Stats
 CREATE OR REPLACE FUNCTION public.admin_get_broker_stats()
 RETURNS JSON 
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
-  IF NOT is_admin() THEN
+  IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
 
@@ -1630,8 +1879,10 @@ BEGIN
     SELECT json_build_object(
       'total_connections', COUNT(*),
       'active_connections', COUNT(*) FILTER (WHERE status = 'connected'),
+      'failed_connections', COUNT(*) FILTER (WHERE status = 'error'),
+      'pending_connections', COUNT(*) FILTER (WHERE status = 'pending'),
       'by_broker', (
-        SELECT json_object_agg(broker, count)
+        SELECT COALESCE(json_object_agg(broker, count), '{}'::json)
         FROM (
           SELECT broker, COUNT(*) as count
           FROM public.broker_connections
@@ -1639,27 +1890,31 @@ BEGIN
         ) broker_counts
       ),
       'recent_syncs', (
-        SELECT json_agg(
+        SELECT COALESCE(json_agg(
           json_build_object(
-            'user_id', user_id,
-            'broker', broker,
-            'last_sync_at', last_sync_at,
-            'status', status
+            'user_id', bc.user_id,
+            'broker', bc.broker,
+            'last_sync_at', bc.last_sync_at,
+            'status', bc.status
           )
-        )
+        ), '[]'::json)
         FROM (
           SELECT user_id, broker, last_sync_at, status
           FROM public.broker_connections
           WHERE last_sync_at IS NOT NULL
           ORDER BY last_sync_at DESC
           LIMIT 10
-        ) recent
-      )
+        ) bc
+      ),
+      'generated_at', NOW()
     )
     FROM public.broker_connections
   );
 END;
 $$;
+
+COMMENT ON FUNCTION public.admin_get_broker_stats IS 
+'v8.5.10: Platform-wide broker connection statistics. Admin only.';
 
 -- ===============================================
 -- SECTION 13: ALL TRIGGERS + RLS
@@ -1670,30 +1925,21 @@ BEGIN
   RAISE NOTICE '[13/15] Creating ALL triggers + RLS...';
 END $$;
 
--- Profile triggers
-DROP TRIGGER IF EXISTS trigger_initialize_risk_settings ON public.profiles;
-CREATE TRIGGER trigger_initialize_risk_settings
-  BEFORE INSERT ON public.profiles
-  FOR EACH ROW
-  EXECUTE FUNCTION public.initialize_risk_settings();
-
+-- Profiles trigger
 DROP TRIGGER IF EXISTS set_updated_at ON public.profiles;
 CREATE TRIGGER set_updated_at 
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW 
   EXECUTE FUNCTION public.handle_updated_at();
 
--- Auth trigger
+-- Auth trigger (new user creation)
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
--- Trades - UNIFIED TRIGGER ONLY!
--- (Old triggers already dropped in Section 1)
-
--- Search vector trigger
+-- Trades search vector trigger
 DROP TRIGGER IF EXISTS trades_search_vector_update ON public.trades;
 CREATE TRIGGER trades_search_vector_update
   BEFORE INSERT OR UPDATE OF notes, setup, mistake, symbol
@@ -1701,6 +1947,7 @@ CREATE TRIGGER trades_search_vector_update
   FOR EACH ROW
   EXECUTE FUNCTION public.update_trades_search_vector();
 
+-- Trades updated_at trigger
 DROP TRIGGER IF EXISTS set_updated_at ON public.trades;
 CREATE TRIGGER set_updated_at 
   BEFORE UPDATE ON public.trades
@@ -1721,13 +1968,13 @@ CREATE TRIGGER on_payment_completed
   FOR EACH ROW
   EXECUTE FUNCTION public.update_account_type_on_payment();
 
--- Activity trigger
+-- Activity/Login trigger
 DROP TRIGGER IF EXISTS trigger_update_login_stats ON public.user_activity_log;
 CREATE TRIGGER trigger_update_login_stats
   AFTER INSERT ON public.user_activity_log
   FOR EACH ROW 
   WHEN (NEW.action = 'LOGIN')
-  EXECUTE FUNCTION update_user_login_stats();
+  EXECUTE FUNCTION public.update_user_login_stats();
 
 -- Broker connections trigger
 DROP TRIGGER IF EXISTS trigger_broker_connection_updated_at ON public.broker_connections;
@@ -1750,8 +1997,13 @@ CREATE TRIGGER update_snaptrade_activity_updated_at_trigger
   FOR EACH ROW
   EXECUTE FUNCTION update_timestamp();
 
+DO $$
+BEGIN
+  RAISE NOTICE '   ✅ All 10 triggers created';
+END $$;
+
 -- ===============================================
--- 🆕 SECTION 14: HELPER FUNCTIONS FOR ADMIN MAINTENANCE
+-- SECTION 14: HELPER FUNCTIONS FOR ADMIN MAINTENANCE
 -- ===============================================
 
 DO $$
@@ -1760,14 +2012,12 @@ BEGIN
   RAISE NOTICE '[14/15] Creating helper functions for admin maintenance...';
 END $$;
 
--- ═══════════════════════════════════════════════════════════════
--- 1. רענון ידני של Webhook Stats
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 1. Refresh Webhook Stats
 CREATE OR REPLACE FUNCTION public.refresh_webhook_stats()
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
@@ -1776,21 +2026,19 @@ BEGIN
   
   REFRESH MATERIALIZED VIEW CONCURRENTLY public.webhook_stats;
   
-  RETURN 'Webhook stats refreshed successfully';
+  RETURN 'Webhook stats refreshed successfully at ' || NOW()::TEXT;
 END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_webhook_stats IS 
-'v8.5.0: Manually refresh webhook statistics materialized view (admin only)';
+'v8.5.10: Manually refresh webhook statistics materialized view (admin only)';
 
--- ═══════════════════════════════════════════════════════════════
--- 2. רענון ידני של Strategy Stats
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 2. Refresh Strategy Stats
 CREATE OR REPLACE FUNCTION public.refresh_strategy_stats()
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
@@ -1799,41 +2047,50 @@ BEGIN
   
   REFRESH MATERIALIZED VIEW CONCURRENTLY public.strategy_stats_view;
   
-  RETURN 'Strategy stats refreshed successfully';
+  RETURN 'Strategy stats refreshed successfully at ' || NOW()::TEXT;
 END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_strategy_stats IS 
-'v8.5.0: Manually refresh strategy statistics materialized view (admin only)';
+'v8.5.10: Manually refresh strategy statistics materialized view (admin only)';
 
--- ═══════════════════════════════════════════════════════════════
--- 3. רענון כל המטריאלייזד ויוז
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 3. Refresh All Materialized Views
 CREATE OR REPLACE FUNCTION public.refresh_all_materialized_views()
 RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
+DECLARE
+  v_refreshed INTEGER := 0;
 BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
   
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.webhook_stats;
-  REFRESH MATERIALIZED VIEW CONCURRENTLY public.strategy_stats_view;
+  -- Refresh each view with error handling
+  BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY public.webhook_stats;
+    v_refreshed := v_refreshed + 1;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Failed to refresh webhook_stats: %', SQLERRM;
+  END;
   
-  RETURN 'All materialized views refreshed successfully';
+  BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY public.strategy_stats_view;
+    v_refreshed := v_refreshed + 1;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Failed to refresh strategy_stats_view: %', SQLERRM;
+  END;
+  
+  RETURN format('Refreshed %s materialized views at %s', v_refreshed, NOW()::TEXT);
 END;
 $$;
 
 COMMENT ON FUNCTION public.refresh_all_materialized_views IS 
-'v8.5.0: Refresh all materialized views in one call (admin only)';
+'v8.5.10: Refresh all materialized views in one call (admin only)';
 
--- ═══════════════════════════════════════════════════════════════
--- 4. גודל מסד הנתונים
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 4. Get Database Size
 CREATE OR REPLACE FUNCTION public.get_database_size()
 RETURNS TABLE (
   total_size_mb NUMERIC,
@@ -1842,6 +2099,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
@@ -1851,17 +2109,14 @@ BEGIN
   RETURN QUERY
   SELECT 
     ROUND(pg_database_size(current_database())::NUMERIC / 1048576, 2) as total_size_mb,
-    ROUND(pg_database_size(current_database())::NUMERIC / 1073741824, 2) as total_size_gb;
+    ROUND(pg_database_size(current_database())::NUMERIC / 1073741824, 4) as total_size_gb;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_database_size IS 
-'v8.5.0: Get total database size in MB and GB (admin only)';
+'v8.5.10: Returns database size in MB and GB. Admin only.';
 
--- ═══════════════════════════════════════════════════════════════
--- 5. גודל טבלאות
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 5. Get Table Sizes
 CREATE OR REPLACE FUNCTION public.get_table_sizes()
 RETURNS TABLE (
   table_name TEXT,
@@ -1871,6 +2126,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
@@ -1892,12 +2148,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_table_sizes IS 
-'v8.5.0: Get size and row count for all tables (admin only)';
+'v8.5.10: Get size and row count for all tables (admin only)';
 
--- ═══════════════════════════════════════════════════════════════
--- 6. שאילתות איטיות
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 6. Get Slow Queries
 CREATE OR REPLACE FUNCTION public.get_slow_queries(limit_count INTEGER DEFAULT 10)
 RETURNS TABLE (
   query TEXT,
@@ -1908,78 +2161,124 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
   
+  -- Check if pg_stat_statements extension is available
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements') THEN
+    RAISE EXCEPTION 'pg_stat_statements extension is not enabled';
+  END IF;
+  
   RETURN QUERY
   SELECT 
-    query::TEXT,
-    ROUND(mean_exec_time::NUMERIC, 2) as mean_time_ms,
-    calls::BIGINT,
-    ROUND(total_exec_time::NUMERIC, 2) as total_time_ms
-  FROM pg_stat_statements
-  WHERE query NOT LIKE '%pg_stat_statements%'
-  ORDER BY mean_exec_time DESC
+    pss.query::TEXT,
+    ROUND(pss.mean_exec_time::NUMERIC, 2) as mean_time_ms,
+    pss.calls::BIGINT,
+    ROUND(pss.total_exec_time::NUMERIC, 2) as total_time_ms
+  FROM pg_stat_statements pss
+  WHERE pss.query NOT LIKE '%pg_stat_statements%'
+  ORDER BY pss.mean_exec_time DESC
   LIMIT limit_count;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_slow_queries IS 
-'v8.5.0: Get slowest queries for performance monitoring (admin only)';
+'v8.5.10: Get slowest queries for performance monitoring. Requires pg_stat_statements extension. (admin only)';
 
--- ═══════════════════════════════════════════════════════════════
--- 7. בדיקת בריאות המערכת
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 7. Check System Health
 CREATE OR REPLACE FUNCTION public.check_system_health()
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   v_result JSONB;
   v_db_size NUMERIC;
   v_max_connections INTEGER;
   v_current_connections INTEGER;
+  v_rls_count INTEGER;
+  v_function_count INTEGER;
+  v_matview_count INTEGER;
+  v_total_users BIGINT;
+  v_total_trades BIGINT;
 BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
   
-  -- גודל DB
+  -- Get database size in GB
   SELECT pg_database_size(current_database())::NUMERIC / 1073741824 INTO v_db_size;
   
-  -- חיבורים
-  SELECT setting::INTEGER INTO v_max_connections FROM pg_settings WHERE name = 'max_connections';
-  SELECT COUNT(*)::INTEGER INTO v_current_connections FROM pg_stat_activity;
+  -- Get connection info
+  SELECT setting::INTEGER INTO v_max_connections 
+  FROM pg_settings WHERE name = 'max_connections';
+  
+  SELECT COUNT(*)::INTEGER INTO v_current_connections 
+  FROM pg_stat_activity;
+  
+  -- Get RLS enabled tables count
+  SELECT COUNT(*) INTO v_rls_count 
+  FROM pg_tables 
+  WHERE schemaname = 'public' AND rowsecurity = true;
+  
+  -- Get function count
+  SELECT COUNT(*) INTO v_function_count 
+  FROM pg_proc p 
+  JOIN pg_namespace n ON p.pronamespace = n.oid 
+  WHERE n.nspname = 'public';
+  
+  -- Get materialized view count
+  SELECT COUNT(*) INTO v_matview_count 
+  FROM pg_matviews 
+  WHERE schemaname = 'public';
+  
+  -- Get user and trade counts
+  SELECT COUNT(*) INTO v_total_users FROM public.profiles WHERE deleted_at IS NULL;
+  SELECT COUNT(*) INTO v_total_trades FROM public.trades WHERE deleted_at IS NULL;
   
   v_result := jsonb_build_object(
     'database', jsonb_build_object(
-      'status', CASE WHEN v_db_size < 8 THEN 'healthy' ELSE 'warning' END,
-      'size_gb', ROUND(v_db_size, 2),
+      'status', CASE 
+        WHEN v_db_size < 8 THEN 'healthy' 
+        WHEN v_db_size < 9 THEN 'warning' 
+        ELSE 'critical' 
+      END,
+      'size_gb', ROUND(v_db_size, 4),
       'max_size_gb', 10
     ),
     'connections', jsonb_build_object(
-      'status', CASE WHEN v_current_connections < (v_max_connections * 0.8) THEN 'healthy' ELSE 'warning' END,
+      'status', CASE 
+        WHEN v_current_connections < (v_max_connections * 0.7) THEN 'healthy' 
+        WHEN v_current_connections < (v_max_connections * 0.9) THEN 'warning' 
+        ELSE 'critical' 
+      END,
       'current', v_current_connections,
-      'max', v_max_connections
+      'max', v_max_connections,
+      'usage_percent', ROUND((v_current_connections::NUMERIC / v_max_connections * 100), 1)
     ),
     'rls', jsonb_build_object(
       'status', 'healthy',
-      'enabled_tables', (SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public' AND rowsecurity = true)
+      'enabled_tables', v_rls_count
     ),
     'functions', jsonb_build_object(
       'status', 'healthy',
-      'total', (SELECT COUNT(*) FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE n.nspname = 'public')
+      'total', v_function_count
     ),
     'materialized_views', jsonb_build_object(
       'status', 'healthy',
-      'total', (SELECT COUNT(*) FROM pg_matviews WHERE schemaname = 'public')
-    )
+      'total', v_matview_count
+    ),
+    'data', jsonb_build_object(
+      'total_users', v_total_users,
+      'total_trades', v_total_trades
+    ),
+    'checked_at', NOW()
   );
   
   RETURN v_result;
@@ -1987,53 +2286,52 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.check_system_health IS 
-'v8.5.0: Comprehensive system health check returning status for DB, connections, RLS, etc. (admin only)';
+'v8.5.10: Comprehensive system health check for admin dashboard.';
 
--- ═══════════════════════════════════════════════════════════════
--- 8. ניקוי נתונים ישנים (ידני)
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 8. Manual Cleanup Old Data
 CREATE OR REPLACE FUNCTION public.manual_cleanup_old_data()
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-  v_rate_limits_deleted INTEGER;
-  v_sessions_deactivated INTEGER;
-  v_logs_archived INTEGER;
+  v_rate_limits_deleted INTEGER := 0;
+  v_sessions_deactivated INTEGER := 0;
+  v_logs_archived INTEGER := 0;
 BEGIN
   IF NOT public.is_admin() THEN
     RAISE EXCEPTION 'Unauthorized - Admin access required';
   END IF;
   
-  -- ניקוי rate limits
-  DELETE FROM api_rate_limits 
+  -- Clean up old rate limits (older than 24 hours)
+  DELETE FROM public.api_rate_limits 
   WHERE window_start < NOW() - INTERVAL '24 hours';
   GET DIAGNOSTICS v_rate_limits_deleted = ROW_COUNT;
   
-  -- סגירת sessions
-  UPDATE admin_impersonation_sessions 
+  -- Deactivate expired impersonation sessions
+  UPDATE public.admin_impersonation_sessions 
   SET is_active = false 
   WHERE expires_at < NOW() AND is_active = true;
   GET DIAGNOSTICS v_sessions_deactivated = ROW_COUNT;
   
-  -- ארכוב logs
-  DELETE FROM admin_audit_log 
+  -- Archive old audit logs (older than 1 year)
+  DELETE FROM public.admin_audit_log 
   WHERE created_at < NOW() - INTERVAL '1 year';
   GET DIAGNOSTICS v_logs_archived = ROW_COUNT;
   
   RETURN jsonb_build_object(
+    'success', true,
     'rate_limits_deleted', v_rate_limits_deleted,
     'sessions_deactivated', v_sessions_deactivated,
     'logs_archived', v_logs_archived,
-    'timestamp', NOW()
+    'cleaned_at', NOW()
   );
 END;
 $$;
 
 COMMENT ON FUNCTION public.manual_cleanup_old_data IS 
-'v8.5.0: Manual cleanup of old data - rate limits (24h), inactive sessions, old logs (1y) (admin only)';
+'v8.5.10: Manual cleanup of old rate limits and expired sessions. Admin only.';
 
 -- ===============================================
 -- 🔥 SECTION 15: SNAPTRADE FUNCTIONS
@@ -2045,10 +2343,7 @@ BEGIN
   RAISE NOTICE '[15/15] 🔥 Creating SnapTrade integration functions...';
 END $$;
 
--- ═══════════════════════════════════════════════════════════════
--- 15.1: Check SnapTrade Connection Status
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 15.1: Check SnapTrade Connection Status
 DROP FUNCTION IF EXISTS public.is_snaptrade_connected(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.is_snaptrade_connected(p_user_id UUID)
@@ -2056,6 +2351,7 @@ RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   RETURN EXISTS (
@@ -2066,12 +2362,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.is_snaptrade_connected IS 
-'v8.5.0: Check if user has SnapTrade connected';
+'v8.5.10: Check if user has SnapTrade connected';
 
--- ═══════════════════════════════════════════════════════════════
--- 15.2: Get User Sync Statistics
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 15.2: Get User Sync Statistics
 DROP FUNCTION IF EXISTS public.get_user_sync_stats(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_user_sync_stats(p_user_id UUID)
@@ -2086,6 +2379,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -2096,23 +2390,20 @@ BEGIN
     COALESCE(SUM(trades_imported), 0)::BIGINT as total_trades_imported,
     MAX(sync_completed_at) as last_sync_at,
     (
-      SELECT status FROM snaptrade_sync_log 
-      WHERE user_id = p_user_id 
-      ORDER BY created_at DESC 
+      SELECT ssl.status FROM snaptrade_sync_log ssl
+      WHERE ssl.user_id = p_user_id 
+      ORDER BY ssl.created_at DESC 
       LIMIT 1
     )::TEXT as last_sync_status
   FROM snaptrade_sync_log
-  WHERE user_id = p_user_id;
+  WHERE snaptrade_sync_log.user_id = p_user_id;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_sync_stats IS 
-'v8.5.0: Get comprehensive sync statistics for user';
+'v8.5.10: Get comprehensive sync statistics for user';
 
--- ═══════════════════════════════════════════════════════════════
--- 15.3: Get Latest Sync for User
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 15.3: Get Latest Sync for User
 DROP FUNCTION IF EXISTS public.get_latest_sync_for_user(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_latest_sync_for_user(p_user_id UUID)
@@ -2129,6 +2420,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -2149,12 +2441,9 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.get_latest_sync_for_user IS 
-'v8.5.0: Get most recent sync log entry for user';
+'v8.5.10: Get most recent sync log entry for user';
 
--- ═══════════════════════════════════════════════════════════════
--- 15.4: Get SnapTrade Import Statistics
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 15.4: Get SnapTrade Import Stats (FIXED)
 DROP FUNCTION IF EXISTS public.get_snaptrade_import_stats(UUID, DATE, DATE) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_snaptrade_import_stats(
@@ -2172,66 +2461,86 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 DECLARE
   v_start_date DATE;
   v_end_date DATE;
+  v_total BIGINT;
+  v_by_symbol JSONB;
+  v_by_side JSONB;
+  v_by_account JSONB;
 BEGIN
+  -- Set default date range (last 30 days)
   v_start_date := COALESCE(p_start_date, CURRENT_DATE - INTERVAL '30 days');
   v_end_date := COALESCE(p_end_date, CURRENT_DATE);
   
-  RETURN QUERY
-  WITH filtered_trades AS (
-    SELECT * FROM trades
+  -- Calculate total count
+  SELECT COUNT(*) INTO v_total
+  FROM trades
+  WHERE user_id = p_user_id
+    AND import_source = 'snaptrade'
+    AND imported_at::DATE BETWEEN v_start_date AND v_end_date
+    AND deleted_at IS NULL;
+  
+  -- Aggregate by symbol (SEPARATE QUERY)
+  SELECT COALESCE(jsonb_object_agg(symbol, cnt), '{}'::jsonb)
+  INTO v_by_symbol
+  FROM (
+    SELECT symbol, COUNT(*) as cnt
+    FROM trades
     WHERE user_id = p_user_id
       AND import_source = 'snaptrade'
-      AND imported_at BETWEEN v_start_date AND v_end_date
-  )
-  SELECT 
-    COUNT(*)::BIGINT as total_imported,
-    
-    jsonb_object_agg(
-      symbol, 
-      count
-    ) as by_symbol,
-    
-    jsonb_object_agg(
-      side,
-      side_count
-    ) as by_side,
-    
-    jsonb_object_agg(
-      COALESCE(snaptrade_account_id::TEXT, 'unknown'),
-      account_count
-    ) as by_account,
-    
+      AND imported_at::DATE BETWEEN v_start_date AND v_end_date
+      AND deleted_at IS NULL
+    GROUP BY symbol
+    ORDER BY cnt DESC
+  ) symbol_stats;
+  
+  -- Aggregate by side (SEPARATE QUERY)
+  SELECT COALESCE(jsonb_object_agg(side, cnt), '{}'::jsonb)
+  INTO v_by_side
+  FROM (
+    SELECT side, COUNT(*) as cnt
+    FROM trades
+    WHERE user_id = p_user_id
+      AND import_source = 'snaptrade'
+      AND imported_at::DATE BETWEEN v_start_date AND v_end_date
+      AND deleted_at IS NULL
+    GROUP BY side
+  ) side_stats;
+  
+  -- Aggregate by account (SEPARATE QUERY)
+  SELECT COALESCE(jsonb_object_agg(account_id, cnt), '{}'::jsonb)
+  INTO v_by_account
+  FROM (
+    SELECT COALESCE(snaptrade_account_id::TEXT, 'unknown') as account_id, COUNT(*) as cnt
+    FROM trades
+    WHERE user_id = p_user_id
+      AND import_source = 'snaptrade'
+      AND imported_at::DATE BETWEEN v_start_date AND v_end_date
+      AND deleted_at IS NULL
+    GROUP BY snaptrade_account_id
+  ) account_stats;
+  
+  -- Return all results
+  RETURN QUERY SELECT 
+    COALESCE(v_total, 0::BIGINT),
+    COALESCE(v_by_symbol, '{}'::jsonb),
+    COALESCE(v_by_side, '{}'::jsonb),
+    COALESCE(v_by_account, '{}'::jsonb),
     jsonb_build_object(
       'start_date', v_start_date,
       'end_date', v_end_date,
-      'days', v_end_date - v_start_date
-    ) as date_range
-    
-  FROM (
-    SELECT 
-      symbol,
-      COUNT(*) as count,
-      side,
-      COUNT(*) as side_count,
-      snaptrade_account_id,
-      COUNT(*) as account_count
-    FROM filtered_trades
-    GROUP BY symbol, side, snaptrade_account_id
-  ) stats;
+      'days', (v_end_date - v_start_date)::INTEGER
+    );
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_snaptrade_import_stats IS 
-'v8.5.0: Get detailed import statistics for date range';
+'v8.5.10: Get detailed import statistics with fixed aggregation.';
 
--- ═══════════════════════════════════════════════════════════════
--- 15.5: Find Duplicate SnapTrade Activities
--- ═══════════════════════════════════════════════════════════════
-
+-- ✅ 15.5: Find Duplicate SnapTrade Activities
 DROP FUNCTION IF EXISTS public.find_duplicate_snaptrade_activities(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.find_duplicate_snaptrade_activities(p_user_id UUID)
@@ -2243,6 +2552,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
+SET search_path = public
 AS $$
 BEGIN
   RETURN QUERY
@@ -2253,35 +2563,37 @@ BEGIN
   FROM trades t
   WHERE t.user_id = p_user_id
     AND t.snaptrade_activity_id IS NOT NULL
+    AND t.deleted_at IS NULL
   GROUP BY t.snaptrade_activity_id
-  HAVING COUNT(*) > 1;
+  HAVING COUNT(*) > 1
+  ORDER BY COUNT(*) DESC;
 END;
 $$;
 
 COMMENT ON FUNCTION public.find_duplicate_snaptrade_activities IS 
-'v8.5.0: Find duplicate SnapTrade activity IDs (should return empty)';
--- ═══════════════════════════════════════════════════════════════
--- GRANT PERMISSIONS
--- ═══════════════════════════════════════════════════════════════
+'v8.5.10: Find duplicate SnapTrade activity IDs (should return empty if no duplicates)';
+
+-- ═══════════════════════════════════════════════════════════
+-- GRANT ALL PERMISSIONS
+-- ═══════════════════════════════════════════════════════════
 
 DO $$
 BEGIN
-  RAISE NOTICE '🔐 Granting permissions...';
+  RAISE NOTICE '🔐 Granting all permissions...';
 END $$;
 
--- Core trade limit functions
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
+-- Section 11: Admin Statistics
+GRANT EXECUTE ON FUNCTION public.get_platform_stats() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_detailed_stats(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_subscription_breakdown() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_revenue_analytics(INTEGER) TO authenticated;
 
--- ✅ Admin free access functions
-GRANT EXECUTE ON FUNCTION public.grant_free_access(UUID, INTEGER, TEXT, UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_grant_free_months(UUID, INTEGER) TO authenticated;
+-- Section 12: Activity Tracking
+GRANT EXECUTE ON FUNCTION public.get_broker_status(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_trades_by_broker() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_get_broker_stats() TO authenticated;
 
--- ✅ Admin update subscription (JSONB version)
-GRANT EXECUTE ON FUNCTION public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO authenticated;
-
--- Section 14: Helper functions
+-- Section 14: Helper Functions
 GRANT EXECUTE ON FUNCTION public.refresh_webhook_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_strategy_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.refresh_all_materialized_views() TO authenticated;
@@ -2291,7 +2603,7 @@ GRANT EXECUTE ON FUNCTION public.get_slow_queries(INTEGER) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.check_system_health() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.manual_cleanup_old_data() TO authenticated;
 
--- 🔥 Section 15: SnapTrade functions
+-- Section 15: SnapTrade Functions
 GRANT EXECUTE ON FUNCTION public.is_snaptrade_connected(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_sync_stats(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_latest_sync_for_user(UUID) TO authenticated;
@@ -2299,7 +2611,7 @@ GRANT EXECUTE ON FUNCTION public.get_snaptrade_import_stats(UUID, DATE, DATE) TO
 GRANT EXECUTE ON FUNCTION public.find_duplicate_snaptrade_activities(UUID) TO authenticated;
 
 -- ═══════════════════════════════════════════════════════════
--- UPGRADE RLS - TRADE LIMIT ENFORCEMENT
+-- RLS POLICY - TRADE LIMIT ENFORCEMENT
 -- ═══════════════════════════════════════════════════════════
 
 DO $$
@@ -2307,7 +2619,7 @@ BEGIN
   RAISE NOTICE '🔥 Creating RLS policy for trade limits...';
 END $$;
 
--- Drop old policy if exists
+-- Drop old policies if exist
 DROP POLICY IF EXISTS "trades_insert_own" ON public.trades;
 DROP POLICY IF EXISTS "trades_insert_with_limits" ON public.trades;
 
@@ -2320,85 +2632,63 @@ WITH CHECK (
   -- Must insert own trade
   user_id = auth.uid()
   AND
-  -- Must be under limit
+  -- Must be under limit (uses can_create_trade function)
   (SELECT public.can_create_trade(auth.uid())) = TRUE
 );
 
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
-'v8.5.0-FIXED: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
+'v8.5.10: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
 
 COMMIT;
 
 -- ===============================================
--- END OF PART 2/3 - COMPLETE WITH v8.5.0
+-- END OF COMPLETE MIGRATION v8.5.10
 -- ===============================================
 
 DO $$
 BEGIN
   RAISE NOTICE '';
-  RAISE NOTICE '╔════════════════════════════════════════╗';
-  RAISE NOTICE '║  ✅ PART 2/3 COMPLETE! (v8.5.0)       ║';
-  RAISE NOTICE '║     Functions + Triggers + RLS        ║';
-  RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!    ║';
-  RAISE NOTICE '║     🆕 SECTION 15 SNAPTRADE COMPLETE! ║';
-  RAISE NOTICE '║     🔧 admin_update RETURNS JSONB!    ║';
-  RAISE NOTICE '║     🔧 PORTFOLIO FIELDS INCLUDED!     ║';
-  RAISE NOTICE '║     🔥 FREE: NO MONTHLY RESET!        ║';
-  RAISE NOTICE '║     🔒 SECURITY: Payment protected!   ║';
-  RAISE NOTICE '║     🚀 OPTIMIZED: 3x faster!          ║';
-  RAISE NOTICE '║     🔧 IMPERSONATION: INCLUDED!       ║';
-  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '╔══════════════════════════════════════════════╗';
+  RAISE NOTICE '║  ✅ COMPLETE MIGRATION v8.5.10 FINISHED!    ║';
+  RAISE NOTICE '║     Functions + Triggers + RLS              ║';
+  RAISE NOTICE '║     🔒 ALL CRITICAL BUGS FIXED!             ║';
+  RAISE NOTICE '║     🔥 WITH SNAPTRADE INTEGRATION!          ║';
+  RAISE NOTICE '║     ❌ NO AFFILIATE FEATURES                ║';
+  RAISE NOTICE '║     ✅ v9.4.2-SYNCED FIXES APPLIED          ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════╝';
   RAISE NOTICE '';
-  RAISE NOTICE '📊 Created:';
-  RAISE NOTICE '   • Functions: 93+ (including SnapTrade!)';
-  RAISE NOTICE '   • Triggers: 12 (unified!)';
-  RAISE NOTICE '   • RLS: Trade limit enforcement ✅';
-  RAISE NOTICE '   • Rate Limiting ✅';
-  RAISE NOTICE '   • Soft Delete ✅';
-  RAISE NOTICE '   • Payment Security ✅';
-  RAISE NOTICE '   • Affiliate Automation ✅';
-  RAISE NOTICE '   • Impersonation ✅';
-  RAISE NOTICE '   • Admin Maintenance Tools ✅';
-  RAISE NOTICE '   • 🔥 SnapTrade Integration ✅';
+  RAISE NOTICE '📊 Summary:';
+  RAISE NOTICE '   • Subscription Functions (7)';
+  RAISE NOTICE '   • Portfolio Functions (1)';
+  RAISE NOTICE '   • TradingView Functions (2)';
+  RAISE NOTICE '   • Admin Functions (8)';
+  RAISE NOTICE '   • Statistics Functions (4)';
+  RAISE NOTICE '   • Impersonation Functions (3)';
+  RAISE NOTICE '   • Activity Tracking (4)';
+  RAISE NOTICE '   • Helper Functions (8)';
+  RAISE NOTICE '   • SnapTrade Functions (5)';
+  RAISE NOTICE '   • Triggers (10)';
+  RAISE NOTICE '   • RLS Policy (1)';
   RAISE NOTICE '';
-  RAISE NOTICE '🔥 NEW in Section 15 (SnapTrade):';
-  RAISE NOTICE '   • is_snaptrade_connected()';
-  RAISE NOTICE '   • get_user_sync_stats()';
-  RAISE NOTICE '   • get_latest_sync_for_user()';
-  RAISE NOTICE '   • get_snaptrade_import_stats()';
-  RAISE NOTICE '   • find_duplicate_snaptrade_activities()';
+  RAISE NOTICE '🔧 v9.4.2 FIXES APPLIED:';
+  RAISE NOTICE '   • subscription_end_date → subscription_expires_at';
+  RAISE NOTICE '   • Added subscription_cancel_at_period_end';
+  RAISE NOTICE '   • Removed duplicate log_admin_action versions';
+  RAISE NOTICE '   • Removed duplicate search_ticker_symbols versions';
+  RAISE NOTICE '   • Fixed check_subscription_status';
+  RAISE NOTICE '   • Fixed process_expired_subscriptions';
+  RAISE NOTICE '   • Fixed cancel_subscription';
+  RAISE NOTICE '   • Fixed admin_update_subscription';
   RAISE NOTICE '';
-  RAISE NOTICE '🔧 FIXED in v8.4.7:';
-  RAISE NOTICE '   • admin_update_subscription NOW RETURNS JSONB!';
-  RAISE NOTICE '   • Better error handling with try-catch';
-  RAISE NOTICE '   • Validates all inputs before update';
-  RAISE NOTICE '   • Returns detailed success/error messages';
-  RAISE NOTICE '   • Logs to admin_audit_log automatically';
-  RAISE NOTICE '';
-  RAISE NOTICE '🆕 Section 14 (Admin Maintenance):';
-  RAISE NOTICE '   • refresh_webhook_stats()';
-  RAISE NOTICE '   • refresh_strategy_stats()';
-  RAISE NOTICE '   • refresh_all_materialized_views()';
-  RAISE NOTICE '   • get_database_size()';
-  RAISE NOTICE '   • get_table_sizes()';
-  RAISE NOTICE '   • get_slow_queries()';
-  RAISE NOTICE '   • check_system_health()';
-  RAISE NOTICE '   • manual_cleanup_old_data()';
-  RAISE NOTICE '';
-  RAISE NOTICE '✨ Trade Limits (v8.5.0):';
+  RAISE NOTICE '✨ Trade Limits:';
   RAISE NOTICE '   • FREE:    10 trades LIFETIME (no reset)';
   RAISE NOTICE '   • BASIC:   25 trades/month';
   RAISE NOTICE '   • TRIAL:   25 trades/month';
   RAISE NOTICE '   • PREMIUM: Unlimited';
   RAISE NOTICE '';
-  RAISE NOTICE '📈 SnapTrade Features:';
-  RAISE NOTICE '   • User connection tracking';
-  RAISE NOTICE '   • Sync job logging & statistics';
-  RAISE NOTICE '   • Import analytics by symbol/side/account';
-  RAISE NOTICE '   • Duplicate detection';
-  RAISE NOTICE '   • Date range filtering';
-  RAISE NOTICE '';
-  RAISE NOTICE '⏭️  Next: Run Part 3 (Views + Permissions)';
-  RAISE NOTICE '   Then run: SNAPTRADE-PART-3-VIEWS.sql';
+  RAISE NOTICE '🎉 MIGRATION v8.5.10 COMPLETE!';
+  RAISE NOTICE '   Total Functions: ~50+';
+  RAISE NOTICE '   Total Triggers: 10';
+  RAISE NOTICE '   Security Level: MAXIMUM 🔒';
   RAISE NOTICE '';
 END $$;

@@ -1,10 +1,16 @@
 // ================================================
-// PRODUCTION NEW TRADE PAGE - CLEAN v11
+// PRODUCTION NEW TRADE PAGE - CLEAN v13
 // ✅ Auto Session with manual override option
 // ✅ Zero spam logging - only critical errors
 // ✅ Fixed session detection with timezone support
 // ✅ Auto timezone handling
 // ✅ Optimized for 5000+ concurrent users
+// 🔥 v12 FIX: Session validation before INSERT
+// 🔥 v13 FIX: FULL DB SYNC - all columns aligned!
+//    - actual_user_r calculation
+//    - close_at timestamp
+//    - broker & import_source defaults
+//    - No metrics wrapper (flat columns)
 // ================================================
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -30,6 +36,7 @@ import { useCommissions } from '@/hooks/useRiskSettings';
 import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
 import { supabase } from '@/lib/supabase';
+import { BasicLimitReachedModal } from '@/components/subscription/BasicLimitReachedModal';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatForInput } from '@/utils/dateFormatter';
 import { 
@@ -53,8 +60,9 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// ✅ Centralized multiplier lookup
+// ✅ Centralized multiplier lookup - MATCHES DB ticker_symbols table!
 const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> = {
+  // CME E-mini Indices
   NQ: { class: "futures", mult: 20 },
   MNQ: { class: "futures", mult: 2 },
   ES: { class: "futures", mult: 50 },
@@ -63,29 +71,66 @@ const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> = {
   MYM: { class: "futures", mult: 0.5 },
   RTY: { class: "futures", mult: 50 },
   M2K: { class: "futures", mult: 5 },
+  // Energy
   CL: { class: "futures", mult: 1000 },
   MCL: { class: "futures", mult: 100 },
   QM: { class: "futures", mult: 500 },
+  NG: { class: "futures", mult: 10000 },
+  QG: { class: "futures", mult: 2500 },
+  // Metals
   GC: { class: "futures", mult: 100 },
   MGC: { class: "futures", mult: 10 },
   SI: { class: "futures", mult: 5000 },
   SIL: { class: "futures", mult: 1000 },
-  NG: { class: "futures", mult: 10000 },
-  QG: { class: "futures", mult: 2500 },
+  HG: { class: "futures", mult: 25000 },
+  // Bonds
   ZB: { class: "futures", mult: 1000 },
   ZN: { class: "futures", mult: 1000 },
   ZF: { class: "futures", mult: 1000 },
   ZT: { class: "futures", mult: 2000 },
+  // Currencies
   "6E": { class: "futures", mult: 12.5 },
   M6E: { class: "futures", mult: 6.25 },
+  "6B": { class: "futures", mult: 62500 },
+  "6J": { class: "futures", mult: 12500000 },
+  "6A": { class: "futures", mult: 100000 },
+  // Crypto Futures
   BTC: { class: "futures", mult: 5 },
   MBT: { class: "futures", mult: 0.1 },
+  // Agricultural
+  ZC: { class: "futures", mult: 50 },
+  ZW: { class: "futures", mult: 50 },
+  ZS: { class: "futures", mult: 50 },
 };
 
 function getAssetMultiplier(symbol: string): number {
   const symbolUpper = symbol.toUpperCase().trim();
   const found = ASSET_MULTIPLIERS[symbolUpper];
   return found ? found.mult : 1;
+}
+
+// 🔥 VALID SESSIONS - must match DB constraint!
+const VALID_SESSIONS = ['asia', 'london', 'newyork'];
+
+/**
+ * 🔥 Normalize session value for database
+ * Converts empty strings to null, validates allowed values
+ */
+function normalizeSession(session: string | undefined | null): string | null {
+  if (!session || session.trim() === '') {
+    return null;
+  }
+  
+  const normalized = session.trim().toLowerCase();
+  
+  if (VALID_SESSIONS.includes(normalized)) {
+    return normalized;
+  }
+  
+  if (isDev) {
+    console.warn('⚠️ Invalid session value:', session, '→ using null');
+  }
+  return null;
 }
 
 // 🎨 Beautiful Date/Time Picker Modal Component
@@ -311,6 +356,8 @@ export default function New() {
   // ✅ Get user's 1R value from hook
   const { oneR: oneRValue } = useRiskSettings();
   const { calculateCommission } = useCommissions();
+
+  const [showBasicLimitModal, setShowBasicLimitModal] = useState(false);
 
   // ✅ Load strategies - SILENT
   const loadStrategies = useCallback(async () => {
@@ -650,20 +697,29 @@ export default function New() {
     return () => window.removeEventListener('keydown', handler);
   }, [isValid]);
 
-  // 🔥 SUBMIT FUNCTION - CLEAN VERSION
+  // ================================================================
+  // 🔥🔥🔥 SUBMIT FUNCTION - v13 FULL DB SYNC! 🔥🔥🔥
+  // ================================================================
   async function handleSubmit() {
     // Clean strategy_id
     if (st.strategy === "none" || st.strategy === "") {
       st.setStrategy(undefined);
     }
     
-    // Check subscription limits (non-blocking)
+// Check subscription limits (non-blocking)
     if (!isEditMode && limits && !canAddTrade) {
-      setShowLimitModal(true);
+      // Check if BASIC user (25 trades limit) or FREE user (10 trades)
+      if (limits.max_trades === 25) {
+        setShowBasicLimitModal(true);  // Show dedicated Basic modal
+      } else {
+        setShowLimitModal(true);  // Show Free modal
+      }
       return;
     }
 
-    // Validation
+    // ================================================================
+    // VALIDATION
+    // ================================================================
     if (!st.symbol || st.symbol.trim() === "") {
       toast.error("Symbol is required");
       return;
@@ -693,10 +749,24 @@ export default function New() {
       return;
     }
 
+    // ================================================================
+    // 🔥 SESSION VALIDATION - Ensure valid for DB constraint
+    // ================================================================
+    let validSession: string | null = null;
+    
+    if (!st.session || st.session.trim() === '') {
+      const detectedSession = getSessionFromDateTime(new Date(st.openAt));
+      validSession = detectedSession || null;
+    } else {
+      validSession = normalizeSession(st.session);
+    }
+
     setLoading(true);
 
     try {
-      // Upload screenshots - MINIMAL LOGGING
+      // ================================================================
+      // UPLOAD SCREENSHOTS
+      // ================================================================
       const screenshotUrls: string[] = [];
       if (screenshotFiles.length > 0) {
         toast.info(`Uploading ${screenshotFiles.length} screenshot(s)...`);
@@ -704,77 +774,137 @@ export default function New() {
         for (let i = 0; i < screenshotFiles.length; i++) {
           try {
             const url = await uploadScreenshot(screenshotFiles[i]);
-            
             if (url) {
               screenshotUrls.push(url);
-              toast.success(`Screenshot ${i + 1}/${screenshotFiles.length} uploaded`);
             }
           } catch (error) {
             if (isDev) console.error(`Failed to upload screenshot ${i + 1}:`, error);
           }
         }
         
-        if (screenshotUrls.length === 0 && screenshotFiles.length > 0) {
-          toast.warning("All screenshot uploads failed");
-        } else if (screenshotUrls.length < screenshotFiles.length) {
-          toast.info(`${screenshotUrls.length}/${screenshotFiles.length} screenshots uploaded`);
-        } else {
-          toast.success(`All ${screenshotUrls.length} screenshots uploaded! 🎉`);
+        if (screenshotUrls.length > 0) {
+          st.setScreenshotUrls(screenshotUrls);
+          toast.success(`${screenshotUrls.length} screenshot(s) uploaded`);
         }
-      }
-      
-      if (screenshotUrls.length > 0) {
-        st.setScreenshotUrls(screenshotUrls);
       }
 
-      const basePayload = st.payload();
-      
+      // ================================================================
+      // 🔥 CALCULATIONS - All R values
+      // ================================================================
       const calculatedPnL = calculatePnL();
       const calculatedOutcome = calculateOutcome();
-      
       const finalMultiplier = getAssetMultiplier(st.symbol);
+      const hasExitPrice = st.exitPrice && st.exitPrice > 0;
       
-      // Calculate actual_r
-      let actual_r = undefined;
-      if (st.exitPrice && st.exitPrice > 0) {
-        const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
-        const calculatedRiskUSD = riskPerPoint * st.quantity * finalMultiplier + st.fees;
-        
-        if (calculatedRiskUSD > 0) {
-          actual_r = calculatedPnL / calculatedRiskUSD;
-        }
+      // 🔥 Calculate risk in USD (for actual_r calculation)
+      const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
+      const calculatedRiskUSD = riskPerPoint * st.quantity * finalMultiplier + st.fees;
+      
+      // 🔥 actual_r: Contract R-multiple = PnL / Risk
+      let actual_r: number | null = null;
+      if (hasExitPrice && calculatedRiskUSD > 0) {
+        actual_r = calculatedPnL / calculatedRiskUSD;
       }
       
-      // Build payload
+      // 🔥 actual_user_r: User Rs achieved = PnL / User's 1R setting
+      let actual_user_r: number | null = null;
+      if (hasExitPrice && oneRValue && oneRValue > 0) {
+        actual_user_r = calculatedPnL / oneRValue;
+      }
+
+      // ================================================================
+      // 🔥🔥🔥 BUILD PAYLOAD - MATCHES DB SCHEMA EXACTLY! 🔥🔥🔥
+      // ================================================================
       const payload = {
-        ...basePayload,
-        strategy_id: st.strategy || undefined,
-        screenshots: screenshotUrls,
-        exit_price: st.exitPrice && st.exitPrice > 0 ? st.exitPrice : null,
-        pnl: st.exitPrice && st.exitPrice > 0 ? calculatedPnL : null,
-        outcome: st.exitPrice && st.exitPrice > 0 ? calculatedOutcome : 'OPEN',
+        // ═══════════════════════════════════════════
+        // CORE REQUIRED FIELDS
+        // ═══════════════════════════════════════════
+        symbol: st.symbol.toUpperCase(),
+        side: st.side,
+        quantity: st.quantity,
+        entry_price: st.entryPrice,
+        stop_price: st.stopPrice,
+        
+        // ═══════════════════════════════════════════
+        // TIMESTAMPS
+        // ═══════════════════════════════════════════
+        open_at: st.openAt || new Date().toISOString(),
+        close_at: hasExitPrice ? new Date().toISOString() : null,  // 🔥 NOW INCLUDED!
+        
+        // ═══════════════════════════════════════════
+        // OPTIONAL TRADE FIELDS
+        // ═══════════════════════════════════════════
+        asset_class: st.assetClass || null,
+        take_profit_price: st.takeProfitPrice || null,
+        exit_price: hasExitPrice ? st.exitPrice : null,
+        fees: st.fees || 0,
+        fees_mode: st.feesMode || 'auto',
+        session: validSession,  // 🔥 Normalized for DB constraint!
+        strategy_id: (st.strategy && st.strategy !== "none") ? st.strategy : null,
+        setup: st.setup || null,
+        notes: st.notes || null,
+        mistake: st.mistake || null,
+        next_time: st.nextTime || null,
+        tags: st.tags || [],
+        
+        // ═══════════════════════════════════════════
+        // CALCULATED FIELDS (FLAT - NOT NESTED!)
+        // ═══════════════════════════════════════════
         multiplier: finalMultiplier,
-        rr: st.rr,
-        risk_usd: st.riskUSD,
-        reward_usd: st.rewardUSD,
-        risk_pts: st.riskPts,
-        reward_pts: st.rewardPts,
-        actual_r: actual_r,
-        user_risk_r: userRiskR,
-        user_reward_r: userRewardR,
+        rr: st.rr || null,
+        risk_usd: st.riskUSD || null,
+        reward_usd: st.rewardUSD || null,
+        risk_pts: st.riskPts || null,
+        reward_pts: st.rewardPts || null,
+        
+        // ═══════════════════════════════════════════
+        // 🔥 ALL 4 R-MULTIPLE FIELDS!
+        // ═══════════════════════════════════════════
+        actual_r: actual_r,                    // Contract R: PnL / Risk
+        user_risk_r: userRiskR || null,        // User Rs risked
+        user_reward_r: userRewardR || null,    // User Rs potential reward
+        actual_user_r: actual_user_r,          // 🔥 User Rs achieved (NOW INCLUDED!)
+        
+        // ═══════════════════════════════════════════
+        // OUTCOME & P&L
+        // ═══════════════════════════════════════════
+        outcome: hasExitPrice ? calculatedOutcome : 'OPEN',
+        pnl: hasExitPrice ? calculatedPnL : null,
+        
+        // ═══════════════════════════════════════════
+        // MEDIA
+        // ═══════════════════════════════════════════
+        screenshots: screenshotUrls.length > 0 ? screenshotUrls : (st.screenshotUrls || []),
+        
+        // ═══════════════════════════════════════════
+        // 🔥 META FIELDS (NOW INCLUDED!)
+        // ═══════════════════════════════════════════
+        broker: 'manual',          // 🔥 Required by DB, defaults to 'manual'
+        import_source: 'manual',   // 🔥 Required by DB, defaults to 'manual'
       };
       
-      delete (payload as any).strategy;
+      if (isDev) {
+        console.log('📦 Final payload:', {
+          symbol: payload.symbol,
+          session: payload.session,
+          close_at: payload.close_at,
+          actual_r: payload.actual_r,
+          actual_user_r: payload.actual_user_r,
+          broker: payload.broker,
+          import_source: payload.import_source,
+        });
+      }
       
+      // ================================================================
+      // CREATE OR UPDATE
+      // ================================================================
       if (isEditMode && editTradeId) {
         const result = await updateTrade(editTradeId, payload);
         
         if (result.success) {
           toast.success("Trade updated successfully! 🎉");
           st.clearDraft();
-          setTimeout(() => {
-            navigate("/app/journal/my-trades");
-          }, 300);
+          setTimeout(() => navigate("/app/journal/my-trades"), 300);
         } else {
           throw new Error(result.error || "Failed to update trade");
         }
@@ -842,9 +972,7 @@ export default function New() {
               }, 5000);
             } else {
               st.clearDraft();
-              setTimeout(() => {
-                navigate("/app/journal/my-trades");
-              }, 300);
+              setTimeout(() => navigate("/app/journal/my-trades"), 300);
             }
           }
         } else {
@@ -856,6 +984,10 @@ export default function New() {
       
       if (error?.message?.includes('limit') || error?.message?.includes('policy')) {
         setShowLimitModal(true);
+      } else if (error?.message?.includes('session')) {
+        toast.error("Session error - please try again");
+      } else if (error?.message?.includes('violates check constraint')) {
+        toast.error("Invalid data - check all fields");
       } else {
         toast.error(error?.message || "An error occurred");
       }
@@ -915,19 +1047,51 @@ export default function New() {
       </style>
 
       <main className="max-w-[1100px] mx-auto px-6 pb-24 bg-[radial-gradient(80%_120%_at_50%_0%,#141414_0%,#0A0A0A_60%)]">
-        {/* Warning Banner */}
-        {!isEditMode && limits && !isUnlimitedUser && !isPremium && tradesRemaining <= 5 && tradesRemaining > 0 && (
-          <div className="mb-6 rounded-xl border border-gold/20 bg-gold/5 p-4">
+        {/* Warning Banner - FREE users (10 trades limit) */}
+        {!isEditMode && limits && !isUnlimitedUser && !isPremium && limits.max_trades === 10 && tradesRemaining <= 5 && tradesRemaining > 0 && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
             <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-gold flex-shrink-0" />
+              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0" />
               <p className="text-sm text-zinc-300">
-                <span className="font-semibold text-gold">{tradesRemaining} free trades remaining</span> out of {limits.max_trades}. 
+                <span className="font-semibold text-amber-400">{tradesRemaining} free trades remaining</span> out of {limits.max_trades}. 
                 <button 
                   onClick={() => navigate('/app/journal/pricing')}
-                  className="ml-2 underline text-gold hover:text-gold/80"
+                  className="ml-2 underline text-amber-400 hover:text-amber-300"
                 >
-                  Upgrade for unlimited
+                  Upgrade to Basic or Premium
                 </button>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Warning Banner - BASIC users (25 trades limit) */}
+        {!isEditMode && limits && !isUnlimitedUser && !isPremium && limits.max_trades === 25 && tradesRemaining <= 5 && tradesRemaining > 0 && (
+          <div className="mb-6 rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/20">
+                  <TrendingUp className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {tradesRemaining} trades left this month
+                  </p>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    You've used {limits.used} of your {limits.max_trades} monthly Basic trades
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => navigate('/app/journal/pricing')}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-semibold hover:from-purple-400 hover:to-blue-400 transition-all shadow-lg shadow-purple-500/20"
+              >
+                Go Premium →
+              </button>
+            </div>
+            <div className="mt-3 pt-3 border-t border-blue-500/20">
+              <p className="text-xs text-zinc-400">
+                🚀 <span className="text-blue-300">Premium</span> gives you <span className="text-white font-medium">unlimited trades</span>, advanced analytics, and priority support
               </p>
             </div>
           </div>
@@ -1083,7 +1247,6 @@ export default function New() {
                       onChange={(e) => {
                         setAutoSession(e.target.checked);
                         if (e.target.checked && st.openAt) {
-                          // מעדכן מיד כשמפעילים auto
                           const detected = getSessionFromDateTime(new Date(st.openAt));
                           if (detected) st.setSession(detected);
                         }
@@ -1098,7 +1261,7 @@ export default function New() {
                   value={st.session || ""} 
                   onValueChange={(v) => {
                     st.setSession(v);
-                    if (v) setAutoSession(false); // כשבוחרים ידנית, מכבה auto
+                    if (v) setAutoSession(false);
                   }}
                   disabled={autoSession}
                 >
@@ -1702,7 +1865,12 @@ export default function New() {
         tradesUsed={limits?.used || 0}
         maxTrades={limits?.max_trades || 10}
       />
-
+      {/* Basic Limit Reached Modal - Dedicated for Basic users */}
+      <BasicLimitReachedModal
+        open={showBasicLimitModal}
+        onClose={() => setShowBasicLimitModal(false)}
+        tradesUsed={limits?.used || 25}
+      />
       {/* Usage Warning Modal */}
       {showUsageWarning && warningState && (
         <UsageWarningModal

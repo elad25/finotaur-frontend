@@ -67,9 +67,8 @@ interface StrategyStats extends BaseStrategyStats {
 
 function calculateStrategyStatsOptimized(trades: Trade[]): StrategyStats {
   const baseStats = calculateAllStats(trades);
-  const rDistribution = trades
-    .map(t => t.metrics?.actual_r || t.metrics?.rr || 0)
-    .filter(r => r !== 0);
+  const rDistribution = trades.map(t => t.metrics?.actual_r ?? t.metrics?.rr ?? 0);
+
   
   let currentStreak = 0;
   let maxWinStreak = 0;

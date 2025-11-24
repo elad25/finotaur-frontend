@@ -92,11 +92,11 @@ export const SubNav = () => {
     // 🔐 BACKTEST ACCESS CONTROL
     if (path.includes('/backtest')) {
       if (!hasBacktestAccess) {
-        // Redirect to landing page for non-Premium users
-        navigate('/app/backtest/landing');
+        // 🔥 Redirect to landing page for non-Premium users
+        navigate('/app/journal/backtest/landing');
         return;
       }
-      // Premium users can proceed
+      // Premium users can proceed to the requested page
       navigate(path);
       return;
     }

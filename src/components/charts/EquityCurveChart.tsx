@@ -21,7 +21,7 @@ interface EquityCurveChartProps {
 
 const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
   const chartData = useMemo(() => {
-    if (rValues.length === 0) return [];
+    if (!rValues || rValues.length === 0) return [];
     
     let cumulative = 0;
     return rValues.map((r, index) => {
@@ -37,23 +37,25 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
   const { yMin, yMax, totalR } = useMemo(() => {
     if (chartData.length === 0) return { yMin: -10, yMax: 10, totalR: 0 };
     
-    const rValues = chartData.map(d => d.r);
-    const maxR = Math.max(...rValues, 0);
-    const minR = Math.min(...rValues, 0);
-    const totalR = rValues[rValues.length - 1];
+    const rVals = chartData.map(d => d.r);
+    const maxR = Math.max(...rVals, 0);
+    const minR = Math.min(...rVals, 0);
+    const totalR = rVals[rVals.length - 1];
     
-    const range = Math.max(maxR - minR, 20);
+    const range = Math.max(maxR - minR, 10);
     const padding = range * 0.15;
     
-    const yMin = Math.floor((minR - padding) / 10) * 10;
-    const yMax = Math.ceil((maxR + padding) / 10) * 10;
+    // Round to nice numbers
+    const yMin = Math.floor((minR - padding) / 5) * 5;
+    const yMax = Math.ceil((maxR + padding) / 5) * 5;
     
     return { yMin, yMax, totalR };
   }, [chartData]);
 
-  if (rValues.length === 0) {
+  // No data state
+  if (!rValues || rValues.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-full w-full">
         <p className="text-sm" style={{ color: '#6a6a6a' }}>
           No trades to display
         </p>
@@ -64,34 +66,29 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
   const isProfitable = totalR >= 0;
 
   return (
-    <div style={{ width: '100%', height: '100%' }}>
+    <div className="relative w-full h-full">
+      {/* Chart Container */}
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart 
           data={chartData}
-          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+          margin={{ top: 20, right: 20, left: 10, bottom: 10 }}
         >
           <defs>
             {/* Gradient for positive */}
             <linearGradient id="areaGradientPositive" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00ff99" stopOpacity={0.3} />
-              <stop offset="50%" stopColor="#00d67d" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="#00d67d" stopOpacity={0} />
+              <stop offset="0%" stopColor="#00C46C" stopOpacity={0.4} />
+              <stop offset="50%" stopColor="#00C46C" stopOpacity={0.15} />
+              <stop offset="100%" stopColor="#00C46C" stopOpacity={0} />
             </linearGradient>
 
             {/* Gradient for negative */}
             <linearGradient id="areaGradientNegative" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ff4757" stopOpacity={0} />
-              <stop offset="50%" stopColor="#d63447" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="#ff4757" stopOpacity={0.3} />
+              <stop offset="0%" stopColor="#E44545" stopOpacity={0} />
+              <stop offset="50%" stopColor="#E44545" stopOpacity={0.15} />
+              <stop offset="100%" stopColor="#E44545" stopOpacity={0.4} />
             </linearGradient>
 
-            {/* Line gradient */}
-            <linearGradient id="strokeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor={isProfitable ? '#00ff99' : '#ff4757'} />
-              <stop offset="100%" stopColor={isProfitable ? '#c9a646' : '#d63447'} />
-            </linearGradient>
-
-            {/* Glow effect */}
+            {/* Line glow effect */}
             <filter id="lineGlow">
               <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
               <feMerge>
@@ -103,7 +100,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
 
           {/* Grid */}
           <CartesianGrid 
-            stroke="rgba(255,255,255,0.03)" 
+            stroke="rgba(201,166,70,0.08)" 
             strokeDasharray="3 3" 
             vertical={false}
           />
@@ -111,22 +108,21 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
           {/* Zero Line */}
           <ReferenceLine 
             y={0} 
-            stroke="rgba(201,166,70,0.3)"
-            strokeWidth={1}
-            strokeDasharray="4 4"
+            stroke="rgba(201,166,70,0.4)"
+            strokeWidth={1.5}
+            strokeDasharray="6 4"
           />
 
           {/* X Axis */}
           <XAxis 
             dataKey="trade"
             tick={{ 
-              fill: '#5a5a5a', 
+              fill: '#7A7A7A', 
               fontSize: 10,
-              fontFamily: "'SF Pro Display', -apple-system, sans-serif"
             }}
-            stroke="rgba(255,255,255,0.08)"
+            stroke="rgba(201,166,70,0.15)"
             tickLine={false}
-            axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+            axisLine={{ stroke: 'rgba(201,166,70,0.15)' }}
             interval="preserveStartEnd"
           />
 
@@ -134,38 +130,35 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
           <YAxis 
             domain={[yMin, yMax]}
             tick={{ 
-              fill: '#5a5a5a', 
+              fill: '#7A7A7A', 
               fontSize: 10,
-              fontFamily: "'SF Pro Display', -apple-system, sans-serif"
             }}
-            stroke="rgba(255,255,255,0.08)"
+            stroke="rgba(201,166,70,0.15)"
             tickLine={false}
-            axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+            axisLine={{ stroke: 'rgba(201,166,70,0.15)' }}
             tickFormatter={(value) => `${value >= 0 ? '+' : ''}${value}R`}
-            width={50}
+            width={55}
           />
 
           {/* Tooltip */}
           <Tooltip
-            cursor={{ stroke: 'rgba(201,166,70,0.2)', strokeWidth: 1 }}
+            cursor={{ stroke: 'rgba(201,166,70,0.3)', strokeWidth: 1 }}
             contentStyle={{
-              background: 'rgba(20,20,20,0.95)',
+              background: 'rgba(20,20,20,0.98)',
               border: '1px solid rgba(201,166,70,0.3)',
               borderRadius: '8px',
-              padding: '8px 12px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              padding: '10px 14px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             }}
             labelStyle={{
-              color: '#9a9a9a',
-              fontSize: '10px',
+              color: '#9A9A9A',
+              fontSize: '11px',
               marginBottom: '4px',
-              fontFamily: "'SF Pro Display', -apple-system, sans-serif"
             }}
             itemStyle={{
-              color: isProfitable ? '#00ff99' : '#ff4757',
-              fontSize: '12px',
+              color: isProfitable ? '#00C46C' : '#E44545',
+              fontSize: '13px',
               fontWeight: '600',
-              fontFamily: "'SF Mono', monospace"
             }}
             formatter={(value: number) => [
               `${value >= 0 ? '+' : ''}${value.toFixed(2)}R`,
@@ -177,39 +170,40 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
           <Area
             type="monotone"
             dataKey="r"
-            stroke="url(#strokeGradient)"
-            strokeWidth={2}
+            stroke={isProfitable ? '#00C46C' : '#E44545'}
+            strokeWidth={2.5}
             fill={isProfitable ? 'url(#areaGradientPositive)' : 'url(#areaGradientNegative)'}
             filter="url(#lineGlow)"
-            isAnimationActive={false}
+            isAnimationActive={true}
+            animationDuration={800}
+            animationEasing="ease-out"
             dot={false}
             activeDot={{
-              r: 4,
-              fill: isProfitable ? '#00ff99' : '#ff4757',
-              stroke: '#0a0a0a',
-              strokeWidth: 2
+              r: 5,
+              fill: isProfitable ? '#00C46C' : '#E44545',
+              stroke: '#0A0A0A',
+              strokeWidth: 2,
             }}
           />
         </AreaChart>
       </ResponsiveContainer>
 
-      {/* Summary Badge */}
+      {/* Summary Badge - Positioned absolutely within relative container */}
       <div 
-        className="absolute top-4 right-4 px-3 py-2 rounded-lg"
+        className="absolute top-2 right-2 px-3 py-2 rounded-lg"
         style={{
-          background: 'rgba(15,15,15,0.9)',
+          background: 'rgba(15,15,15,0.95)',
           backdropFilter: 'blur(12px)',
-          border: `1px solid ${isProfitable ? 'rgba(0,255,153,0.2)' : 'rgba(255,71,87,0.2)'}`,
-          boxShadow: `0 4px 12px ${isProfitable ? 'rgba(0,255,153,0.1)' : 'rgba(255,71,87,0.1)'}`,
+          border: `1px solid ${isProfitable ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)'}`,
+          boxShadow: `0 4px 12px ${isProfitable ? 'rgba(0,196,108,0.15)' : 'rgba(228,69,69,0.15)'}`,
         }}
       >
         <div 
           className="text-xs mb-1"
           style={{ 
-            color: '#7a7a7a',
-            fontFamily: "'SF Pro Display', -apple-system, sans-serif",
+            color: '#7A7A7A',
             fontWeight: '600',
-            letterSpacing: '0.5px'
+            letterSpacing: '0.5px',
           }}
         >
           TOTAL GROWTH
@@ -217,19 +211,15 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
         <div 
           className="text-xl font-bold"
           style={{ 
-            color: isProfitable ? '#00ff99' : '#ff4757',
-            fontFamily: "'SF Mono', monospace",
-            letterSpacing: '-0.5px'
+            color: isProfitable ? '#00C46C' : '#E44545',
+            letterSpacing: '-0.5px',
           }}
         >
           {totalR >= 0 ? '+' : ''}{totalR.toFixed(2)}R
         </div>
         <div 
           className="text-xs mt-1"
-          style={{ 
-            color: '#6a6a6a',
-            fontFamily: "'SF Pro Display', -apple-system, sans-serif"
-          }}
+          style={{ color: '#6A6A6A' }}
         >
           {chartData.length} trades
         </div>

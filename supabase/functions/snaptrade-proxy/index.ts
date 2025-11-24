@@ -20,19 +20,58 @@ console.log("  SNAPTRADE_CONSUMER_KEY:", SNAPTRADE_CONSUMER_KEY ? `${SNAPTRADE_C
 console.log("  SUPABASE_URL:", SUPABASE_URL ? "✅" : "❌ MISSING");
 
 /**
- * ✅ FIXED: Stringify that matches Python's json.dumps(separators=(",", ":"), sort_keys=True)
+ * ✅ FIXED: Deep recursive sorting that matches SnapTrade's signature algorithm
  */
 function sortedStringify(obj: any): string {
-  return JSON.stringify(obj, (key, value) => {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+  if (obj === null) {
+    return 'null';
+  }
+  
+  if (obj === undefined) {
+    return 'null';
+  }
+  
+  if (typeof obj !== 'object' || Array.isArray(obj)) {
+    return JSON.stringify(obj);
+  }
+  
+  // Deep sort all keys recursively
+  const sortObject = (o: any): any => {
+    if (o === null || o === undefined) {
+      return o;
+    }
+    
+    if (Array.isArray(o)) {
+      return o.map(sortObject);
+    }
+    
+    if (typeof o === 'object') {
       const sorted: Record<string, any> = {};
-      Object.keys(value).sort().forEach(k => {
-        sorted[k] = value[k];
+      Object.keys(o).sort().forEach(k => {
+        sorted[k] = sortObject(o[k]);
       });
       return sorted;
     }
-    return value;
-  });
+    
+    return o;
+  };
+  
+  const sorted = sortObject(obj);
+  return JSON.stringify(sorted);
+}
+
+/**
+ * ✅ NEW: Build query string with alphabetically sorted keys
+ */
+function buildSortedQueryString(params: Record<string, string>): string {
+  const sortedKeys = Object.keys(params).sort();
+  const parts: string[] = [];
+  
+  for (const key of sortedKeys) {
+    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`);
+  }
+  
+  return parts.join('&');
 }
 
 async function generateSignature(
@@ -56,7 +95,7 @@ async function generateSignature(
   sigObject.path = pathForSignature;
   sigObject.query = query;
 
-  // Step 2: Stringify
+  // Step 2: Stringify with deep sorting
   const sigContent = sortedStringify(sigObject);
 
   console.log("📋 Signature Components:");
@@ -140,7 +179,8 @@ serve(async (req: Request) => {
       method = "GET", 
       body = null,
       userId,
-      userSecret 
+      userSecret,
+      isPublic = false 
     } = requestBody;
 
     if (!endpoint) {
@@ -153,6 +193,7 @@ serve(async (req: Request) => {
     console.log("\n📍 Parsed Request Details:");
     console.log("  endpoint:", endpoint);
     console.log("  method:", method);
+    console.log("  isPublic:", isPublic);
     console.log("  userId:", userId || "NOT PROVIDED");
     console.log("  userSecret:", userSecret ? `${userSecret.substring(0, 15)}... (length: ${userSecret.length})` : "NOT PROVIDED");
     console.log("  body:", body ? JSON.stringify(body, null, 2) : "null");
@@ -171,47 +212,87 @@ serve(async (req: Request) => {
     console.log("  fullPath:", fullPath);
     console.log("  isRegisterUser:", isRegisterUser);
     
-    // Build query params
-    const queryParams = new URLSearchParams({
+    // ✅ FIXED: Build query params as object first
+    // For registerUser, we need special handling - clientId and timestamp are ONLY for signature!
+    const queryParamsObj: Record<string, string> = {};
+    
+    // These are for signature calculation only
+    const signatureParams: Record<string, string> = {
       clientId: SNAPTRADE_CLIENT_ID!,
       timestamp: timestamp
-    });
+    };
     
     let actualBody: any = null;
     
     if (isRegisterUser) {
-      actualBody = body?.userId ? { userId: body.userId } : body;
-      console.log("  📝 registerUser: userId in BODY:", body?.userId || '❌ MISSING');
-    } else {
+      // ✅ CRITICAL FIX: For registerUser, ALL params go in both URL and signature
+      if (body?.userId) {
+        queryParamsObj.userId = body.userId;
+        queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
+        queryParamsObj.timestamp = timestamp;
+        
+        // Signature uses same params
+        signatureParams.userId = body.userId;
+        
+        console.log("  📝 registerUser: userId in QUERY:", body.userId);
+        console.log("  📝 registerUser: all params in URL");
+      } else {
+        console.log("  ❌ registerUser: NO userId in body!");
+      }
+      actualBody = null;  // ✅ No body for registerUser!
+    } else if (!isPublic) {
+      // Only add credentials for non-public endpoints
+      // ✅ For non-registerUser endpoints, add clientId and timestamp to query
+      queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
+      queryParamsObj.timestamp = timestamp;
+      
       if (userId) {
         console.log("  ✅ Adding userId to query:", userId);
-        queryParams.set('userId', userId);
+        queryParamsObj.userId = userId;
       } else {
         console.log("  ⚠️ NO userId provided for non-register endpoint!");
       }
       
       if (userSecret) {
         console.log("  ✅ Adding userSecret to query:", userSecret.substring(0, 15) + "...");
-        queryParams.set('userSecret', userSecret);
+        queryParamsObj.userSecret = userSecret;
       } else {
         console.log("  ⚠️ NO userSecret provided!");
       }
       
+      // Signature params are same as query params for non-registerUser
+      Object.assign(signatureParams, queryParamsObj);
+      
+      actualBody = body;
+    } else {
+      console.log("  🌐 PUBLIC endpoint - no credentials needed");
+      // ✅ Public endpoints also get clientId and timestamp
+      queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
+      queryParamsObj.timestamp = timestamp;
+      Object.assign(signatureParams, queryParamsObj);
       actualBody = body;
     }
     
-    const queryString = queryParams.toString();
+    // ✅ FIXED: Use sorted query string builder
+    const queryString = buildSortedQueryString(queryParamsObj);
+    
+    // ✅ CRITICAL: For signature, use signatureParams (which includes clientId/timestamp)
+    const signatureQueryString = buildSortedQueryString(signatureParams);
+    
     const fullUrl = `${SNAPTRADE_BASE_URL}${basePath}?${queryString}`;
     
     console.log("\n📤 Building SnapTrade Request:");
     console.log("  Full URL:", fullUrl);
-    console.log("  Query string:", queryString);
+    console.log("  Query string (for URL):", queryString);
+    console.log("  Query string (for SIGNATURE):", signatureQueryString);
+    console.log("  Query params object:", JSON.stringify(queryParamsObj, null, 2));
+    console.log("  Signature params object:", JSON.stringify(signatureParams, null, 2));
     console.log("  Body:", actualBody ? JSON.stringify(actualBody, null, 2) : "null");
 
-    // Generate signature
+    // Generate signature using signatureQueryString
     const signature = await generateSignature(
       fullPath,
-      queryString,
+      signatureQueryString,  // ✅ Use signature query string!
       actualBody
     );
 
@@ -238,6 +319,23 @@ serve(async (req: Request) => {
     console.log("  Status:", snaptradeResponse.status, snaptradeResponse.statusText);
     console.log("  Headers:", Object.fromEntries(snaptradeResponse.headers.entries()));
     console.log("  Body:", responseText);
+    
+    // ✅ CRITICAL DEBUG: Check if response has userSecret
+    if (isRegisterUser && snaptradeResponse.ok) {
+      try {
+        const parsed = JSON.parse(responseText);
+        console.log("\n🔍 PARSED RESPONSE for registerUser:");
+        console.log("  Type:", Array.isArray(parsed) ? 'Array' : typeof parsed);
+        console.log("  Keys:", Object.keys(parsed));
+        console.log("  Has userId:", !!parsed.userId);
+        console.log("  Has userSecret:", !!parsed.userSecret);
+        console.log("  userSecret value:", parsed.userSecret || 'MISSING!');
+        console.log("  Full object:", JSON.stringify(parsed, null, 2));
+      } catch (e) {
+        console.error("  ❌ Failed to parse response:", e);
+      }
+    }
+    
     console.log("=".repeat(80) + "\n");
 
     if (snaptradeResponse.ok) {

@@ -40,7 +40,6 @@ import { DashboardKpiCard } from "@/components/DashboardKpiCard";
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
-import TradingSessionIndicator from '@/components/TradingSessionIndicator';
 
 // ================================================
 // LAZY LOAD HEAVY COMPONENTS
@@ -846,10 +845,7 @@ function JournalOverviewContent() {
               subtitle="Track your performance and manage your trading journey" 
             />
           </div>
-          
-          {/* ✅ NEW: Trading Session Indicator */}
-          <TradingSessionIndicator />
-          
+
           <div className="flex items-center gap-3">
             {isImpersonating && (
               <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
