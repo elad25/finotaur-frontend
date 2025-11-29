@@ -62,7 +62,7 @@ const plans: Plan[] = [
     features: [
       "Everything in Free, plus:",
       "Broker sync (12,000+ brokers)",
-      "Up to 30 auto-synced trades/month (~2GB data)",
+      "Up to 25 auto-synced trades/month (~2GB data)",
       "Unlimited manual trades",
       "Full performance analytics",
       "Strategy builder & tracking",
@@ -880,23 +880,23 @@ export default function JournalSettings() {
             </div>
 
             {/* Subscription Status */}
-            {profile?.account_type !== 'free' && (
-              <div className="flex items-center justify-between py-4">
-                <div>
+              {profile && profile.account_type !== 'free' && profile.subscription_status && (
+                 <div className="flex items-center justify-between py-4">
+                    <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>
                   <p className="text-xs text-zinc-500 mt-1">Current subscription status</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  profile?.subscription_status === 'active'
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : profile?.subscription_status === 'trial'
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                   profile.subscription_status === 'active'
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : profile.subscription_status === 'trial'
+                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                     : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}>
-                  {profile?.subscription_status?.charAt(0).toUpperCase() + profile?.subscription_status?.slice(1)}
-                </span>
-              </div>
-            )}
+                 }`}>
+            {profile.subscription_status.charAt(0).toUpperCase() + profile.subscription_status.slice(1)}
+    </span>
+  </div>
+)}
           </div>
         </div>
 

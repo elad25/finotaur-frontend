@@ -1,0 +1,4361 @@
+-- =====================================================
+-- FINOTAUR AFFILIATE SYSTEM - COMPLETE UNIFIED SCHEMA
+-- =====================================================
+-- Version: 4.0.0 (Final Unified)
+-- Last Updated: 2025
+-- 
+-- THIS FILE CONTAINS EVERYTHING:
+-- ============================================
+-- 1. Complete affiliate system (all tables, functions, triggers)
+-- 2. Admin RLS policies (fixed for admin access)
+-- 3. Admin affiliate setup (no commissions for admin codes)
+-- 4. Admin coupons with FULL CONTROL:
+--    - Percentage discount (e.g., 30% off)
+--    - Fixed price per plan (e.g., $100/year, $9.99/month)
+--    - Time-limited coupons
+--    - Usage-limited coupons
+--    - Single-use until code change
+--    - Plan-specific restrictions
+--    - First-time only option
+--    - Monthly plan override pricing
+-- 5. Cron jobs for automation
+-- 6. Complete views and analytics
+-- 7. All RLS policies
+-- 8. All grants and permissions
+--
+-- ADMIN HAS FULL CONTROL OVER:
+-- - All pricing on the site
+-- - Sales and promotions
+-- - Coupon creation/editing/deactivation
+-- - Affiliate management
+-- - Commission rates
+--
+-- RUN THIS IN SUPABASE SQL EDITOR (Pro plan required for pg_cron)
+-- =====================================================
+
+
+-- ============================================
+-- SECTION 1: EXTENSIONS
+-- ============================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "pg_cron";
+
+-- Grant cron usage
+GRANT USAGE ON SCHEMA cron TO postgres;
+
+
+-- ============================================
+-- SECTION 2: CLEANUP ALL EXISTING OBJECTS
+-- ============================================
+
+-- Drop all views
+DROP VIEW IF EXISTS affiliate_leaderboard CASCADE;
+DROP VIEW IF EXISTS affiliate_pending_verifications CASCADE;
+DROP VIEW IF EXISTS affiliate_pending_payments CASCADE;
+DROP VIEW IF EXISTS affiliate_monthly_performance CASCADE;
+DROP VIEW IF EXISTS affiliate_dashboard_summary CASCADE;
+DROP VIEW IF EXISTS affiliate_applications_queue CASCADE;
+DROP VIEW IF EXISTS affiliate_cron_history CASCADE;
+DROP VIEW IF EXISTS admin_coupons_summary CASCADE;
+DROP VIEW IF EXISTS admin_pricing_overview CASCADE;
+
+-- Drop all functions (every possible signature)
+DROP FUNCTION IF EXISTS get_affiliate_analytics(UUID, DATE, DATE) CASCADE;
+DROP FUNCTION IF EXISTS get_affiliate_analytics CASCADE;
+DROP FUNCTION IF EXISTS validate_affiliate_code(TEXT) CASCADE;
+DROP FUNCTION IF EXISTS validate_affiliate_code CASCADE;
+DROP FUNCTION IF EXISTS validate_coupon_code(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS validate_coupon_code CASCADE;
+DROP FUNCTION IF EXISTS record_affiliate_click(TEXT, INET, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS record_affiliate_click CASCADE;
+DROP FUNCTION IF EXISTS track_referral_signup(TEXT, UUID, TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID, NUMERIC, NUMERIC) CASCADE;
+DROP FUNCTION IF EXISTS track_referral_signup(TEXT, UUID, TEXT, UUID, TEXT, TEXT, NUMERIC, UUID, NUMERIC, NUMERIC) CASCADE;
+DROP FUNCTION IF EXISTS track_referral_signup(TEXT, UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS track_referral_signup CASCADE;
+DROP FUNCTION IF EXISTS record_referral_first_payment(UUID, NUMERIC, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS record_referral_first_payment CASCADE;
+DROP FUNCTION IF EXISTS process_pending_verifications() CASCADE;
+DROP FUNCTION IF EXISTS process_payout(UUID, TEXT, UUID) CASCADE;
+DROP FUNCTION IF EXISTS generate_monthly_payouts(DATE) CASCADE;
+DROP FUNCTION IF EXISTS calculate_sub_affiliate_commissions(DATE) CASCADE;
+DROP FUNCTION IF EXISTS calculate_monthly_commissions(DATE) CASCADE;
+DROP FUNCTION IF EXISTS reactivate_affiliate(UUID, UUID) CASCADE;
+DROP FUNCTION IF EXISTS suspend_affiliate(UUID, UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS reject_affiliate_application(UUID, UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS approve_affiliate_application(UUID, UUID, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS approve_affiliate_application(UUID, UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS approve_affiliate_application CASCADE;
+DROP FUNCTION IF EXISTS set_referral_verification_end() CASCADE;
+DROP FUNCTION IF EXISTS set_affiliate_referral_link() CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+DROP FUNCTION IF EXISTS update_affiliate_signups_count() CASCADE;
+DROP FUNCTION IF EXISTS update_affiliate_clicks_count() CASCADE;
+DROP FUNCTION IF EXISTS update_affiliate_tier_on_qualification() CASCADE;
+DROP FUNCTION IF EXISTS get_affiliate_discount_rate(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS check_referral_verification(UUID) CASCADE;
+DROP FUNCTION IF EXISTS generate_affiliate_code(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS generate_affiliate_code(TEXT) CASCADE;
+DROP FUNCTION IF EXISTS generate_affiliate_code CASCADE;
+DROP FUNCTION IF EXISTS is_affiliate_code_available(TEXT) CASCADE;
+DROP FUNCTION IF EXISTS get_milestone_bonus(INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS get_commission_rate(affiliate_tier, BOOLEAN) CASCADE;
+DROP FUNCTION IF EXISTS calculate_affiliate_tier(INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS increment_affiliate_clicks(UUID) CASCADE;
+DROP FUNCTION IF EXISTS increment_affiliate_signups(UUID) CASCADE;
+DROP FUNCTION IF EXISTS update_affiliate_tier(UUID) CASCADE;
+DROP FUNCTION IF EXISTS reconcile_affiliate_stats() CASCADE;
+DROP FUNCTION IF EXISTS get_pending_affiliate_jobs() CASCADE;
+DROP FUNCTION IF EXISTS check_affiliate_cron_health() CASCADE;
+DROP FUNCTION IF EXISTS is_admin() CASCADE;
+DROP FUNCTION IF EXISTS create_admin_affiliate(UUID, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS create_admin_coupon CASCADE;
+DROP FUNCTION IF EXISTS update_admin_coupon CASCADE;
+DROP FUNCTION IF EXISTS rename_admin_coupon(UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS deactivate_admin_coupon(UUID) CASCADE;
+DROP FUNCTION IF EXISTS increment_admin_coupon_usage(UUID) CASCADE;
+DROP FUNCTION IF EXISTS get_coupon_plan_prices(UUID) CASCADE;
+DROP FUNCTION IF EXISTS get_active_coupon_for_checkout(TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS calculate_discounted_price(TEXT, TEXT, NUMERIC) CASCADE;
+DROP FUNCTION IF EXISTS get_current_plan_prices() CASCADE;
+DROP FUNCTION IF EXISTS set_global_sale CASCADE;
+DROP FUNCTION IF EXISTS end_global_sale() CASCADE;
+
+-- Drop all triggers
+DROP TRIGGER IF EXISTS trg_affiliate_tier_update ON affiliate_referrals CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_clicks_count ON affiliate_clicks CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_signups_count ON affiliate_referrals CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliates_updated_at ON affiliates CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_applications_updated_at ON affiliate_applications CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_referrals_updated_at ON affiliate_referrals CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_commissions_updated_at ON affiliate_commissions CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_bonuses_updated_at ON affiliate_bonuses CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_payouts_updated_at ON affiliate_payouts CASCADE;
+DROP TRIGGER IF EXISTS trg_affiliate_referral_link ON affiliates CASCADE;
+DROP TRIGGER IF EXISTS trg_referral_verification_end ON affiliate_referrals CASCADE;
+DROP TRIGGER IF EXISTS trg_admin_coupons_updated_at ON admin_coupons CASCADE;
+
+-- Drop all tables (correct order for foreign keys)
+DROP TABLE IF EXISTS affiliate_audit_log CASCADE;
+DROP TABLE IF EXISTS affiliate_notifications CASCADE;
+DROP TABLE IF EXISTS affiliate_activity_log CASCADE;
+DROP TABLE IF EXISTS affiliate_payouts CASCADE;
+DROP TABLE IF EXISTS affiliate_bonuses CASCADE;
+DROP TABLE IF EXISTS affiliate_commissions CASCADE;
+DROP TABLE IF EXISTS affiliate_referrals CASCADE;
+DROP TABLE IF EXISTS affiliate_clicks CASCADE;
+DROP TABLE IF EXISTS affiliates CASCADE;
+DROP TABLE IF EXISTS affiliate_applications CASCADE;
+DROP TABLE IF EXISTS affiliate_config CASCADE;
+DROP TABLE IF EXISTS admin_coupons CASCADE;
+DROP TABLE IF EXISTS admin_coupon_plan_prices CASCADE;
+DROP TABLE IF EXISTS admin_global_pricing CASCADE;
+
+-- Drop all types
+DROP TYPE IF EXISTS payout_status CASCADE;
+DROP TYPE IF EXISTS bonus_status CASCADE;
+DROP TYPE IF EXISTS bonus_type CASCADE;
+DROP TYPE IF EXISTS commission_status CASCADE;
+DROP TYPE IF EXISTS commission_type CASCADE;
+DROP TYPE IF EXISTS referral_status CASCADE;
+DROP TYPE IF EXISTS affiliate_tier CASCADE;
+DROP TYPE IF EXISTS affiliate_status CASCADE;
+DROP TYPE IF EXISTS affiliate_application_status CASCADE;
+DROP TYPE IF EXISTS discount_tier CASCADE;
+DROP TYPE IF EXISTS coupon_discount_type CASCADE;
+DROP TYPE IF EXISTS coupon_duration_type CASCADE;
+
+
+-- ============================================
+-- SECTION 3: ENUM TYPES
+-- ============================================
+
+CREATE TYPE affiliate_application_status AS ENUM (
+  'pending',
+  'under_review',
+  'approved',
+  'rejected',
+  'suspended'
+);
+
+CREATE TYPE affiliate_status AS ENUM (
+  'active',
+  'inactive',
+  'suspended',
+  'terminated'
+);
+
+CREATE TYPE affiliate_tier AS ENUM (
+  'tier_1',  -- 0-20 paying clients (10% commission)
+  'tier_2',  -- 20-75 paying clients (15% commission)
+  'tier_3'   -- 75+ paying clients (20% commission)
+);
+
+CREATE TYPE discount_tier AS ENUM (
+  'standard',  -- 10% discount for customers
+  'vip'        -- 15% discount for customers
+);
+
+CREATE TYPE referral_status AS ENUM (
+  'pending',               -- Awaiting first payment
+  'verification_pending',  -- In 7-day verification period
+  'verification_failed',   -- Failed verification (refund/chargeback)
+  'qualified',             -- Passed verification, eligible for commission
+  'churned',               -- Was qualified, subscription ended
+  'refunded'               -- Refund issued after qualification
+);
+
+CREATE TYPE commission_type AS ENUM (
+  'monthly_recurring',  -- Regular monthly commission
+  'annual_upfront',     -- 15% upfront for annual subscriptions
+  'sub_affiliate',      -- 5% from sub-affiliates
+  'bonus'               -- Milestone bonuses
+);
+
+CREATE TYPE commission_status AS ENUM (
+  'pending',
+  'confirmed',
+  'paid',
+  'cancelled',
+  'expired'
+);
+
+CREATE TYPE bonus_type AS ENUM (
+  'milestone_20',           -- $100 for 20 clients
+  'milestone_50',           -- $300 for 50 clients
+  'milestone_100',          -- $1,000 for 100 clients
+  'milestone_50_recurring'  -- $100 for every 50 after 100
+);
+
+CREATE TYPE bonus_status AS ENUM (
+  'pending',
+  'paid',
+  'cancelled'
+);
+
+CREATE TYPE payout_status AS ENUM (
+  'pending',
+  'processing',
+  'completed',
+  'failed',
+  'cancelled'
+);
+
+-- Coupon discount type
+CREATE TYPE coupon_discount_type AS ENUM (
+  'percentage',    -- e.g., 30% off all plans
+  'fixed_price',   -- e.g., specific price per plan ($100/year)
+  'fixed_amount'   -- e.g., $50 off any plan
+);
+
+-- Coupon duration/limit type
+CREATE TYPE coupon_duration_type AS ENUM (
+  'unlimited',           -- No limits
+  'time_limited',        -- Until specific date
+  'usage_limited',       -- Max number of uses
+  'time_and_usage',      -- Both time and usage limits
+  'until_code_change',   -- Active until admin changes/deactivates
+  'single_use_per_user', -- Each user can use once
+  'first_payment_only'   -- Only for first payment ever
+);
+
+
+-- ============================================
+-- SECTION 4: CONFIGURATION TABLE
+-- ============================================
+
+CREATE TABLE affiliate_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  config_key TEXT UNIQUE NOT NULL,
+  config_value JSONB NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert default configuration
+INSERT INTO affiliate_config (config_key, config_value, description) VALUES
+('commission_rates', '{
+  "tier_1": {"rate": 0.10, "min_clients": 0, "max_clients": 20},
+  "tier_2": {"rate": 0.15, "min_clients": 20, "max_clients": 75},
+  "tier_3": {"rate": 0.20, "min_clients": 75, "max_clients": null}
+}', 'Commission rates per tier for monthly subscriptions'),
+
+('annual_commission_rate', '{"rate": 0.15}', 'Commission rate for annual subscriptions (15%)'),
+
+('sub_affiliate_rate', '{"rate": 0.05, "min_tier": "tier_2"}', 'Sub-affiliate commission rate (5%)'),
+
+('commission_duration_months', '{"months": 12}', 'Maximum months to earn commission per customer'),
+
+('verification_period_days', '{"days": 7}', 'Days after FIRST PAYMENT before referral is qualified'),
+
+('attribution_window_days', '{"days": 30}', 'Days affiliate cookie is valid'),
+
+('discount_rates', '{
+  "standard": {"discount_percent": 10},
+  "vip": {"discount_percent": 15}
+}', 'Discount rates for customers based on affiliate discount_tier'),
+
+('bonus_milestones', '{
+  "milestone_20": {"clients": 20, "bonus_usd": 100},
+  "milestone_50": {"clients": 50, "bonus_usd": 300},
+  "milestone_100": {"clients": 100, "bonus_usd": 1000},
+  "milestone_50_recurring": {"clients_interval": 50, "bonus_usd": 100, "starts_after": 100}
+}', 'Volume bonus milestones'),
+
+('payout_settings', '{
+  "min_payout_usd": 100,
+  "payout_day": 15,
+  "payment_methods": ["paypal", "bank_transfer"]
+}', 'Payout configuration'),
+
+('default_plan_prices', '{
+  "monthly": 29.99,
+  "yearly": 299.99,
+  "lifetime": 999.99
+}', 'Default plan prices (can be overridden by coupons/sales)'),
+
+('global_sale_active', '{"active": false}', 'Whether a global sale is currently active');
+
+
+-- ============================================
+-- SECTION 5: ADMIN GLOBAL PRICING TABLE
+-- ============================================
+-- This table allows admin to set global pricing overrides
+-- for sales that apply to ALL users (not just coupon users)
+
+CREATE TABLE admin_global_pricing (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Sale Details
+  sale_name TEXT NOT NULL,
+  description TEXT,
+  
+  -- Pricing Override (NULL = use default price)
+  monthly_price_usd NUMERIC(10,2),
+  yearly_price_usd NUMERIC(10,2),
+  lifetime_price_usd NUMERIC(10,2),
+  
+  -- OR percentage discount from default prices
+  discount_percent NUMERIC(5,2),
+  
+  -- Validity
+  is_active BOOLEAN DEFAULT FALSE,
+  valid_from TIMESTAMPTZ DEFAULT NOW(),
+  valid_until TIMESTAMPTZ,
+  
+  -- Metadata
+  created_by UUID REFERENCES auth.users(id),
+  updated_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_admin_global_pricing_active ON admin_global_pricing(is_active) WHERE is_active = TRUE;
+
+
+-- ============================================
+-- SECTION 6: AFFILIATE APPLICATIONS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  
+  -- Personal Info
+  email TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  phone TEXT,
+  country TEXT,
+  
+  -- Social/Marketing Presence
+  instagram_handle TEXT,
+  youtube_channel TEXT,
+  tiktok_handle TEXT,
+  twitter_handle TEXT,
+  website_url TEXT,
+  other_platforms JSONB DEFAULT '[]',
+  
+  -- Audience Info
+  total_followers INTEGER DEFAULT 0,
+  primary_audience TEXT,
+  audience_location TEXT,
+  
+  -- Marketing Plans
+  promotion_plan TEXT,
+  expected_monthly_referrals INTEGER,
+  
+  -- Custom Code Request
+  requested_code VARCHAR(15),
+  
+  -- Status
+  status affiliate_application_status DEFAULT 'pending',
+  reviewed_by UUID REFERENCES auth.users(id),
+  reviewed_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  admin_notes TEXT,
+  
+  -- Metadata
+  ip_address INET,
+  user_agent TEXT,
+  referral_source TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_applications_user_id ON affiliate_applications(user_id);
+CREATE INDEX idx_affiliate_applications_email ON affiliate_applications(email);
+CREATE INDEX idx_affiliate_applications_status ON affiliate_applications(status);
+CREATE INDEX idx_affiliate_applications_created_at ON affiliate_applications(created_at DESC);
+CREATE INDEX idx_affiliate_applications_requested_code ON affiliate_applications(requested_code);
+
+
+-- ============================================
+-- SECTION 7: AFFILIATES TABLE (Main Accounts)
+-- ============================================
+
+CREATE TABLE affiliates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  application_id UUID REFERENCES affiliate_applications(id),
+  
+  -- Personal Info
+  display_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  country TEXT,
+  
+  -- Unique Codes (simple format, e.g., "ALEX123")
+  affiliate_code TEXT NOT NULL UNIQUE,
+  coupon_code TEXT UNIQUE,
+  referral_link TEXT,
+  
+  -- Status & Tier
+  status affiliate_status DEFAULT 'active',
+  current_tier affiliate_tier DEFAULT 'tier_1',
+  discount_tier discount_tier DEFAULT 'standard',
+  
+  -- Admin affiliate fields (admin codes don't pay commissions)
+  affiliate_type TEXT DEFAULT 'regular' CHECK (affiliate_type IN ('regular', 'admin')),
+  commission_enabled BOOLEAN DEFAULT TRUE,
+  
+  -- Parent Affiliate (Sub-Affiliate System)
+  parent_affiliate_id UUID REFERENCES affiliates(id) ON DELETE SET NULL,
+  can_recruit_sub_affiliates BOOLEAN DEFAULT FALSE,
+  
+  -- Performance Stats (Denormalized for dashboard performance)
+  total_clicks INTEGER DEFAULT 0,
+  total_signups INTEGER DEFAULT 0,
+  total_qualified_referrals INTEGER DEFAULT 0,
+  total_active_customers INTEGER DEFAULT 0,
+  
+  -- Earnings (Denormalized for single-query dashboard)
+  total_earnings_usd NUMERIC(12,2) DEFAULT 0,
+  total_pending_usd NUMERIC(12,2) DEFAULT 0,
+  total_paid_usd NUMERIC(12,2) DEFAULT 0,
+  total_bonuses_usd NUMERIC(12,2) DEFAULT 0,
+  total_sub_affiliate_earnings_usd NUMERIC(12,2) DEFAULT 0,
+  sub_affiliate_count INTEGER DEFAULT 0,
+  
+  -- Payment Info
+  paypal_email TEXT,
+  payment_method TEXT DEFAULT 'paypal',
+  
+  -- Notification Settings
+  notify_on_signup BOOLEAN DEFAULT TRUE,
+  notify_on_qualification BOOLEAN DEFAULT TRUE,
+  notify_on_commission BOOLEAN DEFAULT TRUE,
+  notify_on_payout BOOLEAN DEFAULT TRUE,
+  
+  -- Timestamps
+  activated_at TIMESTAMPTZ DEFAULT NOW(),
+  last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+  suspended_at TIMESTAMPTZ,
+  suspension_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Constraints
+  CONSTRAINT unique_user_affiliate UNIQUE(user_id)
+);
+
+-- Primary indexes
+CREATE INDEX idx_affiliates_user_id ON affiliates(user_id);
+CREATE INDEX idx_affiliates_affiliate_code ON affiliates(affiliate_code);
+CREATE INDEX idx_affiliates_coupon_code ON affiliates(coupon_code);
+CREATE INDEX idx_affiliates_status ON affiliates(status);
+CREATE INDEX idx_affiliates_current_tier ON affiliates(current_tier);
+CREATE INDEX idx_affiliates_parent_id ON affiliates(parent_affiliate_id);
+CREATE INDEX idx_affiliates_discount_tier ON affiliates(discount_tier);
+CREATE INDEX idx_affiliates_email ON affiliates(email);
+CREATE INDEX idx_affiliates_type ON affiliates(affiliate_type);
+
+-- Optimized partial index for active affiliates
+CREATE INDEX idx_active_affiliates ON affiliates(id) WHERE status = 'active';
+
+
+-- ============================================
+-- SECTION 8: ADMIN COUPONS TABLE (Enhanced)
+-- ============================================
+-- Full admin control over pricing and discounts
+
+CREATE TABLE admin_coupons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Coupon Details
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT,
+  
+  -- Discount Type
+  discount_type coupon_discount_type NOT NULL DEFAULT 'percentage',
+  
+  -- For percentage type (e.g., 30% off)
+  discount_percent NUMERIC(5,2) CHECK (
+    discount_type != 'percentage' OR (discount_percent > 0 AND discount_percent <= 100)
+  ),
+  
+  -- For fixed_amount type (e.g., $50 off)
+  discount_amount_usd NUMERIC(10,2) CHECK (
+    discount_type != 'fixed_amount' OR discount_amount_usd > 0
+  ),
+  
+  -- Duration/Limit Type
+  duration_type coupon_duration_type DEFAULT 'unlimited',
+  
+  -- Validity
+  is_active BOOLEAN DEFAULT TRUE,
+  valid_from TIMESTAMPTZ DEFAULT NOW(),
+  valid_until TIMESTAMPTZ,
+  
+  -- Usage Limits
+  max_uses INTEGER,
+  current_uses INTEGER DEFAULT 0,
+  max_uses_per_user INTEGER DEFAULT NULL,  -- NULL = unlimited per user
+  
+  -- Restrictions
+  min_purchase_amount NUMERIC(10,2),
+  applicable_plans TEXT[],  -- NULL = all plans, or ['monthly', 'yearly', 'lifetime']
+  first_time_only BOOLEAN DEFAULT FALSE,
+  new_users_only BOOLEAN DEFAULT FALSE,
+  
+  -- Stackable with affiliate codes?
+  stackable_with_affiliate BOOLEAN DEFAULT FALSE,
+  
+  -- Priority (higher = checked first when multiple coupons could apply)
+  priority INTEGER DEFAULT 0,
+  
+  -- Metadata
+  created_by UUID REFERENCES auth.users(id),
+  updated_by UUID REFERENCES auth.users(id),
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_admin_coupons_code ON admin_coupons(code);
+CREATE INDEX idx_admin_coupons_is_active ON admin_coupons(is_active) WHERE is_active = TRUE;
+CREATE INDEX idx_admin_coupons_valid_dates ON admin_coupons(valid_from, valid_until);
+CREATE INDEX idx_admin_coupons_priority ON admin_coupons(priority DESC);
+CREATE INDEX idx_admin_coupons_discount_type ON admin_coupons(discount_type);
+
+
+-- ============================================
+-- SECTION 9: ADMIN COUPON PLAN PRICES TABLE
+-- ============================================
+-- For fixed_price coupons: specific price per plan
+
+CREATE TABLE admin_coupon_plan_prices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  coupon_id UUID NOT NULL REFERENCES admin_coupons(id) ON DELETE CASCADE,
+  
+  -- Plan name: 'monthly', 'yearly', 'lifetime'
+  plan_name TEXT NOT NULL,
+  
+  -- Fixed price for this plan (e.g., monthly = $9.99, yearly = $99)
+  fixed_price_usd NUMERIC(10,2) NOT NULL CHECK (fixed_price_usd >= 0),
+  
+  -- Optional: override the billing interval (for special deals)
+  -- e.g., "Pay $100 for 6 months" instead of normal yearly
+  custom_billing_months INTEGER,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  UNIQUE(coupon_id, plan_name)
+);
+
+CREATE INDEX idx_coupon_plan_prices_coupon ON admin_coupon_plan_prices(coupon_id);
+CREATE INDEX idx_coupon_plan_prices_plan ON admin_coupon_plan_prices(plan_name);
+
+
+-- ============================================
+-- SECTION 10: AFFILIATE CLICKS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_clicks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  
+  -- Privacy-conscious tracking
+  ip_hash VARCHAR(64),
+  ip_address INET,
+  user_agent TEXT,
+  referrer_url TEXT,
+  landing_page TEXT,
+  
+  -- UTM Parameters
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  
+  -- Geographic Data
+  country_code TEXT,
+  region TEXT,
+  city TEXT,
+  
+  -- Device Info
+  device_type TEXT,
+  browser TEXT,
+  os TEXT,
+  
+  -- Conversion Tracking
+  converted BOOLEAN DEFAULT FALSE,
+  converted_at TIMESTAMPTZ,
+  converted_user_id UUID REFERENCES auth.users(id),
+  
+  -- Attribution Window
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
+  
+  -- Timestamps
+  clicked_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_clicks_affiliate_id ON affiliate_clicks(affiliate_id);
+CREATE INDEX idx_affiliate_clicks_created_at ON affiliate_clicks(created_at DESC);
+CREATE INDEX idx_affiliate_clicks_clicked_at ON affiliate_clicks(clicked_at DESC);
+CREATE INDEX idx_affiliate_clicks_ip_hash ON affiliate_clicks(ip_hash, affiliate_id, created_at DESC);
+CREATE INDEX idx_affiliate_clicks_utm_source ON affiliate_clicks(utm_source);
+CREATE INDEX idx_affiliate_clicks_converted ON affiliate_clicks(converted) WHERE converted = TRUE;
+CREATE INDEX idx_affiliate_clicks_expires_at ON affiliate_clicks(expires_at) WHERE converted = FALSE;
+CREATE INDEX idx_clicks_affiliate_date ON affiliate_clicks(affiliate_id, created_at DESC);
+
+
+-- ============================================
+-- SECTION 11: AFFILIATE REFERRALS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_referrals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  referred_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  referred_user_email TEXT NOT NULL,
+  click_id UUID REFERENCES affiliate_clicks(id),
+  
+  -- Signup Details
+  signup_date TIMESTAMPTZ DEFAULT NOW(),
+  signup_plan TEXT,
+  
+  -- Discount Applied
+  discount_percent NUMERIC(5,2) DEFAULT 0,
+  discount_amount_usd NUMERIC(10,2) DEFAULT 0,
+  
+  -- Coupon used (if any)
+  coupon_code_used TEXT,
+  coupon_id_used UUID REFERENCES admin_coupons(id),
+  
+  -- Verification Period (7 days AFTER first payment)
+  verification_start TIMESTAMPTZ,
+  verification_end TIMESTAMPTZ,
+  
+  -- Status
+  status referral_status DEFAULT 'pending',
+  qualified_at TIMESTAMPTZ,
+  churned_at TIMESTAMPTZ,
+  
+  -- Subscription Info
+  subscription_id UUID,
+  subscription_plan TEXT,
+  subscription_type TEXT,
+  subscription_price_usd NUMERIC(10,2),
+  subscription_started_at TIMESTAMPTZ,
+  subscription_cancelled_at TIMESTAMPTZ,
+  
+  -- Payment Tracking
+  total_payments_usd NUMERIC(12,2) DEFAULT 0,
+  commission_earned_usd NUMERIC(12,2) DEFAULT 0,
+  
+  -- Commission Eligibility (12 months max)
+  commission_eligible BOOLEAN DEFAULT FALSE,
+  commission_start_date TIMESTAMPTZ,
+  commission_end_date TIMESTAMPTZ,
+  months_commissioned INTEGER DEFAULT 0,
+  
+  -- First Payment (triggers verification)
+  first_payment_amount_usd NUMERIC(10,2),
+  first_payment_date TIMESTAMPTZ,
+  
+  -- Notes
+  notes TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Constraints
+  CONSTRAINT unique_referral_user UNIQUE(referred_user_id)
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_referrals_affiliate_id ON affiliate_referrals(affiliate_id);
+CREATE INDEX idx_affiliate_referrals_referred_user_id ON affiliate_referrals(referred_user_id);
+CREATE INDEX idx_affiliate_referrals_status ON affiliate_referrals(status);
+CREATE INDEX idx_affiliate_referrals_signup_date ON affiliate_referrals(signup_date DESC);
+CREATE INDEX idx_affiliate_referrals_verification_end ON affiliate_referrals(verification_end) 
+  WHERE status = 'verification_pending';
+CREATE INDEX idx_affiliate_referrals_qualified ON affiliate_referrals(qualified_at DESC) 
+  WHERE status = 'qualified';
+CREATE INDEX idx_affiliate_referrals_pending ON affiliate_referrals(signup_date DESC) 
+  WHERE status = 'pending';
+CREATE INDEX idx_verification_pending_referrals ON affiliate_referrals(verification_end) 
+  WHERE status = 'verification_pending';
+CREATE INDEX idx_referrals_affiliate_status ON affiliate_referrals(affiliate_id, status);
+CREATE INDEX idx_referrals_coupon ON affiliate_referrals(coupon_id_used);
+
+
+-- ============================================
+-- SECTION 12: AFFILIATE COMMISSIONS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_commissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  referral_id UUID REFERENCES affiliate_referrals(id) ON DELETE SET NULL,
+  sub_affiliate_id UUID REFERENCES affiliates(id) ON DELETE SET NULL,
+  payout_id UUID,
+  
+  -- Commission Details
+  commission_type commission_type NOT NULL,
+  commission_month DATE NOT NULL,
+  
+  -- Calculation
+  base_amount_usd NUMERIC(10,2) NOT NULL DEFAULT 0,
+  commission_rate NUMERIC(5,4) NOT NULL DEFAULT 0,
+  commission_amount_usd NUMERIC(10,2) NOT NULL DEFAULT 0,
+  
+  -- Tier at time of commission
+  tier_at_time affiliate_tier,
+  
+  -- Status
+  status commission_status DEFAULT 'pending',
+  
+  -- Billing Period
+  period_start TIMESTAMPTZ,
+  period_end TIMESTAMPTZ,
+  
+  -- Commission Cap (12 months max)
+  month_number INTEGER,
+  is_capped BOOLEAN DEFAULT FALSE,
+  
+  -- Timestamps
+  calculated_at TIMESTAMPTZ DEFAULT NOW(),
+  confirmed_at TIMESTAMPTZ,
+  paid_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_commissions_affiliate_id ON affiliate_commissions(affiliate_id);
+CREATE INDEX idx_affiliate_commissions_referral_id ON affiliate_commissions(referral_id);
+CREATE INDEX idx_affiliate_commissions_status ON affiliate_commissions(status);
+CREATE INDEX idx_affiliate_commissions_month ON affiliate_commissions(commission_month);
+CREATE INDEX idx_affiliate_commissions_commission_type ON affiliate_commissions(commission_type);
+CREATE INDEX idx_affiliate_commissions_payout_id ON affiliate_commissions(payout_id);
+CREATE INDEX idx_affiliate_commissions_created_at ON affiliate_commissions(created_at DESC);
+
+-- Unique constraint for one commission per referral per month
+CREATE UNIQUE INDEX idx_unique_commission_per_referral_month 
+  ON affiliate_commissions(referral_id, commission_month) 
+  WHERE referral_id IS NOT NULL;
+
+CREATE INDEX idx_commissions_affiliate_status_month ON affiliate_commissions(affiliate_id, status, commission_month);
+CREATE INDEX idx_pending_commissions ON affiliate_commissions(affiliate_id) WHERE status = 'pending';
+
+
+-- ============================================
+-- SECTION 13: AFFILIATE BONUSES TABLE
+-- ============================================
+
+CREATE TABLE affiliate_bonuses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  payout_id UUID,
+  
+  -- Bonus Details
+  bonus_type bonus_type NOT NULL,
+  bonus_amount_usd NUMERIC(10,2) NOT NULL,
+  
+  -- Milestone Info
+  milestone_reached INTEGER NOT NULL,
+  
+  -- Status
+  status bonus_status DEFAULT 'pending',
+  
+  -- Timestamps
+  earned_at TIMESTAMPTZ DEFAULT NOW(),
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_bonuses_affiliate_id ON affiliate_bonuses(affiliate_id);
+CREATE INDEX idx_affiliate_bonuses_status ON affiliate_bonuses(status);
+CREATE INDEX idx_affiliate_bonuses_bonus_type ON affiliate_bonuses(bonus_type);
+
+-- Unique constraint for non-recurring bonuses
+CREATE UNIQUE INDEX idx_unique_milestone_bonus 
+  ON affiliate_bonuses(affiliate_id, bonus_type, milestone_reached)
+  WHERE bonus_type != 'milestone_50_recurring';
+
+
+-- ============================================
+-- SECTION 14: AFFILIATE PAYOUTS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_payouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  
+  -- Payout Period
+  payout_period DATE NOT NULL,
+  
+  -- Amount Breakdown
+  commissions_amount_usd NUMERIC(12,2) DEFAULT 0,
+  bonuses_amount_usd NUMERIC(12,2) DEFAULT 0,
+  adjustments_usd NUMERIC(12,2) DEFAULT 0,
+  total_amount_usd NUMERIC(12,2) NOT NULL,
+  
+  -- Payment Details
+  status payout_status DEFAULT 'pending',
+  payment_method TEXT DEFAULT 'paypal',
+  payment_email TEXT,
+  
+  -- Processing Info
+  transaction_id TEXT,
+  processor_response JSONB,
+  scheduled_date DATE,
+  
+  -- Timestamps
+  requested_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  failed_at TIMESTAMPTZ,
+  failure_reason TEXT,
+  retry_count INTEGER DEFAULT 0,
+  
+  -- Audit
+  processed_by UUID REFERENCES auth.users(id),
+  notes TEXT,
+  admin_notes TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_payouts_affiliate_id ON affiliate_payouts(affiliate_id);
+CREATE INDEX idx_affiliate_payouts_status ON affiliate_payouts(status);
+CREATE INDEX idx_affiliate_payouts_period ON affiliate_payouts(payout_period);
+CREATE INDEX idx_affiliate_payouts_requested_at ON affiliate_payouts(requested_at DESC);
+CREATE INDEX idx_affiliate_payouts_scheduled ON affiliate_payouts(scheduled_date) WHERE status = 'pending';
+CREATE INDEX idx_pending_payouts ON affiliate_payouts(scheduled_date) WHERE status = 'pending';
+
+-- Unique constraint for one payout per period
+CREATE UNIQUE INDEX idx_unique_payout_per_period ON affiliate_payouts(affiliate_id, payout_period);
+
+-- Add foreign key constraints
+ALTER TABLE affiliate_commissions 
+  ADD CONSTRAINT fk_commission_payout 
+  FOREIGN KEY (payout_id) REFERENCES affiliate_payouts(id) ON DELETE SET NULL;
+
+ALTER TABLE affiliate_bonuses 
+  ADD CONSTRAINT fk_bonus_payout 
+  FOREIGN KEY (payout_id) REFERENCES affiliate_payouts(id) ON DELETE SET NULL;
+
+
+-- ============================================
+-- SECTION 15: AFFILIATE NOTIFICATIONS TABLE
+-- ============================================
+
+CREATE TABLE affiliate_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  
+  -- Notification Details
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  
+  -- Related Entity
+  related_id UUID,
+  related_type TEXT,
+  
+  -- Status
+  read BOOLEAN DEFAULT FALSE,
+  read_at TIMESTAMPTZ,
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_notifications_affiliate_id ON affiliate_notifications(affiliate_id);
+CREATE INDEX idx_affiliate_notifications_read ON affiliate_notifications(read);
+CREATE INDEX idx_affiliate_notifications_created_at ON affiliate_notifications(created_at DESC);
+
+
+-- ============================================
+-- SECTION 16: AFFILIATE ACTIVITY LOG TABLE
+-- ============================================
+
+CREATE TABLE affiliate_activity_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID REFERENCES affiliates(id) ON DELETE CASCADE,
+  
+  -- Activity Details
+  activity_type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  
+  -- Related Entities
+  related_referral_id UUID REFERENCES affiliate_referrals(id) ON DELETE SET NULL,
+  related_commission_id UUID REFERENCES affiliate_commissions(id) ON DELETE SET NULL,
+  related_bonus_id UUID REFERENCES affiliate_bonuses(id) ON DELETE SET NULL,
+  related_payout_id UUID REFERENCES affiliate_payouts(id) ON DELETE SET NULL,
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  
+  -- Actor
+  triggered_by UUID REFERENCES auth.users(id),
+  is_system_action BOOLEAN DEFAULT TRUE,
+  
+  -- Legacy fields
+  ip_address INET,
+  user_agent TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_affiliate_activity_log_affiliate_id ON affiliate_activity_log(affiliate_id);
+CREATE INDEX idx_affiliate_activity_log_type ON affiliate_activity_log(activity_type);
+CREATE INDEX idx_affiliate_activity_log_created_at ON affiliate_activity_log(created_at DESC);
+
+
+-- ============================================
+-- SECTION 17: COUPON USAGE TRACKING TABLE
+-- ============================================
+-- Track which users used which coupons (for single-use enforcement)
+
+CREATE TABLE coupon_usage_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  coupon_id UUID NOT NULL REFERENCES admin_coupons(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- Usage Details
+  used_at TIMESTAMPTZ DEFAULT NOW(),
+  plan_purchased TEXT,
+  amount_paid_usd NUMERIC(10,2),
+  discount_applied_usd NUMERIC(10,2),
+  
+  -- Payment Reference
+  payment_id TEXT,
+  subscription_id TEXT,
+  
+  UNIQUE(coupon_id, user_id)  -- For single-use per user enforcement
+);
+
+CREATE INDEX idx_coupon_usage_coupon ON coupon_usage_log(coupon_id);
+CREATE INDEX idx_coupon_usage_user ON coupon_usage_log(user_id);
+CREATE INDEX idx_coupon_usage_date ON coupon_usage_log(used_at DESC);
+
+
+-- ============================================
+-- SECTION 18: HELPER FUNCTIONS
+-- ============================================
+
+-- Check if user is admin
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'super_admin')
+  );
+$$;
+
+
+-- Calculate affiliate tier based on qualified count
+CREATE OR REPLACE FUNCTION calculate_affiliate_tier(qualified_count INTEGER)
+RETURNS affiliate_tier
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF qualified_count >= 75 THEN
+    RETURN 'tier_3';
+  ELSIF qualified_count >= 20 THEN
+    RETURN 'tier_2';
+  ELSE
+    RETURN 'tier_1';
+  END IF;
+END;
+$$;
+
+
+-- Get commission rate based on tier
+CREATE OR REPLACE FUNCTION get_commission_rate(tier affiliate_tier, is_annual BOOLEAN DEFAULT FALSE)
+RETURNS NUMERIC(5,4)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF is_annual THEN
+    RETURN 0.1500;
+  END IF;
+  
+  CASE tier
+    WHEN 'tier_1' THEN RETURN 0.1000;
+    WHEN 'tier_2' THEN RETURN 0.1500;
+    WHEN 'tier_3' THEN RETURN 0.2000;
+    ELSE RETURN 0.1000;
+  END CASE;
+END;
+$$;
+
+
+-- Get milestone bonus info
+CREATE OR REPLACE FUNCTION get_milestone_bonus(client_count INTEGER)
+RETURNS TABLE(bonus_type bonus_type, bonus_amount NUMERIC(10,2))
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF client_count = 20 THEN
+    RETURN QUERY SELECT 'milestone_20'::bonus_type, 100.00::NUMERIC(10,2);
+  END IF;
+  
+  IF client_count = 50 THEN
+    RETURN QUERY SELECT 'milestone_50'::bonus_type, 300.00::NUMERIC(10,2);
+  END IF;
+  
+  IF client_count = 100 THEN
+    RETURN QUERY SELECT 'milestone_100'::bonus_type, 1000.00::NUMERIC(10,2);
+  END IF;
+  
+  IF client_count > 100 AND (client_count - 100) % 50 = 0 THEN
+    RETURN QUERY SELECT 'milestone_50_recurring'::bonus_type, 100.00::NUMERIC(10,2);
+  END IF;
+  
+  RETURN;
+END;
+$$;
+
+
+-- Check if affiliate/coupon code is available
+CREATE OR REPLACE FUNCTION is_affiliate_code_available(p_code TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  clean_code TEXT;
+BEGIN
+  clean_code := UPPER(REGEXP_REPLACE(p_code, '[^A-Z0-9]', '', 'g'));
+  
+  -- Check affiliates table
+  IF EXISTS (
+    SELECT 1 FROM affiliates 
+    WHERE affiliate_code = clean_code OR coupon_code = clean_code
+  ) THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Check pending applications
+  IF EXISTS (
+    SELECT 1 FROM affiliate_applications 
+    WHERE requested_code = clean_code AND status = 'pending'
+  ) THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Check admin coupons
+  IF EXISTS (
+    SELECT 1 FROM admin_coupons 
+    WHERE code = clean_code
+  ) THEN
+    RETURN FALSE;
+  END IF;
+  
+  RETURN TRUE;
+END;
+$$;
+
+
+-- Generate unique affiliate code
+CREATE OR REPLACE FUNCTION generate_affiliate_code(
+  p_requested_code TEXT DEFAULT NULL,
+  p_full_name TEXT DEFAULT NULL
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  base_code TEXT;
+  final_code TEXT;
+  counter INTEGER := 0;
+BEGIN
+  -- Try requested code first
+  IF p_requested_code IS NOT NULL AND p_requested_code != '' THEN
+    base_code := UPPER(REGEXP_REPLACE(p_requested_code, '[^a-zA-Z0-9]', '', 'g'));
+    
+    IF LENGTH(base_code) > 15 THEN
+      base_code := SUBSTRING(base_code FROM 1 FOR 15);
+    END IF;
+    
+    final_code := base_code;
+    
+    IF is_affiliate_code_available(final_code) THEN
+      RETURN final_code;
+    END IF;
+    
+    WHILE counter < 100 LOOP
+      counter := counter + 1;
+      final_code := base_code || counter::TEXT;
+      IF is_affiliate_code_available(final_code) THEN
+        RETURN final_code;
+      END IF;
+    END LOOP;
+  END IF;
+  
+  -- Try name-based code
+  IF p_full_name IS NOT NULL AND p_full_name != '' THEN
+    base_code := UPPER(REGEXP_REPLACE(p_full_name, '[^a-zA-Z0-9]', '', 'g'));
+    
+    IF LENGTH(base_code) > 15 THEN
+      base_code := SUBSTRING(base_code FROM 1 FOR 15);
+    END IF;
+    
+    final_code := base_code;
+    counter := 0;
+    
+    WHILE NOT is_affiliate_code_available(final_code) AND counter < 100 LOOP
+      counter := counter + 1;
+      final_code := base_code || counter::TEXT;
+    END LOOP;
+    
+    IF is_affiliate_code_available(final_code) THEN
+      RETURN final_code;
+    END IF;
+  END IF;
+  
+  -- Generate random code as fallback
+  LOOP
+    final_code := UPPER(SUBSTRING(MD5(RANDOM()::TEXT) FROM 1 FOR 8));
+    IF is_affiliate_code_available(final_code) THEN
+      RETURN final_code;
+    END IF;
+  END LOOP;
+END;
+$$;
+
+
+-- Get affiliate discount rate
+CREATE OR REPLACE FUNCTION get_affiliate_discount_rate(
+  p_affiliate_code TEXT,
+  p_billing_interval TEXT DEFAULT 'monthly'
+)
+RETURNS NUMERIC(5,2)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  aff_discount_tier discount_tier;
+BEGIN
+  SELECT a.discount_tier INTO aff_discount_tier
+  FROM affiliates a
+  WHERE (a.affiliate_code = UPPER(p_affiliate_code) OR a.coupon_code = UPPER(p_affiliate_code))
+    AND a.status = 'active';
+  
+  IF aff_discount_tier IS NULL THEN
+    RETURN 10.00;
+  END IF;
+  
+  CASE aff_discount_tier
+    WHEN 'vip' THEN RETURN 15.00;
+    ELSE RETURN 10.00;
+  END CASE;
+END;
+$$;
+
+
+-- Atomic increment for affiliate clicks
+CREATE OR REPLACE FUNCTION increment_affiliate_clicks(p_affiliate_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE affiliates
+  SET 
+    total_clicks = COALESCE(total_clicks, 0) + 1,
+    last_activity_at = NOW(),
+    updated_at = NOW()
+  WHERE id = p_affiliate_id;
+END;
+$$;
+
+
+-- Atomic increment for affiliate signups
+CREATE OR REPLACE FUNCTION increment_affiliate_signups(p_affiliate_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE affiliates
+  SET 
+    total_signups = COALESCE(total_signups, 0) + 1,
+    last_activity_at = NOW(),
+    updated_at = NOW()
+  WHERE id = p_affiliate_id;
+END;
+$$;
+
+
+-- Update affiliate tier
+CREATE OR REPLACE FUNCTION update_affiliate_tier(p_affiliate_id UUID)
+RETURNS affiliate_tier
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_qualified_count INTEGER;
+  v_new_tier affiliate_tier;
+  v_old_tier affiliate_tier;
+BEGIN
+  SELECT total_qualified_referrals, current_tier 
+  INTO v_qualified_count, v_old_tier
+  FROM affiliates
+  WHERE id = p_affiliate_id;
+  
+  v_new_tier := calculate_affiliate_tier(v_qualified_count);
+  
+  IF v_new_tier != v_old_tier THEN
+    UPDATE affiliates
+    SET current_tier = v_new_tier,
+        can_recruit_sub_affiliates = (v_new_tier IN ('tier_2', 'tier_3'))
+    WHERE id = p_affiliate_id;
+  END IF;
+  
+  RETURN v_new_tier;
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 19: ADMIN COUPON FUNCTIONS
+-- ============================================
+
+-- Create admin coupon with full control
+CREATE OR REPLACE FUNCTION create_admin_coupon(
+  p_code TEXT,
+  p_name TEXT,
+  p_discount_type coupon_discount_type,
+  p_discount_percent NUMERIC(5,2) DEFAULT NULL,
+  p_discount_amount_usd NUMERIC(10,2) DEFAULT NULL,
+  p_plan_prices JSONB DEFAULT NULL,
+  p_description TEXT DEFAULT NULL,
+  p_duration_type coupon_duration_type DEFAULT 'unlimited',
+  p_valid_from TIMESTAMPTZ DEFAULT NOW(),
+  p_valid_until TIMESTAMPTZ DEFAULT NULL,
+  p_max_uses INTEGER DEFAULT NULL,
+  p_max_uses_per_user INTEGER DEFAULT NULL,
+  p_min_purchase_amount NUMERIC(10,2) DEFAULT NULL,
+  p_applicable_plans TEXT[] DEFAULT NULL,
+  p_first_time_only BOOLEAN DEFAULT FALSE,
+  p_new_users_only BOOLEAN DEFAULT FALSE,
+  p_stackable_with_affiliate BOOLEAN DEFAULT FALSE,
+  p_priority INTEGER DEFAULT 0
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_coupon_id UUID;
+  v_clean_code TEXT;
+  v_plan TEXT;
+  v_price NUMERIC;
+BEGIN
+  -- Check admin permission
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can create coupons';
+  END IF;
+  
+  -- Clean and uppercase the code
+  v_clean_code := UPPER(REGEXP_REPLACE(p_code, '[^A-Z0-9]', '', 'g'));
+  
+  -- Check code availability
+  IF NOT is_affiliate_code_available(v_clean_code) THEN
+    RAISE EXCEPTION 'Code "%" already exists', v_clean_code;
+  END IF;
+  
+  -- Validate params based on discount type
+  IF p_discount_type = 'percentage' THEN
+    IF p_discount_percent IS NULL OR p_discount_percent <= 0 OR p_discount_percent > 100 THEN
+      RAISE EXCEPTION 'Percentage discount requires discount_percent between 0 and 100';
+    END IF;
+  ELSIF p_discount_type = 'fixed_amount' THEN
+    IF p_discount_amount_usd IS NULL OR p_discount_amount_usd <= 0 THEN
+      RAISE EXCEPTION 'Fixed amount discount requires discount_amount_usd > 0';
+    END IF;
+  ELSIF p_discount_type = 'fixed_price' THEN
+    IF p_plan_prices IS NULL OR p_plan_prices = '{}'::JSONB THEN
+      RAISE EXCEPTION 'Fixed price discount requires plan_prices';
+    END IF;
+  END IF;
+  
+  -- Create coupon
+  INSERT INTO admin_coupons (
+    code,
+    name,
+    description,
+    discount_type,
+    discount_percent,
+    discount_amount_usd,
+    duration_type,
+    valid_from,
+    valid_until,
+    max_uses,
+    max_uses_per_user,
+    min_purchase_amount,
+    applicable_plans,
+    first_time_only,
+    new_users_only,
+    stackable_with_affiliate,
+    priority,
+    created_by
+  ) VALUES (
+    v_clean_code,
+    p_name,
+    p_description,
+    p_discount_type,
+    CASE WHEN p_discount_type = 'percentage' THEN p_discount_percent ELSE NULL END,
+    CASE WHEN p_discount_type = 'fixed_amount' THEN p_discount_amount_usd ELSE NULL END,
+    p_duration_type,
+    p_valid_from,
+    p_valid_until,
+    p_max_uses,
+    p_max_uses_per_user,
+    p_min_purchase_amount,
+    p_applicable_plans,
+    p_first_time_only,
+    p_new_users_only,
+    p_stackable_with_affiliate,
+    p_priority,
+    auth.uid()
+  )
+  RETURNING id INTO v_coupon_id;
+  
+  -- Insert fixed prices if provided
+  IF p_discount_type = 'fixed_price' AND p_plan_prices IS NOT NULL THEN
+    FOR v_plan, v_price IN SELECT * FROM jsonb_each_text(p_plan_prices)
+    LOOP
+      INSERT INTO admin_coupon_plan_prices (coupon_id, plan_name, fixed_price_usd)
+      VALUES (v_coupon_id, v_plan, v_price::NUMERIC);
+    END LOOP;
+  END IF;
+  
+  RETURN v_coupon_id;
+END;
+$$;
+
+
+-- Update admin coupon
+CREATE OR REPLACE FUNCTION update_admin_coupon(
+  p_coupon_id UUID,
+  p_name TEXT DEFAULT NULL,
+  p_description TEXT DEFAULT NULL,
+  p_discount_percent NUMERIC(5,2) DEFAULT NULL,
+  p_discount_amount_usd NUMERIC(10,2) DEFAULT NULL,
+  p_plan_prices JSONB DEFAULT NULL,
+  p_duration_type coupon_duration_type DEFAULT NULL,
+  p_is_active BOOLEAN DEFAULT NULL,
+  p_valid_from TIMESTAMPTZ DEFAULT NULL,
+  p_valid_until TIMESTAMPTZ DEFAULT NULL,
+  p_max_uses INTEGER DEFAULT NULL,
+  p_max_uses_per_user INTEGER DEFAULT NULL,
+  p_min_purchase_amount NUMERIC(10,2) DEFAULT NULL,
+  p_applicable_plans TEXT[] DEFAULT NULL,
+  p_first_time_only BOOLEAN DEFAULT NULL,
+  p_new_users_only BOOLEAN DEFAULT NULL,
+  p_stackable_with_affiliate BOOLEAN DEFAULT NULL,
+  p_priority INTEGER DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_discount_type coupon_discount_type;
+  v_plan TEXT;
+  v_price NUMERIC;
+BEGIN
+  -- Check admin permission
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can update coupons';
+  END IF;
+  
+  -- Get current discount type
+  SELECT discount_type INTO v_discount_type FROM admin_coupons WHERE id = p_coupon_id;
+  
+  IF v_discount_type IS NULL THEN
+    RAISE EXCEPTION 'Coupon not found';
+  END IF;
+  
+  -- Update coupon
+  UPDATE admin_coupons SET
+    name = COALESCE(p_name, name),
+    description = COALESCE(p_description, description),
+    discount_percent = CASE 
+      WHEN v_discount_type = 'percentage' THEN COALESCE(p_discount_percent, discount_percent) 
+      ELSE discount_percent 
+    END,
+    discount_amount_usd = CASE 
+      WHEN v_discount_type = 'fixed_amount' THEN COALESCE(p_discount_amount_usd, discount_amount_usd) 
+      ELSE discount_amount_usd 
+    END,
+    duration_type = COALESCE(p_duration_type, duration_type),
+    is_active = COALESCE(p_is_active, is_active),
+    valid_from = COALESCE(p_valid_from, valid_from),
+    valid_until = COALESCE(p_valid_until, valid_until),
+    max_uses = COALESCE(p_max_uses, max_uses),
+    max_uses_per_user = COALESCE(p_max_uses_per_user, max_uses_per_user),
+    min_purchase_amount = COALESCE(p_min_purchase_amount, min_purchase_amount),
+    applicable_plans = COALESCE(p_applicable_plans, applicable_plans),
+    first_time_only = COALESCE(p_first_time_only, first_time_only),
+    new_users_only = COALESCE(p_new_users_only, new_users_only),
+    stackable_with_affiliate = COALESCE(p_stackable_with_affiliate, stackable_with_affiliate),
+    priority = COALESCE(p_priority, priority),
+    updated_by = auth.uid(),
+    updated_at = NOW()
+  WHERE id = p_coupon_id;
+  
+  -- Update fixed prices if provided (for fixed_price type)
+  IF v_discount_type = 'fixed_price' AND p_plan_prices IS NOT NULL THEN
+    DELETE FROM admin_coupon_plan_prices WHERE coupon_id = p_coupon_id;
+    FOR v_plan, v_price IN SELECT * FROM jsonb_each_text(p_plan_prices)
+    LOOP
+      INSERT INTO admin_coupon_plan_prices (coupon_id, plan_name, fixed_price_usd)
+      VALUES (p_coupon_id, v_plan, v_price::NUMERIC);
+    END LOOP;
+  END IF;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Rename admin coupon code
+CREATE OR REPLACE FUNCTION rename_admin_coupon(
+  p_coupon_id UUID,
+  p_new_code TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_clean_code TEXT;
+BEGIN
+  -- Check admin permission
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can rename coupons';
+  END IF;
+  
+  v_clean_code := UPPER(REGEXP_REPLACE(p_new_code, '[^A-Z0-9]', '', 'g'));
+  
+  -- Check if code exists in affiliates
+  IF EXISTS (SELECT 1 FROM affiliates WHERE affiliate_code = v_clean_code OR coupon_code = v_clean_code) THEN
+    RAISE EXCEPTION 'Code already exists as affiliate code';
+  END IF;
+  
+  -- Check if code exists in other admin coupons
+  IF EXISTS (SELECT 1 FROM admin_coupons WHERE code = v_clean_code AND id != p_coupon_id) THEN
+    RAISE EXCEPTION 'Code already exists as admin coupon';
+  END IF;
+  
+  UPDATE admin_coupons
+  SET 
+    code = v_clean_code,
+    updated_by = auth.uid(),
+    updated_at = NOW()
+  WHERE id = p_coupon_id;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Deactivate admin coupon
+CREATE OR REPLACE FUNCTION deactivate_admin_coupon(p_coupon_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can deactivate coupons';
+  END IF;
+  
+  UPDATE admin_coupons
+  SET 
+    is_active = FALSE,
+    valid_until = NOW(),
+    updated_by = auth.uid(),
+    updated_at = NOW()
+  WHERE id = p_coupon_id;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Increment admin coupon usage
+CREATE OR REPLACE FUNCTION increment_admin_coupon_usage(p_coupon_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE admin_coupons
+  SET current_uses = current_uses + 1
+  WHERE id = p_coupon_id;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Get all fixed prices for a coupon
+CREATE OR REPLACE FUNCTION get_coupon_plan_prices(p_coupon_id UUID)
+RETURNS TABLE (plan_name TEXT, fixed_price_usd NUMERIC)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY 
+  SELECT cpp.plan_name, cpp.fixed_price_usd
+  FROM admin_coupon_plan_prices cpp
+  WHERE cpp.coupon_id = p_coupon_id
+  ORDER BY cpp.plan_name;
+END;
+$$;
+
+
+-- Check if user can use coupon
+CREATE OR REPLACE FUNCTION can_user_use_coupon(
+  p_coupon_id UUID,
+  p_user_id UUID,
+  p_plan TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  can_use BOOLEAN,
+  reason TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_coupon RECORD;
+  v_user_usage_count INTEGER;
+  v_user_has_paid_before BOOLEAN;
+  v_is_new_user BOOLEAN;
+BEGIN
+  -- Get coupon details
+  SELECT * INTO v_coupon FROM admin_coupons WHERE id = p_coupon_id;
+  
+  IF v_coupon IS NULL THEN
+    RETURN QUERY SELECT FALSE, 'Coupon not found'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Check if coupon is active
+  IF NOT v_coupon.is_active THEN
+    RETURN QUERY SELECT FALSE, 'Coupon is not active'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Check validity dates
+  IF v_coupon.valid_from IS NOT NULL AND v_coupon.valid_from > NOW() THEN
+    RETURN QUERY SELECT FALSE, 'Coupon is not yet valid'::TEXT;
+    RETURN;
+  END IF;
+  
+  IF v_coupon.valid_until IS NOT NULL AND v_coupon.valid_until < NOW() THEN
+    RETURN QUERY SELECT FALSE, 'Coupon has expired'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Check max uses (global)
+  IF v_coupon.max_uses IS NOT NULL AND v_coupon.current_uses >= v_coupon.max_uses THEN
+    RETURN QUERY SELECT FALSE, 'Coupon usage limit reached'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Check max uses per user
+  IF v_coupon.max_uses_per_user IS NOT NULL THEN
+    SELECT COUNT(*) INTO v_user_usage_count
+    FROM coupon_usage_log
+    WHERE coupon_id = p_coupon_id AND user_id = p_user_id;
+    
+    IF v_user_usage_count >= v_coupon.max_uses_per_user THEN
+      RETURN QUERY SELECT FALSE, 'You have already used this coupon the maximum number of times'::TEXT;
+      RETURN;
+    END IF;
+  END IF;
+  
+  -- Check single use per user (for single_use_per_user duration type)
+  IF v_coupon.duration_type = 'single_use_per_user' THEN
+    IF EXISTS (SELECT 1 FROM coupon_usage_log WHERE coupon_id = p_coupon_id AND user_id = p_user_id) THEN
+      RETURN QUERY SELECT FALSE, 'You have already used this coupon'::TEXT;
+      RETURN;
+    END IF;
+  END IF;
+  
+  -- Check first payment only
+  IF v_coupon.first_time_only OR v_coupon.duration_type = 'first_payment_only' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM affiliate_referrals 
+      WHERE referred_user_id = p_user_id 
+      AND first_payment_date IS NOT NULL
+    ) INTO v_user_has_paid_before;
+    
+    IF v_user_has_paid_before THEN
+      RETURN QUERY SELECT FALSE, 'This coupon is only for first-time payments'::TEXT;
+      RETURN;
+    END IF;
+  END IF;
+  
+  -- Check new users only
+  IF v_coupon.new_users_only THEN
+    -- User is considered "new" if account was created in the last 7 days
+    SELECT EXISTS (
+      SELECT 1 FROM auth.users 
+      WHERE id = p_user_id 
+      AND created_at > NOW() - INTERVAL '7 days'
+    ) INTO v_is_new_user;
+    
+    IF NOT v_is_new_user THEN
+      RETURN QUERY SELECT FALSE, 'This coupon is only for new users'::TEXT;
+      RETURN;
+    END IF;
+  END IF;
+  
+  -- Check applicable plans
+  IF v_coupon.applicable_plans IS NOT NULL AND p_plan IS NOT NULL THEN
+    IF NOT (p_plan = ANY(v_coupon.applicable_plans)) THEN
+      RETURN QUERY SELECT FALSE, 'This coupon is not valid for the selected plan'::TEXT;
+      RETURN;
+    END IF;
+  END IF;
+  
+  -- All checks passed
+  RETURN QUERY SELECT TRUE, 'Coupon is valid'::TEXT;
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 20: UNIFIED CODE VALIDATION FUNCTION
+-- ============================================
+
+-- Validates both affiliate codes AND admin coupons
+CREATE OR REPLACE FUNCTION validate_coupon_code(
+  p_code TEXT, 
+  p_plan TEXT DEFAULT NULL,
+  p_user_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+  is_valid BOOLEAN,
+  code_type TEXT,
+  affiliate_id UUID,
+  affiliate_name TEXT,
+  coupon_id UUID,
+  coupon_name TEXT,
+  code TEXT,
+  discount_type TEXT,
+  discount_percent NUMERIC,
+  discount_amount_usd NUMERIC,
+  fixed_price_usd NUMERIC,
+  is_affiliate_code BOOLEAN,
+  pays_commission BOOLEAN,
+  applicable_plans TEXT[],
+  can_stack_with_affiliate BOOLEAN,
+  validation_message TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_clean_code TEXT;
+  v_affiliate RECORD;
+  v_coupon RECORD;
+  v_fixed_price NUMERIC;
+  v_can_use BOOLEAN;
+  v_reason TEXT;
+BEGIN
+  v_clean_code := UPPER(REGEXP_REPLACE(p_code, '[^A-Z0-9]', '', 'g'));
+  
+  -- First check affiliate codes
+  SELECT a.id, a.display_name, a.affiliate_code, a.discount_tier, a.commission_enabled, a.affiliate_type
+  INTO v_affiliate
+  FROM affiliates a
+  WHERE (a.affiliate_code = v_clean_code OR a.coupon_code = v_clean_code)
+    AND a.status = 'active';
+  
+  IF v_affiliate IS NOT NULL THEN
+    RETURN QUERY SELECT 
+      TRUE::BOOLEAN,
+      'affiliate'::TEXT,
+      v_affiliate.id,
+      v_affiliate.display_name,
+      NULL::UUID,
+      NULL::TEXT,
+      v_affiliate.affiliate_code,
+      'percentage'::TEXT,
+      CASE v_affiliate.discount_tier WHEN 'vip' THEN 15.00 ELSE 10.00 END::NUMERIC,
+      NULL::NUMERIC,
+      NULL::NUMERIC,
+      TRUE::BOOLEAN,
+      v_affiliate.commission_enabled AND v_affiliate.affiliate_type = 'regular',
+      NULL::TEXT[],
+      TRUE::BOOLEAN,  -- Affiliate codes can always stack with admin coupons that allow it
+      'Valid affiliate code'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Then check admin coupons
+  SELECT ac.*
+  INTO v_coupon
+  FROM admin_coupons ac
+  WHERE ac.code = v_clean_code
+    AND ac.is_active = TRUE
+    AND (ac.valid_from IS NULL OR ac.valid_from <= NOW())
+    AND (ac.valid_until IS NULL OR ac.valid_until > NOW())
+    AND (ac.max_uses IS NULL OR ac.current_uses < ac.max_uses);
+  
+  IF v_coupon IS NOT NULL THEN
+    -- Check if user can use this coupon
+    IF p_user_id IS NOT NULL THEN
+      SELECT * INTO v_can_use, v_reason FROM can_user_use_coupon(v_coupon.id, p_user_id, p_plan);
+      IF NOT v_can_use THEN
+        RETURN QUERY SELECT 
+          FALSE, 'admin_coupon'::TEXT, NULL::UUID, NULL::TEXT, v_coupon.id, v_coupon.name,
+          v_coupon.code, v_coupon.discount_type::TEXT, v_coupon.discount_percent,
+          v_coupon.discount_amount_usd, NULL::NUMERIC, FALSE, FALSE,
+          v_coupon.applicable_plans, v_coupon.stackable_with_affiliate, v_reason;
+        RETURN;
+      END IF;
+    END IF;
+    
+    -- Get fixed price for requested plan if applicable
+    IF v_coupon.discount_type = 'fixed_price' AND p_plan IS NOT NULL THEN
+      SELECT cpp.fixed_price_usd INTO v_fixed_price
+      FROM admin_coupon_plan_prices cpp
+      WHERE cpp.coupon_id = v_coupon.id AND cpp.plan_name = p_plan;
+    END IF;
+    
+    RETURN QUERY SELECT 
+      TRUE::BOOLEAN,
+      'admin_coupon'::TEXT,
+      NULL::UUID,
+      NULL::TEXT,
+      v_coupon.id,
+      v_coupon.name,
+      v_coupon.code,
+      v_coupon.discount_type::TEXT,
+      v_coupon.discount_percent,
+      v_coupon.discount_amount_usd,
+      v_fixed_price,
+      FALSE::BOOLEAN,
+      FALSE::BOOLEAN,  -- Admin coupons don't pay commission
+      v_coupon.applicable_plans,
+      v_coupon.stackable_with_affiliate,
+      'Valid coupon'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Code not found
+  RETURN QUERY SELECT 
+    FALSE, NULL::TEXT, NULL::UUID, NULL::TEXT, NULL::UUID, NULL::TEXT,
+    NULL::TEXT, NULL::TEXT, NULL::NUMERIC, NULL::NUMERIC, NULL::NUMERIC,
+    NULL::BOOLEAN, NULL::BOOLEAN, NULL::TEXT[], NULL::BOOLEAN, 'Invalid code'::TEXT;
+END;
+$$;
+
+
+-- Legacy alias function
+CREATE OR REPLACE FUNCTION validate_affiliate_code(p_code TEXT)
+RETURNS TABLE (
+  is_valid BOOLEAN,
+  code_type TEXT,
+  affiliate_id UUID,
+  affiliate_name TEXT,
+  coupon_id UUID,
+  coupon_name TEXT,
+  code TEXT,
+  discount_type TEXT,
+  discount_percent NUMERIC,
+  discount_amount_usd NUMERIC,
+  fixed_price_usd NUMERIC,
+  is_affiliate_code BOOLEAN,
+  pays_commission BOOLEAN,
+  applicable_plans TEXT[],
+  can_stack_with_affiliate BOOLEAN,
+  validation_message TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY SELECT * FROM validate_coupon_code(p_code, NULL, NULL);
+END;
+$$;
+
+
+-- Calculate final price with coupon
+CREATE OR REPLACE FUNCTION calculate_discounted_price(
+  p_code TEXT,
+  p_plan TEXT,
+  p_original_price NUMERIC
+)
+RETURNS TABLE (
+  final_price NUMERIC,
+  discount_applied NUMERIC,
+  discount_description TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_validation RECORD;
+  v_final_price NUMERIC;
+  v_discount NUMERIC;
+  v_description TEXT;
+BEGIN
+  -- Validate the code
+  SELECT * INTO v_validation FROM validate_coupon_code(p_code, p_plan, NULL);
+  
+  IF NOT v_validation.is_valid THEN
+    -- Return original price if code is invalid
+    RETURN QUERY SELECT p_original_price, 0::NUMERIC, 'Invalid code'::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Calculate based on discount type
+  IF v_validation.code_type = 'affiliate' THEN
+    -- Affiliate code: percentage discount
+    v_discount := p_original_price * (v_validation.discount_percent / 100);
+    v_final_price := p_original_price - v_discount;
+    v_description := v_validation.discount_percent || '% affiliate discount';
+    
+  ELSIF v_validation.discount_type = 'percentage' THEN
+    -- Percentage coupon
+    v_discount := p_original_price * (v_validation.discount_percent / 100);
+    v_final_price := p_original_price - v_discount;
+    v_description := v_validation.discount_percent || '% off';
+    
+  ELSIF v_validation.discount_type = 'fixed_amount' THEN
+    -- Fixed amount off
+    v_discount := LEAST(v_validation.discount_amount_usd, p_original_price);
+    v_final_price := p_original_price - v_discount;
+    v_description := '$' || v_validation.discount_amount_usd || ' off';
+    
+  ELSIF v_validation.discount_type = 'fixed_price' THEN
+    -- Fixed price for this plan
+    IF v_validation.fixed_price_usd IS NOT NULL THEN
+      v_final_price := v_validation.fixed_price_usd;
+      v_discount := p_original_price - v_final_price;
+      v_description := 'Special price: $' || v_final_price;
+    ELSE
+      -- No fixed price for this plan, return original
+      v_final_price := p_original_price;
+      v_discount := 0;
+      v_description := 'Coupon not valid for this plan';
+    END IF;
+  ELSE
+    v_final_price := p_original_price;
+    v_discount := 0;
+    v_description := 'Unknown discount type';
+  END IF;
+  
+  -- Ensure final price is not negative
+  v_final_price := GREATEST(v_final_price, 0);
+  
+  RETURN QUERY SELECT v_final_price, v_discount, v_description;
+END;
+$$;
+
+
+-- Get current plan prices (considering global sales)
+CREATE OR REPLACE FUNCTION get_current_plan_prices()
+RETURNS TABLE (
+  plan_name TEXT,
+  original_price NUMERIC,
+  current_price NUMERIC,
+  sale_name TEXT,
+  discount_percent NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_default_prices JSONB;
+  v_active_sale RECORD;
+BEGIN
+  -- Get default prices
+  SELECT config_value INTO v_default_prices
+  FROM affiliate_config
+  WHERE config_key = 'default_plan_prices';
+  
+  -- Check for active global sale
+  SELECT * INTO v_active_sale
+  FROM admin_global_pricing
+  WHERE is_active = TRUE
+    AND (valid_from IS NULL OR valid_from <= NOW())
+    AND (valid_until IS NULL OR valid_until > NOW())
+  ORDER BY created_at DESC
+  LIMIT 1;
+  
+  -- Return prices for each plan
+  RETURN QUERY
+  SELECT 
+    'monthly'::TEXT,
+    (v_default_prices->>'monthly')::NUMERIC,
+    CASE 
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.monthly_price_usd IS NOT NULL 
+        THEN v_active_sale.monthly_price_usd
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.discount_percent IS NOT NULL 
+        THEN (v_default_prices->>'monthly')::NUMERIC * (1 - v_active_sale.discount_percent / 100)
+      ELSE (v_default_prices->>'monthly')::NUMERIC
+    END,
+    COALESCE(v_active_sale.sale_name, NULL),
+    COALESCE(v_active_sale.discount_percent, NULL);
+  
+  RETURN QUERY
+  SELECT 
+    'yearly'::TEXT,
+    (v_default_prices->>'yearly')::NUMERIC,
+    CASE 
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.yearly_price_usd IS NOT NULL 
+        THEN v_active_sale.yearly_price_usd
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.discount_percent IS NOT NULL 
+        THEN (v_default_prices->>'yearly')::NUMERIC * (1 - v_active_sale.discount_percent / 100)
+      ELSE (v_default_prices->>'yearly')::NUMERIC
+    END,
+    COALESCE(v_active_sale.sale_name, NULL),
+    COALESCE(v_active_sale.discount_percent, NULL);
+  
+  RETURN QUERY
+  SELECT 
+    'lifetime'::TEXT,
+    (v_default_prices->>'lifetime')::NUMERIC,
+    CASE 
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.lifetime_price_usd IS NOT NULL 
+        THEN v_active_sale.lifetime_price_usd
+      WHEN v_active_sale IS NOT NULL AND v_active_sale.discount_percent IS NOT NULL 
+        THEN (v_default_prices->>'lifetime')::NUMERIC * (1 - v_active_sale.discount_percent / 100)
+      ELSE (v_default_prices->>'lifetime')::NUMERIC
+    END,
+    COALESCE(v_active_sale.sale_name, NULL),
+    COALESCE(v_active_sale.discount_percent, NULL);
+END;
+$$;
+
+
+-- Set global sale (admin function)
+CREATE OR REPLACE FUNCTION set_global_sale(
+  p_sale_name TEXT,
+  p_description TEXT DEFAULT NULL,
+  p_monthly_price NUMERIC DEFAULT NULL,
+  p_yearly_price NUMERIC DEFAULT NULL,
+  p_lifetime_price NUMERIC DEFAULT NULL,
+  p_discount_percent NUMERIC DEFAULT NULL,
+  p_valid_from TIMESTAMPTZ DEFAULT NOW(),
+  p_valid_until TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_sale_id UUID;
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can set global sales';
+  END IF;
+  
+  -- Deactivate any existing active sales
+  UPDATE admin_global_pricing SET is_active = FALSE WHERE is_active = TRUE;
+  
+  -- Create new sale
+  INSERT INTO admin_global_pricing (
+    sale_name,
+    description,
+    monthly_price_usd,
+    yearly_price_usd,
+    lifetime_price_usd,
+    discount_percent,
+    is_active,
+    valid_from,
+    valid_until,
+    created_by
+  ) VALUES (
+    p_sale_name,
+    p_description,
+    p_monthly_price,
+    p_yearly_price,
+    p_lifetime_price,
+    p_discount_percent,
+    TRUE,
+    p_valid_from,
+    p_valid_until,
+    auth.uid()
+  )
+  RETURNING id INTO v_sale_id;
+  
+  -- Update config to indicate sale is active
+  UPDATE affiliate_config 
+  SET config_value = '{"active": true}'::JSONB, updated_at = NOW()
+  WHERE config_key = 'global_sale_active';
+  
+  RETURN v_sale_id;
+END;
+$$;
+
+
+-- End global sale
+CREATE OR REPLACE FUNCTION end_global_sale()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF NOT is_admin() THEN
+    RAISE EXCEPTION 'Only admins can end global sales';
+  END IF;
+  
+  -- Deactivate all sales
+  UPDATE admin_global_pricing 
+  SET is_active = FALSE, valid_until = NOW(), updated_by = auth.uid(), updated_at = NOW()
+  WHERE is_active = TRUE;
+  
+  -- Update config
+  UPDATE affiliate_config 
+  SET config_value = '{"active": false}'::JSONB, updated_at = NOW()
+  WHERE config_key = 'global_sale_active';
+  
+  RETURN TRUE;
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 21: CLICK & REFERRAL TRACKING FUNCTIONS
+-- ============================================
+
+-- Record affiliate click with privacy
+CREATE OR REPLACE FUNCTION record_affiliate_click(
+  p_affiliate_code TEXT,
+  p_ip_address INET DEFAULT NULL,
+  p_user_agent TEXT DEFAULT NULL,
+  p_referrer_url TEXT DEFAULT NULL,
+  p_landing_page TEXT DEFAULT NULL,
+  p_utm_source TEXT DEFAULT NULL,
+  p_utm_medium TEXT DEFAULT NULL,
+  p_utm_campaign TEXT DEFAULT NULL,
+  p_utm_content TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  aff_id UUID;
+  new_click_id UUID;
+  v_ip_hash VARCHAR(64);
+BEGIN
+  -- Get affiliate ID
+  SELECT id INTO aff_id 
+  FROM affiliates 
+  WHERE (affiliate_code = UPPER(p_affiliate_code) OR coupon_code = UPPER(p_affiliate_code))
+    AND status = 'active';
+  
+  IF aff_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+  
+  -- Create IP hash for privacy
+  IF p_ip_address IS NOT NULL THEN
+    v_ip_hash := encode(sha256(p_ip_address::TEXT::bytea), 'hex');
+  END IF;
+  
+  -- Insert click record
+  INSERT INTO affiliate_clicks (
+    affiliate_id,
+    ip_hash,
+    ip_address,
+    user_agent,
+    referrer_url,
+    landing_page,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_content
+  ) VALUES (
+    aff_id,
+    v_ip_hash,
+    p_ip_address,
+    p_user_agent,
+    p_referrer_url,
+    p_landing_page,
+    p_utm_source,
+    p_utm_medium,
+    p_utm_campaign,
+    p_utm_content
+  )
+  RETURNING id INTO new_click_id;
+  
+  -- Increment clicks counter atomically
+  PERFORM increment_affiliate_clicks(aff_id);
+  
+  RETURN new_click_id;
+END;
+$$;
+
+
+-- Track referral signup
+CREATE OR REPLACE FUNCTION track_referral_signup(
+  p_affiliate_code TEXT,
+  p_user_id UUID,
+  p_user_email TEXT,
+  p_subscription_plan TEXT DEFAULT NULL,
+  p_subscription_type TEXT DEFAULT 'monthly',
+  p_subscription_price NUMERIC(10,2) DEFAULT NULL,
+  p_click_id UUID DEFAULT NULL,
+  p_discount_percent NUMERIC(5,2) DEFAULT 0,
+  p_discount_amount NUMERIC(10,2) DEFAULT 0,
+  p_coupon_code TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate_id UUID;
+  v_referral_id UUID;
+  v_discount_tier discount_tier;
+  v_actual_discount NUMERIC(5,2);
+  v_coupon_id UUID;
+BEGIN
+  -- Get affiliate
+  SELECT id, discount_tier INTO v_affiliate_id, v_discount_tier
+  FROM affiliates
+  WHERE (affiliate_code = UPPER(p_affiliate_code) OR coupon_code = UPPER(p_affiliate_code))
+    AND status = 'active';
+    
+  IF v_affiliate_id IS NULL THEN
+    RAISE EXCEPTION 'Invalid or inactive affiliate code';
+  END IF;
+  
+  -- Check for existing referral
+  IF EXISTS (SELECT 1 FROM affiliate_referrals WHERE referred_user_id = p_user_id) THEN
+    SELECT id INTO v_referral_id FROM affiliate_referrals WHERE referred_user_id = p_user_id;
+    RETURN v_referral_id;
+  END IF;
+  
+  -- Calculate discount
+  IF p_discount_percent = 0 THEN
+    v_actual_discount := CASE v_discount_tier 
+      WHEN 'vip' THEN 15.00
+      ELSE 10.00
+    END;
+  ELSE
+    v_actual_discount := p_discount_percent;
+  END IF;
+  
+  -- Get coupon ID if coupon was used
+  IF p_coupon_code IS NOT NULL THEN
+    SELECT id INTO v_coupon_id FROM admin_coupons WHERE code = UPPER(p_coupon_code);
+  END IF;
+  
+  -- Create referral
+  INSERT INTO affiliate_referrals (
+    affiliate_id,
+    referred_user_id,
+    referred_user_email,
+    click_id,
+    signup_plan,
+    discount_percent,
+    discount_amount_usd,
+    coupon_code_used,
+    coupon_id_used,
+    status
+  ) VALUES (
+    v_affiliate_id,
+    p_user_id,
+    p_user_email,
+    p_click_id,
+    p_subscription_plan,
+    v_actual_discount,
+    p_discount_amount,
+    p_coupon_code,
+    v_coupon_id,
+    'pending'
+  )
+  RETURNING id INTO v_referral_id;
+  
+  -- Mark click as converted
+  IF p_click_id IS NOT NULL THEN
+    UPDATE affiliate_clicks
+    SET 
+      converted = TRUE,
+      converted_at = NOW(),
+      converted_user_id = p_user_id
+    WHERE id = p_click_id;
+  END IF;
+  
+  RETURN v_referral_id;
+END;
+$$;
+
+
+-- Record first payment (triggers verification period)
+CREATE OR REPLACE FUNCTION record_referral_first_payment(
+  p_referral_id UUID,
+  p_payment_amount NUMERIC(10,2),
+  p_subscription_plan TEXT DEFAULT NULL,
+  p_subscription_type TEXT DEFAULT 'monthly'
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  ref_record RECORD;
+BEGIN
+  SELECT * INTO ref_record FROM affiliate_referrals WHERE id = p_referral_id;
+  
+  IF ref_record IS NULL THEN
+    RAISE EXCEPTION 'Referral not found';
+  END IF;
+  
+  IF ref_record.status != 'pending' THEN
+    RAISE EXCEPTION 'Referral is not in pending status. Current status: %', ref_record.status;
+  END IF;
+  
+  -- Start 7-day verification period
+  UPDATE affiliate_referrals
+  SET 
+    status = 'verification_pending',
+    first_payment_amount_usd = p_payment_amount,
+    first_payment_date = NOW(),
+    verification_start = NOW(),
+    verification_end = NOW() + INTERVAL '7 days',
+    subscription_plan = COALESCE(p_subscription_plan, subscription_plan),
+    subscription_type = COALESCE(p_subscription_type, subscription_type),
+    subscription_price_usd = p_payment_amount,
+    subscription_started_at = NOW()
+  WHERE id = p_referral_id;
+  
+  -- Log activity
+  INSERT INTO affiliate_activity_log (
+    affiliate_id, 
+    activity_type, 
+    description, 
+    related_referral_id,
+    metadata,
+    is_system_action
+  )
+  VALUES (
+    ref_record.affiliate_id,
+    'first_payment_received',
+    'First payment of $' || p_payment_amount || ' received. 7-day verification period started.',
+    p_referral_id,
+    jsonb_build_object(
+      'payment_amount', p_payment_amount,
+      'subscription_plan', p_subscription_plan,
+      'subscription_type', p_subscription_type,
+      'verification_ends', NOW() + INTERVAL '7 days'
+    ),
+    TRUE
+  );
+  
+  -- Record coupon usage if applicable
+  IF ref_record.coupon_id_used IS NOT NULL THEN
+    INSERT INTO coupon_usage_log (coupon_id, user_id, plan_purchased, amount_paid_usd, discount_applied_usd)
+    VALUES (ref_record.coupon_id_used, ref_record.referred_user_id, p_subscription_plan, p_payment_amount, ref_record.discount_amount_usd)
+    ON CONFLICT (coupon_id, user_id) DO NOTHING;
+    
+    -- Increment coupon usage
+    PERFORM increment_admin_coupon_usage(ref_record.coupon_id_used);
+  END IF;
+  
+  RETURN TRUE;
+END;
+$$;
+
+-- ============================================
+-- SECTION 21.5: ANALYTICS FUNCTION
+-- ============================================
+
+-- Get comprehensive affiliate analytics
+CREATE OR REPLACE FUNCTION get_affiliate_analytics(
+  p_affiliate_id UUID,
+  p_start_date DATE DEFAULT (CURRENT_DATE - INTERVAL '30 days')::DATE,
+  p_end_date DATE DEFAULT CURRENT_DATE
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  result JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'period', jsonb_build_object('start', p_start_date, 'end', p_end_date),
+    
+    'clicks', (
+      SELECT jsonb_build_object(
+        'total', COUNT(*),
+        'unique_ips', COUNT(DISTINCT COALESCE(ip_hash, ip_address::TEXT)),
+        'converted', COUNT(*) FILTER (WHERE converted = TRUE),
+        'conversion_rate', ROUND(
+          (COUNT(*) FILTER (WHERE converted = TRUE)::NUMERIC / NULLIF(COUNT(*), 0)) * 100, 2
+        )
+      )
+      FROM affiliate_clicks
+      WHERE affiliate_id = p_affiliate_id
+        AND created_at BETWEEN p_start_date AND p_end_date + INTERVAL '1 day'
+    ),
+    
+    'signups', (
+      SELECT jsonb_build_object(
+        'total', COUNT(*),
+        'pending', COUNT(*) FILTER (WHERE status = 'pending'),
+        'in_verification', COUNT(*) FILTER (WHERE status = 'verification_pending'),
+        'qualified', COUNT(*) FILTER (WHERE status = 'qualified'),
+        'failed', COUNT(*) FILTER (WHERE status = 'verification_failed'),
+        'churned', COUNT(*) FILTER (WHERE status = 'churned')
+      )
+      FROM affiliate_referrals
+      WHERE affiliate_id = p_affiliate_id
+        AND signup_date BETWEEN p_start_date AND p_end_date + INTERVAL '1 day'
+    ),
+    
+    'earnings', (
+      SELECT jsonb_build_object(
+        'total', COALESCE(SUM(commission_amount_usd), 0),
+        'recurring', COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'monthly_recurring'), 0),
+        'annual', COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'annual_upfront'), 0),
+        'sub_affiliate', COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'sub_affiliate'), 0)
+      )
+      FROM affiliate_commissions
+      WHERE affiliate_id = p_affiliate_id
+        AND commission_month BETWEEN p_start_date AND p_end_date
+        AND status IN ('pending', 'confirmed', 'paid')
+    ),
+    
+    'top_sources', (
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object('source', COALESCE(utm_source, 'direct'), 'clicks', cnt)
+        ORDER BY cnt DESC
+      ), '[]'::jsonb)
+      FROM (
+        SELECT COALESCE(utm_source, 'direct') as utm_source, COUNT(*) as cnt
+        FROM affiliate_clicks
+        WHERE affiliate_id = p_affiliate_id
+          AND created_at BETWEEN p_start_date AND p_end_date + INTERVAL '1 day'
+        GROUP BY COALESCE(utm_source, 'direct')
+        LIMIT 10
+      ) t
+    ),
+    
+    'daily_clicks', (
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object('date', day, 'clicks', cnt)
+        ORDER BY day
+      ), '[]'::jsonb)
+      FROM (
+        SELECT DATE(created_at) as day, COUNT(*) as cnt
+        FROM affiliate_clicks
+        WHERE affiliate_id = p_affiliate_id
+          AND created_at BETWEEN p_start_date AND p_end_date + INTERVAL '1 day'
+        GROUP BY DATE(created_at)
+      ) t
+    )
+  ) INTO result;
+  
+  RETURN result;
+END;
+$$;
+
+-- Grant permission
+GRANT EXECUTE ON FUNCTION get_affiliate_analytics(UUID, DATE, DATE) TO authenticated;
+-- ============================================
+-- SECTION 22: VERIFICATION & COMMISSION FUNCTIONS
+-- ============================================
+
+-- Process pending verifications (called by cron)
+CREATE OR REPLACE FUNCTION process_pending_verifications()
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  ref_record RECORD;
+  processed INTEGER := 0;
+BEGIN
+  FOR ref_record IN 
+    SELECT *
+    FROM affiliate_referrals
+    WHERE status = 'verification_pending'
+      AND verification_end IS NOT NULL
+      AND verification_end <= NOW()
+  LOOP
+    IF ref_record.subscription_cancelled_at IS NULL THEN
+      -- Verification passed
+      UPDATE affiliate_referrals
+      SET 
+        status = 'qualified',
+        qualified_at = NOW(),
+        commission_eligible = TRUE,
+        commission_start_date = NOW(),
+        commission_end_date = NOW() + INTERVAL '12 months'
+      WHERE id = ref_record.id;
+      
+      INSERT INTO affiliate_activity_log (
+        affiliate_id, 
+        activity_type, 
+        description, 
+        related_referral_id,
+        is_system_action
+      )
+      VALUES (
+        ref_record.affiliate_id,
+        'referral_qualified',
+        'Referral qualified after 7-day verification period. Commission eligible.',
+        ref_record.id,
+        TRUE
+      );
+      
+      processed := processed + 1;
+    ELSE
+      -- Verification failed
+      UPDATE affiliate_referrals
+      SET 
+        status = 'verification_failed',
+        notes = COALESCE(notes, '') || ' Refund/cancellation during 7-day verification period.'
+      WHERE id = ref_record.id;
+      
+      INSERT INTO affiliate_activity_log (
+        affiliate_id, 
+        activity_type, 
+        description, 
+        related_referral_id,
+        is_system_action
+      )
+      VALUES (
+        ref_record.affiliate_id,
+        'verification_failed',
+        'Verification failed - refund or cancellation during 7-day period.',
+        ref_record.id,
+        TRUE
+      );
+    END IF;
+  END LOOP;
+  
+  RETURN processed;
+END;
+$$;
+
+
+-- Calculate monthly commissions
+CREATE OR REPLACE FUNCTION calculate_monthly_commissions(for_month DATE)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  ref_record RECORD;
+  commission_rate NUMERIC(5,4);
+  commission_amount NUMERIC(10,2);
+  month_num INTEGER;
+  commissions_created INTEGER := 0;
+BEGIN
+  FOR ref_record IN 
+    SELECT ar.*, a.current_tier, a.id as aff_id, a.commission_enabled, a.affiliate_type
+    FROM affiliate_referrals ar
+    JOIN affiliates a ON ar.affiliate_id = a.id
+    WHERE ar.status = 'qualified'
+      AND ar.commission_eligible = TRUE
+      AND ar.subscription_cancelled_at IS NULL
+      AND ar.commission_end_date > for_month
+      AND a.commission_enabled = TRUE
+      AND a.affiliate_type = 'regular'
+  LOOP
+    -- Calculate which month this is
+    month_num := EXTRACT(MONTH FROM AGE(for_month, ref_record.commission_start_date))::INTEGER + 1;
+    
+    -- Cap at 12 months
+    IF month_num > 12 THEN
+      CONTINUE;
+    END IF;
+    
+    -- Determine commission rate
+    IF ref_record.subscription_type = 'annual' THEN
+      IF month_num > 1 THEN
+        CONTINUE;
+      END IF;
+      commission_rate := 0.1500;
+    ELSE
+      commission_rate := get_commission_rate(ref_record.current_tier, FALSE);
+    END IF;
+    
+    commission_amount := ref_record.subscription_price_usd * commission_rate;
+    
+    -- Insert commission
+    INSERT INTO affiliate_commissions (
+      affiliate_id,
+      referral_id,
+      commission_type,
+      commission_month,
+      base_amount_usd,
+      commission_rate,
+      commission_amount_usd,
+      tier_at_time,
+      month_number,
+      status
+    ) VALUES (
+      ref_record.affiliate_id,
+      ref_record.id,
+      CASE WHEN ref_record.subscription_type = 'annual' THEN 'annual_upfront' ELSE 'monthly_recurring' END,
+      for_month,
+      ref_record.subscription_price_usd,
+      commission_rate,
+      commission_amount,
+      ref_record.current_tier,
+      month_num,
+      'pending'
+    )
+    ON CONFLICT (referral_id, commission_month) DO NOTHING;
+    
+    IF FOUND THEN
+      commissions_created := commissions_created + 1;
+      
+      -- Update affiliate totals
+      UPDATE affiliates 
+      SET 
+        total_pending_usd = total_pending_usd + commission_amount,
+        total_earnings_usd = total_earnings_usd + commission_amount
+      WHERE id = ref_record.affiliate_id;
+      
+      -- Update months commissioned
+      UPDATE affiliate_referrals 
+      SET months_commissioned = month_num
+      WHERE id = ref_record.id;
+    END IF;
+  END LOOP;
+  
+  RETURN commissions_created;
+END;
+$$;
+
+
+-- Calculate sub-affiliate commissions (5% Layer 2)
+CREATE OR REPLACE FUNCTION calculate_sub_affiliate_commissions(for_month DATE)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  parent_record RECORD;
+  child_commission_total NUMERIC(12,2);
+  layer2_commission NUMERIC(10,2);
+  commissions_created INTEGER := 0;
+BEGIN
+  FOR parent_record IN 
+    SELECT a.*
+    FROM affiliates a
+    WHERE a.can_recruit_sub_affiliates = TRUE
+      AND a.status = 'active'
+      AND a.commission_enabled = TRUE
+      AND a.affiliate_type = 'regular'
+      AND EXISTS (SELECT 1 FROM affiliates sub WHERE sub.parent_affiliate_id = a.id)
+  LOOP
+    -- Sum sub-affiliate commissions for the month
+    SELECT COALESCE(SUM(c.commission_amount_usd), 0) INTO child_commission_total
+    FROM affiliate_commissions c
+    JOIN affiliates sub ON c.affiliate_id = sub.id
+    WHERE sub.parent_affiliate_id = parent_record.id
+      AND c.commission_month = for_month
+      AND c.status IN ('pending', 'confirmed');
+    
+    IF child_commission_total > 0 THEN
+      layer2_commission := child_commission_total * 0.05;
+      
+      INSERT INTO affiliate_commissions (
+        affiliate_id,
+        commission_type,
+        commission_month,
+        base_amount_usd,
+        commission_rate,
+        commission_amount_usd,
+        tier_at_time,
+        status
+      ) VALUES (
+        parent_record.id,
+        'sub_affiliate',
+        for_month,
+        child_commission_total,
+        0.0500,
+        layer2_commission,
+        parent_record.current_tier,
+        'pending'
+      );
+      
+      commissions_created := commissions_created + 1;
+      
+      -- Update parent affiliate totals
+      UPDATE affiliates 
+      SET 
+        total_sub_affiliate_earnings_usd = total_sub_affiliate_earnings_usd + layer2_commission,
+        total_pending_usd = total_pending_usd + layer2_commission,
+        total_earnings_usd = total_earnings_usd + layer2_commission
+      WHERE id = parent_record.id;
+    END IF;
+  END LOOP;
+  
+  RETURN commissions_created;
+END;
+$$;
+
+-- ============================================
+-- SECTION 23: PAYOUT FUNCTIONS
+-- ============================================
+
+-- Generate monthly payouts for affiliates with $100+ pending
+CREATE OR REPLACE FUNCTION generate_monthly_payouts(for_period DATE)
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  aff_record RECORD;
+  pending_commissions NUMERIC(12,2);
+  pending_bonuses NUMERIC(12,2);
+  total_payout NUMERIC(12,2);
+  payouts_created INTEGER := 0;
+  min_payout NUMERIC(10,2) := 100.00;
+BEGIN
+  FOR aff_record IN 
+    SELECT a.*
+    FROM affiliates a
+    WHERE a.status = 'active'
+      AND a.commission_enabled = TRUE
+      AND a.affiliate_type = 'regular'
+  LOOP
+    -- Sum confirmed commissions
+    SELECT COALESCE(SUM(commission_amount_usd), 0) INTO pending_commissions
+    FROM affiliate_commissions
+    WHERE affiliate_id = aff_record.id
+      AND status = 'confirmed'
+      AND payout_id IS NULL;
+    
+    -- Sum pending bonuses
+    SELECT COALESCE(SUM(bonus_amount_usd), 0) INTO pending_bonuses
+    FROM affiliate_bonuses
+    WHERE affiliate_id = aff_record.id
+      AND status = 'pending'
+      AND payout_id IS NULL;
+    
+    total_payout := pending_commissions + pending_bonuses;
+    
+    -- Create payout if meets minimum
+    IF total_payout >= min_payout THEN
+      INSERT INTO affiliate_payouts (
+        affiliate_id,
+        payout_period,
+        commissions_amount_usd,
+        bonuses_amount_usd,
+        total_amount_usd,
+        payment_method,
+        payment_email,
+        scheduled_date,
+        status
+      ) VALUES (
+        aff_record.id,
+        for_period,
+        pending_commissions,
+        pending_bonuses,
+        total_payout,
+        aff_record.payment_method,
+        aff_record.paypal_email,
+        DATE_TRUNC('month', for_period) + INTERVAL '14 days',
+        'pending'
+      )
+      ON CONFLICT (affiliate_id, payout_period) DO NOTHING;
+      
+      IF FOUND THEN
+        payouts_created := payouts_created + 1;
+      END IF;
+    END IF;
+  END LOOP;
+  
+  RETURN payouts_created;
+END;
+$$;
+
+
+-- Process individual payout (mark as paid)
+CREATE OR REPLACE FUNCTION process_payout(
+  payout_uuid UUID,
+  transaction_ref TEXT,
+  processed_by_user UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  payout_record RECORD;
+BEGIN
+  SELECT * INTO payout_record FROM affiliate_payouts WHERE id = payout_uuid;
+  
+  IF payout_record IS NULL OR payout_record.status != 'pending' THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Update payout status
+  UPDATE affiliate_payouts
+  SET 
+    status = 'completed',
+    transaction_id = transaction_ref,
+    processed_by = processed_by_user,
+    processed_at = NOW(),
+    completed_at = NOW()
+  WHERE id = payout_uuid;
+  
+  -- Mark commissions as paid
+  UPDATE affiliate_commissions
+  SET 
+    status = 'paid',
+    payout_id = payout_uuid,
+    paid_at = NOW()
+  WHERE affiliate_id = payout_record.affiliate_id
+    AND status = 'confirmed'
+    AND payout_id IS NULL;
+  
+  -- Mark bonuses as paid
+  UPDATE affiliate_bonuses
+  SET 
+    status = 'paid',
+    payout_id = payout_uuid,
+    paid_at = NOW()
+  WHERE affiliate_id = payout_record.affiliate_id
+    AND status = 'pending'
+    AND payout_id IS NULL;
+  
+  -- Update affiliate totals
+  UPDATE affiliates
+  SET 
+    total_paid_usd = total_paid_usd + payout_record.total_amount_usd,
+    total_pending_usd = total_pending_usd - payout_record.total_amount_usd
+  WHERE id = payout_record.affiliate_id;
+  
+  -- Log activity
+  INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, related_payout_id, triggered_by, is_system_action)
+  VALUES (
+    payout_record.affiliate_id,
+    'payout_completed',
+    'Payout of $' || payout_record.total_amount_usd || ' completed. Transaction: ' || transaction_ref,
+    payout_uuid,
+    processed_by_user,
+    FALSE
+  );
+  
+  RETURN TRUE;
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 24: ADMIN MANAGEMENT FUNCTIONS
+-- ============================================
+
+-- Create admin affiliate (no commissions)
+CREATE OR REPLACE FUNCTION create_admin_affiliate(
+  p_admin_user_id UUID,
+  p_display_name TEXT DEFAULT 'Admin',
+  p_affiliate_code TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate_id UUID;
+  v_code TEXT;
+  v_email TEXT;
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = p_admin_user_id AND role IN ('admin', 'super_admin')) THEN
+    RAISE EXCEPTION 'User is not an admin';
+  END IF;
+  
+  -- Check if already has affiliate account
+  IF EXISTS (SELECT 1 FROM affiliates WHERE user_id = p_admin_user_id) THEN
+    SELECT id INTO v_affiliate_id FROM affiliates WHERE user_id = p_admin_user_id;
+    RETURN v_affiliate_id;
+  END IF;
+  
+  -- Get email
+  SELECT email INTO v_email FROM auth.users WHERE id = p_admin_user_id;
+  
+  -- Generate code
+  v_code := generate_affiliate_code(p_affiliate_code, p_display_name);
+  
+  -- Create admin affiliate
+  INSERT INTO affiliates (
+    user_id,
+    display_name,
+    email,
+    affiliate_code,
+    coupon_code,
+    status,
+    current_tier,
+    discount_tier,
+    affiliate_type,
+    commission_enabled
+  ) VALUES (
+    p_admin_user_id,
+    p_display_name,
+    v_email,
+    v_code,
+    v_code,
+    'active',
+    'tier_3',
+    'vip',
+    'admin',
+    FALSE  -- Admin affiliates don't earn commissions
+  )
+  RETURNING id INTO v_affiliate_id;
+  
+  RETURN v_affiliate_id;
+END;
+$$;
+
+
+-- Approve affiliate application
+CREATE OR REPLACE FUNCTION approve_affiliate_application(
+  p_application_id UUID,
+  p_approved_by UUID,
+  p_custom_code TEXT DEFAULT NULL,
+  p_admin_notes TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  app_record RECORD;
+  v_affiliate_id UUID;
+  v_code TEXT;
+BEGIN
+  -- Get application
+  SELECT * INTO app_record FROM affiliate_applications WHERE id = p_application_id;
+  
+  IF app_record IS NULL THEN
+    RAISE EXCEPTION 'Application not found';
+  END IF;
+  
+  IF app_record.status != 'pending' AND app_record.status != 'under_review' THEN
+    RAISE EXCEPTION 'Application is not pending. Current status: %', app_record.status;
+  END IF;
+  
+  -- Generate code
+  v_code := generate_affiliate_code(
+    COALESCE(p_custom_code, app_record.requested_code),
+    app_record.full_name
+  );
+  
+  -- Create affiliate account
+  INSERT INTO affiliates (
+    user_id,
+    application_id,
+    display_name,
+    email,
+    phone,
+    country,
+    affiliate_code,
+    coupon_code,
+    status,
+    current_tier,
+    discount_tier,
+    affiliate_type,
+    commission_enabled
+  ) VALUES (
+    app_record.user_id,
+    p_application_id,
+    app_record.full_name,
+    app_record.email,
+    app_record.phone,
+    app_record.country,
+    v_code,
+    v_code,
+    'active',
+    'tier_1',
+    'standard',
+    'regular',
+    TRUE
+  )
+  RETURNING id INTO v_affiliate_id;
+  
+  -- Update application status
+  UPDATE affiliate_applications
+  SET 
+    status = 'approved',
+    reviewed_by = p_approved_by,
+    reviewed_at = NOW(),
+    admin_notes = COALESCE(p_admin_notes, admin_notes)
+  WHERE id = p_application_id;
+  
+  -- Log activity
+  INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, triggered_by, is_system_action)
+  VALUES (v_affiliate_id, 'application_approved', 'Affiliate application approved. Code: ' || v_code, p_approved_by, FALSE);
+  
+  RETURN v_affiliate_id;
+END;
+$$;
+
+
+-- Reject affiliate application
+CREATE OR REPLACE FUNCTION reject_affiliate_application(
+  p_application_id UUID,
+  p_rejected_by UUID,
+  p_rejection_reason TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE affiliate_applications
+  SET 
+    status = 'rejected',
+    reviewed_by = p_rejected_by,
+    reviewed_at = NOW(),
+    rejection_reason = p_rejection_reason
+  WHERE id = p_application_id
+    AND status IN ('pending', 'under_review');
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Suspend affiliate
+CREATE OR REPLACE FUNCTION suspend_affiliate(
+  p_affiliate_id UUID,
+  p_suspended_by UUID,
+  p_reason TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE affiliates
+  SET 
+    status = 'suspended',
+    suspended_at = NOW(),
+    suspension_reason = p_reason
+  WHERE id = p_affiliate_id
+    AND status = 'active';
+  
+  IF FOUND THEN
+    INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, triggered_by, is_system_action)
+    VALUES (p_affiliate_id, 'affiliate_suspended', 'Affiliate suspended. Reason: ' || p_reason, p_suspended_by, FALSE);
+  END IF;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Reactivate affiliate
+CREATE OR REPLACE FUNCTION reactivate_affiliate(
+  p_affiliate_id UUID,
+  p_reactivated_by UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  UPDATE affiliates
+  SET 
+    status = 'active',
+    suspended_at = NULL,
+    suspension_reason = NULL
+  WHERE id = p_affiliate_id
+    AND status = 'suspended';
+  
+  IF FOUND THEN
+    INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, triggered_by, is_system_action)
+    VALUES (p_affiliate_id, 'affiliate_reactivated', 'Affiliate account reactivated', p_reactivated_by, FALSE);
+  END IF;
+  
+  RETURN FOUND;
+END;
+$$;
+
+
+-- Reconcile affiliate stats (daily cleanup)
+CREATE OR REPLACE FUNCTION reconcile_affiliate_stats()
+RETURNS INTEGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  aff_record RECORD;
+  v_clicks INTEGER;
+  v_signups INTEGER;
+  v_qualified INTEGER;
+  v_active INTEGER;
+  v_pending NUMERIC;
+  v_paid NUMERIC;
+  v_bonuses NUMERIC;
+  v_sub_earnings NUMERIC;
+  reconciled INTEGER := 0;
+BEGIN
+  FOR aff_record IN SELECT id FROM affiliates
+  LOOP
+    -- Count clicks
+    SELECT COUNT(*) INTO v_clicks FROM affiliate_clicks WHERE affiliate_id = aff_record.id;
+    
+    -- Count signups
+    SELECT COUNT(*) INTO v_signups FROM affiliate_referrals WHERE affiliate_id = aff_record.id;
+    
+    -- Count qualified referrals
+    SELECT COUNT(*) INTO v_qualified 
+    FROM affiliate_referrals 
+    WHERE affiliate_id = aff_record.id AND status = 'qualified';
+    
+    -- Count active customers
+    SELECT COUNT(*) INTO v_active 
+    FROM affiliate_referrals 
+    WHERE affiliate_id = aff_record.id 
+      AND status = 'qualified' 
+      AND subscription_cancelled_at IS NULL;
+    
+    -- Sum pending commissions
+    SELECT COALESCE(SUM(commission_amount_usd), 0) INTO v_pending
+    FROM affiliate_commissions 
+    WHERE affiliate_id = aff_record.id AND status IN ('pending', 'confirmed');
+    
+    -- Sum paid commissions
+    SELECT COALESCE(SUM(commission_amount_usd), 0) INTO v_paid
+    FROM affiliate_commissions 
+    WHERE affiliate_id = aff_record.id AND status = 'paid';
+    
+    -- Sum bonuses
+    SELECT COALESCE(SUM(bonus_amount_usd), 0) INTO v_bonuses
+    FROM affiliate_bonuses 
+    WHERE affiliate_id = aff_record.id AND status = 'paid';
+    
+    -- Sum sub-affiliate earnings
+    SELECT COALESCE(SUM(commission_amount_usd), 0) INTO v_sub_earnings
+    FROM affiliate_commissions 
+    WHERE affiliate_id = aff_record.id AND commission_type = 'sub_affiliate';
+    
+    -- Update affiliate stats
+    UPDATE affiliates SET
+      total_clicks = v_clicks,
+      total_signups = v_signups,
+      total_qualified_referrals = v_qualified,
+      total_active_customers = v_active,
+      total_pending_usd = v_pending,
+      total_paid_usd = v_paid,
+      total_bonuses_usd = v_bonuses,
+      total_sub_affiliate_earnings_usd = v_sub_earnings,
+      total_earnings_usd = v_pending + v_paid
+    WHERE id = aff_record.id;
+    
+    reconciled := reconciled + 1;
+  END LOOP;
+  
+  RETURN reconciled;
+END;
+$$;
+
+
+-- Get pending affiliate jobs (for monitoring)
+CREATE OR REPLACE FUNCTION get_pending_affiliate_jobs()
+RETURNS TABLE (
+  job_type TEXT,
+  count BIGINT,
+  oldest TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 'pending_verifications'::TEXT, COUNT(*), MIN(verification_end)
+  FROM affiliate_referrals WHERE status = 'verification_pending';
+  
+  RETURN QUERY
+  SELECT 'pending_commissions'::TEXT, COUNT(*), MIN(created_at)
+  FROM affiliate_commissions WHERE status = 'pending';
+  
+  RETURN QUERY
+  SELECT 'pending_payouts'::TEXT, COUNT(*), MIN(scheduled_date::TIMESTAMPTZ)
+  FROM affiliate_payouts WHERE status = 'pending';
+  
+  RETURN QUERY
+  SELECT 'pending_applications'::TEXT, COUNT(*), MIN(created_at)
+  FROM affiliate_applications WHERE status = 'pending';
+END;
+$$;
+
+
+-- Check cron health
+CREATE OR REPLACE FUNCTION check_affiliate_cron_health()
+RETURNS TABLE (
+  job_name TEXT,
+  last_run TIMESTAMPTZ,
+  status TEXT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    j.jobname::TEXT,
+    (SELECT MAX(end_time) FROM cron.job_run_details WHERE jobid = j.jobid),
+    CASE 
+      WHEN (SELECT MAX(end_time) FROM cron.job_run_details WHERE jobid = j.jobid) > NOW() - INTERVAL '25 hours'
+      THEN 'healthy'
+      ELSE 'stale'
+    END
+  FROM cron.job j
+  WHERE j.jobname LIKE 'affiliate_%';
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 25: TRIGGERS
+-- ============================================
+
+-- Updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply updated_at triggers
+CREATE TRIGGER trg_affiliates_updated_at
+  BEFORE UPDATE ON affiliates
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_affiliate_applications_updated_at
+  BEFORE UPDATE ON affiliate_applications
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_affiliate_referrals_updated_at
+  BEFORE UPDATE ON affiliate_referrals
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_affiliate_commissions_updated_at
+  BEFORE UPDATE ON affiliate_commissions
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_affiliate_bonuses_updated_at
+  BEFORE UPDATE ON affiliate_bonuses
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_affiliate_payouts_updated_at
+  BEFORE UPDATE ON affiliate_payouts
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_admin_coupons_updated_at
+  BEFORE UPDATE ON admin_coupons
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+-- Auto-generate referral link
+CREATE OR REPLACE FUNCTION set_affiliate_referral_link()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.referral_link IS NULL THEN
+    NEW.referral_link := 'https://finotaur.com/?ref=' || NEW.affiliate_code;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_affiliate_referral_link
+  BEFORE INSERT ON affiliates
+  FOR EACH ROW EXECUTE FUNCTION set_affiliate_referral_link();
+
+
+-- Update tier on qualification
+CREATE OR REPLACE FUNCTION update_affiliate_tier_on_qualification()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_qualified_count INTEGER;
+  v_new_tier affiliate_tier;
+  v_bonus RECORD;
+BEGIN
+  IF NEW.status = 'qualified' AND OLD.status != 'qualified' THEN
+    -- Update qualified count
+    UPDATE affiliates
+    SET total_qualified_referrals = total_qualified_referrals + 1
+    WHERE id = NEW.affiliate_id;
+    
+    -- Get new count and calculate tier
+    SELECT total_qualified_referrals INTO v_qualified_count
+    FROM affiliates WHERE id = NEW.affiliate_id;
+    
+    v_new_tier := calculate_affiliate_tier(v_qualified_count);
+    
+    -- Update tier
+    UPDATE affiliates
+    SET 
+      current_tier = v_new_tier,
+      can_recruit_sub_affiliates = (v_new_tier IN ('tier_2', 'tier_3'))
+    WHERE id = NEW.affiliate_id;
+    
+    -- Check for milestone bonus
+    SELECT * INTO v_bonus FROM get_milestone_bonus(v_qualified_count);
+    IF v_bonus IS NOT NULL THEN
+      INSERT INTO affiliate_bonuses (affiliate_id, bonus_type, bonus_amount_usd, milestone_reached, status)
+      VALUES (NEW.affiliate_id, v_bonus.bonus_type, v_bonus.bonus_amount, v_qualified_count, 'pending')
+      ON CONFLICT DO NOTHING;
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_affiliate_tier_update
+  AFTER UPDATE ON affiliate_referrals
+  FOR EACH ROW EXECUTE FUNCTION update_affiliate_tier_on_qualification();
+
+
+-- ============================================
+-- SECTION 26: ROW LEVEL SECURITY (RLS)
+-- ============================================
+
+-- Enable RLS on all tables
+ALTER TABLE affiliate_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_global_pricing ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_coupon_plan_prices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_clicks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_commissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_bonuses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_payouts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon_usage_log ENABLE ROW LEVEL SECURITY;
+
+-- Config: Admin read, no user access
+CREATE POLICY "Admin full access to config" ON affiliate_config
+  FOR ALL USING (is_admin());
+
+-- Global Pricing: Admin full access
+CREATE POLICY "Admin full access to global pricing" ON admin_global_pricing
+  FOR ALL USING (is_admin());
+
+CREATE POLICY "Public read active global pricing" ON admin_global_pricing
+  FOR SELECT USING (is_active = TRUE);
+
+-- Applications: User owns or admin
+CREATE POLICY "Users can view own applications" ON affiliate_applications
+  FOR SELECT USING (user_id = auth.uid() OR is_admin());
+
+CREATE POLICY "Users can create applications" ON affiliate_applications
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Admin can manage applications" ON affiliate_applications
+  FOR ALL USING (is_admin());
+
+-- Affiliates: User owns or admin
+CREATE POLICY "Users can view own affiliate" ON affiliates
+  FOR SELECT USING (user_id = auth.uid() OR is_admin());
+
+CREATE POLICY "Admin can manage affiliates" ON affiliates
+  FOR ALL USING (is_admin());
+
+-- Admin Coupons: Admin full access, public validation
+CREATE POLICY "Admin full access to coupons" ON admin_coupons
+  FOR ALL USING (is_admin());
+
+CREATE POLICY "Public can validate active coupons" ON admin_coupons
+  FOR SELECT USING (is_active = TRUE);
+
+-- Coupon Plan Prices: Same as coupons
+CREATE POLICY "Admin full access to coupon prices" ON admin_coupon_plan_prices
+  FOR ALL USING (is_admin());
+
+CREATE POLICY "Public can read coupon prices" ON admin_coupon_plan_prices
+  FOR SELECT USING (TRUE);
+
+-- Clicks: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own clicks" ON affiliate_clicks
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "System can insert clicks" ON affiliate_clicks
+  FOR INSERT WITH CHECK (TRUE);
+
+CREATE POLICY "Admin can manage clicks" ON affiliate_clicks
+  FOR ALL USING (is_admin());
+
+-- Referrals: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own referrals" ON affiliate_referrals
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR referred_user_id = auth.uid()
+    OR is_admin()
+  );
+
+CREATE POLICY "Admin can manage referrals" ON affiliate_referrals
+  FOR ALL USING (is_admin());
+
+-- Commissions: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own commissions" ON affiliate_commissions
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "Admin can manage commissions" ON affiliate_commissions
+  FOR ALL USING (is_admin());
+
+-- Bonuses: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own bonuses" ON affiliate_bonuses
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "Admin can manage bonuses" ON affiliate_bonuses
+  FOR ALL USING (is_admin());
+
+-- Payouts: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own payouts" ON affiliate_payouts
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "Admin can manage payouts" ON affiliate_payouts
+  FOR ALL USING (is_admin());
+
+-- Notifications: Affiliate owns
+CREATE POLICY "Affiliates can view own notifications" ON affiliate_notifications
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "Affiliates can update own notifications" ON affiliate_notifications
+  FOR UPDATE USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Admin can manage notifications" ON affiliate_notifications
+  FOR ALL USING (is_admin());
+
+-- Activity Log: Affiliate owns or admin
+CREATE POLICY "Affiliates can view own activity" ON affiliate_activity_log
+  FOR SELECT USING (
+    affiliate_id IN (SELECT id FROM affiliates WHERE user_id = auth.uid())
+    OR is_admin()
+  );
+
+CREATE POLICY "Admin can manage activity log" ON affiliate_activity_log
+  FOR ALL USING (is_admin());
+
+-- Coupon Usage: User owns or admin
+CREATE POLICY "Users can view own coupon usage" ON coupon_usage_log
+  FOR SELECT USING (user_id = auth.uid() OR is_admin());
+
+CREATE POLICY "Admin can manage coupon usage" ON coupon_usage_log
+  FOR ALL USING (is_admin());
+
+
+-- ============================================
+-- SECTION 27: VIEWS
+-- ============================================
+
+-- Dashboard summary view
+CREATE OR REPLACE VIEW affiliate_dashboard_summary AS
+SELECT 
+  a.id,
+  a.user_id,
+  a.display_name,
+  a.affiliate_code,
+  a.coupon_code,
+  a.referral_link,
+  a.status,
+  a.current_tier,
+  a.discount_tier,
+  a.affiliate_type,
+  a.commission_enabled,
+  a.total_clicks,
+  a.total_signups,
+  a.total_qualified_referrals,
+  a.total_active_customers,
+  a.total_earnings_usd,
+  a.total_pending_usd,
+  a.total_paid_usd,
+  a.total_bonuses_usd,
+  a.total_sub_affiliate_earnings_usd,
+  a.sub_affiliate_count,
+  a.can_recruit_sub_affiliates,
+  a.activated_at,
+  a.last_activity_at,
+  CASE a.current_tier
+    WHEN 'tier_1' THEN 10
+    WHEN 'tier_2' THEN 15
+    WHEN 'tier_3' THEN 20
+  END as commission_rate_percent,
+  CASE 
+    WHEN a.total_clicks > 0 THEN ROUND((a.total_signups::NUMERIC / a.total_clicks) * 100, 2)
+    ELSE 0
+  END as conversion_rate
+FROM affiliates a
+WHERE a.status = 'active';
+
+
+-- Leaderboard view
+CREATE OR REPLACE VIEW affiliate_leaderboard AS
+SELECT 
+  a.id,
+  a.display_name,
+  a.current_tier,
+  a.total_qualified_referrals,
+  a.total_earnings_usd,
+  a.total_active_customers,
+  RANK() OVER (ORDER BY a.total_qualified_referrals DESC) as rank_by_referrals,
+  RANK() OVER (ORDER BY a.total_earnings_usd DESC) as rank_by_earnings
+FROM affiliates a
+WHERE a.status = 'active'
+  AND a.affiliate_type = 'regular'
+ORDER BY a.total_qualified_referrals DESC;
+
+
+-- Admin coupons summary view
+CREATE OR REPLACE VIEW admin_coupons_summary AS
+SELECT 
+  ac.id,
+  ac.code,
+  ac.name,
+  ac.discount_type,
+  ac.discount_percent,
+  ac.discount_amount_usd,
+  ac.duration_type,
+  ac.is_active,
+  ac.valid_from,
+  ac.valid_until,
+  ac.max_uses,
+  ac.current_uses,
+  ac.max_uses_per_user,
+  ac.applicable_plans,
+  ac.first_time_only,
+  ac.new_users_only,
+  ac.stackable_with_affiliate,
+  ac.priority,
+  ac.created_at,
+  CASE 
+    WHEN ac.discount_type = 'fixed_price' THEN (
+      SELECT jsonb_object_agg(cpp.plan_name, cpp.fixed_price_usd)
+      FROM admin_coupon_plan_prices cpp
+      WHERE cpp.coupon_id = ac.id
+    )
+    ELSE NULL
+  END as plan_prices,
+  CASE 
+    WHEN ac.valid_until IS NOT NULL AND ac.valid_until < NOW() THEN 'expired'
+    WHEN ac.max_uses IS NOT NULL AND ac.current_uses >= ac.max_uses THEN 'exhausted'
+    WHEN ac.is_active THEN 'active'
+    ELSE 'inactive'
+  END as effective_status
+FROM admin_coupons ac;
+
+
+-- Pricing overview view
+CREATE OR REPLACE VIEW admin_pricing_overview AS
+SELECT 
+  'default' as price_source,
+  NULL as sale_id,
+  NULL as sale_name,
+  (config_value->>'monthly')::NUMERIC as monthly_price,
+  (config_value->>'yearly')::NUMERIC as yearly_price,
+  (config_value->>'lifetime')::NUMERIC as lifetime_price,
+  NULL::NUMERIC as discount_percent,
+  TRUE as is_current,
+  NULL::TIMESTAMPTZ as valid_until
+FROM affiliate_config
+WHERE config_key = 'default_plan_prices'
+UNION ALL
+SELECT 
+  'sale' as price_source,
+  id as sale_id,
+  sale_name,
+  monthly_price_usd,
+  yearly_price_usd,
+  lifetime_price_usd,
+  discount_percent,
+  is_active as is_current,
+  valid_until
+FROM admin_global_pricing
+WHERE is_active = TRUE;
+
+
+-- Pending verifications view
+CREATE OR REPLACE VIEW affiliate_pending_verifications AS
+SELECT 
+  ar.id,
+  ar.affiliate_id,
+  a.display_name as affiliate_name,
+  ar.referred_user_id,
+  ar.referred_user_email,
+  ar.first_payment_amount_usd,
+  ar.first_payment_date,
+  ar.verification_start,
+  ar.verification_end,
+  ar.verification_end - NOW() as time_remaining,
+  ar.subscription_plan,
+  ar.subscription_type
+FROM affiliate_referrals ar
+JOIN affiliates a ON ar.affiliate_id = a.id
+WHERE ar.status = 'verification_pending'
+ORDER BY ar.verification_end ASC;
+
+
+-- Applications queue view
+CREATE OR REPLACE VIEW affiliate_applications_queue AS
+SELECT 
+  aa.id,
+  aa.user_id,
+  aa.email,
+  aa.full_name,
+  aa.total_followers,
+  aa.instagram_handle,
+  aa.youtube_channel,
+  aa.website_url,
+  aa.requested_code,
+  aa.status,
+  aa.created_at,
+  aa.admin_notes,
+  NOW() - aa.created_at as pending_duration
+FROM affiliate_applications aa
+WHERE aa.status IN ('pending', 'under_review')
+ORDER BY aa.created_at ASC;
+
+-- Monthly performance view
+CREATE OR REPLACE VIEW affiliate_monthly_performance AS
+SELECT 
+  a.id AS affiliate_id,
+  a.user_id,
+  a.display_name,
+  DATE_TRUNC('month', c.commission_month)::DATE AS month,
+  SUM(CASE WHEN c.commission_type = 'monthly_recurring' THEN c.commission_amount_usd ELSE 0 END) AS recurring_commissions,
+  SUM(CASE WHEN c.commission_type = 'annual_upfront' THEN c.commission_amount_usd ELSE 0 END) AS annual_commissions,
+  SUM(CASE WHEN c.commission_type = 'sub_affiliate' THEN c.commission_amount_usd ELSE 0 END) AS sub_affiliate_commissions,
+  SUM(c.commission_amount_usd) AS total_commissions,
+  COUNT(DISTINCT c.referral_id) AS active_referrals_count
+FROM affiliates a
+LEFT JOIN affiliate_commissions c ON a.id = c.affiliate_id
+WHERE c.status IN ('pending', 'confirmed', 'paid')
+GROUP BY a.id, a.user_id, a.display_name, DATE_TRUNC('month', c.commission_month)
+ORDER BY month DESC;
+
+
+-- Pending payments view (referrals awaiting first payment)
+CREATE OR REPLACE VIEW affiliate_pending_payments AS
+SELECT 
+  ar.id AS referral_id,
+  ar.affiliate_id,
+  a.display_name AS affiliate_name,
+  ar.referred_user_email,
+  ar.signup_date,
+  ar.signup_plan,
+  ar.discount_percent,
+  EXTRACT(DAY FROM (NOW() - ar.signup_date)) AS days_since_signup
+FROM affiliate_referrals ar
+JOIN affiliates a ON ar.affiliate_id = a.id
+WHERE ar.status = 'pending'
+ORDER BY ar.signup_date DESC;
+
+
+-- Cron history view
+CREATE OR REPLACE VIEW affiliate_cron_history AS
+SELECT 
+  j.jobname,
+  r.status,
+  r.return_message,
+  r.start_time,
+  r.end_time,
+  r.end_time - r.start_time AS duration
+FROM cron.job j
+LEFT JOIN cron.job_run_details r ON j.jobid = r.jobid
+WHERE j.jobname LIKE 'affiliate_%'
+ORDER BY r.start_time DESC
+LIMIT 100;
+
+
+-- ============================================
+-- SECTION 28: CRON JOBS
+-- ============================================
+
+-- Process pending verifications (every hour)
+SELECT cron.schedule(
+  'affiliate_process_verifications',
+  '0 * * * *',
+  $$SELECT process_pending_verifications()$$
+);
+
+-- Calculate monthly commissions (1st of month at 2am)
+SELECT cron.schedule(
+  'affiliate_monthly_commissions',
+  '0 2 1 * *',
+  $$SELECT calculate_monthly_commissions(DATE_TRUNC('month', NOW() - INTERVAL '1 month')::DATE)$$
+);
+
+-- Calculate sub-affiliate commissions (1st of month at 3am)
+SELECT cron.schedule(
+  'affiliate_sub_commissions',
+  '0 3 1 * *',
+  $$SELECT calculate_sub_affiliate_commissions(DATE_TRUNC('month', NOW() - INTERVAL '1 month')::DATE)$$
+);
+
+-- Generate monthly payouts (5th of month at 2am)
+SELECT cron.schedule(
+  'affiliate_generate_payouts',
+  '0 2 5 * *',
+  $$SELECT generate_monthly_payouts(DATE_TRUNC('month', NOW() - INTERVAL '1 month')::DATE)$$
+);
+
+-- Reconcile stats (daily at 4am)
+SELECT cron.schedule(
+  'affiliate_reconcile_stats',
+  '0 4 * * *',
+  $$SELECT reconcile_affiliate_stats()$$
+);
+
+-- Confirm pending commissions (10th of month at 2am)
+SELECT cron.schedule(
+  'affiliate_confirm_commissions',
+  '0 2 10 * *',
+  $$UPDATE affiliate_commissions SET status = 'confirmed', confirmed_at = NOW() WHERE status = 'pending' AND commission_month < DATE_TRUNC('month', NOW())$$
+);
+
+-- Clean expired clicks (daily at 3am)
+SELECT cron.schedule(
+  'affiliate_clean_expired_clicks',
+  '0 3 * * *',
+  $$DELETE FROM affiliate_clicks WHERE expires_at < NOW() AND converted = FALSE$$
+);
+
+-- End expired global sales (every hour)
+SELECT cron.schedule(
+  'affiliate_end_expired_sales',
+  '30 * * * *',
+  $$UPDATE admin_global_pricing SET is_active = FALSE WHERE is_active = TRUE AND valid_until IS NOT NULL AND valid_until < NOW()$$
+);
+
+
+-- ============================================
+-- SECTION 29: GRANTS & PERMISSIONS
+-- ============================================
+
+-- Grant usage on schema
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA public TO anon;
+
+-- Grant access to tables
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT INSERT, UPDATE ON affiliate_applications TO authenticated;
+GRANT UPDATE ON affiliate_notifications TO authenticated;
+
+-- Grant execute on functions
+GRANT EXECUTE ON FUNCTION validate_coupon_code(TEXT, TEXT, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION validate_coupon_code(TEXT, TEXT, UUID) TO anon;
+GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO authenticated;
+GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO anon;
+GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO anon;
+GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, INET, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, INET, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION is_affiliate_code_available(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_affiliate_discount_rate(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_affiliate_discount_rate(TEXT, TEXT) TO anon;
+
+-- ============================================
+-- SECTION 30: AUTO-CREATE ADMIN AFFILIATES
+-- ============================================
+
+-- Create admin affiliates for existing admins
+DO $$
+DECLARE
+  admin_record RECORD;
+BEGIN
+  FOR admin_record IN 
+    SELECT p.id, p.display_name, p.email
+    FROM profiles p
+    WHERE p.role IN ('admin', 'super_admin')
+      AND NOT EXISTS (SELECT 1 FROM affiliates a WHERE a.user_id = p.id)
+  LOOP
+    PERFORM create_admin_affiliate(
+      admin_record.id,
+      COALESCE(admin_record.display_name, 'Admin'),
+      'ADMIN' || SUBSTRING(admin_record.id::TEXT FROM 1 FOR 4)
+    );
+  END LOOP;
+END;
+$$;
+
+-- ============================================
+-- SECTION 31: VERIFICATION QUERIES
+-- ============================================
+
+-- Verify all tables exist
+DO $$
+DECLARE
+  missing_tables TEXT[];
+  expected_tables TEXT[] := ARRAY[
+    'affiliate_config', 'admin_global_pricing', 'affiliate_applications',
+    'affiliates', 'admin_coupons', 'admin_coupon_plan_prices',
+    'affiliate_clicks', 'affiliate_referrals', 'affiliate_commissions',
+    'affiliate_bonuses', 'affiliate_payouts', 'affiliate_notifications',
+    'affiliate_activity_log', 'coupon_usage_log'
+  ];
+  t TEXT;
+BEGIN
+  FOREACH t IN ARRAY expected_tables
+  LOOP
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = t) THEN
+      missing_tables := array_append(missing_tables, t);
+    END IF;
+  END LOOP;
+  
+  IF array_length(missing_tables, 1) > 0 THEN
+    RAISE WARNING 'Missing tables: %', array_to_string(missing_tables, ', ');
+  ELSE
+    RAISE NOTICE 'All tables created successfully';
+  END IF;
+END;
+$$;
+
+
+-- ============================================
+-- SECTION 32: EXAMPLE USAGE
+-- ============================================
+
+/*
+-- Create a percentage discount coupon (30% off)
+SELECT create_admin_coupon(
+  'SUMMER30',
+  'Summer Sale 30% Off',
+  'percentage',
+  30.00,  -- 30% off
+  NULL,   -- no fixed amount
+  NULL,   -- no plan prices
+  'Summer promotion - 30% off all plans',
+  'time_limited',
+  NOW(),
+  '2025-09-01'::TIMESTAMPTZ,
+  1000,   -- max 1000 uses
+  1,      -- 1 use per user
+  NULL,   -- no minimum purchase
+  NULL,   -- all plans
+  FALSE,  -- not first-time only
+  FALSE,  -- not new users only
+  TRUE,   -- stackable with affiliate codes
+  10      -- priority
+);
+
+-- Create a fixed price coupon ($100/year, $9.99/month)
+SELECT create_admin_coupon(
+  'YEARLYSPECIAL',
+  'Yearly Special $100',
+  'fixed_price',
+  NULL,
+  NULL,
+  '{"yearly": 100, "monthly": 9.99}'::JSONB,
+  'Special fixed pricing',
+  'unlimited',
+  NOW(),
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  ARRAY['yearly', 'monthly'],
+  FALSE,
+  FALSE,
+  FALSE,
+  5
+);
+
+-- Create a fixed amount coupon ($50 off)
+SELECT create_admin_coupon(
+  'SAVE50',
+  '$50 Off Any Plan',
+  'fixed_amount',
+  NULL,
+  50.00,
+  NULL,
+  '$50 off any plan purchase',
+  'usage_limited',
+  NOW(),
+  NULL,
+  500,
+  1,
+  100.00,  -- minimum $100 purchase
+  NULL,
+  TRUE,    -- first-time only
+  FALSE,
+  TRUE,
+  15
+);
+
+-- Set a global sale
+SELECT set_global_sale(
+  'Black Friday Sale',
+  'Massive discounts for Black Friday',
+  19.99,   -- monthly price
+  149.99,  -- yearly price
+  699.99,  -- lifetime price
+  NULL,    -- no percentage (using fixed prices)
+  '2025-11-25'::TIMESTAMPTZ,
+  '2025-11-30'::TIMESTAMPTZ
+);
+
+-- Validate a coupon code
+SELECT * FROM validate_coupon_code('SUMMER30', 'yearly', 'user-uuid-here');
+
+-- Calculate discounted price
+SELECT * FROM calculate_discounted_price('SUMMER30', 'yearly', 299.99);
+
+-- Get current plan prices
+SELECT * FROM get_current_plan_prices();
+*/
+
+
+-- ============================================
+-- END OF SCHEMA
+-- ============================================
+-- Version: 4.0.0 (Final Unified)
+-- Total Sections: 32
+-- Run time: ~5-10 seconds
+-- ============================================
+ 
+
+
+
+
+
+
+
+
+ # דוח מקיף: מערכת השותפים של Finotaur (Affiliate System v4.0.0)
+
+## סקירה כללית
+
+מערכת השותפים היא מערכת מלאה לניהול תוכנית affiliate עם קופונים, עמלות, ותשלומים אוטומטיים. המערכת בנויה ב-PostgreSQL עם Supabase ומשתמשת ב-pg_cron לאוטומציה.
+
+---
+
+## 1. סוגי משתנים (ENUM Types)
+
+### affiliate_application_status
+מצב בקשת הצטרפות לתוכנית:
+- `pending` - ממתין לבדיקה
+- `under_review` - בבדיקה
+- `approved` - אושר
+- `rejected` - נדחה
+- `suspended` - מושעה
+
+### affiliate_status
+מצב חשבון השותף:
+- `active` - פעיל
+- `inactive` - לא פעיל
+- `suspended` - מושעה
+- `terminated` - הופסק
+
+### affiliate_tier
+דרגת שותף (משפיעה על אחוז העמלה):
+- `tier_1` - 0-20 לקוחות משלמים (10% עמלה)
+- `tier_2` - 20-75 לקוחות (15% עמלה)
+- `tier_3` - 75+ לקוחות (20% עמלה)
+
+### discount_tier
+סוג הנחה ללקוחות של השותף:
+- `standard` - 10% הנחה
+- `vip` - 15% הנחה
+
+### referral_status
+מצב הפניה (referral):
+- `pending` - ממתין לתשלום ראשון
+- `verification_pending` - בתקופת אימות 7 ימים
+- `verification_failed` - נכשל באימות (החזר/ביטול)
+- `qualified` - עבר אימות, זכאי לעמלה
+- `churned` - היה זכאי, המנוי הסתיים
+- `refunded` - בוצע החזר לאחר אישור
+
+### commission_type
+סוג עמלה:
+- `monthly_recurring` - עמלה חודשית רגילה
+- `annual_upfront` - 15% מראש למנוי שנתי
+- `sub_affiliate` - 5% מתת-שותפים
+- `bonus` - בונוסים על אבני דרך
+
+### commission_status
+מצב עמלה:
+- `pending` - ממתין
+- `confirmed` - מאושר
+- `paid` - שולם
+- `cancelled` - בוטל
+- `expired` - פג תוקף
+
+### bonus_type
+סוגי בונוסים:
+- `milestone_20` - $100 על 20 לקוחות
+- `milestone_50` - $300 על 50 לקוחות
+- `milestone_100` - $1,000 על 100 לקוחות
+- `milestone_50_recurring` - $100 על כל 50 לקוחות אחרי 100
+
+### bonus_status
+מצב בונוס:
+- `pending` - ממתין
+- `paid` - שולם
+- `cancelled` - בוטל
+
+### payout_status
+מצב תשלום:
+- `pending` - ממתין
+- `processing` - בעיבוד
+- `completed` - הושלם
+- `failed` - נכשל
+- `cancelled` - בוטל
+
+### coupon_discount_type
+סוג הנחה בקופון:
+- `percentage` - אחוז הנחה (למשל 30%)
+- `fixed_price` - מחיר קבוע לתוכנית (למשל $100 לשנה)
+- `fixed_amount` - סכום קבוע הנחה (למשל $50 הנחה)
+
+### coupon_duration_type
+סוג תוקף קופון:
+- `unlimited` - ללא הגבלה
+- `time_limited` - עד תאריך מסוים
+- `usage_limited` - מספר שימושים מקסימלי
+- `time_and_usage` - גם וגם
+- `until_code_change` - עד שהאדמין משנה
+- `single_use_per_user` - שימוש אחד למשתמש
+- `first_payment_only` - רק לתשלום ראשון
+
+---
+
+## 2. טבלאות מרכזיות
+
+### affiliate_config
+טבלת קונפיגורציה גלובלית. מכילה הגדרות במבנה JSON:
+- `commission_rates` - אחוזי עמלה לכל tier
+- `annual_commission_rate` - 15% למנויים שנתיים
+- `sub_affiliate_rate` - 5% מתת-שותפים
+- `commission_duration_months` - 12 חודשים מקסימום
+- `verification_period_days` - 7 ימי אימות
+- `attribution_window_days` - 30 ימי תוקף לקוקי
+- `discount_rates` - אחוזי הנחה ללקוחות
+- `bonus_milestones` - בונוסים על אבני דרך
+- `payout_settings` - מינימום $100 לתשלום
+- `default_plan_prices` - מחירי ברירת מחדל
+
+### admin_global_pricing
+מבצעים גלובליים שחלים על כל האתר:
+- `sale_name` - שם המבצע
+- `monthly/yearly/lifetime_price_usd` - מחירים קבועים
+- `discount_percent` - אחוז הנחה
+- `is_active` - האם פעיל
+- `valid_from/until` - תקופת תוקף
+
+### affiliate_applications
+בקשות הצטרפות לתוכנית:
+- פרטים אישיים (שם, אימייל, טלפון)
+- נוכחות ברשתות חברתיות (Instagram, YouTube, TikTok, Twitter)
+- מידע על קהל היעד
+- קוד מבוקש
+- סטטוס ותוצאת הבדיקה
+
+### affiliates (טבלה מרכזית)
+חשבונות שותפים פעילים:
+
+**זיהוי:**
+- `user_id` - קישור ל-auth.users
+- `affiliate_code` - קוד ייחודי (למשל "ALEX123")
+- `coupon_code` - קוד קופון (בדרך כלל זהה)
+- `referral_link` - לינק הפניה
+
+**סטטוס:**
+- `status` - active/inactive/suspended/terminated
+- `current_tier` - tier_1/tier_2/tier_3
+- `discount_tier` - standard/vip
+- `affiliate_type` - regular/admin (admin לא מקבל עמלות)
+- `commission_enabled` - האם זכאי לעמלות
+
+**תת-שותפים:**
+- `parent_affiliate_id` - שותף-אב
+- `can_recruit_sub_affiliates` - יכול לגייס (tier_2+)
+
+**סטטיסטיקות (denormalized לביצועים):**
+- `total_clicks` - סה"כ לחיצות
+- `total_signups` - סה"כ הרשמות
+- `total_qualified_referrals` - הפניות שעברו אימות
+- `total_active_customers` - לקוחות פעילים
+
+**רווחים:**
+- `total_earnings_usd` - סה"כ רווחים
+- `total_pending_usd` - ממתין לתשלום
+- `total_paid_usd` - שולם
+- `total_bonuses_usd` - בונוסים
+- `total_sub_affiliate_earnings_usd` - מתת-שותפים
+
+### admin_coupons
+קופונים של האדמין (לא של שותפים):
+- `code` - קוד הקופון
+- `discount_type` - percentage/fixed_price/fixed_amount
+- `discount_percent` / `discount_amount_usd` - ערך ההנחה
+- `duration_type` - סוג התוקף
+- `max_uses` / `current_uses` - מגבלת שימושים
+- `max_uses_per_user` - מגבלה למשתמש
+- `applicable_plans` - לאילו תוכניות
+- `first_time_only` - רק לתשלום ראשון
+- `new_users_only` - רק למשתמשים חדשים
+- `stackable_with_affiliate` - ניתן לשלב עם קוד שותף
+
+### admin_coupon_plan_prices
+מחירים קבועים לכל תוכנית (לקופונים מסוג fixed_price):
+- `coupon_id` - קישור לקופון
+- `plan_name` - monthly/yearly/lifetime
+- `fixed_price_usd` - המחיר הקבוע
+
+### affiliate_clicks
+מעקב לחיצות:
+- `affiliate_id` - השותף
+- `ip_hash` / `ip_address` - זיהוי (עם hash לפרטיות)
+- UTM parameters - מקור, מדיום, קמפיין
+- מידע גיאוגרפי ומכשיר
+- `converted` - האם הומר להרשמה
+- `expires_at` - תוקף (30 יום)
+
+### affiliate_referrals
+הפניות (לקוחות שהגיעו דרך שותף):
+- `affiliate_id` - השותף
+- `referred_user_id` - המשתמש שהצטרף
+- `click_id` - הלחיצה שהביאה אותו
+- `status` - pending → verification_pending → qualified
+- `discount_percent/amount` - ההנחה שקיבל
+- `coupon_code_used` - קופון נוסף אם היה
+
+**תקופת אימות (7 ימים אחרי תשלום ראשון):**
+- `verification_start/end` - תחילת וסיום האימות
+- `first_payment_date/amount` - התשלום הראשון
+
+**זכאות לעמלה:**
+- `commission_eligible` - האם זכאי
+- `commission_start/end_date` - תקופת זכאות (12 חודשים)
+- `months_commissioned` - כמה חודשים כבר שולמו
+
+### affiliate_commissions
+עמלות:
+- `affiliate_id` - השותף
+- `referral_id` - ההפניה (או NULL לתת-שותפים)
+- `commission_type` - סוג העמלה
+- `commission_month` - לאיזה חודש
+- `base_amount_usd` - סכום הבסיס
+- `commission_rate` - אחוז העמלה
+- `commission_amount_usd` - סכום העמלה
+- `tier_at_time` - הדרגה בזמן החישוב
+- `month_number` - חודש מספר (1-12)
+- `status` - pending/confirmed/paid
+- `payout_id` - קישור לתשלום
+
+### affiliate_bonuses
+בונוסים על אבני דרך:
+- `affiliate_id` - השותף
+- `bonus_type` - סוג הבונוס
+- `bonus_amount_usd` - הסכום
+- `milestone_reached` - אבן הדרך שהושגה
+- `status` - pending/paid
+
+### affiliate_payouts
+תשלומים לשותפים:
+- `affiliate_id` - השותף
+- `payout_period` - התקופה
+- `commissions_amount_usd` - סכום עמלות
+- `bonuses_amount_usd` - סכום בונוסים
+- `total_amount_usd` - סה"כ
+- `status` - pending/processing/completed/failed
+- `payment_method` - paypal/bank_transfer
+- `transaction_id` - מזהה טרנזקציה
+
+### affiliate_notifications
+התראות לשותפים:
+- `type` - סוג ההתראה
+- `title/message` - כותרת ותוכן
+- `read` - האם נקרא
+
+### affiliate_activity_log
+לוג פעילות:
+- `activity_type` - סוג הפעולה
+- `description` - תיאור
+- קישורים לישויות קשורות
+- `is_system_action` - פעולת מערכת או משתמש
+
+### coupon_usage_log
+מעקב שימוש בקופונים:
+- `coupon_id` - הקופון
+- `user_id` - המשתמש
+- UNIQUE constraint - מונע שימוש כפול
+
+---
+
+## 3. פונקציות מרכזיות
+
+### פונקציות עזר
+
+**is_admin()** - בודק אם המשתמש הנוכחי הוא admin
+
+**calculate_affiliate_tier(qualified_count)** - מחשב דרגה לפי מספר לקוחות:
+- 0-19 → tier_1
+- 20-74 → tier_2  
+- 75+ → tier_3
+
+**get_commission_rate(tier, is_annual)** - מחזיר אחוז עמלה:
+- tier_1: 10%
+- tier_2: 15%
+- tier_3: 20%
+- שנתי: תמיד 15%
+
+**get_milestone_bonus(client_count)** - בודק אם מגיע בונוס
+
+**is_affiliate_code_available(code)** - בודק זמינות קוד
+
+**generate_affiliate_code(requested, name)** - יוצר קוד ייחודי
+
+### פונקציות קופונים
+
+**create_admin_coupon(...)** - יצירת קופון אדמין עם כל האפשרויות
+
+**update_admin_coupon(...)** - עדכון קופון
+
+**rename_admin_coupon(id, new_code)** - שינוי קוד
+
+**deactivate_admin_coupon(id)** - ביטול קופון
+
+**can_user_use_coupon(coupon_id, user_id, plan)** - בדיקת זכאות לקופון
+
+### פונקציית ולידציה מאוחדת
+
+**validate_coupon_code(code, plan, user_id)** - בודקת גם קודי שותפים וגם קופונים:
+
+מחזירה:
+- `is_valid` - האם תקף
+- `code_type` - 'affiliate' או 'admin_coupon'
+- `affiliate_id/name` - אם קוד שותף
+- `coupon_id/name` - אם קופון
+- `discount_type` - percentage/fixed_price/fixed_amount
+- `discount_percent/amount/fixed_price` - ערך ההנחה
+- `pays_commission` - האם משלם עמלה לשותף
+- `can_stack_with_affiliate` - האם ניתן לשלב
+
+**calculate_discounted_price(code, plan, original_price)** - מחשב מחיר סופי
+
+**get_current_plan_prices()** - מחזיר מחירים נוכחיים (כולל מבצעים)
+
+### מעקב לחיצות והפניות
+
+**record_affiliate_click(...)** - מתעד לחיצה על לינק שותף
+
+**track_referral_signup(...)** - מתעד הרשמה דרך שותף
+
+**record_referral_first_payment(...)** - מתעד תשלום ראשון ומתחיל אימות 7 ימים
+
+### חישוב עמלות
+
+**process_pending_verifications()** - עובר על הפניות שסיימו 7 ימי אימות ומסמן כ-qualified
+
+**calculate_monthly_commissions(for_month)** - מחשב עמלות חודשיות לכל השותפים
+
+**calculate_sub_affiliate_commissions(for_month)** - מחשב 5% מתת-שותפים
+
+### תשלומים
+
+**generate_monthly_payouts(for_period)** - יוצר תשלומים לשותפים עם $100+
+
+**process_payout(id, transaction_ref, processed_by)** - מסמן תשלום כהושלם
+
+### ניהול שותפים
+
+**create_admin_affiliate(user_id, name, code)** - יוצר שותף-admin (ללא עמלות)
+
+**approve_affiliate_application(...)** - מאשר בקשה ויוצר חשבון שותף
+
+**reject_affiliate_application(...)** - דוחה בקשה
+
+**suspend_affiliate(...)** / **reactivate_affiliate(...)** - השעיה והפעלה מחדש
+
+**reconcile_affiliate_stats()** - מתקן סטטיסטיקות denormalized
+
+---
+
+## 4. Views (תצוגות)
+
+### affiliate_dashboard_summary
+כל מה ששותף צריך לדשבורד שלו - קודים, סטטיסטיקות, רווחים, אחוז המרה
+
+### affiliate_leaderboard
+דירוג שותפים לפי הפניות ורווחים
+
+### admin_coupons_summary
+כל הקופונים עם סטטוס אפקטיבי (active/expired/exhausted)
+
+### admin_pricing_overview
+מחירי ברירת מחדל ומבצעים פעילים
+
+### affiliate_pending_verifications
+הפניות בתקופת אימות 7 ימים
+
+### affiliate_applications_queue
+בקשות ממתינות לאישור
+
+### affiliate_monthly_performance
+ביצועים חודשיים מפורטים
+
+### affiliate_pending_payments
+הפניות שממתינות לתשלום ראשון
+
+### affiliate_cron_history
+היסטוריית הרצות cron jobs
+
+---
+
+## 5. Cron Jobs (משימות אוטומטיות)
+
+| Job | תזמון | תפקיד |
+|-----|--------|--------|
+| process_verifications | כל שעה | בודק אימותים שהסתיימו |
+| monthly_commissions | 1 בחודש 02:00 | מחשב עמלות חודשיות |
+| sub_commissions | 1 בחודש 03:00 | מחשב עמלות תת-שותפים |
+| generate_payouts | 5 בחודש 02:00 | יוצר תשלומים |
+| reconcile_stats | יומי 04:00 | מתקן סטטיסטיקות |
+| confirm_commissions | 10 בחודש 02:00 | מאשר עמלות pending |
+| clean_expired_clicks | יומי 03:00 | מוחק לחיצות שפג תוקפן |
+| end_expired_sales | כל שעה | מסיים מבצעים שפג תוקפם |
+
+---
+
+## 6. תהליכים עסקיים מרכזיים
+
+### תהליך הצטרפות שותף:
+1. משתמש ממלא בקשה → `affiliate_applications`
+2. אדמין בודק ומאשר → `approve_affiliate_application()`
+3. נוצר חשבון ב-`affiliates` עם קוד ייחודי
+
+### תהליך הפניה:
+1. לקוח לוחץ על לינק → `record_affiliate_click()`
+2. לקוח נרשם → `track_referral_signup()` → status: pending
+3. לקוח משלם → `record_referral_first_payment()` → status: verification_pending
+4. עוברים 7 ימים ללא ביטול → `process_pending_verifications()` → status: qualified
+5. עמלות נוצרות כל חודש למשך 12 חודשים
+
+### תהליך תשלום:
+1. עמלות מצטברות עד $100
+2. `generate_monthly_payouts()` יוצר payout
+3. אדמין מעבד → `process_payout()`
+4. סטטוס משתנה ל-completed
+
+### שימוש בקופון/קוד שותף:
+1. לקוח מזין קוד
+2. `validate_coupon_code()` בודק תקינות וסוג
+3. `calculate_discounted_price()` מחשב מחיר סופי
+4. אם קוד שותף - נוצרת הפניה עם עמלה
+5. אם קופון admin - רק הנחה, בלי עמלה
+
+---
+
+## 7. RLS (Row Level Security)
+
+כל הטבלאות מוגנות ב-RLS:
+- **אדמין** - גישה מלאה לכל הטבלאות
+- **שותף** - רואה רק את המידע שלו (לפי user_id)
+- **משתמש רגיל** - רואה רק את ההפניה שלו
+- **אנונימי** - יכול רק לבדוק קודים (validate)
+
+---
+
+## 8. נקודות חשובות למתכנת
+
+### Denormalization
+הסטטיסטיקות ב-`affiliates` הן denormalized לביצועים. הן מתעדכנות:
+- אטומית עם פעולות (increment functions)
+- יומית עם `reconcile_affiliate_stats()`
+
+### תקופת אימות 7 ימים
+קריטית למניעת הונאות - עמלה ניתנת רק אחרי 7 ימים שהלקוח לא ביטל/קיבל החזר.
+
+### מגבלת 12 חודשים
+שותף מקבל עמלה מלקוח לכל היותר 12 חודשים.
+
+### Admin vs Regular Affiliates
+שותפים מסוג `admin` לא מקבלים עמלות - רק נותנים הנחות ללקוחות.
+
+### Stacking
+קופוני אדמין יכולים להיות stackable - לקוח יכול להשתמש בקוד שותף + קופון אדמין ביחד.

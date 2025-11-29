@@ -1,4 +1,4 @@
-// src/App.tsx - UPDATED WITH BACKTEST LANDING ROUTE
+// src/App.tsx - COMPLETE WITH AFFILIATE CENTER
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,6 +25,11 @@ import '@/scripts/migrationRunner';
 import SupportWidget from "@/components/SupportWidget";
 
 // ===============================================
+// 🔥 AFFILIATE TRACKER
+// ===============================================
+import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
+
+// ===============================================
 // PUBLIC PAGES - Load immediately (no lazy)
 // ===============================================
 import LandingPage from "@/pages/landing/LandingPage";
@@ -40,6 +45,9 @@ import PricingSelection from "@/pages/app/journal/PricingSelection";
 // 📄 ABOUT & CONTACT PAGES
 import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
+
+// 📢 AFFILIATE PAGE
+import AffiliatePage from "@/pages/AffiliatePage";
 
 // ⚖️ LEGAL PAGES - Load immediately (no lazy)
 import {
@@ -109,6 +117,15 @@ const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Monte
 const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
 const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
 const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
+
+// 🤝 === Affiliate Center Pages (lowercase filenames to match existing files) ===
+const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
+const AffiliateReferrals = lazy(() => import("@/features/affiliate/pages/Affiliatereferrals"));
+const AffiliateEarnings = lazy(() => import("@/features/affiliate/pages/Affiliateearnings"));
+const AffiliatePayouts = lazy(() => import("@/features/affiliate/pages/Affiliatepayouts"));
+const AffiliateMarketing = lazy(() => import("@/features/affiliate/pages/Affiliatemarketing"));
+const AffiliateSettings = lazy(() => import("@/features/affiliate/pages/Affiliatesettings"));
+const AffiliateAnalytics = lazy(() => import("@/features/affiliate/pages/Affiliateanalytics"));
 
 // === All Markets ===
 const AllMarketsOverview = lazy(() => import("@/pages/app/all-markets/Overview"));
@@ -252,7 +269,6 @@ LockedRoute.displayName = 'LockedRoute';
 
 // ===============================================
 // 🧪 BACKTEST PROTECTION - Premium Only
-// Both FREE and BASIC users will see the landing page
 // ===============================================
 const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
@@ -283,8 +299,6 @@ const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
     return <PageLoader />;
   }
 
-  // 🔒 Only PREMIUM users can access Backtest
-  // Both FREE and BASIC users see the landing page
   if (accountType !== 'premium') {
     return (
       <Suspense fallback={<PageLoader />}>
@@ -293,10 +307,71 @@ const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Premium users get the actual backtest page
   return <SuspenseRoute>{children}</SuspenseRoute>;
 });
 BacktestRoute.displayName = 'BacktestRoute';
+
+// ===============================================
+// 🤝 AFFILIATE PROTECTION - Affiliates & Admins Only
+// ===============================================
+const AffiliateRoute = memo(({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function checkAccess() {
+      if (!user?.id) {
+        setIsLoading(false);
+        setHasAccess(false);
+        return;
+      }
+
+      try {
+        // Check if user is an admin
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+
+        if (profileData?.role === 'admin' || profileData?.role === 'super_admin') {
+          setHasAccess(true);
+          setIsLoading(false);
+          return;
+        }
+
+        // Check if user is an active affiliate
+        const { data: affiliateData } = await supabase
+          .from('affiliates')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        setHasAccess(!!affiliateData);
+      } catch (error) {
+        console.error('Error checking affiliate access:', error);
+        setHasAccess(false);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    checkAccess();
+  }, [user?.id]);
+
+  if (isLoading) {
+    return <PageLoader />;
+  }
+
+  if (!hasAccess) {
+    return <Navigate to="/app/journal/overview" replace />;
+  }
+
+  return <SuspenseRoute>{children}</SuspenseRoute>;
+});
+AffiliateRoute.displayName = 'AffiliateRoute';
 
 // ===============================================
 // 🔥 APP CONTENT - ALL ROUTES
@@ -304,6 +379,9 @@ BacktestRoute.displayName = 'BacktestRoute';
 function AppContent() {
   return (
     <>
+      {/* 🔥 AFFILIATE TRACKER - Tracks affiliate clicks on ALL pages */}
+      <AffiliateTracker />
+      
       <Routes>
         {/* PUBLIC ROUTES */}
         <Route path="/" element={<LandingPage />} />
@@ -320,6 +398,9 @@ function AppContent() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         
+        {/* 📢 AFFILIATE PAGE */}
+        <Route path="/affiliate" element={<AffiliatePage />} />
+        
         {/* ⚖️ LEGAL ROUTES */}
         <Route path="/legal/terms" element={<TermsOfUse />} />
         <Route path="/legal/privacy" element={<PrivacyPolicy />} />
@@ -330,7 +411,7 @@ function AppContent() {
         <Route path="/legal/refund" element={<RefundPolicy />} />
         <Route path="/legal/dmca" element={<DMCA />} />
         
-        {/* 🔥 NEW: Pricing Selection Route */}
+        {/* 🔥 Pricing Selection Route */}
         <Route path="/pricing-selection" element={<PricingSelection />} />
         
         {/* PROTECTED ROUTES */}
@@ -459,10 +540,7 @@ function AppContent() {
           <Route path="journal/prop-firms" element={<SuspenseRoute><PropFirmsPage /></SuspenseRoute>} />
           
           {/* 🧪 BACKTEST ROUTES - Premium Only Protection */}
-          {/* 🔥 NEW: Dedicated Landing Page for non-premium users */}
           <Route path="journal/backtest/landing" element={<SuspenseRoute><BacktestLanding /></SuspenseRoute>} />
-          
-          {/* Protected backtest pages - will redirect to landing if not premium */}
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
@@ -475,6 +553,22 @@ function AppContent() {
           <Route path="journal/backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
           <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
 
+          {/* 🤝 AFFILIATE CENTER ROUTES - Affiliates & Admins Only */}
+          <Route path="journal/affiliate" element={<Navigate to="/app/journal/affiliate/overview" replace />} />
+          <Route path="journal/affiliate/overview" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
+          <Route path="journal/affiliate/dashboard" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
+          <Route path="journal/affiliate/referrals" element={<AffiliateRoute><AffiliateReferrals /></AffiliateRoute>} />
+          <Route path="journal/affiliate/earnings" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+          <Route path="journal/affiliate/commissions" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+          <Route path="journal/affiliate/payouts" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+          <Route path="journal/affiliate/request-payout" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+          <Route path="journal/affiliate/payout-history" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+          <Route path="journal/affiliate/marketing" element={<AffiliateRoute><AffiliateMarketing /></AffiliateRoute>} />
+          <Route path="journal/affiliate/analytics" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
+          <Route path="journal/affiliate/performance" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
+          <Route path="journal/affiliate/settings" element={<AffiliateRoute><AffiliateSettings /></AffiliateRoute>} />
+          <Route path="journal/affiliate/bonuses" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+
           {/* 🔐 JOURNAL ADMIN */}
           <Route path="journal/admin" element={<ProtectedAdminRoute><SuspenseRoute><AdminDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/users" element={<ProtectedAdminRoute><SuspenseRoute><AdminUsers /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -485,7 +579,7 @@ function AppContent() {
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
           
-          {/* 🧪 BACKTEST - Backward Compatibility Routes (for old links) */}
+          {/* 🧪 BACKTEST - Backward Compatibility Routes */}
           <Route path="backtest/landing" element={<SuspenseRoute><BacktestLanding /></SuspenseRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
@@ -522,7 +616,7 @@ function AppContent() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       
-      {/* 🎫 SUPPORT WIDGET - Shows on all protected pages */}
+      {/* 🎫 SUPPORT WIDGET */}
       <SupportWidget />
     </>
   );

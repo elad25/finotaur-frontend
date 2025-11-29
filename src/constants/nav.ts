@@ -4,14 +4,16 @@ import {
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, type LucideIcon
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
+  Link, Gift, type LucideIcon
 } from 'lucide-react';
 
 export interface NavItem { 
   label: string; 
   path: string; 
   icon?: LucideIcon; 
-  adminOnly?: boolean; // ✅ ADDED: Mark items as admin-only
+  adminOnly?: boolean; // ✅ Mark items as admin-only
+  affiliateOnly?: boolean; // ✅ NEW: Mark items as affiliate-only
 }
 
 export interface Domain { 
@@ -188,7 +190,8 @@ export const domains: Record<string, Domain> = {
     locked: false, // ✅ UNLOCKED - Only accessible section
     subNav: [
       { label: 'Dashboard', path: '/app/journal/overview' },
-      { label: 'Backtest', path: '/app/journal/backtest/overview' }, // 🧪 שונה מ-Add Trade
+      { label: 'Backtest', path: '/app/journal/backtest/overview' },
+      { label: 'Affiliate', path: '/app/journal/affiliate/overview', affiliateOnly: true }, // 🤝 Affiliate only
       { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true }, // 🔐 Admin only
     ],
     sidebar: [
@@ -206,7 +209,7 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // 🧪 NEW: Backtest Sub-Domain (בתוך Journal)
+  // 🧪 Backtest Sub-Domain (בתוך Journal)
   'journal-backtest': {
     id: 'journal-backtest',
     label: 'Backtest',
@@ -228,6 +231,31 @@ export const domains: Record<string, Domain> = {
       { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Target },
       { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
       { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: PlayCircle },
+    ],
+  },
+
+  // 🤝 NEW: Affiliate Center Sub-Domain (בתוך Journal)
+  'journal-affiliate': {
+    id: 'journal-affiliate',
+    label: 'Affiliate Center',
+    locked: false,
+    subNav: [
+      { label: 'Dashboard', path: '/app/journal/affiliate/overview' },
+      { label: 'My Referrals', path: '/app/journal/affiliate/referrals' },
+      { label: 'Earnings', path: '/app/journal/affiliate/earnings' },
+      { label: 'Payouts', path: '/app/journal/affiliate/payouts' },
+    ],
+    sidebar: [
+      { label: 'Dashboard', path: '/app/journal/affiliate/overview', icon: LayoutDashboard },
+      { label: 'My Referrals', path: '/app/journal/affiliate/referrals', icon: UserPlus },
+      { label: 'Commission History', path: '/app/journal/affiliate/earnings', icon: DollarSign },
+      { label: 'Earnings Analytics', path: '/app/journal/affiliate/analytics', icon: BarChart3 },
+      { label: 'Request Payout', path: '/app/journal/affiliate/request-payout', icon: CreditCard },
+      { label: 'Payout History', path: '/app/journal/affiliate/payouts', icon: Wallet },
+      { label: 'Marketing Tools', path: '/app/journal/affiliate/marketing', icon: Link },
+      { label: 'Bonuses & Rewards', path: '/app/journal/affiliate/bonuses', icon: Gift },
+      { label: 'Performance', path: '/app/journal/affiliate/performance', icon: TrendingUp },
+      { label: 'Settings', path: '/app/journal/affiliate/settings', icon: SettingsIcon },
     ],
   },
 

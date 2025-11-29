@@ -1,5 +1,5 @@
 // ================================================
-// PRODUCTION NEW TRADE PAGE - CLEAN v13
+// PRODUCTION NEW TRADE PAGE - CLEAN v14
 // ✅ Auto Session with manual override option
 // ✅ Zero spam logging - only critical errors
 // ✅ Fixed session detection with timezone support
@@ -11,6 +11,10 @@
 //    - close_at timestamp
 //    - broker & import_source defaults
 //    - No metrics wrapper (flat columns)
+// 🔥 v14 NEW: Partial Exits / Scale Out support!
+//    - Multiple exit points with percentages
+//    - Weighted average exit price calculation
+//    - Popup UI for adding exits
 // ================================================
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -24,7 +28,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent } from "lucide-react";
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
@@ -131,6 +135,29 @@ function normalizeSession(session: string | undefined | null): string | null {
     console.warn('⚠️ Invalid session value:', session, '→ using null');
   }
   return null;
+}
+
+// ================================================
+// 🔥 PARTIAL EXITS TYPES & HELPERS
+// ================================================
+interface ExitPoint {
+  id: string;
+  quantity: number;
+  price: number;
+  percentage?: number;
+  pnl?: number;
+}
+
+function generateExitId(): string {
+  return `exit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function calculateWeightedAverageExit(exits: ExitPoint[]): number {
+  const totalQuantity = exits.reduce((sum, e) => sum + (e.quantity || 0), 0);
+  if (totalQuantity === 0) return 0;
+  
+  const weightedSum = exits.reduce((sum, e) => sum + ((e.price || 0) * (e.quantity || 0)), 0);
+  return weightedSum / totalQuantity;
 }
 
 // 🎨 Beautiful Date/Time Picker Modal Component
@@ -311,6 +338,243 @@ function DateTimePickerModal({
   );
 }
 
+// ================================================
+// 🔥 PARTIAL EXITS POPUP COMPONENT - SIMPLE VERSION
+// ================================================
+function PartialExitsPopup({
+  isOpen,
+  onClose,
+  totalQuantity,
+  entryPrice,
+  side,
+  multiplier,
+  fees,
+  exits,
+  onExitsChange,
+  onApply,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  totalQuantity: number;
+  entryPrice: number;
+  side: 'LONG' | 'SHORT';
+  multiplier: number;
+  fees: number;
+  exits: ExitPoint[];
+  onExitsChange: (exits: ExitPoint[]) => void;
+  onApply: (weightedAvgPrice: number, totalPnL: number) => void;
+}) {
+  // Calculate total percentage used
+  const totalPercentage = useMemo(() => 
+    exits.reduce((sum, e) => sum + (e.percentage || 0), 0),
+    [exits]
+  );
+  
+  const remainingPercentage = 100 - totalPercentage;
+
+  const weightedAveragePrice = useMemo(() => {
+    const validExits = exits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+    if (validExits.length === 0) return 0;
+    
+    const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+    if (totalPct === 0) return 0;
+    
+    const weightedSum = validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0);
+    return weightedSum / totalPct;
+  }, [exits]);
+
+  const totalPnL = useMemo(() => {
+    if (exits.length === 0 || !entryPrice) return 0;
+    
+    return exits.reduce((total, exit) => {
+      if (!exit.price || !exit.percentage) return total;
+      
+      const quantity = (totalQuantity * exit.percentage) / 100;
+      const priceChange = side === 'LONG' 
+        ? exit.price - entryPrice 
+        : entryPrice - exit.price;
+      
+      return total + (priceChange * quantity * multiplier);
+    }, 0) - fees;
+  }, [exits, entryPrice, side, multiplier, fees, totalQuantity]);
+
+  // Update exit
+  const updateExit = (id: string, field: 'percentage' | 'price', value: number) => {
+    if (field === 'percentage') {
+      const otherTotal = exits.filter(e => e.id !== id).reduce((sum, e) => sum + (e.percentage || 0), 0);
+      const maxAllowed = 100 - otherTotal;
+      value = Math.min(value, maxAllowed);
+      value = Math.max(value, 0);
+    }
+    
+    const updated = exits.map(e => e.id === id ? { ...e, [field]: value } : e);
+    onExitsChange(updated);
+  };
+
+  // Remove exit
+  const removeExit = (id: string) => {
+    onExitsChange(exits.filter(e => e.id !== id));
+  };
+
+  // Add new exit
+  const addExit = () => {
+    if (remainingPercentage <= 0) return;
+    onExitsChange([...exits, {
+      id: generateExitId(),
+      quantity: 0,
+      price: 0,
+      percentage: remainingPercentage,
+    }]);
+  };
+
+  // Handle apply
+  const handleApply = () => {
+    const exitsWithQuantities = exits.map(e => ({
+      ...e,
+      quantity: (totalQuantity * (e.percentage || 0)) / 100,
+    }));
+    onExitsChange(exitsWithQuantities);
+    
+    const validExits = exits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+    if (validExits.length > 0) {
+      onApply(weightedAveragePrice, totalPnL);
+    }
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+      <div className="bg-zinc-900 rounded-2xl border border-yellow-200/20 shadow-2xl w-full max-w-sm mx-4">
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+          <h3 className="text-base font-semibold text-white">Partial Exits</h3>
+          <button onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-lg">
+            <X className="w-5 h-5 text-zinc-400" />
+          </button>
+        </div>
+
+        {/* Content - Compact */}
+        <div className="p-3 space-y-2 max-h-[50vh] overflow-y-auto">
+          {exits.map((exit, index) => {
+            const quantity = (totalQuantity * (exit.percentage || 0)) / 100;
+            const exitPnL = exit.price > 0 && quantity > 0
+              ? (side === 'LONG' ? exit.price - entryPrice : entryPrice - exit.price) * quantity * multiplier
+              : 0;
+            
+            return (
+              <div key={exit.id} className="flex items-center gap-2 bg-zinc-800/50 rounded-lg p-2">
+                {/* Percentage */}
+                <div className="w-20">
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={exit.percentage || ''}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateExit(exit.id, 'percentage', isNaN(val) ? 0 : val);
+                      }}
+                      placeholder="100"
+                      className="bg-zinc-900 border-zinc-700 h-9 text-right pr-6 text-sm"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">%</span>
+                  </div>
+                </div>
+                
+                {/* Price */}
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    step="any"
+                    value={exit.price || ''}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateExit(exit.id, 'price', isNaN(val) ? 0 : val);
+                    }}
+                    placeholder="Price"
+                    className="bg-zinc-900 border-zinc-700 h-9 text-right text-sm"
+                  />
+                </div>
+                
+                {/* P&L inline */}
+                {exit.price > 0 && (exit.percentage || 0) > 0 && (
+                  <span className={`text-xs font-medium w-20 text-right ${exitPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {exitPnL >= 0 ? '+' : ''}${formatNumber(exitPnL, 0)}
+                  </span>
+                )}
+                
+                {/* Remove button */}
+                {exits.length > 1 && (
+                  <button 
+                    onClick={() => removeExit(exit.id)} 
+                    className="p-1 text-zinc-500 hover:text-red-400"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add Exit */}
+          {remainingPercentage > 0 && (
+            <button
+              onClick={addExit}
+              className="w-full py-2 rounded-lg border border-dashed border-zinc-700 text-zinc-400 hover:border-yellow-500/40 hover:text-yellow-400 transition flex items-center justify-center gap-1.5 text-xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add ({remainingPercentage}% left)
+            </button>
+          )}
+          
+          {totalPercentage > 100 && (
+            <div className="p-1.5 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400 text-center">
+              Total exceeds 100%!
+            </div>
+          )}
+        </div>
+
+        {/* Summary - Compact */}
+        {exits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+          <div className="px-4 py-2 bg-zinc-800/50 border-t border-zinc-800 flex justify-between text-sm">
+            <div>
+              <span className="text-zinc-500">Avg:</span>
+              <span className="text-yellow-400 font-medium ml-1">{formatNumber(weightedAveragePrice, 2)}</span>
+            </div>
+            <div>
+              <span className="text-zinc-500">P&L:</span>
+              <span className={`font-bold ml-1 ${totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {totalPnL >= 0 ? '+' : ''}${formatNumber(totalPnL, 0)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Footer - Compact */}
+        <div className="px-4 py-3 border-t border-zinc-800 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg text-sm text-zinc-400 border border-zinc-700 hover:bg-zinc-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleApply}
+            disabled={!exits.some(e => e.price > 0 && (e.percentage || 0) > 0) || totalPercentage > 100}
+            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-black disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, #B8944E, #E6C675)' }}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function New() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -324,6 +588,11 @@ export default function New() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [autoSession, setAutoSession] = useState(true);
+  
+  // 🔥 Partial Exits State
+  const [showPartialExits, setShowPartialExits] = useState(false);
+  const [partialExits, setPartialExits] = useState<ExitPoint[]>([]);
+  const [usePartialExits, setUsePartialExits] = useState(false);
   
   // 🌍 Timezone support
   const timezone = useTimezone();
@@ -475,6 +744,12 @@ export default function New() {
           const mult = getAssetMultiplier(trade.symbol);
           st.setMultiplier(mult);
           
+          // Load partial exits if they exist in trade data
+          if (trade.partial_exits && Array.isArray(trade.partial_exits) && trade.partial_exits.length > 0) {
+            setPartialExits(trade.partial_exits);
+            setUsePartialExits(true);
+          }
+          
           // Load screenshots
           if (trade.screenshots && Array.isArray(trade.screenshots) && trade.screenshots.length > 0) {
             try {
@@ -618,8 +893,27 @@ export default function New() {
      (st.stopPrice > 0 ? 25 : 0)) / 1
   );
 
-  // ✅ Calculate P&L - NO LOGGING
+  // ✅ Calculate P&L - supports partial exits
   const calculatePnL = useCallback(() => {
+    // If using partial exits, calculate from them
+    if (usePartialExits && partialExits.length > 0) {
+      const totalPct = partialExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+      if (totalPct === 0) return 0;
+      
+      return partialExits.reduce((total, exit) => {
+        if (!exit.price || !exit.percentage) return total;
+        
+        const quantity = (st.quantity * exit.percentage) / 100;
+        const priceChange = st.side === 'LONG' 
+          ? exit.price - st.entryPrice 
+          : st.entryPrice - exit.price;
+        
+        const grossPnL = priceChange * quantity * st.multiplier;
+        return total + grossPnL;
+      }, 0) - st.fees;
+    }
+    
+    // Regular single exit calculation
     if (!st.exitPrice || st.exitPrice <= 0) return 0;
     
     const priceChange = st.side === "LONG" 
@@ -631,10 +925,22 @@ export default function New() {
     const netPnL = grossPnL - st.fees;
     
     return netPnL;
-  }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol]);
+  }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol, st.multiplier, usePartialExits, partialExits]);
 
   // Calculate Outcome
   const calculateOutcome = useCallback((): "WIN" | "LOSS" | "BE" | "OPEN" => {
+    // If using partial exits
+    if (usePartialExits && partialExits.length > 0) {
+      const totalPct = partialExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+      const hasValidExits = partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0);
+      if (totalPct === 0 || !hasValidExits) return "OPEN";
+      
+      const pnl = calculatePnL();
+      if (pnl > 0) return "WIN";
+      if (pnl < 0) return "LOSS";
+      return "BE";
+    }
+    
     if (!st.exitPrice || st.exitPrice <= 0) return "OPEN";
     
     const pnl = calculatePnL();
@@ -642,10 +948,19 @@ export default function New() {
     if (pnl > 0) return "WIN";
     if (pnl < 0) return "LOSS";
     return "BE";
-  }, [st.exitPrice, calculatePnL]);
+  }, [st.exitPrice, calculatePnL, usePartialExits, partialExits]);
 
   const pnl = calculatePnL();
   const outcome = calculateOutcome();
+
+  // 🔥 Handle partial exits apply
+  const handlePartialExitsApply = (weightedAvgPrice: number, totalPnL: number) => {
+    if (partialExits.length > 0) {
+      setUsePartialExits(true);
+      st.setExitPrice(weightedAvgPrice);
+      toast.success(`Partial exits saved - Avg: ${formatNumber(weightedAvgPrice, 4)}`);
+    }
+  };
 
   // Fire confetti
   const fireFirstTradeConfetti = () => {
@@ -698,7 +1013,7 @@ export default function New() {
   }, [isValid]);
 
   // ================================================================
-  // 🔥🔥🔥 SUBMIT FUNCTION - v13 FULL DB SYNC! 🔥🔥🔥
+  // 🔥🔥🔥 SUBMIT FUNCTION - v14 WITH PARTIAL EXITS! 🔥🔥🔥
   // ================================================================
   async function handleSubmit() {
     // Clean strategy_id
@@ -789,12 +1104,28 @@ export default function New() {
       }
 
       // ================================================================
-      // 🔥 CALCULATIONS - All R values
+      // 🔥 CALCULATIONS - All R values (with partial exits support)
       // ================================================================
       const calculatedPnL = calculatePnL();
       const calculatedOutcome = calculateOutcome();
       const finalMultiplier = getAssetMultiplier(st.symbol);
-      const hasExitPrice = st.exitPrice && st.exitPrice > 0;
+      
+      // 🔥 Determine if trade has exit (either single or partial)
+      const hasExitPrice = usePartialExits 
+        ? partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
+        : st.exitPrice && st.exitPrice > 0;
+      
+      // 🔥 Calculate weighted average exit price for partial exits
+      const finalExitPrice = usePartialExits && partialExits.length > 0
+        ? (() => {
+            const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+            if (validExits.length === 0) return 0;
+            const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+            if (totalPct === 0) return 0;
+            const weightedSum = validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0);
+            return weightedSum / totalPct;
+          })()
+        : st.exitPrice;
       
       // 🔥 Calculate risk in USD (for actual_r calculation)
       const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
@@ -836,7 +1167,7 @@ export default function New() {
         // ═══════════════════════════════════════════
         asset_class: st.assetClass || null,
         take_profit_price: st.takeProfitPrice || null,
-        exit_price: hasExitPrice ? st.exitPrice : null,
+        exit_price: hasExitPrice ? finalExitPrice : null,  // 🔥 Weighted average for partials
         fees: st.fees || 0,
         fees_mode: st.feesMode || 'auto',
         session: validSession,  // 🔥 Normalized for DB constraint!
@@ -881,6 +1212,18 @@ export default function New() {
         // ═══════════════════════════════════════════
         broker: 'manual',          // 🔥 Required by DB, defaults to 'manual'
         import_source: 'manual',   // 🔥 Required by DB, defaults to 'manual'
+        
+        // ═══════════════════════════════════════════
+        // 🔥 PARTIAL EXITS DATA
+        // ═══════════════════════════════════════════
+        partial_exits: usePartialExits && partialExits.length > 0 
+          ? partialExits
+              .filter(e => e.price > 0 && (e.percentage || 0) > 0)
+              .map(e => ({
+                ...e,
+                quantity: (st.quantity * (e.percentage || 0)) / 100,
+              }))
+          : null,
       };
       
       if (isDev) {
@@ -892,6 +1235,8 @@ export default function New() {
           actual_user_r: payload.actual_user_r,
           broker: payload.broker,
           import_source: payload.import_source,
+          partial_exits: payload.partial_exits,
+          exit_price: payload.exit_price,
         });
       }
       
@@ -1524,29 +1869,116 @@ export default function New() {
                 />
               </div>
 
+              {/* 🔥 Exit Price with Partial Exits Button */}
               <div>
-                <Label htmlFor="exitPrice" className="text-xs text-zinc-400 mb-2 block">
-                  Exit Price (optional)
+                <Label htmlFor="exitPrice" className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
+                  <span>Exit Price (optional)</span>
+                  {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                    <span className="text-emerald-400 text-[10px] flex items-center gap-1">
+                      <Percent className="w-3 h-3" />
+                      {partialExits.filter(e => e.price > 0).length} partial exits
+                    </span>
+                  )}
                 </Label>
-                <Input
-                  id="exitPrice"
-                  type="number"
-                  step="any"
-                  value={st.exitPrice || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setExitPrice(undefined);
-                      return;
+                <div className="flex gap-2">
+                  <Input
+                    id="exitPrice"
+                    type="number"
+                    step="any"
+                    value={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
+                      ? (() => {
+                          const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+                          if (validExits.length === 0) return '';
+                          const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+                          if (totalPct === 0) return '';
+                          return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
+                        })()
+                      : st.exitPrice || ""
                     }
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                      st.setExitPrice(num);
-                    }
-                  }}
-                  placeholder="152.00"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
-                />
+                    onChange={(e) => {
+                      // If user types directly, disable partial exits mode
+                      if (usePartialExits) {
+                        setUsePartialExits(false);
+                        setPartialExits([]);
+                      }
+                      const value = e.target.value;
+                      if (value === "") {
+                        st.setExitPrice(undefined);
+                        return;
+                      }
+                      const num = parseFloat(value);
+                      if (!isNaN(num)) {
+                        st.setExitPrice(num);
+                      }
+                    }}
+                    placeholder={usePartialExits ? "Calculated from partials" : "152.00"}
+                    className={`bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all flex-1 ${
+                      usePartialExits ? 'bg-emerald-500/5 border-emerald-500/30' : ''
+                    }`}
+                    readOnly={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)}
+                  />
+                  
+                  {/* 🔥 Partial Exits Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (st.quantity <= 0) {
+                        toast.error("Enter quantity before adding partial exits");
+                        return;
+                      }
+                      if (st.entryPrice <= 0) {
+                        toast.error("Enter entry price before adding partial exits");
+                        return;
+                      }
+                      // Initialize with one exit at 100% if empty
+                      if (partialExits.length === 0) {
+                        setPartialExits([{
+                          id: generateExitId(),
+                          quantity: st.quantity,
+                          price: 0,
+                          percentage: 100,
+                        }]);
+                      }
+                      setShowPartialExits(true);
+                    }}
+                    className={`h-12 px-4 rounded-xl border transition-all flex items-center gap-2 ${
+                      usePartialExits && partialExits.length > 0
+                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                        : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-yellow-500/40 hover:text-yellow-400'
+                    }`}
+                    title="יציאות חלקיות"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="text-xs font-medium hidden sm:inline">Partials</span>
+                  </button>
+                </div>
+                
+                {/* Partial Exits Summary */}
+                {usePartialExits && partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                  <div className="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">
+                        {partialExits.filter(e => e.price > 0).length} exits | Avg: 
+                        <span className="text-emerald-400 font-medium ml-1">
+                          {formatNumber((() => {
+                            const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+                            if (validExits.length === 0) return 0;
+                            const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+                            if (totalPct === 0) return 0;
+                            return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
+                          })(), 4)}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPartialExits(true)}
+                        className="text-emerald-400 hover:text-emerald-300 underline"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1661,10 +2093,16 @@ export default function New() {
               )}
 
               {/* P&L Display */}
-              {st.exitPrice && st.exitPrice > 0 && (
+              {((st.exitPrice && st.exitPrice > 0) || (usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0))) && (
                 <div className="mt-4 bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Trade Result</span>
+                    {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                      <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                        <Percent className="w-3 h-3" />
+                        from partial exits
+                      </span>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -1847,6 +2285,20 @@ export default function New() {
         value={st.openAt}
         onChange={(value) => st.setOpenAt(value)}
         timezone={timezone}
+      />
+
+      {/* 🔥 Partial Exits Popup */}
+      <PartialExitsPopup
+        isOpen={showPartialExits}
+        onClose={() => setShowPartialExits(false)}
+        totalQuantity={st.quantity}
+        entryPrice={st.entryPrice}
+        side={st.side}
+        multiplier={st.multiplier}
+        fees={st.fees}
+        exits={partialExits}
+        onExitsChange={setPartialExits}
+        onApply={handlePartialExitsApply}
       />
 
       {/* Insight Popup */}

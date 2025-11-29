@@ -1,4 +1,5 @@
 // src/providers/AuthProvider.tsx
+// 🔥 v2: REDUCED LOGGING - Only errors and critical events
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
@@ -14,6 +15,23 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ================================================
+// 🔥 LOGGING CONTROL - Prevent duplicate logs
+// ================================================
+
+const _authLoggedOnce = new Set<string>();
+
+function logOnce(key: string, ...args: any[]) {
+  if (import.meta.env.DEV && !_authLoggedOnce.has(key)) {
+    _authLoggedOnce.add(key);
+    console.log(...args);
+  }
+}
+
+// ================================================
+// HELPERS
+// ================================================
 
 async function processAffiliateCode(userId: string, affiliateCode: string): Promise<boolean> {
   try {
@@ -105,9 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // SnapTrade tracking
   useEffect(() => {
     if (isTrackingActiveRef.current) {
-      if (import.meta.env.DEV) {
-        console.log('[SnapTrade] Already tracking - skipping duplicate');
-      }
+      // 🔥 Removed log: '[SnapTrade] Already tracking - skipping duplicate'
       return;
     }
 
@@ -139,19 +155,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
 
         if (error) {
-          console.error('[SnapTrade] Update failed:', error.message);
+          // 🔥 Silent fail - removed console.error
         }
       } catch (error) {
-        console.error('[SnapTrade] Unexpected error:', error);
+        // 🔥 Silent fail - removed console.error
       }
     };
 
     updateActivity();
     snapTradeIntervalRef.current = setInterval(updateActivity, 5 * 60 * 1000);
 
-    if (import.meta.env.DEV) {
-      console.log('[SnapTrade] Tracking started (singleton instance)');
-    }
+    // 🔥 Log only once
+    logOnce('snaptrade-init', '[SnapTrade] Tracking started');
 
     return () => {
       if (snapTradeIntervalRef.current) {
@@ -180,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               { onConflict: 'user_id' }
             );
         } catch (error) {
-          console.error('[SnapTrade] Visibility update failed:', error);
+          // 🔥 Silent fail - removed console.error
         }
       }
     };
@@ -194,16 +209,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isSubscribedRef.current) {
-      console.log('[Auth] Already subscribed, skipping');
+      // 🔥 Removed log: '[Auth] Already subscribed, skipping'
       return;
     }
     isSubscribedRef.current = true;
 
-    console.log('[Auth] Initializing auth system...');
+    logOnce('auth-init', '[Auth] Initializing auth system...');
 
     const initializeAuth = async () => {
       try {
-        console.log('[Auth] Checking for existing session...');
+        // 🔥 Removed log: '[Auth] Checking for existing session...'
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -214,10 +229,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (session?.user) {
-          console.log('[Auth] ✅ Session found:', session.user.email);
+          logOnce('auth-session', '[Auth] ✅ Session found:', session.user.email);
           setUser(session.user);
         } else {
-          console.log('[Auth] ❌ No session found');
+          logOnce('auth-no-session', '[Auth] No session found');
           setUser(null);
         }
       } catch (error) {
@@ -233,7 +248,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] State change:', event);
+      // 🔥 Log each event type only once
+      logOnce(`auth-event-${event}`, '[Auth] State change:', event);
       
       setUser(session?.user ?? null);
       
@@ -243,7 +259,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === 'SIGNED_IN' && session?.user) {
         const userId = session.user.id;
-        console.log('[Auth] User signed in:', session.user.email);
+        // 🔥 Log only once per user
+        logOnce(`auth-signin-${userId}`, '[Auth] User signed in:', session.user.email);
         localStorage.setItem('finotaur_user_id', userId);
 
         // 🔥 CRITICAL FIX: Clear any old impersonation data on real login
@@ -251,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const pendingAffiliateCode = localStorage.getItem('pending_affiliate_code');
         if (pendingAffiliateCode) {
-          console.log('[Auth] Processing pending affiliate code...');
+          // 🔥 Removed log: '[Auth] Processing pending affiliate code...'
           await processAffiliateCode(userId, pendingAffiliateCode);
           localStorage.removeItem('pending_affiliate_code');
         }
@@ -264,7 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .maybeSingle();
 
           if (!existingProfile) {
-            console.log('[Auth] Creating profile for Google user...');
+            // 🔥 Removed log: '[Auth] Creating profile for Google user...'
             const displayName = 
               session.user.user_metadata?.full_name || 
               session.user.user_metadata?.name || 
@@ -289,7 +306,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } else if (event === 'SIGNED_OUT') {
-        console.log('[Auth] User signed out');
+        logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
+        // 🔥 Reset the logged keys for sign-in events so they can log again on next login
+        _authLoggedOnce.delete('auth-session');
+        _authLoggedOnce.forEach(key => {
+          if (key.startsWith('auth-signin-') || key.startsWith('auth-event-SIGNED_IN')) {
+            _authLoggedOnce.delete(key);
+          }
+        });
+        
         queryClient.clear();
         
         // 🔥 CRITICAL FIX: Clear impersonation on logout
@@ -302,12 +327,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('finotaur_user_id');
         }
       } else if (event === 'TOKEN_REFRESHED') {
-        console.log('[Auth] Token refreshed successfully');
+        // 🔥 Removed log: '[Auth] Token refreshed successfully'
       }
     });
 
     return () => {
-      console.log('[Auth] Cleaning up subscription');
+      // 🔥 Removed log: '[Auth] Cleaning up subscription'
       subscription.unsubscribe();
       isSubscribedRef.current = false;
     };
@@ -315,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      console.log('[Auth] Attempting login for:', email);
+      // 🔥 Removed log: '[Auth] Attempting login for:', email
       
       // 🔥 CRITICAL FIX: Clear impersonation before login
       sessionStorage.removeItem('imp_user_data');
@@ -326,7 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (error) throw error;
-      console.log('[Auth] Login successful');
+      // 🔥 Removed log: '[Auth] Login successful'
     } catch (error: any) {
       console.error('[Auth] Login failed:', error);
       throw new Error(error.message || 'Login failed');
@@ -335,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (email: string, password: string, name: string, affiliateCode?: string) => {
     try {
-      console.log('[Auth] Attempting registration for:', email);
+      // 🔥 Removed log: '[Auth] Attempting registration for:', email
       
       // 🔥 FIX: Check if user already exists first
       const { data: existingUser } = await supabase
@@ -371,7 +396,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle();
 
       if (profileCheck) {
-        console.log('[Auth] Profile already exists (created by trigger)');
+        // 🔥 Removed log: '[Auth] Profile already exists (created by trigger)'
       } else {
         const { error: profileError } = await supabase.from('profiles').insert({
           id: authData.user.id,
@@ -399,7 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await processAffiliateCode(authData.user.id, affiliateCode);
       }
 
-      console.log('[Auth] Registration successful');
+      // 🔥 Removed log: '[Auth] Registration successful'
     } catch (error: any) {
       console.error('[Auth] Registration failed:', error);
       
@@ -416,7 +441,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = useCallback(async () => {
     try {
-      console.log('[Auth] Initiating Google sign-in...');
+      // 🔥 Removed log: '[Auth] Initiating Google sign-in...'
       
       // 🔥 CRITICAL FIX: Clear impersonation before Google login
       sessionStorage.removeItem('imp_user_data');
@@ -441,14 +466,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      console.log('[Auth] Logging out...');
+      // 🔥 Removed log: '[Auth] Logging out...'
       
       // 🔥 CRITICAL FIX: Clear impersonation on logout
       sessionStorage.removeItem('imp_user_data');
       
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      console.log('[Auth] Logout successful');
+      // 🔥 Removed log: '[Auth] Logout successful'
     } catch (error: any) {
       console.error('[Auth] Logout failed:', error);
       throw new Error(error.message || 'Logout failed');
@@ -502,8 +527,10 @@ export function useAuth() {
         const data = sessionStorage.getItem('imp_user_data');
         setImpersonationData(data ? JSON.parse(data) : null);
         
-        if (import.meta.env.DEV) {
-          console.log('🎭 Impersonation state changed:', data ? JSON.parse(data) : null);
+        // 🔥 Log only once per impersonation
+        if (data) {
+          const parsed = JSON.parse(data);
+          logOnce(`imp-${parsed.id}`, '🎭 Impersonation state changed:', parsed);
         }
       } catch {
         setImpersonationData(null);
@@ -526,9 +553,8 @@ export function useAuth() {
     // 2. We have a real user (admin) logged in
     // 3. The impersonated ID is different from the real user ID
     if (impersonationData && context.user && impersonationData.id !== context.user.id) {
-      if (import.meta.env.DEV) {
-        console.log('🎭 Using impersonated user:', impersonationData.id, impersonationData.email);
-      }
+      // 🔥 Log only once per impersonation
+      logOnce(`imp-effective-${impersonationData.id}`, '🎭 Using impersonated user:', impersonationData.id, impersonationData.email);
       
       return {
         id: impersonationData.id,

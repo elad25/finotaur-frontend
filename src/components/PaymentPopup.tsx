@@ -1,297 +1,299 @@
-// src/components/PaymentPopup.tsx
-// ✅ FIXED: Changed onComplete → onClose (line 126)
+// =====================================================
+// FINOTAUR PAYMENT POPUP - WHOP INTEGRATION v2.1.0
+// =====================================================
+// Place in: src/components/PaymentPopup.tsx
+// 
+// 🔥 v2.1.0 CHANGES:
+// - Fixed price calculation consistency
+// - Better discount display
+// - Removed duplicate code
+// =====================================================
+
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Shield, Lock, AlertTriangle } from "lucide-react";
+import { Shield, Lock, CreditCard, Tag, Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
-import RiskSetupModal from "@/components/onboarding/RiskSetupModal";
+import { useWhopCheckout } from "@/hooks/useWhopCheckout";
+import type { PlanName, BillingInterval } from "@/lib/whop-config";
+
+// ============================================
+// TYPES
+// ============================================
+
+interface DiscountInfo {
+  code: string;
+  discountPercent: number;
+  originalPrice: number;
+  discountedPrice: number;
+  savings: number;
+  affiliateName?: string;
+}
 
 interface PaymentPopupProps {
   isOpen: boolean;
   onClose: () => void;
   planId: 'basic' | 'premium';
   billingInterval: 'monthly' | 'yearly';
+  discountInfo?: DiscountInfo | null;
 }
 
-export default function PaymentPopup({ isOpen, onClose, planId, billingInterval }: PaymentPopupProps) {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [showRiskSetup, setShowRiskSetup] = useState(false);
+// ============================================
+// PLAN DETAILS
+// ============================================
 
-  const planDetails = {
-    basic: {
-      name: 'Basic',
-      monthlyPrice: 19.99,
-      yearlyPrice: 149,
-      yearlyMonthlyEquivalent: 12.42
-    },
-    premium: {
-      name: 'Premium',
-      monthlyPrice: 39.99,
-      yearlyPrice: 299,
-      yearlyMonthlyEquivalent: 24.92
+const planDetails = {
+  basic: {
+    name: 'Basic',
+    monthlyPrice: 19.99,
+    yearlyPrice: 149,
+    yearlyMonthlyEquivalent: 12.42,
+    maxTrades: 25,
+  },
+  premium: {
+    name: 'Premium',
+    monthlyPrice: 39.99,
+    yearlyPrice: 299,
+    yearlyMonthlyEquivalent: 24.92,
+    maxTrades: 'Unlimited',
+  }
+};
+
+// ============================================
+// COMPONENT
+// ============================================
+
+export default function PaymentPopup({ 
+  isOpen, 
+  onClose, 
+  planId, 
+  billingInterval,
+  discountInfo
+}: PaymentPopupProps) {
+  const { user } = useAuth();
+  
+  const { initiateCheckout, isLoading } = useWhopCheckout({
+    onError: (error) => {
+      toast.error('Checkout failed', { description: error.message });
     }
-  };
+  });
 
   const plan = planDetails[planId];
-  const displayPrice = billingInterval === 'monthly' 
+  
+  // ============================================
+  // PRICE CALCULATION - Use discountInfo for consistency
+  // ============================================
+  
+  // Original price (before any discount)
+  const originalPrice = discountInfo?.originalPrice ?? 
+    (billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice);
+
+  // Monthly equivalent for display purposes
+  const monthlyEquivalent = billingInterval === 'monthly' 
     ? plan.monthlyPrice 
     : plan.yearlyMonthlyEquivalent;
-  
-  const totalPrice = billingInterval === 'monthly' 
-    ? plan.monthlyPrice 
-    : plan.yearlyPrice;
 
-  // 🔥 CRITICAL: Payment with PayPlus integration
+  // Check if discount applies
+  const hasDiscount = discountInfo && discountInfo.savings > 0;
+  
+  // Final price after discount
+  const finalPrice = hasDiscount ? discountInfo.discountedPrice : originalPrice;
+  
+  // Savings amount
+  const savings = hasDiscount ? discountInfo.savings : 0;
+
+  // ============================================
+  // HANDLE PAYMENT
+  // ============================================
+  
   const handlePayment = async () => {
     if (!user) {
-      toast.error("No user found");
+      toast.error("Please log in to continue");
       return;
     }
 
-    setLoading(true);
+    console.log('💳 Starting Whop checkout:', {
+      planId,
+      billingInterval,
+      originalPrice,
+      finalPrice,
+      discountCode: discountInfo?.code,
+      hasDiscount,
+      userEmail: user.email,
+    });
+
+    // Close popup and redirect to Whop
+    onClose();
     
-    try {
-      console.log('💳 Starting payment process for:', {
-        userId: user.id,
-        planId,
-        billingInterval,
-        amount: totalPrice
-      });
-
-      // 🔥 TODO: Call PayPlus API here
-      // const paymentResult = await payPlusService.createPaymentPage(
-      //   user.id,
-      //   planId,
-      //   user.email,
-      //   user.user_metadata?.display_name || 'User',
-      //   billingInterval
-      // );
-
-      // 🚫 TEMPORARY: Block payment until PayPlus is integrated
-      toast.error(
-        "Payment integration in progress",
-        {
-          description: "PayPlus API integration is being finalized. Please use the Free plan for now.",
-          duration: 5000
-        }
-      );
-      
-      setLoading(false);
-      return;
-
-      // 🔥 After PayPlus payment succeeds, this code will run:
-      // await activateSubscription();
-      
-    } catch (error: any) {
-      console.error("❌ Payment error:", error);
-      toast.error(error.message || "Payment failed. Please try again.");
-      setLoading(false);
-    }
+    await initiateCheckout({
+      planName: planId as PlanName,
+      billingInterval: billingInterval as BillingInterval,
+      discountCode: discountInfo?.code,
+    });
   };
 
-  // 🔥 CRITICAL: Only called after SUCCESSFUL payment from PayPlus
-  const activateSubscription = async () => {
-    if (!user) return;
-
-    try {
-      console.log('✅ Payment successful, activating subscription...');
-
-      const now = new Date();
-      const subscriptionEndsAt = new Date();
-      
-      if (billingInterval === 'monthly') {
-        subscriptionEndsAt.setMonth(subscriptionEndsAt.getMonth() + 1);
-      } else {
-        subscriptionEndsAt.setFullYear(subscriptionEndsAt.getFullYear() + 1);
-      }
-
-      // 🔥 CRITICAL: Update subscription in database
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          account_type: planId,
-          subscription_status: 'active',
-          subscription_started_at: now.toISOString(),
-          subscription_expires_at: subscriptionEndsAt.toISOString(),
-          subscription_interval: billingInterval,
-          payment_provider: 'payplus', // 🔥 Mark as paid via PayPlus
-          updated_at: now.toISOString()
-        })
-        .eq('id', user.id);
-
-      if (updateError) {
-        console.error('❌ Failed to activate subscription:', updateError);
-        throw updateError;
-      }
-
-      console.log('✅ Subscription activated in database');
-
-      toast.success(
-        `Welcome to Finotaur ${plan.name}!`,
-        {
-          description: 'Your subscription is now active.'
-        }
-      );
-
-      // 🔥 Close payment popup and show Risk Setup
-      onClose();
-      setShowRiskSetup(true);
-
-    } catch (error: any) {
-      console.error("❌ Subscription activation error:", error);
-      toast.error("Failed to activate subscription. Please contact support.");
-    }
-  };
-
-  // 🔥 Handle Risk Setup completion
-  const handleRiskSetupComplete = async () => {
-    if (!user) return;
-
-    try {
-      // Mark onboarding as completed
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          onboarding_completed: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      toast.success('Setup complete! Welcome to Finotaur! 🎉');
-      
-      // Redirect to dashboard
-      window.location.href = '/app/journal/overview';
-    } catch (error: any) {
-      console.error('Error completing onboarding:', error);
-      toast.error('Failed to complete setup');
-    }
-  };
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
-    <>
-      {/* Risk Setup Modal - shows after successful payment */}
-      {/* ✅ FIXED: Changed onComplete → onClose */}
-      {showRiskSetup && user && (
-        <RiskSetupModal
-          open={showRiskSetup}
-          onClose={handleRiskSetupComplete}
-          userId={user.id}
-        />
-      )}
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-bold">
+            Subscribe to {plan.name}
+          </DialogTitle>
+          <DialogDescription className="text-zinc-400">
+            Complete your payment
+          </DialogDescription>
+        </DialogHeader>
 
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold">
-              Subscribe to {plan.name}
-            </DialogTitle>
-            <DialogDescription className="text-zinc-400">
-              Complete your payment
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            {/* Plan Summary */}
-            <div className="p-4 rounded-lg bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border border-yellow-500/30">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-zinc-300">Plan</span>
-                <span className="font-semibold">{plan.name}</span>
-              </div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-zinc-300">Billing</span>
-                <span className="font-semibold capitalize">{billingInterval}</span>
-              </div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-zinc-300">Price</span>
-                <span className="font-semibold">
-                  ${displayPrice.toFixed(2)}/month
-                  {billingInterval === 'yearly' && (
-                    <span className="text-xs text-zinc-400 ml-1">
-                      (${totalPrice}/year)
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-yellow-500/30 mt-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-zinc-300">Total</span>
-                  <span className="text-2xl font-bold text-yellow-500">
-                    ${totalPrice}
+        <div className="space-y-6 py-4">
+          {/* Discount Badge */}
+          {hasDiscount && discountInfo && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+              <Sparkles className="w-5 h-5 text-emerald-400" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-semibold">
+                    {discountInfo.discountPercent}% OFF Applied!
+                  </span>
+                  <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono">
+                    {discountInfo.code}
                   </span>
                 </div>
-              </div>
-            </div>
-
-            {/* Security Features */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 text-sm">
-                <Shield className="w-5 h-5 text-yellow-500" />
-                <span className="text-zinc-300">Bank-grade encryption</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <Lock className="w-5 h-5 text-yellow-500" />
-                <span className="text-zinc-300">Secure payment via PayPlus</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <CreditCard className="w-5 h-5 text-yellow-500" />
-                <span className="text-zinc-300">Cancel anytime, no questions asked</span>
-              </div>
-            </div>
-
-            {/* 🚫 TEMPORARY: Payment Integration Notice */}
-            <div className="p-6 rounded-lg bg-orange-500/10 border border-orange-500/30">
-              <div className="flex items-center gap-3 mb-3">
-                <AlertTriangle className="w-6 h-6 text-orange-400" />
-                <p className="font-semibold text-orange-200">Payment Integration In Progress</p>
-              </div>
-              <p className="text-sm text-orange-300 mb-3">
-                We're finalizing the PayPlus payment integration for the Israeli market.
-              </p>
-              <div className="space-y-2 text-xs text-orange-400">
-                <p>• Payment processing will be available soon</p>
-                <p>• Meanwhile, you can use the Free plan (10 trades)</p>
-                <p>• All features are ready and waiting for you!</p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                disabled={loading}
-                className="flex-1 border-zinc-700 hover:bg-zinc-800"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handlePayment}
-                disabled={loading}
-                className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold hover:from-yellow-600 hover:to-yellow-700"
-              >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></div>
-                    Processing...
-                  </div>
-                ) : (
-                  "Complete Payment"
+                {discountInfo.affiliateName && (
+                  <p className="text-xs text-emerald-400/70 mt-0.5">
+                    Referred by {discountInfo.affiliateName}
+                  </p>
                 )}
-              </Button>
+              </div>
             </div>
+          )}
 
-            <p className="text-xs text-center text-zinc-500">
-              By subscribing, you agree to our Terms of Service and Privacy Policy.
-            </p>
+          {/* Plan Summary */}
+          <div className={`p-4 rounded-lg border ${
+            hasDiscount 
+              ? 'bg-gradient-to-r from-emerald-500/10 to-yellow-500/5 border-emerald-500/30'
+              : 'bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border-yellow-500/30'
+          }`}>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-zinc-300">Plan</span>
+              <span className="font-semibold">{plan.name}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-zinc-300">Billing</span>
+              <span className="font-semibold capitalize">{billingInterval}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-zinc-300">Price</span>
+              <div className="text-right">
+                {hasDiscount ? (
+                  <>
+                    <span className="text-zinc-500 line-through text-sm mr-2">
+                      ${originalPrice.toFixed(2)}
+                    </span>
+                    <span className="font-semibold text-emerald-400">
+                      ${finalPrice.toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="font-semibold">
+                    ${monthlyEquivalent.toFixed(2)}/month
+                    {billingInterval === 'yearly' && (
+                      <span className="text-xs text-zinc-400 ml-1">
+                        (${originalPrice}/year)
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            {/* Savings highlight */}
+            {hasDiscount && savings > 0 && (
+              <div className="flex justify-between items-center mb-2 text-emerald-400">
+                <span>You save</span>
+                <span className="font-semibold">-${savings.toFixed(2)}</span>
+              </div>
+            )}
+            
+            <div className="pt-2 border-t border-white/10 mt-2">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-300">Total</span>
+                <span className={`text-2xl font-bold ${hasDiscount ? 'text-emerald-400' : 'text-yellow-500'}`}>
+                  ${finalPrice.toFixed(2)}
+                </span>
+              </div>
+              {billingInterval === 'yearly' && (
+                <p className="text-xs text-zinc-500 text-right mt-1">
+                  Billed annually
+                </p>
+              )}
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          {/* Security Features */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm">
+              <Shield className="w-5 h-5 text-yellow-500" />
+              <span className="text-zinc-300">Bank-grade encryption</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <Lock className="w-5 h-5 text-yellow-500" />
+              <span className="text-zinc-300">Secure payment via Whop</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <CreditCard className="w-5 h-5 text-yellow-500" />
+              <span className="text-zinc-300">Cancel anytime, no questions asked</span>
+            </div>
+            {hasDiscount && (
+              <div className="flex items-center gap-3 text-sm">
+                <Tag className="w-5 h-5 text-emerald-400" />
+                <span className="text-emerald-400">Discount will be applied at checkout</span>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={isLoading}
+              className="flex-1 border-zinc-700 hover:bg-zinc-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePayment}
+              disabled={isLoading || !user}
+              className={`flex-1 font-bold ${
+                hasDiscount
+                  ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white'
+                  : 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black'
+              }`}
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className={`w-4 h-4 border-2 ${hasDiscount ? 'border-white/30 border-t-white' : 'border-black/30 border-t-black'} rounded-full animate-spin`}></div>
+                  Redirecting...
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  Complete Payment
+                  <ExternalLink className="w-4 h-4" />
+                </div>
+              )}
+            </Button>
+          </div>
+
+          <p className="text-xs text-center text-zinc-500">
+            By subscribing, you agree to our Terms of Service and Privacy Policy.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

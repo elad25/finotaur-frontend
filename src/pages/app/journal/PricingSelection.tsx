@@ -1,9 +1,16 @@
 // src/pages/app/journal/PricingSelection.tsx
-// ✅ FIXED: Changed "30 trades" → "25 trades" for Basic plan (line 45)
+// =====================================================
+// FINOTAUR PRICING SELECTION - WITH AFFILIATE DISCOUNTS
+// =====================================================
+// 
+// Version: 2.2 - Updated discount display text
+// - Annual discount: 10% (was 15%)
+// =====================================================
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Check, Shield, Zap, TrendingUp } from 'lucide-react';
+import { Check, Shield, Zap, TrendingUp, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PaymentPopup from '@/components/PaymentPopup';
 import RiskSetupModal from '@/components/onboarding/RiskSetupModal';
@@ -11,15 +18,19 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 
+// 🔥 AFFILIATE IMPORTS
+import { useAffiliateDiscount } from '@/features/affiliate/hooks/useAffiliateDiscount';
+import CouponInput from '@/features/affiliate/components/CouponInput';
+
 type BillingInterval = 'monthly' | 'yearly';
 type PlanId = 'basic' | 'premium';
 
 interface Plan {
   id: string;
   name: string;
-  monthlyPrice: string;
-  yearlyPrice: string;
-  yearlyMonthlyEquivalent: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  yearlyMonthlyEquivalent: number;
   description: string;
   features: string[];
   cta: string;
@@ -31,9 +42,9 @@ const plans: Plan[] = [
   {
     id: "free",
     name: "Free",
-    monthlyPrice: "$0",
-    yearlyPrice: "$0",
-    yearlyMonthlyEquivalent: "$0",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    yearlyMonthlyEquivalent: 0,
     description: "Perfect for trying Finotaur",
     features: [
       "10 manual trades (lifetime)",
@@ -49,9 +60,9 @@ const plans: Plan[] = [
   {
     id: "basic",
     name: "Basic",
-    monthlyPrice: "$19.99",
-    yearlyPrice: "$149",
-    yearlyMonthlyEquivalent: "$12.42",
+    monthlyPrice: 19.99,
+    yearlyPrice: 149,
+    yearlyMonthlyEquivalent: 12.42,
     description: "Essential tools + automatic broker sync",
     features: [
       "Everything in Free, plus:",
@@ -72,9 +83,9 @@ const plans: Plan[] = [
   {
     id: "premium",
     name: "Premium",
-    monthlyPrice: "$39.99",
-    yearlyPrice: "$299",
-    yearlyMonthlyEquivalent: "$24.92",
+    monthlyPrice: 39.99,
+    yearlyPrice: 299,
+    yearlyMonthlyEquivalent: 24.92,
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
@@ -104,6 +115,22 @@ export default function PricingSelection() {
   const [loading, setLoading] = useState(false);
   const [checkingSubscription, setCheckingSubscription] = useState(true);
 
+  // 🔥 AFFILIATE DISCOUNT HOOK
+  const {
+    isLoading: discountLoading,
+    isValidating,
+    error: discountError,
+    hasDiscount,
+    discountInfo,
+    manualCode,
+    setManualCode,
+    applyCode,
+    removeCode,
+    validatedCode,
+    discountPercent,
+    savings,
+  } = useAffiliateDiscount(selectedPlan, billingInterval);
+
   // 🔥 Check if user should be here
   useEffect(() => {
     const checkSubscription = async () => {
@@ -130,7 +157,7 @@ export default function PricingSelection() {
 
         console.log('🔍 User subscription status:', data);
 
-        // 🔥 If already has active subscription AND completed onboarding, go to dashboard
+        // If already has active subscription AND completed onboarding, go to dashboard
         const hasPaidSubscription = 
           data?.account_type && 
           data.account_type !== 'free' &&
@@ -142,7 +169,7 @@ export default function PricingSelection() {
           return;
         }
 
-        // 🔥 If has free account AND completed onboarding, also go to dashboard
+        // If has free account AND completed onboarding, also go to dashboard
         if (data?.account_type === 'free' && data?.onboarding_completed) {
           console.log('✅ User has free account + completed onboarding → Dashboard');
           navigate('/app/journal/overview');
@@ -160,23 +187,37 @@ export default function PricingSelection() {
     checkSubscription();
   }, [user, navigate]);
 
+  // 🔥 Calculate display price with discount
   const getDisplayPrice = (plan: Plan) => {
     if (plan.id === "free") {
-      return { price: "$0", period: "forever" };
+      return { price: "$0", period: "forever", discountedPrice: null };
     }
-    
-    if (billingInterval === 'monthly') {
-      return { 
-        price: plan.monthlyPrice, 
-        period: "/month" 
-      };
-    } else {
-      return { 
-        price: plan.yearlyMonthlyEquivalent, 
+
+    const originalPrice = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
+    const monthlyEquivalent = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyMonthlyEquivalent;
+
+    // Check if this plan has a discount applied
+    const isPlanSelected = plan.id === selectedPlan;
+    const showDiscount = hasDiscount && isPlanSelected;
+
+    if (showDiscount && discountInfo) {
+      return {
+        price: `$${monthlyEquivalent.toFixed(2)}`,
+        originalPrice: `$${originalPrice.toFixed(2)}`,
+        discountedPrice: `$${discountInfo.discountedPrice.toFixed(2)}`,
         period: "/month",
-        billedAs: `Billed ${plan.yearlyPrice}/year`
+        billedAs: billingInterval === 'yearly' ? `Billed $${discountInfo.discountedPrice.toFixed(2)}/year` : undefined,
+        savings: discountInfo.savings,
+        discountPercent: discountInfo.discountPercent,
       };
     }
+
+    return { 
+      price: `$${monthlyEquivalent.toFixed(2)}`, 
+      period: "/month",
+      billedAs: billingInterval === 'yearly' ? `Billed $${originalPrice}/year` : undefined,
+      discountedPrice: null,
+    };
   };
 
   // Handle plan selection
@@ -186,6 +227,13 @@ export default function PricingSelection() {
     } else if (planId === 'basic' || planId === 'premium') {
       setSelectedPlan(planId as PlanId);
       setShowPaymentPopup(true);
+    }
+  };
+
+  // Handle plan card click (for highlighting)
+  const handlePlanCardClick = (planId: string) => {
+    if (planId === 'basic' || planId === 'premium') {
+      setSelectedPlan(planId as PlanId);
     }
   };
 
@@ -242,13 +290,12 @@ export default function PricingSelection() {
     }
   };
 
-  // Handle payment popup close (after successful payment)
+  // Handle payment popup close
   const handlePaymentPopupClose = () => {
     setShowPaymentPopup(false);
-    // After successful payment, PaymentPopup will show Risk Setup
   };
 
-  if (checkingSubscription) {
+  if (checkingSubscription || discountLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="flex flex-col items-center gap-4">
@@ -270,13 +317,14 @@ export default function PricingSelection() {
         />
       )}
 
-      {/* Payment Popup */}
+      {/* Payment Popup - 🔥 NOW WITH DISCOUNT INFO */}
       {showPaymentPopup && (
         <PaymentPopup
           isOpen={showPaymentPopup}
           onClose={handlePaymentPopupClose}
           planId={selectedPlan}
           billingInterval={billingInterval}
+          discountInfo={hasDiscount ? discountInfo : undefined}
         />
       )}
 
@@ -344,7 +392,56 @@ export default function PricingSelection() {
             </motion.p>
           </motion.div>
 
+          {/* 🔥 COUPON INPUT SECTION */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.25 }}
+            className="max-w-md mx-auto mb-8"
+          >
+            <CouponInput
+              manualCode={manualCode}
+              setManualCode={setManualCode}
+              onApply={applyCode}
+              onRemove={removeCode}
+              isValidating={isValidating}
+              error={discountError}
+              validatedCode={validatedCode}
+              discountPercent={discountPercent}
+              savings={savings}
+            />
+          </motion.div>
+
+          {/* 🔥 DISCOUNT BANNER - Shows when discount is active */}
+          {/* 🔥 v2.2: Changed 15% to 10% for annual plans */}
+          {hasDiscount && discountInfo && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="max-w-2xl mx-auto mb-8"
+            >
+              <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <Tag className="w-5 h-5 text-emerald-400" />
+                  <span className="text-emerald-400 font-bold text-lg">
+                    {discountInfo.discountPercent}% Discount Applied!
+                  </span>
+                </div>
+                <p className="text-emerald-400/80 text-sm">
+                  {discountInfo.affiliateName 
+                    ? `Referred by ${discountInfo.affiliateName}` 
+                    : `Code: ${discountInfo.code}`
+                  }
+                  {' • '}
+                  {/* 🔥 v2.2: Both monthly and yearly are now 10% */}
+                  10% off {billingInterval === 'yearly' ? 'annual' : 'monthly'} plans
+                </p>
+              </div>
+            </motion.div>
+          )}
+
           {/* Billing Toggle */}
+          {/* 🔥 v2.2: Changed 15% to 10% in toggle text */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -361,6 +458,7 @@ export default function PricingSelection() {
                 }`}
               >
                 Monthly
+                {hasDiscount && <span className="ml-1 text-xs opacity-75">(10% off)</span>}
               </button>
               <button
                 onClick={() => setBillingInterval('yearly')}
@@ -372,7 +470,8 @@ export default function PricingSelection() {
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  Save up to 38%
+                  {/* 🔥 v2.2: Changed from "Save 38% + 15% off" to "Save 38% + 10% off" */}
+                  {hasDiscount ? 'Save 38% + 10% off' : 'Save up to 38%'}
                 </span>
               </button>
             </div>
@@ -382,6 +481,8 @@ export default function PricingSelection() {
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto pt-8">
             {plans.map((plan, index) => {
               const displayPrice = getDisplayPrice(plan);
+              const isPlanSelected = plan.id === selectedPlan;
+              const showDiscountOnCard = hasDiscount && (plan.id === 'basic' || plan.id === 'premium');
               
               return (
                 <motion.div
@@ -389,9 +490,14 @@ export default function PricingSelection() {
                   initial={{ opacity: 0, y: 40 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
-                  className={`p-8 relative transition-all duration-300 flex flex-col rounded-2xl ${
+                  onClick={() => handlePlanCardClick(plan.id)}
+                  className={`p-8 relative transition-all duration-300 flex flex-col rounded-2xl cursor-pointer ${
                     plan.featured 
                       ? 'md:scale-[1.08]' 
+                      : ''
+                  } ${
+                    isPlanSelected && plan.id !== 'free'
+                      ? 'ring-2 ring-[#C9A646]'
                       : ''
                   }`}
                   style={{
@@ -437,8 +543,16 @@ export default function PricingSelection() {
                     </div>
                   )}
 
-                  {/* Savings Badge */}
-                  {plan.savings && billingInterval === 'yearly' && !plan.featured && (
+                  {/* 🔥 Discount Badge */}
+                  {showDiscountOnCard && hasDiscount && (
+                    <div className="absolute -top-4 right-4 bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
+                      <Tag className="w-3 h-3" />
+                      {discountInfo?.discountPercent}% OFF
+                    </div>
+                  )}
+
+                  {/* Savings Badge (non-discount) */}
+                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !showDiscountOnCard && (
                     <div className="absolute -top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       {plan.savings}
                     </div>
@@ -449,13 +563,31 @@ export default function PricingSelection() {
                     <h3 className="text-2xl font-bold mb-2 text-white">{plan.name}</h3>
                     <div className="flex flex-col items-center justify-center gap-1 mb-3">
                       <div className="flex items-baseline gap-1">
-                        <span className={`text-5xl font-bold ${plan.featured ? 'text-[#C9A646]' : 'text-white'}`}>
-                          {displayPrice.price}
+                        {/* Show original price with strikethrough if discount */}
+                        {displayPrice.discountedPrice && (
+                          <span className="text-2xl text-zinc-500 line-through mr-2">
+                            {displayPrice.originalPrice}
+                          </span>
+                        )}
+                        <span className={`text-5xl font-bold ${
+                          displayPrice.discountedPrice 
+                            ? 'text-emerald-400' 
+                            : plan.featured 
+                              ? 'text-[#C9A646]' 
+                              : 'text-white'
+                        }`}>
+                          {displayPrice.discountedPrice || displayPrice.price}
                         </span>
                         <span className="text-slate-400">{displayPrice.period}</span>
                       </div>
                       {displayPrice.billedAs && (
                         <span className="text-sm text-slate-500">{displayPrice.billedAs}</span>
+                      )}
+                      {/* Show savings amount */}
+                      {displayPrice.savings && displayPrice.savings > 0 && (
+                        <span className="text-sm text-emerald-400 font-semibold">
+                          You save ${displayPrice.savings.toFixed(2)}!
+                        </span>
                       )}
                     </div>
                     <p className="text-slate-400">{plan.description}</p>
@@ -484,10 +616,15 @@ export default function PricingSelection() {
                     className={`w-full ${
                       plan.featured 
                         ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black font-bold transition-all duration-500 hover:scale-[1.02]' 
-                        : 'border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white hover:scale-[1.02]'
+                        : hasDiscount && plan.id !== 'free'
+                          ? 'border-2 border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/10 text-white hover:scale-[1.02]'
+                          : 'border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white hover:scale-[1.02]'
                     }`}
                     size="lg"
-                    onClick={() => handlePlanClick(plan.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePlanClick(plan.id);
+                    }}
                     disabled={loading && plan.id === 'free'}
                     style={plan.featured ? {
                       boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
@@ -526,6 +663,15 @@ export default function PricingSelection() {
                 <Zap className="w-5 h-5 text-[#C9A646]" />
                 <span className="text-sm">Cancel anytime</span>
               </div>
+              {hasDiscount && (
+                <>
+                  <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-emerald-400" />
+                    <span className="text-sm text-emerald-400">Referral discount active</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Privacy */}

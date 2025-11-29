@@ -18,11 +18,23 @@ import {
   TrendingUp,
   FileText,
   Calculator,
-  PieChart,
   Activity,
   Shuffle,
   Brain,
-  Play
+  Play,
+  // 🔐 Admin Icons
+  Gift,
+  Trophy,
+  CreditCard,
+  HeadphonesIcon,
+  ArrowLeft,
+  Shield,
+  // 🤝 Affiliate Icons
+  UserPlus,
+  DollarSign,
+  Wallet,
+  Link,
+  Award
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -36,14 +48,15 @@ interface SidebarProps {
   isOpen: boolean;
 }
 
-// 🔥 הגדרת סוגי סביבות
-type EnvironmentType = 'journal' | 'backtest' | 'admin';
+// 🔥 הגדרת סוגי סביבות - הוספת affiliate!
+type EnvironmentType = 'journal' | 'backtest' | 'admin' | 'affiliate';
 
-// 🔥 הגדרת תפריטים שונים לכל סביבה - לפי המסלולים ב-App.tsx
+// 🔥 הגדרת תפריטים שונים לכל סביבה
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
   path: string;
   icon: any;
+  divider?: boolean;
 }>> = {
   journal: [
     { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
@@ -61,31 +74,54 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
   backtest: [
     { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
-    { label: 'Chart', path: '/app/journal/backtest/Chart', icon: PlusCircle },
-    { label: 'Trades Journal', path: '/app/journal/backtest/results', icon: FileText },
-    { label: 'My Strategies', path: '/app/journal/backtest/builder', icon: Layers },
-    { label: 'Statistics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
-    { label: 'Calendar', path: '/app/journal/backtest/data', icon: Calendar },
-    { label: 'AI Chat', path: '/app/journal/backtest/ai-insights', icon: Brain },
-    { label: 'Prop Firms', path: '/app/journal/backtest/monte-carlo', icon: Shuffle },
-    { label: 'Gameplan', path: '/app/journal/backtest/walk-forward', icon: Activity },
-    { label: 'Community Blog', path: '/app/journal/backtest/optimization', icon: Calculator },
-    { label: 'Academy', path: '/app/journal/backtest/replay', icon: Play },
+    { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
+    { label: 'Results', path: '/app/journal/backtest/results', icon: FileText },
+    { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Layers },
+    { label: 'Analytics', path: '/app/journal/backtest/analytics', icon: TrendingUp },
+    { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Calendar },
+    { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
+    { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Shuffle },
+    { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: Activity },
+    { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Calculator },
+    { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: Play },
   ],
+  // 🔐 ADMIN
   admin: [
-    // 🔥 ONLY DASHBOARD - הסרתי את כל השאר
     { label: 'Dashboard', path: '/app/journal/admin', icon: LayoutDashboard },
+    { label: 'Users', path: '/app/journal/admin/users', icon: Users },
+    { label: 'Analytics', path: '/app/journal/admin/analytics', icon: BarChart3 },
+    { label: 'Subscribers', path: '/app/journal/admin/subscribers', icon: CreditCard },
+    { label: 'Support', path: '/app/journal/admin/support', icon: HeadphonesIcon },
+    { label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift },
+    { label: 'Top Traders', path: '/app/journal/admin/top-traders', icon: Trophy },
+    { label: 'divider', path: '', icon: null, divider: true },
+    { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
+  ],
+  // 🤝 AFFILIATE CENTER - NEW!
+  affiliate: [
+    { label: 'Dashboard', path: '/app/journal/affiliate/overview', icon: LayoutDashboard },
+    { label: 'My Referrals', path: '/app/journal/affiliate/referrals', icon: UserPlus },
+    { label: 'Earnings', path: '/app/journal/affiliate/earnings', icon: DollarSign },
+    { label: 'Analytics', path: '/app/journal/affiliate/analytics', icon: BarChart3 },
+    { label: 'Payouts', path: '/app/journal/affiliate/payouts', icon: Wallet },
+    { label: 'Marketing Tools', path: '/app/journal/affiliate/marketing', icon: Link },
+    { label: 'Bonuses', path: '/app/journal/affiliate/bonuses', icon: Gift },
+    { label: 'Performance', path: '/app/journal/affiliate/performance', icon: TrendingUp },
+    { label: 'Settings', path: '/app/journal/affiliate/settings', icon: Settings },
+    { label: 'divider', path: '', icon: null, divider: true },
+    { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ]
 };
 
 export const Sidebar = ({ isOpen }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { activeDomain, isActive } = useDomain();
+  const { isActive } = useDomain();
 
-  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL
+  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL - הוספת affiliate!
   const getCurrentEnvironment = (): EnvironmentType => {
     if (location.pathname.startsWith('/app/journal/admin')) return 'admin';
+    if (location.pathname.startsWith('/app/journal/affiliate')) return 'affiliate'; // 🤝 NEW!
     if (location.pathname.startsWith('/app/journal/backtest')) return 'backtest';
     return 'journal';
   };
@@ -130,6 +166,47 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     }
   };
 
+  // 🔐 בדיקה אם פריט אקטיבי
+  const isItemActive = (itemPath: string): boolean => {
+    // בדיקה מדויקת לדפים ראשיים
+    if (itemPath === '/app/journal/admin' && location.pathname === '/app/journal/admin') {
+      return true;
+    }
+    if (itemPath === '/app/journal/affiliate/overview' && location.pathname === '/app/journal/affiliate/overview') {
+      return true;
+    }
+    // בדיקה לשאר הדפים
+    if (itemPath !== '/app/journal/admin' && itemPath !== '/app/journal/affiliate/overview' && location.pathname.startsWith(itemPath)) {
+      return true;
+    }
+    return isActive(itemPath);
+  };
+
+  // 🎨 קביעת צבע ה-Header לפי סביבה
+  const getEnvironmentHeader = () => {
+    if (currentEnvironment === 'admin') {
+      return {
+        show: true,
+        icon: Shield,
+        label: 'Admin Panel',
+        bgColor: 'bg-[#D4AF37]/5',
+        textColor: 'text-[#D4AF37]'
+      };
+    }
+    if (currentEnvironment === 'affiliate') {
+      return {
+        show: true,
+        icon: Award,
+        label: 'Affiliate Center',
+        bgColor: 'bg-[#C9A646]/5',
+        textColor: 'text-[#C9A646]'
+      };
+    }
+    return { show: false };
+  };
+
+  const envHeader = getEnvironmentHeader();
+
   return (
     <aside
       className={cn(
@@ -137,10 +214,31 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
         isOpen ? 'translate-x-0 w-48' : '-translate-x-full md:w-12'
       )}
     >
+      {/* 🏷️ Environment Header Badge */}
+      {envHeader.show && isOpen && (
+        <div className={cn("px-3 py-2 border-b border-gray-700", envHeader.bgColor)}>
+          <div className={cn("flex items-center gap-2", envHeader.textColor)}>
+            {envHeader.icon && <envHeader.icon className="w-4 h-4" />}
+            <span className="text-xs font-semibold uppercase tracking-wider">{envHeader.label}</span>
+          </div>
+        </div>
+      )}
+
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
-        {sidebarItems.map((item) => {
+        {sidebarItems.map((item, index) => {
+          // 🆕 קו הפרדה
+          if (item.divider) {
+            return (
+              <div 
+                key={`divider-${index}`} 
+                className="my-2 border-t border-gray-700"
+              />
+            );
+          }
+
           const Icon = item.icon;
-          const active = isActive(item.path);
+          const active = isItemActive(item.path);
+          const isBackButton = item.path === '/app/journal/overview' && (currentEnvironment === 'admin' || currentEnvironment === 'affiliate');
           
           return (
             <button
@@ -149,9 +247,12 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
               onMouseEnter={() => handlePrefetch(item.path)}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-smooth relative',
-                active
-                  ? 'border-l-2 border-gold bg-gold/10 text-gold'
-                  : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
+                // סגנון מיוחד לכפתור חזרה
+                isBackButton
+                  ? 'text-gray-400 hover:bg-base-700 hover:text-white'
+                  : active
+                    ? 'border-l-2 border-gold bg-gold/10 text-gold'
+                    : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
               )}
             >
               {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}

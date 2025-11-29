@@ -6,6 +6,7 @@
 // ✅ NEW: Trade Time & Duration Performance Charts
 // ✅ UPDATED: Trade Duration locked for FREE users without SnapTrade
 // ✅ UPDATED: Timezone support & Trading Session indicators
+// ✅ UPDATED: Green checkmark on Refer a Friend for active affiliates
 // ✅ Production ready for 5000+ users
 // ================================================
 
@@ -17,7 +18,7 @@ import {
   PlusSquare, FileText, Layers, BarChart3, Calendar as CalendarIcon,
   MessageSquare, ListChecks, Users, GraduationCap, Settings as SettingsIcon,
   Sparkles, TrendingUp, TrendingDown, UserPlus, Link2, CheckCircle2, Lock, 
-  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle
+  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -35,6 +36,11 @@ import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettings
 import { DashboardKpiCard } from "@/components/DashboardKpiCard";
 
 // ================================================
+// NEW: AFFILIATE STATUS HOOK
+// ================================================
+import { useIsAffiliate } from '@/features/affiliate/hooks/useAffiliateProfile';
+
+// ================================================
 // NEW: TIMEZONE & TRADING SESSION IMPORTS
 // ================================================
 import { useTimezone } from '@/contexts/TimezoneContext';
@@ -48,7 +54,7 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
-const SnapTradePopup = lazy(() => import("@/components/SnapTradePopup"));
+const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
 
 // ================================================
 // LOADING SKELETONS
@@ -756,6 +762,9 @@ function JournalOverviewContent() {
   const { data: stats, isLoading, error } = useDashboardStats(DAYS_MAP[range], userId);
   const { data: connections, isLoading: connectionsLoading } = useSnapTradeConnections(userId);
   
+  // ✅ NEW: Check if user is an affiliate
+  const { isAffiliate, isLoading: affiliateLoading } = useIsAffiliate();
+  
   const tier = useMemo(() => stats?.tier, [stats]);
   
   const hasActiveConnection = useMemo(() => 
@@ -932,13 +941,26 @@ function JournalOverviewContent() {
           </select>
 
           <div className="ml-auto flex items-center gap-3">
+            {/* ✅ UPDATED: Refer a Friend Button with Green Checkmark for Affiliates */}
             <button
               onClick={() => setShowReferModal(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-[#1A1A1A] to-[#242424] border rounded-[12px] px-4 py-2.5 text-[#C9A646] font-medium text-sm transition-all duration-300 hover:bg-[rgba(201,166,70,0.1)] group relative overflow-hidden"
-              style={{ borderColor: 'rgba(201,166,70,0.2)' }}
+              className={`flex items-center gap-2 border rounded-[12px] px-4 py-2.5 font-medium text-sm transition-all duration-300 group relative overflow-hidden ${
+                isAffiliate 
+                  ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
+                  : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:bg-[rgba(201,166,70,0.1)]'
+              }`}
             >
-              <UserPlus className="w-4 h-4 relative z-10" />
-              <span className="relative z-10">Refer a Friend</span>
+              {isAffiliate ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span className="text-emerald-400">Affiliate</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4 text-[#C9A646] relative z-10" />
+                  <span className="text-[#C9A646] relative z-10">Refer a Friend</span>
+                </>
+              )}
             </button>
 
             <button
@@ -1129,7 +1151,7 @@ function JournalOverviewContent() {
       {showSnapTradePopup && (
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <SnapTradePopup onClose={() => setShowSnapTradePopup(false)} />
+            <BrokerConnectionPopup onClose={() => setShowSnapTradePopup(false)} />
           </Suspense>
         </ErrorBoundary>
       )}

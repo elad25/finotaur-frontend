@@ -136,13 +136,15 @@ const AffiliatePage = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Button 
-                size="lg"
-                className="group relative bg-black border-2 border-[#C9A646] hover:bg-[#C9A646] text-[#C9A646] hover:text-black font-bold text-lg px-10 py-7 rounded-xl shadow-[0_0_30px_rgba(201,166,70,0.3)] hover:shadow-[0_0_50px_rgba(201,166,70,0.6)] transition-all duration-300 hover:scale-105"
-              >
-                Join the FINOTAUR Affiliate Program
-                <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
+              <Link to="/auth/register">
+                <Button 
+                  size="lg"
+                  className="group relative bg-black border-2 border-[#C9A646] hover:bg-[#C9A646] text-[#C9A646] hover:text-black font-bold text-lg px-10 py-7 rounded-xl shadow-[0_0_30px_rgba(201,166,70,0.3)] hover:shadow-[0_0_50px_rgba(201,166,70,0.6)] transition-all duration-300 hover:scale-105"
+                >
+                  Join the FINOTAUR Affiliate Program
+                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
             </motion.div>
 
             {/* Stats Bar */}
@@ -307,9 +309,9 @@ const AffiliatePage = () => {
             className="bg-gradient-to-r from-[#C9A646]/10 via-[#C9A646]/5 to-[#C9A646]/10 border border-[#C9A646]/30 rounded-2xl p-8 text-center"
           >
             <Zap className="w-10 h-10 text-[#C9A646] mx-auto mb-4" />
-            <h3 className="text-2xl font-bold text-[#C9A646] mb-2">Annual Plans: 18% Commission</h3>
+            <h3 className="text-2xl font-bold text-[#C9A646] mb-2">Annual Plans: 15% Commission</h3>
             <p className="text-slate-300">
-              Earn 18% up-front on all annual subscriptions — even before hitting 20 clients
+              Earn 15% up-front on all annual subscriptions — even before hitting 20 clients
             </p>
           </motion.div>
 
@@ -649,7 +651,7 @@ const AffiliatePage = () => {
             {[
               {
                 q: "When do I get paid?",
-                a: "Monthly on the 15th, via PayPal or Stripe. Minimum payout: $100."
+                a: "Monthly on the 15th, via PayPal . Minimum payout: $100."
               },
               {
                 q: "How do I track conversions?",
@@ -685,14 +687,6 @@ const AffiliatePage = () => {
             viewport={{ once: true }}
             className="mt-8 text-center"
           >
-            <p className="text-sm text-slate-500 mb-3">Payment Methods:</p>
-            <div className="flex items-center justify-center gap-4 text-slate-400">
-              <span className="text-sm">💳 PayPal</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-sm">💰 Stripe</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-sm">🏦 Wire Transfer</span>
-            </div>
           </motion.div>
         </div>
       </section>
@@ -719,13 +713,15 @@ const AffiliatePage = () => {
               Partner with the fastest-growing trading intelligence platform
             </p>
 
-            <Button 
-              size="lg"
-              className="group bg-[#C9A646] hover:bg-[#D4AF37] text-black font-bold text-lg px-10 py-6 rounded-xl shadow-[0_0_30px_rgba(201,166,70,0.4)] hover:shadow-[0_0_50px_rgba(201,166,70,0.7)] transition-all duration-300 hover:scale-105"
-            >
-              Become a FINOTAUR Affiliate
-              <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
+            <Link to="/auth/register">
+              <Button 
+                size="lg"
+                className="group bg-[#C9A646] hover:bg-[#D4AF37] text-black font-bold text-lg px-10 py-6 rounded-xl shadow-[0_0_30px_rgba(201,166,70,0.4)] hover:shadow-[0_0_50px_rgba(201,166,70,0.7)] transition-all duration-300 hover:scale-105"
+              >
+                Become a FINOTAUR Affiliate
+                <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
 
             <p className="text-xs text-slate-500 mt-4">
               Joining is free. No risk. Only upside.

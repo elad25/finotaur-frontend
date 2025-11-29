@@ -1,17 +1,18 @@
 // src/hooks/useDashboardData.ts
 // ================================================
-// OPTIMIZED FOR 5000+ USERS - v2.1 WITH SESSION SUPPORT
+// OPTIMIZED FOR 5000+ USERS - v2.2
+// ✅ FIXED: Reduced console logging for production
+// ✅ FIXED: Better caching with refetchOnMount: false
 // ✅ Calls enable_admin_mode() before queries
 // ✅ Full admin client support
 // ✅ Trading session support added
 // ================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
-import { useAuth } from '@/providers/AuthProvider';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import dayjs from 'dayjs';
 
@@ -35,7 +36,7 @@ export interface Trade {
   quantity: number | null;
   exit_price: number | null;
   multiplier: number | null;
-  session?: TradingSession; // ✅ NEW: Trading session
+  session?: TradingSession;
 }
 
 export interface DashboardStats {
@@ -55,14 +56,14 @@ export interface DashboardStats {
     rr: number | null;
     symbol: string;
     open_at: string;
-    session?: TradingSession; // ✅ NEW: Added session support
+    session?: TradingSession;
   } | null;
   worstTrade: {
     pnl: number;
     rr: number | null;
     symbol: string;
     open_at: string;
-    session?: TradingSession; // ✅ NEW: Added session support
+    session?: TradingSession;
   } | null;
   equitySeries: Array<{
     date: string;
@@ -83,8 +84,8 @@ export interface DashboardStats {
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  stats: (userId: string, days: number) => [...dashboardKeys.all, 'stats', userId, days] as const,
-  connections: (userId: string) => [...dashboardKeys.all, 'connections', userId] as const,
+  stats: (userId: string, days: number) => ['dashboard', 'stats', userId, days] as const,
+  connections: (userId: string) => ['dashboard', 'connections', userId] as const,
 };
 
 // ================================================
@@ -112,7 +113,7 @@ class LRUCache<K, V> {
       this.cache.delete(key);
     } else if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey) this.cache.delete(firstKey);
     }
     this.cache.set(key, value);
   }
@@ -128,6 +129,15 @@ class LRUCache<K, V> {
 
 const equitySeriesCache = new LRUCache<string, DashboardStats['equitySeries']>(200);
 const statsCache = new Map<string, { trades: any[], result: DashboardStats }>();
+
+// ================================================
+// DEV LOGGING HELPER
+// ================================================
+
+const isDev = import.meta.env.DEV;
+const devLog = (...args: any[]) => {
+  if (isDev) console.log(...args);
+};
 
 // ================================================
 // HELPER FUNCTIONS
@@ -175,7 +185,6 @@ function computeStats(trades: any[]): DashboardStats {
   const tradeIds = trades.map(t => t.id).join(',');
   const cached = statsCache.get(tradeIds);
   if (cached && cached.trades === trades) {
-    console.log('📦 Using cached stats computation');
     return cached.result;
   }
 
@@ -185,8 +194,8 @@ function computeStats(trades: any[]): DashboardStats {
   let breakeven = 0;
   let totalRR = 0;
   let rrCount = 0;
-  let bestTrade = null;
-  let worstTrade = null;
+  let bestTrade: DashboardStats['bestTrade'] = null;
+  let worstTrade: DashboardStats['worstTrade'] = null;
   let runningPnl = 0;
   let peak = 0;
   let maxDrawdown = 0;
@@ -223,14 +232,13 @@ function computeStats(trades: any[]): DashboardStats {
       rrCount++;
     }
 
-    // ✅ UPDATED: Include session in best/worst trade tracking
     if (!bestTrade || pnl > bestTrade.pnl) {
       bestTrade = {
         pnl,
         rr: calculatedRR,
         symbol: trade.symbol || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
-        session: trade.session, // ✅ NEW
+        session: trade.session,
       };
     }
     if (!worstTrade || pnl < worstTrade.pnl) {
@@ -239,7 +247,7 @@ function computeStats(trades: any[]): DashboardStats {
         rr: calculatedRR,
         symbol: trade.symbol || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
-        session: trade.session, // ✅ NEW
+        session: trade.session,
       };
     }
 
@@ -310,19 +318,12 @@ function computeStats(trades: any[]): DashboardStats {
     tier: calculateTier(baseStats),
   };
 
+  // Limit cache size
   if (statsCache.size > 50) {
     const firstKey = statsCache.keys().next().value;
-    statsCache.delete(firstKey);
+    if (firstKey) statsCache.delete(firstKey);
   }
   statsCache.set(tradeIds, { trades, result });
-
-  console.log('📊 Dashboard stats calculated:', {
-    netPnl,
-    wins,
-    losses,
-    winrate: (winrate * 100).toFixed(1) + '%',
-    profitFactor: profitFactor.toFixed(2),
-  });
 
   return result;
 }
@@ -333,54 +334,38 @@ function computeStats(trades: any[]): DashboardStats {
 
 export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
-  const { user } = useAuth();
   const { enableAdminMode } = useImpersonation();
   const queryClient = useQueryClient();
   
   const userId = overrideUserId || effectiveUserId;
   const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
+  
+  // Track if we've prefetched to avoid doing it multiple times
+  const hasPrefetched = useRef(false);
 
   const query = useQuery({
     queryKey: dashboardKeys.stats(userId || '', daysBack || -1),
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
 
-      // 🔥 CRITICAL: Enable admin mode BEFORE query if impersonating
+      // Enable admin mode if impersonating
       if (isImpersonating && enableAdminMode) {
-        console.log('🔓 Enabling admin_mode for impersonation query...');
-        const enabled = await enableAdminMode();
-        if (!enabled) {
-          console.warn('⚠️ Failed to enable admin_mode - query may fail');
-        } else {
-          console.log('✅ admin_mode enabled - RLS bypassed');
-        }
+        devLog('🔓 Enabling admin_mode for impersonation query...');
+        await enableAdminMode();
       }
 
       const cutoffDate = daysBack && daysBack > 0
         ? dayjs().subtract(daysBack, 'days').toISOString()
         : null;
 
-      console.log('🔑 Dashboard query config:', {
-        userId,
-        effectiveUserId,
-        isImpersonating,
-        shouldUseAdminClient,
-        adminModeEnabled: isImpersonating,
-        cutoffDate,
-      });
+      devLog('🔑 Dashboard query config:', { userId, isImpersonating, cutoffDate });
 
       if (isImpersonating && !supabaseAdmin) {
-        console.error('❌ CRITICAL: Impersonating but supabaseAdmin is null!');
-        throw new Error(
-          'Admin client not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to .env file.'
-        );
+        throw new Error('Admin client not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to .env file.');
       }
 
       const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
-      
-      console.log('📡 Query using:', shouldUseAdminClient ? '🔓 ADMIN CLIENT' : '🔒 REGULAR CLIENT');
 
-      // ✅ UPDATED: Added session to the select query
       let queryBuilder = client
         .from('trades')
         .select('id, symbol, pnl, rr, actual_r, risk_usd, open_at, close_at, stop_price, entry_price, quantity, exit_price, multiplier, session')
@@ -395,13 +380,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
       const { data, error } = await queryBuilder;
 
       if (error) {
-        console.error('❌ Dashboard query error:', {
-          error,
-          userId,
-          client: shouldUseAdminClient ? 'ADMIN' : 'REGULAR',
-          message: error.message,
-          code: error.code,
-        });
+        console.error('❌ Dashboard query error:', error.message);
         
         if (error.code === 'PGRST116' || error.message?.includes('row-level security')) {
           throw new Error(
@@ -412,36 +391,35 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
         throw error;
       }
       
-      console.log(`✅ Successfully loaded ${data?.length || 0} trades for user ${userId}`);
-      
-      if (data && data.length > 0) {
-        console.log('📊 Sample trade:', {
-          id: data[0].id,
-          symbol: data[0].symbol,
-          pnl: data[0].pnl,
-          session: data[0].session, // ✅ NEW
-        });
-      }
+      devLog(`✅ Loaded ${data?.length || 0} trades`);
       
       return computeStats(data || []);
     },
     enabled: !!userId,
-    staleTime: 3 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    // ✅ OPTIMIZED: Longer stale time, no refetch on mount
+    staleTime: 5 * 60 * 1000,      // 5 minutes
+    gcTime: 15 * 60 * 1000,         // 15 minutes
+    refetchOnMount: false,          // ✅ KEY FIX
+    refetchOnWindowFocus: false,    // ✅ KEY FIX
     retry: false,
   });
 
+  // Prefetch other ranges only once when data loads successfully
   useEffect(() => {
-    if (userId && query.isSuccess) {
+    if (userId && query.isSuccess && !hasPrefetched.current) {
+      hasPrefetched.current = true;
+      
       const ranges = [7, 30, 90];
       ranges.forEach(days => {
-        queryClient.prefetchQuery({
-          queryKey: dashboardKeys.stats(userId, days),
-          staleTime: 5 * 60 * 1000,
-        });
+        if (days !== daysBack) {
+          queryClient.prefetchQuery({
+            queryKey: dashboardKeys.stats(userId, days),
+            staleTime: 5 * 60 * 1000,
+          });
+        }
       });
     }
-  }, [userId, query.isSuccess, queryClient]);
+  }, [userId, query.isSuccess, queryClient, daysBack]);
 
   return query;
 }
@@ -458,7 +436,6 @@ export function useSnapTradeConnections(overrideUserId?: string) {
     queryFn: async () => {
       if (!userId) return [];
 
-      // 🔥 Enable admin mode if impersonating
       if (isImpersonating && enableAdminMode) {
         await enableAdminMode();
       }
@@ -473,19 +450,22 @@ export function useSnapTradeConnections(overrideUserId?: string) {
           .order('created_at', { ascending: false });
         
         if (error) {
-          console.warn('⚠️ broker_connections query failed:', error.message);
+          devLog('⚠️ broker_connections query failed:', error.message);
           return [];
         }
 
-        console.log(`✅ Loaded ${data?.length || 0} connections for user ${userId}`);
         return data || [];
       } catch (err) {
-        console.warn('⚠️ Error loading connections:', err);
+        devLog('⚠️ Error loading connections:', err);
         return [];
       }
     },
     enabled: !!userId,
-    staleTime: 5 * 60 * 1000,
+    // ✅ OPTIMIZED caching
+    staleTime: 10 * 60 * 1000,      // 10 minutes - connections don't change often
+    gcTime: 30 * 60 * 1000,          // 30 minutes
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 }
@@ -512,5 +492,5 @@ export function getPnLColor(pnl: number): string {
 export function clearDashboardCache() {
   equitySeriesCache.clear();
   statsCache.clear();
-  console.log('🧹 Dashboard cache cleared');
+  devLog('🧹 Dashboard cache cleared');
 }

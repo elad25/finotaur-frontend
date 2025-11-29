@@ -1,16 +1,28 @@
 // src/hooks/brokers/tradovate/useTradovate.ts
+// 🎯 V2.1 - Fixed: Pass accountType to initialize(), better error handling
 
 import { useState, useEffect, useCallback } from 'react';
 import { tradovateApiService } from '@/services/brokers/tradovate/tradovateApi.service';
 import { tradovateWebSocketService } from '@/services/brokers/tradovate/tradovateWebSocket.service';
-import { tradovateSyncService } from '@/services/brokers/tradovate/tradovateSync.service';
+import { tradovateSyncV2Service, SyncResult } from '@/services/brokers/tradovate/tradovateSyncV2.service';
 import {
   TradovateCredentials,
   TradovateAccount,
-  TradovatePosition,
-  TradovateCashBalance
+  TradovatePosition
 } from '@/types/brokers/tradovate/tradovate.types';
 import { useAuth } from '@/hooks/useAuth';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface AccountSummary {
+  balance: number;
+  openPnL: number;
+  realizedPnL: number;
+  marginUsed: number;
+  marginAvailable: number;
+}
 
 interface UseTradovateReturn {
   // Authentication
@@ -23,68 +35,86 @@ interface UseTradovateReturn {
   // Account Management
   accounts: TradovateAccount[];
   selectedAccount: TradovateAccount | null;
-  selectAccount: (accountId: number) => void;
+  selectAccount: (accountId: number) => Promise<void>;
   loadAccounts: () => Promise<void>;
   
   // Data Sync
-  syncHistoricalTrades: (startDate?: Date, endDate?: Date) => Promise<number>;
-  syncCurrentPositions: () => Promise<void>;
+  syncHistoricalTrades: (startDate?: Date, endDate?: Date) => Promise<SyncResult>;
+  syncCurrentPositions: () => Promise<SyncResult>;
   isSyncing: boolean;
+  lastSyncResult: SyncResult | null;
   
   // Real-time Data
   isConnected: boolean;
   positions: TradovatePosition[];
-  accountSummary: {
-    balance: number;
-    openPnL: number;
-    realizedPnL: number;
-    marginUsed: number;
-    marginAvailable: number;
-  } | null;
+  accountSummary: AccountSummary | null;
   
   // Refresh
   refreshAccountSummary: () => Promise<void>;
+  refreshPositions: () => Promise<void>;
   
   // Account Type
   accountType: 'demo' | 'live';
+  setAccountType: (type: 'demo' | 'live') => void;
 }
 
-export const useTradovate = (accountType: 'demo' | 'live' = 'demo'): UseTradovateReturn => {
+// ============================================================================
+// HOOK IMPLEMENTATION
+// ============================================================================
+
+export const useTradovate = (
+  initialAccountType: 'demo' | 'live' = 'demo'
+): UseTradovateReturn => {
   const { user } = useAuth();
+  
+  // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Account state
   const [accounts, setAccounts] = useState<TradovateAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<TradovateAccount | null>(null);
+  const [accountType, setAccountTypeState] = useState<'demo' | 'live'>(initialAccountType);
+  
+  // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
+  
+  // Real-time state
   const [isConnected, setIsConnected] = useState(false);
   const [positions, setPositions] = useState<TradovatePosition[]>([]);
-  const [accountSummary, setAccountSummary] = useState<{
-    balance: number;
-    openPnL: number;
-    realizedPnL: number;
-    marginUsed: number;
-    marginAvailable: number;
-  } | null>(null);
+  const [accountSummary, setAccountSummary] = useState<AccountSummary | null>(null);
+
+  // ============================================================================
+  // EFFECTS
+  // ============================================================================
 
   // Set API URL based on account type
   useEffect(() => {
-    const apiUrl = accountType === 'demo' 
+    const apiUrl = accountType === 'demo'
       ? 'https://demo.tradovateapi.com/v1'
       : 'https://live.tradovateapi.com/v1';
     
-    console.log(`🔧 useTradovate: Setting API URL to ${apiUrl}`);
+    console.log(`🔧 Setting Tradovate API URL: ${apiUrl}`);
     tradovateApiService.setApiUrl(apiUrl);
   }, [accountType]);
 
-  // Check authentication status on mount
+  // Check auth status on mount
   useEffect(() => {
-    const checkAuth = () => {
-      const authenticated = tradovateApiService.isAuthenticated();
-      setIsAuthenticated(authenticated);
-      
-      if (authenticated) {
-        loadAccounts();
+    const checkAuth = async () => {
+      setIsLoading(true);
+      try {
+        const authenticated = tradovateApiService.isAuthenticated();
+        setIsAuthenticated(authenticated);
+        
+        if (authenticated) {
+          await loadAccountsInternal();
+        }
+      } catch (err) {
+        console.error('Auth check failed:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -97,181 +127,366 @@ export const useTradovate = (accountType: 'demo' | 'live' = 'demo'): UseTradovat
       setIsConnected(tradovateWebSocketService.isConnected());
     };
 
-    const interval = setInterval(checkConnection, 1000);
+    const interval = setInterval(checkConnection, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-refresh when account selected
+  useEffect(() => {
+    if (selectedAccount && isAuthenticated) {
+      refreshAccountSummary();
+      refreshPositions();
+      
+      const interval = setInterval(() => {
+        refreshAccountSummary();
+        refreshPositions();
+      }, 30000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [selectedAccount, isAuthenticated]);
+
+  // ============================================================================
+  // INTERNAL HELPERS
+  // ============================================================================
+
+  const loadAccountsInternal = async () => {
+    try {
+      console.log('📊 Loading accounts...');
+      const accountsList = await tradovateApiService.getAccounts();
+      setAccounts(accountsList);
+      
+      // Auto-select first account
+      if (accountsList.length > 0) {
+        await selectAccountInternal(accountsList[0]);
+      }
+      
+      console.log(`✅ Loaded ${accountsList.length} accounts`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load accounts';
+      setError(errorMessage);
+      console.error('❌ Failed to load accounts:', err);
+    }
+  };
+
+  const selectAccountInternal = async (account: TradovateAccount) => {
+    console.log('📌 Selecting account:', account.name);
+    setSelectedAccount(account);
+    
+    // 🎯 CRITICAL FIX: Detect environment from account type
+    const detectedEnv: 'demo' | 'live' = account.accountType === 'Demo' ? 'demo' : 'live';
+    console.log(`🔍 Detected environment: ${detectedEnv} (from accountType: ${account.accountType})`);
+    
+    // Initialize sync service with correct environment
+    if (user?.id) {
+      try {
+        // 🎯 CRITICAL FIX: Pass environment to initialize()
+        await tradovateSyncV2Service.initialize(user.id, account.id, detectedEnv);
+        await refreshAccountSummaryInternal(account.id);
+        await refreshPositionsInternal(account.id);
+      } catch (err) {
+        console.error('❌ Failed to initialize sync service:', err);
+        setError(err instanceof Error ? err.message : 'Failed to initialize sync');
+      }
+    } else {
+      console.warn('⚠️ No user ID available, sync service not initialized');
+    }
+  };
+
+  const refreshAccountSummaryInternal = async (accountId: number) => {
+    try {
+      const summary = await tradovateSyncV2Service.getAccountSummary();
+      setAccountSummary(summary);
+    } catch (err) {
+      console.error('❌ Failed to refresh account summary:', err);
+    }
+  };
+
+  const refreshPositionsInternal = async (accountId: number) => {
+    try {
+      const updatedPositions = await tradovateApiService.getPositions(accountId);
+      setPositions(updatedPositions.filter(p => p.netPos !== 0));
+    } catch (err) {
+      console.error('❌ Failed to refresh positions:', err);
+    }
+  };
+
+  // ============================================================================
+  // AUTHENTICATION
+  // ============================================================================
 
   const login = useCallback(async (credentials: TradovateCredentials) => {
     setIsLoading(true);
     setError(null);
 
     try {
+      console.log('🔐 Logging in to Tradovate...');
       await tradovateApiService.login(credentials);
       setIsAuthenticated(true);
       
       // Connect WebSocket
       const token = localStorage.getItem('tradovate_token');
       if (token) {
-        await tradovateWebSocketService.connect(token);
+        try {
+          await tradovateWebSocketService.connect(token);
+          console.log('✅ WebSocket connected');
+        } catch (wsErr) {
+          console.warn('⚠️ WebSocket connection failed, continuing without real-time:', wsErr);
+        }
       }
       
       // Load accounts
-      await loadAccounts();
+      await loadAccountsInternal();
+      
+      console.log('✅ Login successful');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
       setError(errorMessage);
+      console.error('❌ Login failed:', err);
       throw err;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      await tradovateApiService.logout();
-      tradovateWebSocketService.disconnect();
-      tradovateSyncService.disconnect();
+      console.log('👋 Logging out...');
       
+      // Disconnect sync service
+      try {
+        await tradovateSyncV2Service.disconnect();
+      } catch (e) {
+        console.warn('⚠️ Sync service disconnect error:', e);
+      }
+      
+      // Disconnect WebSocket
+      tradovateWebSocketService.disconnect();
+      
+      // Logout from API
+      try {
+        await tradovateApiService.logout();
+      } catch (e) {
+        console.warn('⚠️ API logout error:', e);
+      }
+      
+      // Clear state
       setIsAuthenticated(false);
       setAccounts([]);
       setSelectedAccount(null);
       setPositions([]);
       setAccountSummary(null);
+      setLastSyncResult(null);
+      
+      console.log('✅ Logout successful');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Logout failed';
       setError(errorMessage);
+      console.error('❌ Logout error:', err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const loadAccounts = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // ============================================================================
+  // ACCOUNT MANAGEMENT
+  // ============================================================================
 
-    try {
-      const accountsList = await tradovateApiService.getAccounts();
-      setAccounts(accountsList);
-      
-      // Auto-select first account if none selected
-      if (accountsList.length > 0 && !selectedAccount) {
-        setSelectedAccount(accountsList[0]);
-        
-        // Initialize sync service
-        if (user?.id) {
-          await tradovateSyncService.initialize(user.id, accountsList[0].id);
-        }
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load accounts';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedAccount, user]);
+  const loadAccounts = useCallback(async () => {
+    setError(null);
+    await loadAccountsInternal();
+  }, []);
 
   const selectAccount = useCallback(async (accountId: number) => {
     const account = accounts.find(acc => acc.id === accountId);
-    if (account) {
-      setSelectedAccount(account);
-      
-      // Initialize sync service with new account
-      if (user?.id) {
-        await tradovateSyncService.initialize(user.id, account.id);
-        await refreshAccountSummary();
-      }
+    if (!account) {
+      console.error('Account not found:', accountId);
+      setError('Account not found');
+      return;
     }
+    await selectAccountInternal(account);
   }, [accounts, user]);
 
-  const syncHistoricalTrades = useCallback(async (startDate?: Date, endDate?: Date): Promise<number> => {
+  const setAccountType = useCallback((type: 'demo' | 'live') => {
+    if (type !== accountType) {
+      console.log(`🔄 Switching to ${type} environment`);
+      setAccountTypeState(type);
+      
+      // Clear current state when switching environments
+      setSelectedAccount(null);
+      setAccounts([]);
+      setPositions([]);
+      setAccountSummary(null);
+      setLastSyncResult(null);
+      setIsAuthenticated(false);
+      setError(null);
+      
+      // Clear stored auth (different environment = different credentials)
+      localStorage.removeItem('tradovate_token');
+      localStorage.removeItem('tradovate_token_expiration');
+      localStorage.removeItem('tradovate_user');
+    }
+  }, [accountType]);
+
+  // ============================================================================
+  // DATA SYNC
+  // ============================================================================
+
+  const syncHistoricalTrades = useCallback(async (
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<SyncResult> => {
     if (!selectedAccount || !user?.id) {
-      throw new Error('No account selected or user not authenticated');
+      const result: SyncResult = {
+        success: false,
+        tradesImported: 0,
+        tradesSkipped: 0,
+        tradesUpdated: 0,
+        errors: ['No account selected or user not authenticated']
+      };
+      setLastSyncResult(result);
+      return result;
     }
 
     setIsSyncing(true);
     setError(null);
 
     try {
-      const count = await tradovateSyncService.syncHistoricalTrades(startDate, endDate);
-      return count;
+      console.log('🔄 Starting historical sync...', { 
+        startDate: startDate?.toISOString(), 
+        endDate: endDate?.toISOString(),
+        accountId: selectedAccount.id
+      });
+      
+      const result = await tradovateSyncV2Service.syncHistoricalTrades(startDate, endDate, 'manual');
+      setLastSyncResult(result);
+      
+      if (!result.success && result.errors.length > 0) {
+        setError(result.errors[0]);
+      }
+      
+      console.log('✅ Historical sync completed:', result);
+      return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Sync failed';
       setError(errorMessage);
-      throw err;
+      console.error('❌ Sync failed:', err);
+      
+      const result: SyncResult = {
+        success: false,
+        tradesImported: 0,
+        tradesSkipped: 0,
+        tradesUpdated: 0,
+        errors: [errorMessage]
+      };
+      setLastSyncResult(result);
+      return result;
     } finally {
       setIsSyncing(false);
     }
   }, [selectedAccount, user]);
 
-  const syncCurrentPositions = useCallback(async () => {
+  const syncCurrentPositions = useCallback(async (): Promise<SyncResult> => {
     if (!selectedAccount || !user?.id) {
-      throw new Error('No account selected or user not authenticated');
+      const result: SyncResult = {
+        success: false,
+        tradesImported: 0,
+        tradesSkipped: 0,
+        tradesUpdated: 0,
+        errors: ['No account selected or user not authenticated']
+      };
+      setLastSyncResult(result);
+      return result;
     }
 
     setIsSyncing(true);
     setError(null);
 
     try {
-      await tradovateSyncService.syncCurrentPositions();
+      console.log('🔄 Syncing current positions for account:', selectedAccount.id);
+      const result = await tradovateSyncV2Service.syncCurrentPositions('manual');
+      setLastSyncResult(result);
       
       // Refresh positions display
-      const updatedPositions = await tradovateApiService.getPositions(selectedAccount.id);
-      setPositions(updatedPositions);
+      await refreshPositionsInternal(selectedAccount.id);
+      
+      if (!result.success && result.errors.length > 0) {
+        setError(result.errors[0]);
+      }
+      
+      console.log('✅ Position sync completed:', result);
+      return result;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to sync positions';
+      const errorMessage = err instanceof Error ? err.message : 'Sync failed';
       setError(errorMessage);
-      throw err;
+      console.error('❌ Position sync failed:', err);
+      
+      const result: SyncResult = {
+        success: false,
+        tradesImported: 0,
+        tradesSkipped: 0,
+        tradesUpdated: 0,
+        errors: [errorMessage]
+      };
+      setLastSyncResult(result);
+      return result;
     } finally {
       setIsSyncing(false);
     }
   }, [selectedAccount, user]);
 
-  const refreshAccountSummary = useCallback(async () => {
-    if (!selectedAccount) {
-      return;
-    }
+  // ============================================================================
+  // REFRESH METHODS
+  // ============================================================================
 
-    try {
-      const summary = await tradovateSyncService.getAccountSummary();
-      setAccountSummary(summary);
-      
-      const updatedPositions = await tradovateApiService.getPositions(selectedAccount.id);
-      setPositions(updatedPositions);
-    } catch (err) {
-      console.error('Failed to refresh account summary:', err);
-    }
+  const refreshAccountSummary = useCallback(async () => {
+    if (!selectedAccount) return;
+    await refreshAccountSummaryInternal(selectedAccount.id);
   }, [selectedAccount]);
 
-  // Auto-refresh account summary every 30 seconds
-  useEffect(() => {
-    if (selectedAccount && isAuthenticated) {
-      refreshAccountSummary();
-      
-      const interval = setInterval(refreshAccountSummary, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [selectedAccount, isAuthenticated, refreshAccountSummary]);
+  const refreshPositions = useCallback(async () => {
+    if (!selectedAccount) return;
+    await refreshPositionsInternal(selectedAccount.id);
+  }, [selectedAccount]);
+
+  // ============================================================================
+  // RETURN
+  // ============================================================================
 
   return {
+    // Authentication
     isAuthenticated,
     isLoading,
     error,
     login,
     logout,
+    
+    // Account Management
     accounts,
     selectedAccount,
     selectAccount,
     loadAccounts,
+    
+    // Data Sync
     syncHistoricalTrades,
     syncCurrentPositions,
     isSyncing,
+    lastSyncResult,
+    
+    // Real-time Data
     isConnected,
     positions,
     accountSummary,
+    
+    // Refresh
     refreshAccountSummary,
-    accountType
+    refreshPositions,
+    
+    // Account Type
+    accountType,
+    setAccountType
   };
 };
