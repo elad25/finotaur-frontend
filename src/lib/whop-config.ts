@@ -1,9 +1,13 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - FIXED MAPPING!
+// FINOTAUR WHOP CONFIGURATION - v2.2.0
 // =====================================================
 // Place in: src/lib/whop-config.ts
 // 
-// ✅ CORRECT Plan ID mapping based on Whop Dashboard
+// 🔥 v2.2.0 CHANGES:
+// - Added userId to CheckoutOptions for user identification
+// - Added metadata[finotaur_user_id] to checkout URL
+// - This ensures we can identify the user even if they use
+//   a different email in WHOP checkout
 // =====================================================
 
 // ============================================
@@ -179,6 +183,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 export interface CheckoutOptions {
   planId: PlanId;
   userEmail?: string;
+  userId?: string;           // 🔥 NEW: Finotaur user ID for identification
   affiliateCode?: string;
   clickId?: string;
   redirectUrl?: string;
@@ -186,9 +191,12 @@ export interface CheckoutOptions {
 
 /**
  * Build Whop checkout URL with all necessary parameters
+ * 
+ * 🔥 v2.2.0: Now includes userId as metadata to ensure we can
+ * identify the user even if they use a different email in WHOP
  */
 export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
-  const { planId, userEmail, affiliateCode, clickId, redirectUrl } = options;
+  const { planId, userEmail, userId, affiliateCode, clickId, redirectUrl } = options;
   
   const plan = PLANS[planId];
   if (!plan) {
@@ -204,6 +212,12 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   // Pre-fill email if provided
   if (userEmail) {
     params.set('email', userEmail);
+  }
+  
+  // 🔥 NEW: Add Finotaur user ID as metadata
+  // This ensures we can identify the user even if they change their email in WHOP
+  if (userId) {
+    params.set('metadata[finotaur_user_id]', userId);
   }
   
   // Add affiliate tracking

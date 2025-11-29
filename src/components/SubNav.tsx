@@ -6,6 +6,12 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
+import { domains } from '@/constants/nav';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 export const SubNav = () => {
   const navigate = useNavigate();
@@ -102,6 +108,16 @@ export const SubNav = () => {
     checkAffiliateStatus();
   }, [user?.id]);
 
+  // 🔒 Check if a path belongs to a locked domain
+  const isPathLocked = (path: string): boolean => {
+    // Check if path is in backtest section
+    if (path.includes('/backtest')) {
+      const backtestDomain = domains['journal-backtest'];
+      return backtestDomain?.locked === true;
+    }
+    return false;
+  };
+
   // 🔥 Enhanced active detection for better tab highlighting
   const isTabActive = (itemPath: string): boolean => {
     // Check exact path match first
@@ -133,7 +149,14 @@ export const SubNav = () => {
   };
 
   const handleNavigation = (path: string) => {
-    // 🔐 BACKTEST ACCESS CONTROL
+    // 🔒 BACKTEST LOCKED CHECK - Before any other logic
+    if (path.includes('/backtest') && isPathLocked(path)) {
+      console.log('🔒 Backtest is locked - Coming Soon');
+      // Don't navigate - the section is locked
+      return;
+    }
+
+    // 🔐 BACKTEST ACCESS CONTROL (if not locked globally)
     if (path.includes('/backtest')) {
       if (!hasBacktestAccess) {
         // 🔥 Redirect to landing page for non-Premium users
@@ -198,10 +221,12 @@ export const SubNav = () => {
         {activeDomain.subNav
           .filter(shouldShowItem)
           .map((item) => {
-            const locked = (activeDomain as any).locked === true;
+            const domainLocked = (activeDomain as any).locked === true;
+            const backtestLocked = item.path.includes('/backtest') && isPathLocked(item.path);
+            const locked = domainLocked || backtestLocked;
             const active = isTabActive(item.path);
             
-            return (
+            const buttonContent = (
               <button
                 key={item.path}
                 onClick={() => handleNavigation(item.path)}
@@ -213,7 +238,7 @@ export const SubNav = () => {
                     ? 'bg-[#C9A646]/5 text-[#C9A646]'
                     : 'text-[#A0A0A0] hover:bg-[#141414] hover:text-[#F4F4F4]'
                 }`}
-                style={active ? { 
+                style={active && !locked ? { 
                   boxShadow: '0 0 6px rgba(201,166,70,0.08)',
                   borderBottom: '2px solid #C9A646'
                 } : {}}
@@ -237,7 +262,7 @@ export const SubNav = () => {
                   />
                 )}
                 
-                {active && (
+                {active && !locked && (
                   <>
                     <span 
                       className="absolute inset-0 rounded-md opacity-10 blur-sm"
@@ -251,6 +276,31 @@ export const SubNav = () => {
                 )}
               </button>
             );
+
+            // 🔒 Wrap locked backtest items with tooltip
+            if (backtestLocked) {
+              return (
+                <Tooltip key={item.path}>
+                  <TooltipTrigger asChild>
+                    {buttonContent}
+                  </TooltipTrigger>
+                  <TooltipContent 
+                    side="bottom" 
+                    className="bg-[#1A1A1A] border-[#C9A646]/20 text-[#F4F4F4]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-3.5 w-3.5 text-[#C9A646]" />
+                      <span className="font-medium text-[#C9A646]">Coming Soon</span>
+                    </div>
+                    <p className="text-xs text-[#A0A0A0] mt-1">
+                      Backtest feature is under development
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            }
+            
+            return buttonContent;
           })}
       </div>
     </div>

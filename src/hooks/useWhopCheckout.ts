@@ -1,14 +1,14 @@
 // =====================================================
-// FINOTAUR WHOP CHECKOUT HOOK - v2.1.0
+// FINOTAUR WHOP CHECKOUT HOOK - v2.2.0
 // =====================================================
 // Place in: src/hooks/useWhopCheckout.ts
 // 
 // Hook for initiating Whop checkout with affiliate tracking
 // 
-// 🔥 v2.1.0 CHANGES:
-// - Fixed localStorage key sync with useAffiliateDiscount
-// - Added fallback to JSON storage
-// - Better expiration handling
+// 🔥 v2.2.0 CHANGES:
+// - Added userId to checkout URL for user identification
+// - This ensures we can identify the user even if they
+//   use a different email in WHOP checkout
 // =====================================================
 
 import { useCallback, useState } from 'react';
@@ -104,6 +104,9 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
 
   /**
    * Initiate Whop checkout
+   * 
+   * 🔥 v2.2.0: Now includes userId in checkout URL to ensure
+   * we can identify the user even if they use a different email
    */
   const initiateCheckout = useCallback(async (params: CheckoutParams) => {
     const { planName, billingInterval, discountCode } = params;
@@ -131,6 +134,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         planName,
         billingInterval,
         price: plan.price,
+        userId: user?.id,           // 🔥 NEW: Log user ID
         userEmail: user?.email,
         providedDiscountCode: discountCode,
         storedCode,
@@ -138,16 +142,22 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         clickId,
       });
 
-      // Build checkout URL
+      // 🔥 Build checkout URL with userId for identification
       const checkoutUrl = buildWhopCheckoutUrl({
         planId,
         userEmail: user?.email || undefined,
+        userId: user?.id || undefined,        // 🔥 NEW: Pass user ID as metadata
         affiliateCode: affiliateCode || undefined,
         clickId: clickId || undefined,
         redirectUrl: 'https://www.finotaur.com',
       });
 
       console.log('🔗 Checkout URL:', checkoutUrl);
+
+      // Verify the URL contains the user ID
+      if (user?.id && !checkoutUrl.includes('finotaur_user_id')) {
+        console.warn('⚠️ User ID not found in URL!');
+      }
 
       // Verify the URL contains the affiliate code
       if (affiliateCode && !checkoutUrl.includes(`d=${affiliateCode}`)) {
@@ -206,6 +216,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     isLoading,
     error,
     userEmail: user?.email,
+    userId: user?.id,              // 🔥 NEW: Expose userId
     isAuthenticated: !!user,
   };
 }
@@ -218,6 +229,7 @@ export function redirectToWhopCheckout(
   planName: PlanName,
   billingInterval: BillingInterval,
   userEmail?: string,
+  userId?: string,                   // 🔥 NEW: Accept userId
   affiliateCode?: string
 ): void {
   const planId = getPlanId(planName, billingInterval);
@@ -228,6 +240,7 @@ export function redirectToWhopCheckout(
   const checkoutUrl = buildWhopCheckoutUrl({
     planId,
     userEmail,
+    userId,                          // 🔥 NEW: Pass userId
     affiliateCode: affiliateCode || storedCode || undefined,
     clickId: clickId || undefined,
     redirectUrl: 'https://www.finotaur.com',

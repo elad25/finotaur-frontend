@@ -56,7 +56,7 @@ export const domains: Record<string, Domain> = {
     sidebar: [
       { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
       { label: 'Screener', path: '/app/stocks/screener', icon: Search },
-      { label: 'Earnings Calendar', path: '/app/stocks/earnings', icon: Calendar },
+      { label: 'Coming Soon', path: '/app/stocks/earnings', icon: Calendar },
       { label: 'Fundamentals', path: '/app/stocks/fundamentals', icon: BarChart3 },
       { label: 'Top Movers', path: '/app/stocks/movers', icon: TrendingUp },
       { label: 'News', path: '/app/stocks/news', icon: Newspaper },
@@ -213,7 +213,7 @@ export const domains: Record<string, Domain> = {
   'journal-backtest': {
     id: 'journal-backtest',
     label: 'Backtest',
-    locked: false,
+    locked: true, // 🔒 LOCKED - Coming Soon
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },

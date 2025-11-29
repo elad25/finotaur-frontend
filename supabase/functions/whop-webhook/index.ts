@@ -1,8 +1,14 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v3.1.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v3.2.0
 // =====================================================
 // 
-// 🔥 v3.1.0 - READS COMMISSION RATES FROM DB CONFIG
+// 🔥 v3.2.0 - ADDED FINOTAUR_USER_ID METADATA SUPPORT
+// 
+// Changes:
+// - Extracts finotaur_user_id from checkout metadata
+// - Primary user lookup by ID, fallback to email
+// - Handles email mismatch between Finotaur and Whop
+// - Logs email mismatch for debugging
 // 
 // Commission Structure (from affiliate_config):
 // - tier_1: 10% (monthly)
@@ -70,6 +76,12 @@ interface WhopPromoCode {
   promo_type?: string;
 }
 
+// 🔥 NEW: Metadata interface for checkout data
+interface WhopMetadata {
+  finotaur_user_id?: string;
+  [key: string]: string | undefined;
+}
+
 interface WhopPaymentData {
   id: string;
   user: WhopUser;
@@ -85,6 +97,12 @@ interface WhopPaymentData {
   paid_at?: string;
   created_at?: string;
   billing_reason?: string;
+  // 🔥 NEW: Metadata fields
+  metadata?: WhopMetadata;
+  checkout_session?: {
+    metadata?: WhopMetadata;
+  };
+  custom_metadata?: WhopMetadata;
 }
 
 interface WhopMembershipData {
@@ -98,6 +116,12 @@ interface WhopMembershipData {
   canceled_at?: string | null;
   renewal_period_start?: string;
   renewal_period_end?: string;
+  // 🔥 NEW: Metadata fields
+  metadata?: WhopMetadata;
+  checkout_session?: {
+    metadata?: WhopMetadata;
+  };
+  custom_metadata?: WhopMetadata;
 }
 
 interface WhopWebhookPayload {
@@ -120,6 +144,14 @@ interface CommissionConfig {
   tier_2: number;
   tier_3: number;
   annual: number;
+}
+
+// 🔥 NEW: User lookup result
+interface UserLookupResult {
+  id: string;
+  email: string;
+  emailMismatch: boolean;
+  lookupMethod: 'finotaur_user_id' | 'email';
 }
 
 // ============================================
@@ -247,25 +279,94 @@ async function getPlanInfo(
 }
 
 // ============================================
-// HELPER: Find user by email
+// 🔥 NEW: Extract finotaur_user_id from metadata
 // ============================================
 
-async function findUserByEmail(
-  supabase: SupabaseClient,
-  email: string
-): Promise<{ id: string; email: string } | null> {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email")
-    .ilike("email", email)
-    .maybeSingle();
+function extractFinotaurUserId(data: WhopPaymentData | WhopMembershipData): string | null {
+  // Check all possible metadata locations
+  const possibleLocations = [
+    data.metadata?.finotaur_user_id,
+    data.checkout_session?.metadata?.finotaur_user_id,
+    data.custom_metadata?.finotaur_user_id,
+  ];
 
-  if (error || !data) {
-    console.warn(`⚠️ User not found: ${email}`);
-    return null;
+  for (const userId of possibleLocations) {
+    if (userId && typeof userId === 'string' && userId.length > 0) {
+      console.log("✅ Found finotaur_user_id in metadata:", userId);
+      return userId;
+    }
   }
 
-  return data;
+  return null;
+}
+
+// ============================================
+// 🔥 NEW: Find user by ID or email with fallback
+// ============================================
+
+async function findUser(
+  supabase: SupabaseClient,
+  finotaurUserId: string | null,
+  whopEmail: string | undefined
+): Promise<UserLookupResult | null> {
+  
+  // 🔥 OPTION 1: Try finotaur_user_id first (PREFERRED)
+  if (finotaurUserId) {
+    console.log("🔍 Looking up user by finotaur_user_id:", finotaurUserId);
+    
+    const { data: userById, error: userByIdError } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .eq("id", finotaurUserId)
+      .maybeSingle();
+
+    if (!userByIdError && userById) {
+      const emailMismatch = whopEmail 
+        ? userById.email?.toLowerCase() !== whopEmail.toLowerCase()
+        : false;
+      
+      if (emailMismatch) {
+        console.warn("⚠️ Email mismatch detected:", {
+          finotaurEmail: userById.email,
+          whopEmail: whopEmail,
+          userId: userById.id,
+        });
+      }
+      
+      return {
+        id: userById.id,
+        email: userById.email,
+        emailMismatch,
+        lookupMethod: 'finotaur_user_id',
+      };
+    }
+    
+    console.warn("⚠️ User not found by finotaur_user_id, trying email fallback");
+  }
+
+  // 🔥 OPTION 2: Fallback to email lookup
+  if (whopEmail) {
+    console.log("📧 Looking up user by email:", whopEmail);
+    
+    const { data: userByEmail, error: userByEmailError } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .ilike("email", whopEmail)
+      .maybeSingle();
+
+    if (!userByEmailError && userByEmail) {
+      return {
+        id: userByEmail.id,
+        email: userByEmail.email,
+        emailMismatch: false,
+        lookupMethod: 'email',
+      };
+    }
+  }
+
+  // No user found
+  console.warn(`⚠️ User not found: finotaur_user_id=${finotaurUserId}, email=${whopEmail}`);
+  return null;
 }
 
 // ============================================
@@ -321,10 +422,15 @@ serve(async (req: Request) => {
     const eventType = payload.type || "unknown";
     const eventId = payload.id || `evt_${Date.now()}`;
 
+    // 🔥 NEW: Extract finotaur_user_id early for logging
+    const finotaurUserId = extractFinotaurUserId(payload.data);
+
     console.log("📨 Webhook received:", {
       eventType,
       eventId,
       timestamp: payload.timestamp,
+      finotaurUserId,  // 🔥 Log the extracted user ID
+      whopEmail: payload.data.user?.email,
     });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -365,6 +471,8 @@ serve(async (req: Request) => {
         whop_product_id: whopProductId,
         payload: payload,
         processed: false,
+        // 🔥 NEW: Store finotaur_user_id in log
+        metadata: finotaurUserId ? { finotaur_user_id: finotaurUserId } : null,
       })
       .select()
       .single();
@@ -373,18 +481,18 @@ serve(async (req: Request) => {
 
     switch (eventType) {
       case "payment.succeeded":
-        result = await handlePaymentSucceeded(supabase, payload, commissionConfig);
+        result = await handlePaymentSucceeded(supabase, payload, commissionConfig, finotaurUserId);
         break;
 
       case "membership.activated":
       case "membership.went_valid":
-        result = await handleMembershipActivated(supabase, payload);
+        result = await handleMembershipActivated(supabase, payload, finotaurUserId);
         break;
 
       case "membership.deactivated":
       case "membership.went_invalid":
       case "membership.canceled":
-        result = await handleMembershipDeactivated(supabase, payload);
+        result = await handleMembershipDeactivated(supabase, payload, finotaurUserId);
         break;
 
       case "payment.failed":
@@ -435,7 +543,8 @@ serve(async (req: Request) => {
 async function handlePaymentSucceeded(
   supabase: SupabaseClient,
   payload: WhopWebhookPayload,
-  commissionConfig: CommissionConfig
+  commissionConfig: CommissionConfig,
+  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
 ): Promise<{ success: boolean; message: string }> {
   try {
     const data = payload.data as WhopPaymentData;
@@ -452,6 +561,7 @@ async function handlePaymentSucceeded(
     }
 
     console.log("💰 Processing payment.succeeded:", {
+      finotaurUserId,  // 🔥 Log finotaur_user_id
       email: userEmail,
       productId,
       membershipId,
@@ -460,18 +570,25 @@ async function handlePaymentSucceeded(
       billingReason: data.billing_reason,
     });
 
-    if (!userEmail) {
-      return { success: false, message: "No user email in payment data" };
-    }
-
     if (!productId) {
       return { success: false, message: "No product ID in payment data" };
     }
 
-    const user = await findUserByEmail(supabase, userEmail);
+    // 🔥 NEW: Use combined user lookup
+    const user = await findUser(supabase, finotaurUserId, userEmail);
     if (!user) {
-      return { success: false, message: `User not found: ${userEmail}` };
+      return { 
+        success: false, 
+        message: `User not found: finotaur_user_id=${finotaurUserId}, email=${userEmail}` 
+      };
     }
+
+    console.log("👤 User identified:", {
+      userId: user.id,
+      userEmail: user.email,
+      lookupMethod: user.lookupMethod,
+      emailMismatch: user.emailMismatch,
+    });
 
     const planInfo = await getPlanInfo(supabase, productId);
     if (!planInfo) {
@@ -487,7 +604,7 @@ async function handlePaymentSucceeded(
       subscriptionEndsAt.setFullYear(subscriptionEndsAt.getFullYear() + 1);
     }
 
-    // Update profile
+    // 🔥 Update profile - now includes whop_email to track email used at checkout
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
@@ -500,11 +617,15 @@ async function handlePaymentSucceeded(
         whop_user_id: whopUserId,
         whop_membership_id: membershipId,
         whop_product_id: productId,
-        whop_customer_email: userEmail,
+        whop_customer_email: userEmail,  // 🔥 Store Whop email (might differ from Finotaur email)
         payment_provider: "whop",
         max_trades: planInfo.maxTrades,
         current_month_trades_count: 0,
         billing_cycle_start: now.toISOString().split('T')[0],
+        // 🔥 NEW: Log email mismatch if detected
+        ...(user.emailMismatch && {
+          subscription_notes: `Email mismatch: Finotaur=${user.email}, Whop=${userEmail}`,
+        }),
       })
       .eq("id", user.id);
 
@@ -513,7 +634,7 @@ async function handlePaymentSucceeded(
       return { success: false, message: `Failed to update profile: ${updateError.message}` };
     }
 
-    console.log(`✅ Profile updated: ${userEmail} → ${planInfo.plan} (${planInfo.interval})`);
+    console.log(`✅ Profile updated: ${user.email} → ${planInfo.plan} (${planInfo.interval})${user.emailMismatch ? ' [EMAIL MISMATCH]' : ''}`);
 
     // Process affiliate
     if (promoCode) {
@@ -521,7 +642,7 @@ async function handlePaymentSucceeded(
       await processAffiliateFromPayment(supabase, commissionConfig, {
         promoCode,
         userId: user.id,
-        userEmail,
+        userEmail: user.email,  // Use Finotaur email for affiliate tracking
         whopUserId,
         membershipId,
         productId,
@@ -533,7 +654,7 @@ async function handlePaymentSucceeded(
 
     return { 
       success: true, 
-      message: `Payment processed: ${planInfo.plan} (${planInfo.interval}) for ${userEmail}${promoCode ? ` with promo ${promoCode}` : ''}` 
+      message: `Payment processed: ${planInfo.plan} (${planInfo.interval}) for ${user.email}${promoCode ? ` with promo ${promoCode}` : ''}${user.emailMismatch ? ' [EMAIL MISMATCH]' : ''}` 
     };
 
   } catch (error) {
@@ -548,10 +669,12 @@ async function handlePaymentSucceeded(
 
 async function handleMembershipActivated(
   supabase: SupabaseClient,
-  payload: WhopWebhookPayload
+  payload: WhopWebhookPayload,
+  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
 ): Promise<{ success: boolean; message: string }> {
   const data = payload.data as WhopMembershipData;
   const membershipId = data.id;
+  const userEmail = data.user?.email;
 
   // Check if already processed by payment.succeeded
   const { data: existingProfile } = await supabase
@@ -564,6 +687,14 @@ async function handleMembershipActivated(
     return { success: true, message: `Membership already active for ${existingProfile.email}` };
   }
 
+  // 🔥 NEW: Try to find user by finotaur_user_id if not found by membership
+  if (!existingProfile && finotaurUserId) {
+    const user = await findUser(supabase, finotaurUserId, userEmail);
+    if (user) {
+      console.log(`📝 Membership activated for user found by finotaur_user_id: ${user.email}`);
+    }
+  }
+
   return { success: true, message: `Membership activated event received for ${membershipId}` };
 }
 
@@ -573,19 +704,37 @@ async function handleMembershipActivated(
 
 async function handleMembershipDeactivated(
   supabase: SupabaseClient,
-  payload: WhopWebhookPayload
+  payload: WhopWebhookPayload,
+  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
 ): Promise<{ success: boolean; message: string }> {
   const data = payload.data as WhopMembershipData;
   const membershipId = data.id;
+  const userEmail = data.user?.email;
 
-  const { data: user } = await supabase
+  // Try to find user by membership ID first
+  let user: { id: string; email: string } | null = null;
+
+  const { data: userByMembership } = await supabase
     .from("profiles")
     .select("id, email")
     .eq("whop_membership_id", membershipId)
     .maybeSingle();
 
+  if (userByMembership) {
+    user = userByMembership;
+  } else if (finotaurUserId || userEmail) {
+    // 🔥 NEW: Fallback to finotaur_user_id or email
+    const foundUser = await findUser(supabase, finotaurUserId, userEmail);
+    if (foundUser) {
+      user = { id: foundUser.id, email: foundUser.email };
+    }
+  }
+
   if (!user) {
-    return { success: false, message: `User not found for membership: ${membershipId}` };
+    return { 
+      success: false, 
+      message: `User not found for membership: ${membershipId}, finotaur_user_id: ${finotaurUserId}` 
+    };
   }
 
   // Downgrade to free

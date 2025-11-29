@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent } from "lucide-react";
+import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown } from "lucide-react";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { formatNumber } from "@/utils/smartCalc";
 
@@ -13,14 +13,20 @@ import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useTrades } from "@/hooks/useTrades";
 
-type BillingInterval = 'monthly' | 'yearly';
+// 🔥 PAYMENT INTEGRATION
+import PaymentPopup from "@/components/PaymentPopup";
+import { useWhopCheckout } from "@/hooks/useWhopCheckout";
+import { useSubscriptionManagement } from "@/hooks/useSubscriptionManagement";
+import type { PlanName, BillingInterval } from "@/lib/whop-config";
+
+type PlanId = 'free' | 'basic' | 'premium';
 
 interface Plan {
-  id: string;
+  id: PlanId;
   name: string;
-  monthlyPrice: string;
-  yearlyPrice: string;
-  yearlyMonthlyEquivalent: string;
+  monthlyPrice: number;
+  yearlyPrice: number;
+  yearlyMonthlyEquivalent: number;
   description: string;
   features: string[];
   highlightedFeatures?: string[];
@@ -31,15 +37,16 @@ interface Plan {
     text: string;
     icon: any;
   };
+  tier: number; // For upgrade/downgrade detection
 }
 
 const plans: Plan[] = [
   {
     id: "free",
     name: "Free",
-    monthlyPrice: "$0",
-    yearlyPrice: "$0",
-    yearlyMonthlyEquivalent: "$0",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    yearlyMonthlyEquivalent: 0,
     description: "Perfect for trying Finotaur",
     features: [
       "10 manual trades (lifetime)",
@@ -50,14 +57,15 @@ const plans: Plan[] = [
       "Mobile app access"
     ],
     cta: "Current Plan",
-    featured: false
+    featured: false,
+    tier: 0,
   },
   {
     id: "basic",
     name: "Basic",
-    monthlyPrice: "$19.99",
-    yearlyPrice: "$149",
-    yearlyMonthlyEquivalent: "$12.42",
+    monthlyPrice: 19.99,
+    yearlyPrice: 149,
+    yearlyMonthlyEquivalent: 12.42,
     description: "Essential tools + automatic broker sync",
     features: [
       "Everything in Free, plus:",
@@ -74,14 +82,15 @@ const plans: Plan[] = [
     ],
     cta: "Upgrade to Basic",
     featured: false,
-    savings: "Save 38%"
+    savings: "Save 38%",
+    tier: 1,
   },
   {
     id: "premium",
     name: "Premium",
-    monthlyPrice: "$39.99",
-    yearlyPrice: "$299",
-    yearlyMonthlyEquivalent: "$24.92",
+    monthlyPrice: 39.99,
+    yearlyPrice: 299,
+    yearlyMonthlyEquivalent: 24.92,
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
@@ -97,9 +106,16 @@ const plans: Plan[] = [
     ],
     cta: "Upgrade to Premium",
     featured: true,
-    savings: "Save 38%"
+    savings: "Save 38%",
+    tier: 2,
   }
 ];
+
+// Helper to get plan tier
+const getPlanTier = (planId: string): number => {
+  const plan = plans.find(p => p.id === planId);
+  return plan?.tier ?? 0;
+};
 
 // ============================================
 // 🔥 CHANGE PASSWORD MODAL - Memoized
@@ -254,18 +270,29 @@ const ChangePasswordModal = ({
 };
 
 // ============================================
-// 🔥 UPGRADE PLAN MODAL - Memoized
+// 🔥 UPGRADE PLAN MODAL - WITH WHOP INTEGRATION
 // ============================================
 const UpgradePlanModal = ({ 
   isOpen, 
   onClose,
-  currentPlan 
+  currentPlan,
+  onSelectPlan,
+  subscriptionExpiresAt,
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   currentPlan: string;
+  onSelectPlan: (planId: PlanId, billingInterval: BillingInterval) => void;
+  subscriptionExpiresAt?: string | null;
 }) => {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [pendingDowngrade, setPendingDowngrade] = useState<PlanId | null>(null);
+  
+  // 🔥 Subscription management hook
+  const { downgradeSubscription, isLoading: isProcessingDowngrade } = useSubscriptionManagement();
+
+  const currentTier = getPlanTier(currentPlan);
 
   const getDisplayPrice = useCallback((plan: Plan) => {
     if (plan.id === "free") {
@@ -274,27 +301,168 @@ const UpgradePlanModal = ({
     
     if (billingInterval === 'monthly') {
       return { 
-        price: plan.monthlyPrice, 
+        price: `$${plan.monthlyPrice.toFixed(2)}`, 
         period: "/month" 
       };
     } else {
       return { 
-        price: plan.yearlyMonthlyEquivalent, 
+        price: `$${plan.yearlyMonthlyEquivalent.toFixed(2)}`, 
         period: "/month",
-        billedAs: `Billed ${plan.yearlyPrice}/year`
+        billedAs: `Billed $${plan.yearlyPrice}/year`
       };
     }
   }, [billingInterval]);
 
-  const handlePlanSelect = useCallback((planId: string) => {
+  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade'; label: string } => {
+    if (plan.id === currentPlan) {
+      return { type: 'current', label: 'Current Plan' };
+    }
+    
+    if (plan.tier > currentTier) {
+      return { type: 'upgrade', label: `Upgrade to ${plan.name}` };
+    }
+    
+    return { type: 'downgrade', label: `Downgrade to ${plan.name}` };
+  }, [currentPlan, currentTier]);
+
+  const handlePlanSelect = useCallback(async (planId: PlanId) => {
     if (planId === currentPlan) {
       toast.info("This is your current plan");
       return;
     }
 
-    toast.info(`Upgrade to ${planId} - Payment integration coming soon`);
-    onClose();
-  }, [currentPlan, onClose]);
+    const selectedPlan = plans.find(p => p.id === planId);
+    if (!selectedPlan) return;
+
+    const action = getPlanAction(selectedPlan);
+
+    if (action.type === 'upgrade') {
+      // Upgrade - go to payment
+      if (planId === 'free') {
+        toast.error("Cannot upgrade to free plan");
+        return;
+      }
+      onSelectPlan(planId as PlanId, billingInterval);
+      onClose();
+    } else if (action.type === 'downgrade') {
+      // Show confirmation for downgrade
+      setPendingDowngrade(planId);
+      setShowCancelConfirm(true);
+    }
+  }, [currentPlan, billingInterval, getPlanAction, onSelectPlan, onClose]);
+
+  const handleConfirmDowngrade = useCallback(async () => {
+    if (!pendingDowngrade) return;
+    
+    const result = await downgradeSubscription(pendingDowngrade as 'basic' | 'free');
+    
+    if (result?.success) {
+      setShowCancelConfirm(false);
+      setPendingDowngrade(null);
+      onClose();
+    }
+  }, [pendingDowngrade, downgradeSubscription, onClose]);
+
+  const handleCancelDowngrade = useCallback(() => {
+    setShowCancelConfirm(false);
+    setPendingDowngrade(null);
+  }, []);
+
+  if (!isOpen) return null;
+
+  // 🔥 Confirmation dialog for downgrade
+  if (showCancelConfirm && pendingDowngrade) {
+    const targetPlan = plans.find(p => p.id === pendingDowngrade);
+    const expiresDate = subscriptionExpiresAt 
+      ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        })
+      : 'the end of your billing period';
+
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+          <div className="p-6 border-b border-zinc-800">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-zinc-100">Confirm Downgrade</h3>
+                <p className="text-sm text-zinc-400">
+                  Downgrade to {targetPlan?.name}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-4">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <p className="text-amber-200 text-sm leading-relaxed">
+                {pendingDowngrade === 'free' ? (
+                  <>
+                    Your subscription will be cancelled and you'll be downgraded to the <strong>Free</strong> plan on <strong>{expiresDate}</strong>.
+                    <br /><br />
+                    You'll lose access to:
+                    <ul className="list-disc ml-5 mt-2 space-y-1">
+                      <li>Broker sync (12,000+ brokers)</li>
+                      <li>Advanced analytics</li>
+                      {currentPlan === 'premium' && <li>AI-powered insights</li>}
+                      {currentPlan === 'premium' && <li>Unlimited trades</li>}
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    Your subscription will be downgraded to <strong>Basic</strong> on <strong>{expiresDate}</strong>.
+                    <br /><br />
+                    You'll lose access to:
+                    <ul className="list-disc ml-5 mt-2 space-y-1">
+                      <li>Unlimited trades (limited to 25/month)</li>
+                      <li>AI-powered insights & coach</li>
+                      <li>Priority support</li>
+                    </ul>
+                  </>
+                )}
+              </p>
+            </div>
+
+            <p className="text-zinc-400 text-sm">
+              You can continue using your current plan features until {expiresDate}.
+            </p>
+          </div>
+
+          <div className="p-6 border-t border-zinc-800 flex gap-3">
+            <button
+              onClick={handleCancelDowngrade}
+              disabled={isProcessingDowngrade}
+              className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              Keep Current Plan
+            </button>
+            <button
+              onClick={handleConfirmDowngrade}
+              disabled={isProcessingDowngrade}
+              className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              {isProcessingDowngrade ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <ArrowDown className="w-4 h-4" />
+                  Confirm Downgrade
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isOpen) return null;
 
@@ -304,7 +472,7 @@ const UpgradePlanModal = ({
         {/* Header */}
         <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between p-6 border-b border-zinc-800">
           <div>
-            <h3 className="text-2xl font-semibold text-zinc-100">Upgrade Your Plan</h3>
+            <h3 className="text-2xl font-semibold text-zinc-100">Change Your Plan</h3>
             <p className="text-sm text-zinc-400 mt-1">Choose the best plan for your trading journey</p>
           </div>
           <button
@@ -338,10 +506,10 @@ const UpgradePlanModal = ({
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                    Start free — 10 manual trades
+                    Upgrade anytime, downgrade at cycle end
                   </h4>
                   <p className="text-slate-300 text-base leading-relaxed">
-                    If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
+                    Upgrades take effect immediately. Downgrades will apply at the end of your current billing cycle.
                   </p>
                 </div>
               </div>
@@ -381,14 +549,17 @@ const UpgradePlanModal = ({
           <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
             {plans.map((plan) => {
               const displayPrice = getDisplayPrice(plan);
-              const isCurrentPlan = plan.id === currentPlan;
+              const action = getPlanAction(plan);
+              const isCurrentPlan = action.type === 'current';
+              const isUpgrade = action.type === 'upgrade';
+              const isDowngrade = action.type === 'downgrade';
               
               return (
                 <div
                   key={plan.id}
                   className={`p-6 relative transition-all duration-300 flex flex-col rounded-2xl ${
                     plan.featured ? 'md:scale-[1.05]' : ''
-                  }`}
+                  } ${isCurrentPlan ? 'ring-2 ring-[#C9A646]' : ''}`}
                   style={{
                     background: plan.featured 
                       ? 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)'
@@ -432,8 +603,16 @@ const UpgradePlanModal = ({
                     </div>
                   )}
 
+                  {/* Current Plan Badge */}
+                  {isCurrentPlan && (
+                    <div className="absolute -top-3 right-4 bg-[#C9A646] text-black px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
+                      <Crown className="w-3 h-3" />
+                      Current
+                    </div>
+                  )}
+
                   {/* Savings Badge */}
-                  {plan.savings && billingInterval === 'yearly' && !plan.featured && (
+                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !isCurrentPlan && (
                     <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       {plan.savings}
                     </div>
@@ -476,22 +655,34 @@ const UpgradePlanModal = ({
                   {/* CTA Button */}
                   <button 
                     onClick={() => handlePlanSelect(plan.id)}
-                    disabled={isCurrentPlan}
-                    className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
+                    disabled={isCurrentPlan || isProcessingDowngrade}
+                    className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                        : plan.featured 
-                        ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]' 
-                        : 'border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white hover:scale-[1.02]'
+                        : isUpgrade
+                        ? plan.featured 
+                          ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]' 
+                          : 'bg-[#C9A646] hover:bg-[#D4B84A] text-black hover:scale-[1.02]'
+                        : 'border-2 border-zinc-600 hover:border-zinc-500 hover:bg-zinc-800/50 text-zinc-300 hover:scale-[1.02]'
                     }`}
-                    style={!isCurrentPlan ? (plan.featured ? {
+                    style={!isCurrentPlan && isUpgrade ? (plan.featured ? {
                       boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
                     } : {
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                      transition: 'all 0.3s ease'
+                      boxShadow: '0 4px 20px rgba(201,166,70,0.3)',
                     }) : undefined}
                   >
-                    {isCurrentPlan ? 'Current Plan' : plan.cta}
+                    {isProcessingDowngrade ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-300 rounded-full animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        {isUpgrade && <ArrowUp className="w-4 h-4" />}
+                        {isDowngrade && <ArrowDown className="w-4 h-4" />}
+                        {action.label}
+                      </>
+                    )}
                   </button>
                 </div>
               );
@@ -508,7 +699,7 @@ const UpgradePlanModal = ({
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm">14-Day Premium Trial</span>
+                <span className="text-sm">Secure payment via Whop</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600" />
               <div className="flex items-center gap-2">
@@ -528,6 +719,7 @@ const UpgradePlanModal = ({
     </div>
   );
 };
+
 // ============================================
 // 🔥 SAFE NUMBER HELPER - Global
 // ============================================
@@ -557,10 +749,22 @@ export default function JournalSettings() {
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { trades } = useTrades(); // Pre-cached for export
 
+  // 🔥 PAYMENT HOOK
+  const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
+    onError: (error) => {
+      toast.error('Checkout failed', { description: error.message });
+    }
+  });
+
   // Local UI state
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isRiskSettingsOpen, setIsRiskSettingsOpen] = useState(false);
+  
+  // 🔥 Payment popup state
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('basic');
+  const [selectedBillingInterval, setSelectedBillingInterval] = useState<BillingInterval>('monthly');
 
   // 🚀 Memoized computed values
   const planInfo = useMemo(() => getPlanDisplay(profile), [profile]);
@@ -593,6 +797,18 @@ export default function JournalSettings() {
 
   const handleUpgrade = useCallback(() => {
     setIsUpgradeModalOpen(true);
+  }, []);
+
+  // 🔥 Handle plan selection from modal
+  const handleSelectPlan = useCallback((planId: 'basic' | 'premium', billingInterval: BillingInterval) => {
+    setSelectedPlan(planId);
+    setSelectedBillingInterval(billingInterval);
+    setShowPaymentPopup(true);
+  }, []);
+
+  // 🔥 Handle payment popup close
+  const handlePaymentPopupClose = useCallback(() => {
+    setShowPaymentPopup(false);
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -997,7 +1213,19 @@ export default function JournalSettings() {
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
         currentPlan={profile?.account_type || 'free'}
+        onSelectPlan={handleSelectPlan}
+        subscriptionExpiresAt={profile?.subscription_expires_at}
       />
+
+      {/* 🔥 Payment Popup - Same as PricingSelection */}
+      {showPaymentPopup && (
+        <PaymentPopup
+          isOpen={showPaymentPopup}
+          onClose={handlePaymentPopupClose}
+          planId={selectedPlan}
+          billingInterval={selectedBillingInterval}
+        />
+      )}
 
       <RiskSettingsDialog 
         open={isRiskSettingsOpen}
