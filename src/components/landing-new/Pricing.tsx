@@ -53,7 +53,7 @@ const plans: Plan[] = [
     features: [
       "Everything in Free, plus:",
       "Broker sync (12,000+ brokers)",
-      "Up to 30 auto-synced trades/month (~2GB data)",
+      "Up to 25 auto-synced trades/month (~2GB data)",
       "Unlimited manual trades",
       "Full performance analytics",
       "Strategy builder & tracking",

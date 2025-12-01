@@ -1,208 +1,260 @@
 // src/components/BrokerConnectionPopup.tsx
-// ✅ Universal broker connection popup - Currently supports Tradovate
-// ✅ UPDATED: Added Demo/Live account type selection + Connection Status Indicator
-// 🔮 Ready for future brokers: Interactive Brokers, NinjaTrader, etc.
+// ✅ SnapTrade Broker Connection Popup - Connect 100+ brokers worldwide
+// 🔄 Syncs trades automatically with Finotaur trades table
+// 🔧 FIXED: Race condition in initialization
 
-import { useState, useEffect } from "react";
-import { X, Search, AlertCircle, Loader2, ArrowRight, Lock, Crown, Shield, Zap, CheckCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { 
+  X, Search, AlertCircle, Loader2, ArrowRight, Lock, Crown, 
+  CheckCircle, RefreshCw, Unlink, Check
+} from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useNavigate } from "react-router-dom";
-import { useTradovate } from "@/hooks/brokers/tradovate/useTradovate";
 
-type ViewType = "select-broker" | "select-account-type" | "tradovate-login" | "connecting" | "connected" | "error" | "blocked";
-type TradovateAccountType = 'demo' | 'live';
+// SnapTrade imports
+import { snaptradeService } from "@/integrations/snaptrade/snaptradeService";
+import { getOrCreateSnapTradeCredentials, snaptradeSupabaseService } from "@/integrations/snaptrade/snaptradeSupabase";
+import { useSnapTradeConnectionStatus } from "@/hooks/useTrackSnapTradeActivity";
+import type { Brokerage, SnapTradeCredentials } from "@/integrations/snaptrade/snaptradeTypes";
 
 // ============================================================================
-// 🎯 AVAILABLE BROKERS - Currently only Tradovate
+// TYPES
 // ============================================================================
 
-interface Broker {
-  id: string;
-  name: string;
-  displayName: string;
-  slug: string;
-  description?: string;
-  supported: boolean;
-  comingSoon?: boolean;
-}
+type ViewType = 
+  | "snaptrade-brokers"    // SnapTrade broker list (main view)
+  | "connecting"           // Connection in progress
+  | "connected"            // Successfully connected
+  | "manage-connections"   // View/manage existing connections
+  | "error"                // Error state
+  | "blocked";             // Blocked for FREE users
 
-const AVAILABLE_BROKERS: Broker[] = [
-  {
-    id: 'tradovate',
-    name: 'Tradovate',
-    displayName: 'Tradovate',
-    slug: 'TRADOVATE',
-    description: 'Futures trading platform',
-    supported: true,
-    comingSoon: false
-  },
-  // 🔮 Future brokers (commented out for now)
-  /*
-  {
-    id: 'interactive-brokers',
-    name: 'Interactive Brokers',
-    displayName: 'Interactive Brokers (IBKR)',
-    slug: 'IBKR',
-    description: 'Professional trading platform',
-    supported: false,
-    comingSoon: true
-  },
-  */
-];
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
 
 export default function BrokerConnectionPopup({ onClose }: { onClose: () => void }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   
   const { canUseSnapTrade, limits, isUnlimitedUser } = useSubscription();
+  const { markAsConnected, markAsDisconnected } = useSnapTradeConnectionStatus();
   
-  // Tradovate account type and credentials MUST BE DEFINED BEFORE HOOK
-  const [accountType, setAccountType] = useState<TradovateAccountType>('demo');
-  
-  // Tradovate hook - NOW WITH accountType parameter!
-  const {
-    isAuthenticated,
-    login: tradovateLogin,
-    isLoading: tradovateLoading,
-    error: tradovateError,
-    accounts: tradovateAccounts,
-    selectedAccount: tradovateSelectedAccount
-  } = useTradovate(accountType);
-  
-  const [view, setView] = useState<ViewType>("select-broker");
-  const [loading, setLoading] = useState(false);
+  // View state - Start directly with broker list
+  const [view, setView] = useState<ViewType>("snaptrade-brokers");
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
   
-  // Broker selection
+  // SnapTrade state
+  const [snaptradeCredentials, setSnaptradeCredentials] = useState<SnapTradeCredentials | null>(null);
+  const [brokerages, setBrokerages] = useState<Brokerage[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBroker, setSelectedBroker] = useState<Broker | null>(null);
+  const [selectedBroker, setSelectedBroker] = useState<Brokerage | null>(null);
+  const [activeConnections, setActiveConnections] = useState<any[]>([]);
   
-  // Credentials
-  const [credentials, setCredentials] = useState({
-    username: '',
-    password: ''
-  });
+  // 🔧 FIX: Prevent double initialization
+  const initializationRef = useRef(false);
 
-  // Block FREE users (only if you want this restriction)
+  // ============================================================================
+  // EFFECTS
+  // ============================================================================
+
+  // Check subscription access
   useEffect(() => {
     if (!canUseSnapTrade && !isUnlimitedUser && limits) {
       console.log('🚫 Broker connection blocked - showing blocked view');
       setView("blocked");
-      setLoading(false);
       return;
     }
     console.log('✅ Broker connection access granted');
   }, [canUseSnapTrade, isUnlimitedUser, limits]);
 
-  // Check if already connected to Tradovate
+  // 🔧 FIXED: Sequential initialization to prevent race conditions
   useEffect(() => {
-    if (isAuthenticated && tradovateSelectedAccount) {
-      console.log('✅ Already connected to Tradovate:', tradovateSelectedAccount.name);
-      setView("connected");
+    async function initializeAndLoadBrokers() {
+      // Prevent double initialization
+      if (initializationRef.current) return;
+      if (!user || view === "blocked") return;
+      
+      initializationRef.current = true;
+      setLoading(true);
+      
+      try {
+        // Step 1: Load brokerages FIRST (public endpoint, no credentials needed)
+        console.log('📋 Loading SnapTrade brokers...');
+        const brokersData = await snaptradeService.listBrokerages();
+        setBrokerages(brokersData);
+        console.log(`✅ Loaded ${brokersData.length} brokers`);
+        
+        // Step 2: Check for existing credentials
+        const hasCredentials = await snaptradeSupabaseService.hasCredentials(user.id);
+        
+        if (hasCredentials) {
+          const credentials = await snaptradeSupabaseService.getCredentials(user.id);
+          if (credentials) {
+            setSnaptradeCredentials(credentials);
+            
+            // Step 3: Check for active connections (only if we have credentials)
+            try {
+              console.log('🔍 Checking for active connections...');
+              const connections = await snaptradeService.listConnections(credentials);
+              const active = connections.filter(c => c.status === 'CONNECTED');
+              setActiveConnections(active);
+              
+              if (active.length > 0) {
+                console.log(`✅ Found ${active.length} active SnapTrade connection(s)`);
+              } else {
+                console.log('No active connections found');
+              }
+            } catch (err) {
+              console.log('No active connections found');
+            }
+          }
+        } else {
+          console.log('No existing SnapTrade credentials');
+        }
+        
+      } catch (error: any) {
+        console.error('Error initializing:', error);
+        setError(error.message || 'Failed to load brokerages');
+        setView("error");
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [isAuthenticated, tradovateSelectedAccount]);
-
-  // ============================================================================
-  // 🎯 FILTERING - Search
-  // ============================================================================
-
-  const filteredBrokers = AVAILABLE_BROKERS.filter(broker => {
-    if (!searchQuery) return true;
     
+    initializeAndLoadBrokers();
+  }, [user, view]);
+
+  // ============================================================================
+  // SNAPTRADE HANDLERS
+  // ============================================================================
+
+  const handleSnapTradeConnect = async (broker: Brokerage) => {
+    if (!user) {
+      setError('Please sign in to connect a broker');
+      return;
+    }
+
+    setSelectedBroker(broker);
+    setView("connecting");
+    setError("");
+    
+    try {
+      console.log('🔗 Starting broker connection for:', broker.name);
+      
+      // Get or create SnapTrade credentials
+      console.log('📝 Getting/Creating SnapTrade credentials...');
+      const credentials = await getOrCreateSnapTradeCredentials(user.id);
+      setSnaptradeCredentials(credentials);
+      
+      console.log('✅ Credentials ready:', {
+        userId: credentials.userId,
+        hasSecret: !!credentials.userSecret
+      });
+
+      // Get OAuth authorization URL
+      console.log('🔗 Getting OAuth authorization URL...');
+      
+      const authUrlResponse = await snaptradeService.getAuthorizationUrl({
+        userId: credentials.userId,
+        userSecret: credentials.userSecret,
+        broker: broker.slug,
+        immediateRedirect: true,
+        customRedirect: `${window.location.origin}/app/journal/overview?broker_connected=true`,
+        connectionType: 'read',
+        connectionPortalVersion: 'v4',
+      });
+
+      // Mark as connected before redirect
+      await markAsConnected(authUrlResponse.sessionId || broker.id, broker.displayName || broker.name);
+
+      // Redirect to broker OAuth page
+      console.log('✅ Redirecting to:', broker.name);
+      window.location.href = authUrlResponse.redirectURI;
+
+    } catch (error: any) {
+      console.error('❌ Connection failed:', error);
+      
+      let errorMessage = 'Failed to connect to broker. ';
+      
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        errorMessage = `This broker (${broker.name}) may not be available. Please try another.`;
+      } else if (error.message?.includes('plan limitation')) {
+        errorMessage = 'This feature is not available in your plan.';
+      } else if (error.message?.includes('register')) {
+        errorMessage = 'Failed to register with SnapTrade. Please try again.';
+      } else {
+        errorMessage += error.message || 'Please try again.';
+      }
+      
+      setError(errorMessage);
+      setView("error");
+    }
+  };
+
+  const handleDisconnect = async (connectionId: string) => {
+    if (!snaptradeCredentials) return;
+    
+    setLoading(true);
+    try {
+      await snaptradeService.deleteConnection(snaptradeCredentials, connectionId);
+      setActiveConnections(prev => prev.filter(c => c.id !== connectionId));
+      
+      // If no more connections, mark as disconnected
+      if (activeConnections.length <= 1) {
+        await markAsDisconnected();
+      }
+      
+      console.log('✅ Disconnected broker');
+    } catch (error: any) {
+      console.error('Failed to disconnect:', error);
+      setError(error.message || 'Failed to disconnect broker');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSyncTrades = async () => {
+    if (!user || !snaptradeCredentials) return;
+    
+    setLoading(true);
+    try {
+      // Import the sync function dynamically
+      const { syncTradesFromSnapTrade } = await import('@/integrations/snaptrade/snaptradeTradeSync');
+      
+      const result = await syncTradesFromSnapTrade(user.id);
+      
+      if (result.success) {
+        console.log(`✅ Synced ${result.tradesImported} trades`);
+        // Could show a toast notification here
+      } else {
+        throw new Error(result.errors.join(', '));
+      }
+    } catch (error: any) {
+      console.error('Sync failed:', error);
+      setError(error.message || 'Failed to sync trades');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================================
+  // FILTERED BROKERS
+  // ============================================================================
+
+  const filteredBrokers = brokerages.filter(broker => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
     return (
-      broker.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      broker.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      broker.slug.toLowerCase().includes(searchQuery.toLowerCase())
+      broker.name?.toLowerCase().includes(query) ||
+      broker.displayName?.toLowerCase().includes(query)
     );
   });
 
   // ============================================================================
-  // HANDLERS
-  // ============================================================================
-
-  const handleBrokerSelect = (broker: Broker) => {
-    console.log('🔍 Selected broker:', broker.name);
-    
-    if (!broker.supported) {
-      setError(`${broker.displayName} is coming soon! We're working on integrating this broker.`);
-      setView("error");
-      return;
-    }
-    
-    setSelectedBroker(broker);
-    
-    // For now, only Tradovate is supported
-    if (broker.id === 'tradovate') {
-      setView("select-account-type");
-    }
-  };
-
-  const handleAccountTypeSelect = (type: TradovateAccountType) => {
-    console.log(`📊 Selected account type: ${type.toUpperCase()}`);
-    setAccountType(type);
-    setView("tradovate-login");
-  };
-
-  const handleTradovateConnect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!credentials.username || !credentials.password) {
-      setError('Please enter both username and password');
-      return;
-    }
-
-    setView("connecting");
-    setError("");
-
-    try {
-      console.log(`🔐 Attempting ${accountType.toUpperCase()} account login...`);
-      
-      await tradovateLogin({
-        username: credentials.username,
-        password: credentials.password,
-        deviceId: 'Finotaur-Web'
-      });
-      
-      // Connection successful
-      setView("connected");
-      
-      // Close popup after 2 seconds
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-      
-    } catch (err: any) {
-      console.error('❌ Connection failed:', err);
-      setError(err.message || 'Failed to connect to Tradovate');
-      setView("error");
-    }
-  };
-
-  // ============================================================================
-  // 🆕 CONNECTION STATUS BADGE - Shows if already connected
-  // ============================================================================
-  
-  const ConnectionStatusBadge = () => {
-    if (!isAuthenticated || !tradovateSelectedAccount) return null;
-    
-    return (
-      <div className="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3">
-        <div className="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/20">
-          <CheckCircle className="w-5 h-5 text-emerald-500" />
-        </div>
-        <div className="flex-1">
-          <p className="text-white font-semibold text-sm">Connected to Tradovate</p>
-          <p className="text-emerald-400 text-xs">
-            {tradovateSelectedAccount.name} • {accountType === 'demo' ? 'Demo' : 'Live'} Account
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  // ============================================================================
-  // VIEWS
+  // RENDER VIEWS
   // ============================================================================
 
   // Blocked State (for FREE users)
@@ -232,6 +284,24 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
             Upgrade your plan to sync trades automatically from your broker!
           </p>
           
+          <div className="bg-[#0A0A0A] border border-[#C9A646]/10 rounded-lg p-4 mb-6 text-left">
+            <p className="text-xs text-zinc-500 mb-3">With broker connection:</p>
+            <ul className="space-y-2 text-sm text-zinc-300">
+              <li className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-[#C9A646]" />
+                Automatic trade imports
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-[#C9A646]" />
+                Real-time portfolio sync
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-[#C9A646]" />
+                No manual data entry
+              </li>
+            </ul>
+          </div>
+          
           <div className="flex gap-3">
             <button
               onClick={onClose}
@@ -254,15 +324,15 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // Select Broker View
-  if (view === "select-broker") {
+  // SnapTrade Broker List View
+  if (view === "snaptrade-brokers") {
     return (
       <div 
         className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
         onClick={onClose}
       >
         <div 
-          className="bg-[#141414] border rounded-[20px] p-6 max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(201,166,70,0.2)]"
+          className="bg-[#141414] border rounded-[20px] p-6 max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-[0_0_50px_rgba(201,166,70,0.2)]"
           style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -280,8 +350,26 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
             </button>
           </div>
 
-          {/* 🆕 Connection Status Badge */}
-          <ConnectionStatusBadge />
+          {/* Active Connections Badge */}
+          {activeConnections.length > 0 && (
+            <button
+              onClick={() => setView("manage-connections")}
+              className="w-full mb-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-3 hover:bg-emerald-500/20 transition-colors"
+            >
+              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/20">
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="text-white font-semibold text-sm">
+                  {activeConnections.length} Active Connection{activeConnections.length > 1 ? 's' : ''}
+                </p>
+                <p className="text-emerald-400 text-xs">
+                  Click to manage or sync trades
+                </p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-emerald-400" />
+            </button>
+          )}
 
           {/* Search */}
           <div className="relative mb-4">
@@ -296,77 +384,71 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
           </div>
 
           {/* Results count */}
-          <div className="mb-3 flex items-center justify-between text-sm">
-            <span className="text-zinc-500">
-              {filteredBrokers.length} broker{filteredBrokers.length !== 1 ? 's' : ''} available
-            </span>
-            <span className="text-zinc-600 text-xs">
-              More brokers coming soon
-            </span>
+          <div className="mb-3 text-zinc-500 text-sm">
+            {filteredBrokers.length} broker{filteredBrokers.length !== 1 ? 's' : ''} available
           </div>
 
+          {/* Loading */}
+          {loading && (
+            <div className="flex-1 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-[#C9A646] animate-spin" />
+            </div>
+          )}
+
           {/* Broker List */}
-          <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
-            {filteredBrokers.map((broker) => (
-              <button
-                key={broker.id}
-                onClick={() => handleBrokerSelect(broker)}
-                disabled={!broker.supported}
-                className={`w-full p-4 border rounded-xl transition-all text-left group relative overflow-hidden ${
-                  broker.supported
-                    ? 'bg-zinc-900/50 hover:bg-zinc-900 border-zinc-800 hover:border-[#C9A646]/50 cursor-pointer'
-                    : 'bg-zinc-900/30 border-zinc-800/50 cursor-not-allowed opacity-60'
-                }`}
-              >
-                {broker.supported && (
+          {!loading && (
+            <div className="flex-1 overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+              {filteredBrokers.map((broker) => (
+                <button
+                  key={broker.id}
+                  onClick={() => handleSnapTradeConnect(broker)}
+                  className="w-full p-4 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-[#C9A646]/50 rounded-xl transition-all text-left group relative overflow-hidden"
+                >
                   <div className="absolute inset-0 bg-gradient-to-r from-[#C9A646]/0 via-[#C9A646]/5 to-[#C9A646]/0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                )}
-                
-                <div className="relative flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 border ${
-                    broker.supported ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-900/50 border-zinc-800/50'
-                  }`}>
-                    <div className={`text-xl font-bold ${broker.supported ? 'text-[#C9A646]' : 'text-zinc-600'}`}>
-                      {broker.displayName.charAt(0).toUpperCase()}
-                    </div>
-                  </div>
                   
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className={`font-semibold truncate ${
-                        broker.supported 
-                          ? 'text-white group-hover:text-[#C9A646] transition-colors'
-                          : 'text-zinc-500'
-                      }`}>
-                        {broker.displayName}
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0 overflow-hidden border border-zinc-700">
+                      <img
+                        src={`https://api.snaptrade.com/api/v1/brokerages/${broker.id}/logo?clientId=${import.meta.env.VITE_SNAPTRADE_CLIENT_ID}`}
+                        alt={broker.displayName || broker.name}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.nextElementSibling as HTMLDivElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      <div 
+                        className="w-full h-full hidden items-center justify-center text-xl font-bold text-[#C9A646]"
+                        style={{ display: 'none' }}
+                      >
+                        {(broker.displayName || broker.name).charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-semibold group-hover:text-[#C9A646] transition-colors mb-0.5 truncate">
+                        {broker.displayName || broker.name}
                       </p>
-                      {broker.comingSoon && (
-                        <span className="px-2 py-0.5 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded text-[10px] text-[#C9A646] font-semibold uppercase tracking-wider">
-                          Soon
-                        </span>
+                      {broker.description && (
+                        <p className="text-zinc-500 text-xs truncate">{broker.description}</p>
                       )}
                     </div>
-                    {broker.description && (
-                      <p className="text-zinc-500 text-xs truncate">{broker.description}</p>
-                    )}
-                  </div>
-                  
-                  {broker.supported && (
+                    
                     <div className="ml-4 flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs text-zinc-600 group-hover:text-zinc-500 transition-colors">
                         Connect
                       </span>
-                      <div className="text-[#C9A646] transform group-hover:translate-x-1 transition-transform">
-                        <ArrowRight className="w-4 h-4" />
-                      </div>
+                      <ArrowRight className="w-4 h-4 text-[#C9A646] transform group-hover:translate-x-1 transition-transform" />
                     </div>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
-          {filteredBrokers.length === 0 && (
+          {!loading && filteredBrokers.length === 0 && (
             <div className="flex-1 flex flex-col items-center justify-center py-12">
               <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mb-4">
                 <Search className="w-8 h-8 text-zinc-600" />
@@ -380,231 +462,92 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // ============================================================================
-  // 🆕 SELECT ACCOUNT TYPE VIEW (Demo vs Live)
-  // ============================================================================
-  
-  if (view === "select-account-type") {
+  // Manage Connections View
+  if (view === "manage-connections") {
     return (
       <div 
         className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-        onClick={() => setView("select-broker")}
+        onClick={onClose}
       >
         <div 
-          className="bg-[#141414] border rounded-[20px] p-6 max-w-md w-full shadow-[0_0_50px_rgba(201,166,70,0.2)]"
+          className="bg-[#141414] border rounded-[20px] p-6 max-w-lg w-full shadow-[0_0_50px_rgba(201,166,70,0.2)]"
           style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-1">Select Account Type</h2>
-              <p className="text-zinc-500 text-sm">Choose between Demo or Live account</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setView("snaptrade-brokers")}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <ArrowRight className="w-5 h-5 text-zinc-400 rotate-180" />
+              </button>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">Manage Connections</h2>
+                <p className="text-zinc-500 text-sm">{activeConnections.length} active broker{activeConnections.length !== 1 ? 's' : ''}</p>
+              </div>
             </div>
             <button
-              onClick={() => setView("select-broker")}
+              onClick={onClose}
               className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-zinc-400" />
             </button>
           </div>
 
-          {/* Account Type Options */}
-          <div className="space-y-3">
-            {/* Demo Account */}
-            <button
-              onClick={() => handleAccountTypeSelect('demo')}
-              className="w-full p-5 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-blue-500/50 rounded-xl transition-all text-left group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 border border-blue-500/30 group-hover:border-blue-500/50 transition-colors">
-                  <Shield className="w-6 h-6 text-blue-400" />
+          {/* Sync Button */}
+          <button
+            onClick={handleSyncTrades}
+            disabled={loading}
+            className="w-full mb-4 p-4 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-xl flex items-center gap-3 hover:bg-[#C9A646]/20 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-5 h-5 text-[#C9A646] ${loading ? 'animate-spin' : ''}`} />
+            <div className="flex-1 text-left">
+              <p className="text-white font-semibold text-sm">Sync Trades Now</p>
+              <p className="text-[#C9A646] text-xs">Import latest trades from all brokers</p>
+            </div>
+          </button>
+
+          {/* Connection List */}
+          <div className="space-y-2">
+            {activeConnections.map((conn) => (
+              <div
+                key={conn.id}
+                className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/30">
+                  <CheckCircle className="w-5 h-5 text-emerald-500" />
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-white font-semibold group-hover:text-blue-400 transition-colors">
-                      Demo Account
-                    </h3>
-                    <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/30 rounded text-[10px] text-blue-400 font-semibold uppercase">
-                      Testing
-                    </span>
-                  </div>
-                  <p className="text-zinc-400 text-sm leading-relaxed">
-                    Practice trading with virtual money. Perfect for testing and learning without risk.
+                
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium truncate">
+                    {conn.brokerage?.displayName || conn.brokerage?.name || 'Connected Broker'}
+                  </p>
+                  <p className="text-zinc-500 text-xs">
+                    Connected {conn.createdDate ? new Date(conn.createdDate).toLocaleDateString() : 'recently'}
                   </p>
                 </div>
+                
+                <button
+                  onClick={() => handleDisconnect(conn.id)}
+                  disabled={loading}
+                  className="p-2 hover:bg-red-500/10 rounded-lg transition-colors group"
+                >
+                  <Unlink className="w-4 h-4 text-zinc-500 group-hover:text-red-400" />
+                </button>
               </div>
-            </button>
-
-            {/* Live Account */}
-            <button
-              onClick={() => handleAccountTypeSelect('live')}
-              className="w-full p-5 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-[#C9A646]/50 rounded-xl transition-all text-left group"
-            >
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-lg bg-[#C9A646]/10 flex items-center justify-center flex-shrink-0 border border-[#C9A646]/30 group-hover:border-[#C9A646]/50 transition-colors">
-                  <Zap className="w-6 h-6 text-[#C9A646]" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-white font-semibold group-hover:text-[#C9A646] transition-colors">
-                      Live Account
-                    </h3>
-                    <span className="px-2 py-0.5 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded text-[10px] text-[#C9A646] font-semibold uppercase">
-                      Real Money
-                    </span>
-                  </div>
-                  <p className="text-zinc-400 text-sm leading-relaxed">
-                    Connect your real trading account. Your actual trades and positions will sync automatically.
-                  </p>
-                </div>
-              </div>
-            </button>
+            ))}
           </div>
 
-          {/* Info Box */}
-          <div className="mt-6 p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
-            <p className="text-xs text-zinc-500 leading-relaxed">
-              <strong className="text-zinc-400">Tip:</strong> Start with a Demo account if you're testing the connection. 
-              You can always disconnect and reconnect with a Live account later.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Tradovate Login View
-  if (view === "tradovate-login") {
-    return (
-      <div 
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-        onClick={() => setView("select-account-type")}
-      >
-        <div 
-          className="bg-[#141414] border rounded-[20px] p-6 max-w-md w-full shadow-[0_0_50px_rgba(201,166,70,0.2)]"
-          style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-1">Connect Tradovate</h2>
-              <p className="text-zinc-500 text-sm">
-                {accountType === 'demo' ? 'Demo Account' : 'Live Account'} credentials
-              </p>
-            </div>
-            <button
-              onClick={() => setView("select-account-type")}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5 text-zinc-400" />
-            </button>
-          </div>
-
-          {/* Tradovate Badge with Account Type */}
-          <div className={`mb-6 flex items-center gap-3 p-4 rounded-xl border ${
-            accountType === 'demo'
-              ? 'bg-blue-500/10 border-blue-500/20'
-              : 'bg-[#C9A646]/10 border-[#C9A646]/20'
-          }`}>
-            <div className={`w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0 ${
-              accountType === 'demo'
-                ? 'bg-blue-500/20'
-                : 'bg-[#C9A646]/20'
-            }`}>
-              <span className={`text-2xl font-bold ${
-                accountType === 'demo' ? 'text-blue-400' : 'text-[#C9A646]'
-              }`}>T</span>
-            </div>
-            <div>
-              <p className="text-white font-semibold">Tradovate</p>
-              <p className={`text-xs ${
-                accountType === 'demo' ? 'text-blue-400' : 'text-[#C9A646]'
-              }`}>
-                {accountType === 'demo' ? 'Demo Account (Testing)' : 'Live Account (Real Money)'}
-              </p>
-            </div>
-          </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-              <p className="text-red-400 text-sm">{error}</p>
-            </div>
-          )}
-
-          {/* Login Form */}
-          <form onSubmit={handleTradovateConnect} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
-                Username
-              </label>
-              <input
-                type="text"
-                value={credentials.username}
-                onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#C9A646]/50 transition-colors"
-                placeholder={`Enter your ${accountType} username`}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                value={credentials.password}
-                onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#C9A646]/50 transition-colors"
-                placeholder={`Enter your ${accountType} password`}
-                required
-              />
-            </div>
-
-            {/* Info Box */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                <strong className="text-[#C9A646]">Note:</strong> Your credentials are only used to connect to Tradovate's API. 
-                We don't store your password.
-              </p>
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setView("select-account-type")}
-                className="flex-1 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors font-medium"
-              >
-                Back
-              </button>
-              <button
-                type="submit"
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-[#C9A646] to-[#E5C158] hover:from-[#B39540] hover:to-[#D4B55E] text-black rounded-xl transition-all font-bold shadow-lg"
-              >
-                Connect
-              </button>
-            </div>
-          </form>
-
-          {/* Help Text */}
-          <div className="mt-6 pt-6 border-t border-zinc-800">
-            <p className="text-center text-zinc-500 text-xs">
-              Don't have a Tradovate account?{' '}
-              <a 
-                href="https://www.tradovate.com/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-[#C9A646] hover:text-[#E5C158] transition-colors"
-              >
-                Sign up here
-              </a>
-            </p>
-          </div>
+          {/* Add New Connection Button */}
+          <button
+            onClick={() => setView("snaptrade-brokers")}
+            className="w-full mt-4 p-4 border border-dashed border-zinc-700 rounded-xl flex items-center justify-center gap-2 hover:border-[#C9A646]/50 hover:bg-zinc-900/50 transition-colors text-zinc-400 hover:text-white"
+          >
+            <span className="text-xl">+</span>
+            <span>Add Another Broker</span>
+          </button>
         </div>
       </div>
     );
@@ -613,18 +556,18 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
   // Connecting View
   if (view === "connecting") {
     return (
-      <div 
-        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      >
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <div 
           className="bg-[#141414] border rounded-[20px] p-8 max-w-md w-full shadow-[0_0_50px_rgba(201,166,70,0.2)]"
           style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
         >
           <div className="flex flex-col items-center justify-center py-8 gap-4">
             <Loader2 className="w-10 h-10 text-[#C9A646] animate-spin" />
-            <p className="text-white font-medium">Connecting to Tradovate...</p>
+            <p className="text-white font-medium">
+              Connecting to {selectedBroker?.displayName || selectedBroker?.name || 'broker'}...
+            </p>
             <p className="text-zinc-500 text-sm text-center">
-              {accountType === 'demo' ? 'Demo Account' : 'Live Account'}
+              You'll be redirected to complete the authorization
             </p>
           </div>
         </div>
@@ -633,7 +576,7 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
   }
 
   // Connected View
-  if (view === "connected" && tradovateSelectedAccount) {
+  if (view === "connected") {
     return (
       <div 
         className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
@@ -651,18 +594,8 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
             Connected Successfully!
           </h2>
           
-          <p className="text-zinc-400 mb-2">
-            {tradovateSelectedAccount.name}
-          </p>
-          
-          <p className="text-zinc-500 text-sm mb-2">
-            Account Type: {tradovateSelectedAccount.accountType}
-          </p>
-          
-          <p className={`text-xs mb-6 ${
-            accountType === 'demo' ? 'text-blue-400' : 'text-[#C9A646]'
-          }`}>
-            {accountType === 'demo' ? '🛡️ Demo Account' : '⚡ Live Account'} • Your trades will now sync automatically
+          <p className="text-zinc-400 mb-6">
+            Your trades will now sync automatically
           </p>
           
           <button
@@ -709,7 +642,7 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
             <button
               onClick={() => {
                 setError("");
-                setView("select-broker");
+                setView("snaptrade-brokers");
               }}
               className="flex-1 px-6 py-3 bg-[#C9A646] hover:bg-[#B39540] text-black rounded-xl transition-colors font-bold"
             >

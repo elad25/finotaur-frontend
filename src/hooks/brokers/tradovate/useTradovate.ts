@@ -1,5 +1,5 @@
 // src/hooks/brokers/tradovate/useTradovate.ts
-// 🎯 V2.1 - Fixed: Pass accountType to initialize(), better error handling
+// 🎯 V3.0 - Uses AuthProvider directly, supports demo/live switching
 
 import { useState, useEffect, useCallback } from 'react';
 import { tradovateApiService } from '@/services/brokers/tradovate/tradovateApi.service';
@@ -8,9 +8,11 @@ import { tradovateSyncV2Service, SyncResult } from '@/services/brokers/tradovate
 import {
   TradovateCredentials,
   TradovateAccount,
-  TradovatePosition
+  TradovatePosition,
+  TRADOVATE_API_URLS,
 } from '@/types/brokers/tradovate/tradovate.types';
-import { useAuth } from '@/hooks/useAuth';
+// ✅ Using AuthProvider directly - no useAuth.ts wrapper
+import { useAuth } from '@/providers/AuthProvider';
 
 // ============================================================================
 // TYPES
@@ -65,6 +67,7 @@ interface UseTradovateReturn {
 export const useTradovate = (
   initialAccountType: 'demo' | 'live' = 'demo'
 ): UseTradovateReturn => {
+  // ✅ Using AuthProvider directly
   const { user } = useAuth();
   
   // Auth state
@@ -93,11 +96,14 @@ export const useTradovate = (
   // Set API URL based on account type
   useEffect(() => {
     const apiUrl = accountType === 'demo'
-      ? 'https://demo.tradovateapi.com/v1'
-      : 'https://live.tradovateapi.com/v1';
+      ? TRADOVATE_API_URLS.demo
+      : TRADOVATE_API_URLS.live;
     
     console.log(`🔧 Setting Tradovate API URL: ${apiUrl}`);
     tradovateApiService.setApiUrl(apiUrl);
+    
+    // Also update WebSocket URL
+    tradovateWebSocketService.setEnvironment(accountType);
   }, [accountType]);
 
   // Check auth status on mount
@@ -173,14 +179,13 @@ export const useTradovate = (
     console.log('📌 Selecting account:', account.name);
     setSelectedAccount(account);
     
-    // 🎯 CRITICAL FIX: Detect environment from account type
+    // Detect environment from account type
     const detectedEnv: 'demo' | 'live' = account.accountType === 'Demo' ? 'demo' : 'live';
     console.log(`🔍 Detected environment: ${detectedEnv} (from accountType: ${account.accountType})`);
     
     // Initialize sync service with correct environment
     if (user?.id) {
       try {
-        // 🎯 CRITICAL FIX: Pass environment to initialize()
         await tradovateSyncV2Service.initialize(user.id, account.id, detectedEnv);
         await refreshAccountSummaryInternal(account.id);
         await refreshPositionsInternal(account.id);
@@ -247,7 +252,7 @@ export const useTradovate = (
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, []);
 
   const logout = useCallback(async () => {
     setIsLoading(true);
@@ -308,7 +313,7 @@ export const useTradovate = (
       return;
     }
     await selectAccountInternal(account);
-  }, [accounts, user]);
+  }, [accounts]);
 
   const setAccountType = useCallback((type: 'demo' | 'live') => {
     if (type !== accountType) {

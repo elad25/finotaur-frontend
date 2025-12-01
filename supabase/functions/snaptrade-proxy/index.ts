@@ -1,11 +1,13 @@
+// ✅ FULLY FIXED VERSION - Proper SnapTrade SDK authentication
+// 🔧 Includes deleteUser support for cleanup
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Snaptrade } from "npm:snaptrade-typescript-sdk@9.0.152";
 
 const SNAPTRADE_CLIENT_ID = Deno.env.get("SNAPTRADE_CLIENT_ID");
 const SNAPTRADE_CONSUMER_KEY = Deno.env.get("SNAPTRADE_CONSUMER_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const SNAPTRADE_BASE_URL = "https://api.snaptrade.com/api/v1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,127 +15,34 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, PUT, DELETE, OPTIONS"
 };
 
-// 🔍 DEBUG: Log environment variables
-console.log("🔧 Environment check:");
-console.log("  SNAPTRADE_CLIENT_ID:", SNAPTRADE_CLIENT_ID ? `${SNAPTRADE_CLIENT_ID.substring(0, 10)}... (length: ${SNAPTRADE_CLIENT_ID.length})` : "❌ MISSING");
-console.log("  SNAPTRADE_CONSUMER_KEY:", SNAPTRADE_CONSUMER_KEY ? `${SNAPTRADE_CONSUMER_KEY.substring(0, 10)}... (length: ${SNAPTRADE_CONSUMER_KEY.length})` : "❌ MISSING");
-console.log("  SUPABASE_URL:", SUPABASE_URL ? "✅" : "❌ MISSING");
+console.log("🔧 SnapTrade Proxy - Environment Check:");
+console.log("  CLIENT_ID:", SNAPTRADE_CLIENT_ID);
+console.log("  CLIENT_ID length:", SNAPTRADE_CLIENT_ID?.length, "(should be 14)");
+console.log("  CONSUMER_KEY length:", SNAPTRADE_CONSUMER_KEY?.length, "(should be 50)");
 
-/**
- * ✅ FIXED: Deep recursive sorting that matches SnapTrade's signature algorithm
- */
-function sortedStringify(obj: any): string {
-  if (obj === null) {
-    return 'null';
-  }
-  
-  if (obj === undefined) {
-    return 'null';
-  }
-  
-  if (typeof obj !== 'object' || Array.isArray(obj)) {
-    return JSON.stringify(obj);
-  }
-  
-  // Deep sort all keys recursively
-  const sortObject = (o: any): any => {
-    if (o === null || o === undefined) {
-      return o;
-    }
-    
-    if (Array.isArray(o)) {
-      return o.map(sortObject);
-    }
-    
-    if (typeof o === 'object') {
-      const sorted: Record<string, any> = {};
-      Object.keys(o).sort().forEach(k => {
-        sorted[k] = sortObject(o[k]);
-      });
-      return sorted;
-    }
-    
-    return o;
-  };
-  
-  const sorted = sortObject(obj);
-  return JSON.stringify(sorted);
+// ✅ CRITICAL: Validate credentials before initializing SDK
+if (!SNAPTRADE_CLIENT_ID || SNAPTRADE_CLIENT_ID.length !== 14) {
+  console.error("❌ Invalid SNAPTRADE_CLIENT_ID! Must be exactly 14 characters.");
+  console.error("   Current:", SNAPTRADE_CLIENT_ID);
+  console.error("   Length:", SNAPTRADE_CLIENT_ID?.length);
 }
 
-/**
- * ✅ NEW: Build query string with alphabetically sorted keys
- */
-function buildSortedQueryString(params: Record<string, string>): string {
-  const sortedKeys = Object.keys(params).sort();
-  const parts: string[] = [];
-  
-  for (const key of sortedKeys) {
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`);
-  }
-  
-  return parts.join('&');
+if (!SNAPTRADE_CONSUMER_KEY || SNAPTRADE_CONSUMER_KEY.length !== 50) {
+  console.error("❌ Invalid SNAPTRADE_CONSUMER_KEY! Must be exactly 50 characters.");
+  console.error("   Length:", SNAPTRADE_CONSUMER_KEY?.length);
 }
 
-async function generateSignature(
-  path: string,
-  query: string,
-  content: any
-): Promise<string> {
-  console.log("\n" + "=".repeat(80));
-  console.log("🔐 SIGNATURE GENERATION - DETAILED DEBUG");
-  console.log("=".repeat(80));
-  
-  // Step 1: Build signature object
-  const sigObject: any = {};
-  sigObject.content = content;
-  
-  // Remove /api/v1 prefix if exists
-  const pathForSignature = path.startsWith('/api/v1') 
-    ? path.substring(7)
-    : path;
-  
-  sigObject.path = pathForSignature;
-  sigObject.query = query;
-
-  // Step 2: Stringify with deep sorting
-  const sigContent = sortedStringify(sigObject);
-
-  console.log("📋 Signature Components:");
-  console.log("  1. Original path:", path);
-  console.log("  2. Path for signature:", pathForSignature);
-  console.log("  3. Query string:", query);
-  console.log("  4. Content:", JSON.stringify(content, null, 2));
-  console.log("  5. Final sigObject:", JSON.stringify(sigObject, null, 2));
-  console.log("  6. Stringified (for HMAC):", sigContent);
-  console.log("  7. Consumer Key (first 10 chars):", SNAPTRADE_CONSUMER_KEY?.substring(0, 10));
-
-  // Step 3: HMAC-SHA256
-  const encoder = new TextEncoder();
-  
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(SNAPTRADE_CONSUMER_KEY),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  
-  const signatureBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(sigContent)
-  );
-  
-  // Step 4: Base64 encode
-  const base64Signature = btoa(
-    String.fromCharCode(...new Uint8Array(signatureBuffer))
-  );
-  
-  console.log("  8. Base64 signature:", base64Signature);
-  console.log("  9. Signature length:", base64Signature.length);
-  console.log("=".repeat(80) + "\n");
-  
-  return base64Signature;
+// ✅ Initialize SnapTrade SDK
+let snaptrade: Snaptrade;
+try {
+  snaptrade = new Snaptrade({
+    consumerKey: SNAPTRADE_CONSUMER_KEY!,
+    clientId: SNAPTRADE_CLIENT_ID!,
+  });
+  console.log("✅ SnapTrade SDK initialized successfully (v9.0.152)");
+} catch (e: any) {
+  console.error("❌ Failed to initialize SnapTrade SDK:", e.message);
+  throw e;
 }
 
 serve(async (req: Request) => {
@@ -142,12 +51,14 @@ serve(async (req: Request) => {
   }
 
   console.log("\n" + "=".repeat(80));
-  console.log("📥 NEW REQUEST TO SNAPTRADE PROXY");
+  console.log("📥 NEW REQUEST");
   console.log("=".repeat(80));
-  console.log("⏰ Timestamp:", new Date().toISOString());
+  console.log("⏰ Time:", new Date().toISOString());
+  console.log("🌐 URL:", req.url);
+  console.log("📍 Method:", req.method);
 
   try {
-    // Auth check
+    // ✅ Authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       console.log("❌ No auth header");
@@ -171,8 +82,9 @@ serve(async (req: Request) => {
 
     console.log("✅ User authenticated:", user.id);
 
+    // ✅ Parse request
     const requestBody = await req.json();
-    console.log("📦 Raw request body:", JSON.stringify(requestBody, null, 2));
+    console.log("📦 Request body:", JSON.stringify(requestBody, null, 2));
     
     const { 
       endpoint, 
@@ -190,193 +102,417 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log("\n📍 Parsed Request Details:");
+    console.log("\n📍 Request Details:");
     console.log("  endpoint:", endpoint);
     console.log("  method:", method);
+    console.log("  userId:", userId || body?.userId || "NOT PROVIDED");
+    console.log("  userSecret:", userSecret ? "PROVIDED" : "NOT PROVIDED");
     console.log("  isPublic:", isPublic);
-    console.log("  userId:", userId || "NOT PROVIDED");
-    console.log("  userSecret:", userSecret ? `${userSecret.substring(0, 15)}... (length: ${userSecret.length})` : "NOT PROVIDED");
-    console.log("  body:", body ? JSON.stringify(body, null, 2) : "null");
 
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const basePath = endpoint.split('?')[0];
-    
-    const fullPath = basePath.startsWith('/api/v1') 
-      ? basePath 
-      : `/api/v1${basePath}`;
-    
-    const isRegisterUser = basePath.includes('registerUser') || endpoint.includes('registerUser');
-    
-    console.log("\n📌 Endpoint Analysis:");
-    console.log("  basePath:", basePath);
-    console.log("  fullPath:", fullPath);
-    console.log("  isRegisterUser:", isRegisterUser);
-    
-    // ✅ FIXED: Build query params as object first
-    // For registerUser, we need special handling - clientId and timestamp are ONLY for signature!
-    const queryParamsObj: Record<string, string> = {};
-    
-    // These are for signature calculation only
-    const signatureParams: Record<string, string> = {
-      clientId: SNAPTRADE_CLIENT_ID!,
-      timestamp: timestamp
-    };
-    
-    let actualBody: any = null;
-    
-    if (isRegisterUser) {
-      // ✅ CRITICAL FIX: For registerUser, ALL params go in both URL and signature
-      if (body?.userId) {
-        queryParamsObj.userId = body.userId;
-        queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
-        queryParamsObj.timestamp = timestamp;
-        
-        // Signature uses same params
-        signatureParams.userId = body.userId;
-        
-        console.log("  📝 registerUser: userId in QUERY:", body.userId);
-        console.log("  📝 registerUser: all params in URL");
-      } else {
-        console.log("  ❌ registerUser: NO userId in body!");
-      }
-      actualBody = null;  // ✅ No body for registerUser!
-    } else if (!isPublic) {
-      // Only add credentials for non-public endpoints
-      // ✅ For non-registerUser endpoints, add clientId and timestamp to query
-      queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
-      queryParamsObj.timestamp = timestamp;
-      
-      if (userId) {
-        console.log("  ✅ Adding userId to query:", userId);
-        queryParamsObj.userId = userId;
-      } else {
-        console.log("  ⚠️ NO userId provided for non-register endpoint!");
-      }
-      
-      if (userSecret) {
-        console.log("  ✅ Adding userSecret to query:", userSecret.substring(0, 15) + "...");
-        queryParamsObj.userSecret = userSecret;
-      } else {
-        console.log("  ⚠️ NO userSecret provided!");
-      }
-      
-      // Signature params are same as query params for non-registerUser
-      Object.assign(signatureParams, queryParamsObj);
-      
-      actualBody = body;
-    } else {
-      console.log("  🌐 PUBLIC endpoint - no credentials needed");
-      // ✅ Public endpoints also get clientId and timestamp
-      queryParamsObj.clientId = SNAPTRADE_CLIENT_ID!;
-      queryParamsObj.timestamp = timestamp;
-      Object.assign(signatureParams, queryParamsObj);
-      actualBody = body;
-    }
-    
-    // ✅ FIXED: Use sorted query string builder
-    const queryString = buildSortedQueryString(queryParamsObj);
-    
-    // ✅ CRITICAL: For signature, use signatureParams (which includes clientId/timestamp)
-    const signatureQueryString = buildSortedQueryString(signatureParams);
-    
-    const fullUrl = `${SNAPTRADE_BASE_URL}${basePath}?${queryString}`;
-    
-    console.log("\n📤 Building SnapTrade Request:");
-    console.log("  Full URL:", fullUrl);
-    console.log("  Query string (for URL):", queryString);
-    console.log("  Query string (for SIGNATURE):", signatureQueryString);
-    console.log("  Query params object:", JSON.stringify(queryParamsObj, null, 2));
-    console.log("  Signature params object:", JSON.stringify(signatureParams, null, 2));
-    console.log("  Body:", actualBody ? JSON.stringify(actualBody, null, 2) : "null");
+    let result: any;
 
-    // Generate signature using signatureQueryString
-    const signature = await generateSignature(
-      fullPath,
-      signatureQueryString,  // ✅ Use signature query string!
-      actualBody
-    );
-
-    console.log("\n🚀 Sending to SnapTrade:");
-    console.log("  URL:", fullUrl);
-    console.log("  Method:", method);
-    console.log("  Headers:", {
-      "Content-Type": "application/json",
-      "Signature": `${signature.substring(0, 20)}...`
-    });
-
-    const snaptradeResponse = await fetch(fullUrl, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "Signature": signature
-      },
-      body: actualBody ? JSON.stringify(actualBody) : undefined
-    });
-
-    const responseText = await snaptradeResponse.text();
-    
-    console.log("\n📥 Response from SnapTrade:");
-    console.log("  Status:", snaptradeResponse.status, snaptradeResponse.statusText);
-    console.log("  Headers:", Object.fromEntries(snaptradeResponse.headers.entries()));
-    console.log("  Body:", responseText);
-    
-    // ✅ CRITICAL DEBUG: Check if response has userSecret
-    if (isRegisterUser && snaptradeResponse.ok) {
-      try {
-        const parsed = JSON.parse(responseText);
-        console.log("\n🔍 PARSED RESPONSE for registerUser:");
-        console.log("  Type:", Array.isArray(parsed) ? 'Array' : typeof parsed);
-        console.log("  Keys:", Object.keys(parsed));
-        console.log("  Has userId:", !!parsed.userId);
-        console.log("  Has userSecret:", !!parsed.userSecret);
-        console.log("  userSecret value:", parsed.userSecret || 'MISSING!');
-        console.log("  Full object:", JSON.stringify(parsed, null, 2));
-      } catch (e) {
-        console.error("  ❌ Failed to parse response:", e);
-      }
-    }
-    
-    console.log("=".repeat(80) + "\n");
-
-    if (snaptradeResponse.ok) {
-      return new Response(responseText, {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
-    }
-
-    // Error response
-    let errorDetails;
     try {
-      errorDetails = JSON.parse(responseText);
-    } catch {
-      errorDetails = responseText;
-    }
-
-    return new Response(
-      JSON.stringify({
-        error: `SnapTrade API error: ${snaptradeResponse.status}`,
-        status: snaptradeResponse.status,
-        details: errorDetails
-      }),
-      { 
-        status: snaptradeResponse.status, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      // ============================================================================
+      // TEST API STATUS
+      // ============================================================================
+      
+      if (endpoint === '/test' || endpoint === 'test') {
+        console.log("\n🧪 Testing API Status");
+        
+        try {
+          const statusResponse = await snaptrade.apiStatus.check();
+          console.log("✅ API Status check successful");
+          
+          result = {
+            test: "success",
+            apiStatus: statusResponse.data,
+            timestamp: new Date().toISOString(),
+            credentials: {
+              clientIdLength: SNAPTRADE_CLIENT_ID?.length,
+              consumerKeyLength: SNAPTRADE_CONSUMER_KEY?.length,
+            }
+          };
+        } catch (testError: any) {
+          console.error("❌ API Status test failed:", testError.message);
+          throw testError;
+        }
       }
-    );
+      
+      // ============================================================================
+      // REGISTER USER
+      // ============================================================================
+      
+      else if (endpoint.includes('/snapTrade/registerUser') || endpoint === '/snapTrade/registerUser') {
+        const userIdToRegister = body?.userId || userId || user.id;
+        
+        console.log("\n📝 Calling SDK: registerSnapTradeUser");
+        console.log("  userId:", userIdToRegister);
+        
+        try {
+          const response = await snaptrade.authentication.registerSnapTradeUser({
+            userId: userIdToRegister
+          });
+          
+          result = response.data;
+          
+          // ✅ Validate response
+          if (!result.userSecret || result.userSecret.trim() === '') {
+            console.error("⚠️ WARNING: Registration returned empty userSecret!");
+            throw new Error("Registration did not return userSecret");
+          }
+          
+          console.log("✅ registerUser SUCCESS");
+          console.log("  userId:", result.userId);
+          console.log("  userSecret length:", result.userSecret?.length);
+          
+        } catch (regError: any) {
+          console.error("❌ Registration failed:", regError.message);
+          console.error("   Status:", regError.status);
+          console.error("   Body:", JSON.stringify(regError.body, null, 2));
+          throw regError;
+        }
+      }
+      
+      // ============================================================================
+      // LOGIN USER (GET OAUTH URL)
+      // ============================================================================
+      
+      else if (endpoint.includes('/snapTrade/login') || endpoint === '/snapTrade/login') {
+        console.log("\n🔗 Calling SDK: loginSnapTradeUser");
+        
+        // ✅ Validate required parameters
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required for login");
+        }
+        
+        const response = await snaptrade.authentication.loginSnapTradeUser({
+          userId: userId!,
+          userSecret: userSecret!,
+          broker: body?.broker,
+          immediateRedirect: body?.immediateRedirect ?? true,
+          customRedirect: body?.customRedirect,
+          reconnect: body?.reconnect,
+          connectionType: body?.connectionType ?? 'read',
+          connectionPortalVersion: body?.connectionPortalVersion ?? 'v4'
+        });
+        
+        result = response.data;
+        console.log("✅ loginUser SUCCESS");
+        console.log("  redirectURI:", result.redirectURI);
+      }
+      
+      // ============================================================================
+      // LIST BROKERAGES (PUBLIC)
+      // ============================================================================
+      
+      else if (endpoint.includes('/brokerages') || endpoint === '/brokerages') {
+        console.log("\n📋 Calling SDK: listAllBrokerages");
+        
+        const response = await snaptrade.referenceData.listAllBrokerages();
+        
+        result = response.data;
+        console.log("✅ Got", result.length, "brokerages");
+      }
+      
+      // ============================================================================
+      // LIST CONNECTIONS
+      // ============================================================================
+      
+      else if (endpoint.includes('/connections') && method === 'GET' && !endpoint.match(/\/connections\/[^/]+/)) {
+        console.log("\n🔌 Calling SDK: listBrokerageAuthorizations");
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.connections.listBrokerageAuthorizations({
+          userId: userId!,
+          userSecret: userSecret!
+        });
+        
+        result = response.data;
+        console.log("✅ Got", result.length, "connections");
+      }
+      
+      // ============================================================================
+      // DELETE CONNECTION
+      // ============================================================================
+      
+      else if (endpoint.match(/\/connections\/([^/]+)$/) && method === 'DELETE') {
+        const connectionId = endpoint.match(/\/connections\/([^/]+)$/)?.[1];
+        console.log("\n🗑️ Calling SDK: removeBrokerageAuthorization");
+        console.log("  connectionId:", connectionId);
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.connections.removeBrokerageAuthorization({
+          authorizationId: connectionId!,
+          userId: userId!,
+          userSecret: userSecret!
+        });
+        
+        result = response.data;
+        console.log("✅ Connection deleted");
+      }
+      
+      // ============================================================================
+      // REFRESH CONNECTION
+      // ============================================================================
+      
+      else if (endpoint.match(/\/connections\/([^/]+)\/refresh$/) && method === 'POST') {
+        const connectionId = endpoint.match(/\/connections\/([^/]+)\/refresh$/)?.[1];
+        console.log("\n🔄 Calling SDK: refreshBrokerageAuthorization");
+        console.log("  connectionId:", connectionId);
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.connections.refreshBrokerageAuthorization({
+          authorizationId: connectionId!,
+          userId: userId!,
+          userSecret: userSecret!
+        });
+        
+        result = response.data;
+        console.log("✅ Connection refreshed");
+      }
+      
+      // ============================================================================
+      // GET ACCOUNTS
+      // ============================================================================
+      
+      else if (endpoint.includes('/accounts') && method === 'GET' && !endpoint.includes('/holdings') && !endpoint.match(/\/accounts\/[^/]+/)) {
+        console.log("\n💼 Calling SDK: listUserAccounts");
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.accountInformation.listUserAccounts({
+          userId: userId!,
+          userSecret: userSecret!
+        });
+        
+        result = response.data;
+        console.log("✅ Got", result.length, "accounts");
+      }
+      
+      // ============================================================================
+      // GET HOLDINGS
+      // ============================================================================
+      
+      else if (endpoint.includes('/holdings')) {
+        console.log("\n📈 Calling SDK: getAllUserHoldings");
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.accountInformation.getAllUserHoldings({
+          userId: userId!,
+          userSecret: userSecret!
+        });
+        
+        result = response.data;
+        console.log("✅ Got holdings");
+      }
+      
+      // ============================================================================
+      // GET ACTIVITIES
+      // ============================================================================
+      
+      else if (endpoint.includes('/activities')) {
+        console.log("\n📜 Calling SDK: getActivities");
+        
+        if (!userId || !userSecret) {
+          throw new Error("userId and userSecret are required");
+        }
+        
+        const response = await snaptrade.transactionsAndReporting.getActivities({
+          userId: userId!,
+          userSecret: userSecret!,
+          startDate: body?.startDate,
+          endDate: body?.endDate,
+          accounts: body?.accounts,
+          brokerageAuthorizations: body?.brokerageAuthorizations,
+          type: body?.type
+        });
+        
+        result = response.data;
+        console.log("✅ Got", result.length, "activities");
+      }
+      
+      // ============================================================================
+      // DELETE USER (for cleanup/reset)
+      // ============================================================================
+      
+      else if (endpoint.includes('/snapTrade/deleteUser') || endpoint.includes('/deleteUser')) {
+        const userIdToDelete = body?.userId || userId || user.id;
+        
+        console.log("\n🗑️ Calling SDK: deleteSnapTradeUser");
+        console.log("  userId:", userIdToDelete);
+        
+        try {
+          const response = await snaptrade.authentication.deleteSnapTradeUser({
+            userId: userIdToDelete
+          });
+          
+          result = {
+            status: 'deleted',
+            detail: response.data?.detail || 'User queued for deletion; please wait for webhook for confirmation.',
+            userId: userIdToDelete
+          };
+          
+          console.log("✅ deleteUser SUCCESS");
+          
+        } catch (deleteError: any) {
+          console.error("❌ Delete failed:", deleteError.message);
+          
+          // If user doesn't exist, that's okay
+          if (deleteError.status === 404) {
+            result = {
+              status: 'not_found',
+              detail: 'User does not exist in SnapTrade',
+              userId: userIdToDelete
+            };
+          } else {
+            throw deleteError;
+          }
+        }
+      }
+      
+      // ============================================================================
+      // LIST USERS (for debugging)
+      // ============================================================================
+      
+      else if (endpoint.includes('/snapTrade/listUsers') || endpoint.includes('/listUsers')) {
+        console.log("\n👥 Calling SDK: listSnapTradeUsers");
+        
+        const response = await snaptrade.authentication.listSnapTradeUsers();
+        
+        result = response.data;
+        console.log("✅ Got", result?.length || 0, "users");
+      }
+      
+      // ============================================================================
+      // FALLBACK
+      // ============================================================================
+      
+      else {
+        console.log("⚠️ Endpoint not implemented:", endpoint);
+        return new Response(
+          JSON.stringify({ 
+            error: "Endpoint not implemented", 
+            endpoint,
+            method,
+            availableEndpoints: [
+              "GET  /test - Test API connection",
+              "POST /snapTrade/registerUser - Register new user",
+              "POST /snapTrade/login - Get OAuth URL",
+              "GET  /brokerages - List available brokerages",
+              "GET  /connections - List user connections",
+              "DELETE /connections/{id} - Delete connection",
+              "POST /connections/{id}/refresh - Refresh connection",
+              "GET  /accounts - List accounts",
+              "GET  /holdings - Get holdings",
+              "GET  /activities - Get activities",
+              "DELETE /snapTrade/deleteUser - Delete user",
+              "GET  /snapTrade/listUsers - List all users"
+            ]
+          }),
+          { status: 501, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("\n✅ REQUEST SUCCESSFUL!");
+      console.log("=".repeat(80) + "\n");
+
+      return new Response(
+        JSON.stringify(result),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
+    } catch (sdkError: any) {
+      console.error("\n" + "=".repeat(80));
+      console.error("❌ SDK ERROR");
+      console.error("=".repeat(80));
+      console.error("Message:", sdkError.message);
+      console.error("Status:", sdkError.status);
+      
+      if (sdkError.body) {
+        console.error("Response Body:", JSON.stringify(sdkError.body, null, 2));
+      }
+      
+      if (sdkError.response) {
+        console.error("Response:", sdkError.response);
+      }
+
+      // ✅ Specific error handling
+      if (sdkError.status === 401) {
+        console.error("\n🔍 AUTHENTICATION ERROR DETECTED!");
+        console.error("─".repeat(80));
+        
+        if (sdkError.message?.includes('signature') || sdkError.body?.detail?.includes('signature')) {
+          console.error("ERROR TYPE: Invalid Signature");
+          console.error("");
+          console.error("CAUSE: Consumer Key is incorrect or expired");
+          console.error("");
+          console.error("ACTION REQUIRED:");
+          console.error("1. Go to: https://app.snaptrade.com");
+          console.error("2. Navigate to: Settings → API Keys");
+          console.error("3. Click 'Regenerate Consumer Key'");
+          console.error("4. Copy the new key (50 characters)");
+          console.error("5. Update Supabase:");
+          console.error("   supabase secrets set SNAPTRADE_CONSUMER_KEY=YOUR_NEW_KEY");
+          console.error("6. Redeploy:");
+          console.error("   supabase functions deploy snaptrade-proxy");
+          console.error("");
+          console.error("Current credentials:");
+          console.error("  CLIENT_ID length:", SNAPTRADE_CLIENT_ID?.length, "/14");
+          console.error("  CONSUMER_KEY length:", SNAPTRADE_CONSUMER_KEY?.length, "/50");
+        } else {
+          console.error("ERROR TYPE: Authentication Failed");
+          console.error("CAUSE: Invalid Client ID or Consumer Key");
+          console.error("");
+          console.error("Verify your credentials match SnapTrade Dashboard");
+        }
+        
+        console.error("=".repeat(80));
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "SnapTrade SDK error",
+          message: sdkError.message,
+          status: sdkError.status,
+          details: sdkError.body || sdkError.message,
+          hint: sdkError.status === 401 
+            ? "Check your SnapTrade API credentials. See logs for details."
+            : undefined
+        }),
+        { 
+          status: sdkError.status || 500, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
+      );
+    }
 
   } catch (error: any) {
     console.error("\n" + "=".repeat(80));
     console.error("❌ CRITICAL ERROR");
     console.error("=".repeat(80));
-    console.error("Error message:", error.message);
-    console.error("Error stack:", error.stack);
-    console.error("=".repeat(80) + "\n");
+    console.error("Message:", error.message);
+    console.error("Stack:", error.stack);
+    console.error("=".repeat(80));
     
     return new Response(
       JSON.stringify({ 
-        error: error.message || "Internal server error",
-        stack: error.stack
+        error: "Internal server error",
+        message: error.message,
+        hint: "Check Edge Function logs for details"
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

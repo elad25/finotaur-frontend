@@ -222,6 +222,7 @@ BEGIN
   RAISE NOTICE '      💳 Adding payment system enhancements...';
   RAISE NOTICE '      ⚡ FIXED: Removed risk percentage limit constraint!';
   RAISE NOTICE '      🆕 v9.4.3: Adding missing subscription columns!';
+  RAISE NOTICE '      💰 v9.4.4: Updated payment_provider to use WHOP!';
 END $$;
 
 -- 🔥 CRITICAL: Add risk columns FIRST
@@ -317,9 +318,16 @@ ALTER TABLE public.profiles ADD CONSTRAINT check_paid_has_interval
     (account_type = 'trial')
   );
 
+-- 💰 v9.4.4: FIX existing invalid payment_provider values BEFORE adding constraint
+UPDATE public.profiles 
+SET payment_provider = NULL 
+WHERE payment_provider IS NOT NULL 
+  AND payment_provider NOT IN ('whop', 'stripe', 'paypal');
+
+-- 💰 v9.4.4: Updated to use WHOP instead of payplus
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_payment_provider_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_payment_provider_check 
-  CHECK (payment_provider IN ('payplus', 'stripe', 'paypal') OR payment_provider IS NULL);
+  CHECK (payment_provider IN ('whop', 'stripe', 'paypal') OR payment_provider IS NULL);
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_banned_by_fkey;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_banned_by_fkey 
@@ -377,7 +385,7 @@ COMMENT ON COLUMN public.profiles.total_pnl IS 'Cumulative P&L across all closed
 COMMENT ON COLUMN public.profiles.trade_count IS 'Total number of trades (closed + open)';
 COMMENT ON COLUMN public.profiles.deleted_at IS 'Soft delete timestamp - NULL means active';
 COMMENT ON COLUMN public.profiles.max_trades IS 'Maximum trades allowed per billing cycle - varies by account type';
-COMMENT ON COLUMN public.profiles.payment_provider IS 'Payment provider: payplus, stripe, paypal. NULL for free accounts.';
+COMMENT ON COLUMN public.profiles.payment_provider IS 'Payment provider: whop, stripe, paypal. NULL for free accounts.';
 COMMENT ON COLUMN public.profiles.portfolio_size IS 'Total account value for risk calculations';
 COMMENT ON COLUMN public.profiles.risk_percentage IS 'Risk percentage per trade - NO LIMITS! Users can risk any amount they choose.';
 COMMENT ON COLUMN public.profiles.risk_mode IS 'Risk calculation mode: percentage of portfolio or fixed dollar amount';
@@ -401,8 +409,8 @@ BEGIN
   RAISE NOTICE '      🆕 v9.4.3: subscription_cancel_at_period_end added';
   RAISE NOTICE '      🆕 v9.4.3: trial_used added';
   RAISE NOTICE '      🆕 v9.4.3: trial_start_date added';
+  RAISE NOTICE '      💰 v9.4.4: payment_provider uses WHOP!';
 END $$;
-
 -- ===============================================
 -- SECTION 3: STRATEGIES TABLE (ENHANCED)
 -- ===============================================
@@ -1095,6 +1103,7 @@ GRANT SELECT ON public.ticker_symbols TO anon;
 -- ===============================================
 -- 🔧 v9.4.3: Fixed payment_history columns
 -- 🔧 v9.4.3: Fixed subscription_changes columns
+-- 💰 v9.4.4: Updated payment_provider to use WHOP!
 
 DO $$
 BEGIN
@@ -1104,6 +1113,7 @@ BEGIN
   RAISE NOTICE '      🆕 v9.4.3: Adding admin_actions table!';
   RAISE NOTICE '      🆕 v9.4.3: Fixed payment_history columns!';
   RAISE NOTICE '      🆕 v9.4.3: Fixed subscription_changes columns!';
+  RAISE NOTICE '      💰 v9.4.4: Updated payment_provider to use WHOP!';
 END $$;
 
 CREATE TABLE IF NOT EXISTS public.payment_history (
@@ -1113,7 +1123,7 @@ CREATE TABLE IF NOT EXISTS public.payment_history (
   currency TEXT NOT NULL DEFAULT 'USD',
   status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
   plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
-  payplus_transaction_id TEXT NOT NULL,
+  whop_transaction_id TEXT,
   invoice_url TEXT,
   payment_method TEXT,
   error_message TEXT,
@@ -1130,24 +1140,48 @@ ALTER TABLE public.payment_history ADD COLUMN IF NOT EXISTS payment_provider TEX
 ALTER TABLE public.payment_history ADD COLUMN IF NOT EXISTS transaction_id TEXT;
 ALTER TABLE public.payment_history ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
+-- 💰 v9.4.4: Rename payplus_transaction_id to whop_transaction_id if exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'payment_history' 
+      AND column_name = 'payplus_transaction_id'
+  ) THEN
+    ALTER TABLE public.payment_history RENAME COLUMN payplus_transaction_id TO whop_transaction_id;
+    RAISE NOTICE '   ✅ Renamed payplus_transaction_id to whop_transaction_id';
+  END IF;
+END $$;
+
+-- 💰 v9.4.4: Make whop_transaction_id nullable (not all payments require it)
+ALTER TABLE public.payment_history ALTER COLUMN whop_transaction_id DROP NOT NULL;
+
 ALTER TABLE public.payment_history DROP CONSTRAINT IF EXISTS payment_type_check;
 ALTER TABLE public.payment_history ADD CONSTRAINT payment_type_check 
 CHECK (payment_type IN ('subscription', 'upgrade', 'renewal', 'refund'));
 
--- 🆕 v9.4.3: Add constraint for payment_provider
+-- 💰 v9.4.4: FIX existing invalid payment_provider values BEFORE adding constraint
+UPDATE public.payment_history 
+SET payment_provider = NULL 
+WHERE payment_provider IS NOT NULL 
+  AND payment_provider NOT IN ('whop', 'stripe', 'paypal');
+
+-- 💰 v9.4.4: Updated to use WHOP instead of payplus
 ALTER TABLE public.payment_history DROP CONSTRAINT IF EXISTS payment_history_provider_check;
 ALTER TABLE public.payment_history ADD CONSTRAINT payment_history_provider_check 
-CHECK (payment_provider IN ('payplus', 'stripe', 'paypal') OR payment_provider IS NULL);
+CHECK (payment_provider IN ('whop', 'stripe', 'paypal') OR payment_provider IS NULL);
 
-COMMENT ON COLUMN public.payment_history.payment_provider IS 'v9.4.3: Payment provider used for this transaction';
-COMMENT ON COLUMN public.payment_history.transaction_id IS 'v9.4.3: Generic transaction ID (alternative to payplus_transaction_id)';
+COMMENT ON COLUMN public.payment_history.payment_provider IS 'v9.4.4: Payment provider used for this transaction (whop, stripe, paypal)';
+COMMENT ON COLUMN public.payment_history.transaction_id IS 'v9.4.4: Generic transaction ID';
+COMMENT ON COLUMN public.payment_history.whop_transaction_id IS 'v9.4.4: Whop-specific transaction ID';
 COMMENT ON COLUMN public.payment_history.metadata IS 'v9.4.3: Additional payment metadata as JSON';
 
 CREATE TABLE IF NOT EXISTS public.subscription_periods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   plan TEXT NOT NULL CHECK (plan IN ('free', 'basic', 'premium')),
-  payplus_transaction_id TEXT,
+  whop_transaction_id TEXT,
   period_start TIMESTAMPTZ NOT NULL,
   period_end TIMESTAMPTZ NOT NULL,
   auto_renew BOOLEAN DEFAULT TRUE,
@@ -1155,6 +1189,20 @@ CREATE TABLE IF NOT EXISTS public.subscription_periods (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 💰 v9.4.4: Rename payplus_transaction_id to whop_transaction_id in subscription_periods
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'subscription_periods' 
+      AND column_name = 'payplus_transaction_id'
+  ) THEN
+    ALTER TABLE public.subscription_periods RENAME COLUMN payplus_transaction_id TO whop_transaction_id;
+    RAISE NOTICE '   ✅ Renamed payplus_transaction_id to whop_transaction_id in subscription_periods';
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.admin_audit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1364,6 +1412,12 @@ CREATE INDEX IF NOT EXISTS idx_admin_actions_type ON public.admin_actions(action
 
 COMMENT ON TABLE public.admin_actions IS 'v9.4.3: Admin action audit log for Part 2 functions';
 
+DO $$
+BEGIN
+  RAISE NOTICE '✅ [6/10] Additional tables created!';
+  RAISE NOTICE '      💰 payment_provider uses WHOP!';
+  RAISE NOTICE '      💰 Renamed payplus_transaction_id to whop_transaction_id';
+END $$;
 -- ===============================================
 -- SECTION 7: STORAGE BUCKET
 -- ===============================================

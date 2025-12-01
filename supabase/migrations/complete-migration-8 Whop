@@ -1,0 +1,1659 @@
+-- =====================================================
+-- FINOTAUR COMPLETE SUBSCRIPTION & WHOP SYSTEM
+-- =====================================================
+-- Version: 5.0.0 UNIFIED
+-- Date: 2025-11-29
+-- 
+-- 🎯 קובץ מאוחד הכולל:
+--    ✅ Whop Integration (v4.1.0)
+--    ✅ Subscription Management (v1.0.0)
+--    ✅ Affiliate System Complete
+--    ✅ Commission & Qualification System
+-- 
+-- 📦 תוכן:
+--    PART 1: Schema Setup (Columns, Constraints, Tables)
+--    PART 2: Indexes
+--    PART 3: Helper Functions
+--    PART 4: RPC Functions (Frontend)
+--    PART 5: Webhook Handlers
+--    PART 6: Subscription Management
+--    PART 7: Qualification & Cron
+--    PART 8: Views
+--    PART 9: RLS Policies & Grants
+--    PART 10: Data Migration & Fixes
+--    PART 11: Verification
+-- 
+-- ⚠️ הרץ את הקובץ ב-Supabase SQL Editor
+-- =====================================================
+
+
+-- ============================================
+-- PART 1: SCHEMA SETUP
+-- ============================================
+
+-- ----------------------------------------
+-- 1.1 PROFILES TABLE - All Columns
+-- ----------------------------------------
+
+DO $$ 
+BEGIN
+  -- Whop user identification
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_user_id') THEN
+    ALTER TABLE profiles ADD COLUMN whop_user_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_membership_id') THEN
+    ALTER TABLE profiles ADD COLUMN whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_product_id') THEN
+    ALTER TABLE profiles ADD COLUMN whop_product_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_plan_id') THEN
+    ALTER TABLE profiles ADD COLUMN whop_plan_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_customer_email') THEN
+    ALTER TABLE profiles ADD COLUMN whop_customer_email TEXT;
+  END IF;
+  
+  -- Payment provider
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'payment_provider') THEN
+    ALTER TABLE profiles ADD COLUMN payment_provider TEXT;
+  END IF;
+  
+  -- Subscription fields
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'subscription_interval') THEN
+    ALTER TABLE profiles ADD COLUMN subscription_interval TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'subscription_started_at') THEN
+    ALTER TABLE profiles ADD COLUMN subscription_started_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'subscription_expires_at') THEN
+    ALTER TABLE profiles ADD COLUMN subscription_expires_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'subscription_cancel_at_period_end') THEN
+    ALTER TABLE profiles ADD COLUMN subscription_cancel_at_period_end BOOLEAN DEFAULT FALSE;
+    COMMENT ON COLUMN profiles.subscription_cancel_at_period_end IS 'Whether subscription will cancel at period end';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'billing_cycle_start') THEN
+    ALTER TABLE profiles ADD COLUMN billing_cycle_start DATE;
+  END IF;
+  
+  -- Subscription management (downgrade/cancel)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'pending_downgrade_plan') THEN
+    ALTER TABLE profiles ADD COLUMN pending_downgrade_plan TEXT;
+    COMMENT ON COLUMN profiles.pending_downgrade_plan IS 'Plan to downgrade to at period end (basic, free, or null)';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'cancellation_reason') THEN
+    ALTER TABLE profiles ADD COLUMN cancellation_reason TEXT;
+    COMMENT ON COLUMN profiles.cancellation_reason IS 'Reason provided when cancelling subscription';
+  END IF;
+END $$;
+
+-- Constraints
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_account_type_check 
+  CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip'));
+
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_payment_provider_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check 
+  CHECK (payment_provider IS NULL OR payment_provider IN ('payplus', 'stripe', 'paypal', 'whop', 'admin_granted', 'manual'));
+
+
+-- ----------------------------------------
+-- 1.2 AFFILIATE_REFERRALS TABLE - Whop Columns
+-- ----------------------------------------
+
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'whop_membership_id') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'whop_user_id') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN whop_user_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'whop_product_id') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN whop_product_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'coupon_code_used') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN coupon_code_used TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'total_payments_usd') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN total_payments_usd NUMERIC(12,2) DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliate_referrals' AND column_name = 'commission_earned_usd') THEN
+    ALTER TABLE affiliate_referrals ADD COLUMN commission_earned_usd NUMERIC(12,2) DEFAULT 0;
+  END IF;
+END $$;
+
+
+-- ----------------------------------------
+-- 1.3 AFFILIATES TABLE - Additional Columns
+-- ----------------------------------------
+
+DO $$ 
+BEGIN
+  -- Notification settings
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'notify_on_signup') THEN
+    ALTER TABLE affiliates ADD COLUMN notify_on_signup BOOLEAN DEFAULT TRUE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'notify_on_qualification') THEN
+    ALTER TABLE affiliates ADD COLUMN notify_on_qualification BOOLEAN DEFAULT TRUE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'notify_on_commission') THEN
+    ALTER TABLE affiliates ADD COLUMN notify_on_commission BOOLEAN DEFAULT TRUE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'notify_on_payout') THEN
+    ALTER TABLE affiliates ADD COLUMN notify_on_payout BOOLEAN DEFAULT TRUE;
+  END IF;
+  
+  -- Referral link
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'referral_link') THEN
+    ALTER TABLE affiliates ADD COLUMN referral_link TEXT;
+  END IF;
+  
+  -- Last activity
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'affiliates' AND column_name = 'last_activity_at') THEN
+    ALTER TABLE affiliates ADD COLUMN last_activity_at TIMESTAMPTZ DEFAULT NOW();
+  END IF;
+END $$;
+
+-- Update referral links for existing affiliates
+UPDATE affiliates 
+SET referral_link = 'https://finotaur.com/?ref=' || affiliate_code
+WHERE referral_link IS NULL AND affiliate_code IS NOT NULL;
+
+
+-- ----------------------------------------
+-- 1.4 AFFILIATE_CLICKS TABLE
+-- ----------------------------------------
+
+CREATE TABLE IF NOT EXISTS affiliate_clicks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+  ip_address TEXT,
+  ip_hash TEXT,
+  user_agent TEXT,
+  referrer_url TEXT,
+  landing_page TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  converted BOOLEAN DEFAULT FALSE,
+  converted_at TIMESTAMPTZ,
+  referral_id UUID REFERENCES affiliate_referrals(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- ----------------------------------------
+-- 1.5 WHOP PLAN MAPPING TABLE
+-- ----------------------------------------
+
+CREATE TABLE IF NOT EXISTS whop_plan_mapping (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  whop_product_id TEXT UNIQUE NOT NULL,
+  whop_plan_id TEXT,
+  finotaur_plan TEXT NOT NULL,
+  billing_interval TEXT NOT NULL CHECK (billing_interval IN ('monthly', 'yearly')),
+  price_usd NUMERIC(10,2) NOT NULL,
+  max_trades INTEGER NOT NULL,
+  display_name TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert/Update plan mappings
+INSERT INTO whop_plan_mapping (whop_product_id, finotaur_plan, billing_interval, price_usd, max_trades, display_name, is_active) VALUES
+('prod_ZaDN418HLst3r', 'basic', 'monthly', 19.99, 25, 'Finotaur Basic Monthly', TRUE),
+('prod_bPwSoYGedsbyh', 'basic', 'yearly', 149.00, 25, 'Finotaur Basic Yearly', TRUE),
+('prod_Kq2pmLT1JyGsU', 'premium', 'monthly', 39.99, -1, 'Finotaur Premium Monthly', TRUE),
+('prod_vON7zlda6iuII', 'premium', 'yearly', 299.00, -1, 'Finotaur Premium Yearly', TRUE)
+ON CONFLICT (whop_product_id) DO UPDATE SET
+  finotaur_plan = EXCLUDED.finotaur_plan,
+  billing_interval = EXCLUDED.billing_interval,
+  price_usd = EXCLUDED.price_usd,
+  max_trades = EXCLUDED.max_trades,
+  display_name = EXCLUDED.display_name,
+  is_active = TRUE,
+  updated_at = NOW();
+
+
+-- ----------------------------------------
+-- 1.6 WHOP WEBHOOK LOG TABLE
+-- ----------------------------------------
+
+CREATE TABLE IF NOT EXISTS whop_webhook_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id TEXT UNIQUE,
+  event_type TEXT,
+  payload JSONB,
+  processed BOOLEAN DEFAULT FALSE,
+  processing_result JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+
+-- ----------------------------------------
+-- 1.7 SUBSCRIPTION_EVENTS TABLE (Audit)
+-- ----------------------------------------
+
+CREATE TABLE IF NOT EXISTS subscription_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  old_plan TEXT,
+  new_plan TEXT,
+  reason TEXT,
+  scheduled_at TIMESTAMPTZ,
+  processed_at TIMESTAMPTZ,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT valid_event_type CHECK (
+    event_type IN (
+      'upgrade',
+      'downgrade',
+      'downgrade_scheduled',
+      'cancel_scheduled',
+      'cancelled',
+      'reactivated',
+      'payment_failed',
+      'payment_succeeded',
+      'trial_started',
+      'trial_ended'
+    )
+  )
+);
+
+
+-- ============================================
+-- PART 2: INDEXES
+-- ============================================
+
+-- Profiles indexes
+CREATE INDEX IF NOT EXISTS idx_profiles_whop_user_id ON profiles(whop_user_id) WHERE whop_user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_profiles_whop_membership_id ON profiles(whop_membership_id) WHERE whop_membership_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_profiles_payment_provider ON profiles(payment_provider) WHERE payment_provider IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_profiles_account_type ON profiles(account_type);
+CREATE INDEX IF NOT EXISTS idx_profiles_subscription_status ON profiles(subscription_status);
+CREATE INDEX IF NOT EXISTS idx_profiles_email_lower ON profiles(LOWER(email));
+CREATE INDEX IF NOT EXISTS idx_profiles_pending_downgrade ON profiles(pending_downgrade_plan) WHERE pending_downgrade_plan IS NOT NULL;
+
+-- Affiliate referrals indexes
+CREATE INDEX IF NOT EXISTS idx_referrals_whop_membership ON affiliate_referrals(whop_membership_id) WHERE whop_membership_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_referrals_whop_user ON affiliate_referrals(whop_user_id) WHERE whop_user_id IS NOT NULL;
+
+-- Affiliate clicks indexes
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_affiliate_id ON affiliate_clicks(affiliate_id);
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_created_at ON affiliate_clicks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_ip_hash ON affiliate_clicks(ip_hash);
+CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_converted ON affiliate_clicks(converted) WHERE converted = TRUE;
+
+-- Webhook log indexes
+CREATE INDEX IF NOT EXISTS idx_whop_webhook_log_event_id ON whop_webhook_log(event_id) WHERE event_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_whop_webhook_log_event_type ON whop_webhook_log(event_type);
+CREATE INDEX IF NOT EXISTS idx_whop_webhook_log_created ON whop_webhook_log(created_at DESC);
+
+-- Subscription events indexes
+CREATE INDEX IF NOT EXISTS idx_subscription_events_user_id ON subscription_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_type ON subscription_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_subscription_events_scheduled ON subscription_events(scheduled_at) WHERE processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_subscription_events_created ON subscription_events(created_at DESC);
+
+
+-- ============================================
+-- PART 3: HELPER FUNCTIONS
+-- ============================================
+
+-- ----------------------------------------
+-- 3.1 Get Commission Rate
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_commission_rate(TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION get_commission_rate(
+  p_tier TEXT,
+  p_subscription_type TEXT DEFAULT 'monthly'
+)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_config_rates JSONB;
+  v_annual_rate NUMERIC;
+  v_rate NUMERIC;
+BEGIN
+  -- For yearly subscriptions: fixed 15%
+  IF p_subscription_type = 'yearly' THEN
+    SELECT (config_value->>'rate')::numeric INTO v_annual_rate
+    FROM affiliate_config
+    WHERE config_key = 'annual_commission_rate';
+    
+    RETURN COALESCE(v_annual_rate, 0.15);
+  END IF;
+  
+  -- For monthly: get from tier config
+  SELECT config_value INTO v_config_rates
+  FROM affiliate_config
+  WHERE config_key = 'commission_rates';
+  
+  IF v_config_rates IS NOT NULL THEN
+    v_rate := (v_config_rates->p_tier->>'rate')::numeric;
+  END IF;
+  
+  -- Defaults if config not found
+  IF v_rate IS NULL THEN
+    v_rate := CASE p_tier
+      WHEN 'tier_3' THEN 0.20
+      WHEN 'tier_2' THEN 0.15
+      ELSE 0.10  -- tier_1 default
+    END;
+  END IF;
+  
+  RETURN v_rate;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 3.2 Get Finotaur Plan from Whop Product ID
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_finotaur_plan_from_whop(TEXT);
+
+CREATE OR REPLACE FUNCTION get_finotaur_plan_from_whop(p_whop_product_id TEXT)
+RETURNS TABLE (
+  finotaur_plan TEXT,
+  billing_interval TEXT,
+  price_usd NUMERIC,
+  max_trades INTEGER,
+  display_name TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    wpm.finotaur_plan, 
+    wpm.billing_interval, 
+    wpm.price_usd, 
+    CASE WHEN wpm.max_trades = -1 THEN 999999 ELSE wpm.max_trades END as max_trades,
+    wpm.display_name
+  FROM whop_plan_mapping wpm
+  WHERE wpm.whop_product_id = p_whop_product_id 
+    AND wpm.is_active = TRUE;
+END;
+$$;
+
+
+-- ============================================
+-- PART 4: RPC FUNCTIONS (Frontend)
+-- ============================================
+
+-- ----------------------------------------
+-- 4.1 Validate Affiliate Code
+-- (Used by useAffiliateDiscount.ts)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS validate_affiliate_code(TEXT);
+
+CREATE OR REPLACE FUNCTION validate_affiliate_code(p_code TEXT)
+RETURNS TABLE (
+  is_valid BOOLEAN,
+  affiliate_id UUID,
+  affiliate_name TEXT,
+  affiliate_code TEXT,
+  discount_monthly NUMERIC,
+  discount_yearly NUMERIC,
+  discount_tier TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate RECORD;
+  v_discount_monthly NUMERIC := 10;
+  v_discount_yearly NUMERIC := 10;
+BEGIN
+  SELECT * INTO v_affiliate
+  FROM affiliates a
+  WHERE (UPPER(a.affiliate_code) = UPPER(p_code) OR UPPER(a.coupon_code) = UPPER(p_code))
+    AND a.status = 'active';
+  
+  IF v_affiliate IS NULL THEN
+    RETURN QUERY SELECT 
+      FALSE::BOOLEAN, NULL::UUID, NULL::TEXT, NULL::TEXT, 
+      NULL::NUMERIC, NULL::NUMERIC, NULL::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Set discount based on tier
+  IF v_affiliate.discount_tier = 'vip' THEN
+    v_discount_monthly := 15;
+    v_discount_yearly := 15;
+  ELSE
+    v_discount_monthly := 10;
+    v_discount_yearly := 10;
+  END IF;
+  
+  RETURN QUERY SELECT 
+    TRUE::BOOLEAN,
+    v_affiliate.id,
+    v_affiliate.display_name,
+    v_affiliate.affiliate_code,
+    v_discount_monthly,
+    v_discount_yearly,
+    v_affiliate.discount_tier::TEXT;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 4.2 Record Affiliate Click
+-- (Used by useAffiliate.ts - trackAffiliateClick)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS record_affiliate_click(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION record_affiliate_click(
+  p_affiliate_code TEXT,
+  p_ip_address TEXT DEFAULT NULL,
+  p_user_agent TEXT DEFAULT NULL,
+  p_referrer_url TEXT DEFAULT NULL,
+  p_landing_page TEXT DEFAULT NULL,
+  p_utm_source TEXT DEFAULT NULL,
+  p_utm_medium TEXT DEFAULT NULL,
+  p_utm_campaign TEXT DEFAULT NULL,
+  p_utm_content TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate_id UUID;
+  v_click_id UUID;
+  v_ip_hash TEXT;
+BEGIN
+  SELECT id INTO v_affiliate_id
+  FROM affiliates
+  WHERE (UPPER(affiliate_code) = UPPER(p_affiliate_code) OR UPPER(coupon_code) = UPPER(p_affiliate_code))
+    AND status = 'active';
+  
+  IF v_affiliate_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+  
+  -- Hash IP for privacy
+  IF p_ip_address IS NOT NULL THEN
+    v_ip_hash := encode(sha256(p_ip_address::bytea), 'hex');
+  END IF;
+  
+  INSERT INTO affiliate_clicks (
+    affiliate_id, ip_hash, user_agent, referrer_url, landing_page,
+    utm_source, utm_medium, utm_campaign, utm_content
+  ) VALUES (
+    v_affiliate_id, v_ip_hash, p_user_agent, p_referrer_url, p_landing_page,
+    p_utm_source, p_utm_medium, p_utm_campaign, p_utm_content
+  )
+  RETURNING id INTO v_click_id;
+  
+  UPDATE affiliates
+  SET total_clicks = COALESCE(total_clicks, 0) + 1, last_activity_at = NOW()
+  WHERE id = v_affiliate_id;
+  
+  RETURN v_click_id;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 4.3 Track Referral Signup
+-- (Used by useAffiliate.ts - trackReferralSignup)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS track_referral_signup(TEXT, UUID, TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID, NUMERIC, NUMERIC);
+
+CREATE OR REPLACE FUNCTION track_referral_signup(
+  p_affiliate_code TEXT,
+  p_user_id UUID,
+  p_user_email TEXT,
+  p_subscription_id TEXT DEFAULT NULL,
+  p_subscription_plan TEXT DEFAULT NULL,
+  p_subscription_type TEXT DEFAULT 'monthly',
+  p_subscription_price NUMERIC DEFAULT NULL,
+  p_click_id UUID DEFAULT NULL,
+  p_discount_percent NUMERIC DEFAULT 0,
+  p_discount_amount NUMERIC DEFAULT 0
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate RECORD;
+  v_referral_id UUID;
+  v_existing_referral UUID;
+BEGIN
+  SELECT * INTO v_affiliate
+  FROM affiliates
+  WHERE (UPPER(affiliate_code) = UPPER(p_affiliate_code) OR UPPER(coupon_code) = UPPER(p_affiliate_code))
+    AND status = 'active';
+  
+  IF v_affiliate IS NULL OR v_affiliate.user_id = p_user_id THEN
+    RETURN NULL;  -- Not found or self-referral
+  END IF;
+  
+  -- Check for existing referral
+  SELECT id INTO v_existing_referral FROM affiliate_referrals WHERE referred_user_id = p_user_id;
+  
+  IF v_existing_referral IS NOT NULL THEN
+    UPDATE affiliate_referrals SET
+      subscription_id = COALESCE(p_subscription_id, subscription_id),
+      subscription_plan = COALESCE(p_subscription_plan, subscription_plan),
+      subscription_type = COALESCE(p_subscription_type, subscription_type),
+      subscription_price_usd = COALESCE(p_subscription_price, subscription_price_usd),
+      updated_at = NOW()
+    WHERE id = v_existing_referral;
+    RETURN v_existing_referral;
+  END IF;
+  
+  -- Create new referral
+  INSERT INTO affiliate_referrals (
+    affiliate_id, referred_user_id, referred_user_email, click_id, signup_date, signup_plan,
+    discount_percent, discount_amount_usd, subscription_id, subscription_plan, subscription_type,
+    subscription_price_usd, status, commission_eligible
+  ) VALUES (
+    v_affiliate.id, p_user_id, p_user_email, p_click_id, NOW(), COALESCE(p_subscription_plan, 'free'),
+    COALESCE(p_discount_percent, 0), COALESCE(p_discount_amount, 0), p_subscription_id, p_subscription_plan,
+    p_subscription_type, p_subscription_price, 'pending', TRUE
+  )
+  RETURNING id INTO v_referral_id;
+  
+  -- Update click if provided
+  IF p_click_id IS NOT NULL THEN
+    UPDATE affiliate_clicks SET converted = TRUE, converted_at = NOW(), referral_id = v_referral_id
+    WHERE id = p_click_id;
+  END IF;
+  
+  -- Update affiliate stats & log
+  UPDATE affiliates SET total_signups = COALESCE(total_signups, 0) + 1, last_activity_at = NOW()
+  WHERE id = v_affiliate.id;
+  
+  INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, metadata, is_system_action)
+  VALUES (v_affiliate.id, 'new_signup', 'New signup: ' || p_user_email,
+    jsonb_build_object('user_email', p_user_email, 'plan', p_subscription_plan, 'type', p_subscription_type, 'click_id', p_click_id), TRUE);
+  
+  RETURN v_referral_id;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 4.4 Get Affiliate Analytics
+-- (Used by useAffiliateData.ts - useAffiliateAnalytics)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_affiliate_analytics(UUID, DATE, DATE);
+
+CREATE OR REPLACE FUNCTION get_affiliate_analytics(
+  p_affiliate_id UUID,
+  p_start_date DATE,
+  p_end_date DATE
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_clicks RECORD;
+  v_signups RECORD;
+  v_earnings RECORD;
+  v_daily_clicks JSONB;
+  v_top_sources JSONB;
+BEGIN
+  -- Clicks stats
+  SELECT 
+    COUNT(*) as total,
+    COUNT(DISTINCT ip_hash) as unique_ips,
+    COUNT(*) FILTER (WHERE converted = TRUE) as converted
+  INTO v_clicks
+  FROM affiliate_clicks
+  WHERE affiliate_id = p_affiliate_id AND created_at::date BETWEEN p_start_date AND p_end_date;
+  
+  -- Signups by status
+  SELECT 
+    COUNT(*) as total,
+    COUNT(*) FILTER (WHERE status = 'pending') as pending,
+    COUNT(*) FILTER (WHERE status = 'verification_pending') as in_verification,
+    COUNT(*) FILTER (WHERE status = 'qualified') as qualified,
+    COUNT(*) FILTER (WHERE status = 'verification_failed') as failed,
+    COUNT(*) FILTER (WHERE status = 'churned') as churned
+  INTO v_signups
+  FROM affiliate_referrals
+  WHERE affiliate_id = p_affiliate_id AND signup_date::date BETWEEN p_start_date AND p_end_date;
+  
+  -- Earnings by type
+  SELECT 
+    COALESCE(SUM(commission_amount_usd) FILTER (WHERE status IN ('confirmed', 'paid')), 0) as total,
+    COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'monthly_recurring' AND status IN ('confirmed', 'paid')), 0) as recurring,
+    COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'annual_upfront' AND status IN ('confirmed', 'paid')), 0) as annual,
+    COALESCE(SUM(commission_amount_usd) FILTER (WHERE commission_type = 'sub_affiliate' AND status IN ('confirmed', 'paid')), 0) as sub_affiliate
+  INTO v_earnings
+  FROM affiliate_commissions
+  WHERE affiliate_id = p_affiliate_id AND created_at::date BETWEEN p_start_date AND p_end_date;
+  
+  -- Daily clicks
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('date', day, 'clicks', cnt) ORDER BY day), '[]'::jsonb) INTO v_daily_clicks
+  FROM (
+    SELECT created_at::date as day, COUNT(*) as cnt FROM affiliate_clicks
+    WHERE affiliate_id = p_affiliate_id AND created_at::date BETWEEN p_start_date AND p_end_date
+    GROUP BY created_at::date
+  ) daily;
+  
+  -- Top sources
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('source', source, 'clicks', cnt) ORDER BY cnt DESC), '[]'::jsonb) INTO v_top_sources
+  FROM (
+    SELECT COALESCE(utm_source, 'direct') as source, COUNT(*) as cnt FROM affiliate_clicks
+    WHERE affiliate_id = p_affiliate_id AND created_at::date BETWEEN p_start_date AND p_end_date
+    GROUP BY COALESCE(utm_source, 'direct') LIMIT 10
+  ) sources;
+  
+  RETURN jsonb_build_object(
+    'period', jsonb_build_object('start', p_start_date, 'end', p_end_date),
+    'clicks', jsonb_build_object(
+      'total', COALESCE(v_clicks.total, 0), 'unique_ips', COALESCE(v_clicks.unique_ips, 0),
+      'converted', COALESCE(v_clicks.converted, 0),
+      'conversion_rate', CASE WHEN v_clicks.total > 0 THEN ROUND((v_clicks.converted::numeric / v_clicks.total) * 100, 2) ELSE 0 END,
+      'daily', v_daily_clicks
+    ),
+    'signups', jsonb_build_object(
+      'total', COALESCE(v_signups.total, 0), 'pending', COALESCE(v_signups.pending, 0),
+      'in_verification', COALESCE(v_signups.in_verification, 0), 'qualified', COALESCE(v_signups.qualified, 0),
+      'failed', COALESCE(v_signups.failed, 0), 'churned', COALESCE(v_signups.churned, 0)
+    ),
+    'earnings', jsonb_build_object(
+      'total', COALESCE(v_earnings.total, 0), 'recurring', COALESCE(v_earnings.recurring, 0),
+      'annual', COALESCE(v_earnings.annual, 0), 'sub_affiliate', COALESCE(v_earnings.sub_affiliate, 0)
+    ),
+    'top_sources', v_top_sources
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 4.5 Get User Subscription Status (UNIFIED)
+-- Returns all subscription info including pending_downgrade_plan
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_user_subscription_status(UUID);
+
+CREATE OR REPLACE FUNCTION get_user_subscription_status(user_id_param UUID)
+RETURNS TABLE (
+  remaining INTEGER,
+  used INTEGER,
+  max_trades INTEGER,
+  plan TEXT,
+  reset_date TEXT,
+  account_type TEXT,
+  role TEXT,
+  subscription_interval TEXT,
+  subscription_status TEXT,
+  subscription_expires_at TIMESTAMPTZ,
+  subscription_cancel_at_period_end BOOLEAN,
+  subscription_started_at TIMESTAMPTZ,
+  initial_portfolio NUMERIC,
+  current_portfolio NUMERIC,
+  portfolio_size NUMERIC,
+  total_pnl NUMERIC,
+  risk_mode TEXT,
+  risk_percentage NUMERIC,
+  fixed_risk_amount NUMERIC,
+  trade_count INTEGER,
+  current_month_trades_count INTEGER,
+  current_month_active_days INTEGER,
+  billing_cycle_start TEXT,
+  is_lifetime BOOLEAN,
+  payment_provider TEXT,
+  whop_user_id TEXT,
+  whop_membership_id TEXT,
+  whop_product_id TEXT,
+  whop_plan_id TEXT,
+  whop_customer_email TEXT,
+  pending_downgrade_plan TEXT
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_trades_used INT;
+  v_reset_date DATE;
+  v_is_lifetime BOOLEAN;
+BEGIN
+  SELECT 
+    p.account_type,
+    p.max_trades,
+    p.subscription_interval,
+    p.subscription_status,
+    p.subscription_expires_at,
+    p.subscription_cancel_at_period_end,
+    p.subscription_started_at,
+    COALESCE(p.billing_cycle_start, CURRENT_DATE) as billing_cycle_start,
+    COALESCE(p.role, 'user') as role,
+    COALESCE(p.current_month_trades_count, 0) as monthly_count,
+    COALESCE(p.trade_count, 0) as lifetime_count,
+    COALESCE(p.current_month_active_days, 0) as active_days,
+    COALESCE(p.initial_portfolio, 10000) as initial_portfolio,
+    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio,
+    COALESCE(p.portfolio_size, p.current_portfolio, 10000) as portfolio_size,
+    COALESCE(p.total_pnl, 0) as total_pnl,
+    COALESCE(p.risk_mode, 'percentage') as risk_mode,
+    p.risk_percentage,
+    p.fixed_risk_amount,
+    p.payment_provider,
+    p.whop_user_id,
+    p.whop_membership_id,
+    p.whop_product_id,
+    p.whop_plan_id,
+    p.whop_customer_email,
+    p.pending_downgrade_plan
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = user_id_param;
+  
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 
+      10::INT, 0::INT, 10::INT, 'Free Plan'::TEXT, NULL::TEXT,
+      'free'::TEXT, 'user'::TEXT, NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
+      0::INT, 0::INT, 0::INT, NULL::TEXT, TRUE,
+      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+    RETURN;
+  END IF;
+  
+  v_is_lifetime := (v_profile.account_type = 'free');
+  
+  IF NOT v_is_lifetime THEN
+    v_reset_date := (DATE_TRUNC('month', v_profile.billing_cycle_start) + INTERVAL '1 month')::DATE;
+  END IF;
+  
+  v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
+  
+  -- Unlimited for premium/admin/vip
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+    RETURN QUERY SELECT
+      999999::INT, v_trades_used::INT, 999999::INT,
+      CASE v_profile.account_type WHEN 'premium' THEN 'Premium Plan' WHEN 'vip' THEN 'VIP Plan' ELSE 'Admin' END::TEXT,
+      v_reset_date::TEXT, v_profile.account_type::TEXT, v_profile.role::TEXT,
+      v_profile.subscription_interval::TEXT, v_profile.subscription_status::TEXT,
+      v_profile.subscription_expires_at::TIMESTAMPTZ, COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+      v_profile.subscription_started_at::TIMESTAMPTZ, v_profile.initial_portfolio::NUMERIC,
+      v_profile.current_portfolio::NUMERIC, v_profile.portfolio_size::NUMERIC, v_profile.total_pnl::NUMERIC,
+      v_profile.risk_mode::TEXT, v_profile.risk_percentage::NUMERIC, v_profile.fixed_risk_amount::NUMERIC,
+      v_profile.lifetime_count::INT, v_profile.monthly_count::INT, v_profile.active_days::INT,
+      v_profile.billing_cycle_start::TEXT, FALSE,
+      v_profile.payment_provider::TEXT, v_profile.whop_user_id::TEXT, v_profile.whop_membership_id::TEXT,
+      v_profile.whop_product_id::TEXT, v_profile.whop_plan_id::TEXT, v_profile.whop_customer_email::TEXT,
+      v_profile.pending_downgrade_plan::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Regular users
+  RETURN QUERY SELECT
+    GREATEST(0, v_profile.max_trades - v_trades_used)::INT, v_trades_used::INT, v_profile.max_trades::INT,
+    CASE v_profile.account_type WHEN 'free' THEN 'Free Plan' WHEN 'basic' THEN 'Basic Plan' WHEN 'trial' THEN 'Trial' ELSE 'Free Plan' END::TEXT,
+    v_reset_date::TEXT, v_profile.account_type::TEXT, v_profile.role::TEXT,
+    v_profile.subscription_interval::TEXT, v_profile.subscription_status::TEXT,
+    v_profile.subscription_expires_at::TIMESTAMPTZ, COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+    v_profile.subscription_started_at::TIMESTAMPTZ, v_profile.initial_portfolio::NUMERIC,
+    v_profile.current_portfolio::NUMERIC, v_profile.portfolio_size::NUMERIC, v_profile.total_pnl::NUMERIC,
+    v_profile.risk_mode::TEXT, v_profile.risk_percentage::NUMERIC, v_profile.fixed_risk_amount::NUMERIC,
+    v_profile.lifetime_count::INT, v_profile.monthly_count::INT, v_profile.active_days::INT,
+    v_profile.billing_cycle_start::TEXT, v_is_lifetime,
+    v_profile.payment_provider::TEXT, v_profile.whop_user_id::TEXT, v_profile.whop_membership_id::TEXT,
+    v_profile.whop_product_id::TEXT, v_profile.whop_plan_id::TEXT, v_profile.whop_customer_email::TEXT,
+    v_profile.pending_downgrade_plan::TEXT;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 4.6 Get Subscription Cancellation Status
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_subscription_cancellation_status(UUID);
+
+CREATE OR REPLACE FUNCTION get_subscription_cancellation_status(p_user_id UUID)
+RETURNS TABLE (
+  is_pending_cancellation BOOLEAN,
+  pending_downgrade_plan TEXT,
+  expires_at TIMESTAMPTZ,
+  current_plan TEXT,
+  cancellation_reason TEXT
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COALESCE(p.subscription_cancel_at_period_end, FALSE),
+    p.pending_downgrade_plan,
+    p.subscription_expires_at,
+    p.account_type,
+    p.cancellation_reason
+  FROM profiles p WHERE p.id = p_user_id;
+END;
+$$;
+
+
+-- ============================================
+-- PART 5: WEBHOOK HANDLERS
+-- ============================================
+
+-- ----------------------------------------
+-- 5.1 Activate Whop Subscription
+-- (payment.succeeded, membership.went_valid)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS activate_whop_subscription(TEXT, TEXT, TEXT, TEXT, TEXT, UUID);
+
+CREATE OR REPLACE FUNCTION activate_whop_subscription(
+  p_user_email TEXT,
+  p_whop_user_id TEXT,
+  p_whop_membership_id TEXT,
+  p_whop_product_id TEXT,
+  p_affiliate_code TEXT DEFAULT NULL,
+  p_click_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_plan_info RECORD;
+  v_subscription_ends_at TIMESTAMPTZ;
+  v_max_trades INTEGER;
+  v_affiliate_id UUID;
+  v_referral_id UUID;
+BEGIN
+  -- Find user by email (case insensitive)
+  SELECT id INTO v_user_id FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found for email: ' || p_user_email);
+  END IF;
+  
+  -- Get plan info
+  SELECT * INTO v_plan_info FROM whop_plan_mapping WHERE whop_product_id = p_whop_product_id AND is_active = TRUE;
+  
+  IF v_plan_info IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Unknown Whop product ID: ' || p_whop_product_id);
+  END IF;
+  
+  v_subscription_ends_at := CASE WHEN v_plan_info.billing_interval = 'monthly' THEN NOW() + INTERVAL '1 month' ELSE NOW() + INTERVAL '1 year' END;
+  v_max_trades := CASE WHEN v_plan_info.max_trades = -1 THEN 999999 ELSE v_plan_info.max_trades END;
+  
+  -- Update user profile
+  UPDATE profiles SET
+    account_type = v_plan_info.finotaur_plan,
+    subscription_status = 'active',
+    subscription_interval = v_plan_info.billing_interval,
+    subscription_started_at = NOW(),
+    subscription_expires_at = v_subscription_ends_at,
+    subscription_cancel_at_period_end = FALSE,
+    pending_downgrade_plan = NULL,
+    cancellation_reason = NULL,
+    whop_user_id = p_whop_user_id,
+    whop_membership_id = p_whop_membership_id,
+    whop_product_id = p_whop_product_id,
+    whop_customer_email = p_user_email,
+    payment_provider = 'whop',
+    max_trades = v_max_trades,
+    current_month_trades_count = 0,
+    billing_cycle_start = CURRENT_DATE,
+    updated_at = NOW()
+  WHERE id = v_user_id;
+  
+  -- Process affiliate if code provided
+  IF p_affiliate_code IS NOT NULL AND p_affiliate_code != '' THEN
+    SELECT id INTO v_affiliate_id FROM affiliates
+    WHERE (UPPER(affiliate_code) = UPPER(p_affiliate_code) OR UPPER(coupon_code) = UPPER(p_affiliate_code)) AND status = 'active';
+    
+    IF v_affiliate_id IS NOT NULL THEN
+      SELECT id INTO v_referral_id FROM affiliate_referrals WHERE referred_user_id = v_user_id;
+      
+      IF v_referral_id IS NOT NULL THEN
+        UPDATE affiliate_referrals SET
+          whop_membership_id = p_whop_membership_id,
+          whop_user_id = p_whop_user_id,
+          whop_product_id = p_whop_product_id,
+          subscription_plan = v_plan_info.finotaur_plan,
+          subscription_type = v_plan_info.billing_interval,
+          subscription_price_usd = v_plan_info.price_usd,
+          subscription_started_at = NOW(),
+          updated_at = NOW()
+        WHERE id = v_referral_id;
+      ELSE
+        INSERT INTO affiliate_referrals (
+          affiliate_id, referred_user_id, referred_user_email, click_id, signup_date, signup_plan,
+          whop_membership_id, whop_user_id, whop_product_id, subscription_plan, subscription_type,
+          subscription_price_usd, subscription_started_at, status, commission_eligible
+        ) VALUES (
+          v_affiliate_id, v_user_id, p_user_email, p_click_id, NOW(), v_plan_info.finotaur_plan,
+          p_whop_membership_id, p_whop_user_id, p_whop_product_id, v_plan_info.finotaur_plan,
+          v_plan_info.billing_interval, v_plan_info.price_usd, NOW(), 'pending', TRUE
+        )
+        RETURNING id INTO v_referral_id;
+        
+        UPDATE affiliates SET total_signups = COALESCE(total_signups, 0) + 1, last_activity_at = NOW(), updated_at = NOW()
+        WHERE id = v_affiliate_id;
+      END IF;
+    END IF;
+  END IF;
+  
+  RETURN jsonb_build_object(
+    'success', true, 'user_id', v_user_id, 'plan', v_plan_info.finotaur_plan,
+    'interval', v_plan_info.billing_interval, 'expires_at', v_subscription_ends_at,
+    'affiliate_id', v_affiliate_id, 'referral_id', v_referral_id
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 5.2 Deactivate Whop Subscription (UNIFIED)
+-- Handles both cancellation and downgrade
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS deactivate_whop_subscription(TEXT);
+
+CREATE OR REPLACE FUNCTION deactivate_whop_subscription(p_whop_membership_id TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_user_email TEXT;
+  v_old_plan TEXT;
+  v_pending_plan TEXT;
+  v_new_plan TEXT;
+  v_referral_id UUID;
+  v_affiliate_id UUID;
+  v_new_max_trades INTEGER;
+BEGIN
+  -- Find user
+  SELECT id, email, account_type, pending_downgrade_plan 
+  INTO v_user_id, v_user_email, v_old_plan, v_pending_plan
+  FROM profiles WHERE whop_membership_id = p_whop_membership_id;
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found for membership: ' || p_whop_membership_id);
+  END IF;
+  
+  -- Determine target plan (use pending_downgrade_plan if set, otherwise free)
+  v_new_plan := COALESCE(v_pending_plan, 'free');
+  v_new_max_trades := CASE v_new_plan WHEN 'basic' THEN 25 WHEN 'premium' THEN 999999 ELSE 10 END;
+  
+  -- Update profile
+  UPDATE profiles SET
+    account_type = v_new_plan,
+    subscription_status = CASE WHEN v_new_plan = 'free' THEN 'cancelled' ELSE 'pending_resubscribe' END,
+    subscription_cancel_at_period_end = FALSE,
+    pending_downgrade_plan = NULL,
+    cancellation_reason = NULL,
+    max_trades = v_new_max_trades,
+    whop_membership_id = CASE WHEN v_new_plan = 'free' THEN NULL ELSE whop_membership_id END,
+    whop_product_id = CASE WHEN v_new_plan = 'free' THEN NULL ELSE whop_product_id END,
+    updated_at = NOW()
+  WHERE id = v_user_id;
+  
+  -- Log event
+  INSERT INTO subscription_events (user_id, event_type, old_plan, new_plan, processed_at, metadata)
+  VALUES (v_user_id, 'cancelled', v_old_plan, v_new_plan, NOW(),
+    jsonb_build_object('whop_membership_id', p_whop_membership_id, 'was_scheduled_downgrade', v_pending_plan IS NOT NULL));
+  
+  -- Update affiliate referral (only if going to free = churn)
+  IF v_new_plan = 'free' THEN
+    SELECT id, affiliate_id INTO v_referral_id, v_affiliate_id
+    FROM affiliate_referrals WHERE referred_user_id = v_user_id OR whop_membership_id = p_whop_membership_id;
+    
+    IF v_referral_id IS NOT NULL THEN
+      UPDATE affiliate_referrals SET status = 'churned', churned_at = NOW(), subscription_cancelled_at = NOW(), updated_at = NOW()
+      WHERE id = v_referral_id;
+      
+      UPDATE affiliates SET total_active_customers = GREATEST(0, COALESCE(total_active_customers, 0) - 1), updated_at = NOW()
+      WHERE id = v_affiliate_id;
+      
+      INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, metadata, is_system_action)
+      VALUES (v_affiliate_id, 'referral_churned', 'Customer ' || v_user_email || ' subscription ended',
+        jsonb_build_object('whop_membership_id', p_whop_membership_id, 'user_email', v_user_email, 'old_plan', v_old_plan, 'was_scheduled_downgrade', v_pending_plan IS NOT NULL), true);
+    END IF;
+  END IF;
+  
+  RETURN jsonb_build_object(
+    'success', true, 'user_id', v_user_id, 'email', v_user_email,
+    'old_plan', v_old_plan, 'new_plan', v_new_plan,
+    'was_scheduled_downgrade', v_pending_plan IS NOT NULL, 'referral_updated', v_referral_id IS NOT NULL
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 5.3 Handle Whop Payment
+-- (payment.succeeded - recurring and first)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS handle_whop_payment(TEXT, NUMERIC, BOOLEAN, TEXT);
+
+CREATE OR REPLACE FUNCTION handle_whop_payment(
+  p_whop_membership_id TEXT,
+  p_payment_amount NUMERIC,
+  p_is_first_payment BOOLEAN DEFAULT FALSE,
+  p_promo_code TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_user_email TEXT;
+  v_subscription_type TEXT;
+  v_referral RECORD;
+  v_affiliate RECORD;
+  v_commission_rate NUMERIC;
+  v_commission_amount NUMERIC;
+  v_referral_id UUID;
+  v_commission_type_val commission_type;
+BEGIN
+  -- Get user info
+  SELECT id, email, subscription_interval INTO v_user_id, v_user_email, v_subscription_type
+  FROM profiles WHERE whop_membership_id = p_whop_membership_id;
+  
+  -- Find existing referral
+  SELECT ar.*, a.commission_enabled, a.affiliate_type, a.current_tier, a.id as aff_id, a.user_id as aff_user_id
+  INTO v_referral
+  FROM affiliate_referrals ar
+  JOIN affiliates a ON ar.affiliate_id = a.id
+  WHERE ar.whop_membership_id = p_whop_membership_id OR ar.referred_user_id = v_user_id;
+  
+  -- If no referral but promo code provided, try to create one
+  IF v_referral IS NULL AND p_promo_code IS NOT NULL AND v_user_id IS NOT NULL THEN
+    SELECT * INTO v_affiliate FROM affiliates
+    WHERE (UPPER(affiliate_code) = UPPER(p_promo_code) OR UPPER(coupon_code) = UPPER(p_promo_code))
+      AND status = 'active' AND commission_enabled = true;
+    
+    IF v_affiliate IS NOT NULL AND v_affiliate.user_id != v_user_id THEN
+      v_commission_rate := get_commission_rate(COALESCE(v_affiliate.current_tier::text, 'tier_1'), COALESCE(v_subscription_type, 'monthly'));
+      v_commission_amount := ROUND(p_payment_amount * v_commission_rate, 2);
+      v_commission_type_val := CASE WHEN v_subscription_type = 'yearly' THEN 'annual_upfront' ELSE 'monthly_recurring' END;
+      
+      INSERT INTO affiliate_referrals (
+        affiliate_id, referred_user_id, referred_user_email, signup_date, whop_membership_id,
+        first_payment_amount_usd, first_payment_date, total_payments_usd, status,
+        verification_start, verification_end, commission_eligible, coupon_code_used, subscription_type
+      ) VALUES (
+        v_affiliate.id, v_user_id, v_user_email, NOW(), p_whop_membership_id,
+        p_payment_amount, NOW(), p_payment_amount, 'verification_pending',
+        NOW(), NOW() + INTERVAL '7 days', true, p_promo_code, v_subscription_type
+      ) RETURNING id INTO v_referral_id;
+      
+      UPDATE affiliates SET total_signups = COALESCE(total_signups, 0) + 1, last_activity_at = NOW() WHERE id = v_affiliate.id;
+      
+      INSERT INTO affiliate_commissions (
+        affiliate_id, referral_id, commission_type, commission_month, base_amount_usd,
+        commission_rate, commission_amount_usd, tier_at_time, status, month_number
+      ) VALUES (
+        v_affiliate.id, v_referral_id, v_commission_type_val, date_trunc('month', NOW())::date,
+        p_payment_amount, v_commission_rate, v_commission_amount, v_affiliate.current_tier, 'pending', 1
+      );
+      
+      UPDATE affiliates SET
+        total_pending_usd = COALESCE(total_pending_usd, 0) + v_commission_amount,
+        total_earnings_usd = COALESCE(total_earnings_usd, 0) + v_commission_amount
+      WHERE id = v_affiliate.id;
+      
+      UPDATE affiliate_referrals SET commission_earned_usd = v_commission_amount WHERE id = v_referral_id;
+      
+      INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, metadata, is_system_action)
+      VALUES (v_affiliate.id, 'first_payment_received',
+        'First payment of $' || p_payment_amount || ' (' || COALESCE(v_subscription_type, 'monthly') || '), commission: $' || v_commission_amount,
+        jsonb_build_object('user_email', v_user_email, 'amount', p_payment_amount, 'promo_code', p_promo_code,
+          'commission_rate', v_commission_rate, 'commission_amount', v_commission_amount), true);
+      
+      RETURN jsonb_build_object('success', true, 'message', 'New referral and commission created',
+        'referral_id', v_referral_id, 'commission_amount', v_commission_amount, 'commission_rate', v_commission_rate);
+    END IF;
+  END IF;
+  
+  IF v_referral IS NULL THEN
+    RETURN jsonb_build_object('success', true, 'message', 'No affiliate referral found for this payment');
+  END IF;
+  
+  IF NOT v_referral.commission_enabled OR v_referral.affiliate_type != 'regular' THEN
+    RETURN jsonb_build_object('success', true, 'message', 'Affiliate not eligible for commission');
+  END IF;
+  
+  v_commission_rate := get_commission_rate(COALESCE(v_referral.current_tier::text, 'tier_1'), COALESCE(v_subscription_type, 'monthly'));
+  v_commission_type_val := CASE WHEN v_subscription_type = 'yearly' THEN 'annual_upfront' ELSE 'monthly_recurring' END;
+  
+  -- First payment
+  IF p_is_first_payment AND v_referral.first_payment_date IS NULL THEN
+    v_commission_amount := ROUND(p_payment_amount * v_commission_rate, 2);
+    
+    UPDATE affiliate_referrals SET
+      status = 'verification_pending', first_payment_amount_usd = p_payment_amount, first_payment_date = NOW(),
+      verification_start = NOW(), verification_end = NOW() + INTERVAL '7 days',
+      total_payments_usd = COALESCE(total_payments_usd, 0) + p_payment_amount,
+      subscription_type = v_subscription_type, updated_at = NOW()
+    WHERE id = v_referral.id;
+    
+    INSERT INTO affiliate_commissions (
+      affiliate_id, referral_id, commission_type, commission_month, base_amount_usd,
+      commission_rate, commission_amount_usd, tier_at_time, status, month_number
+    ) VALUES (v_referral.affiliate_id, v_referral.id, v_commission_type_val, date_trunc('month', NOW())::date,
+      p_payment_amount, v_commission_rate, v_commission_amount, v_referral.current_tier, 'pending', 1);
+    
+    UPDATE affiliates SET
+      total_pending_usd = COALESCE(total_pending_usd, 0) + v_commission_amount,
+      total_earnings_usd = COALESCE(total_earnings_usd, 0) + v_commission_amount, last_activity_at = NOW()
+    WHERE id = v_referral.affiliate_id;
+    
+    UPDATE affiliate_referrals SET commission_earned_usd = COALESCE(commission_earned_usd, 0) + v_commission_amount
+    WHERE id = v_referral.id;
+    
+    INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, metadata, is_system_action)
+    VALUES (v_referral.affiliate_id, 'first_payment_received',
+      'First payment of $' || p_payment_amount || ', commission: $' || v_commission_amount,
+      jsonb_build_object('amount', p_payment_amount, 'commission', v_commission_amount, 'rate', v_commission_rate), true);
+    
+    RETURN jsonb_build_object('success', true, 'message', 'First payment recorded, commission created',
+      'referral_id', v_referral.id, 'commission_amount', v_commission_amount, 'verification_ends', NOW() + INTERVAL '7 days');
+  END IF;
+  
+  -- Recurring payment for qualified referrals
+  IF v_referral.status = 'qualified' AND v_referral.commission_eligible THEN
+    UPDATE affiliate_referrals SET total_payments_usd = COALESCE(total_payments_usd, 0) + p_payment_amount, updated_at = NOW()
+    WHERE id = v_referral.id;
+    
+    IF v_subscription_type = 'monthly' AND COALESCE(v_referral.months_commissioned, 0) < 12 THEN
+      v_commission_amount := ROUND(p_payment_amount * v_commission_rate, 2);
+      
+      INSERT INTO affiliate_commissions (
+        affiliate_id, referral_id, commission_type, commission_month, base_amount_usd,
+        commission_rate, commission_amount_usd, tier_at_time, status, month_number
+      ) VALUES (v_referral.affiliate_id, v_referral.id, 'monthly_recurring', date_trunc('month', NOW())::date,
+        p_payment_amount, v_commission_rate, v_commission_amount, v_referral.current_tier, 'pending',
+        COALESCE(v_referral.months_commissioned, 0) + 1);
+      
+      UPDATE affiliate_referrals SET
+        months_commissioned = COALESCE(months_commissioned, 0) + 1,
+        commission_earned_usd = COALESCE(commission_earned_usd, 0) + v_commission_amount
+      WHERE id = v_referral.id;
+      
+      UPDATE affiliates SET
+        total_pending_usd = COALESCE(total_pending_usd, 0) + v_commission_amount,
+        total_earnings_usd = COALESCE(total_earnings_usd, 0) + v_commission_amount, last_activity_at = NOW()
+      WHERE id = v_referral.affiliate_id;
+      
+      RETURN jsonb_build_object('success', true, 'message', 'Recurring payment and commission recorded',
+        'referral_id', v_referral.id, 'commission_amount', v_commission_amount, 'month_number', COALESCE(v_referral.months_commissioned, 0) + 1);
+    END IF;
+  END IF;
+  
+  RETURN jsonb_build_object('success', true, 'message', 'Payment recorded', 'referral_id', v_referral.id, 'referral_status', v_referral.status);
+END;
+$$;
+
+
+-- ============================================
+-- PART 6: SUBSCRIPTION MANAGEMENT
+-- ============================================
+
+-- ----------------------------------------
+-- 6.1 Undo Pending Cancellation
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS undo_pending_cancellation(UUID);
+
+CREATE OR REPLACE FUNCTION undo_pending_cancellation(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT * INTO v_profile FROM profiles WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF NOT COALESCE(v_profile.subscription_cancel_at_period_end, FALSE) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No pending cancellation to undo');
+  END IF;
+  
+  UPDATE profiles SET
+    subscription_cancel_at_period_end = FALSE,
+    pending_downgrade_plan = NULL,
+    cancellation_reason = NULL,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  INSERT INTO subscription_events (user_id, event_type, old_plan, new_plan, metadata)
+  VALUES (p_user_id, 'reactivated', v_profile.pending_downgrade_plan, v_profile.account_type,
+    jsonb_build_object('action', 'undo_cancellation'));
+  
+  RETURN jsonb_build_object('success', true, 'message', 'Cancellation has been undone. Your subscription will continue.', 'plan', v_profile.account_type);
+END;
+$$;
+
+
+-- ============================================
+-- PART 7: QUALIFICATION & CRON
+-- ============================================
+
+-- ----------------------------------------
+-- 7.1 Qualify Verified Referrals
+-- (Runs daily via Cron to qualify after 7 days)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS qualify_verified_referrals();
+
+CREATE OR REPLACE FUNCTION qualify_verified_referrals()
+RETURNS TABLE(referrals_qualified INTEGER, commissions_confirmed INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_referrals_qualified INTEGER := 0;
+  v_commissions_confirmed INTEGER := 0;
+BEGIN
+  -- Move referrals to qualified after 7 days
+  WITH qualified AS (
+    UPDATE affiliate_referrals SET
+      status = 'qualified', qualified_at = NOW(), commission_eligible = TRUE,
+      commission_start_date = NOW(), commission_end_date = NOW() + INTERVAL '12 months', updated_at = NOW()
+    WHERE status = 'verification_pending' AND verification_end <= NOW() AND churned_at IS NULL
+    RETURNING id, affiliate_id
+  )
+  SELECT COUNT(*) INTO v_referrals_qualified FROM qualified;
+
+  -- Update affiliate stats
+  UPDATE affiliates a SET
+    total_qualified_referrals = (SELECT COUNT(*) FROM affiliate_referrals ar WHERE ar.affiliate_id = a.id AND ar.status = 'qualified'),
+    total_active_customers = (SELECT COUNT(*) FROM affiliate_referrals ar WHERE ar.affiliate_id = a.id AND ar.status IN ('qualified', 'verification_pending') AND ar.churned_at IS NULL),
+    updated_at = NOW()
+  WHERE EXISTS (SELECT 1 FROM affiliate_referrals ar WHERE ar.affiliate_id = a.id AND ar.status = 'qualified' AND ar.qualified_at >= NOW() - INTERVAL '1 minute');
+
+  -- Confirm commissions
+  WITH confirmed AS (
+    UPDATE affiliate_commissions ac SET status = 'confirmed', confirmed_at = NOW(), updated_at = NOW()
+    FROM affiliate_referrals ar
+    WHERE ac.referral_id = ar.id AND ac.status = 'pending' AND ar.status = 'qualified'
+    RETURNING ac.id, ac.affiliate_id, ac.commission_amount_usd
+  )
+  SELECT COUNT(*) INTO v_commissions_confirmed FROM confirmed;
+
+  -- Update pending totals
+  UPDATE affiliates a SET
+    total_pending_usd = GREATEST(0, COALESCE(total_pending_usd, 0) - COALESCE((
+      SELECT SUM(commission_amount_usd) FROM affiliate_commissions 
+      WHERE affiliate_id = a.id AND status = 'confirmed' AND confirmed_at >= NOW() - INTERVAL '1 minute'
+    ), 0)),
+    updated_at = NOW()
+  WHERE id IN (SELECT DISTINCT affiliate_id FROM affiliate_commissions WHERE status = 'confirmed' AND confirmed_at >= NOW() - INTERVAL '1 minute');
+
+  -- Log activity
+  INSERT INTO affiliate_activity_log (affiliate_id, activity_type, description, metadata, is_system_action)
+  SELECT ar.affiliate_id, 'referral_qualified', 'Referral ' || ar.referred_user_email || ' completed 7-day verification',
+    jsonb_build_object('referral_id', ar.id, 'user_email', ar.referred_user_email, 'first_payment', ar.first_payment_amount_usd), true
+  FROM affiliate_referrals ar WHERE ar.status = 'qualified' AND ar.qualified_at >= NOW() - INTERVAL '1 minute';
+
+  RETURN QUERY SELECT v_referrals_qualified, v_commissions_confirmed;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 7.2 Manual Task Runner
+-- ----------------------------------------
+
+CREATE OR REPLACE FUNCTION run_daily_affiliate_tasks()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_result RECORD;
+BEGIN
+  SELECT * INTO v_result FROM qualify_verified_referrals();
+  RETURN 'Qualified: ' || v_result.referrals_qualified || ', Confirmed: ' || v_result.commissions_confirmed;
+END;
+$$;
+
+
+-- ============================================
+-- PART 8: VIEWS
+-- ============================================
+
+-- ----------------------------------------
+-- 8.1 Affiliate Dashboard Summary View
+-- ----------------------------------------
+
+DROP VIEW IF EXISTS affiliate_dashboard_summary;
+
+CREATE OR REPLACE VIEW affiliate_dashboard_summary AS
+SELECT 
+  a.id as affiliate_id, a.user_id, a.display_name, a.email, a.affiliate_code, a.coupon_code, a.referral_link,
+  a.status, a.current_tier, a.discount_tier, a.affiliate_type, a.commission_enabled,
+  COALESCE(a.total_clicks, 0) as total_clicks,
+  COALESCE(a.total_signups, 0) as total_signups,
+  COALESCE(a.total_qualified_referrals, 0) as total_qualified_referrals,
+  COALESCE(a.total_active_customers, 0) as total_active_customers,
+  CASE WHEN COALESCE(a.total_clicks, 0) > 0 THEN ROUND((COALESCE(a.total_signups, 0)::numeric / a.total_clicks) * 100, 2) ELSE 0 END as signup_conversion_rate,
+  CASE WHEN COALESCE(a.total_signups, 0) > 0 THEN ROUND((COALESCE(a.total_qualified_referrals, 0)::numeric / a.total_signups) * 100, 2) ELSE 0 END as qualification_rate,
+  COALESCE(a.total_earnings_usd, 0) as total_earnings_usd,
+  COALESCE(a.total_pending_usd, 0) as total_pending_usd,
+  COALESCE(a.total_paid_usd, 0) as total_paid_usd,
+  CASE a.current_tier WHEN 'tier_3' THEN 0.20 WHEN 'tier_2' THEN 0.15 ELSE 0.10 END as current_commission_rate,
+  CASE a.current_tier WHEN 'tier_1' THEN GREATEST(0, 20 - COALESCE(a.total_qualified_referrals, 0)) WHEN 'tier_2' THEN GREATEST(0, 75 - COALESCE(a.total_qualified_referrals, 0)) ELSE 0 END as clients_to_next_tier,
+  COALESCE(a.notify_on_signup, TRUE) as notify_on_signup,
+  COALESCE(a.notify_on_qualification, TRUE) as notify_on_qualification,
+  COALESCE(a.notify_on_commission, TRUE) as notify_on_commission,
+  COALESCE(a.notify_on_payout, TRUE) as notify_on_payout,
+  a.paypal_email, a.payment_method, a.activated_at, a.last_activity_at, a.created_at, a.updated_at
+FROM affiliates a WHERE a.status IN ('active', 'inactive');
+
+
+-- ============================================
+-- PART 9: RLS POLICIES & GRANTS
+-- ============================================
+
+-- Enable RLS
+ALTER TABLE whop_plan_mapping ENABLE ROW LEVEL SECURITY;
+ALTER TABLE whop_webhook_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE affiliate_clicks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscription_events ENABLE ROW LEVEL SECURITY;
+
+-- Plan mapping policies
+DROP POLICY IF EXISTS "Public can read active plan mapping" ON whop_plan_mapping;
+CREATE POLICY "Public can read active plan mapping" ON whop_plan_mapping FOR SELECT USING (is_active = TRUE);
+
+DROP POLICY IF EXISTS "Admin full access to plan mapping" ON whop_plan_mapping;
+CREATE POLICY "Admin full access to plan mapping" ON whop_plan_mapping FOR ALL 
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'super_admin')));
+
+-- Webhook log policies
+DROP POLICY IF EXISTS "Admin access to webhook log" ON whop_webhook_log;
+CREATE POLICY "Admin access to webhook log" ON whop_webhook_log FOR ALL 
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'super_admin')));
+
+DROP POLICY IF EXISTS "Service role access to webhook log" ON whop_webhook_log;
+CREATE POLICY "Service role access to webhook log" ON whop_webhook_log FOR ALL USING (auth.role() = 'service_role');
+
+-- Affiliate clicks policies
+DROP POLICY IF EXISTS "Affiliates can view own clicks" ON affiliate_clicks;
+CREATE POLICY "Affiliates can view own clicks" ON affiliate_clicks FOR SELECT 
+  USING (EXISTS (SELECT 1 FROM affiliates WHERE id = affiliate_id AND user_id = auth.uid()));
+
+DROP POLICY IF EXISTS "Service role can insert clicks" ON affiliate_clicks;
+CREATE POLICY "Service role can insert clicks" ON affiliate_clicks FOR INSERT WITH CHECK (TRUE);
+
+DROP POLICY IF EXISTS "Public can insert clicks" ON affiliate_clicks;
+CREATE POLICY "Public can insert clicks" ON affiliate_clicks FOR INSERT WITH CHECK (TRUE);
+
+-- Subscription events policies
+DROP POLICY IF EXISTS "Users can view own subscription events" ON subscription_events;
+CREATE POLICY "Users can view own subscription events" ON subscription_events FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Service role can manage subscription events" ON subscription_events;
+CREATE POLICY "Service role can manage subscription events" ON subscription_events FOR ALL USING (TRUE);
+
+-- Grants
+GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION get_finotaur_plan_from_whop(TEXT) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION get_commission_rate(TEXT, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION track_referral_signup(TEXT, UUID, TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID, NUMERIC, NUMERIC) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION get_affiliate_analytics(UUID, DATE, DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION activate_whop_subscription(TEXT, TEXT, TEXT, TEXT, TEXT, UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION deactivate_whop_subscription(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION handle_whop_payment(TEXT, NUMERIC, BOOLEAN, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION qualify_verified_referrals() TO service_role;
+GRANT EXECUTE ON FUNCTION get_subscription_cancellation_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION undo_pending_cancellation(UUID) TO authenticated;
+
+GRANT SELECT ON whop_plan_mapping TO authenticated, anon;
+GRANT ALL ON whop_webhook_log TO service_role;
+GRANT SELECT ON affiliate_dashboard_summary TO authenticated;
+GRANT SELECT, INSERT ON affiliate_clicks TO authenticated, anon;
+GRANT SELECT ON subscription_events TO authenticated;
+GRANT ALL ON subscription_events TO service_role;
+
+
+-- ============================================
+-- PART 10: DATA MIGRATION & FIXES
+-- ============================================
+
+-- Fix existing webhook logs
+UPDATE whop_webhook_log
+SET event_type = payload->>'type'
+WHERE (event_type = 'unknown' OR event_type IS NULL) AND payload->>'type' IS NOT NULL;
+
+-- Fix profiles for users with payments but still 'free'
+WITH paid_users AS (
+  SELECT DISTINCT ON (LOWER(payload->'data'->'user'->>'email'))
+    payload->'data'->'user'->>'email' as email,
+    payload->'data'->'product'->>'id' as product_id,
+    payload->'data'->'membership'->>'id' as membership_id,
+    payload->'data'->'user'->>'id' as whop_user_id,
+    payload->'data'->'promo_code'->>'code' as promo_code,
+    (payload->'data'->>'subtotal')::numeric as amount,
+    created_at as payment_date
+  FROM whop_webhook_log
+  WHERE payload->>'type' = 'payment.succeeded' AND payload->'data'->'user'->>'email' IS NOT NULL
+  ORDER BY LOWER(payload->'data'->'user'->>'email'), created_at DESC
+)
+UPDATE profiles p SET
+  account_type = wpm.finotaur_plan,
+  subscription_status = 'active',
+  subscription_interval = wpm.billing_interval,
+  subscription_started_at = pu.payment_date,
+  subscription_expires_at = CASE WHEN wpm.billing_interval = 'monthly' THEN pu.payment_date + INTERVAL '1 month' ELSE pu.payment_date + INTERVAL '1 year' END,
+  subscription_cancel_at_period_end = false,
+  whop_user_id = pu.whop_user_id,
+  whop_membership_id = pu.membership_id,
+  whop_product_id = pu.product_id,
+  whop_customer_email = pu.email,
+  payment_provider = 'whop',
+  max_trades = CASE WHEN wpm.max_trades = -1 THEN 999999 ELSE wpm.max_trades END,
+  current_month_trades_count = 0,
+  billing_cycle_start = pu.payment_date::date,
+  updated_at = NOW()
+FROM paid_users pu
+JOIN whop_plan_mapping wpm ON wpm.whop_product_id = pu.product_id
+WHERE LOWER(p.email) = LOWER(pu.email) AND (p.account_type = 'free' OR p.account_type IS NULL);
+
+-- Create referrals for users with promo codes
+WITH promo_payments AS (
+  SELECT DISTINCT ON (LOWER(payload->'data'->'user'->>'email'))
+    payload->'data'->'user'->>'email' as email,
+    payload->'data'->'product'->>'id' as product_id,
+    payload->'data'->'membership'->>'id' as membership_id,
+    payload->'data'->'user'->>'id' as whop_user_id,
+    payload->'data'->'promo_code'->>'code' as promo_code,
+    (payload->'data'->>'subtotal')::numeric as amount,
+    created_at as payment_date
+  FROM whop_webhook_log
+  WHERE payload->>'type' = 'payment.succeeded' AND payload->'data'->'promo_code'->>'code' IS NOT NULL
+  ORDER BY LOWER(payload->'data'->'user'->>'email'), created_at DESC
+)
+INSERT INTO affiliate_referrals (
+  affiliate_id, referred_user_id, referred_user_email, signup_date, signup_plan, coupon_code_used,
+  subscription_plan, subscription_type, subscription_price_usd, subscription_started_at,
+  first_payment_amount_usd, first_payment_date, total_payments_usd, status,
+  verification_start, verification_end, commission_eligible, whop_membership_id, whop_user_id, whop_product_id
+)
+SELECT 
+  a.id, p.id, pp.email, pp.payment_date, wpm.finotaur_plan, pp.promo_code,
+  wpm.finotaur_plan, wpm.billing_interval, pp.amount, pp.payment_date,
+  pp.amount, pp.payment_date, pp.amount, 'verification_pending'::referral_status,
+  pp.payment_date, pp.payment_date + INTERVAL '7 days', true, pp.membership_id, pp.whop_user_id, pp.product_id
+FROM promo_payments pp
+JOIN profiles p ON LOWER(p.email) = LOWER(pp.email)
+JOIN affiliates a ON (UPPER(a.affiliate_code) = UPPER(pp.promo_code) OR UPPER(a.coupon_code) = UPPER(pp.promo_code))
+JOIN whop_plan_mapping wpm ON wpm.whop_product_id = pp.product_id
+WHERE a.status = 'active' AND a.user_id != p.id
+  AND NOT EXISTS (SELECT 1 FROM affiliate_referrals ar WHERE ar.referred_user_id = p.id);
+
+-- Create commissions for new referrals
+INSERT INTO affiliate_commissions (
+  affiliate_id, referral_id, commission_type, commission_month, base_amount_usd,
+  commission_rate, commission_amount_usd, tier_at_time, status, month_number
+)
+SELECT 
+  ar.affiliate_id, ar.id,
+  CASE WHEN ar.subscription_type = 'yearly' THEN 'annual_upfront'::commission_type ELSE 'monthly_recurring'::commission_type END,
+  date_trunc('month', ar.first_payment_date)::date, ar.first_payment_amount_usd,
+  get_commission_rate(a.current_tier::text, COALESCE(ar.subscription_type, 'monthly')),
+  ROUND(ar.first_payment_amount_usd * get_commission_rate(a.current_tier::text, COALESCE(ar.subscription_type, 'monthly')), 2),
+  a.current_tier, 'pending'::commission_status, 1
+FROM affiliate_referrals ar
+JOIN affiliates a ON a.id = ar.affiliate_id
+WHERE ar.created_at >= NOW() - INTERVAL '5 minutes'
+  AND NOT EXISTS (SELECT 1 FROM affiliate_commissions ac WHERE ac.referral_id = ar.id);
+
+-- Update affiliate stats
+UPDATE affiliates a SET
+  total_signups = (SELECT COUNT(*) FROM affiliate_referrals ar WHERE ar.affiliate_id = a.id),
+  total_pending_usd = (SELECT COALESCE(SUM(commission_amount_usd), 0) FROM affiliate_commissions ac WHERE ac.affiliate_id = a.id AND ac.status = 'pending'),
+  total_earnings_usd = (SELECT COALESCE(SUM(commission_amount_usd), 0) FROM affiliate_commissions ac WHERE ac.affiliate_id = a.id),
+  last_activity_at = NOW(), updated_at = NOW()
+WHERE EXISTS (SELECT 1 FROM affiliate_referrals ar WHERE ar.affiliate_id = a.id);
+
+
+-- ============================================
+-- PART 11: VERIFICATION
+-- ============================================
+
+SELECT '========== VERIFICATION RESULTS ==========' as section;
+
+-- Check columns
+SELECT 
+  'COLUMNS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'pending_downgrade_plan') THEN '✅' ELSE '❌' END as pending_downgrade_plan,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'cancellation_reason') THEN '✅' ELSE '❌' END as cancellation_reason,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'whop_membership_id') THEN '✅' ELSE '❌' END as whop_membership_id;
+
+-- Check tables
+SELECT 
+  'TABLES' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'subscription_events') THEN '✅' ELSE '❌' END as subscription_events,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'whop_webhook_log') THEN '✅' ELSE '❌' END as whop_webhook_log,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'whop_plan_mapping') THEN '✅' ELSE '❌' END as whop_plan_mapping,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'affiliate_clicks') THEN '✅' ELSE '❌' END as affiliate_clicks;
+
+-- Check functions
+SELECT 
+  'FUNCTIONS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_user_subscription_status') THEN '✅' ELSE '❌' END as get_user_subscription_status,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'validate_affiliate_code') THEN '✅' ELSE '❌' END as validate_affiliate_code,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'activate_whop_subscription') THEN '✅' ELSE '❌' END as activate_whop_subscription,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'deactivate_whop_subscription') THEN '✅' ELSE '❌' END as deactivate_whop_subscription,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'handle_whop_payment') THEN '✅' ELSE '❌' END as handle_whop_payment,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'qualify_verified_referrals') THEN '✅' ELSE '❌' END as qualify_verified_referrals,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'undo_pending_cancellation') THEN '✅' ELSE '❌' END as undo_pending_cancellation;
+
+-- Check view
+SELECT 
+  'VIEW' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_views WHERE viewname = 'affiliate_dashboard_summary') THEN '✅' ELSE '❌' END as affiliate_dashboard_summary;
+
+-- Plan mapping count
+SELECT 'PLANS' as check_type, COUNT(*)::TEXT || ' active plans' as status FROM whop_plan_mapping WHERE is_active = TRUE;
+
+-- Commission rates test
+SELECT 'COMMISSION RATES' as check_type,
+  'tier_1: ' || get_commission_rate('tier_1', 'monthly')::text || ', ' ||
+  'tier_2: ' || get_commission_rate('tier_2', 'monthly')::text || ', ' ||
+  'tier_3: ' || get_commission_rate('tier_3', 'monthly')::text || ', ' ||
+  'annual: ' || get_commission_rate('tier_1', 'yearly')::text as rates;
+
+-- Summary stats
+SELECT 
+  'SUMMARY' as check_type,
+  (SELECT COUNT(*) FROM profiles WHERE payment_provider = 'whop' AND account_type != 'free') as paid_users,
+  (SELECT COUNT(*) FROM affiliate_referrals) as total_referrals,
+  (SELECT COUNT(*) FROM affiliate_referrals WHERE status = 'verification_pending') as pending_verification,
+  (SELECT COUNT(*) FROM affiliate_commissions) as total_commissions,
+  (SELECT COALESCE(SUM(commission_amount_usd), 0) FROM affiliate_commissions WHERE status = 'pending') as pending_commission_usd;
+
+
+-- ============================================
+-- 🎉 FINOTAUR COMPLETE SUBSCRIPTION SYSTEM v5.0.0
+-- ============================================
+-- 
+-- ✅ Whop Integration (v4.1.0)
+-- ✅ Subscription Management (v1.0.0)
+-- ✅ Affiliate System Complete
+-- ✅ Commission & Qualification
+-- 
+-- 📋 Commission Rates:
+--    tier_1: 10%, tier_2: 15%, tier_3: 20%, yearly: 15%
+-- 
+-- 🔄 Subscription Cancel/Downgrade Flow:
+--    1. User clicks Cancel/Downgrade
+--    2. Edge Function calls Whop API (cancel at_period_end)
+--    3. profiles: cancel_at_period_end=TRUE, pending_downgrade_plan='free'/'basic'
+--    4. User keeps current plan until period end
+--    5. Whop webhook: membership.went_invalid
+--    6. deactivate_whop_subscription checks pending_downgrade_plan
+--    7. User moved to target plan
+-- 
+-- 🔄 Affiliate Qualification Flow:
+--    1. Affiliate link click → record_affiliate_click
+--    2. Promo code validation → validate_affiliate_code
+--    3. Payment via Whop → handle_whop_payment
+--    4. Referral created (verification_pending)
+--    5. After 7 days: qualify_verified_referrals (Cron)
+--    6. Referral → qualified, Commission → confirmed
+-- 
+-- ⚠️ Cron Setup (if pg_cron available):
+--    SELECT cron.schedule('qualify-referrals', '0 2 * * *', 'SELECT qualify_verified_referrals()');
+-- 
+-- Manual run: SELECT run_daily_affiliate_tasks();
+-- ============================================

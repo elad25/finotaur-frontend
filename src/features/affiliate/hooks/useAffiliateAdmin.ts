@@ -1,19 +1,21 @@
 // =====================================================
-// FINOTAUR AFFILIATE ADMIN HOOKS - WITH WHOP INTEGRATION
+// FINOTAUR AFFILIATE ADMIN HOOKS - WITH WHOP + EMAIL
 // =====================================================
 // Place in: src/features/affiliate/hooks/useAffiliateAdmin.ts
 // 
-// Version: 3.0 - Full Whop Integration
+// Version: 4.0 - Full Whop Integration + Email Notifications
 // 
 // 🆕 Features:
 // - Creates promo code in Whop when admin approves affiliate
 // - Syncs discount_tier (standard=10%, vip=15%) with Whop
 // - Updates affiliate record with whop_promo_id
+// - 📧 Sends approval email automatically via Edge Function
 // =====================================================
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { generateApprovalEmail } from "../utils/affiliateEmailTemplates";
 import type { 
   AffiliateApplication, 
   Affiliate, 
@@ -185,6 +187,47 @@ async function createWhopPromoCode(
 }
 
 // ============================================
+// 📧 HELPER: Send Affiliate Approval Email
+// ============================================
+
+async function sendAffiliateApprovalEmail(
+  email: string,
+  fullName: string,
+  affiliateCode: string,
+  discountPercent: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const emailContent = generateApprovalEmail({
+      fullName,
+      affiliateCode,
+      discountPercent,
+    });
+
+    console.log('[sendAffiliateApprovalEmail] Sending email to:', email);
+
+    const { data, error } = await supabase.functions.invoke('send-affiliate-email', {
+      body: {
+        to: email,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        text: emailContent.text,
+      },
+    });
+
+    if (error) {
+      console.error('[sendAffiliateApprovalEmail] Error:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[sendAffiliateApprovalEmail] Success:', data);
+    return { success: true };
+  } catch (err) {
+    console.error('[sendAffiliateApprovalEmail] Exception:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+// ============================================
 // GET ADMIN STATS
 // ============================================
 
@@ -350,7 +393,7 @@ export function useAffiliateApplications(status?: AffiliateApplicationStatus | '
 }
 
 // ============================================
-// 🔥 APPROVE APPLICATION - WITH WHOP INTEGRATION
+// 🔥 APPROVE APPLICATION - WITH WHOP + EMAIL
 // ============================================
 
 export function useApproveApplication() {
@@ -475,6 +518,30 @@ export function useApproveApplication() {
         });
       }
 
+      // ============================================
+      // 📧 8. SEND APPROVAL EMAIL
+      // ============================================
+      console.log('[useApproveApplication] Sending approval email...');
+      
+      const emailResult = await sendAffiliateApprovalEmail(
+        application.email,
+        application.full_name,
+        affiliateCode,
+        discountPercent
+      );
+
+      if (emailResult.success) {
+        console.log('[useApproveApplication] ✅ Email sent successfully');
+        toast.success('Approval email sent!', {
+          description: `Welcome email sent to ${application.email}`,
+        });
+      } else {
+        console.error('[useApproveApplication] ⚠️ Email failed:', emailResult.error);
+        toast.warning('Affiliate approved, but email failed to send', {
+          description: emailResult.error || 'Please notify the affiliate manually',
+        });
+      }
+
       return {
         affiliate,
         affiliateCode,
@@ -482,6 +549,9 @@ export function useApproveApplication() {
         discountPercent,
         whopPromoId,
         whopSuccess: whopResult.success,
+        emailSuccess: emailResult.success,
+        applicationEmail: application.email,
+        applicationName: application.full_name,
       };
     },
     

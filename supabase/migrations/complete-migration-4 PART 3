@@ -1591,7 +1591,7 @@ END $$;
 DO $$
 BEGIN
   BEGIN
-    GRANT EXECUTE ON FUNCTION public.log_admin_action(TEXT, UUID, TEXT, UUID, JSONB) TO authenticated;
+    GRANT EXECUTE ON FUNCTION public.log_admin_action(TEXT, TEXT, UUID, JSONB) TO authenticated;
   EXCEPTION WHEN undefined_function THEN NULL;
   END;
   BEGIN

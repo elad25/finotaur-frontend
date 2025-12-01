@@ -121,6 +121,7 @@ DROP FUNCTION IF EXISTS calculate_discounted_price(TEXT, TEXT, NUMERIC) CASCADE;
 DROP FUNCTION IF EXISTS get_current_plan_prices() CASCADE;
 DROP FUNCTION IF EXISTS set_global_sale CASCADE;
 DROP FUNCTION IF EXISTS end_global_sale() CASCADE;
+DROP FUNCTION IF EXISTS can_user_use_coupon(UUID, UUID, TEXT) CASCADE;
 
 -- Drop all triggers
 DROP TRIGGER IF EXISTS trg_affiliate_tier_update ON affiliate_referrals CASCADE;
@@ -137,6 +138,7 @@ DROP TRIGGER IF EXISTS trg_referral_verification_end ON affiliate_referrals CASC
 DROP TRIGGER IF EXISTS trg_admin_coupons_updated_at ON admin_coupons CASCADE;
 
 -- Drop all tables (correct order for foreign keys)
+DROP TABLE IF EXISTS coupon_usage_log CASCADE;
 DROP TABLE IF EXISTS affiliate_audit_log CASCADE;
 DROP TABLE IF EXISTS affiliate_notifications CASCADE;
 DROP TABLE IF EXISTS affiliate_activity_log CASCADE;
@@ -165,7 +167,6 @@ DROP TYPE IF EXISTS affiliate_application_status CASCADE;
 DROP TYPE IF EXISTS discount_tier CASCADE;
 DROP TYPE IF EXISTS coupon_discount_type CASCADE;
 DROP TYPE IF EXISTS coupon_duration_type CASCADE;
-
 
 -- ============================================
 -- SECTION 3: ENUM TYPES
@@ -1694,6 +1695,10 @@ $$;
 -- SECTION 20: UNIFIED CODE VALIDATION FUNCTION
 -- ============================================
 
+-- Drop existing functions first
+DROP FUNCTION IF EXISTS validate_affiliate_code(TEXT);
+DROP FUNCTION IF EXISTS validate_coupon_code(TEXT, TEXT, UUID);
+
 -- Validates both affiliate codes AND admin coupons
 CREATE OR REPLACE FUNCTION validate_coupon_code(
   p_code TEXT, 
@@ -1716,7 +1721,10 @@ RETURNS TABLE (
   pays_commission BOOLEAN,
   applicable_plans TEXT[],
   can_stack_with_affiliate BOOLEAN,
-  validation_message TEXT
+  validation_message TEXT,
+  discount_monthly NUMERIC,
+  discount_yearly NUMERIC,
+  discount_tier discount_tier
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1728,17 +1736,30 @@ DECLARE
   v_fixed_price NUMERIC;
   v_can_use BOOLEAN;
   v_reason TEXT;
+  v_discount_rate NUMERIC;
 BEGIN
   v_clean_code := UPPER(REGEXP_REPLACE(p_code, '[^A-Z0-9]', '', 'g'));
   
   -- First check affiliate codes
-  SELECT a.id, a.display_name, a.affiliate_code, a.discount_tier, a.commission_enabled, a.affiliate_type
+  SELECT 
+    a.id, 
+    a.display_name, 
+    a.affiliate_code, 
+    a.discount_tier, 
+    a.commission_enabled, 
+    a.affiliate_type
   INTO v_affiliate
   FROM affiliates a
   WHERE (a.affiliate_code = v_clean_code OR a.coupon_code = v_clean_code)
     AND a.status = 'active';
   
   IF v_affiliate IS NOT NULL THEN
+    -- Calculate discount rate based on affiliate's discount_tier
+    v_discount_rate := CASE v_affiliate.discount_tier 
+      WHEN 'vip' THEN 15.00 
+      ELSE 10.00 
+    END;
+    
     RETURN QUERY SELECT 
       TRUE::BOOLEAN,
       'affiliate'::TEXT,
@@ -1748,14 +1769,17 @@ BEGIN
       NULL::TEXT,
       v_affiliate.affiliate_code,
       'percentage'::TEXT,
-      CASE v_affiliate.discount_tier WHEN 'vip' THEN 15.00 ELSE 10.00 END::NUMERIC,
+      v_discount_rate::NUMERIC,
       NULL::NUMERIC,
       NULL::NUMERIC,
       TRUE::BOOLEAN,
       v_affiliate.commission_enabled AND v_affiliate.affiliate_type = 'regular',
       NULL::TEXT[],
       TRUE::BOOLEAN,  -- Affiliate codes can always stack with admin coupons that allow it
-      'Valid affiliate code'::TEXT;
+      'Valid affiliate code'::TEXT,
+      v_discount_rate::NUMERIC,        -- discount_monthly
+      v_discount_rate::NUMERIC,        -- discount_yearly (same rate for affiliates)
+      v_affiliate.discount_tier;       -- discount_tier
     RETURN;
   END IF;
   
@@ -1778,7 +1802,10 @@ BEGIN
           FALSE, 'admin_coupon'::TEXT, NULL::UUID, NULL::TEXT, v_coupon.id, v_coupon.name,
           v_coupon.code, v_coupon.discount_type::TEXT, v_coupon.discount_percent,
           v_coupon.discount_amount_usd, NULL::NUMERIC, FALSE, FALSE,
-          v_coupon.applicable_plans, v_coupon.stackable_with_affiliate, v_reason;
+          v_coupon.applicable_plans, v_coupon.stackable_with_affiliate, v_reason,
+          v_coupon.discount_percent::NUMERIC,
+          v_coupon.discount_percent::NUMERIC,
+          NULL::discount_tier;
         RETURN;
       END IF;
     END IF;
@@ -1806,7 +1833,10 @@ BEGIN
       FALSE::BOOLEAN,  -- Admin coupons don't pay commission
       v_coupon.applicable_plans,
       v_coupon.stackable_with_affiliate,
-      'Valid coupon'::TEXT;
+      'Valid coupon'::TEXT,
+      v_coupon.discount_percent::NUMERIC,
+      v_coupon.discount_percent::NUMERIC,
+      NULL::discount_tier;
     RETURN;
   END IF;
   
@@ -1814,7 +1844,8 @@ BEGIN
   RETURN QUERY SELECT 
     FALSE, NULL::TEXT, NULL::UUID, NULL::TEXT, NULL::UUID, NULL::TEXT,
     NULL::TEXT, NULL::TEXT, NULL::NUMERIC, NULL::NUMERIC, NULL::NUMERIC,
-    NULL::BOOLEAN, NULL::BOOLEAN, NULL::TEXT[], NULL::BOOLEAN, 'Invalid code'::TEXT;
+    NULL::BOOLEAN, NULL::BOOLEAN, NULL::TEXT[], NULL::BOOLEAN, 'Invalid code'::TEXT,
+    NULL::NUMERIC, NULL::NUMERIC, NULL::discount_tier;
 END;
 $$;
 
@@ -1837,7 +1868,10 @@ RETURNS TABLE (
   pays_commission BOOLEAN,
   applicable_plans TEXT[],
   can_stack_with_affiliate BOOLEAN,
-  validation_message TEXT
+  validation_message TEXT,
+  discount_monthly NUMERIC,
+  discount_yearly NUMERIC,
+  discount_tier discount_tier
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -2084,6 +2118,19 @@ BEGIN
 END;
 $$;
 
+
+-- ============================================
+-- GRANTS FOR SECTION 20 FUNCTIONS
+-- ============================================
+
+GRANT EXECUTE ON FUNCTION validate_coupon_code(TEXT, TEXT, UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION validate_coupon_code(TEXT, TEXT, UUID) TO anon;
+GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO authenticated;
+GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO anon;
+GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO anon;
 
 -- ============================================
 -- SECTION 21: CLICK & REFERRAL TRACKING FUNCTIONS
@@ -3895,467 +3942,3 @@ SELECT * FROM get_current_plan_prices();
 -- Total Sections: 32
 -- Run time: ~5-10 seconds
 -- ============================================
- 
-
-
-
-
-
-
-
-
- # דוח מקיף: מערכת השותפים של Finotaur (Affiliate System v4.0.0)
-
-## סקירה כללית
-
-מערכת השותפים היא מערכת מלאה לניהול תוכנית affiliate עם קופונים, עמלות, ותשלומים אוטומטיים. המערכת בנויה ב-PostgreSQL עם Supabase ומשתמשת ב-pg_cron לאוטומציה.
-
----
-
-## 1. סוגי משתנים (ENUM Types)
-
-### affiliate_application_status
-מצב בקשת הצטרפות לתוכנית:
-- `pending` - ממתין לבדיקה
-- `under_review` - בבדיקה
-- `approved` - אושר
-- `rejected` - נדחה
-- `suspended` - מושעה
-
-### affiliate_status
-מצב חשבון השותף:
-- `active` - פעיל
-- `inactive` - לא פעיל
-- `suspended` - מושעה
-- `terminated` - הופסק
-
-### affiliate_tier
-דרגת שותף (משפיעה על אחוז העמלה):
-- `tier_1` - 0-20 לקוחות משלמים (10% עמלה)
-- `tier_2` - 20-75 לקוחות (15% עמלה)
-- `tier_3` - 75+ לקוחות (20% עמלה)
-
-### discount_tier
-סוג הנחה ללקוחות של השותף:
-- `standard` - 10% הנחה
-- `vip` - 15% הנחה
-
-### referral_status
-מצב הפניה (referral):
-- `pending` - ממתין לתשלום ראשון
-- `verification_pending` - בתקופת אימות 7 ימים
-- `verification_failed` - נכשל באימות (החזר/ביטול)
-- `qualified` - עבר אימות, זכאי לעמלה
-- `churned` - היה זכאי, המנוי הסתיים
-- `refunded` - בוצע החזר לאחר אישור
-
-### commission_type
-סוג עמלה:
-- `monthly_recurring` - עמלה חודשית רגילה
-- `annual_upfront` - 15% מראש למנוי שנתי
-- `sub_affiliate` - 5% מתת-שותפים
-- `bonus` - בונוסים על אבני דרך
-
-### commission_status
-מצב עמלה:
-- `pending` - ממתין
-- `confirmed` - מאושר
-- `paid` - שולם
-- `cancelled` - בוטל
-- `expired` - פג תוקף
-
-### bonus_type
-סוגי בונוסים:
-- `milestone_20` - $100 על 20 לקוחות
-- `milestone_50` - $300 על 50 לקוחות
-- `milestone_100` - $1,000 על 100 לקוחות
-- `milestone_50_recurring` - $100 על כל 50 לקוחות אחרי 100
-
-### bonus_status
-מצב בונוס:
-- `pending` - ממתין
-- `paid` - שולם
-- `cancelled` - בוטל
-
-### payout_status
-מצב תשלום:
-- `pending` - ממתין
-- `processing` - בעיבוד
-- `completed` - הושלם
-- `failed` - נכשל
-- `cancelled` - בוטל
-
-### coupon_discount_type
-סוג הנחה בקופון:
-- `percentage` - אחוז הנחה (למשל 30%)
-- `fixed_price` - מחיר קבוע לתוכנית (למשל $100 לשנה)
-- `fixed_amount` - סכום קבוע הנחה (למשל $50 הנחה)
-
-### coupon_duration_type
-סוג תוקף קופון:
-- `unlimited` - ללא הגבלה
-- `time_limited` - עד תאריך מסוים
-- `usage_limited` - מספר שימושים מקסימלי
-- `time_and_usage` - גם וגם
-- `until_code_change` - עד שהאדמין משנה
-- `single_use_per_user` - שימוש אחד למשתמש
-- `first_payment_only` - רק לתשלום ראשון
-
----
-
-## 2. טבלאות מרכזיות
-
-### affiliate_config
-טבלת קונפיגורציה גלובלית. מכילה הגדרות במבנה JSON:
-- `commission_rates` - אחוזי עמלה לכל tier
-- `annual_commission_rate` - 15% למנויים שנתיים
-- `sub_affiliate_rate` - 5% מתת-שותפים
-- `commission_duration_months` - 12 חודשים מקסימום
-- `verification_period_days` - 7 ימי אימות
-- `attribution_window_days` - 30 ימי תוקף לקוקי
-- `discount_rates` - אחוזי הנחה ללקוחות
-- `bonus_milestones` - בונוסים על אבני דרך
-- `payout_settings` - מינימום $100 לתשלום
-- `default_plan_prices` - מחירי ברירת מחדל
-
-### admin_global_pricing
-מבצעים גלובליים שחלים על כל האתר:
-- `sale_name` - שם המבצע
-- `monthly/yearly/lifetime_price_usd` - מחירים קבועים
-- `discount_percent` - אחוז הנחה
-- `is_active` - האם פעיל
-- `valid_from/until` - תקופת תוקף
-
-### affiliate_applications
-בקשות הצטרפות לתוכנית:
-- פרטים אישיים (שם, אימייל, טלפון)
-- נוכחות ברשתות חברתיות (Instagram, YouTube, TikTok, Twitter)
-- מידע על קהל היעד
-- קוד מבוקש
-- סטטוס ותוצאת הבדיקה
-
-### affiliates (טבלה מרכזית)
-חשבונות שותפים פעילים:
-
-**זיהוי:**
-- `user_id` - קישור ל-auth.users
-- `affiliate_code` - קוד ייחודי (למשל "ALEX123")
-- `coupon_code` - קוד קופון (בדרך כלל זהה)
-- `referral_link` - לינק הפניה
-
-**סטטוס:**
-- `status` - active/inactive/suspended/terminated
-- `current_tier` - tier_1/tier_2/tier_3
-- `discount_tier` - standard/vip
-- `affiliate_type` - regular/admin (admin לא מקבל עמלות)
-- `commission_enabled` - האם זכאי לעמלות
-
-**תת-שותפים:**
-- `parent_affiliate_id` - שותף-אב
-- `can_recruit_sub_affiliates` - יכול לגייס (tier_2+)
-
-**סטטיסטיקות (denormalized לביצועים):**
-- `total_clicks` - סה"כ לחיצות
-- `total_signups` - סה"כ הרשמות
-- `total_qualified_referrals` - הפניות שעברו אימות
-- `total_active_customers` - לקוחות פעילים
-
-**רווחים:**
-- `total_earnings_usd` - סה"כ רווחים
-- `total_pending_usd` - ממתין לתשלום
-- `total_paid_usd` - שולם
-- `total_bonuses_usd` - בונוסים
-- `total_sub_affiliate_earnings_usd` - מתת-שותפים
-
-### admin_coupons
-קופונים של האדמין (לא של שותפים):
-- `code` - קוד הקופון
-- `discount_type` - percentage/fixed_price/fixed_amount
-- `discount_percent` / `discount_amount_usd` - ערך ההנחה
-- `duration_type` - סוג התוקף
-- `max_uses` / `current_uses` - מגבלת שימושים
-- `max_uses_per_user` - מגבלה למשתמש
-- `applicable_plans` - לאילו תוכניות
-- `first_time_only` - רק לתשלום ראשון
-- `new_users_only` - רק למשתמשים חדשים
-- `stackable_with_affiliate` - ניתן לשלב עם קוד שותף
-
-### admin_coupon_plan_prices
-מחירים קבועים לכל תוכנית (לקופונים מסוג fixed_price):
-- `coupon_id` - קישור לקופון
-- `plan_name` - monthly/yearly/lifetime
-- `fixed_price_usd` - המחיר הקבוע
-
-### affiliate_clicks
-מעקב לחיצות:
-- `affiliate_id` - השותף
-- `ip_hash` / `ip_address` - זיהוי (עם hash לפרטיות)
-- UTM parameters - מקור, מדיום, קמפיין
-- מידע גיאוגרפי ומכשיר
-- `converted` - האם הומר להרשמה
-- `expires_at` - תוקף (30 יום)
-
-### affiliate_referrals
-הפניות (לקוחות שהגיעו דרך שותף):
-- `affiliate_id` - השותף
-- `referred_user_id` - המשתמש שהצטרף
-- `click_id` - הלחיצה שהביאה אותו
-- `status` - pending → verification_pending → qualified
-- `discount_percent/amount` - ההנחה שקיבל
-- `coupon_code_used` - קופון נוסף אם היה
-
-**תקופת אימות (7 ימים אחרי תשלום ראשון):**
-- `verification_start/end` - תחילת וסיום האימות
-- `first_payment_date/amount` - התשלום הראשון
-
-**זכאות לעמלה:**
-- `commission_eligible` - האם זכאי
-- `commission_start/end_date` - תקופת זכאות (12 חודשים)
-- `months_commissioned` - כמה חודשים כבר שולמו
-
-### affiliate_commissions
-עמלות:
-- `affiliate_id` - השותף
-- `referral_id` - ההפניה (או NULL לתת-שותפים)
-- `commission_type` - סוג העמלה
-- `commission_month` - לאיזה חודש
-- `base_amount_usd` - סכום הבסיס
-- `commission_rate` - אחוז העמלה
-- `commission_amount_usd` - סכום העמלה
-- `tier_at_time` - הדרגה בזמן החישוב
-- `month_number` - חודש מספר (1-12)
-- `status` - pending/confirmed/paid
-- `payout_id` - קישור לתשלום
-
-### affiliate_bonuses
-בונוסים על אבני דרך:
-- `affiliate_id` - השותף
-- `bonus_type` - סוג הבונוס
-- `bonus_amount_usd` - הסכום
-- `milestone_reached` - אבן הדרך שהושגה
-- `status` - pending/paid
-
-### affiliate_payouts
-תשלומים לשותפים:
-- `affiliate_id` - השותף
-- `payout_period` - התקופה
-- `commissions_amount_usd` - סכום עמלות
-- `bonuses_amount_usd` - סכום בונוסים
-- `total_amount_usd` - סה"כ
-- `status` - pending/processing/completed/failed
-- `payment_method` - paypal/bank_transfer
-- `transaction_id` - מזהה טרנזקציה
-
-### affiliate_notifications
-התראות לשותפים:
-- `type` - סוג ההתראה
-- `title/message` - כותרת ותוכן
-- `read` - האם נקרא
-
-### affiliate_activity_log
-לוג פעילות:
-- `activity_type` - סוג הפעולה
-- `description` - תיאור
-- קישורים לישויות קשורות
-- `is_system_action` - פעולת מערכת או משתמש
-
-### coupon_usage_log
-מעקב שימוש בקופונים:
-- `coupon_id` - הקופון
-- `user_id` - המשתמש
-- UNIQUE constraint - מונע שימוש כפול
-
----
-
-## 3. פונקציות מרכזיות
-
-### פונקציות עזר
-
-**is_admin()** - בודק אם המשתמש הנוכחי הוא admin
-
-**calculate_affiliate_tier(qualified_count)** - מחשב דרגה לפי מספר לקוחות:
-- 0-19 → tier_1
-- 20-74 → tier_2  
-- 75+ → tier_3
-
-**get_commission_rate(tier, is_annual)** - מחזיר אחוז עמלה:
-- tier_1: 10%
-- tier_2: 15%
-- tier_3: 20%
-- שנתי: תמיד 15%
-
-**get_milestone_bonus(client_count)** - בודק אם מגיע בונוס
-
-**is_affiliate_code_available(code)** - בודק זמינות קוד
-
-**generate_affiliate_code(requested, name)** - יוצר קוד ייחודי
-
-### פונקציות קופונים
-
-**create_admin_coupon(...)** - יצירת קופון אדמין עם כל האפשרויות
-
-**update_admin_coupon(...)** - עדכון קופון
-
-**rename_admin_coupon(id, new_code)** - שינוי קוד
-
-**deactivate_admin_coupon(id)** - ביטול קופון
-
-**can_user_use_coupon(coupon_id, user_id, plan)** - בדיקת זכאות לקופון
-
-### פונקציית ולידציה מאוחדת
-
-**validate_coupon_code(code, plan, user_id)** - בודקת גם קודי שותפים וגם קופונים:
-
-מחזירה:
-- `is_valid` - האם תקף
-- `code_type` - 'affiliate' או 'admin_coupon'
-- `affiliate_id/name` - אם קוד שותף
-- `coupon_id/name` - אם קופון
-- `discount_type` - percentage/fixed_price/fixed_amount
-- `discount_percent/amount/fixed_price` - ערך ההנחה
-- `pays_commission` - האם משלם עמלה לשותף
-- `can_stack_with_affiliate` - האם ניתן לשלב
-
-**calculate_discounted_price(code, plan, original_price)** - מחשב מחיר סופי
-
-**get_current_plan_prices()** - מחזיר מחירים נוכחיים (כולל מבצעים)
-
-### מעקב לחיצות והפניות
-
-**record_affiliate_click(...)** - מתעד לחיצה על לינק שותף
-
-**track_referral_signup(...)** - מתעד הרשמה דרך שותף
-
-**record_referral_first_payment(...)** - מתעד תשלום ראשון ומתחיל אימות 7 ימים
-
-### חישוב עמלות
-
-**process_pending_verifications()** - עובר על הפניות שסיימו 7 ימי אימות ומסמן כ-qualified
-
-**calculate_monthly_commissions(for_month)** - מחשב עמלות חודשיות לכל השותפים
-
-**calculate_sub_affiliate_commissions(for_month)** - מחשב 5% מתת-שותפים
-
-### תשלומים
-
-**generate_monthly_payouts(for_period)** - יוצר תשלומים לשותפים עם $100+
-
-**process_payout(id, transaction_ref, processed_by)** - מסמן תשלום כהושלם
-
-### ניהול שותפים
-
-**create_admin_affiliate(user_id, name, code)** - יוצר שותף-admin (ללא עמלות)
-
-**approve_affiliate_application(...)** - מאשר בקשה ויוצר חשבון שותף
-
-**reject_affiliate_application(...)** - דוחה בקשה
-
-**suspend_affiliate(...)** / **reactivate_affiliate(...)** - השעיה והפעלה מחדש
-
-**reconcile_affiliate_stats()** - מתקן סטטיסטיקות denormalized
-
----
-
-## 4. Views (תצוגות)
-
-### affiliate_dashboard_summary
-כל מה ששותף צריך לדשבורד שלו - קודים, סטטיסטיקות, רווחים, אחוז המרה
-
-### affiliate_leaderboard
-דירוג שותפים לפי הפניות ורווחים
-
-### admin_coupons_summary
-כל הקופונים עם סטטוס אפקטיבי (active/expired/exhausted)
-
-### admin_pricing_overview
-מחירי ברירת מחדל ומבצעים פעילים
-
-### affiliate_pending_verifications
-הפניות בתקופת אימות 7 ימים
-
-### affiliate_applications_queue
-בקשות ממתינות לאישור
-
-### affiliate_monthly_performance
-ביצועים חודשיים מפורטים
-
-### affiliate_pending_payments
-הפניות שממתינות לתשלום ראשון
-
-### affiliate_cron_history
-היסטוריית הרצות cron jobs
-
----
-
-## 5. Cron Jobs (משימות אוטומטיות)
-
-| Job | תזמון | תפקיד |
-|-----|--------|--------|
-| process_verifications | כל שעה | בודק אימותים שהסתיימו |
-| monthly_commissions | 1 בחודש 02:00 | מחשב עמלות חודשיות |
-| sub_commissions | 1 בחודש 03:00 | מחשב עמלות תת-שותפים |
-| generate_payouts | 5 בחודש 02:00 | יוצר תשלומים |
-| reconcile_stats | יומי 04:00 | מתקן סטטיסטיקות |
-| confirm_commissions | 10 בחודש 02:00 | מאשר עמלות pending |
-| clean_expired_clicks | יומי 03:00 | מוחק לחיצות שפג תוקפן |
-| end_expired_sales | כל שעה | מסיים מבצעים שפג תוקפם |
-
----
-
-## 6. תהליכים עסקיים מרכזיים
-
-### תהליך הצטרפות שותף:
-1. משתמש ממלא בקשה → `affiliate_applications`
-2. אדמין בודק ומאשר → `approve_affiliate_application()`
-3. נוצר חשבון ב-`affiliates` עם קוד ייחודי
-
-### תהליך הפניה:
-1. לקוח לוחץ על לינק → `record_affiliate_click()`
-2. לקוח נרשם → `track_referral_signup()` → status: pending
-3. לקוח משלם → `record_referral_first_payment()` → status: verification_pending
-4. עוברים 7 ימים ללא ביטול → `process_pending_verifications()` → status: qualified
-5. עמלות נוצרות כל חודש למשך 12 חודשים
-
-### תהליך תשלום:
-1. עמלות מצטברות עד $100
-2. `generate_monthly_payouts()` יוצר payout
-3. אדמין מעבד → `process_payout()`
-4. סטטוס משתנה ל-completed
-
-### שימוש בקופון/קוד שותף:
-1. לקוח מזין קוד
-2. `validate_coupon_code()` בודק תקינות וסוג
-3. `calculate_discounted_price()` מחשב מחיר סופי
-4. אם קוד שותף - נוצרת הפניה עם עמלה
-5. אם קופון admin - רק הנחה, בלי עמלה
-
----
-
-## 7. RLS (Row Level Security)
-
-כל הטבלאות מוגנות ב-RLS:
-- **אדמין** - גישה מלאה לכל הטבלאות
-- **שותף** - רואה רק את המידע שלו (לפי user_id)
-- **משתמש רגיל** - רואה רק את ההפניה שלו
-- **אנונימי** - יכול רק לבדוק קודים (validate)
-
----
-
-## 8. נקודות חשובות למתכנת
-
-### Denormalization
-הסטטיסטיקות ב-`affiliates` הן denormalized לביצועים. הן מתעדכנות:
-- אטומית עם פעולות (increment functions)
-- יומית עם `reconcile_affiliate_stats()`
-
-### תקופת אימות 7 ימים
-קריטית למניעת הונאות - עמלה ניתנת רק אחרי 7 ימים שהלקוח לא ביטל/קיבל החזר.
-
-### מגבלת 12 חודשים
-שותף מקבל עמלה מלקוח לכל היותר 12 חודשים.
-
-### Admin vs Regular Affiliates
-שותפים מסוג `admin` לא מקבלים עמלות - רק נותנים הנחות ללקוחות.
-
-### Stacking
-קופוני אדמין יכולים להיות stackable - לקוח יכול להשתמש בקוד שותף + קופון אדמין ביחד.

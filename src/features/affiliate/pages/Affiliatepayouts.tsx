@@ -3,25 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { 
-  Wallet, CreditCard, Clock, CheckCircle, XCircle,
+  Wallet, Clock, CheckCircle, XCircle,
   ChevronLeft, ChevronRight, AlertCircle, Send,
-  DollarSign, Mail, Edit2, Save
+  DollarSign, Mail, Edit2, Save, ExternalLink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
-// Types
+// ============================================
+// TYPES
+// ============================================
+
 interface Payout {
   id: string;
   affiliate_id: string;
-  amount_usd: number;
+  payout_period: string;
+  commissions_amount_usd: number;
+  bonuses_amount_usd: number;
+  adjustments_usd: number;
+  total_amount_usd: number;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   payment_method: string;
   payment_email: string;
-  payout_period_start: string;
-  payout_period_end: string;
+  paypal_batch_id: string | null;
+  paypal_transaction_id: string | null;
+  paypal_transaction_status: string | null;
   processed_at: string | null;
-  transaction_id: string | null;
-  admin_notes: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  notes: string | null;
   created_at: string;
 }
 
@@ -33,7 +44,10 @@ interface AffiliateBalance {
   paypalEmail: string | null;
 }
 
-// Status config
+// ============================================
+// CONSTANTS
+// ============================================
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: any }> = {
   pending: { label: 'Pending', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10', icon: Clock },
   processing: { label: 'Processing', color: 'text-blue-400', bgColor: 'bg-blue-500/10', icon: Clock },
@@ -42,7 +56,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: str
   cancelled: { label: 'Cancelled', color: 'text-gray-400', bgColor: 'bg-gray-500/10', icon: XCircle },
 };
 
-// Helper: Format currency
+const MIN_PAYOUT_AMOUNT = 100;
+
+// ============================================
+// HELPERS
+// ============================================
+
 const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -51,7 +70,6 @@ const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
-// Helper: Format date
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
@@ -60,11 +78,15 @@ const formatDate = (dateString: string): string => {
   });
 };
 
-const MIN_PAYOUT_AMOUNT = 100;
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 export default function AffiliatePayouts() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  
+  // State
   const [affiliateId, setAffiliateId] = useState<string | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [balance, setBalance] = useState<AffiliateBalance>({
@@ -91,12 +113,16 @@ export default function AffiliatePayouts() {
   const [totalCount, setTotalCount] = useState(0);
   const itemsPerPage = 10;
 
-  // Fetch affiliate data
+  // ============================================
+  // DATA FETCHING
+  // ============================================
+
   useEffect(() => {
     async function fetchAffiliateData() {
       if (!user?.id) return;
 
       try {
+        // Get affiliate record
         const { data: affiliateData, error } = await supabase
           .from('affiliates')
           .select('id, total_earnings_usd, total_paid_usd, total_pending_usd, paypal_email')
@@ -112,20 +138,34 @@ export default function AffiliatePayouts() {
         setAffiliateId(affiliateData.id);
         setNewPaypalEmail(affiliateData.paypal_email || '');
 
-        // Calculate pending payouts
+        // Calculate available balance from confirmed commissions
+        const { data: confirmedCommissions } = await supabase
+          .from('affiliate_commissions')
+          .select('commission_amount_usd')
+          .eq('affiliate_id', affiliateData.id)
+          .eq('status', 'confirmed')
+          .is('payout_id', null);
+
+        const availableFromCommissions = confirmedCommissions?.reduce(
+          (sum, c) => sum + Number(c.commission_amount_usd), 0
+        ) || 0;
+
+        // Get pending payouts total
         const { data: pendingPayoutsData } = await supabase
           .from('affiliate_payouts')
-          .select('amount_usd')
+          .select('total_amount_usd')
           .eq('affiliate_id', affiliateData.id)
           .in('status', ['pending', 'processing']);
 
-        const pendingPayoutsTotal = pendingPayoutsData?.reduce((sum, p) => sum + Number(p.amount_usd), 0) || 0;
+        const pendingPayoutsTotal = pendingPayoutsData?.reduce(
+          (sum, p) => sum + Number(p.total_amount_usd), 0
+        ) || 0;
 
         setBalance({
           totalEarnings: Number(affiliateData.total_earnings_usd) || 0,
           totalPaid: Number(affiliateData.total_paid_usd) || 0,
           pendingPayouts: pendingPayoutsTotal,
-          availableBalance: (Number(affiliateData.total_earnings_usd) || 0) - (Number(affiliateData.total_paid_usd) || 0) - pendingPayoutsTotal,
+          availableBalance: availableFromCommissions,
           paypalEmail: affiliateData.paypal_email,
         });
 
@@ -171,12 +211,16 @@ export default function AffiliatePayouts() {
     fetchPayouts();
   }, [affiliateId, currentPage]);
 
-  // Save PayPal email
+  // ============================================
+  // HANDLERS
+  // ============================================
+
   const handleSavePaypalEmail = async () => {
     if (!affiliateId) return;
 
     // Validate email
-    if (!newPaypalEmail || !newPaypalEmail.includes('@')) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newPaypalEmail || !emailRegex.test(newPaypalEmail)) {
       setPaypalError('Please enter a valid email address');
       return;
     }
@@ -201,6 +245,7 @@ export default function AffiliatePayouts() {
 
       setBalance(prev => ({ ...prev, paypalEmail: newPaypalEmail }));
       setIsEditingPaypal(false);
+      toast.success('PayPal email saved successfully!');
     } catch (error) {
       setPaypalError('An error occurred. Please try again.');
       console.error('Error:', error);
@@ -209,7 +254,6 @@ export default function AffiliatePayouts() {
     }
   };
 
-  // Request payout handler
   const handleRequestPayout = async () => {
     if (!affiliateId) return;
 
@@ -235,28 +279,23 @@ export default function AffiliatePayouts() {
     setRequestError('');
 
     try {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Call Edge Function to request payout
+      const { data, error } = await supabase.functions.invoke('process-affiliate-payout', {
+        body: { 
+          action: 'request',
+          affiliateId,
+          amount
+        }
+      });
 
-      const { error } = await supabase
-        .from('affiliate_payouts')
-        .insert({
-          affiliate_id: affiliateId,
-          amount_usd: amount,
-          status: 'pending',
-          payment_method: 'paypal',
-          payment_email: balance.paypalEmail,
-          payout_period_start: startOfMonth.toISOString(),
-          payout_period_end: now.toISOString(),
-        });
-
-      if (error) {
-        setRequestError('Failed to request payout. Please try again.');
-        console.error('Error requesting payout:', error);
+      if (error || !data?.success) {
+        setRequestError(data?.error || 'Failed to request payout. Please try again.');
+        setRequesting(false);
         return;
       }
 
-      // Refresh data
+      // Success
+      toast.success('Payout request submitted! You will receive payment within 3-5 business days.');
       setShowRequestModal(false);
       setRequestAmount('');
       
@@ -289,6 +328,10 @@ export default function AffiliatePayouts() {
     }
   };
 
+  // ============================================
+  // RENDER HELPERS
+  // ============================================
+
   const totalPages = Math.ceil(totalCount / itemsPerPage);
   const canRequestPayout = balance.availableBalance >= MIN_PAYOUT_AMOUNT && balance.paypalEmail;
 
@@ -299,6 +342,10 @@ export default function AffiliatePayouts() {
       </div>
     );
   }
+
+  // ============================================
+  // RENDER
+  // ============================================
 
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-7xl mx-auto">
@@ -328,7 +375,7 @@ export default function AffiliatePayouts() {
         </button>
       </div>
 
-      {/* 💳 PayPal Email Section - PROMINENT */}
+      {/* 💳 PayPal Email Section */}
       <div 
         className="rounded-xl p-6"
         style={{
@@ -339,13 +386,14 @@ export default function AffiliatePayouts() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-[#0077B5]/20">
+              {/* PayPal Logo */}
               <svg className="h-6 w-6 text-[#0077B5]" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
               </svg>
             </div>
             <div>
               <h3 className="text-white font-semibold">PayPal Payout Account</h3>
-              <p className="text-gray-400 text-sm">All payouts will be sent to this email</p>
+              <p className="text-gray-400 text-sm">All payouts will be sent to this PayPal email</p>
             </div>
           </div>
 
@@ -476,9 +524,9 @@ export default function AffiliatePayouts() {
             <p className="text-white font-medium mb-1">Payout Information</p>
             <ul className="space-y-1">
               <li>• Minimum payout amount: <span className="text-white">{formatCurrency(MIN_PAYOUT_AMOUNT)}</span></li>
-              <li>• Payouts are processed on the <span className="text-white">15th of each month</span></li>
+              <li>• Payouts are processed within <span className="text-white">1-3 business days</span></li>
               <li>• Payments are sent via <span className="text-white">PayPal</span></li>
-              <li>• Processing time: <span className="text-white">3-5 business days</span></li>
+              <li>• Commissions must be <span className="text-white">confirmed</span> (7-day verification period)</li>
             </ul>
           </div>
         </div>
@@ -537,32 +585,41 @@ export default function AffiliatePayouts() {
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-white font-medium">
-                            {formatCurrency(payout.amount_usd)}
+                            {formatCurrency(payout.total_amount_usd)}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-gray-300">
                           {payout.payment_email}
                         </td>
                         <td className="px-6 py-4">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
-                            statusConfig.bgColor,
-                            statusConfig.color
-                          )}>
-                            <StatusIcon className="h-3.5 w-3.5" />
-                            {statusConfig.label}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium w-fit",
+                              statusConfig.bgColor,
+                              statusConfig.color
+                            )}>
+                              <StatusIcon className="h-3.5 w-3.5" />
+                              {statusConfig.label}
+                            </span>
+                            {payout.failure_reason && (
+                              <span className="text-xs text-red-400">
+                                {payout.failure_reason}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-gray-400">
-                          {payout.processed_at 
+                          {payout.completed_at 
+                            ? formatDate(payout.completed_at)
+                            : payout.processed_at
                             ? formatDate(payout.processed_at)
                             : <span className="text-gray-500">-</span>
                           }
                         </td>
                         <td className="px-6 py-4">
-                          {payout.transaction_id ? (
+                          {payout.paypal_transaction_id ? (
                             <span className="text-gray-300 font-mono text-xs">
-                              {payout.transaction_id}
+                              {payout.paypal_transaction_id}
                             </span>
                           ) : (
                             <span className="text-gray-500">-</span>
@@ -648,6 +705,12 @@ export default function AffiliatePayouts() {
                     className="w-full pl-10 pr-4 py-3 bg-black/30 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#C9A646]/50"
                   />
                 </div>
+                <button
+                  onClick={() => setRequestAmount(balance.availableBalance.toString())}
+                  className="text-xs text-[#C9A646] hover:text-[#D4B85A] mt-1"
+                >
+                  Request maximum ({formatCurrency(balance.availableBalance)})
+                </button>
                 {requestError && (
                   <p className="text-red-400 text-sm mt-2">{requestError}</p>
                 )}
@@ -707,7 +770,10 @@ export default function AffiliatePayouts() {
   );
 }
 
-// Balance Card Component
+// ============================================
+// BALANCE CARD COMPONENT
+// ============================================
+
 function BalanceCard({ 
   label, 
   value, 

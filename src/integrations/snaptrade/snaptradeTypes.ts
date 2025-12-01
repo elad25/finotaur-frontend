@@ -55,6 +55,7 @@ export interface GetAuthUrlRequest {
 export interface Brokerage {
   id: string;
   name: string;
+  slug: string;
   displayName: string;
   description?: string;
   logoUrl?: string;

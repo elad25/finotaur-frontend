@@ -1,5 +1,7 @@
 // src/services/brokers/tradovate/tradovateSyncV2.service.ts
-// 🎯 V2 - Updated to match the advanced multi-broker database schema
+// 🎯 V3.0 - Updated to work with existing trades table
+// ✅ Does NOT send pnl - trigger calculates it
+// ✅ Uses broker_connections from migration
 
 import { supabase } from '@/lib/supabase';
 import { tradovateApiService } from './tradovateApi.service';
@@ -18,7 +20,6 @@ import {
   TradovateContract,
   TradovateProduct,
   TradovatePosition,
-  TradovateAccount
 } from '@/types/brokers/tradovate/tradovate.types';
 
 // ============================================================================
@@ -125,7 +126,8 @@ class TradovateSyncV2Service {
 
       console.log('✅ TradovateSyncV2: Initialized successfully', {
         connectionId: this.connectionId,
-        brokerAccountId: this.brokerAccountId
+        brokerAccountId: this.brokerAccountId,
+        environment: this.environment
       });
 
     } catch (error) {
@@ -151,6 +153,8 @@ class TradovateSyncV2Service {
     }
 
     try {
+      // Set WebSocket environment to match API
+      tradovateWebSocketService.setEnvironment(this.environment);
       await tradovateWebSocketService.connect(token);
 
       // Subscribe to fills (completed trades)
@@ -177,7 +181,7 @@ class TradovateSyncV2Service {
     if (!this.userId) return;
 
     try {
-      // Trigger a mini-sync for recent fills to ensure proper pairing
+      // Trigger a mini-sync for recent fills
       const oneDayAgo = new Date();
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
       await this.syncHistoricalTrades(oneDayAgo, undefined, 'realtime');
@@ -277,18 +281,10 @@ class TradovateSyncV2Service {
 
           const tradeData = tradovateTradeMapperService.convertToFinotaurTrade(
             pairedTrade,
-            this.userId
+            this.userId,
+            this.connectionId,
+            this.brokerAccountId || undefined
           );
-
-          // Add broker connection references
-          const enrichedTradeData = {
-            ...tradeData,
-            broker_connection_id: this.connectionId,
-            broker_account_id: this.brokerAccountId,
-            broker_name: 'tradovate',
-            synced_at: new Date().toISOString(),
-            sync_source: trigger
-          };
 
           // Validate before insert
           const validation = tradovateTradeMapperService.validateTradeData(tradeData);
@@ -304,10 +300,10 @@ class TradovateSyncV2Service {
             continue;
           }
 
-          // Insert trade
+          // Insert trade - pnl will be calculated by trigger!
           const { error } = await supabase
             .from('trades')
-            .insert([enrichedTradeData]);
+            .insert([tradeData]);
 
           if (error) {
             console.error('❌ Insert error:', error);
@@ -413,17 +409,10 @@ class TradovateSyncV2Service {
             position,
             contract,
             product,
-            this.userId
+            this.userId,
+            this.connectionId,
+            this.brokerAccountId || undefined
           );
-
-          const enrichedTradeData = {
-            ...tradeData,
-            broker_connection_id: this.connectionId,
-            broker_account_id: this.brokerAccountId,
-            broker_name: 'tradovate',
-            synced_at: new Date().toISOString(),
-            sync_source: trigger
-          };
 
           const existingTradeId = existingMap.get(tradeData.external_id);
 
@@ -447,7 +436,7 @@ class TradovateSyncV2Service {
             // Insert new position
             const { error } = await supabase
               .from('trades')
-              .insert([enrichedTradeData]);
+              .insert([tradeData]);
 
             if (error) {
               result.errors.push(`Insert failed: ${error.message}`);
@@ -619,6 +608,10 @@ class TradovateSyncV2Service {
 
   public getBrokerAccountId(): string | null {
     return this.brokerAccountId;
+  }
+
+  public getEnvironment(): 'demo' | 'live' {
+    return this.environment;
   }
 }
 

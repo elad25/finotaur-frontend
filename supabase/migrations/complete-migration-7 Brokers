@@ -1,6 +1,6 @@
 -- ============================================================================
--- FINOTAUR - Multi-Broker Integration Database Schema
--- Version: 3.0.0 - SMART MIGRATION (Compatible with existing schema)
+-- FINOTAUR - Multi-Broker Integration Database Schema (UNIFIED)
+-- Version: 3.2.0 - WITH SNAPTRADE INTEGRATION
 -- ============================================================================
 -- 
 -- This migration intelligently handles:
@@ -9,6 +9,10 @@
 -- ✅ Adds missing columns without breaking existing data
 -- ✅ Fixes constraints to support all brokers
 -- ✅ Safe to run multiple times (idempotent)
+-- ✅ Optimized indexes for high-performance queries
+-- ✅ Partial indexes to reduce index size
+-- ✅ BRIN indexes for time-series data
+-- ✅ SnapTrade integration (users, activity, trades columns)
 --
 -- ============================================================================
 
@@ -74,34 +78,25 @@ CREATE TABLE IF NOT EXISTS broker_definitions (
     
     -- Broker Type & Category
     broker_type VARCHAR(50) NOT NULL DEFAULT 'broker',
-    -- Types: 'broker', 'prop_firm', 'exchange', 'platform', 'data_provider'
-    
     asset_classes TEXT[] DEFAULT ARRAY['futures'],
-    -- Options: 'futures', 'stocks', 'options', 'forex', 'crypto', 'cfd'
     
     -- Authentication Configuration
     auth_method VARCHAR(50) NOT NULL DEFAULT 'credentials',
-    -- Methods: 'credentials', 'oauth2', 'api_key', 'csv_import', 'mt4_mt5'
-    
     auth_config JSONB DEFAULT '{}',
-    -- Stores auth-specific config like OAuth URLs, required fields, etc.
     
     -- API Configuration
     api_config JSONB DEFAULT '{}',
-    -- Stores API endpoints, rate limits, etc.
     
     -- Features & Capabilities
     features JSONB DEFAULT '{}',
     
     -- Data Mapping Configuration
     data_mapping JSONB DEFAULT '{}',
-    -- Maps broker-specific fields to our standard trade format
     
     -- Status & Availability
     is_active BOOLEAN DEFAULT true,
     is_beta BOOLEAN DEFAULT false,
     requires_subscription VARCHAR(20) DEFAULT 'FREE',
-    -- Subscription levels: 'FREE', 'BASIC', 'PREMIUM'
     
     -- Regional Availability
     supported_regions TEXT[] DEFAULT ARRAY['US', 'EU', 'GLOBAL'],
@@ -122,21 +117,16 @@ BEGIN
     END IF;
 END $$;
 
--- Indexes for quick lookups
-CREATE INDEX IF NOT EXISTS idx_broker_definitions_slug ON broker_definitions(slug);
-CREATE INDEX IF NOT EXISTS idx_broker_definitions_active ON broker_definitions(is_active);
-CREATE INDEX IF NOT EXISTS idx_broker_definitions_type ON broker_definitions(broker_type);
+-- Optimized indexes for broker_definitions
+CREATE INDEX IF NOT EXISTS idx_broker_definitions_slug ON broker_definitions(slug) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_broker_definitions_active ON broker_definitions(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_broker_definitions_type ON broker_definitions(broker_type) WHERE is_active = true;
 
 -- ============================================================================
 -- STEP 2: UPDATE EXISTING BROKER_CONNECTIONS TABLE
 -- ============================================================================
--- Your existing table has: id, user_id, broker (text), status, account_id, 
--- account_name, connected_at, last_sync_at, error_message, access_token,
--- refresh_token, expires_at, metadata, created_at, updated_at
---
--- We need to ADD missing columns without breaking existing functionality
 
--- Add broker_id reference to broker_definitions (optional, for new connections)
+-- Add broker_id reference to broker_definitions
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS broker_id UUID REFERENCES broker_definitions(id) ON DELETE SET NULL;
 
@@ -144,11 +134,11 @@ ADD COLUMN IF NOT EXISTS broker_id UUID REFERENCES broker_definitions(id) ON DEL
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS connection_name VARCHAR(100);
 
--- Add environment (demo/live/paper/simulated)
+-- Add environment
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS environment VARCHAR(20) DEFAULT 'demo';
 
--- Add connection metadata (in addition to existing 'metadata' column)
+-- Add connection metadata
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS connection_data JSONB DEFAULT '{}';
 
@@ -189,17 +179,24 @@ ADD COLUMN IF NOT EXISTS credentials_encrypted BYTEA;
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS credentials_iv BYTEA;
 
--- Add token_expires_at if it doesn't exist (you might have expires_at)
+-- Add token_expires_at
 ALTER TABLE broker_connections 
 ADD COLUMN IF NOT EXISTS token_expires_at TIMESTAMPTZ;
 
--- Indexes for broker_connections
-CREATE INDEX IF NOT EXISTS idx_broker_connections_user ON broker_connections(user_id);
-CREATE INDEX IF NOT EXISTS idx_broker_connections_broker ON broker_connections(broker);
-CREATE INDEX IF NOT EXISTS idx_broker_connections_broker_id ON broker_connections(broker_id);
-CREATE INDEX IF NOT EXISTS idx_broker_connections_status ON broker_connections(status);
-CREATE INDEX IF NOT EXISTS idx_broker_connections_active ON broker_connections(user_id, is_active);
-CREATE INDEX IF NOT EXISTS idx_broker_connections_environment ON broker_connections(user_id, broker, environment);
+-- Optimized indexes for broker_connections
+DROP INDEX IF EXISTS idx_broker_connections_user;
+DROP INDEX IF EXISTS idx_broker_connections_broker;
+DROP INDEX IF EXISTS idx_broker_connections_broker_id;
+DROP INDEX IF EXISTS idx_broker_connections_status;
+DROP INDEX IF EXISTS idx_broker_connections_active;
+DROP INDEX IF EXISTS idx_broker_connections_environment;
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_bc_user_active ON broker_connections(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_bc_user_broker_env ON broker_connections(user_id, broker, environment) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_bc_status ON broker_connections(status) WHERE status IN ('connected', 'pending', 'error');
+CREATE INDEX IF NOT EXISTS idx_bc_broker_id ON broker_connections(broker_id) WHERE broker_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bc_last_sync ON broker_connections(last_sync_at DESC NULLS LAST) WHERE is_active = true;
 
 -- ============================================================================
 -- STEP 3: BROKER ACCOUNTS - Individual trading accounts within a connection
@@ -211,16 +208,13 @@ CREATE TABLE IF NOT EXISTS broker_accounts (
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     
     -- Account Identification
-    broker_account_id VARCHAR(100) NOT NULL, -- ID from the broker
+    broker_account_id VARCHAR(100) NOT NULL,
     account_name VARCHAR(100),
     account_number VARCHAR(100),
     
     -- Account Type
     account_type VARCHAR(50) DEFAULT 'individual',
-    -- Options: 'individual', 'joint', 'ira', 'corporate', 'prop', 'funded', 'evaluation'
-    
     account_subtype VARCHAR(50),
-    -- Options: 'margin', 'cash', 'futures', 'options', etc.
     
     -- Currency & Base Info
     base_currency VARCHAR(10) DEFAULT 'USD',
@@ -228,24 +222,12 @@ CREATE TABLE IF NOT EXISTS broker_accounts (
     
     -- Account Status from Broker
     broker_status VARCHAR(50),
-    -- Example: 'active', 'inactive', 'suspended', 'closed'
     
     -- Balance Snapshot (updated on sync)
     balance_snapshot JSONB DEFAULT '{}',
-    -- Example: {
-    --   "cash_balance": 50000.00,
-    --   "buying_power": 100000.00,
-    --   "equity": 52000.00,
-    --   "margin_used": 5000.00,
-    --   "margin_available": 45000.00,
-    --   "open_pnl": 1500.00,
-    --   "realized_pnl_today": 500.00,
-    --   "updated_at": "2024-01-15T10:30:00Z"
-    -- }
     
     -- Account Metadata
     account_data JSONB DEFAULT '{}',
-    -- Stores additional broker-specific account info
     
     -- Selection & Display
     is_primary BOOLEAN DEFAULT false,
@@ -261,7 +243,7 @@ CREATE TABLE IF NOT EXISTS broker_accounts (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add unique constraint if doesn't exist
+-- Add unique constraint
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'broker_accounts_connection_id_broker_account_id_key') THEN
@@ -270,11 +252,10 @@ BEGIN
     END IF;
 END $$;
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_broker_accounts_connection ON broker_accounts(connection_id);
-CREATE INDEX IF NOT EXISTS idx_broker_accounts_user ON broker_accounts(user_id);
-CREATE INDEX IF NOT EXISTS idx_broker_accounts_primary ON broker_accounts(user_id, is_primary);
-CREATE INDEX IF NOT EXISTS idx_broker_accounts_active ON broker_accounts(connection_id, is_active);
+-- Optimized indexes for broker_accounts
+CREATE INDEX IF NOT EXISTS idx_ba_connection_active ON broker_accounts(connection_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_ba_user_primary ON broker_accounts(user_id, is_primary) WHERE is_primary = true;
+CREATE INDEX IF NOT EXISTS idx_ba_user_active ON broker_accounts(user_id) WHERE is_active = true;
 
 -- ============================================================================
 -- STEP 4: BROKER SYNC LOGS - Detailed logging of sync operations
@@ -288,10 +269,7 @@ CREATE TABLE IF NOT EXISTS broker_sync_logs (
     
     -- Sync Operation Details
     sync_type VARCHAR(50) NOT NULL,
-    -- Types: 'full', 'incremental', 'positions', 'orders', 'fills', 'balance', 'manual'
-    
     sync_trigger VARCHAR(50) NOT NULL DEFAULT 'manual',
-    -- Triggers: 'manual', 'scheduled', 'realtime', 'webhook', 'login'
     
     -- Time Range Synced
     sync_from_date TIMESTAMPTZ,
@@ -299,7 +277,6 @@ CREATE TABLE IF NOT EXISTS broker_sync_logs (
     
     -- Results
     status VARCHAR(30) NOT NULL DEFAULT 'started',
-    -- Options: 'started', 'in_progress', 'completed', 'partial', 'failed', 'cancelled'
     
     -- Counts
     records_fetched INTEGER DEFAULT 0,
@@ -310,12 +287,6 @@ CREATE TABLE IF NOT EXISTS broker_sync_logs (
     
     -- Details
     sync_details JSONB DEFAULT '{}',
-    -- Example: {
-    --   "fills_synced": 15,
-    --   "positions_synced": 3,
-    --   "new_trades": 10,
-    --   "updated_trades": 5
-    -- }
     
     -- Error Information
     error_message TEXT,
@@ -330,13 +301,12 @@ CREATE TABLE IF NOT EXISTS broker_sync_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_connection ON broker_sync_logs(connection_id);
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_account ON broker_sync_logs(account_id);
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_user ON broker_sync_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_status ON broker_sync_logs(status);
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_created ON broker_sync_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_broker_sync_logs_type ON broker_sync_logs(sync_type);
+-- Optimized indexes for broker_sync_logs
+-- BRIN index for time-series queries (much smaller than B-tree)
+CREATE INDEX IF NOT EXISTS idx_bsl_created_brin ON broker_sync_logs USING BRIN(created_at) WITH (pages_per_range = 32);
+CREATE INDEX IF NOT EXISTS idx_bsl_connection_status ON broker_sync_logs(connection_id, status) WHERE status IN ('started', 'in_progress', 'failed');
+CREATE INDEX IF NOT EXISTS idx_bsl_user_recent ON broker_sync_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bsl_account ON broker_sync_logs(account_id) WHERE account_id IS NOT NULL;
 
 -- ============================================================================
 -- STEP 5: BROKER RAW DATA - Store raw data from brokers for debugging/replay
@@ -349,10 +319,9 @@ CREATE TABLE IF NOT EXISTS broker_raw_data (
     
     -- Data Type
     data_type VARCHAR(50) NOT NULL,
-    -- Types: 'fill', 'order', 'position', 'balance', 'margin', 'contract'
     
     -- Raw Data
-    broker_record_id VARCHAR(100), -- Original ID from broker
+    broker_record_id VARCHAR(100),
     raw_data JSONB NOT NULL,
     
     -- Processing Status
@@ -368,13 +337,11 @@ CREATE TABLE IF NOT EXISTS broker_raw_data (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_connection ON broker_raw_data(connection_id);
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_sync_log ON broker_raw_data(sync_log_id);
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_type ON broker_raw_data(data_type);
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_processed ON broker_raw_data(is_processed);
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_broker_id ON broker_raw_data(broker_record_id);
-CREATE INDEX IF NOT EXISTS idx_broker_raw_data_created ON broker_raw_data(created_at DESC);
+-- Optimized indexes for broker_raw_data
+CREATE INDEX IF NOT EXISTS idx_brd_connection_unprocessed ON broker_raw_data(connection_id, is_processed) WHERE is_processed = false;
+CREATE INDEX IF NOT EXISTS idx_brd_broker_record ON broker_raw_data(broker_record_id) WHERE broker_record_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_brd_sync_log ON broker_raw_data(sync_log_id) WHERE sync_log_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_brd_created_brin ON broker_raw_data USING BRIN(created_at) WITH (pages_per_range = 32);
 
 -- ============================================================================
 -- STEP 6: ADD BROKER COLUMNS TO TRADES TABLE
@@ -430,7 +397,7 @@ BEGIN
         ALTER TABLE trades ADD COLUMN underlying_symbol VARCHAR(20);
     END IF;
     
-    -- Instrument Details (check if they already exist)
+    -- Instrument Details
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
                    WHERE table_name = 'trades' AND column_name = 'tick_size') THEN
         ALTER TABLE trades ADD COLUMN tick_size DECIMAL(18, 8);
@@ -479,13 +446,15 @@ BEGIN
     END IF;
 END $$;
 
--- Indexes for broker columns on trades
-CREATE INDEX IF NOT EXISTS idx_trades_broker_connection ON trades(broker_connection_id);
-CREATE INDEX IF NOT EXISTS idx_trades_broker_account ON trades(broker_account_id);
-CREATE INDEX IF NOT EXISTS idx_trades_broker_name ON trades(broker_name) WHERE broker_name IS NOT NULL;
+-- Optimized indexes for broker columns on trades
+-- Partial indexes to reduce size and improve performance
+CREATE INDEX IF NOT EXISTS idx_trades_broker_conn ON trades(broker_connection_id) WHERE broker_connection_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_trades_broker_acc ON trades(broker_account_id) WHERE broker_account_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_trades_external_id ON trades(external_id) WHERE external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_trades_broker_trade_id ON trades(broker_trade_id) WHERE broker_trade_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_trades_synced_at ON trades(synced_at) WHERE synced_at IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_trades_external_id_broker ON trades(external_id) WHERE external_id IS NOT NULL;
+
+-- Composite index for duplicate checking (most common query during sync)
+CREATE INDEX IF NOT EXISTS idx_trades_dedup ON trades(user_id, broker, external_id) WHERE external_id IS NOT NULL;
 
 -- ============================================================================
 -- STEP 7: INSTRUMENT DEFINITIONS - Master list of tradeable instruments
@@ -501,10 +470,7 @@ CREATE TABLE IF NOT EXISTS instrument_definitions (
     
     -- Classification
     asset_class VARCHAR(30) NOT NULL,
-    -- Options: 'futures', 'stocks', 'options', 'forex', 'crypto', 'cfd', 'etf', 'index'
-    
     instrument_type VARCHAR(50),
-    -- Options: 'perpetual', 'quarterly', 'monthly', 'spot', 'forward'
     
     -- Exchange & Product
     exchange VARCHAR(50),
@@ -521,23 +487,11 @@ CREATE TABLE IF NOT EXISTS instrument_definitions (
     currency VARCHAR(10) DEFAULT 'USD',
     quote_currency VARCHAR(10),
     
-    -- Trading Hours (stored as JSON)
+    -- Trading Hours
     trading_hours JSONB,
-    -- Example: {
-    --   "timezone": "America/Chicago",
-    --   "sessions": [
-    --     {"day": "sunday", "open": "17:00", "close": "16:00"},
-    --     {"day": "monday", "open": "17:00", "close": "16:00"}
-    --   ]
-    -- }
     
     -- Margin Requirements
     margin_requirements JSONB,
-    -- Example: {
-    --   "initial": 6600,
-    --   "maintenance": 6000,
-    --   "day_trade": 500
-    -- }
     
     -- Status
     is_active BOOLEAN DEFAULT true,
@@ -548,7 +502,7 @@ CREATE TABLE IF NOT EXISTS instrument_definitions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Add unique constraint if doesn't exist
+-- Add unique constraint
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'instrument_definitions_symbol_exchange_key') THEN
@@ -557,11 +511,10 @@ BEGIN
     END IF;
 END $$;
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_instrument_definitions_symbol ON instrument_definitions(symbol);
-CREATE INDEX IF NOT EXISTS idx_instrument_definitions_asset_class ON instrument_definitions(asset_class);
-CREATE INDEX IF NOT EXISTS idx_instrument_definitions_exchange ON instrument_definitions(exchange);
-CREATE INDEX IF NOT EXISTS idx_instrument_definitions_active ON instrument_definitions(is_active);
+-- Optimized indexes for instrument_definitions
+CREATE INDEX IF NOT EXISTS idx_inst_symbol_active ON instrument_definitions(symbol) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_inst_asset_class ON instrument_definitions(asset_class) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_inst_exchange ON instrument_definitions(exchange) WHERE is_active = true;
 
 -- ============================================================================
 -- STEP 8: SEED DATA - Pre-populate broker definitions
@@ -979,6 +932,35 @@ INSERT INTO broker_definitions (
     }'::jsonb,
     true,
     true
+),
+
+-- SnapTrade (Aggregator)
+(
+    'SnapTrade',
+    'SnapTrade',
+    'snaptrade',
+    'Brokerage aggregator supporting 50+ brokers',
+    'aggregator',
+    ARRAY['stocks', 'options', 'etf', 'crypto'],
+    'oauth2',
+    '{
+        "oauth_flow": "redirect",
+        "supports_multiple_brokers": true
+    }'::jsonb,
+    '{
+        "api_url": "https://api.snaptrade.com/api/v1",
+        "docs_url": "https://docs.snaptrade.com"
+    }'::jsonb,
+    '{
+        "realtime_sync": true,
+        "historical_sync": true,
+        "positions": true,
+        "orders": true,
+        "account_balance": true,
+        "multi_broker": true
+    }'::jsonb,
+    true,
+    false
 )
 
 ON CONFLICT (slug) DO UPDATE SET
@@ -1147,7 +1129,7 @@ CREATE POLICY "Anyone can view instrument definitions"
     USING (is_active = true);
 
 -- ============================================================================
--- STEP 11: HELPER FUNCTIONS
+-- STEP 11: HELPER FUNCTIONS (OPTIMIZED)
 -- ============================================================================
 
 -- Function to get user's active broker connections with broker details
@@ -1185,7 +1167,7 @@ BEGIN
     GROUP BY bc.id, bd.display_name, bd.slug, bd.logo_url
     ORDER BY bc.created_at DESC;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- Function to update connection status
 CREATE OR REPLACE FUNCTION update_connection_status(
@@ -1203,7 +1185,7 @@ BEGIN
         disconnected_at = CASE WHEN p_status IN ('disconnected', 'expired', 'revoked', 'error') THEN NOW() ELSE disconnected_at END
     WHERE id = p_connection_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
 
 -- Function to log sync operation
 CREATE OR REPLACE FUNCTION log_sync_operation(
@@ -1224,7 +1206,7 @@ BEGIN
     
     RETURN v_log_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
 
 -- Function to complete sync operation
 CREATE OR REPLACE FUNCTION complete_sync_operation(
@@ -1272,9 +1254,9 @@ BEGIN
         error_count = CASE WHEN p_status = 'failed' THEN COALESCE(error_count, 0) + 1 ELSE 0 END
     WHERE id = v_connection_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
 
--- Function to get broker definition by slug
+-- Function to get broker definition by slug (with caching hint)
 CREATE OR REPLACE FUNCTION get_broker_by_slug(p_slug VARCHAR)
 RETURNS broker_definitions AS $$
 DECLARE
@@ -1286,7 +1268,7 @@ BEGIN
     
     RETURN v_broker;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- Function to get instrument by symbol
 CREATE OR REPLACE FUNCTION get_instrument_by_symbol(p_symbol VARCHAR, p_exchange VARCHAR DEFAULT NULL)
@@ -1307,7 +1289,75 @@ BEGIN
     
     RETURN v_instrument;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Optimized function for checking duplicate trades during sync
+CREATE OR REPLACE FUNCTION get_existing_trade_external_ids(
+    p_user_id UUID,
+    p_broker VARCHAR,
+    p_external_ids TEXT[]
+) RETURNS TABLE(external_id TEXT) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT t.external_id
+    FROM trades t
+    WHERE t.user_id = p_user_id
+    AND t.broker = p_broker
+    AND t.external_id = ANY(p_external_ids);
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Bulk insert trades function for better performance
+CREATE OR REPLACE FUNCTION bulk_insert_trades(
+    p_trades JSONB
+) RETURNS TABLE(inserted_count INTEGER, skipped_count INTEGER) AS $$
+DECLARE
+    v_inserted INTEGER := 0;
+    v_skipped INTEGER := 0;
+    v_trade JSONB;
+BEGIN
+    FOR v_trade IN SELECT * FROM jsonb_array_elements(p_trades)
+    LOOP
+        BEGIN
+            INSERT INTO trades (
+                user_id, symbol, asset_class, side, quantity,
+                entry_price, exit_price, stop_price, fees, fees_mode,
+                open_at, close_at, pnl, broker, external_id,
+                multiplier, import_source, broker_connection_id,
+                broker_account_id, broker_trade_id, synced_at, raw_data
+            ) VALUES (
+                (v_trade->>'user_id')::UUID,
+                v_trade->>'symbol',
+                v_trade->>'asset_class',
+                v_trade->>'side',
+                (v_trade->>'quantity')::NUMERIC,
+                (v_trade->>'entry_price')::NUMERIC,
+                (v_trade->>'exit_price')::NUMERIC,
+                (v_trade->>'stop_price')::NUMERIC,
+                COALESCE((v_trade->>'fees')::NUMERIC, 0),
+                COALESCE(v_trade->>'fees_mode', 'auto'),
+                (v_trade->>'open_at')::TIMESTAMPTZ,
+                (v_trade->>'close_at')::TIMESTAMPTZ,
+                (v_trade->>'pnl')::NUMERIC,
+                v_trade->>'broker',
+                v_trade->>'external_id',
+                (v_trade->>'multiplier')::NUMERIC,
+                v_trade->>'import_source',
+                (v_trade->>'broker_connection_id')::UUID,
+                (v_trade->>'broker_account_id')::UUID,
+                v_trade->>'broker_trade_id',
+                COALESCE((v_trade->>'synced_at')::TIMESTAMPTZ, NOW()),
+                v_trade->'raw_data'
+            );
+            v_inserted := v_inserted + 1;
+        EXCEPTION WHEN unique_violation THEN
+            v_skipped := v_skipped + 1;
+        END;
+    END LOOP;
+    
+    RETURN QUERY SELECT v_inserted, v_skipped;
+END;
+$$ LANGUAGE plpgsql VOLATILE SECURITY DEFINER;
 
 -- ============================================================================
 -- STEP 12: TRIGGERS FOR UPDATED_AT
@@ -1346,35 +1396,170 @@ CREATE TRIGGER update_instrument_definitions_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
--- STEP 13: OPTIONAL - Link existing broker_connections to broker_definitions
+-- STEP 13: LINK EXISTING BROKER_CONNECTIONS TO BROKER_DEFINITIONS
 -- ============================================================================
--- This updates existing connections to link to broker_definitions
--- Run this AFTER the seed data is inserted
 
--- Link existing tradovate connections
 UPDATE broker_connections 
 SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'tradovate')
 WHERE broker = 'tradovate' AND broker_id IS NULL;
 
--- Link existing ninjatrader connections
 UPDATE broker_connections 
 SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'ninjatrader')
 WHERE broker = 'ninja_trader' AND broker_id IS NULL;
 
--- Link existing interactive_brokers connections
 UPDATE broker_connections 
 SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'interactive-brokers')
 WHERE broker = 'interactive_brokers' AND broker_id IS NULL;
 
--- Link existing tradingview connections
 UPDATE broker_connections 
 SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'tradingview')
 WHERE broker = 'tradingview' AND broker_id IS NULL;
 
--- Link existing mt4 connections
 UPDATE broker_connections 
 SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'metatrader5')
 WHERE broker IN ('mt4', 'mt5') AND broker_id IS NULL;
+
+UPDATE broker_connections 
+SET broker_id = (SELECT id FROM broker_definitions WHERE slug = 'snaptrade')
+WHERE broker = 'snaptrade' AND broker_id IS NULL;
+
+-- ============================================================================
+-- STEP 14: ANALYZE TABLES FOR QUERY PLANNER OPTIMIZATION
+-- ============================================================================
+
+ANALYZE broker_definitions;
+ANALYZE broker_connections;
+ANALYZE broker_accounts;
+ANALYZE broker_sync_logs;
+ANALYZE broker_raw_data;
+ANALYZE instrument_definitions;
+ANALYZE trades;
+
+-- ============================================================================
+-- STEP 15: SNAPTRADE USERS TABLE (Credentials Storage)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.snaptrade_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    snaptrade_user_id TEXT NOT NULL,
+    snaptrade_user_secret TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT snaptrade_users_user_id_key UNIQUE (user_id)
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_snaptrade_users_user_id 
+ON public.snaptrade_users(user_id);
+
+-- RLS
+ALTER TABLE public.snaptrade_users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own snaptrade" ON public.snaptrade_users;
+CREATE POLICY "Users can view own snaptrade" 
+ON public.snaptrade_users FOR SELECT 
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own snaptrade" ON public.snaptrade_users;
+CREATE POLICY "Users can insert own snaptrade" 
+ON public.snaptrade_users FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own snaptrade" ON public.snaptrade_users;
+CREATE POLICY "Users can update own snaptrade" 
+ON public.snaptrade_users FOR UPDATE 
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete own snaptrade" ON public.snaptrade_users;
+CREATE POLICY "Users can delete own snaptrade" 
+ON public.snaptrade_users FOR DELETE 
+USING (auth.uid() = user_id);
+
+-- Updated at trigger (reuse existing function)
+DROP TRIGGER IF EXISTS update_snaptrade_users_updated_at ON public.snaptrade_users;
+CREATE TRIGGER update_snaptrade_users_updated_at
+    BEFORE UPDATE ON public.snaptrade_users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- STEP 16: SNAPTRADE ACTIVITY TABLE (Activity Tracking)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.snaptrade_activity (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+    connection_status TEXT DEFAULT 'disconnected',
+    brokerage_connection_id TEXT,
+    brokerage_name TEXT,
+    connected_at TIMESTAMPTZ,
+    disconnected_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT snaptrade_activity_user_id_key UNIQUE (user_id),
+    CONSTRAINT snaptrade_activity_connection_status_check 
+        CHECK (connection_status IN ('connected', 'disconnected'))
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_snaptrade_activity_user_id 
+ON public.snaptrade_activity(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_snaptrade_activity_last_activity 
+ON public.snaptrade_activity(last_activity_at);
+
+CREATE INDEX IF NOT EXISTS idx_snaptrade_activity_status 
+ON public.snaptrade_activity(connection_status);
+
+-- RLS
+ALTER TABLE public.snaptrade_activity ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own activity" ON public.snaptrade_activity;
+CREATE POLICY "Users can view own activity" 
+ON public.snaptrade_activity FOR SELECT 
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own activity" ON public.snaptrade_activity;
+CREATE POLICY "Users can insert own activity" 
+ON public.snaptrade_activity FOR INSERT 
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own activity" ON public.snaptrade_activity;
+CREATE POLICY "Users can update own activity" 
+ON public.snaptrade_activity FOR UPDATE 
+USING (auth.uid() = user_id);
+
+-- Updated at trigger (reuse existing function)
+DROP TRIGGER IF EXISTS update_snaptrade_activity_updated_at ON public.snaptrade_activity;
+CREATE TRIGGER update_snaptrade_activity_updated_at
+    BEFORE UPDATE ON public.snaptrade_activity
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- STEP 17: ADD SNAPTRADE COLUMNS TO TRADES TABLE
+-- ============================================================================
+
+ALTER TABLE public.trades 
+ADD COLUMN IF NOT EXISTS snaptrade_activity_id TEXT UNIQUE;
+
+ALTER TABLE public.trades 
+ADD COLUMN IF NOT EXISTS snaptrade_account_id TEXT;
+
+-- Index for deduplication
+CREATE INDEX IF NOT EXISTS idx_trades_snaptrade_activity_id 
+ON public.trades(snaptrade_activity_id) 
+WHERE snaptrade_activity_id IS NOT NULL;
+
+-- ============================================================================
+-- STEP 18: FINAL ANALYZE
+-- ============================================================================
+
+ANALYZE snaptrade_users;
+ANALYZE snaptrade_activity;
+ANALYZE trades;
 
 -- ============================================================================
 -- VERIFICATION QUERIES (run these after migration to verify)
@@ -1384,15 +1569,16 @@ WHERE broker IN ('mt4', 'mt5') AND broker_id IS NULL;
 SELECT table_name FROM information_schema.tables 
 WHERE table_schema = 'public' 
 AND table_name IN ('broker_definitions', 'broker_connections', 'broker_accounts', 
-                   'broker_sync_logs', 'broker_raw_data', 'instrument_definitions');
+                   'broker_sync_logs', 'broker_raw_data', 'instrument_definitions',
+                   'snaptrade_users', 'snaptrade_activity');
 
--- Check broker_definitions has data
+-- Check broker_definitions has data (including snaptrade)
 SELECT slug, display_name, broker_type, is_active FROM broker_definitions ORDER BY display_name;
 
 -- Check instrument_definitions has data
 SELECT symbol, name, point_value, tick_value FROM instrument_definitions ORDER BY symbol;
 
--- Check trades constraints include tradovate
+-- Check trades constraints include all brokers
 SELECT conname, pg_get_constraintdef(oid) 
 FROM pg_constraint 
 WHERE conrelid = 'trades'::regclass 
@@ -1404,1054 +1590,30 @@ FROM information_schema.columns
 WHERE table_name = 'broker_connections'
 ORDER BY ordinal_position;
 
+-- Check snaptrade columns on trades
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'trades' 
+AND column_name LIKE 'snaptrade%';
+
 -- Check RLS policies
 SELECT schemaname, tablename, policyname, cmd, qual 
 FROM pg_policies 
 WHERE tablename IN ('broker_definitions', 'broker_connections', 'broker_accounts', 
-                    'broker_sync_logs', 'broker_raw_data', 'instrument_definitions');
+                    'broker_sync_logs', 'broker_raw_data', 'instrument_definitions',
+                    'snaptrade_users', 'snaptrade_activity');
+
+-- Check index sizes
+SELECT 
+    schemaname,
+    tablename,
+    indexname,
+    pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+FROM pg_stat_user_indexes
+WHERE schemaname = 'public'
+ORDER BY pg_relation_size(indexrelid) DESC;
 */
 
 -- ============================================================================
--- END OF MIGRATION ✅
+-- END OF UNIFIED MIGRATION ✅
 -- ============================================================================
-
-
-
-# 📊 דוח מקיף - Finotaur Multi-Broker Database Architecture
-## גרסה 3.0 | נובמבר 2024
-
----
-
-# 🎯 תקציר מנהלים
-
-מערכת Finotaur בנויה לתמוך ב**אינטגרציה עם מספר ברוקרים** באמצעות ארכיטקטורת Database גמישה ומודולרית. הדוח הזה מפרט:
-
-1. **מבנה ה-Database המלא** - כל הטבלאות, העמודות והקשרים
-2. **סינרגיה בין Frontend ל-Database** - מה נשלח ומה מתקבל
-3. **רשימת ברוקרים נתמכים** - מה עובד היום ומה אפשרי
-4. **Tradovate Deep Dive** - איך האינטגרציה עובדת בפועל
-
----
-
-# 📐 חלק 1: ארכיטקטורת Database
-
-## 1.1 תרשים ישויות (ERD)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                    DATABASE SCHEMA                                   │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────┐         ┌──────────────────────┐                          │
-│  │  broker_definitions  │         │   auth.users         │                          │
-│  │  ──────────────────  │         │   ──────────────     │                          │
-│  │  id (PK)             │         │   id (PK)            │                          │
-│  │  name                │         │   email              │                          │
-│  │  display_name        │         │   ...                │                          │
-│  │  slug (UNIQUE)       │         └──────────┬───────────┘                          │
-│  │  broker_type         │                    │                                       │
-│  │  asset_classes[]     │                    │ user_id (FK)                          │
-│  │  auth_method         │                    │                                       │
-│  │  auth_config (JSONB) │                    ▼                                       │
-│  │  api_config (JSONB)  │         ┌──────────────────────┐                          │
-│  │  features (JSONB)    │         │  broker_connections  │                          │
-│  │  is_active           │◀────────│  ──────────────────  │                          │
-│  │  is_beta             │broker_id│  id (PK)             │                          │
-│  └──────────────────────┘   (FK)  │  user_id (FK)────────┼──▶ auth.users            │
-│                                   │  broker_id (FK)      │                          │
-│                                   │  broker (text)       │  ◀── Legacy support      │
-│                                   │  environment         │                          │
-│                                   │  status              │                          │
-│                                   │  access_token        │                          │
-│                                   │  connection_data     │                          │
-│                                   │  last_sync_at        │                          │
-│                                   │  is_active           │                          │
-│                                   └──────────┬───────────┘                          │
-│                                              │                                       │
-│                          ┌───────────────────┼───────────────────┐                  │
-│                          │                   │                   │                  │
-│                          ▼                   ▼                   ▼                  │
-│             ┌─────────────────────┐ ┌─────────────────┐ ┌─────────────────────┐     │
-│             │   broker_accounts   │ │ broker_sync_logs│ │   broker_raw_data   │     │
-│             │   ───────────────   │ │ ────────────────│ │   ───────────────   │     │
-│             │   id (PK)           │ │ id (PK)         │ │   id (PK)           │     │
-│             │   connection_id(FK) │ │ connection_id   │ │   connection_id(FK) │     │
-│             │   user_id (FK)      │ │ account_id (FK) │ │   sync_log_id (FK)  │     │
-│             │   broker_account_id │ │ user_id (FK)    │ │   data_type         │     │
-│             │   account_name      │ │ sync_type       │ │   raw_data (JSONB)  │     │
-│             │   account_type      │ │ sync_trigger    │ │   is_processed      │     │
-│             │   balance_snapshot  │ │ status          │ │   created_trade_id  │     │
-│             │   is_primary        │ │ records_created │ └─────────────────────┘     │
-│             └─────────┬───────────┘ │ records_skipped │                             │
-│                       │             │ error_message   │                             │
-│                       │             │ duration_ms     │                             │
-│                       │             └─────────────────┘                             │
-│                       │                                                             │
-│                       │ broker_account_id (FK)                                      │
-│                       ▼                                                             │
-│             ┌─────────────────────────────────────────────────────────────┐         │
-│             │                         trades                              │         │
-│             │   ─────────────────────────────────────────────────────     │         │
-│             │   id (PK)                                                   │         │
-│             │   user_id (FK) ──────────────────────────────▶ auth.users   │         │
-│             │   symbol, asset_class, side                                 │         │
-│             │   quantity, entry_price, exit_price, stop_price             │         │
-│             │   pnl, multiplier, fees                                     │         │
-│             │   open_at, close_at                                         │         │
-│             │   broker, import_source                                     │         │
-│             │   broker_connection_id (FK) ──▶ broker_connections          │         │
-│             │   broker_account_id (FK) ────▶ broker_accounts              │         │
-│             │   external_id (UNIQUE per broker)                           │         │
-│             │   synced_at, raw_data                                       │         │
-│             └─────────────────────────────────────────────────────────────┘         │
-│                                                                                      │
-│             ┌─────────────────────────────────────────────────────────────┐         │
-│             │               instrument_definitions                        │         │
-│             │   ─────────────────────────────────────────────────────     │         │
-│             │   id (PK)                                                   │         │
-│             │   symbol, name, exchange (UNIQUE together)                  │         │
-│             │   asset_class, tick_size, tick_value                        │         │
-│             │   point_value, contract_size                                │         │
-│             └─────────────────────────────────────────────────────────────┘         │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 1.2 פירוט כל טבלה
-
-### 🔷 broker_definitions
-**תפקיד:** רשימת מאסטר של כל הברוקרים הנתמכים במערכת
-
-| עמודה | טיפוס | תיאור | דוגמה |
-|-------|-------|-------|-------|
-| `id` | UUID | מזהה ייחודי | `a1b2c3d4-...` |
-| `name` | VARCHAR(100) | שם פנימי (ייחודי) | `Tradovate` |
-| `display_name` | VARCHAR(100) | שם תצוגה | `Tradovate` |
-| `slug` | VARCHAR(50) | URL-friendly (ייחודי) | `tradovate` |
-| `description` | TEXT | תיאור הברוקר | `Commission-free futures...` |
-| `logo_url` | TEXT | קישור ללוגו | `https://...` |
-| `website_url` | TEXT | אתר הברוקר | `https://tradovate.com` |
-| `broker_type` | VARCHAR(50) | סוג | `broker` / `prop_firm` / `exchange` / `platform` |
-| `asset_classes` | TEXT[] | סוגי נכסים | `['futures']` |
-| `auth_method` | VARCHAR(50) | שיטת אימות | `credentials` / `oauth2` / `api_key` / `csv_import` |
-| `auth_config` | JSONB | הגדרות אימות | `{"fields": ["username", "password"]}` |
-| `api_config` | JSONB | הגדרות API | `{"demo_api_url": "https://..."}` |
-| `features` | JSONB | יכולות נתמכות | `{"realtime_sync": true, "positions": true}` |
-| `data_mapping` | JSONB | מיפוי שדות | `{"symbol_field": "contractName"}` |
-| `is_active` | BOOLEAN | האם פעיל | `true` |
-| `is_beta` | BOOLEAN | האם בבטא | `false` |
-| `requires_subscription` | VARCHAR(20) | רמת מנוי נדרשת | `FREE` / `BASIC` / `PREMIUM` |
-| `supported_regions` | TEXT[] | אזורים נתמכים | `['US', 'EU', 'GLOBAL']` |
-
-**דוגמת JSONB - auth_config:**
-```json
-{
-  "fields": ["username", "password", "device_id"],
-  "optional_fields": ["cid", "sec"],
-  "supports_mfa": true
-}
-```
-
-**דוגמת JSONB - api_config:**
-```json
-{
-  "demo_api_url": "https://demo.tradovateapi.com/v1",
-  "live_api_url": "https://live.tradovateapi.com/v1",
-  "demo_ws_url": "wss://demo.tradovateapi.com/v1/websocket",
-  "live_ws_url": "wss://live.tradovateapi.com/v1/websocket",
-  "rate_limit": 120,
-  "rate_limit_window": 60
-}
-```
-
-**דוגמת JSONB - features:**
-```json
-{
-  "realtime_sync": true,
-  "historical_sync": true,
-  "positions": true,
-  "orders": true,
-  "account_balance": true,
-  "margin_info": true,
-  "trade_execution": false
-}
-```
-
----
-
-### 🔷 broker_connections
-**תפקיד:** חיבורים של משתמשים לברוקרים
-
-| עמודה | טיפוס | תיאור | חובה |
-|-------|-------|-------|------|
-| `id` | UUID | מזהה ייחודי | ✅ |
-| `user_id` | UUID (FK) | מזהה משתמש | ✅ |
-| `broker_id` | UUID (FK) | קישור ל-broker_definitions | ❌ (אופציונלי) |
-| `broker` | TEXT | שם ברוקר (legacy) | ✅ |
-| `connection_name` | VARCHAR(100) | שם ידידותי | ❌ |
-| `environment` | VARCHAR(20) | סביבה | ✅ (default: `demo`) |
-| `status` | VARCHAR(30) | סטטוס חיבור | ✅ |
-| `access_token` | TEXT | טוקן גישה | ❌ |
-| `refresh_token` | TEXT | טוקן רענון | ❌ |
-| `token_expires_at` | TIMESTAMPTZ | תפוגת טוקן | ❌ |
-| `connection_data` | JSONB | מידע נוסף | ❌ |
-| `status_message` | TEXT | הודעת סטטוס | ❌ |
-| `last_error` | TEXT | שגיאה אחרונה | ❌ |
-| `last_error_at` | TIMESTAMPTZ | זמן שגיאה | ❌ |
-| `error_count` | INTEGER | מונה שגיאות | ❌ |
-| `auto_sync_enabled` | BOOLEAN | סנכרון אוטומטי | ✅ (default: `true`) |
-| `sync_interval_minutes` | INTEGER | תדירות סנכרון | ✅ (default: `15`) |
-| `last_sync_at` | TIMESTAMPTZ | סנכרון אחרון | ❌ |
-| `last_successful_sync_at` | TIMESTAMPTZ | סנכרון מוצלח אחרון | ❌ |
-| `is_active` | BOOLEAN | האם פעיל | ✅ (default: `true`) |
-| `connected_at` | TIMESTAMPTZ | זמן התחברות | ❌ |
-| `disconnected_at` | TIMESTAMPTZ | זמן התנתקות | ❌ |
-
-**ערכי status אפשריים:**
-- `pending` - ממתין לחיבור
-- `connected` - מחובר ופעיל
-- `disconnected` - מנותק
-- `error` - שגיאה
-- `expired` - טוקן פג
-- `revoked` - בוטל
-
-**ערכי environment אפשריים:**
-- `demo` - חשבון הדגמה
-- `live` - חשבון אמיתי
-- `paper` - מסחר על נייר
-- `simulated` - סימולציה
-
----
-
-### 🔷 broker_accounts
-**תפקיד:** חשבונות מסחר בתוך חיבור (משתמש יכול לחבר חשבון אחד עם כמה Sub-Accounts)
-
-| עמודה | טיפוס | תיאור |
-|-------|-------|-------|
-| `id` | UUID | מזהה ייחודי |
-| `connection_id` | UUID (FK) | קישור ל-broker_connections |
-| `user_id` | UUID (FK) | קישור ל-auth.users |
-| `broker_account_id` | VARCHAR(100) | מזהה החשבון אצל הברוקר |
-| `account_name` | VARCHAR(100) | שם החשבון |
-| `account_number` | VARCHAR(100) | מספר חשבון |
-| `account_type` | VARCHAR(50) | סוג חשבון |
-| `account_subtype` | VARCHAR(50) | תת-סוג |
-| `base_currency` | VARCHAR(10) | מטבע בסיס |
-| `timezone` | VARCHAR(50) | אזור זמן |
-| `broker_status` | VARCHAR(50) | סטטוס אצל הברוקר |
-| `balance_snapshot` | JSONB | תמונת מצב יתרות |
-| `account_data` | JSONB | מידע נוסף |
-| `is_primary` | BOOLEAN | האם ראשי |
-| `is_active` | BOOLEAN | האם פעיל |
-| `display_order` | INTEGER | סדר תצוגה |
-| `last_sync_at` | TIMESTAMPTZ | סנכרון אחרון |
-| `sync_status` | VARCHAR(30) | סטטוס סנכרון |
-
-**ערכי account_type אפשריים:**
-- `individual` - אישי
-- `joint` - משותף
-- `ira` - פנסיה
-- `corporate` - חברה
-- `prop` - Prop Trading
-- `funded` - Funded Account
-- `evaluation` - הערכה
-
-**דוגמת balance_snapshot:**
-```json
-{
-  "cash_balance": 50000.00,
-  "buying_power": 100000.00,
-  "equity": 52000.00,
-  "margin_used": 5000.00,
-  "margin_available": 45000.00,
-  "open_pnl": 1500.00,
-  "realized_pnl_today": 500.00,
-  "updated_at": "2024-11-28T10:30:00Z"
-}
-```
-
----
-
-### 🔷 broker_sync_logs
-**תפקיד:** לוג של כל פעולות הסנכרון
-
-| עמודה | טיפוס | תיאור |
-|-------|-------|-------|
-| `id` | UUID | מזהה ייחודי |
-| `connection_id` | UUID (FK) | קישור לחיבור |
-| `account_id` | UUID (FK) | קישור לחשבון (אופציונלי) |
-| `user_id` | UUID (FK) | קישור למשתמש |
-| `sync_type` | VARCHAR(50) | סוג סנכרון |
-| `sync_trigger` | VARCHAR(50) | מה הפעיל |
-| `sync_from_date` | TIMESTAMPTZ | מתאריך |
-| `sync_to_date` | TIMESTAMPTZ | עד תאריך |
-| `status` | VARCHAR(30) | סטטוס |
-| `records_fetched` | INTEGER | נשלפו |
-| `records_created` | INTEGER | נוצרו |
-| `records_updated` | INTEGER | עודכנו |
-| `records_skipped` | INTEGER | דולגו |
-| `records_failed` | INTEGER | נכשלו |
-| `sync_details` | JSONB | פרטים נוספים |
-| `error_message` | TEXT | הודעת שגיאה |
-| `error_details` | JSONB | פרטי שגיאה |
-| `started_at` | TIMESTAMPTZ | התחלה |
-| `completed_at` | TIMESTAMPTZ | סיום |
-| `duration_ms` | INTEGER | משך בms |
-
-**ערכי sync_type:**
-- `full` - סנכרון מלא
-- `incremental` - רק חדשים
-- `positions` - פוזיציות בלבד
-- `orders` - הוראות בלבד
-- `fills` - ביצועים בלבד
-- `balance` - יתרות בלבד
-- `manual` - ידני
-
-**ערכי sync_trigger:**
-- `manual` - משתמש לחץ
-- `scheduled` - מתוזמן
-- `realtime` - WebSocket
-- `webhook` - Callback
-- `login` - בהתחברות
-
----
-
-### 🔷 broker_raw_data
-**תפקיד:** שמירת נתונים גולמיים מהברוקר (לדיבוג ו-replay)
-
-| עמודה | טיפוס | תיאור |
-|-------|-------|-------|
-| `id` | UUID | מזהה ייחודי |
-| `sync_log_id` | UUID (FK) | קישור ללוג סנכרון |
-| `connection_id` | UUID (FK) | קישור לחיבור |
-| `data_type` | VARCHAR(50) | סוג נתון |
-| `broker_record_id` | VARCHAR(100) | מזהה אצל הברוקר |
-| `raw_data` | JSONB | הנתון הגולמי |
-| `is_processed` | BOOLEAN | האם עובד |
-| `processed_at` | TIMESTAMPTZ | זמן עיבוד |
-| `processing_error` | TEXT | שגיאת עיבוד |
-| `created_trade_id` | UUID | הטרייד שנוצר |
-| `broker_timestamp` | TIMESTAMPTZ | זמן אצל הברוקר |
-
-**ערכי data_type:**
-- `fill` - ביצוע
-- `order` - הוראה
-- `position` - פוזיציה
-- `balance` - יתרה
-- `margin` - מרג'ין
-- `contract` - חוזה
-
----
-
-### 🔷 instrument_definitions
-**תפקיד:** מידע על מכשירי מסחר (tick size, multiplier וכו')
-
-| עמודה | טיפוס | תיאור | דוגמה |
-|-------|-------|-------|-------|
-| `id` | UUID | מזהה | |
-| `symbol` | VARCHAR(50) | סימול | `ES` |
-| `name` | VARCHAR(200) | שם | `E-mini S&P 500` |
-| `description` | TEXT | תיאור | |
-| `asset_class` | VARCHAR(30) | סוג נכס | `futures` |
-| `instrument_type` | VARCHAR(50) | סוג מכשיר | `quarterly` |
-| `exchange` | VARCHAR(50) | בורסה | `CME` |
-| `product_code` | VARCHAR(20) | קוד מוצר | `ES` |
-| `tick_size` | DECIMAL(18,8) | גודל טיק | `0.25` |
-| `tick_value` | DECIMAL(18,4) | ערך טיק | `12.50` |
-| `point_value` | DECIMAL(18,4) | ערך נקודה | `50.00` |
-| `contract_size` | DECIMAL(18,4) | גודל חוזה | `50` |
-| `currency` | VARCHAR(10) | מטבע | `USD` |
-| `trading_hours` | JSONB | שעות מסחר | |
-| `margin_requirements` | JSONB | דרישות מרג'ין | |
-| `is_active` | BOOLEAN | פעיל | `true` |
-
-**נתוני Seed מובנים:**
-
-| Symbol | Name | Tick Size | Tick Value | Point Value |
-|--------|------|-----------|------------|-------------|
-| ES | E-mini S&P 500 | 0.25 | $12.50 | $50 |
-| NQ | E-mini Nasdaq 100 | 0.25 | $5.00 | $20 |
-| RTY | E-mini Russell 2000 | 0.10 | $5.00 | $50 |
-| YM | E-mini Dow | 1.00 | $5.00 | $5 |
-| MES | Micro S&P | 0.25 | $1.25 | $5 |
-| MNQ | Micro Nasdaq | 0.25 | $0.50 | $2 |
-| CL | Crude Oil | 0.01 | $10.00 | $1,000 |
-| GC | Gold | 0.10 | $10.00 | $100 |
-| SI | Silver | 0.005 | $25.00 | $5,000 |
-| NG | Natural Gas | 0.001 | $10.00 | $10,000 |
-
----
-
-### 🔷 trades (עמודות ברוקר)
-**תפקיד:** הטבלה הראשית - כל הטריידים של המשתמש
-
-**עמודות ליבה קיימות:**
-| עמודה | טיפוס | תיאור |
-|-------|-------|-------|
-| `id` | UUID | מזהה |
-| `user_id` | UUID (FK) | משתמש |
-| `symbol` | TEXT | סימול |
-| `asset_class` | VARCHAR(30) | סוג נכס |
-| `side` | TEXT | כיוון (`LONG`/`SHORT`) |
-| `quantity` | NUMERIC | כמות |
-| `entry_price` | NUMERIC | מחיר כניסה |
-| `exit_price` | NUMERIC | מחיר יציאה |
-| `stop_price` | NUMERIC | סטופ |
-| `fees` | NUMERIC | עמלות |
-| `multiplier` | NUMERIC | מכפיל |
-| `pnl` | NUMERIC | רווח/הפסד |
-| `open_at` | TIMESTAMPTZ | זמן פתיחה |
-| `close_at` | TIMESTAMPTZ | זמן סגירה |
-| `broker` | TEXT | שם ברוקר |
-| `import_source` | TEXT | מקור ייבוא |
-| `external_id` | TEXT | מזהה חיצוני (למניעת כפילויות) |
-
-**עמודות ברוקר חדשות:**
-| עמודה | טיפוס | תיאור |
-|-------|-------|-------|
-| `broker_connection_id` | UUID (FK) | קישור לחיבור |
-| `broker_account_id` | UUID (FK) | קישור לחשבון |
-| `broker_name` | VARCHAR(50) | שם ברוקר |
-| `broker_trade_id` | VARCHAR(100) | מזהה טרייד אצל הברוקר |
-| `broker_order_id` | VARCHAR(100) | מזהה הוראה |
-| `contract_id` | VARCHAR(100) | מזהה חוזה |
-| `contract_name` | VARCHAR(100) | שם חוזה |
-| `contract_month` | VARCHAR(20) | חודש חוזה |
-| `underlying_symbol` | VARCHAR(20) | סימול בסיס |
-| `tick_size` | DECIMAL | גודל טיק |
-| `tick_value` | DECIMAL | ערך טיק |
-| `point_value` | DECIMAL | ערך נקודה |
-| `execution_id` | VARCHAR(100) | מזהה ביצוע |
-| `order_type` | VARCHAR(30) | סוג הוראה |
-| `synced_at` | TIMESTAMPTZ | זמן סנכרון |
-| `sync_source` | VARCHAR(30) | מקור סנכרון |
-| `raw_data` | JSONB | נתון גולמי |
-
----
-
-## 1.3 Constraints חשובים
-
-### trades table:
-
-**broker constraint:**
-```sql
-CHECK (broker = ANY (ARRAY[
-  'manual', 'interactive_brokers', 'td_ameritrade', 'alpaca',
-  'tradingview', 'mt4', 'mt5', 'ninja_trader', 'tradovate',
-  'rithmic', 'topstepx', 'tradelocker', 'bybit', 'binance',
-  'schwab', 'robinhood', 'snaptrade', 'sierra_chart', 'dxtrade', 'colmexpro'
-]))
-```
-
-**import_source constraint:**
-```sql
-CHECK (import_source = ANY (ARRAY[
-  'manual', 'snaptrade', 'csv', 'api', 'tradovate',
-  'broker_sync', 'webhook', 'rithmic', 'ninja_trader'
-]))
-```
-
-**side constraint:**
-```sql
-CHECK (side IN ('LONG', 'SHORT'))
-```
-⚠️ **חשוב:** חובה UPPERCASE!
-
-**session constraint:**
-```sql
-CHECK ((session IS NULL) OR (lower(TRIM(session)) IN ('asia', 'london', 'newyork')))
-```
-
----
-
-## 1.4 RLS Policies
-
-כל הטבלאות מוגנות ב-Row Level Security:
-
-| טבלה | SELECT | INSERT | UPDATE | DELETE |
-|------|--------|--------|--------|--------|
-| broker_definitions | Anyone (if active) | - | - | - |
-| broker_connections | Own only | Own only | Own only | Own only |
-| broker_accounts | Own only | Own only | Own only | Own only |
-| broker_sync_logs | Own only | Own only | Own only | - |
-| broker_raw_data | Via connection | Via connection | - | - |
-| instrument_definitions | Anyone (if active) | - | - | - |
-| trades | Own only + Admin | With limits check | Own only | Own only |
-
----
-
-# 🔄 חלק 2: סינרגיה Frontend ↔ Database
-
-## 2.1 זרימת נתונים - התחברות לברוקר
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         CONNECTION FLOW                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  [User enters credentials]                                                   │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌─────────────────────┐                                                    │
-│  │  TradovateLogin.tsx │                                                    │
-│  │  username, password │                                                    │
-│  └──────────┬──────────┘                                                    │
-│             │                                                                │
-│             ▼                                                                │
-│  ┌─────────────────────┐      ┌─────────────────────────────┐              │
-│  │  useTradovate.ts    │─────▶│  tradovateApi.login()       │              │
-│  │  login()            │      │  POST /auth/accesstokenrequest             │
-│  └──────────┬──────────┘      └──────────────┬──────────────┘              │
-│             │                                │                              │
-│             │                                ▼                              │
-│             │                 ┌─────────────────────────────┐              │
-│             │                 │  Tradovate API Response     │              │
-│             │                 │  {accessToken, userId, ...} │              │
-│             │                 └──────────────┬──────────────┘              │
-│             │                                │                              │
-│             ▼                                ▼                              │
-│  ┌─────────────────────┐      ┌─────────────────────────────┐              │
-│  │  brokerConnection   │─────▶│  broker_connections         │              │
-│  │  .createConnection()│      │  INSERT/UPDATE              │              │
-│  └──────────┬──────────┘      │  status='connected'         │              │
-│             │                 │  access_token=xxx           │              │
-│             │                 │  environment='demo'         │              │
-│             │                 └─────────────────────────────┘              │
-│             │                                                              │
-│             ▼                                                              │
-│  ┌─────────────────────┐      ┌─────────────────────────────┐              │
-│  │  tradovateApi       │─────▶│  GET /account/list          │              │
-│  │  .getAccounts()     │      │  Returns: [{id, name,...}]  │              │
-│  └──────────┬──────────┘      └──────────────┬──────────────┘              │
-│             │                                │                              │
-│             ▼                                ▼                              │
-│  ┌─────────────────────┐      ┌─────────────────────────────┐              │
-│  │  brokerConnection   │─────▶│  broker_accounts            │              │
-│  │  .createAccount()   │      │  INSERT                     │              │
-│  └─────────────────────┘      │  broker_account_id=xxx      │              │
-│                               │  account_name='Demo Account'│              │
-│                               └─────────────────────────────┘              │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2.2 זרימת נתונים - סנכרון טריידים
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           SYNC FLOW                                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  [User clicks "Sync Historical"]                                             │
-│           │                                                                  │
-│           ▼                                                                  │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  tradovateSyncV2.syncHistoricalTrades(startDate, endDate)   │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 1: Create sync log                                     │            │
-│  │  broker_sync_logs.INSERT(status='started', sync_type='full') │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 2: Get existing external_ids from trades              │            │
-│  │  SELECT external_id FROM trades                              │            │
-│  │  WHERE broker='tradovate' AND user_id=xxx                    │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 3: Fetch fills from Tradovate                         │            │
-│  │  GET /fill/list?accountId=xxx&startDate=xxx                 │            │
-│  │  Returns: [{id, contractId, action, qty, price, ...}]       │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 4: Filter finallyPaired=true only                     │            │
-│  │  (Only closed trades, not open positions)                   │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 5: Enrich with contract/product details               │            │
-│  │  GET /contract/item?id=xxx → {name, productId}              │            │
-│  │  GET /product/item?id=xxx → {valuePerPoint, tickSize}       │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 6: Pair fills using FIFO                              │            │
-│  │  tradovateTradeMapper.pairFillsToTrades()                   │            │
-│  │                                                              │            │
-│  │  Input:  [Buy 2 @ 5000, Sell 2 @ 5010]                      │            │
-│  │  Output: [{entry: Buy, exit: Sell, direction: 'long',       │            │
-│  │           pnl: (5010-5000) * 2 * 50 = $1000}]               │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 7: Convert to Finotaur format                         │            │
-│  │  tradovateTradeMapper.convertToFinotaurTrade()              │            │
-│  │                                                              │            │
-│  │  {                                                           │            │
-│  │    symbol: 'ESZ4',                                          │            │
-│  │    asset_class: 'futures',                                  │            │
-│  │    side: 'LONG',           ← UPPERCASE!                     │            │
-│  │    quantity: 2,                                             │            │
-│  │    entry_price: 5000,                                       │            │
-│  │    exit_price: 5010,                                        │            │
-│  │    stop_price: 4900,       ← estimated 2%                   │            │
-│  │    multiplier: 50,                                          │            │
-│  │    pnl: 1000,                                               │            │
-│  │    broker: 'tradovate',                                     │            │
-│  │    import_source: 'tradovate',                              │            │
-│  │    external_id: 'tradovate_123_456',                        │            │
-│  │    open_at: '2024-11-28T10:00:00Z',                         │            │
-│  │    close_at: '2024-11-28T10:30:00Z'                         │            │
-│  │  }                                                           │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 8: Check for duplicates                               │            │
-│  │  if (existingIds.has(external_id)) → SKIP                   │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 9: Insert to trades table                             │            │
-│  │  INSERT INTO trades (...)                                   │            │
-│  │  + can_create_trade() RLS check                             │            │
-│  └──────────────────────────────┬──────────────────────────────┘            │
-│                                 │                                            │
-│                                 ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────┐            │
-│  │  Step 10: Complete sync log                                 │            │
-│  │  UPDATE broker_sync_logs                                    │            │
-│  │  SET status='completed',                                    │            │
-│  │      records_created=5,                                     │            │
-│  │      records_skipped=2,                                     │            │
-│  │      duration_ms=1234                                       │            │
-│  └─────────────────────────────────────────────────────────────┘            │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 2.3 מה Frontend שולח vs מה Database מצפה
-
-### טבלת trades - השוואה מלאה:
-
-| שדה | Frontend שולח | Database מצפה | סטטוס |
-|-----|---------------|---------------|-------|
-| `user_id` | מה-auth session | UUID | ✅ |
-| `symbol` | `contract.name` (ESZ4) | TEXT | ✅ |
-| `asset_class` | `'futures'` | VARCHAR(30) | ✅ |
-| `side` | ⚠️ `'long'` | `'LONG'` (UPPERCASE) | ⚠️ **צריך תיקון** |
-| `quantity` | `fill.qty` | NUMERIC | ✅ |
-| `entry_price` | `entryFill.price` | NUMERIC | ✅ |
-| `exit_price` | `exitFill.price` | NUMERIC (nullable) | ✅ |
-| `stop_price` | estimated 2% | NUMERIC | ✅ (אבל לא מדויק) |
-| `fees` | `0` | NUMERIC | ⚠️ (Tradovate לא שולח) |
-| `multiplier` | `product.valuePerPoint` | NUMERIC | ✅ |
-| `pnl` | calculated | NUMERIC | ✅ |
-| `open_at` | `entryFill.timestamp` | TIMESTAMPTZ | ✅ |
-| `close_at` | `exitFill.timestamp` | TIMESTAMPTZ (nullable) | ✅ |
-| `broker` | `'tradovate'` | TEXT (constraint) | ✅ |
-| `import_source` | `'tradovate'` | TEXT (constraint) | ✅ |
-| `external_id` | `tradovate_{entry}_{exit}` | TEXT | ✅ |
-| `broker_connection_id` | from initialization | UUID (FK) | ✅ |
-| `synced_at` | `new Date()` | TIMESTAMPTZ | ✅ |
-
-### ⚠️ בעיית Side - התיקון הנדרש:
-
-**ב-tradovateTradeMapper.service.ts, שורה ~150:**
-
-```typescript
-// נוכחי (לא נכון):
-side: direction,  // 'long' או 'short'
-
-// נדרש:
-side: direction.toUpperCase() as 'LONG' | 'SHORT',  // 'LONG' או 'SHORT'
-```
-
----
-
-## 2.4 חישוב P&L - הנוסחה
-
-```typescript
-// Long Trade (קנייה ואז מכירה):
-pnl = (exitPrice - entryPrice) * quantity * multiplier
-
-// Short Trade (מכירה ואז קנייה):
-pnl = (entryPrice - exitPrice) * quantity * multiplier
-
-// דוגמאות:
-// ES Long: entry=5000, exit=5010, qty=2, multiplier=50
-// pnl = (5010 - 5000) * 2 * 50 = $1,000 ✅
-
-// NQ Short: entry=20000, exit=19950, qty=1, multiplier=20
-// pnl = (20000 - 19950) * 1 * 20 = $1,000 ✅
-
-// MES Long: entry=5000, exit=4990, qty=5, multiplier=5
-// pnl = (4990 - 5000) * 5 * 5 = -$250 (הפסד) ✅
-```
-
----
-
-# 🔌 חלק 3: רשימת ברוקרים נתמכים
-
-## 3.1 סיכום מצב נוכחי
-
-| ברוקר | Slug | סוג | נכסים | שיטת אימות | מצב | סנכרון |
-|-------|------|-----|-------|------------|-----|--------|
-| **Tradovate** | `tradovate` | Broker | Futures | Credentials | ✅ **פעיל** | Real-time + Historical |
-| NinjaTrader | `ninjatrader` | Platform | Futures | Credentials | 🔶 Beta | דרך Rithmic |
-| Interactive Brokers | `interactive-brokers` | Broker | Multi | OAuth2 | 🔶 Beta | API |
-| Rithmic | `rithmic` | Data Provider | Futures | Credentials | 🔶 Beta | Protocol Buffer |
-| TopstepX | `topstepx` | Prop Firm | Futures | Credentials | 🔶 Beta | via Tradovate |
-| MetaTrader 5 | `metatrader5` | Platform | Multi | CSV Import | 🔶 Beta | CSV |
-| TradeLocker | `tradelocker` | Prop Firm | Multi | API Key | 🔶 Beta | API |
-| Bybit | `bybit` | Exchange | Crypto | API Key | ✅ Ready | API |
-| Binance | `binance` | Exchange | Crypto | API Key | ✅ Ready | API |
-| Sierra Chart | `sierra-chart` | Platform | Futures | CSV Import | 🔶 Beta | CSV |
-| TradingView | `tradingview` | Platform | Multi | CSV Import | 🔶 Beta | CSV |
-| Charles Schwab | `charles-schwab` | Broker | Multi | OAuth2 | 🔶 Beta | API |
-| Robinhood | `robinhood` | Broker | Stocks/Crypto | CSV Import | 🔶 Beta | CSV |
-| ColmexPro | `colmexpro` | Prop Firm | Forex | Credentials | 🔶 Beta | CSV |
-| DXtrade | `dxtrade` | Platform | Multi | Credentials | 🔶 Beta | API |
-
-**מקרא:**
-- ✅ **פעיל** = קוד מלא ועובד
-- ✅ Ready = Schema מוכן, צריך קוד
-- 🔶 Beta = Schema מוכן, בפיתוח
-
----
-
-## 3.2 פירוט לפי שיטת אימות
-
-### 🔐 Credentials (Username/Password)
-| ברוקר | שדות נדרשים | הערות |
-|-------|-------------|-------|
-| Tradovate | username, password, device_id | + optional cid, sec |
-| NinjaTrader | username, password | דרך Rithmic |
-| Rithmic | username, password, server | בחירת server |
-| TopstepX | username, password | משתמש ב-Tradovate API |
-| ColmexPro | username, password | |
-| DXtrade | username, password, server | |
-
-### 🔑 API Key
-| ברוקר | שדות נדרשים | הערות |
-|-------|-------------|-------|
-| TradeLocker | api_key, api_secret | |
-| Bybit | api_key, api_secret | + testnet |
-| Binance | api_key, api_secret | + testnet |
-
-### 🌐 OAuth2
-| ברוקר | שדות נדרשים | הערות |
-|-------|-------------|-------|
-| Interactive Brokers | OAuth flow | דורש Gateway |
-| Charles Schwab | OAuth flow | |
-
-### 📁 CSV Import
-| ברוקר | פורמטים נתמכים | הערות |
-|-------|-----------------|-------|
-| MetaTrader 5 | mt5_history, mt5_statement | |
-| Sierra Chart | sierra_trade_log | |
-| TradingView | tradingview_export | |
-| Robinhood | robinhood_export | |
-
----
-
-## 3.3 פירוט לפי סוג נכסים
-
-### 📈 Futures
-- Tradovate ✅
-- NinjaTrader
-- Rithmic
-- TopstepX
-- Interactive Brokers
-- Charles Schwab
-- Sierra Chart
-
-### 🪙 Crypto
-- Bybit
-- Binance
-- TradeLocker
-- Robinhood (limited)
-
-### 📊 Stocks
-- Interactive Brokers
-- Charles Schwab
-- Robinhood
-- TradingView (charts)
-
-### 💱 Forex
-- MetaTrader 5
-- TradeLocker
-- ColmexPro
-- DXtrade
-
----
-
-# 🎯 חלק 4: Tradovate Deep Dive
-
-## 4.1 מה Tradovate מספק
-
-### API Endpoints בשימוש:
-
-| Endpoint | Method | תיאור | Response |
-|----------|--------|-------|----------|
-| `/auth/accesstokenrequest` | POST | התחברות | `{accessToken, userId, expirationTime}` |
-| `/auth/renewaccesstoken` | POST | חידוש טוקן | `{accessToken, ...}` |
-| `/account/list` | GET | רשימת חשבונות | `[{id, name, accountType}]` |
-| `/fill/list` | GET | ביצועים | `[{id, contractId, action, qty, price, timestamp}]` |
-| `/position/list` | GET | פוזיציות פתוחות | `[{id, contractId, netPos, netPrice}]` |
-| `/contract/item` | GET | פרטי חוזה | `{id, name, productId}` |
-| `/product/item` | GET | פרטי מוצר | `{valuePerPoint, tickSize}` |
-| `/cashBalance/getcashbalancesnapshot` | GET | יתרה | `{amount, realizedPnL}` |
-| `/cashBalance/getaccountmarginSsnapshot` | GET | מרג'ין | `{initialMargin, marginExcess}` |
-
-### WebSocket Events:
-
-| Event | תיאור | Data |
-|-------|-------|------|
-| `fill` | ביצוע חדש | `{id, contractId, action, qty, price}` |
-| `position` | שינוי פוזיציה | `{id, contractId, netPos}` |
-| `order` | שינוי הוראה | `{id, orderStatus}` |
-
----
-
-## 4.2 מבנה Fill מ-Tradovate
-
-```typescript
-interface TradovateFill {
-  id: number;                    // מזהה ייחודי
-  contractId: number;            // מזהה חוזה
-  timestamp: string;             // ISO timestamp
-  action: 'Buy' | 'Sell';        // כיוון
-  qty: number;                   // כמות
-  price: number;                 // מחיר
-  finallyPaired: boolean;        // האם הטרייד נסגר
-  orderId: number;               // מזהה הוראה
-  
-  // נוסף אחרי enrichment:
-  contract?: TradovateContract;  // פרטי חוזה
-  product?: TradovateProduct;    // פרטי מוצר (multiplier)
-}
-```
-
----
-
-## 4.3 אלגוריתם זיווג FIFO
-
-```
-Input Fills (sorted by timestamp):
-──────────────────────────────────
-1. Buy 2 @ 5000   (t1)
-2. Sell 1 @ 5005  (t2)
-3. Buy 1 @ 5002   (t3)
-4. Sell 2 @ 5010  (t4)
-
-Processing:
-───────────
-Step 1: Buy 2 @ 5000
-  → Opens Long position
-  → Queue: [Buy 2 @ 5000]
-
-Step 2: Sell 1 @ 5005
-  → Closes 1 from Long
-  → Matched: Buy 1 @ 5000 + Sell 1 @ 5005
-  → Trade 1: Long, Entry=5000, Exit=5005, Qty=1, PnL=+$250
-  → Queue: [Buy 1 @ 5000 remaining]
-
-Step 3: Buy 1 @ 5002
-  → Adds to Long
-  → Queue: [Buy 1 @ 5000, Buy 1 @ 5002]
-
-Step 4: Sell 2 @ 5010
-  → Closes both
-  → Matched: Buy 1 @ 5000 + Sell 1 @ 5010 → Trade 2
-  → Matched: Buy 1 @ 5002 + Sell 1 @ 5010 → Trade 3
-  → Queue: []
-
-Output Trades:
-──────────────
-Trade 1: Long, Qty=1, Entry=5000, Exit=5005, PnL=+$250
-Trade 2: Long, Qty=1, Entry=5000, Exit=5010, PnL=+$500
-Trade 3: Long, Qty=1, Entry=5002, Exit=5010, PnL=+$400
-
-Total PnL: $1,150
-```
-
----
-
-## 4.4 מניעת כפילויות
-
-**פורמט external_id:**
-```
-tradovate_{entryFillId}_{exitFillId}
-
-דוגמאות:
-- tradovate_12345_12346      (טרייד סגור)
-- tradovate_pos_789          (פוזיציה פתוחה)
-```
-
-**תהליך:**
-1. לפני סנכרון - שולף כל external_ids קיימים
-2. לכל טרייד חדש - בודק אם ה-ID קיים
-3. אם קיים → מדלג (records_skipped++)
-4. אם לא קיים → מכניס (records_created++)
-
----
-
-## 4.5 הגדרות API של Tradovate
-
-מתוך `broker_definitions.api_config`:
-
-```json
-{
-  "demo_api_url": "https://demo.tradovateapi.com/v1",
-  "live_api_url": "https://live.tradovateapi.com/v1",
-  "demo_ws_url": "wss://demo.tradovateapi.com/v1/websocket",
-  "live_ws_url": "wss://live.tradovateapi.com/v1/websocket",
-  "rate_limit": 120,
-  "rate_limit_window": 60
-}
-```
-
-**Rate Limits:**
-- 120 בקשות לדקה
-- Heartbeat כל 30 שניות ל-WebSocket
-- Token תקף ל-24 שעות (צריך חידוש)
-
----
-
-# ✅ חלק 5: בדיקת סינרגיה
-
-## 5.1 צ'קליסט סינרגיה
-
-| בדיקה | Frontend | Database | סטטוס |
-|-------|----------|----------|-------|
-| broker value | `'tradovate'` | constraint includes `'tradovate'` | ✅ |
-| import_source | `'tradovate'` | constraint includes `'tradovate'` | ✅ |
-| side value | ⚠️ `'long'` | expects `'LONG'` | ⚠️ **FIX NEEDED** |
-| multiplier | from API | NUMERIC column exists | ✅ |
-| external_id | generated | TEXT column exists | ✅ |
-| broker_connection_id | from init | UUID FK exists | ✅ |
-| timestamps | ISO format | TIMESTAMPTZ | ✅ |
-| session | null | constraint allows null | ✅ |
-| asset_class | `'futures'` | VARCHAR(30) | ✅ |
-
-## 5.2 מה עובד מושלם ✅
-
-1. **חיבור לברוקר** - login/logout עם token management
-2. **שליפת חשבונות** - Demo + Live
-3. **שליפת Fills** - עם date range
-4. **שליפת Contracts/Products** - עם caching
-5. **זיווג FIFO** - אלגוריתם נכון
-6. **חישוב P&L** - עם multiplier
-7. **מניעת כפילויות** - via external_id
-8. **WebSocket** - heartbeat + reconnect
-9. **DB Schema** - כל הטבלאות והעמודות
-10. **RLS Policies** - אבטחה תקינה
-11. **Sync Logs** - tracking מלא
-
-## 5.3 מה צריך תיקון ⚠️
-
-### תיקון 1: Side UPPERCASE
-**קובץ:** `tradovateTradeMapper.service.ts`
-**שורה:** ~150
-```typescript
-// מ:
-side: direction,
-// ל:
-side: direction.toUpperCase() as 'LONG' | 'SHORT',
-```
-
-### תיקון 2: useTradovate.ts Service Import
-**קובץ:** `useTradovate.ts`
-**שורה:** 6
-```typescript
-// מ:
-import { tradovateSyncService } from '@/services/brokers/tradovate/tradovateSync.service';
-// ל:
-import { tradovateSyncV2Service } from '@/services/brokers/tradovate/tradovateSyncV2.service';
-```
-
-## 5.4 מה אופציונלי לשיפור 🔶
-
-1. **Stop Price** - כרגע מוערך 2%, אפשר לשלוף מ-Orders API
-2. **Fees** - Tradovate לא שולח, אפשר להוסיף ידנית
-3. **Auto-Sync** - background service כל X דקות
-4. **Real-time Processing** - עיבוד Fill בודד במקום full sync
-
----
-
-# 📊 חלק 6: סיכום ביצועים
-
-## 6.1 Indexes קיימים
-
-| טבלה | Index | עמודות |
-|------|-------|--------|
-| broker_definitions | slug | slug |
-| broker_definitions | active | is_active |
-| broker_connections | user | user_id |
-| broker_connections | broker | broker |
-| broker_connections | status | status |
-| broker_accounts | connection | connection_id |
-| broker_accounts | user | user_id |
-| broker_sync_logs | connection | connection_id |
-| broker_sync_logs | created | created_at DESC |
-| trades | broker_connection | broker_connection_id |
-| trades | broker_name | broker_name |
-| trades | external_id | external_id |
-| trades | synced_at | synced_at |
-| instrument_definitions | symbol | symbol |
-
-## 6.2 צפי ביצועים
-
-| פעולה | זמן צפוי | הערות |
-|-------|----------|-------|
-| Login | < 1 sec | single API call |
-| Get Accounts | < 500ms | cached after first |
-| Sync 100 trades | < 5 sec | with enrichment |
-| Sync 1000 trades | < 30 sec | bulk operations |
-| Duplicate check | < 100ms | indexed external_id |
-
----
-
-# 🎯 סיכום
-
-## המערכת מוכנה ל:
-✅ חיבור Tradovate מלא (Demo + Live)
-✅ סנכרון היסטורי של טריידים
-✅ WebSocket לזמן אמת
-✅ מניעת כפילויות
-✅ חישובי P&L נכונים עם multiplier
-✅ תמיכה עתידית ב-14 ברוקרים נוספים
-
-## נדרש לפני Production:
-⚠️ תיקון side ל-UPPERCASE
-⚠️ עדכון import ב-useTradovate.ts
-🔶 בדיקת E2E מלאה
-
-## הרחבות עתידיות:
-🔮 Bybit/Binance integration (Schema ready)
-🔮 Auto-sync background service
-🔮 Multi-account parallel sync
-🔮 Advanced stop price detection
-
----
-
-**מסמך זה מספק תמונה מלאה של ארכיטקטורת ה-Database ואינטגרציית הברוקרים ב-Finotaur.**
-**כל מפתח שיקבל מסמך זה יוכל להבין, לתחזק ולהרחיב את המערכת.**

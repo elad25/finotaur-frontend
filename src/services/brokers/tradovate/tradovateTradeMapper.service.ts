@@ -1,6 +1,8 @@
 // src/services/brokers/tradovate/tradovateTradeMapper.service.ts
-// 🎯 Service for pairing Tradovate fills and converting to Finotaur trade format
-// ✅ V2.0 - Fixed: side values are now UPPERCASE ('LONG'/'SHORT') to match DB constraint
+// 🎯 V3.0 - Updated to match EXISTING trades table schema
+// ✅ Does NOT calculate pnl, outcome, R-values - trigger handles those!
+// ✅ Side is UPPERCASE ('LONG'/'SHORT')
+// ✅ stop_price is REQUIRED for R calculation by trigger
 
 import {
   TradovateFill,
@@ -10,42 +12,49 @@ import {
 } from '@/types/brokers/tradovate/tradovate.types';
 
 // ============================================================================
-// TYPES
+// TYPES - Matching EXISTING trades table
 // ============================================================================
 
+/**
+ * Data structure for inserting into trades table
+ * Note: pnl, outcome, R-values are calculated by DB trigger!
+ */
 export interface FinotaurTradeData {
+  // === REQUIRED FIELDS ===
   user_id: string;
-  symbol: string;
-  asset_class: 'futures';
-  side: 'LONG' | 'SHORT';  // ✅ FIXED: UPPERCASE to match DB constraint
+  symbol: string;                    // contract name (e.g., "MNQZ4")
+  side: 'LONG' | 'SHORT';           // UPPERCASE - DB constraint!
   quantity: number;
   entry_price: number;
+  stop_price: number;                // REQUIRED for R calculation!
+  open_at: string;                   // ISO timestamp
+  
+  // === OPTIONAL/NULLABLE FIELDS ===
   exit_price: number | null;
-  stop_price: number;
+  close_at: string | null;           // null = open trade
+  take_profit_price: number | null;
   fees: number;
-  fees_mode: 'auto';
-  open_at: string;           // ISO timestamp
-  close_at: string | null;   // ISO timestamp
-  pnl: number | null;
+  
+  // === BROKER IDENTIFICATION ===
   broker: 'tradovate';
-  external_id: string;       // Unique ID for deduplication
-  multiplier: number;
+  external_id: string;               // For deduplication
   import_source: 'tradovate';
-  imported_at: string;
-  // Calculated fields
-  risk_pts?: number;
-  reward_pts?: number;
-  risk_usd?: number;
-  reward_usd?: number;
-  actual_r?: number;
-  // Optional broker metadata
+  multiplier: number;                // product.valuePerPoint
+  asset_class: 'futures';
+  
+  // === BROKER CONNECTION (from migration) ===
   broker_connection_id?: string;
   broker_account_id?: string;
+  broker_name?: string;
   broker_trade_id?: string;
-  contract_name?: string;
   synced_at?: string;
   sync_source?: string;
   raw_data?: Record<string, unknown>;
+  
+  // === OPTIONAL USER FIELDS ===
+  notes?: string;
+  setup?: string;
+  tags?: string[];
 }
 
 export interface PairedTrade {
@@ -53,11 +62,10 @@ export interface PairedTrade {
   exitFill: TradovateFill | null;
   contract: TradovateContract;
   product: TradovateProduct;
-  direction: 'long' | 'short';  // Internal use - lowercase
+  direction: 'long' | 'short';       // Internal use - lowercase
   quantity: number;
   entryPrice: number;
   exitPrice: number | null;
-  pnl: number | null;
   isClosed: boolean;
 }
 
@@ -73,8 +81,8 @@ interface FillWithDetails extends TradovateFill {
 class TradovateTradeMapperService {
   
   /**
-   * 🎯 Main function: Convert Tradovate fills to Finotaur trades
-   * Groups and pairs fills by contract, calculates P&L with correct multiplier
+   * 🎯 Main function: Pair Tradovate fills into trades
+   * Groups and pairs fills by contract using FIFO method
    */
   public pairFillsToTrades(
     fills: FillWithDetails[],
@@ -132,7 +140,7 @@ class TradovateTradeMapperService {
     const openShorts: FillWithDetails[] = [];
     
     for (const fill of fills) {
-      const externalId = this.generateExternalId(fill);
+      const externalId = this.generateFillExternalId(fill);
       
       // Skip if already imported
       if (existingExternalIds.has(externalId)) {
@@ -183,37 +191,22 @@ class TradovateTradeMapperService {
     exitFill: FillWithDetails | null,
     direction: 'long' | 'short'
   ): PairedTrade {
-    const multiplier = entryFill.product.valuePerPoint;
-    const quantity = entryFill.qty;
-    
-    let pnl: number | null = null;
-    
-    if (exitFill) {
-      const priceDiff = direction === 'long'
-        ? exitFill.price - entryFill.price
-        : entryFill.price - exitFill.price;
-      
-      // 🎯 CRITICAL: Correct P&L calculation with multiplier
-      pnl = priceDiff * quantity * multiplier;
-    }
-    
     return {
       entryFill,
       exitFill,
       contract: entryFill.contract,
       product: entryFill.product,
       direction,
-      quantity,
+      quantity: entryFill.qty,
       entryPrice: entryFill.price,
       exitPrice: exitFill?.price ?? null,
-      pnl,
       isClosed: exitFill !== null
     };
   }
 
   /**
    * 🔄 Convert paired trade to Finotaur database format
-   * ✅ FIXED: side is now UPPERCASE ('LONG'/'SHORT') to match DB constraint
+   * ⚠️ Does NOT calculate pnl/R-values - trigger handles those!
    */
   public convertToFinotaurTrade(
     pairedTrade: PairedTrade,
@@ -221,7 +214,7 @@ class TradovateTradeMapperService {
     brokerConnectionId?: string,
     brokerAccountId?: string
   ): FinotaurTradeData {
-    const { entryFill, exitFill, contract, product, direction, quantity, pnl } = pairedTrade;
+    const { entryFill, exitFill, contract, product, direction, quantity } = pairedTrade;
     
     // Generate unique external ID for deduplication
     const externalId = this.generateTradeExternalId(pairedTrade);
@@ -233,64 +226,52 @@ class TradovateTradeMapperService {
     // Get multiplier (valuePerPoint is the $ value per point movement)
     const multiplier = product.valuePerPoint;
     
-    // Estimate stop price (if not available, use 2% from entry)
-    // This is a placeholder - ideally should come from order data
+    // Calculate stop price (REQUIRED for R calculation)
+    // Using 2% from entry as default - ideally should come from order data
     const stopDistance = entryFill.price * 0.02;
     const stopPrice = direction === 'long'
       ? entryFill.price - stopDistance
       : entryFill.price + stopDistance;
     
-    // Calculate risk metrics
-    const riskPts = Math.abs(entryFill.price - stopPrice);
-    const riskUsd = riskPts * quantity * multiplier;
-    
-    let rewardPts: number | undefined;
-    let rewardUsd: number | undefined;
-    let actualR: number | undefined;
-    
-    if (exitFill && pnl !== null) {
-      rewardPts = Math.abs(exitFill.price - entryFill.price);
-      rewardUsd = Math.abs(pnl);
-      actualR = riskUsd > 0 ? pnl / riskUsd : undefined;
-    }
-    
-    // ✅ CRITICAL FIX: Convert direction to UPPERCASE for DB constraint
-    // DB expects: CHECK (side IN ('LONG', 'SHORT'))
+    // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
     
     const now = new Date().toISOString();
     
+    // Build trade data - only fields we should send
+    // pnl, outcome, R-values will be calculated by trigger!
     return {
+      // Required fields
       user_id: userId,
       symbol: contract.name,
-      asset_class: 'futures',
-      side: sideUppercase,  // ✅ UPPERCASE!
+      side: sideUppercase,
       quantity,
       entry_price: entryFill.price,
-      exit_price: exitFill?.price ?? null,
-      stop_price: stopPrice,
-      fees: 0, // Tradovate doesn't provide fee info in fills
-      fees_mode: 'auto',
+      stop_price: stopPrice,      // REQUIRED for R calculation!
       open_at: openAt,
+      
+      // Optional/nullable
+      exit_price: exitFill?.price ?? null,
       close_at: closeAt,
-      pnl,
+      take_profit_price: null,    // Not available from fills
+      fees: 0,                    // Tradovate doesn't provide in fills
+      
+      // Broker identification
       broker: 'tradovate',
       external_id: externalId,
-      multiplier,
       import_source: 'tradovate',
-      imported_at: now,
-      risk_pts: riskPts,
-      reward_pts: rewardPts,
-      risk_usd: riskUsd,
-      reward_usd: rewardUsd,
-      actual_r: actualR,
-      // Broker metadata
+      multiplier,
+      asset_class: 'futures',
+      
+      // Broker connection references
       broker_connection_id: brokerConnectionId,
       broker_account_id: brokerAccountId,
+      broker_name: 'tradovate',
       broker_trade_id: `${entryFill.id}_${exitFill?.id ?? 'open'}`,
-      contract_name: contract.name,
       synced_at: now,
       sync_source: 'tradovate_api',
+      
+      // Raw data for debugging
       raw_data: {
         entryFill: {
           id: entryFill.id,
@@ -325,7 +306,6 @@ class TradovateTradeMapperService {
 
   /**
    * 🔄 Convert open position to Finotaur format
-   * ✅ FIXED: side is now UPPERCASE ('LONG'/'SHORT') to match DB constraint
    */
   public convertPositionToFinotaurTrade(
     position: TradovatePosition,
@@ -339,48 +319,49 @@ class TradovateTradeMapperService {
     const quantity = Math.abs(position.netPos);
     const multiplier = product.valuePerPoint;
     
-    // Estimate stop (2% from entry)
+    // Calculate stop (REQUIRED for R calculation)
     const stopDistance = position.netPrice * 0.02;
     const stopPrice = direction === 'long'
       ? position.netPrice - stopDistance
       : position.netPrice + stopDistance;
     
-    const riskPts = Math.abs(position.netPrice - stopPrice);
-    const riskUsd = riskPts * quantity * multiplier;
-    
-    // ✅ CRITICAL FIX: Convert direction to UPPERCASE for DB constraint
+    // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
     
     const now = new Date().toISOString();
     
     return {
+      // Required fields
       user_id: userId,
       symbol: contract.name,
-      asset_class: 'futures',
-      side: sideUppercase,  // ✅ UPPERCASE!
+      side: sideUppercase,
       quantity,
       entry_price: position.netPrice,
-      exit_price: null,
       stop_price: stopPrice,
-      fees: 0,
-      fees_mode: 'auto',
       open_at: new Date(position.timestamp).toISOString(),
+      
+      // Open position - no exit
+      exit_price: null,
       close_at: null,
-      pnl: null,
+      take_profit_price: null,
+      fees: 0,
+      
+      // Broker identification
       broker: 'tradovate',
       external_id: `tradovate_pos_${position.id}`,
-      multiplier,
       import_source: 'tradovate',
-      imported_at: now,
-      risk_pts: riskPts,
-      risk_usd: riskUsd,
-      // Broker metadata
+      multiplier,
+      asset_class: 'futures',
+      
+      // Broker connection references
       broker_connection_id: brokerConnectionId,
       broker_account_id: brokerAccountId,
+      broker_name: 'tradovate',
       broker_trade_id: `pos_${position.id}`,
-      contract_name: contract.name,
       synced_at: now,
       sync_source: 'tradovate_api',
+      
+      // Raw data
       raw_data: {
         position: {
           id: position.id,
@@ -408,7 +389,7 @@ class TradovateTradeMapperService {
   /**
    * Generate unique external ID for a fill
    */
-  private generateExternalId(fill: TradovateFill): string {
+  private generateFillExternalId(fill: TradovateFill): string {
     return `tradovate_fill_${fill.id}`;
   }
 
@@ -427,28 +408,36 @@ class TradovateTradeMapperService {
   public validateTradeData(trade: FinotaurTradeData): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
     
+    // Required fields
     if (!trade.user_id) errors.push('Missing user_id');
     if (!trade.symbol) errors.push('Missing symbol');
     if (!trade.side) errors.push('Missing side');
+    if (!trade.open_at) errors.push('Missing open_at');
+    if (!trade.external_id) errors.push('Missing external_id');
     
-    // ✅ Validate side is UPPERCASE
+    // Validate side is UPPERCASE
     if (trade.side && !['LONG', 'SHORT'].includes(trade.side)) {
       errors.push(`Invalid side value: ${trade.side}. Must be 'LONG' or 'SHORT'`);
     }
     
-    if (trade.quantity <= 0) errors.push('Invalid quantity');
-    if (trade.entry_price <= 0) errors.push('Invalid entry_price');
-    if (trade.stop_price <= 0) errors.push('Invalid stop_price');
-    if (!trade.open_at) errors.push('Missing open_at');
-    if (!trade.external_id) errors.push('Missing external_id');
-    if (trade.multiplier <= 0) errors.push('Invalid multiplier');
+    // Numeric validations
+    if (trade.quantity <= 0) errors.push('Invalid quantity (must be > 0)');
+    if (trade.entry_price <= 0) errors.push('Invalid entry_price (must be > 0)');
+    if (trade.stop_price <= 0) errors.push('Invalid stop_price (must be > 0)');
+    if (trade.multiplier <= 0) errors.push('Invalid multiplier (must be > 0)');
     
-    // Validate broker is in allowed list
+    // Stop price logic
+    if (trade.side === 'LONG' && trade.stop_price >= trade.entry_price) {
+      errors.push('For LONG, stop_price must be below entry_price');
+    }
+    if (trade.side === 'SHORT' && trade.stop_price <= trade.entry_price) {
+      errors.push('For SHORT, stop_price must be above entry_price');
+    }
+    
+    // Broker validation
     if (trade.broker !== 'tradovate') {
       errors.push(`Invalid broker: ${trade.broker}`);
     }
-    
-    // Validate import_source is in allowed list
     if (trade.import_source !== 'tradovate') {
       errors.push(`Invalid import_source: ${trade.import_source}`);
     }
@@ -470,7 +459,6 @@ class TradovateTradeMapperService {
     
     for (let i = contractName.length - 1; i >= 0; i--) {
       const char = contractName[i];
-      // If we hit a month code followed by a digit, we found the contract suffix
       if (monthCodes.includes(char) && i < contractName.length - 1) {
         const nextChar = contractName[i + 1];
         if (/\d/.test(nextChar)) {
@@ -484,8 +472,8 @@ class TradovateTradeMapperService {
   }
 
   /**
-   * 🔧 Utility: Get point value for a symbol
-   * Returns the multiplier for P&L calculation
+   * 🔧 Utility: Get default multiplier for common symbols
+   * Note: This is a fallback - prefer using product.valuePerPoint from API
    */
   public getDefaultMultiplier(symbol: string): number {
     const baseSymbol = this.extractBaseSymbol(symbol);
