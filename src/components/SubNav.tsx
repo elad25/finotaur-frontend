@@ -148,7 +148,13 @@ export const SubNav = () => {
     return isActive(itemPath);
   };
 
-  const handleNavigation = (path: string) => {
+  const handleNavigation = (path: string, itemLocked?: boolean) => {
+    // 🔒 CHECK IF INDIVIDUAL ITEM IS LOCKED
+    if (itemLocked) {
+      console.log('🔒 Item is locked - Coming Soon:', path);
+      return;
+    }
+
     // 🔒 BACKTEST LOCKED CHECK - Before any other logic
     if (path.includes('/backtest') && isPathLocked(path)) {
       console.log('🔒 Backtest is locked - Coming Soon');
@@ -223,13 +229,15 @@ export const SubNav = () => {
           .map((item) => {
             const domainLocked = (activeDomain as any).locked === true;
             const backtestLocked = item.path.includes('/backtest') && isPathLocked(item.path);
-            const locked = domainLocked || backtestLocked;
+            // 🔒 NEW: Check if individual item is locked
+            const itemLocked = (item as any).locked === true;
+            const locked = domainLocked || backtestLocked || itemLocked;
             const active = isTabActive(item.path);
             
             const buttonContent = (
               <button
                 key={item.path}
-                onClick={() => handleNavigation(item.path)}
+                onClick={() => handleNavigation(item.path, itemLocked)}
                 disabled={locked}
                 className={`relative flex-shrink-0 rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
                   locked
@@ -277,8 +285,8 @@ export const SubNav = () => {
               </button>
             );
 
-            // 🔒 Wrap locked backtest items with tooltip
-            if (backtestLocked) {
+            // 🔒 Wrap locked items with tooltip (backtest OR individual locked items)
+            if (backtestLocked || itemLocked) {
               return (
                 <Tooltip key={item.path}>
                   <TooltipTrigger asChild>
@@ -293,7 +301,7 @@ export const SubNav = () => {
                       <span className="font-medium text-[#C9A646]">Coming Soon</span>
                     </div>
                     <p className="text-xs text-[#A0A0A0] mt-1">
-                      Backtest feature is under development
+                      This feature is under development
                     </p>
                   </TooltipContent>
                 </Tooltip>

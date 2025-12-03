@@ -5,15 +5,16 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon
+  Link, Gift, type LucideIcon, Swords
 } from 'lucide-react';
 
 export interface NavItem { 
   label: string; 
   path: string; 
   icon?: LucideIcon; 
-  adminOnly?: boolean; // ✅ Mark items as admin-only
-  affiliateOnly?: boolean; // ✅ NEW: Mark items as affiliate-only
+  adminOnly?: boolean;
+  affiliateOnly?: boolean;
+  locked?: boolean; // 🔒 הוספת מאפיין נעילה לפריט בודד
 }
 
 export interface Domain { 
@@ -21,33 +22,38 @@ export interface Domain {
   label: string; 
   subNav: NavItem[]; 
   sidebar: NavItem[]; 
-  locked?: boolean; // NEW: true = locked, false/undefined = accessible
+  locked?: boolean;
+  defaultPath?: string; // 🔥 נתיב ברירת מחדל כשלוחצים על הדומיין
 }
 
 export const domains: Record<string, Domain> = {
   'all-markets': {
     id: 'all-markets',
     label: 'All Markets',
-    locked: true, // 🔒 LOCKED
+    locked: false, // ✅ הדומיין עצמו פתוח
+    // 🔥 DEFAULT PATH - מוביל ישירות ל-War Zone!
+    defaultPath: '/app/all-markets/warzone',
     subNav: [
-      { label: 'Overview', path: '/app/all-markets/overview' },
-      { label: 'Chart', path: '/app/all-markets/chart' },
-      { label: 'Summary', path: '/app/all-markets/summary' },
-      { label: 'News', path: '/app/all-markets/news' },
+      { label: 'Overview', path: '/app/all-markets/overview', locked: true },
+      { label: 'Chart', path: '/app/all-markets/chart', locked: true },
+      { label: 'Summary', path: '/app/all-markets/summary', locked: true },
+      { label: 'News', path: '/app/all-markets/news', locked: true },
     ],
     sidebar: [
-      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard },
-      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map },
-      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp },
-      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity },
-      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar },
+      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
+      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
+      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
+      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
+      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
+      // ⚔️ WAR ZONE - פתוח! היחיד שלא נעול
+      { label: 'War Zone', path: '/app/all-markets/warzone', icon: Swords, locked: false },
     ],
   },
 
   stocks: {
     id: 'stocks',
     label: 'Stocks',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/stocks/overview' },
       { label: 'News', path: '/app/stocks/news' },
@@ -72,7 +78,7 @@ export const domains: Record<string, Domain> = {
   crypto: {
     id: 'crypto',
     label: 'Crypto',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/crypto/overview' },
       { label: 'News', path: '/app/crypto/news' },
@@ -94,7 +100,7 @@ export const domains: Record<string, Domain> = {
   futures: {
     id: 'futures',
     label: 'Futures',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
     sidebar: [
       { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
@@ -106,7 +112,7 @@ export const domains: Record<string, Domain> = {
   forex: {
     id: 'forex',
     label: 'Forex',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/forex/overview' },
       { label: 'News', path: '/app/forex/news' },
@@ -126,7 +132,7 @@ export const domains: Record<string, Domain> = {
   commodities: {
     id: 'commodities',
     label: 'Commodities',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/commodities/overview' },
       { label: 'News', path: '/app/commodities/news' },
@@ -147,7 +153,7 @@ export const domains: Record<string, Domain> = {
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
       { label: 'News', path: '/app/macro/news' },
@@ -166,7 +172,7 @@ export const domains: Record<string, Domain> = {
   ai: {
     id: 'ai',
     label: 'AI Insights',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/ai/overview' },
       { label: 'Forecasts', path: '/app/ai/forecasts' },
@@ -187,12 +193,12 @@ export const domains: Record<string, Domain> = {
   journal: {
     id: 'journal',
     label: 'Journal',
-    locked: false, // ✅ UNLOCKED - Only accessible section
+    locked: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
-      { label: 'Affiliate', path: '/app/journal/affiliate/overview', affiliateOnly: true }, // 🤝 Affiliate only
-      { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true }, // 🔐 Admin only
+      { label: 'Affiliate', path: '/app/journal/affiliate/overview', affiliateOnly: true },
+      { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
@@ -209,11 +215,10 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // 🧪 Backtest Sub-Domain (בתוך Journal)
   'journal-backtest': {
     id: 'journal-backtest',
     label: 'Backtest',
-    locked: true, // 🔒 LOCKED - Coming Soon
+    locked: true,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
@@ -234,7 +239,6 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // 🤝 NEW: Affiliate Center Sub-Domain (בתוך Journal)
   'journal-affiliate': {
     id: 'journal-affiliate',
     label: 'Affiliate Center',
@@ -262,7 +266,7 @@ export const domains: Record<string, Domain> = {
   'copy-trade': {
     id: 'copy-trade',
     label: 'Copy Trade',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/copy-trade/overview' },
       { label: 'Top Traders', path: '/app/copy-trade/top-traders' },
@@ -281,7 +285,7 @@ export const domains: Record<string, Domain> = {
   funding: {
     id: 'funding',
     label: 'Funding',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/funding/overview' },
       { label: 'Brokers', path: '/app/funding/brokers' },
@@ -297,7 +301,7 @@ export const domains: Record<string, Domain> = {
   options: {
     id: 'options',
     label: 'Options',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Chain', path: '/app/options/chain' },
       { label: 'Flow', path: '/app/options/flow' },

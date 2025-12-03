@@ -6,20 +6,24 @@
  * ✅ 30-minute stale time (profile changes slowly)
  * ✅ Proper TypeScript types
  * ✅ Helper functions for plan display
+ * ✅ Cancellation fields support
  * ================================================
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/providers/AuthProvider'; // 🔥 FIXED: Use AuthProvider
-import { queryKeys } from '@/lib/queryClient'; // 🔥 ADDED: Use centralized query keys
+import { useAuth } from '@/providers/AuthProvider';
+import { queryKeys } from '@/lib/queryClient';
 
 export interface UserProfile {
   account_type: 'free' | 'basic' | 'premium';
   subscription_interval: 'monthly' | 'yearly' | null;
-  subscription_status: 'active' | 'trial' | 'inactive' | null;
+  subscription_status: 'active' | 'trial' | 'inactive' | 'cancelled' | null;
   subscription_expires_at: string | null;
+  // 🔥 Cancellation fields
+  subscription_cancel_at_period_end?: boolean;
+  pending_downgrade_plan?: 'free' | 'basic' | null;
 }
 
 // ============================================
@@ -28,7 +32,14 @@ export interface UserProfile {
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('account_type, subscription_interval, subscription_status, subscription_expires_at')
+    .select(`
+      account_type, 
+      subscription_interval, 
+      subscription_status, 
+      subscription_expires_at,
+      subscription_cancel_at_period_end,
+      pending_downgrade_plan
+    `)
     .eq('id', userId)
     .single();
 
@@ -46,7 +57,7 @@ export function useUserProfile() {
   const effectiveUserId = user?.id || null;
 
   const query = useQuery({
-    queryKey: queryKeys.profile(effectiveUserId || undefined), // 🔥 Use centralized queryKeys
+    queryKey: queryKeys.profile(effectiveUserId || undefined),
     queryFn: () => fetchUserProfile(effectiveUserId!),
     enabled: !!effectiveUserId && !authLoading,
     staleTime: 30 * 60 * 1000, // 30 minutes

@@ -1,5 +1,5 @@
 // src/lib/supabase.ts
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, RealtimeChannel } from '@supabase/supabase-js';
 
 // ============================================
 // Supabase Client Configuration
@@ -93,7 +93,6 @@ class SupabaseCache {
     return this.cache.size;
   }
 
-  // 🔥 NEW: Cleanup expired entries periodically
   private cleanupExpired(): void {
     const now = Date.now();
     for (const [key, entry] of this.cache.entries()) {
@@ -116,7 +115,7 @@ if (typeof window !== 'undefined') {
 }
 
 // ============================================
-// 🔥 REQUEST DEDUPLICATION - מונע queries כפולים
+// 🔥 REQUEST DEDUPLICATION
 // ============================================
 
 const pendingRequests = new Map<string, Promise<any>>();
@@ -126,16 +125,13 @@ export async function cachedQuery<T>(
   queryFn: () => Promise<T>,
   ttl?: number
 ): Promise<T> {
-  // 1. Check cache first
   const cached = supabaseCache.get<T>(key);
   if (cached) return cached;
 
-  // 2. Check if same request is already in flight
   if (pendingRequests.has(key)) {
     return pendingRequests.get(key)!;
   }
 
-  // 3. Execute query
   const promise = queryFn()
     .then(data => {
       supabaseCache.set(key, data, ttl);
@@ -151,9 +147,88 @@ export async function cachedQuery<T>(
   return promise;
 }
 
-// 🔥 NEW: Batch invalidation helper
 export function invalidateCachePatterns(...patterns: string[]): void {
   supabaseCache.invalidateMultiple(patterns);
+}
+
+// ============================================
+// 🔥 NEW: REALTIME SUBSCRIPTION HELPERS
+// ============================================
+
+export type RealtimeEventType = 'INSERT' | 'UPDATE' | 'DELETE';
+
+export interface RealtimePayload<T = Record<string, unknown>> {
+  eventType: RealtimeEventType;
+  new: T;
+  old: T | null;
+}
+
+/**
+ * Subscribe to profile changes for admin dashboard
+ * Payment-provider agnostic - works with Whop, Stripe, or any provider
+ */
+export function subscribeToProfileChanges(
+  callback: (payload: RealtimePayload) => void
+): () => void {
+  console.log('🔌 Setting up profile changes subscription...');
+  
+  const channel = supabase
+    .channel('admin-profile-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'profiles',
+      },
+      (payload) => {
+        console.log('📡 Profile change received:', payload.eventType);
+        callback({
+          eventType: payload.eventType as RealtimeEventType,
+          new: payload.new as Record<string, unknown>,
+          old: payload.old as Record<string, unknown> | null,
+        });
+      }
+    )
+    .subscribe((status) => {
+      console.log('📡 Realtime subscription status:', status);
+    });
+
+  // Return cleanup function
+  return () => {
+    console.log('🔌 Cleaning up profile changes subscription...');
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Subscribe to payment history changes (optional)
+ */
+export function subscribeToPaymentChanges(
+  callback: (payload: RealtimePayload) => void
+): () => void {
+  const channel = supabase
+    .channel('admin-payment-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'payment_history',
+      },
+      (payload) => {
+        callback({
+          eventType: payload.eventType as RealtimeEventType,
+          new: payload.new as Record<string, unknown>,
+          old: null,
+        });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
 // ============================================

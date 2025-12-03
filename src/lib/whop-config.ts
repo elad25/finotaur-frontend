@@ -1,27 +1,34 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v2.2.0
+// FINOTAUR WHOP CONFIGURATION - v2.3.0
 // =====================================================
 // Place in: src/lib/whop-config.ts
 // 
-// 🔥 v2.2.0 CHANGES:
-// - Added userId to CheckoutOptions for user identification
-// - Added metadata[finotaur_user_id] to checkout URL
-// - This ensures we can identify the user even if they use
-//   a different email in WHOP checkout
+// 🔥 v2.3.0 CHANGES:
+// - Added Newsletter (War Zone) plan
+// - Newsletter is separate from trading journal subscription
+// - Updates newsletter_enabled field, not account_type
+// - 7-day free trial support
+// 
+// ⚠️ IMPORTANT: Update NEWSLETTER_PRODUCT_ID with actual value!
 // =====================================================
 
 // ============================================
 // TYPES
 // ============================================
 
-export type PlanName = 'basic' | 'premium';
+export type PlanName = 'basic' | 'premium' | 'newsletter';
 export type BillingInterval = 'monthly' | 'yearly';
-export type PlanId = 'basic_monthly' | 'basic_yearly' | 'premium_monthly' | 'premium_yearly';
+export type PlanId = 
+  | 'basic_monthly' 
+  | 'basic_yearly' 
+  | 'premium_monthly' 
+  | 'premium_yearly'
+  | 'newsletter_monthly';
 
 export interface PlanConfig {
   id: PlanId;
-  whopPlanId: string;      // Plan ID for checkout URLs
-  whopProductId: string;   // Product ID for webhooks
+  whopPlanId: string;
+  whopProductId: string;
   name: PlanName;
   displayName: string;
   price: number;
@@ -32,40 +39,43 @@ export interface PlanConfig {
   popular?: boolean;
   badge?: string;
   maxTrades: number;
+  trialDays?: number;
+  isNewsletter?: boolean;
 }
 
 // ============================================
-// ⚠️ CORRECTED WHOP IDs - BASED ON DASHBOARD ORDER
-// ============================================
-// Dashboard shows (top to bottom):
-// 1. Finotaur Premium – Yearly  $299/year   → plan_gBG436aeJxaHU
-// 2. Finotaur Premium           $39.99/month → plan_v7QKxkvKIZooe
-// 3. Finotaur Basic – Yearly    $149/year   → plan_x0jTFLe9qNv8i
-// 4. Finotaur Basic             $19.99/month → plan_2hIXaJbGP1tYN
+// ⚠️ WHOP IDs - UPDATE NEWSLETTER_PRODUCT_ID!
 // ============================================
 
-// 🔥 Plan IDs - Used for CHECKOUT URLs (CORRECTED!)
+// Plan IDs - Used for CHECKOUT URLs
 export const WHOP_PLAN_IDS = {
-  basic_monthly: 'plan_2hIXaJbGP1tYN',      // Finotaur Basic - $19.99/month
-  basic_yearly: 'plan_x0jTFLe9qNv8i',       // Finotaur Basic Yearly - $149/year
-  premium_monthly: 'plan_v7QKxkvKIZooe',    // Finotaur Premium - $39.99/month
-  premium_yearly: 'plan_gBG436aeJxaHU',     // Finotaur Premium Yearly - $299/year
+  basic_monthly: 'plan_2hIXaJbGP1tYN',
+  basic_yearly: 'plan_x0jTFLe9qNv8i',
+  premium_monthly: 'plan_v7QKxkvKIZooe',
+  premium_yearly: 'plan_gBG436aeJxaHU',
+  // 🔥 Newsletter (War Zone)
+  newsletter_monthly: 'plan_LCBG5yJpoNtW3',
 } as const;
 
 // Product IDs - Used for WEBHOOK identification
+// ⚠️ UPDATE 'prod_XXXXXXXX' WITH ACTUAL NEWSLETTER PRODUCT ID!
 export const WHOP_PRODUCT_IDS = {
   basic_monthly: 'prod_ZaDN418HLst3r',
   basic_yearly: 'prod_bPwSoYGedsbyh',
   premium_monthly: 'prod_Kq2pmLT1JyGsU',
   premium_yearly: 'prod_vON7zlda6iuII',
+  // 🔥 Newsletter - UPDATE THIS WITH ACTUAL PRODUCT ID FROM WHOP DASHBOARD!
+  newsletter_monthly: 'prod_qlaV5Uu6LZlYn',  // ⚠️ CHANGE THIS!
 } as const;
 
 // Reverse lookup (for webhooks)
-export const PRODUCT_ID_TO_PLAN: Record<string, { plan: PlanName; interval: BillingInterval }> = {
+export const PRODUCT_ID_TO_PLAN: Record<string, { plan: PlanName; interval: BillingInterval; isNewsletter?: boolean }> = {
   'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly' },
   'prod_bPwSoYGedsbyh': { plan: 'basic', interval: 'yearly' },
   'prod_Kq2pmLT1JyGsU': { plan: 'premium', interval: 'monthly' },
   'prod_vON7zlda6iuII': { plan: 'premium', interval: 'yearly' },
+  // 🔥 Newsletter - UPDATE THE KEY WITH ACTUAL PRODUCT ID!
+  'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', isNewsletter: true },  // ⚠️ CHANGE KEY!
 };
 
 // ============================================
@@ -174,7 +184,50 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       '2 months FREE!',
     ],
   },
+  // 🔥 WAR ZONE NEWSLETTER
+  newsletter_monthly: {
+    id: 'newsletter_monthly',
+    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,
+    whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,
+    name: 'newsletter',
+    displayName: 'War Zone Intelligence',
+    price: 20,
+    period: 'monthly',
+    periodLabel: '/month',
+    maxTrades: 0,
+    trialDays: 7,
+    isNewsletter: true,
+    badge: '7-Day Free Trial',
+    features: [
+      'Daily institutional-grade PDF report (8-14 pages)',
+      'Macro breakdown & market structure analysis',
+      'Unusual Options Activity (UOA) tracking',
+      'Technical outlook (24-72h)',
+      'Earnings & corporate intel',
+      'Private Discord community',
+      'Finotaur Trading Room access',
+      'Real-time alerts',
+      'Chart pack blueprint',
+    ],
+  },
 };
+
+// ============================================
+// NEWSLETTER HELPERS
+// ============================================
+
+export function isNewsletterProduct(productId: string): boolean {
+  const planInfo = PRODUCT_ID_TO_PLAN[productId];
+  return planInfo?.isNewsletter === true;
+}
+
+export function getNewsletterPlan(): PlanConfig {
+  return PLANS.newsletter_monthly;
+}
+
+export function getNewsletterCheckoutUrl(): string {
+  return `https://whop.com/checkout/${WHOP_PLAN_IDS.newsletter_monthly}`;
+}
 
 // ============================================
 // CHECKOUT URL BUILDER
@@ -183,18 +236,12 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 export interface CheckoutOptions {
   planId: PlanId;
   userEmail?: string;
-  userId?: string;           // 🔥 NEW: Finotaur user ID for identification
+  userId?: string;
   affiliateCode?: string;
   clickId?: string;
   redirectUrl?: string;
 }
 
-/**
- * Build Whop checkout URL with all necessary parameters
- * 
- * 🔥 v2.2.0: Now includes userId as metadata to ensure we can
- * identify the user even if they use a different email in WHOP
- */
 export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   const { planId, userEmail, userId, affiliateCode, clickId, redirectUrl } = options;
   
@@ -203,24 +250,17 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
     throw new Error(`Unknown plan ID: ${planId}`);
   }
   
-  // Use Plan ID for checkout
   const baseUrl = `https://whop.com/checkout/${plan.whopPlanId}`;
-  
-  // Build query parameters
   const params = new URLSearchParams();
   
-  // Pre-fill email if provided
   if (userEmail) {
     params.set('email', userEmail);
   }
   
-  // 🔥 NEW: Add Finotaur user ID as metadata
-  // This ensures we can identify the user even if they change their email in WHOP
   if (userId) {
     params.set('metadata[finotaur_user_id]', userId);
   }
   
-  // Add affiliate tracking
   if (affiliateCode) {
     params.set('d', affiliateCode);
   }
@@ -231,11 +271,21 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   
   // Success redirect URL
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
-  params.set('redirect_url', `${baseRedirect}/app/journal/overview?payment=success`);
+  if (plan.isNewsletter) {
+    params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success`);
+  } else {
+    params.set('redirect_url', `${baseRedirect}/app/journal/overview?payment=success`);
+  }
   
-  // Build final URL
   const queryString = params.toString();
   return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+}
+
+export function buildNewsletterCheckoutUrl(options: Omit<CheckoutOptions, 'planId'>): string {
+  return buildWhopCheckoutUrl({
+    ...options,
+    planId: 'newsletter_monthly',
+  });
 }
 
 // ============================================
@@ -264,6 +314,7 @@ export const PLAN_FEATURES = {
     aiInsights: false,
     advancedAnalytics: false,
     prioritySupport: false,
+    newsletter: false,
   },
   basic: {
     maxTrades: 25,
@@ -271,6 +322,7 @@ export const PLAN_FEATURES = {
     aiInsights: false,
     advancedAnalytics: true,
     prioritySupport: false,
+    newsletter: false,
   },
   premium: {
     maxTrades: Infinity,
@@ -278,6 +330,15 @@ export const PLAN_FEATURES = {
     aiInsights: true,
     advancedAnalytics: true,
     prioritySupport: true,
+    newsletter: false,
+  },
+  newsletter: {
+    maxTrades: 0,
+    autoSync: false,
+    aiInsights: false,
+    advancedAnalytics: false,
+    prioritySupport: false,
+    newsletter: true,
   },
 };
 
@@ -292,7 +353,7 @@ export const getPlansByName = (name: PlanName): PlanConfig[] => {
 };
 
 export const getMonthlyPlans = (): PlanConfig[] => {
-  return Object.values(PLANS).filter(plan => plan.period === 'monthly');
+  return Object.values(PLANS).filter(plan => plan.period === 'monthly' && !plan.isNewsletter);
 };
 
 export const getYearlyPlans = (): PlanConfig[] => {
@@ -307,24 +368,15 @@ export const calculateYearlySavings = (monthlyPrice: number, yearlyPrice: number
   return (monthlyPrice * 12) - yearlyPrice;
 };
 
-/**
- * Get plan ID from plan name and billing interval
- */
 export const getPlanId = (name: PlanName, interval: BillingInterval): PlanId => {
   return `${name}_${interval}` as PlanId;
 };
 
-/**
- * Get Whop Plan ID for checkout
- */
 export const getWhopPlanId = (name: PlanName, interval: BillingInterval): string => {
   const planId = getPlanId(name, interval);
   return PLANS[planId].whopPlanId;
 };
 
-/**
- * Get Whop Product ID (for webhooks)
- */
 export const getWhopProductId = (name: PlanName, interval: BillingInterval): string => {
   const planId = getPlanId(name, interval);
   return PLANS[planId].whopProductId;

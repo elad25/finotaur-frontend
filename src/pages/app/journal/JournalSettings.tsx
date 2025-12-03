@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown } from "lucide-react";
+import { X, Check, AlertTriangle, Shield, Zap, TrendingUp, DollarSign, Percent, Crown, ArrowUp, ArrowDown, Clock } from "lucide-react";
 import RiskSettingsDialog from "@/components/RiskSettingsDialog";
 import { formatNumber } from "@/utils/smartCalc";
 
@@ -278,12 +278,16 @@ const UpgradePlanModal = ({
   currentPlan,
   onSelectPlan,
   subscriptionExpiresAt,
+  subscriptionCancelAtPeriodEnd,
+  pendingDowngradePlan,
 }: { 
   isOpen: boolean; 
   onClose: () => void;
   currentPlan: string;
   onSelectPlan: (planId: PlanId, billingInterval: BillingInterval) => void;
   subscriptionExpiresAt?: string | null;
+  subscriptionCancelAtPeriodEnd?: boolean;
+  pendingDowngradePlan?: string | null;
 }) => {
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -313,7 +317,12 @@ const UpgradePlanModal = ({
     }
   }, [billingInterval]);
 
-  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade'; label: string } => {
+  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade'; label: string } => {
+    // 🔥 Check if this plan is the pending downgrade target
+    if (subscriptionCancelAtPeriodEnd && pendingDowngradePlan === plan.id) {
+      return { type: 'pending_downgrade', label: 'Pending Downgrade' };
+    }
+    
     if (plan.id === currentPlan) {
       return { type: 'current', label: 'Current Plan' };
     }
@@ -323,11 +332,23 @@ const UpgradePlanModal = ({
     }
     
     return { type: 'downgrade', label: `Downgrade to ${plan.name}` };
-  }, [currentPlan, currentTier]);
+  }, [currentPlan, currentTier, subscriptionCancelAtPeriodEnd, pendingDowngradePlan]);
 
   const handlePlanSelect = useCallback(async (planId: PlanId) => {
     if (planId === currentPlan) {
       toast.info("This is your current plan");
+      return;
+    }
+
+    // 🔥 Check if already pending downgrade to this plan
+    if (subscriptionCancelAtPeriodEnd && pendingDowngradePlan === planId) {
+      toast.info("Your subscription is already scheduled to change to this plan");
+      return;
+    }
+
+    // 🔥 Check if already pending any downgrade
+    if (subscriptionCancelAtPeriodEnd && pendingDowngradePlan) {
+      toast.warning(`Your subscription is already scheduled to ${pendingDowngradePlan === 'free' ? 'be cancelled' : `downgrade to ${pendingDowngradePlan}`}`);
       return;
     }
 
@@ -349,7 +370,7 @@ const UpgradePlanModal = ({
       setPendingDowngrade(planId);
       setShowCancelConfirm(true);
     }
-  }, [currentPlan, billingInterval, getPlanAction, onSelectPlan, onClose]);
+  }, [currentPlan, billingInterval, getPlanAction, onSelectPlan, onClose, subscriptionCancelAtPeriodEnd, pendingDowngradePlan]);
 
   const handleConfirmDowngrade = useCallback(async () => {
     if (!pendingDowngrade) return;
@@ -464,8 +485,6 @@ const UpgradePlanModal = ({
     );
   }
 
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl w-full max-w-7xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
@@ -485,6 +504,30 @@ const UpgradePlanModal = ({
 
         {/* Content */}
         <div className="p-8">
+          {/* 🔥 Pending Cancellation Notice */}
+          {subscriptionCancelAtPeriodEnd && pendingDowngradePlan && (
+            <div className="mb-8 max-w-4xl mx-auto">
+              <div className="p-4 rounded-xl border-2 border-amber-500/30 bg-amber-500/10">
+                <div className="flex items-start gap-3">
+                  <Clock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-amber-300 font-medium">
+                      Subscription Change Pending
+                    </p>
+                    <p className="text-amber-200/80 text-sm mt-1">
+                      Your subscription will {pendingDowngradePlan === 'free' ? 'be cancelled' : `change to ${pendingDowngradePlan}`} on{' '}
+                      {subscriptionExpiresAt ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : 'the end of your billing period'}.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Guarantee Box */}
           <div className="mb-8 max-w-4xl mx-auto">
             <div className="p-6 rounded-2xl relative overflow-hidden"
@@ -553,13 +596,14 @@ const UpgradePlanModal = ({
               const isCurrentPlan = action.type === 'current';
               const isUpgrade = action.type === 'upgrade';
               const isDowngrade = action.type === 'downgrade';
+              const isPendingDowngrade = action.type === 'pending_downgrade';
               
               return (
                 <div
                   key={plan.id}
                   className={`p-6 relative transition-all duration-300 flex flex-col rounded-2xl ${
                     plan.featured ? 'md:scale-[1.05]' : ''
-                  } ${isCurrentPlan ? 'ring-2 ring-[#C9A646]' : ''}`}
+                  } ${isCurrentPlan ? 'ring-2 ring-[#C9A646]' : ''} ${isPendingDowngrade ? 'ring-2 ring-amber-500' : ''}`}
                   style={{
                     background: plan.featured 
                       ? 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)'
@@ -590,7 +634,7 @@ const UpgradePlanModal = ({
                        }} />
 
                   {/* Featured Badge */}
-                  {plan.featured && (
+                  {plan.featured && !isPendingDowngrade && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap"
                          style={{
                            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
@@ -611,8 +655,16 @@ const UpgradePlanModal = ({
                     </div>
                   )}
 
+                  {/* 🔥 Pending Downgrade Badge */}
+                  {isPendingDowngrade && (
+                    <div className="absolute -top-3 right-4 bg-amber-500 text-black px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Pending
+                    </div>
+                  )}
+
                   {/* Savings Badge */}
-                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !isCurrentPlan && (
+                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
                     <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       {plan.savings}
                     </div>
@@ -655,17 +707,19 @@ const UpgradePlanModal = ({
                   {/* CTA Button */}
                   <button 
                     onClick={() => handlePlanSelect(plan.id)}
-                    disabled={isCurrentPlan || isProcessingDowngrade}
+                    disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade}
                     className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                        : isPendingDowngrade
+                        ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
                         : isUpgrade
                         ? plan.featured 
                           ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]' 
                           : 'bg-[#C9A646] hover:bg-[#D4B84A] text-black hover:scale-[1.02]'
                         : 'border-2 border-zinc-600 hover:border-zinc-500 hover:bg-zinc-800/50 text-zinc-300 hover:scale-[1.02]'
                     }`}
-                    style={!isCurrentPlan && isUpgrade ? (plan.featured ? {
+                    style={!isCurrentPlan && !isPendingDowngrade && isUpgrade ? (plan.featured ? {
                       boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
                     } : {
                       boxShadow: '0 4px 20px rgba(201,166,70,0.3)',
@@ -675,6 +729,11 @@ const UpgradePlanModal = ({
                       <>
                         <div className="w-4 h-4 border-2 border-zinc-500 border-t-zinc-300 rounded-full animate-spin" />
                         Processing...
+                      </>
+                    ) : isPendingDowngrade ? (
+                      <>
+                        <Clock className="w-4 h-4" />
+                        Scheduled
                       </>
                     ) : (
                       <>
@@ -1044,9 +1103,39 @@ export default function JournalSettings() {
           </div>
         </div>
 
-        {/* Account Information */}
+        {/* 🔥 Account Information - WITH CANCELLATION NOTICE */}
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
           <h3 className="text-xl font-semibold text-zinc-100 mb-6">Account Information</h3>
+          
+          {/* 🔥 CANCELLATION NOTICE - Shows when subscription is pending cancellation */}
+          {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at && (
+            <div className="mb-6 p-4 rounded-xl border-2 border-amber-500/30 bg-amber-500/10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-amber-300 font-semibold mb-1">
+                    Subscription Ending Soon
+                  </h4>
+                  <p className="text-amber-200/80 text-sm leading-relaxed">
+                    Your <span className="font-semibold">{profile.account_type?.charAt(0).toUpperCase() + profile.account_type?.slice(1)}</span> subscription 
+                    will {profile.pending_downgrade_plan === 'free' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan?.charAt(0).toUpperCase() + profile.pending_downgrade_plan?.slice(1)}`} on{' '}
+                    <span className="font-semibold">
+                      {new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </span>.
+                  </p>
+                  <p className="text-amber-200/60 text-xs mt-2">
+                    You'll continue to have full access to all {profile.account_type} features until then.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="space-y-4">
             {/* Plan Type */}
@@ -1059,15 +1148,23 @@ export default function JournalSettings() {
                 {loading ? (
                   <div className="h-8 w-20 bg-zinc-800 animate-pulse rounded-full"></div>
                 ) : (
-                  <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
-                    planInfo.badge === "free"
-                      ? "bg-zinc-800 text-zinc-300" 
-                      : planInfo.badge === "basic"
-                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                      : "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30"
-                  }`}>
-                    {planInfo.name}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
+                      planInfo.badge === "free"
+                        ? "bg-zinc-800 text-zinc-300" 
+                        : planInfo.badge === "basic"
+                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                        : "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30"
+                    }`}>
+                      {planInfo.name}
+                    </span>
+                    {/* 🔥 Cancellation badge */}
+                    {profile?.subscription_cancel_at_period_end && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        Ending
+                      </span>
+                    )}
+                  </div>
                 )}
                 <button 
                   onClick={handleUpgrade}
@@ -1082,37 +1179,79 @@ export default function JournalSettings() {
               </div>
             </div>
 
-            {/* Billing Date */}
+            {/* Billing Date - Updated to show expiration for cancelled subscriptions */}
             <div className="flex items-center justify-between py-4 border-b border-zinc-800">
               <div>
-                <label className="text-sm font-medium text-zinc-300">Billing Date</label>
-                <p className="text-xs text-zinc-500 mt-1">Next billing cycle</p>
+                <label className="text-sm font-medium text-zinc-300">
+                  {profile?.subscription_cancel_at_period_end ? 'Access Until' : 'Billing Date'}
+                </label>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {profile?.subscription_cancel_at_period_end 
+                    ? 'Your subscription ends on this date' 
+                    : 'Next billing cycle'
+                  }
+                </p>
               </div>
               {loading ? (
                 <div className="h-5 w-32 bg-zinc-800 animate-pulse rounded"></div>
               ) : (
-                <span className="text-sm text-zinc-400">{billingDate}</span>
+                <span className={`text-sm ${
+                  profile?.subscription_cancel_at_period_end 
+                    ? 'text-amber-400 font-medium' 
+                    : 'text-zinc-400'
+                }`}>
+                  {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at
+                    ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })
+                    : billingDate
+                  }
+                </span>
               )}
             </div>
 
             {/* Subscription Status */}
-              {profile && profile.account_type !== 'free' && profile.subscription_status && (
-                 <div className="flex items-center justify-between py-4">
-                    <div>
+            {profile && profile.account_type !== 'free' && (
+              <div className="flex items-center justify-between py-4">
+                <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>
                   <p className="text-xs text-zinc-500 mt-1">Current subscription status</p>
                 </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                   profile.subscription_status === 'active'
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                  : profile.subscription_status === 'trial'
-                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  profile.subscription_cancel_at_period_end
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    : profile.subscription_status === 'active'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : profile.subscription_status === 'trial'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                     : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                 }`}>
-            {profile.subscription_status.charAt(0).toUpperCase() + profile.subscription_status.slice(1)}
-    </span>
-  </div>
-)}
+                }`}>
+                  {profile.subscription_cancel_at_period_end
+                    ? 'Cancelling'
+                    : profile.subscription_status?.charAt(0).toUpperCase() + profile.subscription_status?.slice(1)
+                  }
+                </span>
+              </div>
+            )}
+
+            {/* 🔥 Pending Downgrade Info */}
+            {profile?.pending_downgrade_plan && profile?.subscription_cancel_at_period_end && (
+              <div className="flex items-center justify-between py-4 border-t border-zinc-800">
+                <div>
+                  <label className="text-sm font-medium text-zinc-300">Downgrading To</label>
+                  <p className="text-xs text-zinc-500 mt-1">Your plan after current period ends</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  profile.pending_downgrade_plan === 'free'
+                    ? 'bg-zinc-700 text-zinc-300'
+                    : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                }`}>
+                  {profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1215,6 +1354,8 @@ export default function JournalSettings() {
         currentPlan={profile?.account_type || 'free'}
         onSelectPlan={handleSelectPlan}
         subscriptionExpiresAt={profile?.subscription_expires_at}
+        subscriptionCancelAtPeriodEnd={profile?.subscription_cancel_at_period_end}
+        pendingDowngradePlan={profile?.pending_downgrade_plan}
       />
 
       {/* 🔥 Payment Popup - Same as PricingSelection */}

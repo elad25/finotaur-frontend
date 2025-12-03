@@ -75,6 +75,7 @@ const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"
 const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
 const AdminSupportTickets = lazy(() => import("@/pages/app/journal/admin/Supporttickets"));
 const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
+const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 
 // === Settings & Payment ===
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -136,6 +137,8 @@ const AllMarketsMovers = lazy(() => import("@/pages/app/all-markets/Movers"));
 const AllMarketsSentiment = lazy(() => import("@/pages/app/all-markets/Sentiment"));
 const AllMarketsCalendar = lazy(() => import("@/pages/app/all-markets/Calendar"));
 const AllMarketsNews = lazy(() => import("@/pages/app/all-markets/News"));
+// ⚔️ WAR ZONE - Newsletter Hub
+const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 
 // === Stocks ===
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
@@ -517,14 +520,16 @@ function AppContent() {
         <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="/app/journal/overview" replace />} />
           
-          {/* 🔒 ALL MARKETS - LOCKED */}
-          <Route path="all-markets/overview" element={<LockedRoute domainId="all-markets"><AllMarketsOverview /></LockedRoute>} />
-          <Route path="all-markets/chart" element={<LockedRoute domainId="all-markets"><AllMarketsChart /></LockedRoute>} />
-          <Route path="all-markets/summary" element={<LockedRoute domainId="all-markets"><AllMarketsSummary /></LockedRoute>} />
-          <Route path="all-markets/movers" element={<LockedRoute domainId="all-markets"><AllMarketsMovers /></LockedRoute>} />
-          <Route path="all-markets/sentiment" element={<LockedRoute domainId="all-markets"><AllMarketsSentiment /></LockedRoute>} />
-          <Route path="all-markets/calendar" element={<LockedRoute domainId="all-markets"><AllMarketsCalendar /></LockedRoute>} />
-          <Route path="all-markets/news" element={<LockedRoute domainId="all-markets"><AllMarketsNews /></LockedRoute>} />
+          {/* ✅ ALL MARKETS - UNLOCKED */}
+          <Route path="all-markets/overview" element={<SuspenseRoute><AllMarketsOverview /></SuspenseRoute>} />
+          <Route path="all-markets/chart" element={<SuspenseRoute><AllMarketsChart /></SuspenseRoute>} />
+          <Route path="all-markets/summary" element={<SuspenseRoute><AllMarketsSummary /></SuspenseRoute>} />
+          <Route path="all-markets/movers" element={<SuspenseRoute><AllMarketsMovers /></SuspenseRoute>} />
+          <Route path="all-markets/sentiment" element={<SuspenseRoute><AllMarketsSentiment /></SuspenseRoute>} />
+          <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
+          <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
+          {/* ⚔️ WAR ZONE - Newsletter Hub (shows different content for admin vs regular users) */}
+          <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
           
           {/* 🔒 OPTIONS - LOCKED */}
           <Route path="options" element={<Navigate to="/app/options/chain" replace />} />
@@ -678,6 +683,7 @@ function AppContent() {
           <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="journal/admin/newsletter-sub" element={<ProtectedAdminRoute><SuspenseRoute><AdminNewsletterSub /></SuspenseRoute></ProtectedAdminRoute>} />
           
           {/* 🔒 BACKTEST - Backward Compatibility Routes (also locked) */}
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />

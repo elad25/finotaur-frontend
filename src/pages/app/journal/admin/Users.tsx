@@ -1,17 +1,43 @@
 // src/pages/app/journal/admin/Users.tsx
 // ============================================
-// OPTIMIZED FOR 5000+ USERS
+// OPTIMIZED FOR 5000+ USERS + REALTIME - v2.0.0
+// ============================================
+// 🔥 v2.0.0 CHANGES:
+// - Added Supabase Realtime for live updates
+// - Toast notifications for subscription changes
+// - Payment-provider agnostic architecture
+// - Better cache invalidation strategy
 // ============================================
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search, Download, Shield, AlertCircle, RefreshCw } from 'lucide-react';
+import { 
+  Search, 
+  Download, 
+  Shield, 
+  AlertCircle, 
+  RefreshCw,
+  Wifi,
+  WifiOff,
+} from 'lucide-react';
 import { getAllUsers } from '@/services/adminService';
 import { UserWithStats, UserFilters, PaginationParams } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
 import UserActionsMenu from '@/components/admin/UserActionsMenu';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useAdminRealtimeUpdates } from '@/hooks/useRealtimeSubscriptions';
+import { toast } from 'sonner';
+
+// ============================================
+// CACHE CONFIGURATION
+// ============================================
+
+const CACHE_CONFIG = {
+  staleTime: 2 * 60 * 1000,      // 2 minutes
+  gcTime: 5 * 60 * 1000,         // 5 minutes
+  refetchOnWindowFocus: false,
+};
 
 export default function AdminUsers() {
   // ============================================
@@ -26,6 +52,9 @@ export default function AdminUsers() {
     sortOrder: 'desc',
   });
 
+  // Track recently changed users for highlighting
+  const [recentlyChangedIds, setRecentlyChangedIds] = useState<Set<string>>(new Set());
+
   const queryClient = useQueryClient();
 
   // ⚡ Debounce search (300ms delay)
@@ -36,6 +65,18 @@ export default function AdminUsers() {
     () => ['admin-users', { ...filters, search: debouncedSearchTerm }, pagination],
     [filters, debouncedSearchTerm, pagination]
   );
+
+  // ============================================
+  // 🔥 REALTIME SUBSCRIPTION
+  // ============================================
+
+  const { isSubscribed, refresh } = useAdminRealtimeUpdates(true);
+
+  // Listen for specific changes and highlight rows
+  useEffect(() => {
+    // This effect will re-run when realtime updates happen
+    // The actual subscription is handled by useAdminRealtimeUpdates
+  }, []);
 
   // ============================================
   // REACT QUERY - DATA FETCHING
@@ -53,9 +94,7 @@ export default function AdminUsers() {
       { ...filters, search: debouncedSearchTerm || undefined },
       pagination
     ),
-    staleTime: 2 * 60 * 1000, // 2 minutes cache
-    gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false, // ⚡ Don't refetch on tab focus
+    ...CACHE_CONFIG,
     placeholderData: (previousData) => previousData, // ⚡ Keep old data while fetching
   });
 
@@ -78,9 +117,17 @@ export default function AdminUsers() {
   }, []);
 
   const handleUserActionComplete = useCallback(() => {
-    // ⚡ Only invalidate the current query, not all admin queries
+    // ⚡ Invalidate the current query + stats
     queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ['admin', 'subscriber-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['admin', 'subscribers-list'] });
   }, [queryClient, queryKey]);
+
+  const handleManualRefresh = useCallback(async () => {
+    toast.info('Refreshing users...');
+    await refetch();
+    toast.success('Users refreshed!');
+  }, [refetch]);
 
   // ⚡ Prefetch next page for instant navigation
   const prefetchNextPage = useCallback(() => {
@@ -155,13 +202,33 @@ export default function AdminUsers() {
       title="User Management"
       description="Manage users, subscriptions, and permissions"
     >
-      {/* Refresh Indicator */}
-      {isFetching && (
-        <div className="mb-4 flex items-center gap-2 text-sm text-gray-400">
-          <RefreshCw className="w-4 h-4 animate-spin" />
-          Loading users...
+      {/* 🔥 Realtime Status Bar */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          {isSubscribed ? (
+            <div className="flex items-center gap-2 text-green-500 text-sm">
+              <Wifi className="w-4 h-4" />
+              <span>Live updates enabled</span>
+              {isFetching && (
+                <RefreshCw className="w-3 h-3 animate-spin text-gray-400" />
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-yellow-500 text-sm">
+              <WifiOff className="w-4 h-4" />
+              <span>Connecting...</span>
+            </div>
+          )}
         </div>
-      )}
+        <button
+          onClick={handleManualRefresh}
+          disabled={isFetching}
+          className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
 
       {/* Search & Filters */}
       <div className="bg-[#111111] border border-gray-800 rounded-lg p-6 mb-6">
@@ -255,6 +322,7 @@ export default function AdminUsers() {
                     key={user.id}
                     user={user}
                     onActionComplete={handleUserActionComplete}
+                    isRecentlyChanged={recentlyChangedIds.has(user.id)}
                   />
                 ))
               )}
@@ -330,7 +398,8 @@ TableHeader.displayName = 'TableHeader';
 const UserRow = React.memo<{ 
   user: UserWithStats;
   onActionComplete: () => void;
-}>(({ user, onActionComplete }) => {
+  isRecentlyChanged?: boolean;
+}>(({ user, onActionComplete, isRecentlyChanged = false }) => {
   // ⚡ Memoize badge styles
   const accountTypeBadgeStyle = useMemo(() => {
     const styles: Record<string, string> = {
@@ -352,8 +421,17 @@ const UserRow = React.memo<{
 
   const isAdmin = user.role === 'admin' || user.role === 'super_admin';
 
+  // 🔥 Highlight row if recently changed
+  const rowClassName = useMemo(() => {
+    const base = 'transition-colors';
+    if (isRecentlyChanged) {
+      return `${base} bg-[#D4AF37]/10 animate-pulse`;
+    }
+    return `${base} hover:bg-[#0A0A0A]`;
+  }, [isRecentlyChanged]);
+
   return (
-    <tr className="hover:bg-[#0A0A0A] transition-colors">
+    <tr className={rowClassName}>
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center">
           <div className="flex-shrink-0 h-10 w-10">
@@ -364,8 +442,11 @@ const UserRow = React.memo<{
             </div>
           </div>
           <div className="ml-4">
-            <div className="text-sm font-medium text-white">
+            <div className="text-sm font-medium text-white flex items-center gap-2">
               {user.display_name || 'No name'}
+              {isRecentlyChanged && (
+                <span className="text-xs text-[#D4AF37] animate-pulse">● Updated</span>
+              )}
             </div>
             <div className="text-sm text-gray-400">{user.email}</div>
           </div>

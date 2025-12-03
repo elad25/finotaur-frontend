@@ -188,3 +188,88 @@ export interface StrategyFormData {
   default_take_profit?: number;
   status?: 'active' | 'archived';
 }
+// ============================================
+// Newsletter Types
+// ============================================
+
+export interface NewsletterSubscriber {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  status: 'active' | 'unsubscribed' | 'bounced' | 'pending';
+  tier: 'free' | 'basic' | 'premium';
+  source: string;
+  referral_code: string | null;
+  user_id: string | null;
+  preferences: NewsletterPreferences;
+  email_verified: boolean;
+  verification_token: string;
+  verified_at: string | null;
+  emails_sent: number;
+  emails_opened: number;
+  last_email_sent_at: string | null;
+  last_email_opened_at: string | null;
+  created_at: string;
+  updated_at: string;
+  unsubscribed_at: string | null;
+}
+
+export interface NewsletterPreferences {
+  daily_newsletter: boolean;
+  market_alerts: boolean;
+  weekly_digest: boolean;
+}
+
+export interface NewsletterStats {
+  total_subscribers: number;
+  active_subscribers: number;
+  unsubscribed: number;
+  verified: number;
+  free_tier: number;
+  basic_tier: number;
+  premium_tier: number;
+  subscribed_today: number;
+  subscribed_this_week: number;
+  subscribed_this_month: number;
+}
+// ============================================
+// Newsletter Content & Records
+// ============================================
+
+export interface NewsletterSection {
+  title: string;
+  content: string;
+  type?: 'market_summary' | 'top_movers' | 'macro' | 'ratings' | 'custom';
+}
+
+export interface Newsletter {
+  id: string;
+  subject: string;
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+  content: NewsletterSection[];
+  html_content: string | null;
+  scheduled_for: string | null;
+  sent_at: string | null;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  opened_count: number;
+  clicked_count: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TodayNewsletter {
+  id: string;
+  subject: string;
+  status: string;
+  content: NewsletterSection[];
+  html_content: string | null;
+  sent_at: string;
+  recipient_count: number;
+  sent_count: number;
+  opened_count: number;
+  open_rate: number;
+}

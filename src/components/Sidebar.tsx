@@ -34,7 +34,13 @@ import {
   DollarSign,
   Wallet,
   Link,
-  Award
+  Award,
+  // 🌐 All Markets Icons
+  Map,
+  Newspaper,
+  Swords,
+  // 🔒 Lock Icon
+  Lock
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -48,8 +54,8 @@ interface SidebarProps {
   isOpen: boolean;
 }
 
-// 🔥 הגדרת סוגי סביבות - הוספת affiliate!
-type EnvironmentType = 'journal' | 'backtest' | 'admin' | 'affiliate';
+// 🔥 הגדרת סוגי סביבות - הוספת all-markets!
+type EnvironmentType = 'journal' | 'backtest' | 'admin' | 'affiliate' | 'all-markets';
 
 // 🔥 הגדרת תפריטים שונים לכל סביבה
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
@@ -57,7 +63,20 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   path: string;
   icon: any;
   divider?: boolean;
+  locked?: boolean; // 🔒 הוספת מאפיין נעילה
 }>> = {
+  // 🌐 ALL MARKETS - הכל נעול חוץ מ-War Zone!
+  'all-markets': [
+    { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
+    { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
+    { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
+    { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
+    { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
+    { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
+    { label: 'divider', path: '', icon: null, divider: true },
+    // ⚔️ WAR ZONE - פתוח!
+    { label: 'War Zone', path: '/app/all-markets/warzone', icon: Swords, locked: false },
+  ],
   journal: [
     { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
     { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
@@ -97,7 +116,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'divider', path: '', icon: null, divider: true },
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ],
-  // 🤝 AFFILIATE CENTER - NEW!
+  // 🤝 AFFILIATE CENTER
   affiliate: [
     { label: 'Dashboard', path: '/app/journal/affiliate/overview', icon: LayoutDashboard },
     { label: 'My Referrals', path: '/app/journal/affiliate/referrals', icon: UserPlus },
@@ -118,25 +137,31 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const location = useLocation();
   const { isActive } = useDomain();
 
-  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL - הוספת affiliate!
+  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL
   const getCurrentEnvironment = (): EnvironmentType => {
+    if (location.pathname.startsWith('/app/all-markets')) return 'all-markets';
     if (location.pathname.startsWith('/app/journal/admin')) return 'admin';
-    if (location.pathname.startsWith('/app/journal/affiliate')) return 'affiliate'; // 🤝 NEW!
+    if (location.pathname.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (location.pathname.startsWith('/app/journal/backtest')) return 'backtest';
-    return 'journal';
+    if (location.pathname.startsWith('/app/journal')) return 'journal';
+    return 'journal'; // default
   };
 
   const currentEnvironment = getCurrentEnvironment();
   const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
 
-  // ✅ הצג את ה-Sidebar רק בסקשנים הרלוונטיים
-  const shouldShowSidebar = location.pathname.startsWith('/app/journal');
+  // ✅ הצג את ה-Sidebar ב-Journal וב-All Markets
+  const shouldShowSidebar = 
+    location.pathname.startsWith('/app/journal') || 
+    location.pathname.startsWith('/app/all-markets');
   
   if (!shouldShowSidebar) {
     return null;
   }
 
-  const handleNavigation = (path: string) => {
+  const handleNavigation = (path: string, isLocked?: boolean) => {
+    // 🔒 אם הפריט נעול - לא מאפשר ניווט
+    if (isLocked) return;
     navigate(path);
   };
 
@@ -168,15 +193,23 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
 
   // 🔐 בדיקה אם פריט אקטיבי
   const isItemActive = (itemPath: string): boolean => {
-    // בדיקה מדויקת לדפים ראשיים
     if (itemPath === '/app/journal/admin' && location.pathname === '/app/journal/admin') {
       return true;
     }
     if (itemPath === '/app/journal/affiliate/overview' && location.pathname === '/app/journal/affiliate/overview') {
       return true;
     }
-    // בדיקה לשאר הדפים
-    if (itemPath !== '/app/journal/admin' && itemPath !== '/app/journal/affiliate/overview' && location.pathname.startsWith(itemPath)) {
+    if (itemPath === '/app/all-markets/overview' && location.pathname === '/app/all-markets/overview') {
+      return true;
+    }
+    if (location.pathname === itemPath) {
+      return true;
+    }
+    if (itemPath !== '/app/journal/admin' && 
+        itemPath !== '/app/journal/affiliate/overview' && 
+        itemPath !== '/app/all-markets/overview' &&
+        location.pathname.startsWith(itemPath) && 
+        itemPath.length > 10) {
       return true;
     }
     return isActive(itemPath);
@@ -200,6 +233,15 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
         label: 'Affiliate Center',
         bgColor: 'bg-[#C9A646]/5',
         textColor: 'text-[#C9A646]'
+      };
+    }
+    if (currentEnvironment === 'all-markets') {
+      return {
+        show: true,
+        icon: LayoutDashboard,
+        label: 'All Markets',
+        bgColor: 'bg-blue-500/5',
+        textColor: 'text-blue-400'
       };
     }
     return { show: false };
@@ -239,24 +281,41 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           const Icon = item.icon;
           const active = isItemActive(item.path);
           const isBackButton = item.path === '/app/journal/overview' && (currentEnvironment === 'admin' || currentEnvironment === 'affiliate');
+          const isWarZone = item.path === '/app/all-markets/warzone';
+          const isLocked = item.locked === true;
           
           return (
             <button
               key={item.path}
-              onClick={() => handleNavigation(item.path)}
-              onMouseEnter={() => handlePrefetch(item.path)}
+              onClick={() => handleNavigation(item.path, isLocked)}
+              onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
+              disabled={isLocked}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-smooth relative',
-                // סגנון מיוחד לכפתור חזרה
-                isBackButton
-                  ? 'text-gray-400 hover:bg-base-700 hover:text-white'
-                  : active
-                    ? 'border-l-2 border-gold bg-gold/10 text-gold'
-                    : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
+                // 🔒 סגנון לפריט נעול
+                isLocked
+                  ? 'text-gray-500 cursor-not-allowed opacity-60'
+                  // סגנון מיוחד לכפתור חזרה
+                  : isBackButton
+                    ? 'text-gray-400 hover:bg-base-700 hover:text-white'
+                    // סגנון מיוחד ל-War Zone
+                    : isWarZone
+                      ? active
+                        ? 'border-l-2 border-red-500 bg-red-500/10 text-red-400'
+                        : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
+                      : active
+                        ? 'border-l-2 border-gold bg-gold/10 text-gold'
+                        : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
               )}
             >
               {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
-              {isOpen && <span>{item.label}</span>}
+              {isOpen && (
+                <>
+                  <span className="flex-1">{item.label}</span>
+                  {/* 🔒 אייקון מנעול לפריטים נעולים */}
+                  {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
+                </>
+              )}
             </button>
           );
         })}

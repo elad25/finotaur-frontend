@@ -1,12 +1,9 @@
 // =====================================================
-// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v1.0.0
+// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v1.0.1 FIXED
 // =====================================================
 // Edge Function for managing Whop subscriptions
 // 
-// Endpoints:
-// - POST /cancel - Cancel subscription (at_period_end or immediate)
-// - POST /downgrade - Schedule downgrade to lower plan
-// - GET /status - Get current subscription status
+// 🔧 FIXED: Removed .catch() on Supabase queries
 // =====================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -124,6 +121,35 @@ async function getWhopMembership(
 }
 
 // ============================================
+// 🔧 HELPER: Safe event logging (no .catch())
+// ============================================
+
+async function logSubscriptionEvent(
+  supabase: any,
+  eventData: {
+    user_id: string;
+    event_type: string;
+    old_plan: string;
+    new_plan: string;
+    reason?: string;
+    scheduled_at?: string;
+    metadata?: Record<string, any>;
+  }
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("subscription_events")
+      .insert(eventData);
+    
+    if (error) {
+      console.warn("Failed to log subscription event:", error.message);
+    }
+  } catch (err) {
+    console.warn("Failed to log subscription event:", err);
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -143,14 +169,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // Create Supabase client with user's token
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
+    // Create Supabase client with service role
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get current user
+    // Get current user from token
     const { data: { user }, error: userError } = await supabase.auth.getUser(
       authHeader.replace("Bearer ", "")
     );
@@ -255,8 +277,6 @@ async function handleStatus(
 // ============================================
 // CANCEL HANDLER
 // ============================================
-// 🔥 ביטול תמיד at_period_end - המשתמש ממשיך ליהנות עד סוף הסייקל
-// ============================================
 
 async function handleCancel(
   supabase: any,
@@ -321,22 +341,19 @@ async function handleCancel(
     // Don't fail - Whop cancellation succeeded
   }
 
-  // Log the action
-  await supabase
-    .from("subscription_events")
-    .insert({
-      user_id: profile.id,
-      event_type: "cancel_scheduled",
-      old_plan: profile.account_type,
-      new_plan: "free",
-      reason: request.reason,
-      scheduled_at: profile.subscription_expires_at,
-      metadata: {
-        whop_membership_id: profile.whop_membership_id,
-        cancelled_at: new Date().toISOString(),
-      },
-    })
-    .catch((err: any) => console.warn("Failed to log event:", err));
+  // Log the action (using safe helper)
+  await logSubscriptionEvent(supabase, {
+    user_id: profile.id,
+    event_type: "cancel_scheduled",
+    old_plan: profile.account_type,
+    new_plan: "free",
+    reason: request.reason,
+    scheduled_at: profile.subscription_expires_at,
+    metadata: {
+      whop_membership_id: profile.whop_membership_id,
+      cancelled_at: new Date().toISOString(),
+    },
+  });
 
   // Format expiration date
   const expiresDate = profile.subscription_expires_at 
@@ -352,8 +369,8 @@ async function handleCancel(
       success: true,
       message: `Your subscription has been cancelled. You'll continue to have ${profile.account_type} access until ${expiresDate}.`,
       subscription: {
-        plan: profile.account_type, // 🔥 Keep current plan
-        status: "active", // 🔥 Still active until period ends
+        plan: profile.account_type,
+        status: "active",
         cancelAtPeriodEnd: true,
         expiresAt: profile.subscription_expires_at,
         pendingDowngrade: "free",
@@ -365,8 +382,6 @@ async function handleCancel(
 
 // ============================================
 // DOWNGRADE HANDLER
-// ============================================
-// 🔥 Downgrade תמיד at_period_end - המשתמש ממשיך ליהנות עד סוף הסייקל
 // ============================================
 
 async function handleDowngrade(
@@ -454,7 +469,7 @@ async function handleDowngrade(
     }
 
     // Update profile - keep current plan, mark pending downgrade
-    await supabase
+    const { error: updateError } = await supabase
       .from("profiles")
       .update({
         subscription_cancel_at_period_end: true,
@@ -463,18 +478,19 @@ async function handleDowngrade(
       })
       .eq("id", profile.id);
 
-    // Log event
-    await supabase
-      .from("subscription_events")
-      .insert({
-        user_id: profile.id,
-        event_type: "downgrade_scheduled",
-        old_plan: profile.account_type,
-        new_plan: "free",
-        scheduled_at: profile.subscription_expires_at,
-        metadata: { whop_membership_id: profile.whop_membership_id },
-      })
-      .catch((err: any) => console.warn("Failed to log event:", err));
+    if (updateError) {
+      console.error("❌ Profile update error:", updateError);
+    }
+
+    // Log event (using safe helper)
+    await logSubscriptionEvent(supabase, {
+      user_id: profile.id,
+      event_type: "downgrade_scheduled",
+      old_plan: profile.account_type,
+      new_plan: "free",
+      scheduled_at: profile.subscription_expires_at,
+      metadata: { whop_membership_id: profile.whop_membership_id },
+    });
 
     const expiresDate = profile.subscription_expires_at 
       ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
@@ -489,7 +505,7 @@ async function handleDowngrade(
         success: true,
         message: `Your subscription will downgrade to Free on ${expiresDate}. You'll continue to have ${profile.account_type} access until then.`,
         subscription: {
-          plan: profile.account_type, // 🔥 Keep current plan
+          plan: profile.account_type,
           status: "active",
           cancelAtPeriodEnd: true,
           pendingDowngrade: "free",
@@ -518,7 +534,7 @@ async function handleDowngrade(
     }
 
     // Update profile - keep Premium, mark pending downgrade to Basic
-    await supabase
+    const { error: updateError } = await supabase
       .from("profiles")
       .update({
         subscription_cancel_at_period_end: true,
@@ -527,18 +543,19 @@ async function handleDowngrade(
       })
       .eq("id", profile.id);
 
-    // Log event
-    await supabase
-      .from("subscription_events")
-      .insert({
-        user_id: profile.id,
-        event_type: "downgrade_scheduled",
-        old_plan: "premium",
-        new_plan: "basic",
-        scheduled_at: profile.subscription_expires_at,
-        metadata: { whop_membership_id: profile.whop_membership_id },
-      })
-      .catch((err: any) => console.warn("Failed to log event:", err));
+    if (updateError) {
+      console.error("❌ Profile update error:", updateError);
+    }
+
+    // Log event (using safe helper)
+    await logSubscriptionEvent(supabase, {
+      user_id: profile.id,
+      event_type: "downgrade_scheduled",
+      old_plan: "premium",
+      new_plan: "basic",
+      scheduled_at: profile.subscription_expires_at,
+      metadata: { whop_membership_id: profile.whop_membership_id },
+    });
 
     const expiresDate = profile.subscription_expires_at 
       ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
@@ -553,7 +570,7 @@ async function handleDowngrade(
         success: true,
         message: `Your Premium subscription will end on ${expiresDate}. You'll need to subscribe to Basic after that date to continue with that plan.`,
         subscription: {
-          plan: profile.account_type, // 🔥 Keep Premium
+          plan: profile.account_type,
           status: "active",
           cancelAtPeriodEnd: true,
           pendingDowngrade: "basic",

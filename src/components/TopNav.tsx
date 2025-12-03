@@ -36,7 +36,13 @@ export const TopNav = () => {
       return;
     }
     
-    // Navigate to the first subnav item of the domain
+    // 🔥 NEW: Use defaultPath if exists, otherwise use first subNav item
+    if (domain?.defaultPath) {
+      navigate(domain.defaultPath);
+      return;
+    }
+    
+    // Fallback: Navigate to the first subnav item of the domain
     if (domain?.subNav[0]) {
       navigate(domain.subNav[0].path);
     }
