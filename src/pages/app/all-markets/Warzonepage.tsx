@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
-import WarZoneLanding from './WarZoneLanding';
+import Warzonelanding from './Warzonelanding';
 
 // Lazy import for admin component - CORRECT PATH based on App.tsx
 const NewsletterSub = lazy(() => import('@/pages/app/journal/admin/NewsletterSub'));
@@ -81,5 +81,5 @@ export default function WarZonePage() {
   }
 
   // 👤 Regular users see the landing page
-  return <WarZoneLanding />;
+  return <Warzonelanding />;
 }
