@@ -1,14 +1,22 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v3.2.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v3.4.0
 // =====================================================
 // 
-// 🔥 v3.2.0 - ADDED FINOTAUR_USER_ID METADATA SUPPORT
+// 🔥 v3.4.0 - NEWSLETTER (WAR ZONE) SUPPORT
 // 
-// Changes:
-// - Extracts finotaur_user_id from checkout metadata
-// - Primary user lookup by ID, fallback to email
-// - Handles email mismatch between Finotaur and Whop
-// - Logs email mismatch for debugging
+// Changes from v3.2.0:
+// - Added NEWSLETTER_PRODUCT_IDS for War Zone product
+// - Added isNewsletter() helper to detect newsletter products
+// - Newsletter events routed to separate RPC functions
+// - Newsletter doesn't affect journal subscription (account_type, max_trades)
+// - Users can have both newsletter + journal subscriptions
+// - Added pending_downgrade_plan support for plan changes
+// 
+// Newsletter Configuration:
+// - Product ID: prod_qlaV5Uu6LZlYn
+// - Plan ID: plan_LCBG5yJpoNtW3
+// - Price: $20/month
+// - Trial: 7 days free
 // 
 // Commission Structure (from affiliate_config):
 // - tier_1: 10% (monthly)
@@ -28,6 +36,11 @@ import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 const WHOP_WEBHOOK_SECRET = Deno.env.get("WHOP_WEBHOOK_SECRET") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+// 🔥 NEW: Newsletter Product IDs
+const NEWSLETTER_PRODUCT_IDS = new Set([
+  'prod_qlaV5Uu6LZlYn',  // War Zone Intelligence Newsletter
+]);
 
 // Default commission rates (fallback if DB config not found)
 const DEFAULT_COMMISSION_RATES = {
@@ -76,7 +89,6 @@ interface WhopPromoCode {
   promo_type?: string;
 }
 
-// 🔥 NEW: Metadata interface for checkout data
 interface WhopMetadata {
   finotaur_user_id?: string;
   [key: string]: string | undefined;
@@ -97,7 +109,6 @@ interface WhopPaymentData {
   paid_at?: string;
   created_at?: string;
   billing_reason?: string;
-  // 🔥 NEW: Metadata fields
   metadata?: WhopMetadata;
   checkout_session?: {
     metadata?: WhopMetadata;
@@ -116,7 +127,6 @@ interface WhopMembershipData {
   canceled_at?: string | null;
   renewal_period_start?: string;
   renewal_period_end?: string;
-  // 🔥 NEW: Metadata fields
   metadata?: WhopMetadata;
   checkout_session?: {
     metadata?: WhopMetadata;
@@ -137,6 +147,7 @@ interface PlanInfo {
   interval: string;
   price: number;
   maxTrades: number;
+  isNewsletter: boolean;  // 🔥 NEW
 }
 
 interface CommissionConfig {
@@ -146,12 +157,20 @@ interface CommissionConfig {
   annual: number;
 }
 
-// 🔥 NEW: User lookup result
 interface UserLookupResult {
   id: string;
   email: string;
   emailMismatch: boolean;
   lookupMethod: 'finotaur_user_id' | 'email';
+}
+
+// ============================================
+// 🔥 NEW: Check if product is Newsletter
+// ============================================
+
+function isNewsletter(productId: string | undefined): boolean {
+  if (!productId) return false;
+  return NEWSLETTER_PRODUCT_IDS.has(productId);
 }
 
 // ============================================
@@ -189,14 +208,12 @@ function verifyWebhookSignature(payload: string, signature: string | null): bool
 
 async function getCommissionConfig(supabase: SupabaseClient): Promise<CommissionConfig> {
   try {
-    // Get monthly rates
     const { data: monthlyConfig } = await supabase
       .from("affiliate_config")
       .select("config_value")
       .eq("config_key", "commission_rates")
       .single();
 
-    // Get annual rate
     const { data: annualConfig } = await supabase
       .from("affiliate_config")
       .select("config_value")
@@ -227,12 +244,10 @@ function getCommissionRate(
   tier: string,
   subscriptionType: string
 ): number {
-  // Annual subscriptions get fixed rate
   if (subscriptionType === "yearly") {
     return config.annual;
   }
 
-  // Monthly subscriptions based on tier
   switch (tier) {
     case "tier_3":
       return config.tier_3;
@@ -264,26 +279,28 @@ async function getPlanInfo(
       interval: dbPlan.billing_interval,
       price: parseFloat(dbPlan.price_usd),
       maxTrades: dbPlan.max_trades === -1 ? 999999 : dbPlan.max_trades,
+      isNewsletter: dbPlan.finotaur_plan === 'newsletter',  // 🔥 NEW
     };
   }
 
-  // Fallback
+  // Fallback for journal subscriptions
   const fallbackMapping: Record<string, PlanInfo> = {
-    "prod_ZaDN418HLst3r": { plan: "basic", interval: "monthly", price: 19.99, maxTrades: 25 },
-    "prod_bPwSoYGedsbyh": { plan: "basic", interval: "yearly", price: 149.00, maxTrades: 25 },
-    "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999 },
-    "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999 },
+    "prod_ZaDN418HLst3r": { plan: "basic", interval: "monthly", price: 19.99, maxTrades: 25, isNewsletter: false },
+    "prod_bPwSoYGedsbyh": { plan: "basic", interval: "yearly", price: 149.00, maxTrades: 25, isNewsletter: false },
+    "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false },
+    "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false },
+    // Newsletter fallback
+    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 20.00, maxTrades: 0, isNewsletter: true },
   };
 
   return fallbackMapping[productId] || null;
 }
 
 // ============================================
-// 🔥 NEW: Extract finotaur_user_id from metadata
+// Extract finotaur_user_id from metadata
 // ============================================
 
 function extractFinotaurUserId(data: WhopPaymentData | WhopMembershipData): string | null {
-  // Check all possible metadata locations
   const possibleLocations = [
     data.metadata?.finotaur_user_id,
     data.checkout_session?.metadata?.finotaur_user_id,
@@ -301,7 +318,7 @@ function extractFinotaurUserId(data: WhopPaymentData | WhopMembershipData): stri
 }
 
 // ============================================
-// 🔥 NEW: Find user by ID or email with fallback
+// Find user by ID or email with fallback
 // ============================================
 
 async function findUser(
@@ -310,7 +327,7 @@ async function findUser(
   whopEmail: string | undefined
 ): Promise<UserLookupResult | null> {
   
-  // 🔥 OPTION 1: Try finotaur_user_id first (PREFERRED)
+  // OPTION 1: Try finotaur_user_id first (PREFERRED)
   if (finotaurUserId) {
     console.log("🔍 Looking up user by finotaur_user_id:", finotaurUserId);
     
@@ -344,7 +361,7 @@ async function findUser(
     console.warn("⚠️ User not found by finotaur_user_id, trying email fallback");
   }
 
-  // 🔥 OPTION 2: Fallback to email lookup
+  // OPTION 2: Fallback to email lookup
   if (whopEmail) {
     console.log("📧 Looking up user by email:", whopEmail);
     
@@ -364,7 +381,6 @@ async function findUser(
     }
   }
 
-  // No user found
   console.warn(`⚠️ User not found: finotaur_user_id=${finotaurUserId}, email=${whopEmail}`);
   return null;
 }
@@ -421,16 +437,22 @@ serve(async (req: Request) => {
     const payload: WhopWebhookPayload = JSON.parse(rawBody);
     const eventType = payload.type || "unknown";
     const eventId = payload.id || `evt_${Date.now()}`;
+    const productId = payload.data.product?.id;
 
-    // 🔥 NEW: Extract finotaur_user_id early for logging
+    // Extract finotaur_user_id early for logging
     const finotaurUserId = extractFinotaurUserId(payload.data);
+
+    // 🔥 NEW: Detect if this is a newsletter event
+    const isNewsletterEvent = isNewsletter(productId);
 
     console.log("📨 Webhook received:", {
       eventType,
       eventId,
       timestamp: payload.timestamp,
-      finotaurUserId,  // 🔥 Log the extracted user ID
+      finotaurUserId,
       whopEmail: payload.data.user?.email,
+      productId,
+      isNewsletter: isNewsletterEvent,  // 🔥 Log newsletter detection
     });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -471,8 +493,7 @@ serve(async (req: Request) => {
         whop_product_id: whopProductId,
         payload: payload,
         processed: false,
-        // 🔥 NEW: Store finotaur_user_id in log
-        metadata: finotaurUserId ? { finotaur_user_id: finotaurUserId } : null,
+        metadata: finotaurUserId ? { finotaur_user_id: finotaurUserId, is_newsletter: isNewsletterEvent } : { is_newsletter: isNewsletterEvent },
       })
       .select()
       .single();
@@ -544,7 +565,7 @@ async function handlePaymentSucceeded(
   supabase: SupabaseClient,
   payload: WhopWebhookPayload,
   commissionConfig: CommissionConfig,
-  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
+  finotaurUserId: string | null
 ): Promise<{ success: boolean; message: string }> {
   try {
     const data = payload.data as WhopPaymentData;
@@ -560,21 +581,38 @@ async function handlePaymentSucceeded(
       paymentAmount = paymentAmount / 100;
     }
 
+    // 🔥 NEW: Check if this is a newsletter payment
+    const isNewsletterPayment = isNewsletter(productId);
+
     console.log("💰 Processing payment.succeeded:", {
-      finotaurUserId,  // 🔥 Log finotaur_user_id
+      finotaurUserId,
       email: userEmail,
       productId,
       membershipId,
       amount: paymentAmount,
       promoCode,
       billingReason: data.billing_reason,
+      isNewsletter: isNewsletterPayment,  // 🔥 Log
     });
 
     if (!productId) {
       return { success: false, message: "No product ID in payment data" };
     }
 
-    // 🔥 NEW: Use combined user lookup
+    // 🔥 NEW: Handle newsletter payment separately
+    if (isNewsletterPayment) {
+      return await handleNewsletterPayment(supabase, {
+        userEmail,
+        whopUserId,
+        membershipId,
+        productId,
+        paymentAmount,
+        finotaurUserId,
+      });
+    }
+
+    // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
+
     const user = await findUser(supabase, finotaurUserId, userEmail);
     if (!user) {
       return { 
@@ -604,7 +642,7 @@ async function handlePaymentSucceeded(
       subscriptionEndsAt.setFullYear(subscriptionEndsAt.getFullYear() + 1);
     }
 
-    // 🔥 Update profile - now includes whop_email to track email used at checkout
+    // Update profile for journal subscription
     const { error: updateError } = await supabase
       .from("profiles")
       .update({
@@ -614,15 +652,16 @@ async function handlePaymentSucceeded(
         subscription_started_at: now.toISOString(),
         subscription_expires_at: subscriptionEndsAt.toISOString(),
         subscription_cancel_at_period_end: false,
+        pending_downgrade_plan: null,
+        cancellation_reason: null,
         whop_user_id: whopUserId,
         whop_membership_id: membershipId,
         whop_product_id: productId,
-        whop_customer_email: userEmail,  // 🔥 Store Whop email (might differ from Finotaur email)
+        whop_customer_email: userEmail,
         payment_provider: "whop",
         max_trades: planInfo.maxTrades,
         current_month_trades_count: 0,
         billing_cycle_start: now.toISOString().split('T')[0],
-        // 🔥 NEW: Log email mismatch if detected
         ...(user.emailMismatch && {
           subscription_notes: `Email mismatch: Finotaur=${user.email}, Whop=${userEmail}`,
         }),
@@ -642,7 +681,7 @@ async function handlePaymentSucceeded(
       await processAffiliateFromPayment(supabase, commissionConfig, {
         promoCode,
         userId: user.id,
-        userEmail: user.email,  // Use Finotaur email for affiliate tracking
+        userEmail: user.email,
         whopUserId,
         membershipId,
         productId,
@@ -664,17 +703,101 @@ async function handlePaymentSucceeded(
 }
 
 // ============================================
+// 🔥 NEW: NEWSLETTER PAYMENT HANDLER
+// ============================================
+
+interface NewsletterPaymentParams {
+  userEmail: string | undefined;
+  whopUserId: string;
+  membershipId: string;
+  productId: string;
+  paymentAmount: number;
+  finotaurUserId: string | null;
+}
+
+async function handleNewsletterPayment(
+  supabase: SupabaseClient,
+  params: NewsletterPaymentParams
+): Promise<{ success: boolean; message: string }> {
+  const { userEmail, whopUserId, membershipId, productId, paymentAmount, finotaurUserId } = params;
+
+  console.log("📰 Processing NEWSLETTER payment:", {
+    userEmail,
+    finotaurUserId,
+    membershipId,
+    amount: paymentAmount,
+  });
+
+  try {
+    // Call the newsletter-specific RPC function
+    const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
+      p_user_email: userEmail || '',
+      p_whop_user_id: whopUserId,
+      p_whop_membership_id: membershipId,
+      p_whop_product_id: productId,
+      p_payment_amount: paymentAmount,
+      p_finotaur_user_id: finotaurUserId,
+    });
+
+    if (error) {
+      console.error("❌ handle_newsletter_payment RPC error:", error);
+      return { success: false, message: `Newsletter payment failed: ${error.message}` };
+    }
+
+    console.log("✅ Newsletter payment processed:", result);
+
+    const wasInTrial = result?.was_in_trial || false;
+    const status = result?.newsletter_status || 'active';
+
+    return { 
+      success: true, 
+      message: `Newsletter payment: ${userEmail} → ${status}${wasInTrial ? ' (trial ended)' : ''}` 
+    };
+
+  } catch (error) {
+    console.error("❌ handleNewsletterPayment error:", error);
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
 // MEMBERSHIP ACTIVATED
 // ============================================
 
 async function handleMembershipActivated(
   supabase: SupabaseClient,
   payload: WhopWebhookPayload,
-  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
+  finotaurUserId: string | null
 ): Promise<{ success: boolean; message: string }> {
   const data = payload.data as WhopMembershipData;
   const membershipId = data.id;
   const userEmail = data.user?.email;
+  const whopUserId = data.user?.id;
+  const productId = data.product?.id;
+
+  // 🔥 NEW: Check if this is a newsletter activation
+  const isNewsletterActivation = isNewsletter(productId);
+
+  console.log("🎫 Processing membership.activated:", {
+    membershipId,
+    userEmail,
+    productId,
+    isNewsletter: isNewsletterActivation,
+    finotaurUserId,
+  });
+
+  // 🔥 NEW: Handle newsletter activation (trial start)
+  if (isNewsletterActivation) {
+    return await handleNewsletterActivation(supabase, {
+      userEmail,
+      whopUserId,
+      membershipId,
+      productId,
+      finotaurUserId,
+    });
+  }
+
+  // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
 
   // Check if already processed by payment.succeeded
   const { data: existingProfile } = await supabase
@@ -687,7 +810,7 @@ async function handleMembershipActivated(
     return { success: true, message: `Membership already active for ${existingProfile.email}` };
   }
 
-  // 🔥 NEW: Try to find user by finotaur_user_id if not found by membership
+  // Try to find user by finotaur_user_id if not found by membership
   if (!existingProfile && finotaurUserId) {
     const user = await findUser(supabase, finotaurUserId, userEmail);
     if (user) {
@@ -699,31 +822,105 @@ async function handleMembershipActivated(
 }
 
 // ============================================
+// 🔥 NEW: NEWSLETTER ACTIVATION HANDLER
+// ============================================
+
+interface NewsletterActivationParams {
+  userEmail: string | undefined;
+  whopUserId: string;
+  membershipId: string;
+  productId: string;
+  finotaurUserId: string | null;
+}
+
+async function handleNewsletterActivation(
+  supabase: SupabaseClient,
+  params: NewsletterActivationParams
+): Promise<{ success: boolean; message: string }> {
+  const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
+
+  console.log("📰 Processing NEWSLETTER activation (trial start):", {
+    userEmail,
+    finotaurUserId,
+    membershipId,
+  });
+
+  try {
+    // Call the newsletter-specific RPC function
+    const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
+      p_user_email: userEmail || '',
+      p_whop_user_id: whopUserId,
+      p_whop_membership_id: membershipId,
+      p_whop_product_id: productId,
+      p_finotaur_user_id: finotaurUserId,
+    });
+
+    if (error) {
+      console.error("❌ activate_newsletter_subscription RPC error:", error);
+      return { success: false, message: `Newsletter activation failed: ${error.message}` };
+    }
+
+    console.log("✅ Newsletter activated:", result);
+
+    const isNewTrial = result?.is_new_trial || false;
+    const status = result?.newsletter_status || 'trial';
+    const trialEndsAt = result?.trial_ends_at;
+
+    return { 
+      success: true, 
+      message: `Newsletter activated: ${userEmail} → ${status}${isNewTrial ? ` (trial ends: ${trialEndsAt})` : ''}` 
+    };
+
+  } catch (error) {
+    console.error("❌ handleNewsletterActivation error:", error);
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
 // MEMBERSHIP DEACTIVATED
 // ============================================
 
 async function handleMembershipDeactivated(
   supabase: SupabaseClient,
   payload: WhopWebhookPayload,
-  finotaurUserId: string | null  // 🔥 NEW: Accept finotaur_user_id
+  finotaurUserId: string | null
 ): Promise<{ success: boolean; message: string }> {
   const data = payload.data as WhopMembershipData;
   const membershipId = data.id;
   const userEmail = data.user?.email;
+  const productId = data.product?.id;
+
+  // 🔥 NEW: Check if this is a newsletter deactivation
+  const isNewsletterDeactivation = isNewsletter(productId);
+
+  console.log("❌ Processing membership.deactivated:", {
+    membershipId,
+    userEmail,
+    productId,
+    isNewsletter: isNewsletterDeactivation,
+    finotaurUserId,
+  });
+
+  // 🔥 NEW: Handle newsletter deactivation
+  if (isNewsletterDeactivation) {
+    return await handleNewsletterDeactivation(supabase, membershipId);
+  }
+
+  // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
 
   // Try to find user by membership ID first
-  let user: { id: string; email: string } | null = null;
+  let user: { id: string; email: string; pending_downgrade_plan?: string } | null = null;
 
   const { data: userByMembership } = await supabase
     .from("profiles")
-    .select("id, email")
+    .select("id, email, pending_downgrade_plan")
     .eq("whop_membership_id", membershipId)
     .maybeSingle();
 
   if (userByMembership) {
     user = userByMembership;
   } else if (finotaurUserId || userEmail) {
-    // 🔥 NEW: Fallback to finotaur_user_id or email
     const foundUser = await findUser(supabase, finotaurUserId, userEmail);
     if (foundUser) {
       user = { id: foundUser.id, email: foundUser.email };
@@ -737,29 +934,79 @@ async function handleMembershipDeactivated(
     };
   }
 
-  // Downgrade to free
+  // Determine target plan (use pending_downgrade_plan if set, otherwise free)
+  const targetPlan = user.pending_downgrade_plan || 'free';
+  const newMaxTrades = targetPlan === 'basic' ? 25 : targetPlan === 'premium' ? 999999 : 10;
+
+  // Downgrade user
   await supabase
     .from("profiles")
     .update({
-      account_type: "free",
-      subscription_status: "cancelled",
+      account_type: targetPlan,
+      subscription_status: targetPlan === 'free' ? "cancelled" : "pending_resubscribe",
       subscription_cancel_at_period_end: false,
-      max_trades: 10,
+      pending_downgrade_plan: null,
+      cancellation_reason: null,
+      max_trades: newMaxTrades,
+      // Clear Whop IDs only if going to free
+      ...(targetPlan === 'free' && {
+        whop_membership_id: null,
+        whop_product_id: null,
+      }),
     })
     .eq("id", user.id);
 
-  // Update affiliate referral
-  await supabase
-    .from("affiliate_referrals")
-    .update({
-      status: "churned",
-      churned_at: new Date().toISOString(),
-      subscription_cancelled_at: new Date().toISOString(),
-    })
-    .eq("referred_user_id", user.id);
+  // Update affiliate referral (only if going to free = churn)
+  if (targetPlan === 'free') {
+    await supabase
+      .from("affiliate_referrals")
+      .update({
+        status: "churned",
+        churned_at: new Date().toISOString(),
+        subscription_cancelled_at: new Date().toISOString(),
+      })
+      .eq("referred_user_id", user.id);
+  }
 
-  console.log(`✅ Subscription deactivated: ${user.email}`);
-  return { success: true, message: `Subscription deactivated for ${user.email}` };
+  console.log(`✅ Subscription deactivated: ${user.email} → ${targetPlan}`);
+  return { success: true, message: `Subscription deactivated for ${user.email} → ${targetPlan}` };
+}
+
+// ============================================
+// 🔥 NEW: NEWSLETTER DEACTIVATION HANDLER
+// ============================================
+
+async function handleNewsletterDeactivation(
+  supabase: SupabaseClient,
+  membershipId: string
+): Promise<{ success: boolean; message: string }> {
+  console.log("📰 Processing NEWSLETTER deactivation:", { membershipId });
+
+  try {
+    // Call the newsletter-specific RPC function
+    const { data: result, error } = await supabase.rpc('deactivate_newsletter_subscription', {
+      p_whop_membership_id: membershipId,
+    });
+
+    if (error) {
+      console.error("❌ deactivate_newsletter_subscription RPC error:", error);
+      return { success: false, message: `Newsletter deactivation failed: ${error.message}` };
+    }
+
+    console.log("✅ Newsletter deactivated:", result);
+
+    const userEmail = result?.email || 'unknown';
+    const previousStatus = result?.previous_status || 'unknown';
+
+    return { 
+      success: true, 
+      message: `Newsletter deactivated: ${userEmail} (was: ${previousStatus})` 
+    };
+
+  } catch (error) {
+    console.error("❌ handleNewsletterDeactivation error:", error);
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
 }
 
 // ============================================
@@ -795,6 +1042,12 @@ async function processAffiliateFromPayment(
     isFirstPayment,
   } = params;
 
+  // 🔥 Skip affiliate processing for newsletter (no commissions for newsletter yet)
+  if (planInfo.isNewsletter) {
+    console.log("⚠️ Skipping affiliate processing for newsletter subscription");
+    return;
+  }
+
   try {
     console.log("📊 Processing affiliate:", { promoCode, isFirstPayment, amount: paymentAmount });
 
@@ -823,7 +1076,7 @@ async function processAffiliateFromPayment(
       return;
     }
 
-    // 🎯 GET COMMISSION RATE FROM CONFIG
+    // GET COMMISSION RATE FROM CONFIG
     const commissionRate = getCommissionRate(
       commissionConfig,
       affiliate.current_tier || "tier_1",
