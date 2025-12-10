@@ -2028,7 +2028,7 @@ COMMENT ON FUNCTION public.admin_get_broker_stats IS
 'v8.5.10: Platform-wide broker connection statistics. Admin only.';
 
 -- ===============================================
--- SECTION 13: ALL TRIGGERS + RLS
+-- SECTION 13: ALL TRIGGERS + RLS (FIXED)
 -- ===============================================
 
 DO $$
@@ -2072,8 +2072,45 @@ CREATE TRIGGER set_updated_at
   FOR EACH ROW 
   EXECUTE FUNCTION public.handle_updated_at();
 
--- Payment trigger
+-- ═══════════════════════════════════════════════════════════════
+-- 🔧 FIXED: Payment trigger - Whop handles payments via webhooks
+-- Option 1: Remove the trigger entirely (RECOMMENDED for Whop users)
+-- ═══════════════════════════════════════════════════════════════
 DROP TRIGGER IF EXISTS on_payment_completed ON public.payment_history;
+
+-- 🔧 Create placeholder function for backward compatibility
+-- (Does nothing - Whop webhooks handle subscription updates)
+CREATE OR REPLACE FUNCTION public.update_account_type_on_payment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- ═══════════════════════════════════════════════════════════
+  -- NOTE: This is a placeholder function.
+  -- 
+  -- Subscription updates are handled by Whop webhooks:
+  --   • activate_whop_subscription() - on payment.succeeded
+  --   • handle_whop_payment() - on recurring payments
+  --   • deactivate_whop_subscription() - on membership.went_invalid
+  -- 
+  -- This function exists only for backward compatibility with
+  -- any legacy payment_history inserts.
+  -- ═══════════════════════════════════════════════════════════
+  
+  -- Log for debugging (optional - can be removed in production)
+  RAISE NOTICE 'update_account_type_on_payment triggered for user: %, status: %', 
+    NEW.user_id, NEW.status;
+  
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.update_account_type_on_payment IS 
+'v8.5.10: Placeholder function - Whop webhooks handle subscription updates. Kept for backward compatibility.';
+
+-- Recreate trigger with the now-existing function
 CREATE TRIGGER on_payment_completed
   AFTER INSERT OR UPDATE ON public.payment_history
   FOR EACH ROW
@@ -2111,8 +2148,8 @@ CREATE TRIGGER update_snaptrade_activity_updated_at_trigger
 DO $$
 BEGIN
   RAISE NOTICE '   ✅ All 10 triggers created';
+  RAISE NOTICE '   ✅ update_account_type_on_payment() function created (Whop placeholder)';
 END $$;
-
 -- ===============================================
 -- SECTION 14: HELPER FUNCTIONS FOR ADMIN MAINTENANCE
 -- ===============================================

@@ -2,7 +2,7 @@
 -- FINOTAUR SUPPORT EMAIL SYSTEM - COMPLETE FIX
 -- Using pg_net triggers instead of unreliable webhooks
 -- ============================================
-
+--צ'אט ללקוחות 
 -- ============================================
 -- PART 1: CLEANUP - Remove old broken triggers
 -- ============================================

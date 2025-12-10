@@ -1200,28 +1200,717 @@ FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset.';
 GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
 
 -- ===============================================
--- SECTION 3: GRANT VIEW PERMISSIONS
+-- SECTION 3: VIEW PERMISSIONS - FIXED VERSION
+-- ===============================================
+-- 🔒 FIX: Admin views accessible to authenticated users
+-- 🔒 Security enforced via admin_get_* RPC functions
+-- 🔒 OR direct view access for admins only
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[3/10] 🔐 Granting view permissions...';
+  RAISE NOTICE '[3/10] 🔐 Setting up view permissions...';
 END $$;
 
-GRANT SELECT ON public.admin_stats_view TO authenticated;
-GRANT SELECT ON public.admin_users_list_view TO authenticated;
-GRANT SELECT ON public.payment_analytics TO authenticated, service_role;
-GRANT SELECT ON public.active_subscriptions TO authenticated, service_role;
-GRANT SELECT ON public.pricing_info TO authenticated;
-GRANT SELECT ON public.webhook_stats TO authenticated;
-GRANT SELECT ON public.strategy_stats_view TO authenticated;
-GRANT SELECT ON public.archived_users_view TO authenticated;
-GRANT SELECT ON public.subscription_health_view TO authenticated;
-GRANT SELECT ON public.revenue_analytics_view TO authenticated;
-GRANT SELECT ON public.proration_impact_view TO authenticated;
-GRANT SELECT ON public.cancellation_analytics_view TO authenticated;
-GRANT SELECT ON public.subscription_flow_view TO authenticated;
+-- ═══════════════════════════════════════════════════════════════
+-- 3.1: DROP EXISTING ADMIN VIEWS TO RECREATE WITH SECURITY
+-- ═══════════════════════════════════════════════════════════════
 
+DROP VIEW IF EXISTS public.admin_stats_view CASCADE;
+DROP VIEW IF EXISTS public.admin_users_list_view CASCADE;
+DROP VIEW IF EXISTS public.subscription_health_view CASCADE;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.2: RECREATE ADMIN STATS VIEW WITH BUILT-IN SECURITY
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW public.admin_stats_view 
+WITH (security_invoker = false)
+AS
+WITH 
+  admin_check AS (
+    SELECT EXISTS (
+      SELECT 1 FROM public.profiles 
+      WHERE id = auth.uid() 
+      AND role IN ('admin', 'super_admin')
+    ) as is_admin
+  ),
+  time_periods AS (
+    SELECT 
+      CURRENT_TIMESTAMP as now,
+      CURRENT_DATE as today,
+      (CURRENT_TIMESTAMP - INTERVAL '1 day') as one_day_ago,
+      (CURRENT_TIMESTAMP - INTERVAL '7 days') as seven_days_ago,
+      (CURRENT_TIMESTAMP - INTERVAL '30 days') as thirty_days_ago,
+      DATE_TRUNC('week', CURRENT_DATE) as start_of_week,
+      DATE_TRUNC('month', CURRENT_DATE) as start_of_month
+  ),
+  user_counts AS (
+    SELECT
+      COUNT(*) as total_users,
+      COUNT(*) FILTER (WHERE last_login_at > (SELECT thirty_days_ago FROM time_periods)) as active_users,
+      COUNT(*) FILTER (WHERE created_at::date = (SELECT today FROM time_periods)) as new_users_today,
+      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_week FROM time_periods)) as new_users_this_week,
+      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_month FROM time_periods)) as new_users_this_month,
+      COUNT(*) FILTER (WHERE account_type = 'free') as free_users,
+      COUNT(*) FILTER (WHERE account_type = 'basic') as basic_users,
+      COUNT(*) FILTER (WHERE account_type = 'premium') as premium_users,
+      COUNT(*) FILTER (WHERE subscription_status = 'trial') as trial_users,
+      COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_interval = 'monthly') as basic_monthly_users,
+      COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_interval = 'yearly') as basic_yearly_users,
+      COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_interval = 'monthly') as premium_monthly_users,
+      COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_interval = 'yearly') as premium_yearly_users,
+      COUNT(*) FILTER (WHERE last_login_at > (SELECT one_day_ago FROM time_periods)) as daily_active_users,
+      COUNT(*) FILTER (WHERE last_login_at > (SELECT seven_days_ago FROM time_periods)) as weekly_active_users,
+      COUNT(*) FILTER (WHERE last_login_at > (SELECT thirty_days_ago FROM time_periods)) as monthly_active_users
+    FROM public.profiles
+    WHERE deleted_at IS NULL
+  ),
+  trade_counts AS (
+    SELECT
+      COUNT(*) as total_trades,
+      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_week FROM time_periods)) as trades_this_week,
+      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_month FROM time_periods)) as trades_this_month
+    FROM public.trades
+  ),
+  revenue AS (
+    SELECT
+      (uc.basic_monthly_users * 15.99 +
+       uc.basic_yearly_users * 12.99 +
+       uc.premium_monthly_users * 24.99 +
+       uc.premium_yearly_users * 19.99) as estimated_monthly_revenue
+    FROM user_counts uc
+  )
+SELECT
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.total_users ELSE NULL END as total_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.active_users ELSE NULL END as active_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.new_users_today ELSE NULL END as new_users_today,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.new_users_this_week ELSE NULL END as new_users_this_week,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.new_users_this_month ELSE NULL END as new_users_this_month,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.free_users ELSE NULL END as free_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.basic_users ELSE NULL END as basic_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.premium_users ELSE NULL END as premium_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.trial_users ELSE NULL END as trial_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.basic_monthly_users ELSE NULL END as basic_monthly_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.basic_yearly_users ELSE NULL END as basic_yearly_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.premium_monthly_users ELSE NULL END as premium_monthly_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.premium_yearly_users ELSE NULL END as premium_yearly_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN r.estimated_monthly_revenue ELSE NULL END as estimated_monthly_revenue,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN (r.estimated_monthly_revenue * 12) ELSE NULL END as estimated_yearly_revenue,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN tc.total_trades ELSE NULL END as total_trades,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN tc.trades_this_week ELSE NULL END as trades_this_week,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN tc.trades_this_month ELSE NULL END as trades_this_month,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN 
+    CASE 
+      WHEN uc.total_users > 0 THEN ROUND((tc.total_trades::NUMERIC / uc.total_users::NUMERIC), 2)
+      ELSE 0 
+    END
+  ELSE NULL END as average_trades_per_user,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.daily_active_users ELSE NULL END as daily_active_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.weekly_active_users ELSE NULL END as weekly_active_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN uc.monthly_active_users ELSE NULL END as monthly_active_users,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN 
+    CASE 
+      WHEN (uc.free_users + uc.basic_users + uc.premium_users) > 0 
+      THEN ROUND(((uc.basic_users + uc.premium_users)::NUMERIC / 
+                  (uc.free_users + uc.basic_users + uc.premium_users)::NUMERIC * 100), 2)
+      ELSE 0 
+    END
+  ELSE NULL END as free_to_paying_conversion_rate,
+  CASE WHEN (SELECT is_admin FROM admin_check) THEN 
+    CASE 
+      WHEN (uc.trial_users + uc.basic_users + uc.premium_users) > 0 
+      THEN ROUND(((uc.basic_users + uc.premium_users)::NUMERIC / 
+                  (uc.trial_users + uc.basic_users + uc.premium_users)::NUMERIC * 100), 2)
+      ELSE 0 
+    END
+  ELSE NULL END as trial_to_paying_conversion_rate,
+  (SELECT is_admin FROM admin_check) as _is_authorized
+FROM user_counts uc
+CROSS JOIN trade_counts tc
+CROSS JOIN revenue r;
+
+COMMENT ON VIEW public.admin_stats_view IS 
+'Platform statistics for admin dashboard - returns NULL for non-admins';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.3: RECREATE ADMIN USERS LIST VIEW WITH BUILT-IN SECURITY
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW public.admin_users_list_view 
+WITH (security_invoker = false)
+AS
+SELECT 
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.id ELSE NULL END as id,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.email ELSE NULL END as email,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COALESCE(p.display_name, split_part(p.email, '@', 1)) ELSE NULL END as display_name,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COALESCE(p.account_type, 'free') ELSE NULL END as account_type,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COALESCE(p.role, 'user') ELSE NULL END as role,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_status ELSE NULL END as subscription_status,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_interval ELSE NULL END as subscription_interval,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_expires_at ELSE NULL END as subscription_expires_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_cancel_at_period_end ELSE NULL END as subscription_cancel_at_period_end,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.is_banned ELSE NULL END as is_banned,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.last_login_at ELSE NULL END as last_login_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.login_count ELSE NULL END as login_count,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.created_at ELSE NULL END as created_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.updated_at ELSE NULL END as updated_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.current_portfolio ELSE NULL END as current_portfolio,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.initial_portfolio ELSE NULL END as initial_portfolio,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.total_pnl ELSE NULL END as total_pnl,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.trade_count ELSE NULL END as trade_count,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.risk_settings ELSE NULL END as risk_settings,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.current_month_trades_count ELSE NULL END as current_month_trades_count,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.max_trades ELSE NULL END as max_trades,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.portfolio_size ELSE NULL END as portfolio_size,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.risk_mode ELSE NULL END as risk_mode,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.risk_percentage ELSE NULL END as risk_percentage,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.fixed_risk_amount ELSE NULL END as fixed_risk_amount,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    CASE 
+      WHEN p.risk_mode = 'percentage' THEN ROUND((p.portfolio_size * p.risk_percentage) / 100, 2)
+      WHEN p.risk_mode = 'fixed' THEN p.fixed_risk_amount
+      ELSE NULL
+    END
+  ELSE NULL END as calculated_one_r,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL) ELSE NULL END as total_closed_trades,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    CASE 
+      WHEN COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL) > 0 
+      THEN ROUND(
+        (COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'WIN') * 100.0 
+        / COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL)), 2
+      )
+      ELSE 0 
+    END
+  ELSE NULL END as win_rate,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'WIN') ELSE NULL END as wins,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'LOSS') ELSE NULL END as losses,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'BE') ELSE NULL END as break_even,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'OPEN') ELSE NULL END as open_trades,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN MAX(t.close_at) ELSE NULL END as last_trade_date,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN ROUND(AVG(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL), 2) ELSE NULL END as avg_r,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN MAX(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL) ELSE NULL END as best_r,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN MIN(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL) ELSE NULL END as worst_r
+FROM public.profiles p
+LEFT JOIN public.trades t ON t.user_id = p.id
+WHERE p.deleted_at IS NULL
+  AND (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid())
+GROUP BY 
+  p.id, p.email, p.display_name, p.account_type, p.role,
+  p.subscription_status, p.subscription_interval, p.subscription_expires_at,
+  p.subscription_cancel_at_period_end,
+  p.is_banned, p.last_login_at, p.login_count, p.created_at, p.updated_at,
+  p.current_portfolio, p.initial_portfolio, p.total_pnl, p.trade_count, 
+  p.risk_settings, p.current_month_trades_count, p.max_trades,
+  p.portfolio_size, p.risk_mode, p.risk_percentage, p.fixed_risk_amount
+ORDER BY p.created_at DESC;
+
+COMMENT ON VIEW public.admin_users_list_view IS 
+'v9.4.2: User list for admin management - returns empty for non-admins';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.4: RECREATE SUBSCRIPTION HEALTH VIEW WITH BUILT-IN SECURITY
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE VIEW public.subscription_health_view 
+WITH (security_invoker = false)
+AS
+SELECT 
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.id ELSE NULL END as user_id,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.email ELSE NULL END as email,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.display_name ELSE NULL END as display_name,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.account_type ELSE NULL END as account_type,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_interval ELSE NULL END as subscription_interval,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_status ELSE NULL END as subscription_status,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_expires_at ELSE NULL END as subscription_expires_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.subscription_cancel_at_period_end ELSE NULL END as subscription_cancel_at_period_end,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.cancellation_requested_at ELSE NULL END as cancellation_requested_at,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.cancellation_effective_date ELSE NULL END as cancellation_effective_date,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    CASE 
+      WHEN p.subscription_expires_at IS NULL THEN NULL
+      ELSE EXTRACT(DAY FROM (p.subscription_expires_at - NOW()))::INTEGER
+    END
+  ELSE NULL END as days_remaining,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    CASE 
+      WHEN p.account_type = 'free' THEN 'free'
+      WHEN p.subscription_status = 'cancelled' THEN 'cancelled'
+      WHEN p.subscription_cancel_at_period_end = TRUE THEN 'cancelling_at_period_end'
+      WHEN p.subscription_expires_at < NOW() THEN 'expired'
+      WHEN p.subscription_expires_at < NOW() + INTERVAL '7 days' THEN 'expiring_soon'
+      WHEN p.subscription_expires_at < NOW() + INTERVAL '14 days' THEN 'active_expiring'
+      ELSE 'active_healthy'
+    END
+  ELSE NULL END as health_status,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT ph.created_at 
+     FROM payment_history ph 
+     WHERE ph.user_id = p.id AND ph.status = 'completed'
+     ORDER BY ph.created_at DESC LIMIT 1)
+  ELSE NULL END as last_payment_date,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT ph.amount 
+     FROM payment_history ph 
+     WHERE ph.user_id = p.id AND ph.status = 'completed'
+     ORDER BY ph.created_at DESC LIMIT 1)
+  ELSE NULL END as last_payment_amount,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT COALESCE(SUM(ph.amount), 0)
+     FROM payment_history ph
+     WHERE ph.user_id = p.id AND ph.status = 'completed')
+  ELSE NULL END as lifetime_value,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT COUNT(*)
+     FROM subscription_changes sc
+     WHERE sc.user_id = p.id AND sc.change_type = 'renew')
+  ELSE NULL END as renewal_count,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT sp.period_start
+     FROM subscription_periods sp
+     WHERE sp.user_id = p.id AND sp.period_end > NOW()
+     ORDER BY sp.period_end DESC LIMIT 1)
+  ELSE NULL END as current_period_start,
+  CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN 
+    (SELECT sp.auto_renew
+     FROM subscription_periods sp
+     WHERE sp.user_id = p.id AND sp.period_end > NOW()
+     ORDER BY sp.period_end DESC LIMIT 1)
+  ELSE NULL END as auto_renew_enabled
+FROM public.profiles p
+WHERE p.deleted_at IS NULL
+  AND (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid())
+ORDER BY 
+  CASE p.subscription_status
+    WHEN 'active' THEN 1
+    WHEN 'cancelled' THEN 2
+    WHEN 'expired' THEN 3
+    ELSE 4
+  END,
+  p.subscription_expires_at ASC NULLS LAST;
+
+COMMENT ON VIEW public.subscription_health_view IS 
+'📊 v9.4.2: Subscription health dashboard - returns empty for non-admins';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.5: GRANT SELECT TO AUTHENTICATED ON ALL ADMIN VIEWS
+-- ═══════════════════════════════════════════════════════════════
+
+GRANT SELECT ON public.admin_stats_view TO authenticated;
+GRANT SELECT ON public.admin_stats_view TO service_role;
+
+GRANT SELECT ON public.admin_users_list_view TO authenticated;
+GRANT SELECT ON public.admin_users_list_view TO service_role;
+
+GRANT SELECT ON public.subscription_health_view TO authenticated;
+GRANT SELECT ON public.subscription_health_view TO service_role;
+
+-- Other admin views - grant to both
+GRANT SELECT ON public.payment_analytics TO authenticated;
+GRANT SELECT ON public.payment_analytics TO service_role;
+
+GRANT SELECT ON public.active_subscriptions TO authenticated;
+GRANT SELECT ON public.active_subscriptions TO service_role;
+
+GRANT SELECT ON public.archived_users_view TO authenticated;
+GRANT SELECT ON public.archived_users_view TO service_role;
+
+GRANT SELECT ON public.revenue_analytics_view TO authenticated;
+GRANT SELECT ON public.revenue_analytics_view TO service_role;
+
+GRANT SELECT ON public.proration_impact_view TO authenticated;
+GRANT SELECT ON public.proration_impact_view TO service_role;
+
+GRANT SELECT ON public.cancellation_analytics_view TO authenticated;
+GRANT SELECT ON public.cancellation_analytics_view TO service_role;
+
+GRANT SELECT ON public.subscription_flow_view TO authenticated;
+GRANT SELECT ON public.subscription_flow_view TO service_role;
+
+-- Public views
+GRANT SELECT ON public.pricing_info TO authenticated;
+GRANT SELECT ON public.pricing_info TO anon;
+GRANT SELECT ON public.pricing_info TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.6: MATERIALIZED VIEWS - service_role + RPC access
+-- ═══════════════════════════════════════════════════════════════
+
+GRANT SELECT ON public.webhook_stats TO service_role;
+GRANT SELECT ON public.strategy_stats_view TO service_role;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.7: DROP EXISTING FUNCTIONS (to allow return type changes)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_my_webhook_stats() CASCADE;
+DROP FUNCTION IF EXISTS public.get_my_strategy_stats() CASCADE;
+DROP FUNCTION IF EXISTS public.admin_get_stats() CASCADE;
+DROP FUNCTION IF EXISTS public.admin_get_users_list(INTEGER, INTEGER, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.admin_get_payment_analytics() CASCADE;
+DROP FUNCTION IF EXISTS public.admin_get_subscription_health() CASCADE;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.8: CREATE SECURE RPC FUNCTIONS FOR USER DATA
+-- ═══════════════════════════════════════════════════════════════
+
+-- Function to get user's own webhook stats
+CREATE OR REPLACE FUNCTION public.get_my_webhook_stats()
+RETURNS TABLE (
+  total_trades BIGINT,
+  tradingview_trades BIGINT,
+  open_tradingview_trades BIGINT,
+  closed_tradingview_trades BIGINT,
+  last_tradingview_trade_at TIMESTAMPTZ,
+  last_trade_created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ws.total_trades,
+    ws.tradingview_trades,
+    ws.open_tradingview_trades,
+    ws.closed_tradingview_trades,
+    ws.last_tradingview_trade_at,
+    ws.last_trade_created_at
+  FROM public.webhook_stats ws
+  WHERE ws.user_id = auth.uid();
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_my_webhook_stats() TO authenticated;
+
+COMMENT ON FUNCTION public.get_my_webhook_stats IS 
+'🔒 Secure access to webhook_stats - returns only current user data';
+
+-- Function to get user's own strategy stats
+CREATE OR REPLACE FUNCTION public.get_my_strategy_stats()
+RETURNS TABLE (
+  id UUID,
+  name TEXT,
+  status TEXT,
+  category TEXT,
+  setup_type TEXT,
+  total_trades BIGINT,
+  wins BIGINT,
+  losses BIGINT,
+  break_even BIGINT,
+  open_trades BIGINT,
+  win_rate NUMERIC,
+  total_pnl NUMERIC,
+  avg_win NUMERIC,
+  avg_loss NUMERIC,
+  best_trade NUMERIC,
+  worst_trade NUMERIC,
+  avg_r NUMERIC,
+  total_r NUMERIC,
+  profit_factor NUMERIC,
+  last_trade_date TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ss.id,
+    ss.name,
+    ss.status,
+    ss.category,
+    ss.setup_type,
+    ss.total_trades,
+    ss.wins,
+    ss.losses,
+    ss.break_even,
+    ss.open_trades,
+    ss.win_rate,
+    ss.total_pnl,
+    ss.avg_win,
+    ss.avg_loss,
+    ss.best_trade,
+    ss.worst_trade,
+    ss.avg_r,
+    ss.total_r,
+    ss.profit_factor,
+    ss.last_trade_date,
+    ss.created_at,
+    ss.updated_at
+  FROM public.strategy_stats_view ss
+  WHERE ss.user_id = auth.uid();
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_my_strategy_stats() TO authenticated;
+
+COMMENT ON FUNCTION public.get_my_strategy_stats IS 
+'🔒 Secure access to strategy_stats_view - returns only current user strategies';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.9: ADMIN RPC FUNCTIONS (BACKUP - views now have built-in security)
+-- ═══════════════════════════════════════════════════════════════
+
+-- Admin stats RPC (backup method)
+CREATE OR REPLACE FUNCTION public.admin_get_stats()
+RETURNS TABLE (
+  total_users BIGINT,
+  active_users BIGINT,
+  new_users_today BIGINT,
+  new_users_this_week BIGINT,
+  new_users_this_month BIGINT,
+  free_users BIGINT,
+  basic_users BIGINT,
+  premium_users BIGINT,
+  trial_users BIGINT,
+  basic_monthly_users BIGINT,
+  basic_yearly_users BIGINT,
+  premium_monthly_users BIGINT,
+  premium_yearly_users BIGINT,
+  estimated_monthly_revenue NUMERIC,
+  estimated_yearly_revenue NUMERIC,
+  total_trades BIGINT,
+  trades_this_week BIGINT,
+  trades_this_month BIGINT,
+  average_trades_per_user NUMERIC,
+  daily_active_users BIGINT,
+  weekly_active_users BIGINT,
+  monthly_active_users BIGINT,
+  free_to_paying_conversion_rate NUMERIC,
+  trial_to_paying_conversion_rate NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'super_admin')
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+  
+  RETURN QUERY SELECT * FROM public.admin_stats_view WHERE _is_authorized = true;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO authenticated;
+
+-- Admin users list RPC (backup method)
+CREATE OR REPLACE FUNCTION public.admin_get_users_list(
+  p_limit INTEGER DEFAULT 100,
+  p_offset INTEGER DEFAULT 0,
+  p_search TEXT DEFAULT NULL,
+  p_account_type TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  display_name TEXT,
+  account_type TEXT,
+  role TEXT,
+  subscription_status TEXT,
+  subscription_interval TEXT,
+  subscription_expires_at TIMESTAMPTZ,
+  subscription_cancel_at_period_end BOOLEAN,
+  is_banned BOOLEAN,
+  last_login_at TIMESTAMPTZ,
+  login_count INTEGER,
+  created_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ,
+  current_portfolio NUMERIC,
+  initial_portfolio NUMERIC,
+  total_pnl NUMERIC,
+  trade_count INTEGER,
+  risk_settings JSONB,
+  current_month_trades_count INTEGER,
+  max_trades INTEGER,
+  portfolio_size NUMERIC,
+  risk_mode TEXT,
+  risk_percentage NUMERIC,
+  fixed_risk_amount NUMERIC,
+  calculated_one_r NUMERIC,
+  total_closed_trades BIGINT,
+  win_rate NUMERIC,
+  wins BIGINT,
+  losses BIGINT,
+  break_even BIGINT,
+  open_trades BIGINT,
+  last_trade_date TIMESTAMPTZ,
+  avg_r NUMERIC,
+  best_r NUMERIC,
+  worst_r NUMERIC
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'super_admin')
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+  
+  RETURN QUERY
+  SELECT 
+    u.id, u.email, u.display_name, u.account_type, u.role,
+    u.subscription_status, u.subscription_interval, u.subscription_expires_at,
+    u.subscription_cancel_at_period_end, u.is_banned, u.last_login_at,
+    u.login_count, u.created_at, u.updated_at, u.current_portfolio,
+    u.initial_portfolio, u.total_pnl, u.trade_count, u.risk_settings,
+    u.current_month_trades_count, u.max_trades, u.portfolio_size,
+    u.risk_mode, u.risk_percentage, u.fixed_risk_amount, u.calculated_one_r,
+    u.total_closed_trades, u.win_rate, u.wins, u.losses, u.break_even,
+    u.open_trades, u.last_trade_date, u.avg_r, u.best_r, u.worst_r
+  FROM public.admin_users_list_view u
+  WHERE u.id IS NOT NULL  -- Filter out NULL rows (non-admin access)
+    AND (p_search IS NULL OR 
+         u.email ILIKE '%' || p_search || '%' OR 
+         u.display_name ILIKE '%' || p_search || '%')
+    AND (p_account_type IS NULL OR u.account_type = p_account_type)
+  ORDER BY u.created_at DESC
+  LIMIT p_limit
+  OFFSET p_offset;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_get_users_list(INTEGER, INTEGER, TEXT, TEXT) TO authenticated;
+
+-- Payment analytics RPC
+CREATE OR REPLACE FUNCTION public.admin_get_payment_analytics()
+RETURNS TABLE (
+  plan TEXT,
+  status TEXT,
+  payment_count BIGINT,
+  total_amount NUMERIC,
+  avg_amount NUMERIC,
+  month TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'super_admin')
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+  
+  RETURN QUERY SELECT * FROM public.payment_analytics;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_get_payment_analytics() TO authenticated;
+
+-- Subscription health RPC
+CREATE OR REPLACE FUNCTION public.admin_get_subscription_health()
+RETURNS TABLE (
+  user_id UUID,
+  email TEXT,
+  display_name TEXT,
+  account_type TEXT,
+  subscription_interval TEXT,
+  subscription_status TEXT,
+  subscription_expires_at TIMESTAMPTZ,
+  subscription_cancel_at_period_end BOOLEAN,
+  cancellation_requested_at TIMESTAMPTZ,
+  cancellation_effective_date DATE,
+  days_remaining INTEGER,
+  health_status TEXT,
+  last_payment_date TIMESTAMPTZ,
+  last_payment_amount NUMERIC,
+  lifetime_value NUMERIC,
+  renewal_count BIGINT,
+  current_period_start TIMESTAMPTZ,
+  auto_renew_enabled BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin', 'super_admin')
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+  
+  RETURN QUERY SELECT * FROM public.subscription_health_view WHERE shv.user_id IS NOT NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_get_subscription_health() TO authenticated;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3.10: VERIFICATION
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+DECLARE
+  v_views_with_auth INTEGER;
+  v_functions_created INTEGER;
+BEGIN
+  -- Count views accessible to authenticated
+  SELECT COUNT(*) INTO v_views_with_auth
+  FROM information_schema.role_table_grants
+  WHERE table_schema = 'public'
+    AND table_name IN ('admin_stats_view', 'admin_users_list_view', 'subscription_health_view')
+    AND grantee = 'authenticated'
+    AND privilege_type = 'SELECT';
+  
+  -- Count functions created
+  SELECT COUNT(*) INTO v_functions_created
+  FROM pg_proc p
+  JOIN pg_namespace n ON p.pronamespace = n.oid
+  WHERE n.nspname = 'public'
+    AND p.proname IN ('get_my_webhook_stats', 'get_my_strategy_stats', 
+                      'admin_get_stats', 'admin_get_users_list', 
+                      'admin_get_payment_analytics', 'admin_get_subscription_health');
+
+  RAISE NOTICE '';
+  RAISE NOTICE '═══════════════════════════════════════════════';
+  RAISE NOTICE '🔒 SECTION 3 - PERMISSIONS COMPLETE';
+  RAISE NOTICE '═══════════════════════════════════════════════';
+  RAISE NOTICE '';
+  RAISE NOTICE '📊 Results:';
+  RAISE NOTICE '   ├─ Admin views with SELECT grant: % (should be 3)', v_views_with_auth;
+  RAISE NOTICE '   └─ RPC functions created: % (should be 6)', v_functions_created;
+  RAISE NOTICE '';
+  RAISE NOTICE '🔐 Security Model:';
+  RAISE NOTICE '   ├─ Admin Views → Built-in admin check (returns NULL for non-admins)';
+  RAISE NOTICE '   ├─ Direct Access → SELECT granted to authenticated';
+  RAISE NOTICE '   ├─ RPC Backup → Functions with role check available';
+  RAISE NOTICE '   └─ User Data → Via secure RPC filtered by auth.uid()';
+  RAISE NOTICE '';
+  RAISE NOTICE '✅ Admins can now directly query admin_stats_view!';
+  RAISE NOTICE '';
+END $$;
 -- ===============================================
 -- SECTION 4: DATA MIGRATION & FIXES (PROFILES)
 -- ===============================================

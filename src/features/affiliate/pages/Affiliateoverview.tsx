@@ -1,7 +1,6 @@
 // src/features/affiliate/pages/AffiliateOverview.tsx
 // ============================================
-// 🚀 Optimized Affiliate Overview with Admin Controls
-// Includes AdminAffiliateEditor for admin users to manage their codes and coupons
+// 🚀 Optimized Affiliate Overview
 // ============================================
 
 import { useNavigate } from 'react-router-dom';
@@ -10,16 +9,13 @@ import {
   useAffiliateStats,
   usePrefetchAffiliateData 
 } from '../hooks/useAffiliateData';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
 import { 
   DollarSign, Users, MousePointer, TrendingUp, 
   Copy, CheckCircle, ArrowUpRight, Award,
-  CreditCard, Wallet, ExternalLink, Shield
+  CreditCard, Wallet, ExternalLink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState, useCallback, useMemo, memo, useEffect } from 'react';
-import AdminAffiliateEditor from '../components/AdminAffiliateEditor';
+import { useState, useCallback, useMemo, memo } from 'react';
 
 // =====================================================
 // CONSTANTS
@@ -166,36 +162,13 @@ const NotAffiliateState = memo(function NotAffiliateState({ onNavigate }: { onNa
 // =====================================================
 
 export default function AffiliateOverview() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminCheckDone, setAdminCheckDone] = useState(false);
   
   // Using optimized hooks with caching
-  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useAffiliateProfile();
+  const { data: profile, isLoading: profileLoading } = useAffiliateProfile();
   const { data: stats, isLoading: statsLoading } = useAffiliateStats();
   const { prefetchAll } = usePrefetchAffiliateData();
-
-  // Check if user is admin
-  useEffect(() => {
-    async function checkAdmin() {
-      if (!user?.id) {
-        setAdminCheckDone(true);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      setIsAdmin(data?.role === 'admin' || data?.role === 'super_admin');
-      setAdminCheckDone(true);
-    }
-    checkAdmin();
-  }, [user?.id]);
 
   // Memoized handlers
   const handleCopyCode = useCallback(async () => {
@@ -228,10 +201,6 @@ export default function AffiliateOverview() {
   const handleNavigateToReferrals = useCallback(() => navigate('/app/journal/affiliate/referrals'), [navigate]);
   const handleNavigateToEarnings = useCallback(() => navigate('/app/journal/affiliate/earnings'), [navigate]);
   const handleNavigateToMarketing = useCallback(() => navigate('/app/journal/affiliate/marketing'), [navigate]);
-
-  const handleProfileUpdate = useCallback(() => {
-    refetchProfile();
-  }, [refetchProfile]);
 
   // Memoized computed values
   const tierConfig = useMemo(() => {
@@ -273,7 +242,7 @@ export default function AffiliateOverview() {
   }, [stats?.thisMonthEarnings, stats?.lastMonthEarnings]);
 
   // Loading state
-  if (profileLoading || !adminCheckDone) {
+  if (profileLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#C9A646]"></div>
@@ -294,39 +263,13 @@ export default function AffiliateOverview() {
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             <Award className="h-6 w-6 text-[#C9A646]" />
             Welcome back, {profile.affiliate_code}!
-            {isAdmin && (
-              <span className="ml-2 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                Admin
-              </span>
-            )}
           </h1>
           <p className="text-gray-400 mt-1">
             Tier: <span className={tierConfig.color}>{tierConfig.name}</span> ({tierConfig.commission}% commission) • 
             Status: <span className="text-emerald-400">Active</span>
-            {profile.affiliate_type === 'admin' && (
-              <span className="ml-2 text-purple-400">(Admin Affiliate)</span>
-            )}
           </p>
         </div>
       </div>
-
-      {/* Admin Controls Section - Only visible to admins */}
-      {isAdmin && (
-        <AdminAffiliateEditor 
-          profile={{
-            id: profile.id,
-            user_id: profile.user_id,
-            affiliate_code: profile.affiliate_code,
-            coupon_code: profile.coupon_code,
-            discount_tier: profile.discount_tier as 'standard' | 'vip',
-            current_tier: profile.current_tier,
-            affiliate_type: profile.affiliate_type || 'regular',
-            commission_enabled: profile.commission_enabled ?? true,
-          }}
-          onProfileUpdate={handleProfileUpdate}
-        />
-      )}
 
       {/* Coupon Code Card */}
       <div 

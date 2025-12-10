@@ -39,6 +39,10 @@ import {
   Map,
   Newspaper,
   Swords,
+  // 📰 Macro Icons
+  LineChart,
+  Zap,
+  Globe,
   // 🔒 Lock Icon
   Lock
 } from 'lucide-react';
@@ -54,8 +58,8 @@ interface SidebarProps {
   isOpen: boolean;
 }
 
-// 🔥 הגדרת סוגי סביבות - הוספת all-markets!
-type EnvironmentType = 'journal' | 'backtest' | 'admin' | 'affiliate' | 'all-markets';
+// 🔥 הגדרת סוגי סביבות - הוספת macro!
+type EnvironmentType = 'journal' | 'backtest' | 'admin' | 'affiliate' | 'all-markets' | 'macro';
 
 // 🔥 הגדרת תפריטים שונים לכל סביבה
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
@@ -77,6 +81,22 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     // ⚔️ WAR ZONE - פתוח!
     { label: 'War Zone', path: '/app/all-markets/warzone', icon: Swords, locked: false },
   ],
+  
+  // 📰 MACRO & NEWS - UNLOCKED!
+  'macro': [
+    { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
+    { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
+    { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
+    { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
+    { label: 'Global Calendar', path: '/app/macro/calendar', icon: Calendar },
+    { label: 'Interest Rates', path: '/app/macro/rates', icon: LineChart },
+    { label: 'Economic Indicators', path: '/app/macro/indicators', icon: BarChart3 },
+    { label: 'Major Events', path: '/app/macro/events', icon: Zap },
+    { label: 'Reports & PDFs', path: '/app/macro/reports', icon: FileText },
+    { label: 'Sentiment', path: '/app/macro/sentiment', icon: Activity },
+    { label: 'News', path: '/app/macro/news', icon: Newspaper },
+  ],
+  
   journal: [
     { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
     { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
@@ -137,9 +157,10 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const location = useLocation();
   const { isActive } = useDomain();
 
-  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL
+  // 🔥 זיהוי הסביבה הנוכחית לפי ה-URL - הוספת macro!
   const getCurrentEnvironment = (): EnvironmentType => {
     if (location.pathname.startsWith('/app/all-markets')) return 'all-markets';
+    if (location.pathname.startsWith('/app/macro')) return 'macro'; // 📰 NEW!
     if (location.pathname.startsWith('/app/journal/admin')) return 'admin';
     if (location.pathname.startsWith('/app/journal/affiliate')) return 'affiliate';
     if (location.pathname.startsWith('/app/journal/backtest')) return 'backtest';
@@ -150,10 +171,11 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const currentEnvironment = getCurrentEnvironment();
   const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
 
-  // ✅ הצג את ה-Sidebar ב-Journal וב-All Markets
+  // ✅ הצג את ה-Sidebar ב-Journal, All Markets, ו-Macro!
   const shouldShowSidebar = 
     location.pathname.startsWith('/app/journal') || 
-    location.pathname.startsWith('/app/all-markets');
+    location.pathname.startsWith('/app/all-markets') ||
+    location.pathname.startsWith('/app/macro'); // 📰 NEW!
   
   if (!shouldShowSidebar) {
     return null;
@@ -202,12 +224,16 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     if (itemPath === '/app/all-markets/overview' && location.pathname === '/app/all-markets/overview') {
       return true;
     }
+    if (itemPath === '/app/macro/overview' && location.pathname === '/app/macro/overview') {
+      return true;
+    }
     if (location.pathname === itemPath) {
       return true;
     }
     if (itemPath !== '/app/journal/admin' && 
         itemPath !== '/app/journal/affiliate/overview' && 
         itemPath !== '/app/all-markets/overview' &&
+        itemPath !== '/app/macro/overview' &&
         location.pathname.startsWith(itemPath) && 
         itemPath.length > 10) {
       return true;
@@ -242,6 +268,16 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
         label: 'All Markets',
         bgColor: 'bg-blue-500/5',
         textColor: 'text-blue-400'
+      };
+    }
+    // 📰 MACRO HEADER
+    if (currentEnvironment === 'macro') {
+      return {
+        show: true,
+        icon: Globe,
+        label: 'Macro & News',
+        bgColor: 'bg-emerald-500/5',
+        textColor: 'text-emerald-400'
       };
     }
     return { show: false };

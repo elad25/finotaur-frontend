@@ -1623,6 +1623,916 @@ SELECT
   (SELECT COALESCE(SUM(commission_amount_usd), 0) FROM affiliate_commissions WHERE status = 'pending') as pending_commission_usd;
 
 
+-- =====================================================
+-- FINOTAUR NEWSLETTER (WAR ZONE) - WHOP INTEGRATION
+-- =====================================================
+-- Version: 1.0.0
+-- Date: 2025-12-03
+-- 
+-- 🎯 הוסף לקובץ ה-SQL הראשי (אחרי PART 11)
+-- 
+-- ✅ Product ID: prod_qlaV5Uu6LZlYn
+-- ✅ Plan ID: plan_LCBG5yJpoNtW3
+-- =====================================================
+
+
+-- =====================================================
+-- FINOTAUR NEWSLETTER (WAR ZONE) - WHOP INTEGRATION
+-- =====================================================
+-- Version: 1.1.0 (FIXED)
+-- Date: 2025-12-03
+-- 
+-- ✅ Product ID: prod_qlaV5Uu6LZlYn
+-- ✅ Plan ID: plan_LCBG5yJpoNtW3
+-- 
+-- 🔧 FIX: Added whop_plan_id column check before insert
+-- =====================================================
+
+
+-- ============================================
+-- PART 13: NEWSLETTER SCHEMA
+-- ============================================
+
+-- ----------------------------------------
+-- 13.0 FIX: Add whop_plan_id column + fix finotaur_plan constraint
+-- ----------------------------------------
+
+-- Add whop_plan_id column if missing
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'whop_plan_mapping' AND column_name = 'whop_plan_id') THEN
+    ALTER TABLE whop_plan_mapping ADD COLUMN whop_plan_id TEXT;
+    COMMENT ON COLUMN whop_plan_mapping.whop_plan_id IS 'Whop Plan ID for checkout URLs';
+  END IF;
+END $$;
+
+-- Fix finotaur_plan constraint to include 'newsletter'
+ALTER TABLE whop_plan_mapping DROP CONSTRAINT IF EXISTS whop_plan_mapping_finotaur_plan_check;
+ALTER TABLE whop_plan_mapping ADD CONSTRAINT whop_plan_mapping_finotaur_plan_check 
+  CHECK (finotaur_plan IN ('free', 'basic', 'premium', 'trial', 'newsletter'));
+
+-- ----------------------------------------
+-- 13.1 PROFILES TABLE - Newsletter Columns
+-- ----------------------------------------
+
+DO $$ 
+BEGIN
+  -- Newsletter subscription enabled
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_enabled') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_enabled BOOLEAN DEFAULT FALSE;
+    COMMENT ON COLUMN profiles.newsletter_enabled IS 'Whether user has active newsletter subscription';
+  END IF;
+  
+  -- Newsletter Whop membership ID (separate from journal subscription)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_whop_membership_id') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_whop_membership_id TEXT;
+    COMMENT ON COLUMN profiles.newsletter_whop_membership_id IS 'Whop membership ID for newsletter subscription';
+  END IF;
+  
+  -- Newsletter subscription dates
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_started_at') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_started_at TIMESTAMPTZ;
+    COMMENT ON COLUMN profiles.newsletter_started_at IS 'When newsletter subscription started';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_expires_at') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_expires_at TIMESTAMPTZ;
+    COMMENT ON COLUMN profiles.newsletter_expires_at IS 'Newsletter subscription expiration/next billing date';
+  END IF;
+  
+  -- 7-day trial tracking
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_trial_ends_at') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_trial_ends_at TIMESTAMPTZ;
+    COMMENT ON COLUMN profiles.newsletter_trial_ends_at IS '7-day free trial end date';
+  END IF;
+  
+  -- Cancellation tracking
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_cancel_at_period_end') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_cancel_at_period_end BOOLEAN DEFAULT FALSE;
+    COMMENT ON COLUMN profiles.newsletter_cancel_at_period_end IS 'Whether newsletter will cancel at period end';
+  END IF;
+  
+  -- Newsletter status (inactive, trial, active, cancelled)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_status') THEN
+    ALTER TABLE profiles ADD COLUMN newsletter_status TEXT DEFAULT 'inactive';
+    COMMENT ON COLUMN profiles.newsletter_status IS 'Newsletter subscription status: inactive, trial, active, cancelled';
+  END IF;
+END $$;
+
+-- Add constraint for newsletter_status
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_newsletter_status_check;
+ALTER TABLE profiles ADD CONSTRAINT profiles_newsletter_status_check 
+  CHECK (newsletter_status IS NULL OR newsletter_status IN ('inactive', 'trial', 'active', 'cancelled'));
+
+
+-- ----------------------------------------
+-- 13.2 NEWSLETTER INDEXES
+-- ----------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_profiles_newsletter_enabled 
+ON profiles(newsletter_enabled) WHERE newsletter_enabled = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_profiles_newsletter_membership 
+ON profiles(newsletter_whop_membership_id) WHERE newsletter_whop_membership_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_profiles_newsletter_status 
+ON profiles(newsletter_status) WHERE newsletter_status != 'inactive';
+
+CREATE INDEX IF NOT EXISTS idx_profiles_newsletter_trial 
+ON profiles(newsletter_trial_ends_at) WHERE newsletter_trial_ends_at IS NOT NULL;
+
+
+-- ----------------------------------------
+-- 13.3 WHOP PLAN MAPPING - Newsletter Entry
+-- ----------------------------------------
+
+INSERT INTO whop_plan_mapping (
+  whop_product_id, 
+  whop_plan_id,
+  finotaur_plan, 
+  billing_interval, 
+  price_usd, 
+  max_trades, 
+  display_name, 
+  is_active
+) VALUES (
+  'prod_qlaV5Uu6LZlYn',      -- ✅ Product ID
+  'plan_LCBG5yJpoNtW3',      -- ✅ Plan ID
+  'newsletter',               -- Plan type
+  'monthly',                  -- Billing interval
+  20.00,                      -- Price: $20/month
+  0,                          -- No trade limits (newsletter only)
+  'War Zone Intelligence Newsletter',
+  TRUE
+)
+ON CONFLICT (whop_product_id) DO UPDATE SET
+  whop_plan_id = EXCLUDED.whop_plan_id,
+  finotaur_plan = EXCLUDED.finotaur_plan,
+  billing_interval = EXCLUDED.billing_interval,
+  price_usd = EXCLUDED.price_usd,
+  max_trades = EXCLUDED.max_trades,
+  display_name = EXCLUDED.display_name,
+  is_active = TRUE,
+  updated_at = NOW();
+
+
+-- ============================================
+-- PART 14: NEWSLETTER FUNCTIONS
+-- ============================================
+
+-- ----------------------------------------
+-- 14.1 Activate Newsletter Subscription
+-- Called on: membership.activated, membership.went_valid (trial start)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS activate_newsletter_subscription(TEXT, TEXT, TEXT, TEXT, UUID);
+
+CREATE OR REPLACE FUNCTION activate_newsletter_subscription(
+  p_user_email TEXT,
+  p_whop_user_id TEXT,
+  p_whop_membership_id TEXT,
+  p_whop_product_id TEXT,
+  p_finotaur_user_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_is_first_time BOOLEAN;
+  v_trial_ends_at TIMESTAMPTZ;
+  v_expires_at TIMESTAMPTZ;
+  v_status TEXT;
+BEGIN
+  -- Find user: first by finotaur_user_id (from metadata), then by email
+  IF p_finotaur_user_id IS NOT NULL THEN
+    SELECT id INTO v_user_id FROM profiles WHERE id = p_finotaur_user_id;
+  END IF;
+  
+  IF v_user_id IS NULL THEN
+    SELECT id INTO v_user_id FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+  END IF;
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'User not found for email: ' || p_user_email
+    );
+  END IF;
+  
+  -- Check if first-time newsletter subscriber (eligible for 7-day trial)
+  SELECT 
+    newsletter_started_at IS NULL OR newsletter_status = 'inactive'
+  INTO v_is_first_time
+  FROM profiles WHERE id = v_user_id;
+  
+  -- Calculate dates
+  v_trial_ends_at := NOW() + INTERVAL '7 days';
+  v_expires_at := NOW() + INTERVAL '1 month';
+  
+  -- Set status based on whether it's first time (trial) or returning (active)
+  v_status := CASE WHEN v_is_first_time THEN 'trial' ELSE 'active' END;
+  
+  -- Update user profile
+  UPDATE profiles SET
+    newsletter_enabled = TRUE,
+    newsletter_whop_membership_id = p_whop_membership_id,
+    newsletter_started_at = COALESCE(newsletter_started_at, NOW()),
+    newsletter_expires_at = v_expires_at,
+    newsletter_trial_ends_at = CASE WHEN v_is_first_time THEN v_trial_ends_at ELSE newsletter_trial_ends_at END,
+    newsletter_cancel_at_period_end = FALSE,
+    newsletter_status = v_status,
+    updated_at = NOW()
+  WHERE id = v_user_id;
+  
+  -- Log event
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, metadata
+  ) VALUES (
+    v_user_id,
+    CASE WHEN v_is_first_time THEN 'trial_started' ELSE 'payment_succeeded' END,
+    'none',
+    'newsletter',
+    jsonb_build_object(
+      'whop_membership_id', p_whop_membership_id,
+      'whop_product_id', p_whop_product_id,
+      'is_first_time', v_is_first_time,
+      'trial_ends_at', v_trial_ends_at,
+      'subscription_type', 'newsletter'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_user_id,
+    'newsletter_status', v_status,
+    'is_new_trial', v_is_first_time,
+    'trial_ends_at', v_trial_ends_at,
+    'expires_at', v_expires_at
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 14.2 Deactivate Newsletter Subscription
+-- Called on: membership.deactivated, membership.went_invalid, membership.canceled
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS deactivate_newsletter_subscription(TEXT);
+
+CREATE OR REPLACE FUNCTION deactivate_newsletter_subscription(p_whop_membership_id TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_user_email TEXT;
+  v_previous_status TEXT;
+BEGIN
+  -- Find user by newsletter membership ID
+  SELECT id, email, newsletter_status 
+  INTO v_user_id, v_user_email, v_previous_status
+  FROM profiles 
+  WHERE newsletter_whop_membership_id = p_whop_membership_id;
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'User not found for newsletter membership: ' || p_whop_membership_id
+    );
+  END IF;
+  
+  -- Update profile - disable newsletter
+  UPDATE profiles SET
+    newsletter_enabled = FALSE,
+    newsletter_status = 'cancelled',
+    newsletter_cancel_at_period_end = FALSE,
+    updated_at = NOW()
+  WHERE id = v_user_id;
+  
+  -- Log event
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, processed_at, metadata
+  ) VALUES (
+    v_user_id,
+    'cancelled',
+    'newsletter',
+    'none',
+    NOW(),
+    jsonb_build_object(
+      'whop_membership_id', p_whop_membership_id,
+      'previous_status', v_previous_status,
+      'subscription_type', 'newsletter'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_user_id,
+    'email', v_user_email,
+    'previous_status', v_previous_status
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 14.3 Handle Newsletter Payment
+-- Called on: payment.succeeded for newsletter product
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS handle_newsletter_payment(TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID);
+
+CREATE OR REPLACE FUNCTION handle_newsletter_payment(
+  p_user_email TEXT,
+  p_whop_user_id TEXT,
+  p_whop_membership_id TEXT,
+  p_whop_product_id TEXT,
+  p_payment_amount NUMERIC,
+  p_finotaur_user_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_current_status TEXT;
+  v_was_in_trial BOOLEAN;
+  v_new_expires_at TIMESTAMPTZ;
+BEGIN
+  -- Find user
+  IF p_finotaur_user_id IS NOT NULL THEN
+    SELECT id, newsletter_status INTO v_user_id, v_current_status 
+    FROM profiles WHERE id = p_finotaur_user_id;
+  END IF;
+  
+  IF v_user_id IS NULL THEN
+    SELECT id, newsletter_status INTO v_user_id, v_current_status 
+    FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+  END IF;
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'User not found for email: ' || p_user_email
+    );
+  END IF;
+  
+  -- Check if this is first payment (coming out of trial)
+  v_was_in_trial := (v_current_status = 'trial');
+  v_new_expires_at := NOW() + INTERVAL '1 month';
+  
+  -- Update profile
+  UPDATE profiles SET
+    newsletter_enabled = TRUE,
+    newsletter_whop_membership_id = p_whop_membership_id,
+    newsletter_status = 'active',
+    newsletter_expires_at = v_new_expires_at,
+    newsletter_cancel_at_period_end = FALSE,
+    updated_at = NOW()
+  WHERE id = v_user_id;
+  
+  -- Log event
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, metadata
+  ) VALUES (
+    v_user_id,
+    CASE WHEN v_was_in_trial THEN 'trial_ended' ELSE 'payment_succeeded' END,
+    'newsletter',
+    'newsletter',
+    jsonb_build_object(
+      'whop_membership_id', p_whop_membership_id,
+      'payment_amount', p_payment_amount,
+      'was_in_trial', v_was_in_trial,
+      'new_expires_at', v_new_expires_at,
+      'subscription_type', 'newsletter'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_user_id,
+    'newsletter_status', 'active',
+    'was_in_trial', v_was_in_trial,
+    'expires_at', v_new_expires_at
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 14.4 Get Newsletter Status
+-- Called by frontend to check subscription status
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_newsletter_status(UUID);
+
+CREATE OR REPLACE FUNCTION get_newsletter_status(p_user_id UUID)
+RETURNS TABLE (
+  newsletter_enabled BOOLEAN,
+  newsletter_status TEXT,
+  started_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  trial_ends_at TIMESTAMPTZ,
+  cancel_at_period_end BOOLEAN,
+  is_in_trial BOOLEAN,
+  trial_days_remaining INTEGER
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COALESCE(p.newsletter_enabled, FALSE),
+    COALESCE(p.newsletter_status, 'inactive'),
+    p.newsletter_started_at,
+    p.newsletter_expires_at,
+    p.newsletter_trial_ends_at,
+    COALESCE(p.newsletter_cancel_at_period_end, FALSE),
+    -- Is currently in trial?
+    (p.newsletter_trial_ends_at IS NOT NULL 
+     AND p.newsletter_trial_ends_at > NOW() 
+     AND p.newsletter_status = 'trial'),
+    -- Days remaining in trial
+    CASE 
+      WHEN p.newsletter_trial_ends_at IS NOT NULL AND p.newsletter_trial_ends_at > NOW()
+      THEN EXTRACT(DAY FROM (p.newsletter_trial_ends_at - NOW()))::INTEGER
+      ELSE 0
+    END
+  FROM profiles p
+  WHERE p.id = p_user_id;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 14.5 Check if Product is Newsletter
+-- Helper function for webhook handler
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS is_newsletter_product(TEXT);
+
+CREATE OR REPLACE FUNCTION is_newsletter_product(p_product_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM whop_plan_mapping 
+    WHERE whop_product_id = p_product_id 
+    AND finotaur_plan = 'newsletter'
+    AND is_active = TRUE
+  );
+END;
+$$;
+
+
+-- ============================================
+-- PART 15: GRANTS & PERMISSIONS
+-- ============================================
+
+GRANT EXECUTE ON FUNCTION activate_newsletter_subscription(TEXT, TEXT, TEXT, TEXT, UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION deactivate_newsletter_subscription(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION handle_newsletter_payment(TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION get_newsletter_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_newsletter_product(TEXT) TO service_role, authenticated;
+
+
+-- ============================================
+-- PART 16: VERIFICATION
+-- ============================================
+
+SELECT '========== NEWSLETTER VERIFICATION ==========' as section;
+
+-- Check whop_plan_id column was added
+SELECT 
+  'WHOP_PLAN_MAPPING FIX' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'whop_plan_mapping' AND column_name = 'whop_plan_id') THEN '✅ whop_plan_id exists' ELSE '❌ whop_plan_id missing' END as status;
+
+-- Check newsletter columns
+SELECT 
+  'NEWSLETTER COLUMNS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_enabled') THEN '✅' ELSE '❌' END as newsletter_enabled,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_whop_membership_id') THEN '✅' ELSE '❌' END as newsletter_membership_id,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_status') THEN '✅' ELSE '❌' END as newsletter_status,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'newsletter_trial_ends_at') THEN '✅' ELSE '❌' END as newsletter_trial_ends_at;
+
+-- Check newsletter functions
+SELECT 
+  'NEWSLETTER FUNCTIONS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'activate_newsletter_subscription') THEN '✅' ELSE '❌' END as activate_newsletter,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'deactivate_newsletter_subscription') THEN '✅' ELSE '❌' END as deactivate_newsletter,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'handle_newsletter_payment') THEN '✅' ELSE '❌' END as handle_newsletter_payment,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_newsletter_status') THEN '✅' ELSE '❌' END as get_newsletter_status,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'is_newsletter_product') THEN '✅' ELSE '❌' END as is_newsletter_product;
+
+-- Check newsletter plan in mapping
+SELECT 
+  'NEWSLETTER PLAN' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM whop_plan_mapping WHERE finotaur_plan = 'newsletter' AND is_active = TRUE) THEN '✅ Found' ELSE '❌ Missing' END as status,
+  (SELECT whop_product_id FROM whop_plan_mapping WHERE finotaur_plan = 'newsletter' LIMIT 1) as product_id,
+  (SELECT whop_plan_id FROM whop_plan_mapping WHERE finotaur_plan = 'newsletter' LIMIT 1) as plan_id;
+
+-- Test is_newsletter_product function
+SELECT 
+  'PRODUCT CHECK' as check_type,
+  is_newsletter_product('prod_qlaV5Uu6LZlYn') as is_newsletter_prod_qlaV5Uu6LZlYn,
+  is_newsletter_product('prod_ZaDN418HLst3r') as is_newsletter_basic_monthly;
+
+-- ============================================
+-- PART 17: NEWSLETTER ADMIN RPC FUNCTIONS (FIXED)
+-- ============================================
+-- Version: 3.0 - Newsletter is SEPARATE product
+-- Newsletter subscription is independent of journal subscription!
+-- ============================================
+
+
+-- ----------------------------------------
+-- 17.1 GET NEWSLETTER STATS (FIXED)
+-- Counts users with NEWSLETTER subscription (not journal!)
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_newsletter_stats();
+
+CREATE OR REPLACE FUNCTION get_newsletter_stats()
+RETURNS TABLE (
+  total_subscribers BIGINT,
+  active_subscribers BIGINT,
+  trial_subscribers BIGINT,
+  cancelled_subscribers BIGINT,
+  total_users BIGINT
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    -- Total with any newsletter subscription (active or trial)
+    COUNT(*) FILTER (
+      WHERE p.newsletter_status IN ('active', 'trial')
+    ) as total_subscribers,
+    
+    -- Active (paid) newsletter subscribers
+    COUNT(*) FILTER (
+      WHERE p.newsletter_status = 'active'
+    ) as active_subscribers,
+    
+    -- In trial period
+    COUNT(*) FILTER (
+      WHERE p.newsletter_status = 'trial'
+    ) as trial_subscribers,
+    
+    -- Cancelled
+    COUNT(*) FILTER (
+      WHERE p.newsletter_status = 'cancelled'
+    ) as cancelled_subscribers,
+    
+    -- Total users
+    COUNT(*) as total_users
+  FROM profiles p
+  WHERE p.email IS NOT NULL;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 17.2 GET NEWSLETTER USERS (FIXED)
+-- Returns users with their NEWSLETTER subscription status
+-- Completely independent of journal subscription!
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS get_newsletter_users();
+
+CREATE OR REPLACE FUNCTION get_newsletter_users()
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  display_name TEXT,
+  account_type TEXT,
+  newsletter_enabled BOOLEAN,
+  newsletter_status TEXT,
+  newsletter_started_at TIMESTAMPTZ,
+  newsletter_expires_at TIMESTAMPTZ,
+  newsletter_trial_ends_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    p.id,
+    p.email,
+    COALESCE(p.display_name, p.full_name) as display_name,
+    COALESCE(p.account_type, 'free')::TEXT as account_type,
+    -- Newsletter subscription (SEPARATE from journal!)
+    COALESCE(p.newsletter_enabled, FALSE) as newsletter_enabled,
+    COALESCE(p.newsletter_status, 'inactive')::TEXT as newsletter_status,
+    p.newsletter_started_at,
+    p.newsletter_expires_at,
+    p.newsletter_trial_ends_at,
+    p.created_at
+  FROM profiles p
+  WHERE p.email IS NOT NULL
+  ORDER BY 
+    -- Newsletter subscribers first
+    CASE p.newsletter_status 
+      WHEN 'active' THEN 1 
+      WHEN 'trial' THEN 2 
+      WHEN 'cancelled' THEN 3
+      ELSE 4 
+    END,
+    p.created_at DESC;
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 17.3 TOGGLE NEWSLETTER STATUS (FIXED)
+-- Admin can manually toggle newsletter for any user
+-- No account_type restriction!
+-- ----------------------------------------
+
+DROP FUNCTION IF EXISTS toggle_newsletter_status(UUID, BOOLEAN);
+
+CREATE OR REPLACE FUNCTION toggle_newsletter_status(
+  p_user_id UUID,
+  p_enabled BOOLEAN
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_email TEXT;
+  v_current_status TEXT;
+BEGIN
+  -- Get user info
+  SELECT email, newsletter_status
+  INTO v_email, v_current_status
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF v_email IS NULL THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'User not found'
+    );
+  END IF;
+  
+  -- Update newsletter status
+  UPDATE profiles 
+  SET 
+    newsletter_enabled = p_enabled,
+    newsletter_status = CASE 
+      WHEN p_enabled THEN 'active'  -- Admin manually enabling = active
+      ELSE 'inactive'
+    END,
+    newsletter_started_at = CASE 
+      WHEN p_enabled AND newsletter_started_at IS NULL THEN NOW()
+      ELSE newsletter_started_at
+    END,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', p_user_id,
+    'email', v_email,
+    'newsletter_enabled', p_enabled,
+    'previous_status', v_current_status
+  );
+END;
+$$;
+
+
+-- ----------------------------------------
+-- 17.4 GRANTS
+-- ----------------------------------------
+
+GRANT EXECUTE ON FUNCTION get_newsletter_stats() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_newsletter_users() TO authenticated;
+GRANT EXECUTE ON FUNCTION toggle_newsletter_status(UUID, BOOLEAN) TO authenticated;
+
+
+-- ----------------------------------------
+-- 17.5 VERIFICATION
+-- ----------------------------------------
+
+SELECT '========== NEWSLETTER ADMIN RPC (v3.0 - SEPARATE PRODUCT) ==========' as section;
+
+SELECT 'NEWSLETTER RPC FUNCTIONS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_newsletter_stats') THEN '✅' ELSE '❌' END as get_newsletter_stats,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_newsletter_users') THEN '✅' ELSE '❌' END as get_newsletter_users,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'toggle_newsletter_status') THEN '✅' ELSE '❌' END as toggle_newsletter_status;
+
+-- Show current stats
+SELECT 'CURRENT NEWSLETTER STATS' as info, * FROM get_newsletter_stats();
+
+-- Show newsletter status breakdown
+SELECT 
+  'NEWSLETTER STATUS BREAKDOWN' as info,
+  COALESCE(newsletter_status, 'inactive') as status,
+  COUNT(*) as count
+FROM profiles 
+WHERE email IS NOT NULL
+GROUP BY COALESCE(newsletter_status, 'inactive')
+ORDER BY count DESC;
+
+-- ============================================
+-- PART 18: NEWSLETTER SEND LOGS
+-- ============================================
+-- Version: 1.0.0
+-- Tracks newsletter send history for admin dashboard
+-- ============================================
+
+-- ----------------------------------------
+-- 18.1 NEWSLETTER_SEND_LOGS TABLE
+-- ----------------------------------------
+
+CREATE TABLE IF NOT EXISTS newsletter_send_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sent_at TIMESTAMPTZ DEFAULT NOW(),
+  subject TEXT NOT NULL,
+  recipient_count INTEGER NOT NULL,
+  segments TEXT[] DEFAULT '{}',
+  admin_note TEXT,
+  sent_by UUID REFERENCES auth.users(id),
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE newsletter_send_logs IS 'Tracks all newsletter sends for admin dashboard';
+COMMENT ON COLUMN newsletter_send_logs.segments IS 'Array of audience segments: newsletter_active, newsletter_trial, journal_basic, journal_premium';
+COMMENT ON COLUMN newsletter_send_logs.admin_note IS 'Optional admin note that was included in the email';
+
+
+-- ----------------------------------------
+-- 18.2 INDEXES
+-- ----------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_newsletter_send_logs_sent_at 
+ON newsletter_send_logs(sent_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_newsletter_send_logs_sent_by 
+ON newsletter_send_logs(sent_by);
+
+
+-- ----------------------------------------
+-- 18.3 RLS POLICIES
+-- ----------------------------------------
+
+ALTER TABLE newsletter_send_logs ENABLE ROW LEVEL SECURITY;
+
+-- Admins can read all send logs
+DROP POLICY IF EXISTS "Admins can read newsletter send logs" ON newsletter_send_logs;
+CREATE POLICY "Admins can read newsletter send logs" ON newsletter_send_logs
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Service role can insert (from Edge Function)
+DROP POLICY IF EXISTS "Service role can insert newsletter send logs" ON newsletter_send_logs;
+CREATE POLICY "Service role can insert newsletter send logs" ON newsletter_send_logs
+  FOR INSERT WITH CHECK (TRUE);
+
+-- Service role full access
+DROP POLICY IF EXISTS "Service role full access to newsletter send logs" ON newsletter_send_logs;
+CREATE POLICY "Service role full access to newsletter send logs" ON newsletter_send_logs
+  FOR ALL USING (auth.role() = 'service_role');
+
+
+-- ----------------------------------------
+-- 18.4 GRANTS
+-- ----------------------------------------
+
+GRANT SELECT ON newsletter_send_logs TO authenticated;
+GRANT ALL ON newsletter_send_logs TO service_role;
+
+
+-- ----------------------------------------
+-- 18.5 VERIFICATION
+-- ----------------------------------------
+
+SELECT '========== NEWSLETTER SEND LOGS ==========' as section;
+
+SELECT 
+  'NEWSLETTER_SEND_LOGS TABLE' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'newsletter_send_logs') 
+    THEN '✅ Created' ELSE '❌ Missing' END as status;
+
+SELECT 
+  'INDEXES' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_newsletter_send_logs_sent_at') 
+    THEN '✅' ELSE '❌' END as sent_at_index,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_newsletter_send_logs_sent_by') 
+    THEN '✅' ELSE '❌' END as sent_by_index;
+-- ============================================
+-- 🎉 NEWSLETTER ADMIN FUNCTIONS v3.0 COMPLETE
+-- ============================================
+-- 
+-- ✅ Logic (CORRECTED):
+--    - Newsletter is SEPARATE from Journal subscription
+--    - ANY user can subscribe to Newsletter (free/basic/premium)
+--    - newsletter_enabled = has active newsletter subscription
+--    - newsletter_status = 'inactive', 'trial', 'active', 'cancelled'
+-- 
+-- 📋 Functions:
+--    get_newsletter_stats() - Total/Active/Trial/Cancelled counts
+--    get_newsletter_users() - All users with newsletter status
+--    toggle_newsletter_status(user_id, enabled) - Admin manual toggle
+-- 
+-- 🔍 Test:
+--    SELECT * FROM get_newsletter_stats();
+--    SELECT * FROM get_newsletter_users() LIMIT 10;
+-- ============================================
+-- 🎉 NEWSLETTER INTEGRATION COMPLETE
+-- ============================================
+-- 
+-- ✅ Configuration:
+--    Product ID: prod_qlaV5Uu6LZlYn
+--    Plan ID: plan_LCBG5yJpoNtW3
+--    Price: $20/month
+--    Trial: 7 days free
+-- 
+-- 📋 Newsletter Flow:
+--    1. User clicks "Start Free Trial" → Whop checkout
+--    2. Whop: membership.activated → activate_newsletter_subscription()
+--    3. User gets 7-day free trial (newsletter_status = 'trial')
+--    4. After 7 days: payment.succeeded → handle_newsletter_payment()
+--    5. Status changes to 'active', expires_at extended by 1 month
+--    6. Monthly: payment.succeeded → handle_newsletter_payment()
+--    7. Cancel: membership.deactivated → deactivate_newsletter_subscription()
+-- 
+-- 🔍 Test queries:
+--    SELECT * FROM get_newsletter_status('user-uuid-here');
+--    SELECT is_newsletter_product('prod_qlaV5Uu6LZlYn');
+--    SELECT * FROM whop_plan_mapping WHERE finotaur_plan = 'newsletter';
+-- ===============================================
+-- PART 12: SUPABASE REALTIME FOR ADMIN DASHBOARD
+-- ===============================================
+-- Version: 1.1.0
+-- Must run AFTER all other migrations
+-- ===============================================
+
+-- 12.1 Add profiles to Realtime publication (safe)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'profiles'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+    RAISE NOTICE '✅ Added profiles to supabase_realtime';
+  ELSE
+    RAISE NOTICE 'ℹ️ profiles already in supabase_realtime';
+  END IF;
+END $$;
+
+-- 12.2 Set REPLICA IDENTITY FULL (required for UPDATE old values)
+DO $$
+DECLARE
+  v_current_identity CHAR(1);
+BEGIN
+  SELECT relreplident INTO v_current_identity 
+  FROM pg_class WHERE relname = 'profiles';
+  
+  IF v_current_identity != 'f' THEN
+    ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+    RAISE NOTICE '✅ Set REPLICA IDENTITY FULL on profiles';
+  ELSE
+    RAISE NOTICE 'ℹ️ profiles already has REPLICA IDENTITY FULL';
+  END IF;
+END $$;
+
+-- 12.3 Indexes for Realtime performance
+CREATE INDEX IF NOT EXISTS idx_profiles_realtime_updates 
+ON public.profiles(account_type, subscription_status, updated_at DESC);
+
+-- 12.4 Verification
+SELECT 'REALTIME SETUP' as check_type,
+  CASE WHEN EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'profiles'
+  ) THEN '✅ profiles in realtime' ELSE '❌ NOT in realtime' END as publication_status,
+  CASE WHEN (SELECT relreplident FROM pg_class WHERE relname = 'profiles') = 'f' 
+  THEN '✅ REPLICA IDENTITY FULL' ELSE '❌ NOT FULL' END as replica_identity;
 -- ============================================
 -- 🎉 FINOTAUR COMPLETE SUBSCRIPTION SYSTEM v5.0.0
 -- ============================================
@@ -1657,3 +2567,125 @@ SELECT
 -- 
 -- Manual run: SELECT run_daily_affiliate_tasks();
 -- ============================================
+-- =============================================
+-- AFFILIATE PAYOUTS - PAYPAL INTEGRATION
+-- Migration: Add PayPal fields to affiliates and payouts
+-- =============================================
+
+-- 1. Add paypal_email to affiliates table (if not exists)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliates' AND column_name = 'paypal_email'
+    ) THEN
+        ALTER TABLE affiliates ADD COLUMN paypal_email TEXT;
+    END IF;
+END $$;
+
+-- 2. Update affiliate_payouts table with PayPal specific fields
+DO $$ 
+BEGIN
+    -- Add paypal_batch_id (PayPal's batch ID)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_batch_id'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN paypal_batch_id TEXT;
+    END IF;
+    
+    -- Add paypal_payout_item_id (Individual payout item ID)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_payout_item_id'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN paypal_payout_item_id TEXT;
+    END IF;
+    
+    -- Add paypal_transaction_status (SUCCESS, FAILED, PENDING, UNCLAIMED, etc.)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_transaction_status'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN paypal_transaction_status TEXT;
+    END IF;
+    
+    -- Add payment_email (the email used for this specific payout)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'payment_email'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN payment_email TEXT;
+    END IF;
+    
+    -- Add paypal_fee (fee charged by PayPal)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_fee_usd'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN paypal_fee_usd DECIMAL(10,2) DEFAULT 0;
+    END IF;
+    
+    -- Rename transaction_id to paypal_transaction_id for clarity (if exists)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'transaction_id'
+    ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_transaction_id'
+    ) THEN
+        ALTER TABLE affiliate_payouts RENAME COLUMN transaction_id TO paypal_transaction_id;
+    END IF;
+    
+    -- Add paypal_transaction_id if it doesn't exist at all
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'affiliate_payouts' AND column_name = 'paypal_transaction_id'
+    ) THEN
+        ALTER TABLE affiliate_payouts ADD COLUMN paypal_transaction_id TEXT;
+    END IF;
+END $$;
+
+-- 3. Create index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_affiliate_payouts_paypal_batch_id 
+ON affiliate_payouts(paypal_batch_id);
+
+CREATE INDEX IF NOT EXISTS idx_affiliate_payouts_status 
+ON affiliate_payouts(status);
+
+CREATE INDEX IF NOT EXISTS idx_affiliates_paypal_email 
+ON affiliates(paypal_email);
+
+-- 4. Add comment for documentation
+COMMENT ON COLUMN affiliates.paypal_email IS 'PayPal email address for receiving payouts';
+COMMENT ON COLUMN affiliate_payouts.paypal_batch_id IS 'PayPal Payouts API batch ID';
+COMMENT ON COLUMN affiliate_payouts.paypal_payout_item_id IS 'PayPal individual payout item ID';
+COMMENT ON COLUMN affiliate_payouts.paypal_transaction_id IS 'PayPal transaction ID after successful payout';
+COMMENT ON COLUMN affiliate_payouts.paypal_transaction_status IS 'PayPal transaction status (SUCCESS, FAILED, PENDING, UNCLAIMED, RETURNED, ONHOLD, BLOCKED, REFUNDED, REVERSED)';
+COMMENT ON COLUMN affiliate_payouts.payment_email IS 'PayPal email used for this specific payout';
+COMMENT ON COLUMN affiliate_payouts.paypal_fee_usd IS 'Fee charged by PayPal for this payout';
+
+-- ===============================================
+-- FINOTAUR: Enable Supabase Realtime for Admin
+-- ===============================================
+-- Run in: Supabase Dashboard → SQL Editor
+-- ===============================================
+
+-- Enable Realtime on profiles table
+DO $$
+BEGIN
+  -- Add to realtime only if not already added
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'profiles'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;
+  END IF;
+END $$;
+
+-- Ensure REPLICA IDENTITY FULL for old values in UPDATE events
+ALTER TABLE public.profiles REPLICA IDENTITY FULL;
+
+-- Verify
+SELECT tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
+SELECT relname, relreplident FROM pg_class WHERE relname = 'profiles';

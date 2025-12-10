@@ -12,7 +12,43 @@
 -- ===============================================
 
 BEGIN;
+-- ===============================================
+-- 🔥 CRITICAL: DROP ALL TRIGGERS FIRST TO PREVENT DEADLOCK
+-- ===============================================
 
+DO $$
+BEGIN
+  RAISE NOTICE '🔥 [PRE-0] Dropping ALL triggers to prevent deadlock...';
+END $$;
+
+-- Drop ALL triggers on trades table
+DROP TRIGGER IF EXISTS handle_trade_changes_unified_trigger ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS increment_trade_count_trigger ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS calculate_trade_outcome_trigger ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS trigger_update_current_portfolio ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS trigger_increment_monthly_trade_count ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS trigger_auto_set_trade_session ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS trigger_set_imported_at ON public.trades CASCADE;
+DROP TRIGGER IF EXISTS trades_search_vector_update ON public.trades CASCADE;
+
+-- Drop triggers on profiles table
+DROP TRIGGER IF EXISTS trigger_initialize_risk_settings ON public.profiles CASCADE;
+DROP TRIGGER IF EXISTS on_auth_user_created ON public.profiles CASCADE;
+
+-- Drop triggers on snaptrade_users table
+DROP TRIGGER IF EXISTS trigger_update_snaptrade_users_updated_at ON public.snaptrade_users CASCADE;
+
+-- Drop triggers on payment_history table
+DROP TRIGGER IF EXISTS trigger_update_account_type_on_payment ON public.payment_history CASCADE;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ [PRE-0] All triggers dropped - safe to proceed';
+END $$;
+
+-- ===============================================
+-- END OF TRIGGER CLEANUP
+-- ===============================================
 DO $$
 BEGIN
   RAISE NOTICE '';
@@ -355,7 +391,7 @@ CREATE TRIGGER trigger_initialize_risk_settings
 COMMENT ON TRIGGER trigger_initialize_risk_settings ON public.profiles IS 
 'v8.5.9: Auto-initialize risk settings on profile creation';
 
--- Auto-Create Profile on Signup (NO AFFILIATE)
+-- Auto-Create Profile on Signup (WITH AFFILIATE CODE)
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -363,11 +399,33 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
+DECLARE
+  v_affiliate_code TEXT;
+  v_display_name TEXT;
 BEGIN
+  -- Generate display name
+  v_display_name := COALESCE(
+    NEW.raw_user_meta_data->>'display_name',
+    NEW.raw_user_meta_data->>'full_name',
+    NEW.raw_user_meta_data->>'name',
+    split_part(NEW.email, '@', 1)
+  );
+  
+  -- Generate unique affiliate code
+  v_affiliate_code := UPPER(LEFT(COALESCE(v_display_name, 'USR'), 3)) || 
+                      LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
+  
+  -- Ensure uniqueness (retry if exists)
+  WHILE EXISTS (SELECT 1 FROM public.profiles WHERE affiliate_code = v_affiliate_code) LOOP
+    v_affiliate_code := UPPER(LEFT(COALESCE(v_display_name, 'USR'), 3)) || 
+                        LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
+  END LOOP;
+
   INSERT INTO public.profiles (
     id, 
     email, 
-    display_name, 
+    display_name,
+    affiliate_code,
     account_type, 
     max_trades, 
     trade_count, 
@@ -377,11 +435,16 @@ BEGIN
     initial_portfolio,
     portfolio_size,
     risk_mode,
-    risk_percentage
+    risk_percentage,
+    role,
+    is_banned,
+    created_at,
+    updated_at
   ) VALUES (
     NEW.id,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+    v_display_name,
+    v_affiliate_code,
     'free',
     10,
     0,
@@ -391,16 +454,24 @@ BEGIN
     10000,
     10000,
     'percentage',
-    1.0
+    1.0,
+    'user',
+    FALSE,
+    NOW(),
+    NOW()
   )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    display_name = COALESCE(profiles.display_name, EXCLUDED.display_name),
+    affiliate_code = COALESCE(profiles.affiliate_code, EXCLUDED.affiliate_code),
+    updated_at = NOW();
   
   RETURN NEW;
 END;
 $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
-'v8.5.9-NO-AFFILIATE: Creates profile with new risk columns (NOT JSONB)';
+'v8.5.9-WITH-AFFILIATE: Creates profile with affiliate_code on user signup';
 
 DO $$
 BEGIN
@@ -3946,8 +4017,6 @@ END $$;
 -- ===============================================
 -- END OF MIGRATION - COMMIT
 -- ===============================================
-
-COMMIT;
 
 -- ===============================================
 -- FINAL VERIFICATION

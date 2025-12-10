@@ -7,6 +7,8 @@
 // ✅ UPDATED: Trade Duration locked for FREE users without SnapTrade
 // ✅ UPDATED: Timezone support & Trading Session indicators
 // ✅ UPDATED: Green checkmark on Refer a Friend for active affiliates
+// ✅ NEW: Personalized greeting with user name
+// ✅ FIXED: Broker button completely disabled for FREE users
 // ✅ Production ready for 5000+ users
 // ================================================
 
@@ -21,6 +23,7 @@ import {
   Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   useDashboardStats,
@@ -751,6 +754,16 @@ function JournalOverviewContent() {
   // ✅ NEW: Timezone context
   const timezone = useTimezone();
   
+  // ✅ NEW: Get user name from auth for personalized greeting
+  const { user } = useAuth();
+  const displayName = useMemo(() => {
+    return user?.user_metadata?.display_name || 
+           user?.user_metadata?.full_name || 
+           user?.user_metadata?.name ||
+           user?.email?.split('@')[0] || 
+           'Trader';
+  }, [user]);
+  
   const [range, setRange] = useState<DaysRange>('30D');
   const [showReferModal, setShowReferModal] = useState(false);
   const [showSnapTradePopup, setShowSnapTradePopup] = useState(false);
@@ -846,12 +859,12 @@ function JournalOverviewContent() {
       <style>{ANIMATION_STYLES}</style>
       
       <div className="p-6 space-y-6">
-        {/* ✅ UPDATED: Header with Trading Session Indicator */}
+        {/* ✅ UPDATED: Header with Personalized Greeting in Subtitle */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex-1">
             <PageTitle 
               title="Dashboard" 
-              subtitle="Track your performance and manage your trading journey" 
+              subtitle={`Welcome back, ${displayName.charAt(0).toUpperCase() + displayName.slice(1)} — let's review your performance`}
             />
           </div>
 
@@ -863,41 +876,34 @@ function JournalOverviewContent() {
               </div>
             )}
 
+            {/* ✅ DISABLED: Broker button - only admins can access */}
             <button
               onClick={handleBrokerButtonClick}
-              disabled={isCheckingConnection}
+              disabled={!isImpersonating}
               className={`flex items-center gap-2.5 border rounded-[12px] px-4 py-2.5 transition-all duration-300 group relative overflow-hidden ${
-                isCheckingConnection
-                  ? 'bg-[#1A1A1A] border-[#C9A646]/20 cursor-wait'
-                  : isLockedForFree
-                  ? 'bg-gradient-to-r from-zinc-800/50 to-zinc-700/50 border-zinc-600/30 hover:border-zinc-500/50 cursor-pointer hover:scale-[1.02]'
-                  : hasActiveConnection
-                  ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
-                  : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:border-[#C9A646]/40'
+                isImpersonating
+                  ? hasActiveConnection
+                    ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
+                    : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:border-[#C9A646]/40'
+                  : 'bg-zinc-900/50 border-zinc-700/30 cursor-not-allowed opacity-50'
               }`}
             >
-              {isCheckingConnection ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-[#C9A646] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-[#C9A646] text-sm font-medium">Loading...</span>
-                </>
-              ) : isLockedForFree ? (
-                <>
-                  <Lock className="w-4 h-4 text-zinc-400 group-hover:text-[#C9A646] transition-colors" />
-                  <span className="text-zinc-400 group-hover:text-[#C9A646] text-sm font-medium transition-colors">
-                    Connect Broker
-                  </span>
-                  <Crown className="w-3 h-3 text-[#C9A646] opacity-70" />
-                </>
-              ) : hasActiveConnection ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400 text-sm font-medium">Broker Connected</span>
-                </>
+              {isImpersonating ? (
+                hasActiveConnection ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-400 text-sm font-medium">Broker Connected</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="w-4 h-4 text-[#C9A646] group-hover:rotate-45 transition-transform duration-300" />
+                    <span className="text-[#C9A646] text-sm font-medium">Connect Broker</span>
+                  </>
+                )
               ) : (
                 <>
-                  <Link2 className="w-4 h-4 text-[#C9A646] group-hover:rotate-45 transition-transform duration-300" />
-                  <span className="text-[#C9A646] text-sm font-medium">Connect Broker</span>
+                  <Lock className="w-4 h-4 text-zinc-500" />
+                  <span className="text-zinc-500 text-sm font-medium">Connect Broker</span>
                 </>
               )}
             </button>

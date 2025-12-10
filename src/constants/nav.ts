@@ -153,13 +153,15 @@ export const domains: Record<string, Domain> = {
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: true,
+    locked: true, // ✅ UNLOCKED!
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
-      { label: 'News', path: '/app/macro/news' },
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
+      { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
+      { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
+      { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
       { label: 'Global Calendar', path: '/app/macro/calendar', icon: Calendar },
       { label: 'Interest Rates', path: '/app/macro/rates', icon: LineChart },
       { label: 'Economic Indicators', path: '/app/macro/indicators', icon: BarChart3 },

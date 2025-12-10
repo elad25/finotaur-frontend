@@ -34,6 +34,7 @@ import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTrack
 // PUBLIC PAGES - Load immediately (no lazy)
 // ===============================================
 import LandingPage from "@/pages/landing/LandingPage";
+import NewsletterSignup from "@/pages/landing/NewsletterSignup";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import ForgotPassword from '@/pages/auth/ForgotPassword';
@@ -194,8 +195,11 @@ const CommoditiesReports = lazy(() => import("@/pages/app/commodities/Reports"))
 const CommoditiesCalendar = lazy(() => import("@/pages/app/commodities/Calendar"));
 const CommoditiesNews = lazy(() => import("@/pages/app/commodities/News"));
 
-// === Macro ===
+// === Macro === ✅ UNLOCKED + NEW PAGES
 const MacroOverview = lazy(() => import("@/pages/app/macro/Overview"));
+const MacroCrossAsset = lazy(() => import("@/pages/app/macro/CrossAsset"));
+const MacroGlobalHeatmap = lazy(() => import("@/pages/app/macro/GlobalHeatmap"));
+const MacroModels = lazy(() => import("@/pages/app/macro/Models"));
 const MacroCalendar = lazy(() => import("@/pages/app/macro/Calendar"));
 const MacroRates = lazy(() => import("@/pages/app/macro/Rates"));
 const MacroIndicators = lazy(() => import("@/pages/app/macro/Indicators"));
@@ -502,6 +506,9 @@ function AppContent() {
         
         {/* 📢 AFFILIATE PAGE */}
         <Route path="/affiliate" element={<AffiliatePage />} />
+
+        {/* 🔥 NEWSLETTER SIGNUP - War Zone Landing */}
+        <Route path="/warzone-signup" element={<NewsletterSignup />} />
         
         {/* ⚖️ LEGAL ROUTES */}
         <Route path="/legal/terms" element={<TermsOfUse />} />
@@ -599,15 +606,18 @@ function AppContent() {
           <Route path="commodities/calendar" element={<LockedRoute domainId="commodities"><CommoditiesCalendar /></LockedRoute>} />
           <Route path="commodities/news" element={<LockedRoute domainId="commodities"><CommoditiesNews /></LockedRoute>} />
           
-          {/* 🔒 MACRO - LOCKED */}
-          <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
-          <Route path="macro/calendar" element={<LockedRoute domainId="macro"><MacroCalendar /></LockedRoute>} />
-          <Route path="macro/rates" element={<LockedRoute domainId="macro"><MacroRates /></LockedRoute>} />
-          <Route path="macro/indicators" element={<LockedRoute domainId="macro"><MacroIndicators /></LockedRoute>} />
-          <Route path="macro/events" element={<LockedRoute domainId="macro"><MacroEvents /></LockedRoute>} />
-          <Route path="macro/reports" element={<LockedRoute domainId="macro"><MacroReports /></LockedRoute>} />
-          <Route path="macro/sentiment" element={<LockedRoute domainId="macro"><MacroSentiment /></LockedRoute>} />
-          <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
+          {/* ✅ MACRO & NEWS - UNLOCKED */}
+          <Route path="macro/overview" element={<SuspenseRoute><MacroOverview /></SuspenseRoute>} />
+          <Route path="macro/cross-asset" element={<SuspenseRoute><MacroCrossAsset /></SuspenseRoute>} />
+          <Route path="macro/global-heatmap" element={<SuspenseRoute><MacroGlobalHeatmap /></SuspenseRoute>} />
+          <Route path="macro/models" element={<SuspenseRoute><MacroModels /></SuspenseRoute>} />
+          <Route path="macro/calendar" element={<SuspenseRoute><MacroCalendar /></SuspenseRoute>} />
+          <Route path="macro/rates" element={<SuspenseRoute><MacroRates /></SuspenseRoute>} />
+          <Route path="macro/indicators" element={<SuspenseRoute><MacroIndicators /></SuspenseRoute>} />
+          <Route path="macro/events" element={<SuspenseRoute><MacroEvents /></SuspenseRoute>} />
+          <Route path="macro/reports" element={<SuspenseRoute><MacroReports /></SuspenseRoute>} />
+          <Route path="macro/sentiment" element={<SuspenseRoute><MacroSentiment /></SuspenseRoute>} />
+          <Route path="macro/news" element={<SuspenseRoute><MacroNews /></SuspenseRoute>} />
           
           {/* 🔒 AI - LOCKED */}
           <Route path="ai/overview" element={<LockedRoute domainId="ai"><AIOverview /></LockedRoute>} />
