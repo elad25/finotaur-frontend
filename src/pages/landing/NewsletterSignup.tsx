@@ -1,15 +1,15 @@
 // =====================================================
-// FINOTAUR WAR ZONE - FINAL OPTIMIZED v7.0
+// FINOTAUR WAR ZONE - INSTITUTIONAL GOLD v1.0
 // =====================================================
 // Place in: src/pages/landing/NewsletterSignup.tsx
 //
-// OPTIMIZATIONS:
-// - Deep gradient background with noise & vignette
-// - AI-vibe form with metallic border & glow
-// - Larger dashboard with glowing outline
-// - "Who This Is For" section
-// - Mobile-optimized order: FOMO content earlier
-// - Better spacing and bullet points
+// DESIGN SYSTEM:
+// - Deep black background with subtle gold gradients
+// - Gold Primary: #D4AF37
+// - Gold Gradient: #C9A646 → #E7C873
+// - Luxury gray text: #C4C4C4
+// - Institutional premium aesthetic
+// - Clean typography with generous spacing
 //
 // Route: /warzone-signup (public, no auth required)
 // =====================================================
@@ -46,6 +46,8 @@ import {
   Check,
   TrendingUp,
   Users,
+  Shield,
+  Award,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -58,18 +60,39 @@ const WHOP_CHECKOUT_BASE_URL = `https://whop.com/checkout/${WHOP_NEWSLETTER_PLAN
 const REDIRECT_URL = 'https://www.finotaur.com/app/all-markets/warzone';
 
 // ============================================
-// DESIGN TOKENS
+// DESIGN TOKENS - INSTITUTIONAL GOLD
 // ============================================
 
 const COLORS = {
-  primary: '#00D4AA',
-  primaryGlow: 'rgba(0, 212, 170, 0.2)',
-  danger: '#EF4444',
-  warning: '#F59E0B',
-  dark: '#020508',
-  card: '#0A0D12',
-  border: 'rgba(255,255,255,0.06)',
-  borderLight: 'rgba(255,255,255,0.1)',
+  // Gold palette
+  gold: '#D4AF37',
+  goldLight: '#E7C873',
+  goldDark: '#C9A646',
+  goldMuted: 'rgba(212, 175, 55, 0.15)',
+  goldGlow: 'rgba(212, 175, 55, 0.25)',
+  goldBorder: 'rgba(212, 175, 55, 0.2)',
+  goldBorderLight: 'rgba(212, 175, 55, 0.3)',
+  
+  // Backgrounds
+  dark: '#0C0C0C',
+  darkAlt: '#1A1A1A',
+  card: 'rgba(255, 255, 255, 0.02)',
+  cardHover: 'rgba(255, 255, 255, 0.04)',
+  
+  // Text
+  white: '#FFFFFF',
+  whiteMuted: 'rgba(255, 255, 255, 0.8)',
+  gray: '#C4C4C4',
+  grayDark: '#8A8A8A',
+  
+  // Accents
+  danger: '#7A2424',
+  dangerLight: 'rgba(122, 36, 36, 0.15)',
+  success: 'rgba(212, 175, 55, 0.2)',
+  
+  // Borders
+  border: 'rgba(255, 255, 255, 0.06)',
+  borderLight: 'rgba(255, 255, 255, 0.1)',
 };
 
 // ============================================
@@ -114,57 +137,70 @@ const useCountdown = () => {
 };
 
 // ============================================
-// DEEP BACKGROUND WITH NOISE & VIGNETTE
+// INSTITUTIONAL BACKGROUND
 // ============================================
 
-const DeepBackground = () => (
+const InstitutionalBackground = () => (
   <div className="fixed inset-0 pointer-events-none overflow-hidden">
-    {/* Base deep gradient */}
+    {/* Base gradient - deep black */}
     <div 
       className="absolute inset-0"
       style={{
-        background: 'linear-gradient(180deg, #020508 0%, #000000 50%, #010203 100%)',
+        background: `linear-gradient(180deg, ${COLORS.dark} 0%, #000000 40%, ${COLORS.darkAlt} 100%)`,
       }}
     />
     
-    {/* Noise texture */}
+    {/* Subtle noise texture */}
     <div 
-      className="absolute inset-0 opacity-[0.03]"
+      className="absolute inset-0 opacity-[0.015]"
       style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
       }}
     />
     
-    {/* Vignette effect */}
+    {/* Vignette */}
     <div 
       className="absolute inset-0"
       style={{
-        background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 70%, rgba(0,0,0,0.8) 100%)',
+        background: 'radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.3) 60%, rgba(0,0,0,0.7) 100%)',
       }}
     />
     
-    {/* Subtle grid */}
+    {/* Top gold glow - very subtle */}
     <div 
-      className="absolute inset-0 opacity-[0.02]"
+      className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px]"
       style={{
-        backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
-        backgroundSize: '50px 50px',
+        background: `radial-gradient(ellipse at center, ${COLORS.goldMuted} 0%, transparent 70%)`,
+        opacity: 0.4,
       }}
     />
     
-    {/* Top glow */}
+    {/* Subtle grid pattern */}
     <div 
-      className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px]"
+      className="absolute inset-0 opacity-[0.015]"
       style={{
-        background: `radial-gradient(ellipse at center, ${COLORS.primaryGlow} 0%, transparent 60%)`,
-        opacity: 0.5,
+        backgroundImage: `linear-gradient(rgba(212,175,55,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,0.1) 1px, transparent 1px)`,
+        backgroundSize: '60px 60px',
       }}
     />
   </div>
 );
 
 // ============================================
-// COUNTDOWN BADGE
+// SECTION DIVIDER
+// ============================================
+
+const SectionDivider = () => (
+  <div 
+    className="h-px my-8 mx-auto max-w-[200px]"
+    style={{ 
+      background: `linear-gradient(90deg, transparent, ${COLORS.goldBorder}, transparent)` 
+    }}
+  />
+);
+
+// ============================================
+// COUNTDOWN BADGE - GOLD
 // ============================================
 
 const CountdownBadge = ({ countdown }: { countdown: { hours: number; minutes: number; seconds: number; urgent: boolean } }) => {
@@ -173,18 +209,18 @@ const CountdownBadge = ({ countdown }: { countdown: { hours: number; minutes: nu
   return (
     <div 
       className={cn(
-        "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold",
+        "inline-flex items-center gap-2.5 px-5 py-2.5 rounded-full text-sm font-medium tracking-wide",
         isUrgent && "animate-pulse"
       )}
       style={{ 
-        background: isUrgent ? 'rgba(239,68,68,0.15)' : 'rgba(0,212,170,0.1)', 
-        border: `1px solid ${isUrgent ? 'rgba(239,68,68,0.4)' : 'rgba(0,212,170,0.3)'}`,
-        color: isUrgent ? '#EF4444' : COLORS.primary,
-        boxShadow: isUrgent ? '0 0 20px rgba(239,68,68,0.2)' : '0 0 20px rgba(0,212,170,0.15)',
+        background: isUrgent ? COLORS.dangerLight : COLORS.goldMuted, 
+        border: `1px solid ${isUrgent ? 'rgba(122,36,36,0.4)' : COLORS.goldBorder}`,
+        color: isUrgent ? '#EF4444' : COLORS.gold,
+        boxShadow: isUrgent ? '0 0 30px rgba(239,68,68,0.1)' : `0 0 30px ${COLORS.goldMuted}`,
       }}
     >
       <Clock className="w-4 h-4" />
-      <span>Next Report: </span>
+      <span className="opacity-80">Next Report</span>
       <span className="tabular-nums font-bold">
         {String(countdown.hours).padStart(2, '0')}:{String(countdown.minutes).padStart(2, '0')}:{String(countdown.seconds).padStart(2, '0')}
       </span>
@@ -193,7 +229,7 @@ const CountdownBadge = ({ countdown }: { countdown: { hours: number; minutes: nu
 };
 
 // ============================================
-// TODAY'S REPORT PREVIEW (FOMO) - COMPACT
+// TODAY'S REPORT PREVIEW - GOLD
 // ============================================
 
 const TodaysReportPreview = () => {
@@ -206,24 +242,29 @@ const TodaysReportPreview = () => {
 
   return (
     <div 
-      className="rounded-xl p-4"
+      className="rounded-2xl p-5"
       style={{ 
-        background: 'rgba(0,212,170,0.05)', 
-        border: '1px solid rgba(0,212,170,0.2)',
-        boxShadow: '0 0 30px rgba(0,212,170,0.08)',
+        background: COLORS.card, 
+        border: `1px solid ${COLORS.goldBorder}`,
+        boxShadow: `0 0 40px ${COLORS.goldMuted}`,
       }}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Zap className="w-4 h-4" style={{ color: COLORS.warning }} />
-        <span className="text-xs font-bold uppercase tracking-wide" style={{ color: COLORS.warning }}>
-          Today's Report Includes
+      <div className="flex items-center gap-2.5 mb-4">
+        <div 
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ background: COLORS.goldMuted }}
+        >
+          <Zap className="w-4 h-4" style={{ color: COLORS.gold }} />
+        </div>
+        <span className="text-sm font-semibold uppercase tracking-widest" style={{ color: COLORS.gold }}>
+          Today's Report
         </span>
       </div>
-      <ul className="space-y-1.5">
+      <ul className="space-y-2.5">
         {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm">
-            <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: COLORS.primary }} />
-            <span className="text-gray-300">{item}</span>
+          <li key={i} className="flex items-start gap-3 text-sm">
+            <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: COLORS.gold }} />
+            <span style={{ color: COLORS.gray }}>{item}</span>
           </li>
         ))}
       </ul>
@@ -232,70 +273,92 @@ const TodaysReportPreview = () => {
 };
 
 // ============================================
-// PAIN POINTS (FOMO) - COMPACT
+// PAIN POINTS - GOLD ACCENT
 // ============================================
 
 const PainPointsCompact = () => {
   const points = [
     "Missing early liquidity shifts",
     "Trading without macro context",
-    "Zero visibility on smart money flow",
+    "Zero visibility on smart money",
     "Not seeing structure behind moves",
   ];
 
   return (
     <div 
-      className="rounded-xl p-4"
-      style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)' }}
+      className="rounded-2xl p-5"
+      style={{ 
+        background: COLORS.dangerLight, 
+        border: `1px solid rgba(122,36,36,0.25)`,
+      }}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <AlertTriangle className="w-4 h-4 text-red-500" />
-        <span className="text-xs font-bold uppercase tracking-wide text-red-400">
-          Without War Zone, You're:
+      <div className="flex items-center gap-2.5 mb-4">
+        <div 
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ background: 'rgba(122,36,36,0.3)' }}
+        >
+          <AlertTriangle className="w-4 h-4 text-red-400" />
+        </div>
+        <span className="text-sm font-semibold uppercase tracking-widest text-red-400">
+          Without War Zone
         </span>
       </div>
-      <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+      <ul className="grid grid-cols-2 gap-x-4 gap-y-2">
         {points.map((point, i) => (
-          <li key={i} className="flex items-start gap-1.5 text-sm">
-            <X className="w-3.5 h-3.5 text-red-500/60 flex-shrink-0 mt-0.5" />
-            <span className="text-gray-500">{point}</span>
+          <li key={i} className="flex items-start gap-2 text-sm">
+            <X className="w-4 h-4 text-red-500/50 flex-shrink-0 mt-0.5" />
+            <span style={{ color: COLORS.grayDark }}>{point}</span>
           </li>
         ))}
       </ul>
+      {/* Gold underline accent */}
+      <div 
+        className="h-0.5 mt-4 rounded-full"
+        style={{ background: `linear-gradient(90deg, ${COLORS.goldBorder}, transparent)` }}
+      />
     </div>
   );
 };
 
 // ============================================
-// WHO THIS IS FOR
+// WHO THIS IS FOR - GOLD CARDS
 // ============================================
 
 const WhoThisIsFor = () => {
   const audiences = [
-    { icon: TrendingUp, text: 'Day Traders', desc: 'who need pre-market edge' },
-    { icon: LineChart, text: 'Swing Traders', desc: 'looking for macro context' },
-    { icon: Activity, text: 'Options Traders', desc: 'tracking unusual flow' },
-    { icon: Clock, text: 'Busy Professionals', desc: 'no time to analyze' },
+    { icon: TrendingUp, text: 'Day Traders', desc: 'Pre-market edge' },
+    { icon: LineChart, text: 'Swing Traders', desc: 'Macro context' },
+    { icon: Activity, text: 'Options Traders', desc: 'Unusual flow' },
+    { icon: Clock, text: 'Professionals', desc: 'Time-efficient' },
   ];
 
   return (
-    <div className="py-6">
-      <h3 className="text-center text-white font-bold text-lg mb-1">
-        Who This Is For
+    <div className="py-2">
+      <h3 className="text-center font-bold text-xl mb-2" style={{ color: COLORS.white }}>
+        Who This Is <span style={{ color: COLORS.gold }}>For</span>
       </h3>
-      <p className="text-center text-gray-500 text-sm mb-5">
+      <p className="text-center text-sm mb-6" style={{ color: COLORS.grayDark }}>
         Is this you?
       </p>
       <div className="grid grid-cols-2 gap-3">
         {audiences.map((a, i) => (
           <div 
             key={i}
-            className="p-3 rounded-lg text-center"
-            style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}
+            className="p-4 rounded-xl text-center transition-all duration-300 hover:scale-[1.02]"
+            style={{ 
+              background: COLORS.card, 
+              border: `1px solid ${COLORS.goldBorder}`,
+              boxShadow: `0 4px 20px rgba(0,0,0,0.2)`,
+            }}
           >
-            <a.icon className="w-5 h-5 mx-auto mb-2" style={{ color: COLORS.primary }} />
-            <p className="text-white text-sm font-medium">{a.text}</p>
-            <p className="text-gray-500 text-xs">{a.desc}</p>
+            <div 
+              className="w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-2"
+              style={{ background: COLORS.goldMuted }}
+            >
+              <a.icon className="w-5 h-5" style={{ color: COLORS.gold }} />
+            </div>
+            <p className="font-semibold text-sm" style={{ color: COLORS.white }}>{a.text}</p>
+            <p className="text-xs mt-0.5" style={{ color: COLORS.grayDark }}>{a.desc}</p>
           </div>
         ))}
       </div>
@@ -304,63 +367,72 @@ const WhoThisIsFor = () => {
 };
 
 // ============================================
-// DASHBOARD MOCKUP - LARGER WITH GLOW
+// DASHBOARD MOCKUP - GOLD THEME
 // ============================================
 
 const DashboardMockup = () => (
   <div className="relative">
     {/* Outer glow */}
     <div 
-      className="absolute -inset-2 rounded-2xl opacity-60 blur-xl"
-      style={{ background: `linear-gradient(135deg, ${COLORS.primaryGlow}, rgba(99,102,241,0.15))` }}
+      className="absolute -inset-3 rounded-3xl opacity-50 blur-2xl"
+      style={{ background: COLORS.goldGlow }}
     />
     
     <div 
-      className="relative rounded-xl overflow-hidden"
+      className="relative rounded-2xl overflow-hidden"
       style={{ 
-        background: COLORS.card, 
-        border: '1px solid rgba(0,212,170,0.3)',
-        boxShadow: `0 0 40px rgba(0,212,170,0.15), 0 20px 60px rgba(0,0,0,0.5)`,
+        background: 'linear-gradient(180deg, rgba(20,20,20,0.95) 0%, rgba(12,12,12,0.98) 100%)', 
+        border: `1px solid ${COLORS.goldBorderLight}`,
+        boxShadow: `0 0 60px ${COLORS.goldMuted}, 0 25px 80px rgba(0,0,0,0.6)`,
       }}
     >
       {/* Window Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b" style={{ borderColor: COLORS.border }}>
+      <div 
+        className="flex items-center gap-2 px-5 py-3 border-b"
+        style={{ borderColor: COLORS.border, background: 'rgba(0,0,0,0.3)' }}
+      >
         <div className="flex gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+          <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
         </div>
-        <span className="text-gray-500 text-xs ml-2">War Zone Intelligence — Live</span>
-        <div className="ml-auto flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-green-500 text-[10px] font-medium">LIVE</span>
+        <span className="text-xs ml-2" style={{ color: COLORS.grayDark }}>War Zone Intelligence</span>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: COLORS.gold }} />
+          <span className="text-[10px] font-medium" style={{ color: COLORS.gold }}>LIVE</span>
         </div>
       </div>
       
       {/* Content */}
-      <div className="p-4">
+      <div className="p-5">
         {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-5">
           {[
-            { label: 'SPY Bias', value: 'Bullish', color: COLORS.primary },
-            { label: 'VIX Level', value: '14.2', color: COLORS.warning },
-            { label: 'Net Flow', value: '+$2.4M', color: '#8B5CF6' },
+            { label: 'SPY Bias', value: 'Bullish', highlight: true },
+            { label: 'VIX Level', value: '14.2', highlight: false },
+            { label: 'Net Flow', value: '+$2.4M', highlight: true },
           ].map((s, i) => (
             <div 
               key={i} 
-              className="p-2.5 rounded-lg text-center"
-              style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${COLORS.border}` }}
+              className="p-3 rounded-xl text-center"
+              style={{ 
+                background: COLORS.card, 
+                border: `1px solid ${s.highlight ? COLORS.goldBorder : COLORS.border}` 
+              }}
             >
-              <p className="text-gray-500 text-[10px] uppercase tracking-wide">{s.label}</p>
-              <p className="font-bold text-sm mt-0.5" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: COLORS.grayDark }}>{s.label}</p>
+              <p className="font-bold text-sm" style={{ color: s.highlight ? COLORS.gold : COLORS.white }}>{s.value}</p>
             </div>
           ))}
         </div>
         
         {/* Chart */}
         <div 
-          className="h-24 sm:h-28 rounded-lg flex items-end justify-between px-3 pb-3"
-          style={{ background: 'rgba(0,212,170,0.03)', border: `1px solid ${COLORS.border}` }}
+          className="h-28 sm:h-32 rounded-xl flex items-end justify-between px-4 pb-4"
+          style={{ 
+            background: COLORS.card, 
+            border: `1px solid ${COLORS.border}` 
+          }}
         >
           {[35, 50, 40, 70, 45, 80, 55, 85, 60, 95, 70, 90, 65, 88].map((h, i) => (
             <div 
@@ -368,8 +440,10 @@ const DashboardMockup = () => (
               className="w-2 sm:w-2.5 rounded-t transition-all"
               style={{ 
                 height: `${h}%`, 
-                background: i === 13 ? COLORS.primary : 'rgba(0,212,170,0.25)',
-                boxShadow: i === 13 ? `0 0 10px ${COLORS.primaryGlow}` : 'none',
+                background: i === 13 
+                  ? `linear-gradient(180deg, ${COLORS.goldLight}, ${COLORS.goldDark})` 
+                  : 'rgba(212,175,55,0.2)',
+                boxShadow: i === 13 ? `0 0 15px ${COLORS.goldGlow}` : 'none',
               }}
             />
           ))}
@@ -377,13 +451,21 @@ const DashboardMockup = () => (
         
         {/* Alert */}
         <div 
-          className="mt-3 p-3 rounded-lg flex items-start gap-2"
-          style={{ background: 'rgba(0,212,170,0.08)', border: '1px solid rgba(0,212,170,0.2)' }}
+          className="mt-4 p-4 rounded-xl flex items-start gap-3"
+          style={{ 
+            background: COLORS.goldMuted, 
+            border: `1px solid ${COLORS.goldBorder}` 
+          }}
         >
-          <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: COLORS.primary }} />
+          <div 
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(212,175,55,0.2)' }}
+          >
+            <Zap className="w-4 h-4" style={{ color: COLORS.gold }} />
+          </div>
           <div>
-            <p className="text-white text-sm font-medium">Large NVDA Call Flow Detected</p>
-            <p className="text-gray-400 text-xs">$2.4M in 140C Jan expiry — Smart money</p>
+            <p className="font-semibold text-sm" style={{ color: COLORS.white }}>Large NVDA Call Flow Detected</p>
+            <p className="text-xs mt-0.5" style={{ color: COLORS.gray }}>$2.4M in 140C Jan expiry — Smart money</p>
           </div>
         </div>
       </div>
@@ -392,55 +474,97 @@ const DashboardMockup = () => (
 );
 
 // ============================================
-// AI PIPELINE - COMPACT
+// AI PIPELINE - GOLD
 // ============================================
 
 const AIPipelineCompact = () => {
   const steps = [
-    { icon: Database, label: 'Data', color: '#3B82F6' },
-    { icon: Cpu, label: 'Analysis', color: '#8B5CF6' },
-    { icon: Brain, label: 'AI', color: '#EC4899' },
-    { icon: FileText, label: 'Report', color: COLORS.primary },
+    { icon: Database, label: 'Data' },
+    { icon: Cpu, label: 'Analysis' },
+    { icon: Brain, label: 'AI' },
+    { icon: FileText, label: 'Report' },
   ];
 
   return (
-    <div className="py-6">
-      <h3 className="text-center text-white font-bold text-lg mb-1">
-        AI-Powered Intelligence Pipeline
+    <div className="py-2">
+      <h3 className="text-center font-bold text-xl mb-2" style={{ color: COLORS.white }}>
+        AI-Powered <span style={{ color: COLORS.gold }}>Intelligence</span>
       </h3>
-      <p className="text-center text-gray-500 text-sm mb-5">
+      <p className="text-center text-sm mb-6" style={{ color: COLORS.grayDark }}>
         Multi-agent system working overnight
       </p>
       
-      <div className="flex items-center justify-center gap-2 sm:gap-4">
+      <div className="flex items-center justify-center gap-3 sm:gap-5">
         {steps.map((step, i) => (
-          <div key={i} className="flex items-center gap-2 sm:gap-4">
+          <div key={i} className="flex items-center gap-3 sm:gap-5">
             <div className="text-center">
               <div 
-                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center mx-auto mb-1"
-                style={{ background: `${step.color}15`, border: `1px solid ${step.color}30` }}
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center mx-auto mb-2"
+                style={{ 
+                  background: COLORS.goldMuted, 
+                  border: `1px solid ${COLORS.goldBorder}`,
+                  boxShadow: `0 4px 15px rgba(0,0,0,0.3)`,
+                }}
               >
-                <step.icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: step.color }} />
+                <step.icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: COLORS.gold }} />
               </div>
-              <p className="text-gray-400 text-[10px] sm:text-xs">{step.label}</p>
+              <p className="text-[10px] sm:text-xs" style={{ color: COLORS.gray }}>{step.label}</p>
             </div>
             {i < steps.length - 1 && (
-              <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-gray-700" />
+              <ArrowRight className="w-4 h-4" style={{ color: COLORS.goldBorder }} />
             )}
           </div>
         ))}
       </div>
 
-      <div className="mt-4 text-center">
-        <span className="text-gray-400 text-sm">Delivered daily at </span>
-        <span className="font-bold" style={{ color: COLORS.warning }}>9:00 AM ET</span>
+      <div className="mt-6 text-center">
+        <span style={{ color: COLORS.gray }} className="text-sm">Delivered daily at </span>
+        <span className="font-bold" style={{ color: COLORS.gold }}>9:00 AM ET</span>
       </div>
     </div>
   );
 };
 
 // ============================================
-// AI-VIBE SIGNUP FORM
+// GOLD CTA BUTTON
+// ============================================
+
+const GoldButton = ({ 
+  children, 
+  onClick, 
+  disabled, 
+  className,
+  size = 'default',
+}: { 
+  children: React.ReactNode; 
+  onClick?: (e: React.FormEvent) => void; 
+  disabled?: boolean;
+  className?: string;
+  size?: 'default' | 'large';
+}) => (
+  <button
+    type="submit"
+    onClick={onClick}
+    disabled={disabled}
+    className={cn(
+      "w-full rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300",
+      "hover:shadow-lg hover:scale-[1.01] active:scale-[0.99]",
+      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
+      size === 'large' ? 'py-4 text-base' : 'py-3.5 text-sm',
+      className
+    )}
+    style={{ 
+      background: `linear-gradient(135deg, ${COLORS.goldDark}, ${COLORS.gold}, ${COLORS.goldLight})`,
+      color: COLORS.dark,
+      boxShadow: `0 4px 25px ${COLORS.goldGlow}, 0 0 50px ${COLORS.goldMuted}`,
+    }}
+  >
+    {children}
+  </button>
+);
+
+// ============================================
+// AI-VIBE SIGNUP FORM - GOLD
 // ============================================
 
 const SignupForm = ({
@@ -456,129 +580,162 @@ const SignupForm = ({
   showPassword: boolean; setShowPassword: (v: boolean) => void;
   isLoading: boolean; error: string | null; handleSignup: (e: React.FormEvent) => void;
 }) => (
-  <form onSubmit={handleSignup} className="space-y-3">
+  <form onSubmit={handleSignup} className="space-y-4">
     {error && (
-      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
-        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+      <div 
+        className="p-4 rounded-xl flex items-center gap-3"
+        style={{ background: COLORS.dangerLight, border: `1px solid rgba(122,36,36,0.3)` }}
+      >
+        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
         <p className="text-red-400 text-sm">{error}</p>
       </div>
     )}
 
-    {/* AI-Vibe Form Container */}
+    {/* Premium Form Container */}
     <div 
-      className="relative rounded-xl p-4 space-y-3"
+      className="relative rounded-2xl p-5 space-y-4"
       style={{ 
-        background: 'linear-gradient(180deg, rgba(10,13,18,0.95) 0%, rgba(5,8,12,0.98) 100%)',
-        border: '1px solid rgba(0,212,170,0.2)',
+        background: 'linear-gradient(180deg, rgba(20,20,20,0.9) 0%, rgba(12,12,12,0.95) 100%)',
+        border: `1px solid ${COLORS.goldBorder}`,
         boxShadow: `
-          0 0 30px rgba(0,212,170,0.08),
-          inset 0 1px 0 rgba(255,255,255,0.03),
-          inset 0 -1px 0 rgba(0,0,0,0.3)
+          0 0 40px ${COLORS.goldMuted},
+          inset 0 1px 0 rgba(255,255,255,0.02),
+          inset 0 -1px 0 rgba(0,0,0,0.2)
         `,
       }}
     >
-      {/* Metallic top edge */}
+      {/* Gold top edge accent */}
       <div 
-        className="absolute top-0 left-4 right-4 h-px"
-        style={{ background: 'linear-gradient(90deg, transparent, rgba(0,212,170,0.3), transparent)' }}
+        className="absolute top-0 left-6 right-6 h-px"
+        style={{ background: `linear-gradient(90deg, transparent, ${COLORS.goldBorderLight}, transparent)` }}
       />
 
       <div className="relative">
-        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: COLORS.grayDark }} />
         <input
           type="text"
           placeholder="First name"
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           disabled={isLoading}
-          className="w-full pl-10 pr-4 py-3 rounded-lg bg-black/50 border text-white placeholder-gray-500 focus:outline-none focus:border-[#00D4AA]/50 text-sm"
-          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+          className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-black/40 border text-white placeholder-gray-500 focus:outline-none transition-all text-sm"
+          style={{ 
+            borderColor: COLORS.border,
+          }}
+          onFocus={(e) => e.target.style.borderColor = COLORS.goldBorder}
+          onBlur={(e) => e.target.style.borderColor = COLORS.border}
         />
       </div>
 
       <div className="relative">
-        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: COLORS.grayDark }} />
         <input
           type="email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={isLoading}
-          className="w-full pl-10 pr-4 py-3 rounded-lg bg-black/50 border text-white placeholder-gray-500 focus:outline-none focus:border-[#00D4AA]/50 text-sm"
-          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+          className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-black/40 border text-white placeholder-gray-500 focus:outline-none transition-all text-sm"
+          style={{ borderColor: COLORS.border }}
+          onFocus={(e) => e.target.style.borderColor = COLORS.goldBorder}
+          onBlur={(e) => e.target.style.borderColor = COLORS.border}
         />
       </div>
 
       <div className="relative">
-        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: COLORS.grayDark }} />
         <input
           type={showPassword ? 'text' : 'password'}
-          placeholder="Password (6+ chars)"
+          placeholder="Password (6+ characters)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={isLoading}
-          className="w-full pl-10 pr-10 py-3 rounded-lg bg-black/50 border text-white placeholder-gray-500 focus:outline-none focus:border-[#00D4AA]/50 text-sm"
-          style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+          className="w-full pl-11 pr-11 py-3.5 rounded-xl bg-black/40 border text-white placeholder-gray-500 focus:outline-none transition-all text-sm"
+          style={{ borderColor: COLORS.border }}
+          onFocus={(e) => e.target.style.borderColor = COLORS.goldBorder}
+          onBlur={(e) => e.target.style.borderColor = COLORS.border}
         />
-        <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
-          {showPassword ? <EyeOff className="w-4 h-4 text-gray-500" /> : <Eye className="w-4 h-4 text-gray-500" />}
+        <button 
+          type="button" 
+          onClick={() => setShowPassword(!showPassword)} 
+          className="absolute right-4 top-1/2 -translate-y-1/2 transition-colors hover:opacity-80"
+        >
+          {showPassword 
+            ? <EyeOff className="w-4 h-4" style={{ color: COLORS.grayDark }} /> 
+            : <Eye className="w-4 h-4" style={{ color: COLORS.grayDark }} />
+          }
         </button>
       </div>
 
-      <button
-        type="submit"
-        disabled={isLoading}
-        className="w-full py-3.5 rounded-lg font-bold text-black flex items-center justify-center gap-2 transition-all hover:opacity-90 disabled:opacity-50"
-        style={{ 
-          background: `linear-gradient(135deg, ${COLORS.primary}, #00E5B8)`,
-          boxShadow: `0 4px 20px ${COLORS.primaryGlow}, 0 0 40px rgba(0,212,170,0.15)`,
-        }}
-      >
+      <GoldButton disabled={isLoading}>
         {isLoading ? (
-          <><Loader2 className="w-5 h-5 animate-spin" /> Creating...</>
+          <><Loader2 className="w-5 h-5 animate-spin" /> Creating Account...</>
         ) : (
-          <>🔥 Unlock Today's Report</>
+          <>
+            <Award className="w-5 h-5" />
+            Unlock Today's Report
+          </>
         )}
-      </button>
+      </GoldButton>
     </div>
 
-    <p className="text-center text-gray-500 text-xs">
-      ✓ 7-Day Free &nbsp;•&nbsp; No Card Now &nbsp;•&nbsp; Cancel Anytime
-    </p>
+    {/* Trust indicators */}
+    <div className="flex items-center justify-center gap-4 text-xs" style={{ color: COLORS.grayDark }}>
+      <span className="flex items-center gap-1.5">
+        <Shield className="w-3.5 h-3.5" style={{ color: COLORS.gold }} />
+        7-Day Free
+      </span>
+      <span>•</span>
+      <span>No Card Now</span>
+      <span>•</span>
+      <span>Cancel Anytime</span>
+    </div>
     
-    <p className="text-center text-gray-600 text-xs">
-      Have an account? <a href="/login" className="font-medium hover:underline" style={{ color: COLORS.primary }}>Log in</a>
+    <p className="text-center text-xs" style={{ color: COLORS.grayDark }}>
+      Have an account?{' '}
+      <a href="/login" className="font-semibold hover:underline transition-colors" style={{ color: COLORS.gold }}>
+        Log in
+      </a>
     </p>
   </form>
 );
 
 // ============================================
-// TESTIMONIAL
+// TESTIMONIAL - GOLD ACCENT
 // ============================================
 
 const TestimonialCard = ({ text, author, role }: { text: string; author: string; role: string }) => (
   <div 
-    className="p-4 rounded-xl"
-    style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}
+    className="p-5 rounded-2xl transition-all duration-300 hover:scale-[1.01]"
+    style={{ 
+      background: COLORS.card, 
+      border: `1px solid ${COLORS.goldBorder}`,
+      boxShadow: `0 4px 20px rgba(0,0,0,0.2)`,
+    }}
   >
-    <div className="flex gap-0.5 mb-2">
+    <div className="flex gap-0.5 mb-3">
       {[...Array(5)].map((_, i) => (
-        <Star key={i} className="w-3.5 h-3.5 fill-yellow-500 text-yellow-500" />
+        <Star key={i} className="w-4 h-4" style={{ fill: COLORS.gold, color: COLORS.gold }} />
       ))}
     </div>
-    <p className="text-gray-300 text-sm mb-3">"{text}"</p>
-    <div className="flex items-center gap-2">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600" />
+    <p className="text-sm mb-4 leading-relaxed" style={{ color: COLORS.gray }}>"{text}"</p>
+    <div className="flex items-center gap-3">
+      <div 
+        className="w-9 h-9 rounded-full flex items-center justify-center"
+        style={{ background: `linear-gradient(135deg, ${COLORS.goldDark}, ${COLORS.gold})` }}
+      >
+        <span className="text-xs font-bold" style={{ color: COLORS.dark }}>{author.charAt(0)}</span>
+      </div>
       <div>
-        <p className="text-white text-xs font-medium">{author}</p>
-        <p className="text-gray-500 text-[10px]">{role}</p>
+        <p className="text-sm font-medium" style={{ color: COLORS.white }}>{author}</p>
+        <p className="text-[11px]" style={{ color: COLORS.grayDark }}>{role}</p>
       </div>
     </div>
   </div>
 );
 
 // ============================================
-// WELCOME POPUP
+// WELCOME POPUP - GOLD
 // ============================================
 
 const WelcomePopup = ({ 
@@ -591,45 +748,80 @@ const WelcomePopup = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
-      <div className="relative rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+      <div className="absolute inset-0 bg-black/95 backdrop-blur-sm" />
+      <div 
+        className="relative rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+        style={{ 
+          background: 'linear-gradient(180deg, #1A1A1A 0%, #0C0C0C 100%)', 
+          border: `1px solid ${COLORS.goldBorder}`,
+          boxShadow: `0 0 80px ${COLORS.goldMuted}`,
+        }}
+      >
         <div className="p-6 text-center border-b" style={{ borderColor: COLORS.border }}>
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style={{ background: 'rgba(0,212,170,0.15)' }}>
-            <CheckCircle2 className="w-6 h-6" style={{ color: COLORS.primary }} />
+          <div 
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+            style={{ background: COLORS.goldMuted }}
+          >
+            <CheckCircle2 className="w-7 h-7" style={{ color: COLORS.gold }} />
           </div>
-          <h2 className="text-xl font-bold text-white">Welcome, {userName}! 🎉</h2>
-          <p className="text-gray-400 text-sm mt-1">Your account is ready</p>
+          <h2 className="text-2xl font-bold" style={{ color: COLORS.white }}>
+            Welcome, <span style={{ color: COLORS.gold }}>{userName}</span>! 🎉
+          </h2>
+          <p className="text-sm mt-2" style={{ color: COLORS.gray }}>Your account is ready</p>
         </div>
 
-        <div className="p-5 space-y-4">
-          <div className="space-y-2">
+        <div className="p-6 space-y-5">
+          <div className="space-y-3">
             {['Complete 7-day free trial', 'First report tomorrow 9 AM ET', 'Private Discord access'].map((item, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Check className="w-4 h-4" style={{ color: COLORS.primary }} />
-                <span className="text-gray-300 text-sm">{item}</span>
+              <div key={i} className="flex items-center gap-3">
+                <div 
+                  className="w-6 h-6 rounded-lg flex items-center justify-center"
+                  style={{ background: COLORS.goldMuted }}
+                >
+                  <Check className="w-4 h-4" style={{ color: COLORS.gold }} />
+                </div>
+                <span className="text-sm" style={{ color: COLORS.gray }}>{item}</span>
               </div>
             ))}
           </div>
 
-          <div className="p-3 rounded-lg text-xs text-gray-400" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <strong className="text-yellow-500">Disclaimer:</strong> Educational only. You're responsible for your trades.
+          <div 
+            className="p-4 rounded-xl text-xs leading-relaxed"
+            style={{ background: COLORS.card, color: COLORS.grayDark }}
+          >
+            <span style={{ color: COLORS.gold }} className="font-semibold">Disclaimer:</span> Educational only. You're responsible for your trades.
           </div>
 
-          <label className="flex items-start gap-2 cursor-pointer">
-            <div className={cn("w-4 h-4 rounded flex-shrink-0 flex items-center justify-center border transition-all mt-0.5", agreed ? "border-transparent" : "border-gray-600")} style={agreed ? { background: COLORS.primary } : {}}>
-              {agreed && <Check className="w-3 h-3 text-black" />}
+          <label className="flex items-start gap-3 cursor-pointer">
+            <div 
+              className={cn(
+                "w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center border-2 transition-all mt-0.5"
+              )}
+              style={{ 
+                borderColor: agreed ? COLORS.gold : COLORS.grayDark,
+                background: agreed ? COLORS.gold : 'transparent',
+              }}
+            >
+              {agreed && <Check className="w-3.5 h-3.5" style={{ color: COLORS.dark }} />}
             </div>
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="sr-only" />
-            <span className="text-gray-400 text-sm">I understand and accept</span>
+            <span className="text-sm" style={{ color: COLORS.gray }}>I understand and accept</span>
           </label>
         </div>
 
-        <div className="p-5 pt-0">
+        <div className="p-6 pt-0">
           <a
             href={agreed ? checkoutUrl : '#'}
             onClick={(e) => !agreed && e.preventDefault()}
-            className={cn("w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all text-sm", agreed ? "text-black hover:opacity-90" : "bg-gray-800 text-gray-500 cursor-not-allowed")}
-            style={agreed ? { background: COLORS.primary } : {}}
+            className={cn(
+              "w-full py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all text-sm"
+            )}
+            style={{ 
+              background: agreed ? `linear-gradient(135deg, ${COLORS.goldDark}, ${COLORS.gold})` : COLORS.card,
+              color: agreed ? COLORS.dark : COLORS.grayDark,
+              cursor: agreed ? 'pointer' : 'not-allowed',
+              boxShadow: agreed ? `0 4px 25px ${COLORS.goldGlow}` : 'none',
+            }}
           >
             Start Free Trial <ExternalLink className="w-4 h-4" />
           </a>
@@ -747,53 +939,85 @@ export default function NewsletterSignup() {
 
   return (
     <div className="min-h-screen relative" style={{ background: COLORS.dark }}>
-      <DeepBackground />
+      <InstitutionalBackground />
       <WelcomePopup isOpen={showWelcome} userName={firstName} checkoutUrl={checkoutUrl} />
 
-      <div className="relative z-10 px-4 py-6 sm:py-10">
+      <div className="relative z-10 px-4 py-8 sm:py-12">
         <div className="max-w-md mx-auto">
 
           {/* ============ HERO ============ */}
-          <section className="text-center mb-5">
-            <div className="mb-4">
+          <section className="text-center mb-8">
+            <div className="mb-6">
               <CountdownBadge countdown={countdown} />
             </div>
 
-            <div className="relative inline-block mb-4">
-              <div className="absolute inset-[-10px] rounded-full blur-[25px] opacity-50" style={{ background: COLORS.primary }} />
+            <div className="relative inline-block mb-6">
               <div 
-                className="relative w-14 h-14 rounded-xl flex items-center justify-center"
-                style={{ background: 'rgba(0,212,170,0.12)', border: '1px solid rgba(0,212,170,0.25)' }}
+                className="absolute inset-[-15px] rounded-full blur-[30px] opacity-60"
+                style={{ background: COLORS.gold }} 
+              />
+              <div 
+                className="relative w-16 h-16 rounded-2xl flex items-center justify-center"
+                style={{ 
+                  background: COLORS.goldMuted, 
+                  border: `1px solid ${COLORS.goldBorder}`,
+                  boxShadow: `0 0 40px ${COLORS.goldGlow}`,
+                }}
               >
-                <Swords className="w-7 h-7" style={{ color: COLORS.primary }} />
+                <Swords className="w-8 h-8" style={{ color: COLORS.gold }} />
               </div>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight mb-3">
+            <h1 
+              className="text-3xl sm:text-4xl font-bold leading-tight mb-4"
+              style={{ color: COLORS.white }}
+            >
               Stop Trading Blind.
               <br />
-              <span style={{ color: COLORS.primary }}>Get an Unfair Advantage.</span>
+              <span style={{ color: COLORS.gold }}>Get an Unfair Advantage.</span>
             </h1>
 
-            <p className="text-gray-400 text-sm sm:text-base mb-4">
-              Daily intelligence to spot reversals & liquidity shifts — 
-              <span className="text-white"> before they're obvious.</span>
+            <p className="text-base sm:text-lg leading-relaxed" style={{ color: COLORS.gray }}>
+              Daily intelligence to spot reversals & liquidity shifts —{' '}
+              <span style={{ color: COLORS.white }}>before they're obvious.</span>
             </p>
           </section>
 
           {/* ============ CTA FORM ============ */}
-          <section className="mb-5">
+          <section className="mb-8">
             {specialMessage ? (
-              <div className="rounded-xl p-5 text-center" style={{ background: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-3" style={{ background: 'rgba(0,212,170,0.15)' }}>
-                  <CheckCircle2 className="w-6 h-6" style={{ color: COLORS.primary }} />
+              <div 
+                className="rounded-2xl p-6 text-center"
+                style={{ 
+                  background: 'linear-gradient(180deg, rgba(20,20,20,0.9) 0%, rgba(12,12,12,0.95) 100%)', 
+                  border: `1px solid ${COLORS.goldBorder}`,
+                  boxShadow: `0 0 40px ${COLORS.goldMuted}`,
+                }}
+              >
+                <div 
+                  className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
+                  style={{ background: COLORS.goldMuted }}
+                >
+                  <CheckCircle2 className="w-7 h-7" style={{ color: COLORS.gold }} />
                 </div>
-                <h3 className="text-lg font-bold text-white mb-1">{specialMessage.title}</h3>
-                <p className="text-gray-400 text-sm mb-4">{specialMessage.message}</p>
-                <a href="/login" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-black font-semibold text-sm" style={{ background: COLORS.primary }}>
+                <h3 className="text-xl font-bold mb-2" style={{ color: COLORS.white }}>{specialMessage.title}</h3>
+                <p className="text-sm mb-5" style={{ color: COLORS.gray }}>{specialMessage.message}</p>
+                <a 
+                  href="/login" 
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02]"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${COLORS.goldDark}, ${COLORS.gold})`,
+                    color: COLORS.dark,
+                    boxShadow: `0 4px 20px ${COLORS.goldGlow}`,
+                  }}
+                >
                   Log In <ArrowRight className="w-4 h-4" />
                 </a>
-                <button onClick={() => setSpecialMessage(null)} className="block w-full text-gray-500 text-xs mt-3">
+                <button 
+                  onClick={() => setSpecialMessage(null)} 
+                  className="block w-full text-xs mt-4 transition-colors hover:opacity-80"
+                  style={{ color: COLORS.grayDark }}
+                >
                   Use different email
                 </button>
               </div>
@@ -808,35 +1032,50 @@ export default function NewsletterSignup() {
             )}
           </section>
 
+          <SectionDivider />
+
           {/* ============ TODAY'S REPORT (HIGH CONVERSION) ============ */}
-          <section className="mb-5">
+          <section className="mb-8">
             <TodaysReportPreview />
           </section>
 
           {/* ============ PAIN POINTS (FOMO - EARLY) ============ */}
-          <section className="mb-6">
+          <section className="mb-8">
             <PainPointsCompact />
           </section>
 
+          <SectionDivider />
+
           {/* ============ DASHBOARD (LARGER WITH GLOW) ============ */}
-          <section className="mb-8 px-2">
+          <section className="mb-10 px-1">
             <DashboardMockup />
           </section>
 
+          <SectionDivider />
+
           {/* ============ WHO THIS IS FOR ============ */}
-          <section className="mb-6">
+          <section className="mb-8">
             <WhoThisIsFor />
           </section>
+
+          <SectionDivider />
 
           {/* ============ AI PIPELINE ============ */}
           <section className="mb-8">
             <AIPipelineCompact />
           </section>
 
+          <SectionDivider />
+
           {/* ============ TESTIMONIALS ============ */}
           <section className="mb-8">
-            <h3 className="text-white font-bold text-center text-sm uppercase tracking-wide mb-4">Trader Reviews</h3>
-            <div className="space-y-3">
+            <h3 
+              className="text-center text-sm font-semibold uppercase tracking-widest mb-5"
+              style={{ color: COLORS.gold }}
+            >
+              Trader Reviews
+            </h3>
+            <div className="space-y-4">
               {testimonials.map((t, i) => (
                 <TestimonialCard key={i} text={t.text} author={t.author} role={t.role} />
               ))}
@@ -844,44 +1083,46 @@ export default function NewsletterSignup() {
           </section>
 
           {/* ============ SOCIAL PROOF ============ */}
-          <section className="text-center mb-8">
-            <div className="flex justify-center gap-0.5 mb-2">
+          <section className="text-center mb-10">
+            <div className="flex justify-center gap-1 mb-3">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+                <Star key={i} className="w-5 h-5" style={{ fill: COLORS.gold, color: COLORS.gold }} />
               ))}
             </div>
-            <p className="text-gray-400 text-sm">
-              <span className="text-white font-bold">847+</span> traders • <span className="text-white font-bold">94%</span> renewal rate
+            <p className="text-sm" style={{ color: COLORS.gray }}>
+              <span className="font-bold" style={{ color: COLORS.gold }}>847+</span> traders •{' '}
+              <span className="font-bold" style={{ color: COLORS.gold }}>94%</span> renewal rate
             </p>
           </section>
 
           {/* ============ FINAL CTA ============ */}
-          <section className="mb-6">
+          <section className="mb-8">
             <div 
-              className="rounded-xl p-5 text-center"
+              className="rounded-2xl p-6 text-center"
               style={{ 
-                background: 'rgba(0,212,170,0.05)', 
-                border: '1px solid rgba(0,212,170,0.2)',
-                boxShadow: '0 0 30px rgba(0,212,170,0.08)',
+                background: COLORS.goldMuted, 
+                border: `1px solid ${COLORS.goldBorder}`,
+                boxShadow: `0 0 50px ${COLORS.goldMuted}`,
               }}
             >
-              <h3 className="text-white font-bold text-lg mb-1">
-                Don't Fall Behind
+              <h3 className="font-bold text-xl mb-2" style={{ color: COLORS.white }}>
+                Don't Fall <span style={{ color: COLORS.gold }}>Behind</span>
               </h3>
-              <p className="text-gray-500 text-sm mb-4">
+              <p className="text-sm mb-5" style={{ color: COLORS.gray }}>
                 While others guess, you'll have the map.
               </p>
-              <a 
-                href="#"
-                onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-black"
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl font-bold transition-all hover:scale-[1.02] hover:shadow-lg"
                 style={{ 
-                  background: `linear-gradient(135deg, ${COLORS.primary}, #00E5B8)`,
-                  boxShadow: `0 4px 20px ${COLORS.primaryGlow}`,
+                  background: `linear-gradient(135deg, ${COLORS.goldDark}, ${COLORS.gold}, ${COLORS.goldLight})`,
+                  color: COLORS.dark,
+                  boxShadow: `0 4px 30px ${COLORS.goldGlow}`,
                 }}
               >
-                🔥 Unlock Today's Report
-              </a>
+                <Award className="w-5 h-5" />
+                Unlock Today's Report
+              </button>
             </div>
           </section>
 
@@ -889,11 +1130,14 @@ export default function NewsletterSignup() {
       </div>
 
       {/* Footer */}
-      <footer className="relative z-10 py-5 px-4" style={{ borderTop: `1px solid ${COLORS.border}` }}>
-        <p className="text-center text-gray-600 text-xs">
-          © {new Date().getFullYear()} Finotaur • 
-          <a href="/legal/terms" className="text-gray-500 hover:text-gray-400 mx-1">Terms</a> • 
-          <a href="/legal/privacy" className="text-gray-500 hover:text-gray-400 mx-1">Privacy</a>
+      <footer 
+        className="relative z-10 py-6 px-4"
+        style={{ borderTop: `1px solid ${COLORS.border}` }}
+      >
+        <p className="text-center text-xs" style={{ color: COLORS.grayDark }}>
+          © {new Date().getFullYear()} Finotaur •{' '}
+          <a href="/legal/terms" className="transition-colors hover:opacity-80" style={{ color: COLORS.gray }}>Terms</a> •{' '}
+          <a href="/legal/privacy" className="transition-colors hover:opacity-80" style={{ color: COLORS.gray }}>Privacy</a>
         </p>
       </footer>
     </div>
