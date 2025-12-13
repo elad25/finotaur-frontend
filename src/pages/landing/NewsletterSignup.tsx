@@ -7,7 +7,6 @@ import {
   CheckCircle2, 
   Shield,
   Clock,
-  Users,
   Star,
   ArrowRight,
   LineChart,
@@ -28,17 +27,7 @@ import {
   ChevronUp,
   X,
   AlertCircle,
-  Zap,
-  TrendingUp,
-  Crown,
-  Target,
-  Radio,
-  MessagesSquare,
-  User,
-  Mail,
-  Lock,
-  Eye,
-  EyeOff
+  LogIn
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -50,249 +39,140 @@ const WHOP_CHECKOUT_BASE_URL = `https://whop.com/checkout/${WHOP_NEWSLETTER_PLAN
 const REDIRECT_URL = 'https://www.finotaur.com/app/all-markets/warzone';
 
 // ============================================
-// PASSWORD VALIDATION HELPERS
+// PAYMENT SUCCESS MODAL COMPONENT
 // ============================================
-const validatePassword = (password: string) => {
-  return {
-    minLength: password.length >= 8,
-    hasUpperCase: /[A-Z]/.test(password),
-    hasNumber: /[0-9]/.test(password),
-    hasSpecialChar: /[@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?!]/.test(password),
-  };
-};
-
-const getPasswordStrength = (password: string) => {
-  if (!password) return { label: '', color: '', bgColor: '', progress: 0 };
-  
-  const validation = validatePassword(password);
-  const score = Object.values(validation).filter(Boolean).length;
-  
-  if (score === 4) return { label: 'Strong', color: 'text-green-400', bgColor: 'bg-green-500', progress: 100 };
-  if (score === 3) return { label: 'Good', color: 'text-yellow-400', bgColor: 'bg-yellow-500', progress: 75 };
-  if (score === 2) return { label: 'Fair', color: 'text-orange-400', bgColor: 'bg-orange-500', progress: 50 };
-  return { label: 'Weak', color: 'text-red-400', bgColor: 'bg-red-500', progress: 25 };
-};
-
-const validateEmail = (email: string) => {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-};
-
-// ============================================
-// REGISTRATION FORM COMPONENT
-// ============================================
-const RegistrationForm = ({ 
-  onSubmit, 
-  isLoading 
+const PaymentSuccessModal = ({ 
+  isOpen, 
+  onClose 
 }: { 
-  onSubmit: (data: { firstName: string; email: string; password: string }) => void;
-  isLoading: boolean;
+  isOpen: boolean; 
+  onClose: () => void;
 }) => {
-  const [firstName, setFirstName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showPasswordRules, setShowPasswordRules] = useState(false);
-
-  const passwordValidation = validatePassword(password);
-  const isPasswordValid = Object.values(passwordValidation).every(Boolean);
-  const isEmailValid = validateEmail(email);
-  const passwordStrength = getPasswordStrength(password);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!isEmailValid) {
-      alert('Please enter a valid email address');
-      return;
-    }
-    
-    if (!isPasswordValid) {
-      alert('Password does not meet security requirements');
-      return;
-    }
-    
-    onSubmit({ firstName, email, password });
-  };
+  if (!isOpen) return null;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* First Name */}
-      <div className="relative">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-          <User className="w-5 h-5" />
-        </div>
-        <input
-          type="text"
-          placeholder="First name"
-          value={firstName}
-          onChange={(e) => setFirstName(e.target.value)}
-          required
-          className="w-full pl-12 pr-4 py-4 rounded-xl bg-[#0d0d18] border border-gray-800 text-white placeholder-gray-500 focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/30 transition-all"
-        />
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className="relative bg-[#0d0d18] border border-gray-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-800 transition-colors z-10"
+        >
+          <X className="w-5 h-5 text-gray-400" />
+        </button>
 
-      {/* Email */}
-      <div className="relative">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-          <Mail className="w-5 h-5" />
-        </div>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className={cn(
-            "w-full pl-12 pr-10 py-4 rounded-xl bg-[#0d0d18] border text-white placeholder-gray-500 focus:outline-none focus:ring-1 transition-all",
-            email && (isEmailValid 
-              ? "border-green-500/50 focus:border-green-500/50 focus:ring-green-500/30" 
-              : "border-red-500/50 focus:border-red-500/50 focus:ring-red-500/30"),
-            !email && "border-gray-800 focus:border-yellow-500/50 focus:ring-yellow-500/30"
-          )}
-        />
-        {email && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            {isEmailValid ? (
-              <CheckCircle2 className="w-5 h-5 text-green-500" />
-            ) : (
-              <X className="w-5 h-5 text-red-500" />
-            )}
+        {/* Header with Animation */}
+        <div className="relative px-6 py-8 text-center bg-gradient-to-br from-green-500/20 via-transparent to-emerald-500/10 border-b border-gray-800">
+          {/* Confetti/Sparkle effect */}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute top-4 left-8 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
+            <div className="absolute top-12 right-12 w-1.5 h-1.5 bg-green-400 rounded-full animate-ping delay-300" />
+            <div className="absolute bottom-8 left-16 w-1 h-1 bg-blue-400 rounded-full animate-ping delay-500" />
+            <div className="absolute top-8 right-20 w-1.5 h-1.5 bg-purple-400 rounded-full animate-ping delay-700" />
           </div>
-        )}
-      </div>
-
-      {/* Password */}
-      <div className="space-y-2">
-        <div className="relative">
-          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-            <Lock className="w-5 h-5" />
+          
+          {/* Success Icon */}
+          <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-green-500/30 to-emerald-500/30 border border-green-500/50 mb-4 shadow-lg shadow-green-500/20">
+            <CheckCircle2 className="w-10 h-10 text-green-500" />
           </div>
-          <input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => setShowPasswordRules(true)}
-            required
-            className="w-full pl-12 pr-12 py-4 rounded-xl bg-[#0d0d18] border border-gray-800 text-white placeholder-gray-500 focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/30 transition-all"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-400 transition-colors"
-          >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-          </button>
+          
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+            Welcome to War Zone! ⚔️
+          </h2>
+          <p className="text-gray-400">
+            Your subscription is now active
+          </p>
         </div>
 
-        {/* Password Strength Bar */}
-        {password && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500">Password strength</span>
-              <span className={cn("text-xs font-semibold", passwordStrength.color)}>
-                {passwordStrength.label}
-              </span>
-            </div>
-            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-              <div 
-                className={cn("h-full transition-all duration-500", passwordStrength.bgColor)}
-                style={{ width: `${passwordStrength.progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Password Requirements */}
-        {showPasswordRules && password && (
-          <div className="p-3 bg-[#080812] border border-gray-800 rounded-xl space-y-2">
-            <p className="text-xs font-semibold text-gray-400">Requirements:</p>
+        {/* Content */}
+        <div className="p-6">
+          {/* What Happens Next */}
+          <div className="bg-[#080812] rounded-xl p-5 border border-gray-800 mb-6">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-yellow-500" />
+              What Happens Next?
+            </h3>
             
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2">
-                {passwordValidation.minLength ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                ) : (
-                  <X className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                )}
-                <span className={cn("text-xs", passwordValidation.minLength ? "text-green-400" : "text-gray-500")}>
-                  8+ characters
-                </span>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-white font-medium text-sm">Check Your Email</p>
+                  <p className="text-gray-500 text-xs">Your first report arrives tomorrow at 9:00 AM NY time</p>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                {passwordValidation.hasUpperCase ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                ) : (
-                  <X className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                )}
-                <span className={cn("text-xs", passwordValidation.hasUpperCase ? "text-green-400" : "text-gray-500")}>
-                  Uppercase (A-Z)
-                </span>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                  <MessageSquare className="w-4 h-4 text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-white font-medium text-sm">Join the Discord</p>
+                  <p className="text-gray-500 text-xs">Connect with 847+ traders in our private community</p>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                {passwordValidation.hasNumber ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                ) : (
-                  <X className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                )}
-                <span className={cn("text-xs", passwordValidation.hasNumber ? "text-green-400" : "text-gray-500")}>
-                  Number (0-9)
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {passwordValidation.hasSpecialChar ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
-                ) : (
-                  <X className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
-                )}
-                <span className={cn("text-xs", passwordValidation.hasSpecialChar ? "text-green-400" : "text-gray-500")}>
-                  Special (@#$%...)
-                </span>
+              
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                  <Calendar className="w-4 h-4 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-white font-medium text-sm">7-Day Free Trial</p>
+                  <p className="text-gray-500 text-xs">You won't be charged during your trial period</p>
+                </div>
               </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={isLoading || !isPasswordValid || !isEmailValid || !firstName}
-        className="w-full py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-bold text-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-yellow-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
-        ) : (
-          <>
-            <Lock className="w-5 h-5" />
-            Unlock Today's Report
-          </>
-        )}
-      </button>
+          {/* Finotaur Promo */}
+          <div className="bg-gradient-to-r from-red-500/10 to-orange-500/10 rounded-xl p-4 border border-red-500/30 mb-6">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center">
+                <Swords className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="text-white font-medium text-sm">Explore Finotaur</p>
+                <p className="text-gray-400 text-xs leading-relaxed">
+                  You now have a Finotaur account! Check out our trading journal with advanced analytics, 
+                  AI insights, and broker sync.
+                </p>
+              </div>
+            </div>
+          </div>
 
-      {/* Trust Badges */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-gray-500 text-xs sm:text-sm pt-2">
-        <div className="flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span>7-Day Free</span>
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-3">
+            <a
+              href="https://discord.gg/finotaur"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold transition-all flex items-center justify-center gap-2"
+            >
+              <MessageSquare className="w-5 h-5" />
+              Join Discord Community
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-semibold transition-all flex items-center justify-center gap-2"
+            >
+              Continue to War Zone
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-        <span className="text-gray-700 hidden sm:inline">•</span>
-        <span>No Card Now</span>
-        <span className="text-gray-700 hidden sm:inline">•</span>
-        <span>Cancel Anytime</span>
       </div>
-
-      {/* Login Link */}
-      <div className="text-center text-gray-500 text-sm">
-        Have an account?{' '}
-        <a href="/login" className="text-yellow-500 hover:text-yellow-400 font-medium">
-          Log in
-        </a>
-      </div>
-    </form>
+    </div>
   );
 };
 
@@ -302,11 +182,13 @@ const RegistrationForm = ({
 const DisclaimerPopup = ({ 
   isOpen, 
   onClose, 
-  onAccept 
+  onAccept,
+  isProcessing
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
   onAccept: () => void;
+  isProcessing: boolean;
 }) => {
   const [agreed, setAgreed] = useState(false);
 
@@ -332,7 +214,8 @@ const DisclaimerPopup = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+            disabled={isProcessing}
+            className="p-2 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5 text-gray-400" />
           </button>
@@ -375,6 +258,7 @@ const DisclaimerPopup = ({
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
+                disabled={isProcessing}
                 className="sr-only"
               />
               <div className={cn(
@@ -397,22 +281,32 @@ const DisclaimerPopup = ({
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors font-medium"
+              disabled={isProcessing}
+              className="flex-1 py-3 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors font-medium disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={onAccept}
-              disabled={!agreed}
+              disabled={!agreed || isProcessing}
               className={cn(
                 "flex-1 py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2",
-                agreed
-                  ? "bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black"
+                agreed && !isProcessing
+                  ? "bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white"
                   : "bg-gray-800 text-gray-500 cursor-not-allowed"
               )}
             >
-              Start Free Trial
-              <ArrowRight className="w-4 h-4" />
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Start Free Trial
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -422,313 +316,67 @@ const DisclaimerPopup = ({
 };
 
 // ============================================
-// LIVE DASHBOARD PREVIEW COMPONENT
+// LOGIN REQUIRED POPUP COMPONENT
 // ============================================
-const LiveDashboardPreview = () => {
-  return (
-    <div className="relative">
-      {/* Window Frame */}
-      <div className="bg-[#0d0d18] rounded-2xl border border-gray-800 overflow-hidden shadow-2xl">
-        {/* Window Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#080812] border-b border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500/80" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-              <div className="w-3 h-3 rounded-full bg-green-500/80" />
-            </div>
-            <span className="text-gray-400 text-sm ml-2">War Zone Intelligence</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-green-400 text-xs font-medium">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            LIVE
-          </div>
-        </div>
-
-        {/* Dashboard Content */}
-        <div className="p-5">
-          {/* Metrics Row */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            <div className="bg-[#080812] rounded-xl p-3 border border-gray-800">
-              <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">SPY Bias</div>
-              <div className="text-green-400 font-bold text-lg">Bullish</div>
-            </div>
-            <div className="bg-[#080812] rounded-xl p-3 border border-gray-800">
-              <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">VIX Level</div>
-              <div className="text-white font-bold text-lg">14.2</div>
-            </div>
-            <div className="bg-[#080812] rounded-xl p-3 border border-gray-800">
-              <div className="text-gray-500 text-xs uppercase tracking-wide mb-1">Net Flow</div>
-              <div className="text-green-400 font-bold text-lg">+$2.4M</div>
-            </div>
-          </div>
-
-          {/* Chart Bars */}
-          <div className="flex items-end gap-1.5 h-24 mb-4">
-            {[40, 55, 45, 70, 60, 85, 75, 90, 65, 80, 70, 95, 85, 100, 90].map((height, i) => (
-              <div 
-                key={i}
-                className="flex-1 bg-gradient-to-t from-yellow-600 to-yellow-400 rounded-t opacity-80"
-                style={{ height: `${height}%` }}
-              />
-            ))}
-          </div>
-
-          {/* Alert Box */}
-          <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-xl border border-blue-500/30">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-              <Zap className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-blue-400 font-semibold text-sm">Large NVDA Call Flow Detected</p>
-              <p className="text-gray-500 text-xs mt-0.5">$2.4M in 140C Jan expiry — Smart money</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// ELITE COMMUNITY SECTION COMPONENT
-// ============================================
-const EliteCommunitySection = () => {
-  const communityFeatures = [
-    {
-      icon: Globe,
-      title: 'Global Network',
-      description: 'Connect with traders from New York, London, Tokyo, and beyond'
-    },
-    {
-      icon: Zap,
-      title: 'Real-Time Alerts',
-      description: 'Instant notifications on market-moving events and opportunities'
-    },
-    {
-      icon: Target,
-      title: 'Trade Ideas',
-      description: 'Daily setups shared by experienced traders in the community'
-    },
-    {
-      icon: MessagesSquare,
-      title: 'Live Discussions',
-      description: '24/7 market chat with professionals who speak your language'
-    }
-  ];
-
-  const memberLocations = [
-    { flag: '🇺🇸', country: 'USA', members: '312' },
-    { flag: '🇬🇧', country: 'UK', members: '156' },
-    { flag: '🇮🇱', country: 'Israel', members: '89' },
-    { flag: '🇩🇪', country: 'Germany', members: '67' },
-    { flag: '🇦🇺', country: 'Australia', members: '54' },
-    { flag: '🇨🇦', country: 'Canada', members: '48' },
-  ];
+const LoginRequiredPopup = ({ 
+  isOpen, 
+  onClose,
+  onLogin
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  onLogin: () => void;
+}) => {
+  if (!isOpen) return null;
 
   return (
-    <div className="relative py-20 overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#080812] via-purple-900/10 to-[#080812]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-500/5 rounded-full blur-3xl" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
       
-      <div className="relative max-w-6xl mx-auto px-4">
-        {/* Section Header */}
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/40 mb-6">
-            <Crown className="w-4 h-4 text-purple-400" />
-            <span className="text-purple-400 text-sm font-semibold">EXCLUSIVE ACCESS</span>
+      {/* Modal */}
+      <div className="relative bg-[#0d0d18] border border-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#080812]">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <LogIn className="w-5 h-5 text-blue-500" />
+            </div>
+            <h2 className="text-lg font-semibold text-white">Login Required</h2>
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
-            Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-orange-400">ELITE</span> Community
-          </h2>
-          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-            A private network of serious traders and investors from around the world. 
-            No noise, no pump and dumps — just real value.
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-400" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <p className="text-gray-400 text-center mb-6">
+            Please login or create an account to subscribe to War Zone Intelligence.
           </p>
-        </div>
-
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-2 gap-8 items-center">
           
-          {/* Left Side - Discord Preview Card */}
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-blue-500/20 rounded-3xl blur-xl" />
-            <div className="relative bg-[#0d0d18] rounded-3xl border border-purple-500/30 overflow-hidden">
-              {/* Discord-style Header */}
-              <div className="bg-[#080812] px-6 py-4 border-b border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500/80" />
-                    <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                    <div className="w-3 h-3 rounded-full bg-green-500/80" />
-                  </div>
-                  <div className="flex items-center gap-2 ml-2">
-                    <MessageSquare className="w-5 h-5 text-purple-400" />
-                    <span className="text-white font-semibold">Finotaur Elite</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 text-green-400 text-sm">
-                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    847 Online
-                  </span>
-                </div>
-              </div>
-
-              {/* Channel List */}
-              <div className="p-4">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 px-2">
-                  💬 Trading Channels
-                </div>
-                <div className="space-y-1">
-                  {[
-                    { name: '# market-analysis', active: true, unread: 12 },
-                    { name: '# trade-ideas', active: false, unread: 5 },
-                    { name: '# options-flow', active: false, unread: 3 },
-                    { name: '# macro-intel', active: false, unread: 0 },
-                    { name: '# earnings-plays', active: false, unread: 8 },
-                  ].map((channel, i) => (
-                    <div 
-                      key={i}
-                      className={cn(
-                        "flex items-center justify-between px-3 py-2 rounded-lg transition-all",
-                        channel.active ? "bg-purple-500/20 text-white" : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-300"
-                      )}
-                    >
-                      <span className="text-sm">{channel.name}</span>
-                      {channel.unread > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-xs font-bold">
-                          {channel.unread}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-6 px-2">
-                  🎙️ Voice Channels
-                </div>
-                <div className="space-y-1">
-                  {[
-                    { name: '🔊 Trading Room', users: 23 },
-                    { name: '🔊 Market Open Call', users: 0 },
-                  ].map((channel, i) => (
-                    <div 
-                      key={i}
-                      className="flex items-center justify-between px-3 py-2 rounded-lg text-gray-400 hover:bg-gray-800/50 hover:text-gray-300 transition-all"
-                    >
-                      <span className="text-sm">{channel.name}</span>
-                      {channel.users > 0 && (
-                        <span className="flex items-center gap-1 text-green-400 text-xs">
-                          <Users className="w-3 h-3" />
-                          {channel.users}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Sample Message Preview */}
-                <div className="mt-6 p-4 bg-[#080812] rounded-xl border border-gray-800">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold flex-shrink-0">
-                      M
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-purple-400 font-semibold text-sm">Mike_NYC</span>
-                        <span className="text-xs text-gray-600">Today at 9:32 AM</span>
-                      </div>
-                      <p className="text-gray-300 text-sm mt-1">
-                        SPY showing strong support at 580. Watching for a break above 582 with volume for a potential move to 585. 
-                        Anyone else seeing the unusual call activity? 🎯
-                      </p>
-                      <div className="flex gap-2 mt-2">
-                        <span className="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs">🔥 12</span>
-                        <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 text-xs">👀 8</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={onLogin}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-semibold transition-all flex items-center justify-center gap-2"
+            >
+              <LogIn className="w-5 h-5" />
+              Login / Sign Up
+            </button>
+            
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors font-medium"
+            >
+              Cancel
+            </button>
           </div>
-
-          {/* Right Side - Features & Stats */}
-          <div className="space-y-6">
-            {/* Feature Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {communityFeatures.map((feature, i) => (
-                <div 
-                  key={i}
-                  className="p-4 rounded-2xl bg-[#0d0d18] border border-gray-800 hover:border-purple-500/30 transition-all group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center mb-3 group-hover:bg-purple-500/20 transition-colors">
-                    <feature.icon className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <h4 className="text-white font-semibold mb-1">{feature.title}</h4>
-                  <p className="text-gray-500 text-sm leading-relaxed">{feature.description}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Global Members Card */}
-            <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-br from-[#0d0d18] to-purple-900/10 border border-purple-500/20">
-              <div className="flex items-center gap-2 mb-4">
-                <Globe className="w-5 h-5 text-purple-400" />
-                <h4 className="text-white font-semibold">Global Trading Network</h4>
-              </div>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                {memberLocations.map((loc, i) => (
-                  <div 
-                    key={i}
-                    className="text-center p-2 sm:p-3 rounded-xl bg-[#080812] border border-gray-800"
-                  >
-                    <div className="text-xl sm:text-2xl mb-1">{loc.flag}</div>
-                    <div className="text-white font-bold text-base sm:text-lg">{loc.members}</div>
-                    <div className="text-gray-500 text-xs">{loc.country}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-gray-500 text-sm text-center mt-4">
-                + traders from 40+ more countries
-              </p>
-            </div>
-
-            {/* Live Activity Indicator */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-[#0d0d18] border border-gray-800">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Radio className="w-5 h-5 text-green-400" />
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500 animate-ping" />
-                </div>
-                <div>
-                  <p className="text-white font-medium">Live Trading Room</p>
-                  <p className="text-gray-500 text-sm">Active during US market hours</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-green-400 ml-8 sm:ml-0">
-                <Users className="w-4 h-4" />
-                <span className="font-semibold">23 live</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Value Props */}
-        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          {[
-            { icon: Shield, label: 'Verified Traders Only', color: 'text-green-400' },
-            { icon: MessageSquare, label: '24/7 Active Chat', color: 'text-blue-400' },
-            { icon: TrendingUp, label: 'Daily Trade Ideas', color: 'text-orange-400' },
-            { icon: Headphones, label: 'Voice Trading Room', color: 'text-purple-400' },
-          ].map((item, i) => (
-            <div key={i} className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl bg-[#0d0d18]/50 border border-gray-800/50">
-              <item.icon className={cn("w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0", item.color)} />
-              <span className="text-gray-300 text-xs sm:text-sm font-medium">{item.label}</span>
-            </div>
-          ))}
         </div>
       </div>
     </div>
@@ -738,189 +386,285 @@ const EliteCommunitySection = () => {
 // ============================================
 // MAIN COMPONENT
 // ============================================
-export default function WarZoneLanding() {
+export default function WarZoneLandingSimple() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [newsletterStatus, setNewsletterStatus] = useState<string>('inactive');
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-
-  // 🔥 NEW: Store pending user data after registration (before Whop checkout)
-  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
-  const [pendingUserEmail, setPendingUserEmail] = useState<string | null>(null);
-
-  // Calculate countdown to next report (9:00 AM ET)
-  const [countdown, setCountdown] = useState('');
-  
-  useEffect(() => {
-    const updateCountdown = () => {
-      const now = new Date();
-      const etOffset = -5; // ET offset from UTC
-      const utcHours = now.getUTCHours();
-      const etHours = (utcHours + etOffset + 24) % 24;
-      
-      let hoursUntil = 9 - etHours;
-      if (hoursUntil <= 0) hoursUntil += 24;
-      
-      const minutesUntil = 60 - now.getMinutes();
-      const secondsUntil = 60 - now.getSeconds();
-      
-      if (minutesUntil === 60) {
-        setCountdown(`${String(hoursUntil).padStart(2, '0')}:00:${String(secondsUntil).padStart(2, '0')}`);
-      } else {
-        setCountdown(`${String(hoursUntil - 1).padStart(2, '0')}:${String(minutesUntil).padStart(2, '0')}:${String(secondsUntil).padStart(2, '0')}`);
-      }
-    };
-    
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const [showLoginRequired, setShowLoginRequired] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Check for payment success from redirect
   useEffect(() => {
-    if (searchParams.get('payment') === 'success' || searchParams.get('checkout_status') === 'success') {
-      setPaymentSuccess(true);
+    const paymentParam = searchParams.get('payment');
+    const checkoutStatus = searchParams.get('checkout_status');
+    
+    if (paymentParam === 'success' || checkoutStatus === 'success') {
+      console.log('🎉 Payment success detected, showing modal');
+      setShowSuccessModal(true);
+      // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
+      
+      // Refresh subscription status after a short delay
+      setTimeout(() => {
+        checkSubscriptionStatus();
+      }, 2000);
     }
   }, [searchParams]);
 
-  // Check subscription status
-  useEffect(() => {
-    const checkSubscription = async () => {
-      if (!user?.id) {
-        setIsLoading(false);
+  // Check subscription status function
+  const checkSubscriptionStatus = async () => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('newsletter_enabled, newsletter_status, newsletter_trial_ends_at')
+        .eq('id', user.id)
+        .single();
+      
+      if (error) {
+        console.error('Error checking subscription:', error);
         return;
       }
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('newsletter_enabled')
-          .eq('id', user.id)
-          .single();
-        setIsSubscribed(data?.newsletter_enabled ?? false);
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkSubscription();
-  }, [user?.id]);
-
-  // 🔥 FIXED: Handle registration form submission - save user ID for Whop
-  const handleRegistration = async (data: { firstName: string; email: string; password: string }) => {
-    setIsRegistering(true);
-    try {
-      // Create user account
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            first_name: data.firstName,
-          }
-        }
+      
+      setIsSubscribed(data?.newsletter_enabled ?? false);
+      setNewsletterStatus(data?.newsletter_status ?? 'inactive');
+      setTrialEndsAt(data?.newsletter_trial_ends_at ?? null);
+      
+      console.log('📊 Newsletter status:', {
+        enabled: data?.newsletter_enabled,
+        status: data?.newsletter_status,
+        trialEndsAt: data?.newsletter_trial_ends_at
       });
-
-      if (authError) throw authError;
-
-      // 🔥 IMPORTANT: Save the user ID and email for Whop checkout
-      // This ensures we can identify the user even if they use different email in Whop
-      if (authData.user?.id) {
-        setPendingUserId(authData.user.id);
-        setPendingUserEmail(data.email);
-        console.log('✅ User registered, saved ID for Whop:', authData.user.id);
-      }
-
-      // Show disclaimer after registration
-      setShowDisclaimer(true);
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      alert(error.message || 'Registration failed. Please try again.');
+    } catch (error) {
+      console.error('Error:', error);
     } finally {
-      setIsRegistering(false);
+      setIsLoading(false);
     }
   };
 
-  // 🔥 FIXED: After accepting disclaimer, go to Whop with correct user ID
-  const handleAcceptDisclaimer = () => {
-    setShowDisclaimer(false);
-    
-    const params = new URLSearchParams();
-    
-    // Use user from AuthProvider (if logged in) OR pending data from registration
-    const userId = user?.id || pendingUserId;
-    const userEmail = user?.email || pendingUserEmail;
-    
-    // Pre-fill email
-    if (userEmail) {
-      params.set('email', userEmail);
+  // Check subscription status on mount and user change
+  useEffect(() => {
+    checkSubscriptionStatus();
+  }, [user?.id]);
+
+  // Open disclaimer popup (or login popup if not logged in)
+  const handleSubscribeClick = () => {
+    if (!user) {
+      // User not logged in - show login required popup
+      setShowLoginRequired(true);
+      return;
     }
     
-    // 🔥 CRITICAL: Add finotaur_user_id for webhook identification
-    if (userId) {
-      params.set('metadata[finotaur_user_id]', userId);
-      console.log('✅ Sending to Whop with user ID:', userId);
-    } else {
-      console.warn('⚠️ No user ID available for Whop checkout!');
+    // User is logged in - show disclaimer
+    setShowDisclaimer(true);
+  };
+
+  // Handle login redirect
+  const handleLoginRedirect = () => {
+    // Save the return URL so user comes back after login
+    sessionStorage.setItem('return_after_login', window.location.pathname);
+    navigate('/login');
+  };
+
+  // 🔥 After accepting disclaimer, go to Whop with user ID
+  const handleAcceptDisclaimer = async () => {
+    if (!user?.id || !user?.email) {
+      console.error('❌ No user data available');
+      setShowDisclaimer(false);
+      setShowLoginRequired(true);
+      return;
     }
+
+    setIsProcessing(true);
     
-    params.set('redirect_url', `${REDIRECT_URL}?payment=success`);
-    
-    const checkoutUrl = `${WHOP_CHECKOUT_BASE_URL}?${params.toString()}`;
-    console.log('🔗 Checkout URL:', checkoutUrl);
-    
-    window.open(checkoutUrl, '_blank');
+    try {
+      // Verify user profile exists and has newsletter token
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, email, newsletter_unsubscribe_token')
+        .eq('id', user.id)
+        .single();
+      
+      if (profileError || !profile) {
+        console.error('❌ Profile not found:', profileError);
+        throw new Error('Profile not found. Please try again.');
+      }
+      
+      // Ensure newsletter_unsubscribe_token exists
+      if (!profile.newsletter_unsubscribe_token) {
+        console.log('🔧 Generating newsletter token...');
+        await supabase
+          .from('profiles')
+          .update({ 
+            newsletter_unsubscribe_token: crypto.randomUUID(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', user.id);
+      }
+      
+      // Build Whop checkout URL
+      const params = new URLSearchParams();
+      
+      // Pre-fill email
+      params.set('email', user.email);
+      
+      // 🔥 CRITICAL: Add finotaur_user_id for webhook identification
+      params.set('metadata[finotaur_user_id]', user.id);
+      
+      // Set redirect URL
+      params.set('redirect_url', `${REDIRECT_URL}?payment=success`);
+      
+      const checkoutUrl = `${WHOP_CHECKOUT_BASE_URL}?${params.toString()}`;
+      
+      console.log('✅ Redirecting to Whop checkout:', {
+        userId: user.id,
+        email: user.email,
+        url: checkoutUrl
+      });
+      
+      // Close disclaimer and redirect (same window for better tracking)
+      setShowDisclaimer(false);
+      
+      // Use same window for better conversion tracking
+      window.location.href = checkoutUrl;
+      
+    } catch (error) {
+      console.error('❌ Error preparing checkout:', error);
+      setIsProcessing(false);
+      alert(error instanceof Error ? error.message : 'An error occurred. Please try again.');
+    }
+  };
+
+  // Calculate trial days remaining
+  const getTrialDaysRemaining = () => {
+    if (!trialEndsAt) return null;
+    const now = new Date();
+    const trialEnd = new Date(trialEndsAt);
+    const diffTime = trialEnd.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(0, diffDays);
   };
 
   // ====================================
   // CONTENT DATA
   // ====================================
 
-  const todaysReportItems = [
-    'Fed rate expectations & yield curve analysis',
-    'Large UOA: TSLA $280C, NVDA $145C sweep',
-    'ES/NQ key levels with liquidity zones',
-    'AI-detected reversal pattern on SPY'
+  const dailyIntelligence = [
+    {
+      icon: Globe,
+      title: 'Institutional Macro Breakdown',
+      description: 'Wall Street desk-level analysis: global growth, inflation, yield curves, FX trends, commodities, and geopolitical risk mapping.',
+      tag: 'DAILY',
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-500/10'
+    },
+    {
+      icon: BarChart3,
+      title: 'US Market Structure Analysis',
+      description: 'Who\'s leading (Tech/AI), who\'s weakening. Breadth, flows, ETF rotation, and real institutional positioning.',
+      tag: 'DAILY',
+      color: 'text-green-400',
+      bgColor: 'bg-green-500/10'
+    },
+    {
+      icon: Calendar,
+      title: 'Economic Calendar Playbook',
+      description: 'Every major event decoded: why it matters, risk scenarios, how options/stocks/bonds will react, and actionable plays.',
+      tag: 'DAILY',
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/10'
+    },
+    {
+      icon: Activity,
+      title: 'Unusual Options Activity (UOA)',
+      description: 'Institutional flow tracking: call sweeps, put blocks, large transactions, and follow-through probability analysis.',
+      tag: 'DAILY',
+      color: 'text-orange-400',
+      bgColor: 'bg-orange-500/10'
+    },
+    {
+      icon: LineChart,
+      title: 'Technical Market Outlook',
+      description: '24-72h outlook: liquidity pockets, breakout vs fakeout logic, volatility triggers, and long/short playbooks.',
+      tag: 'DAILY',
+      color: 'text-cyan-400',
+      bgColor: 'bg-cyan-500/10'
+    },
+    {
+      icon: FileText,
+      title: 'Earnings & Corporate Intel',
+      description: 'Winners, losers, competitive impact, sector read-throughs, execution risks, and catalyst timelines.',
+      tag: 'DAILY',
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/10'
+    },
   ];
 
-  const withoutWarzoneProblems = [
-    { text: 'Missing early liquidity shifts', icon: X },
-    { text: 'Zero visibility on smart money', icon: X },
-    { text: 'Trading without macro context', icon: X },
-    { text: 'Not seeing structure behind moves', icon: X },
+  const exclusiveAccess = [
+    {
+      icon: MessageSquare,
+      title: 'Private Discord Community',
+      description: 'Connect with professional traders, share ideas, and get real-time market discussions.',
+      highlight: true
+    },
+    {
+      icon: Headphones,
+      title: 'Finotaur Trading Room',
+      description: 'Exclusive access to our live trading room with real-time alerts and analysis.',
+      highlight: true
+    },
+    {
+      icon: FileText,
+      title: 'Daily PDF Report (8-14 pages)',
+      description: 'Comprehensive institutional-grade analysis delivered to your inbox at 9:00 AM NY time.',
+      highlight: false
+    },
+    {
+      icon: PieChart,
+      title: 'Chart Pack Blueprint',
+      description: 'SPX vs Rates, sector leadership, BTC risk proxy, earnings overlays, and breadth charts.',
+      highlight: false
+    },
   ];
 
-  const targetAudience = [
-    { icon: TrendingUp, title: 'Day Traders', subtitle: 'Pre-market edge' },
-    { icon: LineChart, title: 'Swing Traders', subtitle: 'Macro context' },
-    { icon: Activity, title: 'Options Traders', subtitle: 'Unusual flow' },
-    { icon: Clock, title: 'Professionals', subtitle: 'Time-efficient' },
+  const comparisons = [
+    { service: 'Goldman Morning Note', price: '$2,000+/mo' },
+    { service: 'JPM Daily Brief', price: '$1,500+/mo' },
+    { service: 'UOA Services', price: '$79/mo' },
+    { service: 'Macro Research', price: '$150-300/mo' },
+    { service: 'Discord Trading Community', price: '$50-100/mo' },
+    { service: 'Live Trading Room', price: '$100-200/mo' },
   ];
 
   const testimonials = [
     {
-      text: "This report became my morning weapon. I don't trade without it.",
-      author: "Mike T.",
-      role: "Day Trader",
-      avatar: "M"
+      text: "I was paying $300/month for macro research that wasn't half as good as this. The UOA section alone is worth the subscription.",
+      author: "David K.",
+      role: "Hedge Fund Analyst",
+      avatar: "D"
     },
     {
-      text: "The UOA alerts paid for a year of subscription in one trade.",
-      author: "Sarah K.",
-      role: "Swing Trader",
+      text: "The daily PDF is my trading bible. I read it every morning before the open. My win rate has improved significantly since joining.",
+      author: "Sarah M.",
+      role: "Full-Time Trader",
       avatar: "S"
     },
     {
-      text: "Better than $500/mo services. Finally, institutional research I can afford.",
-      author: "David R.",
-      role: "Options Trader",
-      avatar: "D"
+      text: "The Discord community is incredible. Real traders sharing real ideas. No pump and dump garbage, just quality analysis.",
+      author: "James R.",
+      role: "Portfolio Manager",
+      avatar: "J"
     }
   ];
 
@@ -952,38 +696,53 @@ export default function WarZoneLanding() {
   ];
 
   const stats = [
-    { value: '847+', label: 'traders' },
-    { value: '94%', label: 'renewal rate' },
+    { value: '847', label: 'Active Members' },
+    { value: '94%', label: 'Renewal Rate' },
+    { value: '4.9/5', label: 'Member Rating' },
+    { value: '85%', label: 'Open Rate' },
   ];
 
   // ====================================
   // RENDER
   // ====================================
 
+  const trialDaysRemaining = getTrialDaysRemaining();
+
   return (
     <div className="min-h-screen bg-[#080812]">
       
-      {/* Disclaimer Popup */}
+      {/* Modals */}
+      <PaymentSuccessModal 
+        isOpen={showSuccessModal}
+        onClose={() => {
+          setShowSuccessModal(false);
+          checkSubscriptionStatus();
+        }}
+      />
+      
       <DisclaimerPopup 
         isOpen={showDisclaimer}
         onClose={() => setShowDisclaimer(false)}
         onAccept={handleAcceptDisclaimer}
+        isProcessing={isProcessing}
+      />
+      
+      <LoginRequiredPopup
+        isOpen={showLoginRequired}
+        onClose={() => setShowLoginRequired(false)}
+        onLogin={handleLoginRedirect}
       />
 
-      {/* Payment Success Banner */}
-      {paymentSuccess && !isSubscribed && (
-        <div className="bg-green-500/10 border-b border-green-500/30 px-4 py-3">
+      {/* Trial Status Banner (for existing subscribers in trial) */}
+      {isSubscribed && newsletterStatus === 'trial' && trialDaysRemaining !== null && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-4 py-3">
           <div className="max-w-6xl mx-auto flex items-center justify-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-500" />
-            <p className="text-green-400 text-sm font-medium">
-              Payment successful! Your access is being activated. Please refresh in a moment.
+            <Clock className="w-5 h-5 text-yellow-500" />
+            <p className="text-yellow-400 text-sm font-medium">
+              {trialDaysRemaining > 0 
+                ? `Your free trial ends in ${trialDaysRemaining} day${trialDaysRemaining !== 1 ? 's' : ''}`
+                : 'Your free trial ends today'}
             </p>
-            <button 
-              onClick={() => window.location.reload()}
-              className="text-green-400 underline text-sm hover:text-green-300"
-            >
-              Refresh now
-            </button>
           </div>
         </div>
       )}
@@ -991,56 +750,71 @@ export default function WarZoneLanding() {
       {/* ============ HERO SECTION ============ */}
       <div className="relative overflow-hidden">
         {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-yellow-900/20 via-transparent to-amber-900/10" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] bg-yellow-500/5 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-red-900/30 via-transparent to-orange-900/20" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[1000px] bg-red-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-orange-500/10 rounded-full blur-3xl" />
         
-        <div className="relative max-w-6xl mx-auto px-4 py-12 sm:py-16">
+        <div className="relative max-w-6xl mx-auto px-4 py-16 sm:py-24">
           
-          {/* Countdown Timer */}
+          {/* Limited Spots Banner */}
           <div className="flex justify-center mb-8">
-            <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-[#0d0d18] border border-gray-800">
-              <Clock className="w-4 h-4 text-green-400" />
-              <span className="text-gray-400 text-sm">Next Report</span>
-              <span className="text-yellow-500 font-mono font-bold">{countdown}</span>
+            <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-gradient-to-r from-red-500/20 to-orange-500/20 border border-red-500/40">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+              </span>
+              <span className="text-red-400 text-sm font-semibold">🔥 Limited to 1,000 Members — 153 Spots Remaining</span>
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="text-center">
+            {/* Icon */}
+            <div className="inline-flex items-center justify-center w-28 h-28 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/40 mb-8 shadow-2xl shadow-red-500/20">
+              <Swords className="w-14 h-14 text-red-500" />
+            </div>
             
-            {/* Left Side - Content */}
-            <div className="text-center lg:text-left">
-              {/* Icon */}
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-500/20 border border-yellow-500/40 mb-6 shadow-xl shadow-yellow-500/10">
-                <Swords className="w-10 h-10 text-yellow-500" />
-              </div>
-              
-              {/* Main Headline */}
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-                Stop Trading Blind.
-                <br />
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500">
-                  Get an Unfair Advantage.
-                </span>
-              </h1>
-              
-              {/* Subheadline */}
-              <p className="text-base sm:text-lg text-gray-400 mb-8 leading-relaxed">
-                Daily intelligence to spot reversals & liquidity shifts
-                <br className="hidden sm:block" />
-                <span className="sm:hidden"> </span>
-                <span className="text-white font-medium">— before they're obvious.</span>
-              </p>
+            {/* Main Headline */}
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
+              Stop Guessing.<br/>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500">
+                Start Trading Like an Institution.
+              </span>
+            </h1>
+            
+            {/* Subheadline */}
+            <p className="text-xl sm:text-2xl text-gray-300 max-w-3xl mx-auto mb-4 leading-relaxed">
+              Get the same market intelligence that Wall Street pays <span className="text-white font-semibold">$2,000+/month</span> for — 
+              delivered to your inbox every morning.
+            </p>
+            
+            <p className="text-lg text-gray-500 max-w-2xl mx-auto mb-8">
+              Daily institutional-grade analysis • Private Discord community • Live trading room access
+            </p>
 
-              {/* Registration Form */}
-              {isLoading ? (
-                <div className="flex justify-center lg:justify-start">
-                  <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
-                </div>
-              ) : isSubscribed ? (
-                <div className="inline-flex flex-col items-center gap-4 p-6 rounded-2xl bg-[#0d0d18] border border-green-500/30 max-w-md">
-                  <CheckCircle2 className="w-12 h-12 text-green-500" />
-                  <h3 className="text-xl font-bold text-white">Welcome to War Zone ⚔️</h3>
-                  <p className="text-gray-400 text-sm">Check your email and Discord for today's intel.</p>
+            {/* Free Trial Badge */}
+            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-green-500/10 border border-green-500/40 mb-8">
+              <Shield className="w-5 h-5 text-green-500" />
+              <span className="text-green-400 font-semibold">Start Your 7-Day Free Trial — No Credit Card Charge</span>
+            </div>
+
+            {/* CTA Section */}
+            {isLoading ? (
+              <div className="inline-flex items-center justify-center p-8">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-500" />
+              </div>
+            ) : isSubscribed ? (
+              <div className="inline-flex flex-col items-center gap-4 p-8 rounded-2xl bg-[#0d0d18] border border-green-500/30 max-w-md mx-auto">
+                <CheckCircle2 className="w-12 h-12 text-green-500" />
+                <h3 className="text-2xl font-bold text-white">Welcome to the War Zone ⚔️</h3>
+                <p className="text-gray-400">Check your email and Discord for today's intel.</p>
+                {newsletterStatus === 'trial' && trialDaysRemaining !== null && (
+                  <p className="text-yellow-400 text-sm">
+                    {trialDaysRemaining > 0 
+                      ? `Trial: ${trialDaysRemaining} day${trialDaysRemaining !== 1 ? 's' : ''} remaining`
+                      : 'Trial ends today'}
+                  </p>
+                )}
+                <div className="flex gap-3 mt-2">
                   <a 
                     href="https://discord.gg/finotaur" 
                     target="_blank" 
@@ -1051,163 +825,279 @@ export default function WarZoneLanding() {
                     Join Discord
                   </a>
                 </div>
-              ) : (
-                <div className="max-w-md mx-auto lg:mx-0">
-                  <div className="bg-[#0a0a14] rounded-2xl border border-gray-800 p-6">
-                    <RegistrationForm 
-                      onSubmit={handleRegistration}
-                      isLoading={isRegistering}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="inline-flex flex-col items-center gap-4">
+                <button
+                  onClick={handleSubscribeClick}
+                  className="group px-8 py-5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-xl font-bold transition-all flex items-center gap-3 shadow-2xl shadow-red-500/30 hover:shadow-red-500/50 hover:scale-105 active:scale-100"
+                >
+                  <Swords className="w-6 h-6" />
+                  Start Free Trial — Then $20/mo
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <p className="text-gray-500 text-sm">
+                  {user ? 'No charge for 7 days • Cancel anytime during trial' : 'Login required • No charge for 7 days'}
+                </p>
+              </div>
+            )}
 
-            {/* Right Side - Dashboard Preview (Desktop) */}
-            <div className="hidden lg:block">
-              <LiveDashboardPreview />
-            </div>
-          </div>
-
-          {/* Dashboard Preview (Mobile) - shown below form */}
-          <div className="lg:hidden mt-10">
-            <LiveDashboardPreview />
-          </div>
-        </div>
-      </div>
-
-      {/* ============ TODAY'S REPORT SECTION ============ */}
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <div className="grid md:grid-cols-2 gap-6">
-          
-          {/* Today's Report Card */}
-          <div className="p-6 rounded-2xl bg-[#0d0d18] border border-gray-800">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-yellow-500" />
-              <span className="text-yellow-500 text-sm font-semibold uppercase tracking-wide">Today's Report</span>
-            </div>
-            <div className="space-y-3">
-              {todaysReportItems.map((item, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-300 text-sm">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Without War Zone Card */}
-          <div className="p-6 rounded-2xl bg-[#0d0d18] border border-gray-800">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              <span className="text-red-400 text-sm font-semibold uppercase tracking-wide">Without War Zone</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {withoutWarzoneProblems.map((item, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <X className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-500 text-sm">{item.text}</span>
-                </div>
-              ))}
+            {/* Trust Badges */}
+            <div className="flex flex-wrap justify-center gap-6 mt-10 text-gray-500 text-sm">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-green-500" />
+                <span>7-Day Free Trial</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>Cancel Anytime</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4" />
+                <span>No Questions Asked</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ============ WHO THIS IS FOR SECTION ============ */}
-      <div className="max-w-4xl mx-auto px-4 py-16">
-        <div className="text-center mb-10">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-            Who This Is <span className="text-yellow-500">For</span>
-          </h2>
-          <p className="text-gray-500">Is this you?</p>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {targetAudience.map((item, i) => (
-            <div 
-              key={i}
-              className="p-5 rounded-2xl bg-[#0d0d18] border border-gray-800 text-center hover:border-yellow-500/30 transition-all group"
-            >
-              <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-yellow-500/20 transition-colors">
-                <item.icon className="w-6 h-6 text-yellow-500" />
+      {/* ============ SOCIAL PROOF STATS ============ */}
+      <div className="border-y border-gray-800 bg-[#0a0a14]">
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            {stats.map((stat, i) => (
+              <div key={i} className="text-center">
+                <div className="text-4xl sm:text-5xl font-bold text-white mb-1">{stat.value}</div>
+                <div className="text-sm text-gray-500">{stat.label}</div>
               </div>
-              <h4 className="text-white font-semibold mb-1">{item.title}</h4>
-              <p className="text-gray-500 text-sm">{item.subtitle}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ============ ELITE COMMUNITY SECTION ============ */}
-      <EliteCommunitySection />
-
-      {/* ============ TESTIMONIALS ============ */}
-      <div className="max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center mb-10">
-          <span className="text-yellow-500 text-sm font-semibold uppercase tracking-wide">Trader Reviews</span>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {testimonials.map((t, i) => (
-            <div key={i} className="p-6 rounded-2xl bg-[#0d0d18] border border-gray-800">
-              <div className="flex gap-1 mb-4">
-                {[...Array(5)].map((_, j) => (
-                  <Star key={j} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                ))}
-              </div>
-              <p className="text-gray-300 italic mb-6 leading-relaxed">"{t.text}"</p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-500 to-amber-600 flex items-center justify-center text-black font-bold">
-                  {t.avatar}
-                </div>
-                <div>
-                  <p className="text-white font-medium">{t.author}</p>
-                  <p className="text-gray-500 text-sm">{t.role}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Stats */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-10 text-gray-500 text-sm">
-          <div className="flex gap-1">
-            {[...Array(5)].map((_, j) => (
-              <Star key={j} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
             ))}
           </div>
-          <span className="mx-1 sm:mx-2">•</span>
-          <span>{stats[0].value} {stats[0].label}</span>
-          <span className="mx-1 sm:mx-2">•</span>
-          <span>{stats[1].value} {stats[1].label}</span>
+        </div>
+      </div>
+
+      {/* ============ WHAT YOU GET - DAILY INTELLIGENCE ============ */}
+      <div className="max-w-6xl mx-auto px-4 py-20">
+        <div className="text-center mb-16">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/30 mb-6">
+            <FileText className="w-4 h-4 text-blue-400" />
+            <span className="text-blue-400 text-sm font-medium">Daily 8-14 Page PDF Report</span>
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            Institutional-Grade Intelligence,<br/>Delivered Every Morning
+          </h2>
+          <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+            Everything you need to trade with confidence — the same research that hedge funds pay thousands for.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {dailyIntelligence.map((item, i) => (
+            <div
+              key={i}
+              className="p-6 rounded-2xl bg-[#0d0d18] border border-gray-800 hover:border-gray-700 transition-all group"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", item.bgColor)}>
+                  <item.icon className={cn("w-6 h-6", item.color)} />
+                </div>
+                <span className="px-2 py-1 rounded text-xs font-bold bg-gray-800 text-gray-400">
+                  {item.tag}
+                </span>
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">{item.title}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">{item.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ============ EXCLUSIVE ACCESS SECTION ============ */}
+      <div className="bg-gradient-to-b from-[#080812] via-[#0d0d18] to-[#080812] py-20">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/30 mb-6">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              <span className="text-purple-400 text-sm font-medium">Members-Only Access</span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+              More Than Just a Newsletter
+            </h2>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">
+              Join a community of serious traders and get access to our exclusive trading room.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {exclusiveAccess.map((item, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "p-6 rounded-2xl border transition-all",
+                  item.highlight 
+                    ? "bg-gradient-to-br from-purple-500/10 to-blue-500/10 border-purple-500/30 hover:border-purple-500/50" 
+                    : "bg-[#0d0d18] border-gray-800 hover:border-gray-700"
+                )}
+              >
+                <div className="flex items-start gap-4">
+                  <div className={cn(
+                    "w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0",
+                    item.highlight ? "bg-purple-500/20" : "bg-gray-800"
+                  )}>
+                    <item.icon className={cn("w-7 h-7", item.highlight ? "text-purple-400" : "text-gray-400")} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
+                      {item.title}
+                      {item.highlight && <span className="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">EXCLUSIVE</span>}
+                    </h3>
+                    <p className="text-gray-400 leading-relaxed">{item.description}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ============ VALUE COMPARISON ============ */}
+      <div className="max-w-4xl mx-auto px-4 py-20">
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+            The Real Value
+          </h2>
+          <p className="text-gray-400 text-lg">
+            What you'd pay separately vs. what you get with War Zone
+          </p>
+        </div>
+
+        <div className="bg-[#0d0d18] rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="divide-y divide-gray-800">
+            {comparisons.map((item, i) => (
+              <div key={i} className="flex items-center justify-between px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-500" />
+                  <span className="text-gray-300">{item.service}</span>
+                </div>
+                <span className="text-gray-500 line-through">{item.price}</span>
+              </div>
+            ))}
+          </div>
+          
+          <div className="bg-gradient-to-r from-red-500/10 to-orange-500/10 px-6 py-6 border-t border-red-500/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Total Value</p>
+                <p className="text-2xl font-bold text-white">$4,000+/month</p>
+              </div>
+              <div className="text-right">
+                <p className="text-gray-400 text-sm">Your Price (after trial)</p>
+                <p className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500">$20/month</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        {!isSubscribed && (
+          <div className="text-center mt-10">
+            <button
+              onClick={handleSubscribeClick}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-lg font-bold transition-all inline-flex items-center gap-3 shadow-lg shadow-red-500/25"
+            >
+              <Shield className="w-5 h-5" />
+              Start 7-Day Free Trial
+              <ArrowRight className="w-5 h-5" />
+            </button>
+            <p className="text-gray-500 text-sm mt-3">
+              {user ? 'Try everything free for 7 days • Cancel anytime' : 'Login required • Try free for 7 days'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ============ TESTIMONIALS ============ */}
+      <div className="bg-[#0a0a14] py-20">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl font-bold text-white mb-4">What Members Are Saying</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {testimonials.map((t, i) => (
+              <div key={i} className="p-6 rounded-2xl bg-[#0d0d18] border border-gray-800">
+                <div className="flex gap-1 mb-4">
+                  {[...Array(5)].map((_, j) => (
+                    <Star key={j} className="w-4 h-4 fill-yellow-500 text-yellow-500" />
+                  ))}
+                </div>
+                <p className="text-gray-300 italic mb-6 leading-relaxed">"{t.text}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center text-white font-bold">
+                    {t.avatar}
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{t.author}</p>
+                    <p className="text-gray-500 text-sm">{t.role}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* ============ FINAL CTA ============ */}
-      <div className="max-w-4xl mx-auto px-4 py-16">
-        <div className="relative p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-yellow-500/20 via-[#0d0d18] to-amber-500/10 border border-yellow-500/30 overflow-hidden text-center">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-yellow-500/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl" />
-          
-          <div className="relative">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-              Don't Fall <span className="text-yellow-500">Behind</span>
-            </h2>
-            <p className="text-gray-400 mb-8">
-              While others guess, you'll have the map.
-            </p>
+      {!isSubscribed && (
+        <div className="max-w-4xl mx-auto px-4 py-20">
+          <div className="relative p-8 sm:p-12 rounded-3xl bg-gradient-to-br from-red-500/20 via-[#0d0d18] to-orange-500/20 border border-red-500/40 overflow-hidden text-center">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-red-500/10 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl" />
             
-            <button
-              onClick={() => setShowDisclaimer(true)}
-              className="w-full sm:w-auto px-6 sm:px-8 py-4 rounded-xl bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black text-base sm:text-lg font-bold transition-all inline-flex items-center justify-center gap-2 sm:gap-3 shadow-2xl shadow-yellow-500/20 hover:scale-105"
-            >
-              <Lock className="w-5 h-5" />
-              Unlock Today's Report
-            </button>
+            <div className="relative">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-500/20 border border-red-500/40 mb-6">
+                <Flame className="w-4 h-4 text-red-400" />
+                <span className="text-red-400 text-sm font-semibold">Only 153 Spots Remaining</span>
+              </div>
+              
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                Ready to Trade Like a Professional?
+              </h2>
+              <p className="text-gray-400 text-lg mb-4 max-w-xl mx-auto">
+                Join 847 traders who start every day with War Zone intelligence. 
+                Your edge starts tomorrow morning.
+              </p>
+
+              {/* Trial Explanation Box */}
+              <div className="inline-block bg-[#080812]/80 rounded-xl p-4 mb-8 border border-gray-800 text-left max-w-md">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-5 h-5 text-green-500" />
+                  <span className="text-white font-semibold">How the Free Trial Works:</span>
+                </div>
+                <ul className="space-y-1 text-sm text-gray-400">
+                  <li>✓ <span className="text-green-400">Days 1-7:</span> Full access, no charge</li>
+                  <li>✓ <span className="text-yellow-400">Cancel anytime</span> during trial = pay nothing</li>
+                  <li>✓ <span className="text-gray-300">After 7 days:</span> $20/month (cancel anytime)</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={handleSubscribeClick}
+                className="px-10 py-5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white text-xl font-bold transition-all inline-flex items-center gap-3 shadow-2xl shadow-red-500/30 hover:scale-105"
+              >
+                <Swords className="w-6 h-6" />
+                Start Your Free Trial
+                <ExternalLink className="w-5 h-5" />
+              </button>
+              
+              <p className="text-gray-500 text-sm mt-6">
+                {user 
+                  ? '✓ 7 Days Free   ✓ Cancel Anytime   ✓ Instant Access'
+                  : '✓ Login Required   ✓ 7 Days Free   ✓ Cancel Anytime'}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ============ FAQ ============ */}
       <div className="max-w-3xl mx-auto px-4 py-16">
@@ -1242,12 +1132,21 @@ export default function WarZoneLanding() {
         </div>
       </div>
 
-      {/* ============ FOOTER ============ */}
-      <div className="border-t border-gray-800 bg-[#0a0a14] py-8">
+      {/* ============ FOOTER CTA ============ */}
+      <div className="border-t border-gray-800 bg-[#0a0a14] py-12">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <p className="text-gray-600 text-sm">
-            © 2025 Finotaur • <a href="/terms" className="hover:text-gray-400">Terms</a> • <a href="/privacy" className="hover:text-gray-400">Privacy</a>
+          <p className="text-gray-400 mb-4">
+            Questions? Email us at <span className="text-white">support@finotaur.com</span>
           </p>
+          {!isSubscribed && (
+            <button
+              onClick={handleSubscribeClick}
+              className="px-6 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-white font-medium transition-colors inline-flex items-center gap-2"
+            >
+              Start Free Trial
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>

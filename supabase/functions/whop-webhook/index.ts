@@ -730,15 +730,14 @@ async function handleNewsletterPayment(
 
   try {
     // Call the newsletter-specific RPC function
-    const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
-      p_user_email: userEmail || '',
-      p_whop_user_id: whopUserId,
-      p_whop_membership_id: membershipId,
-      p_whop_product_id: productId,
-      p_payment_amount: paymentAmount,
-      p_finotaur_user_id: finotaurUserId,
-    });
-
+const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
+  p_user_email: userEmail || '',
+  p_whop_user_id: whopUserId || '',
+  p_whop_membership_id: membershipId || '',
+  p_whop_product_id: productId || '',
+  p_payment_amount: paymentAmount,
+  p_finotaur_user_id: finotaurUserId || null,  // TEXT, explicitly null
+});
     if (error) {
       console.error("❌ handle_newsletter_payment RPC error:", error);
       return { success: false, message: `Newsletter payment failed: ${error.message}` };
@@ -847,13 +846,13 @@ async function handleNewsletterActivation(
 
   try {
     // Call the newsletter-specific RPC function
-    const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
-      p_user_email: userEmail || '',
-      p_whop_user_id: whopUserId,
-      p_whop_membership_id: membershipId,
-      p_whop_product_id: productId,
-      p_finotaur_user_id: finotaurUserId,
-    });
+const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
+  p_user_email: userEmail || '',
+  p_whop_user_id: whopUserId || '',
+  p_whop_membership_id: membershipId || '',
+  p_whop_product_id: productId || '',
+  p_finotaur_user_id: finotaurUserId || null,  // TEXT, explicitly null
+});
 
     if (error) {
       console.error("❌ activate_newsletter_subscription RPC error:", error);
@@ -984,10 +983,9 @@ async function handleNewsletterDeactivation(
 
   try {
     // Call the newsletter-specific RPC function
-    const { data: result, error } = await supabase.rpc('deactivate_newsletter_subscription', {
-      p_whop_membership_id: membershipId,
-    });
-
+const { data: result, error } = await supabase.rpc('deactivate_newsletter_subscription', {
+  p_whop_membership_id: membershipId || '',
+});
     if (error) {
       console.error("❌ deactivate_newsletter_subscription RPC error:", error);
       return { success: false, message: `Newsletter deactivation failed: ${error.message}` };

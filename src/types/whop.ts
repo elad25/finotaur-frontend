@@ -10,9 +10,10 @@ export type PlanId =
   | 'basic_yearly'
   | 'premium_monthly'
   | 'premium_yearly'
+  | 'newsletter_monthly'  // ✅ ADD
   | 'lifetime';
 
-export type PlanName = 'free' | 'basic' | 'premium' | 'lifetime';
+export type PlanName = 'free' | 'basic' | 'premium' | 'newsletter' | 'lifetime';  // ✅ ADD newsletter
 
 export type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 
