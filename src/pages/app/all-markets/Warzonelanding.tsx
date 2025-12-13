@@ -7,7 +7,6 @@ import {
   CheckCircle2, 
   Shield,
   Clock,
-  Users,
   Star,
   ArrowRight,
   LineChart,
@@ -166,7 +165,7 @@ const DisclaimerPopup = ({
 // ============================================
 // MAIN COMPONENT
 // ============================================
-export default function WarZoneLanding() {
+export default function WarZoneLandingSimple() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -180,7 +179,6 @@ export default function WarZoneLanding() {
   useEffect(() => {
     if (searchParams.get('payment') === 'success' || searchParams.get('checkout_status') === 'success') {
       setPaymentSuccess(true);
-      // Remove the query param from URL
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [searchParams]);
@@ -208,16 +206,15 @@ export default function WarZoneLanding() {
     checkSubscription();
   }, [user?.id]);
 
-  // Open disclaimer popup instead of going directly to Whop
+  // Open disclaimer popup
   const handleSubscribeClick = () => {
     setShowDisclaimer(true);
   };
 
-  // After accepting disclaimer, go to Whop
+  // 🔥 FIXED: After accepting disclaimer, go to Whop with user ID
   const handleAcceptDisclaimer = () => {
     setShowDisclaimer(false);
     
-    // Build checkout URL with all parameters
     const params = new URLSearchParams();
     
     // Pre-fill email if logged in
@@ -225,16 +222,19 @@ export default function WarZoneLanding() {
       params.set('email', user.email);
     }
     
-    // 🔥 IMPORTANT: Add finotaur_user_id for webhook identification
-    // This ensures we can identify the user even if they use a different email
+    // 🔥 CRITICAL: Add finotaur_user_id for webhook identification
     if (user?.id) {
       params.set('metadata[finotaur_user_id]', user.id);
+      console.log('✅ Sending to Whop with user ID:', user.id);
+    } else {
+      console.warn('⚠️ No user ID available - user not logged in!');
     }
     
-    // Redirect URL after successful payment
     params.set('redirect_url', `${REDIRECT_URL}?payment=success`);
     
     const checkoutUrl = `${WHOP_CHECKOUT_BASE_URL}?${params.toString()}`;
+    console.log('🔗 Checkout URL:', checkoutUrl);
+    
     window.open(checkoutUrl, '_blank');
   };
 
@@ -321,12 +321,12 @@ export default function WarZoneLanding() {
   ];
 
   const comparisons = [
-    { service: 'Goldman Morning Note', price: '$2,000+/mo', included: true },
-    { service: 'JPM Daily Brief', price: '$1,500+/mo', included: true },
-    { service: 'UOA Services', price: '$79/mo', included: true },
-    { service: 'Macro Research', price: '$150-300/mo', included: true },
-    { service: 'Discord Trading Community', price: '$50-100/mo', included: true },
-    { service: 'Live Trading Room', price: '$100-200/mo', included: true },
+    { service: 'Goldman Morning Note', price: '$2,000+/mo' },
+    { service: 'JPM Daily Brief', price: '$1,500+/mo' },
+    { service: 'UOA Services', price: '$79/mo' },
+    { service: 'Macro Research', price: '$150-300/mo' },
+    { service: 'Discord Trading Community', price: '$50-100/mo' },
+    { service: 'Live Trading Room', price: '$100-200/mo' },
   ];
 
   const testimonials = [
