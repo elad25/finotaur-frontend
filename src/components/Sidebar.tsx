@@ -78,8 +78,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
     { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
     { label: 'divider', path: '', icon: null, divider: true },
-    // ⚔️ WAR ZONE - פתוח!
-    { label: 'War Zone', path: '/app/all-markets/warzone', icon: Swords, locked: false },
   ],
   
   // 📰 MACRO & NEWS - UNLOCKED!

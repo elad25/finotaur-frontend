@@ -1,7 +1,20 @@
+/**
+ * ===============================================
+ * 🔥 JOURNAL CALENDAR - SYNCED WITH MY TRADES
+ * ===============================================
+ * ✅ FIXED: Now uses useTrades() hook (same as MyTrades)
+ * ✅ FIXED: Proper PnL/Outcome from database (no recalculation)
+ * ✅ FIXED: oneR and actualR support via useRiskSettings
+ * ✅ FIXED: Timezone support with useTimezone
+ * ✅ FIXED: Session formatting with getSessionColor
+ * ✅ FIXED: Proper impersonation support
+ * ✅ OPTIMIZED: Memoized components and calculations
+ * ===============================================
+ */
+
 import { useEffect, useState, useMemo, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import PageTitle from "@/components/PageTitle";
-import { getTrades } from "@/routes/journal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,11 +55,17 @@ import {
   ArrowDown
 } from "lucide-react";
 import { formatNumber } from "@/utils/smartCalc";
-import { getStrategyName } from "@/utils/storage";
+import { toast } from "sonner";
+
+// 🔥 CRITICAL: Same imports as MyTrades!
+import { useTrades, Trade } from "@/hooks/useTradesData";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
+import { useTimezone } from '@/contexts/TimezoneContext';
+import { formatTradeDate } from '@/utils/dateFormatter';
+import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
+
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -59,37 +78,11 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
-  Legend
 } from "recharts";
 
-interface Trade {
-  id: string;
-  symbol: string;
-  side: "LONG" | "SHORT";
-  entry_price: number;
-  stop_price: number;
-  take_profit_price?: number;
-  exit_price?: number;
-  quantity: number;
-  fees: number;
-  open_at: string;
-  close_at?: string;
-  session?: string;
-  strategy?: string;
-  setup?: string;
-  notes?: string;
-  outcome?: "WIN" | "LOSS" | "BE" | "OPEN";
-  pnl?: number;
-  mistake?: string;
-  next_time?: string;
-  metrics?: {
-    rr?: number;
-    riskUSD?: number;
-    rewardUSD?: number;
-    riskPts?: number;
-    rewardPts?: number;
-  };
-}
+// ================================================
+// 🎯 TYPES
+// ================================================
 
 interface DayData {
   date: string;
@@ -98,6 +91,7 @@ interface DayData {
   tradeCount: number;
   winRate: number;
   avgRR: number;
+  avgR: number; // 🔥 NEW: Average actual R
   emotionScore: number;
   violations: string[];
   topMistake?: string;
@@ -109,12 +103,17 @@ interface MonthStats {
   profitFactor: number;
   winRate: number;
   avgRR: number;
+  avgR: number; // 🔥 NEW: Average actual R
   consistencyScore: number;
   wins: number;
   losses: number;
   totalTrades: number;
   emotionalStability: number;
 }
+
+// ================================================
+// 🎯 HELPER FUNCTIONS
+// ================================================
 
 // Emotion score calculation (0-100)
 const calculateEmotionScore = (trades: Trade[]): number => {
@@ -128,14 +127,6 @@ const calculateEmotionScore = (trades: Trade[]): number => {
   return Math.round(score);
 };
 
-// ✅ FIXED: Use UTC to avoid timezone issues
-const getUTCDateString = (date: Date): string => {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 // Keep local version for display purposes
 const getLocalDateString = (date: Date): string => {
   const year = date.getFullYear();
@@ -144,7 +135,30 @@ const getLocalDateString = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-// ✅ OPTIMIZATION: Memoized Chart Components
+// 🔥 NEW: Get trade data consistently (same logic as MyTrades)
+const getTradeData = (trade: Trade, oneR: number) => {
+  const pnl = trade.pnl ?? 0;
+  const outcome = trade.outcome ?? 'OPEN';
+  
+  // Calculate actual R based on global 1R
+  const actualR = trade.exit_price && oneR > 0 
+    ? calculateActualR(pnl, oneR)
+    : (trade.metrics?.actual_r ?? null);
+  
+  return {
+    pnl,
+    actualR,
+    riskUSD: trade.metrics?.riskUSD ?? 0,
+    outcome,
+    multiplier: trade.multiplier ?? 1,
+    rr: trade.metrics?.rr ?? 0,
+  };
+};
+
+// ================================================
+// 🚀 MEMOIZED CHART COMPONENTS
+// ================================================
+
 const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
   <ResponsiveContainer width="100%" height={280}>
     <AreaChart data={data}>
@@ -191,6 +205,11 @@ const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
                   <div className="text-emerald-400">{props.payload.wins} wins</div>
                   <div className="text-red-400">{props.payload.losses} losses</div>
                   <div className="text-yellow-400">{props.payload.emotion}</div>
+                  {props.payload.avgR !== undefined && props.payload.avgR !== 0 && (
+                    <div className={props.payload.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                      Avg R: {formatRValue(props.payload.avgR)}
+                    </div>
+                  )}
                 </div>
               </div>,
               'Cumulative'
@@ -214,7 +233,6 @@ const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
 
 MemoizedAreaChart.displayName = 'MemoizedAreaChart';
 
-// ✅ OPTIMIZATION: Memoized Radar Chart
 const MemoizedRadarChart = memo(({ data }: { data: any[] }) => (
   <ResponsiveContainer width="100%" height={240}>
     <RadarChart data={data}>
@@ -253,14 +271,20 @@ const MemoizedRadarChart = memo(({ data }: { data: any[] }) => (
 
 MemoizedRadarChart.displayName = 'MemoizedRadarChart';
 
+// ================================================
+// 🎯 MAIN COMPONENT
+// ================================================
+
 export default function JournalCalendar() {
   const navigate = useNavigate();
   
-  // ✅ FIXED: Added isLoading from useEffectiveUser
+  // 🔥 CRITICAL: Same hooks as MyTrades!
   const { id: userId, isImpersonating, isLoading: userLoading } = useEffectiveUser();
+  const timezone = useTimezone();
+  const { oneR, loading: riskLoading } = useRiskSettings();
   
-  const [trades, setTrades] = useState<Trade[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 🔥 CRITICAL: Use the same useTrades hook as MyTrades!
+  const { data: trades = [], isLoading: tradesLoading, error } = useTrades(userId);
   
   // Date navigation
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -301,64 +325,21 @@ export default function JournalCalendar() {
       userId,
       isImpersonating,
       tradesCount: trades.length,
-      loading,
+      tradesLoading,
       userLoading,
+      oneR,
     });
-  }, [userId, isImpersonating, trades.length, loading, userLoading]);
+  }, [userId, isImpersonating, trades.length, tradesLoading, userLoading, oneR]);
   
   useEffect(() => {
     setIsVisible(true);
   }, []);
 
-  // ✅ FIXED: Wait for userId to be ready before loading trades
-  useEffect(() => {
-    if (userId && !userLoading) {
-      loadTrades();
-    }
-  }, [userId, userLoading]);
+  // ================================================
+  // 🚀 MEMOIZED CALCULATIONS
+  // ================================================
 
-  // ✅ FIXED: Pass userId to getTrades (you'll need to update the getTrades function signature)
-  async function loadTrades() {
-    if (!userId) return;
-    
-    setLoading(true);
-    try {
-      // TODO: Update getTrades to accept userId parameter
-      // const result = await getTrades(userId);
-      const result = await getTrades(userId); // ✅ Pass userId
-      
-      if (result.ok && result.data) {
-        // Calculate outcome and pnl for trades that don't have them
-        const processedTrades = result.data.map((trade: Trade) => {
-          if (!trade.exit_price) return { ...trade, outcome: "OPEN" as const };
-          
-          const priceChange = trade.side === "LONG"
-            ? trade.exit_price - trade.entry_price
-            : trade.entry_price - trade.exit_price;
-          
-          const multiplier = trade.metrics?.riskUSD && trade.metrics?.riskPts && trade.quantity
-            ? Math.abs(trade.metrics.riskUSD / trade.metrics.riskPts / trade.quantity)
-            : 1;
-          
-          const pnl = (priceChange * trade.quantity * multiplier) - trade.fees;
-          
-          let outcome: "WIN" | "LOSS" | "BE" = "BE";
-          if (pnl > 0) outcome = "WIN";
-          else if (pnl < 0) outcome = "LOSS";
-          
-          return { ...trade, pnl, outcome };
-        });
-        
-        setTrades(processedTrades);
-      }
-    } catch (error) {
-      console.error('Error loading trades:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // ✅ OPTIMIZATION: Memoize expensive calculations with proper dependencies
+  // 🔥 Process trades with proper data (using same logic as MyTrades)
   const dayDataMap = useMemo(() => {
     const map = new Map<string, DayData>();
     
@@ -373,6 +354,7 @@ export default function JournalCalendar() {
           tradeCount: 0,
           winRate: 0,
           avgRR: 0,
+          avgR: 0,
           emotionScore: 0,
           violations: [],
           sessions: [],
@@ -381,15 +363,18 @@ export default function JournalCalendar() {
       
       const dayData = map.get(date)!;
       
-      // Apply filters
-      if (filterStrategy !== "all" && trade.strategy !== filterStrategy) return;
+      // Apply filters - 🔥 FIXED: use strategy_id instead of strategy
+      if (filterStrategy !== "all" && trade.strategy_id !== filterStrategy) return;
       if (filterSession !== "all" && trade.session !== filterSession) return;
       if (filterResult !== "all" && trade.outcome !== filterResult) return;
       
       dayData.trades.push(trade);
       dayData.tradeCount++;
       
-      if (trade.pnl) dayData.netPnL += trade.pnl;
+      // 🔥 Use pnl directly from trade (already calculated correctly)
+      const { pnl } = getTradeData(trade, oneR);
+      dayData.netPnL += pnl;
+      
       if (trade.session && !dayData.sessions.includes(trade.session)) {
         dayData.sessions.push(trade.session);
       }
@@ -405,11 +390,22 @@ export default function JournalCalendar() {
         const wins = closedTrades.filter(t => t.outcome === "WIN").length;
         dayData.winRate = (wins / closedTrades.length) * 100;
         
-        const totalRR = closedTrades.reduce((sum, t) => {
-          if (t.metrics?.rr) return sum + t.metrics.rr;
-          return sum;
-        }, 0);
+        // 🔥 Calculate average RR AND actual R
+        let totalRR = 0;
+        let totalR = 0;
+        let rCount = 0;
+        
+        closedTrades.forEach(t => {
+          const { actualR } = getTradeData(t, oneR);
+          if (t.metrics?.rr) totalRR += t.metrics.rr;
+          if (actualR !== null && actualR !== undefined) {
+            totalR += actualR;
+            rCount++;
+          }
+        });
+        
         dayData.avgRR = closedTrades.length > 0 ? totalRR / closedTrades.length : 0;
+        dayData.avgR = rCount > 0 ? totalR / rCount : 0;
       }
       
       dayData.emotionScore = calculateEmotionScore(dayData.trades);
@@ -424,9 +420,9 @@ export default function JournalCalendar() {
     });
     
     return map;
-  }, [trades, filterStrategy, filterSession, filterResult]);
+  }, [trades, filterStrategy, filterSession, filterResult, oneR]);
 
-  // ✅ OPTIMIZATION: Memoize month statistics
+  // 🔥 Month statistics with proper R calculation
   const monthStats = useMemo((): MonthStats => {
     const monthTrades = trades.filter(trade => {
       const tradeDate = new Date(trade.open_at);
@@ -438,18 +434,33 @@ export default function JournalCalendar() {
     const wins = closedTrades.filter(t => t.outcome === "WIN");
     const losses = closedTrades.filter(t => t.outcome === "LOSS");
     
+    // 🔥 Use pnl directly from trades
     const grossProfit = wins.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const grossLoss = Math.abs(losses.reduce((sum, t) => sum + (t.pnl || 0), 0));
     
     const totalPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
     const winRate = closedTrades.length > 0 ? (wins.length / closedTrades.length) * 100 : 0;
     
-    const totalRR = closedTrades.reduce((sum, t) => sum + (t.metrics?.rr || 0), 0);
+    // 🔥 Calculate average RR AND actual R
+    let totalRR = 0;
+    let totalR = 0;
+    let rCount = 0;
+    
+    closedTrades.forEach(t => {
+      if (t.metrics?.rr) totalRR += t.metrics.rr;
+      const { actualR } = getTradeData(t, oneR);
+      if (actualR !== null && actualR !== undefined) {
+        totalR += actualR;
+        rCount++;
+      }
+    });
+    
     const avgRR = closedTrades.length > 0 ? totalRR / closedTrades.length : 0;
+    const avgR = rCount > 0 ? totalR / rCount : 0;
     
     const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 999 : 0;
     
-    // Consistency score: fewer mistakes = higher score
+    // Consistency score
     const emotionalTrades = monthTrades.filter(t => 
       t.mistake && ["revenge", "fomo", "emotional", "overtrading"].includes(t.mistake)
     );
@@ -464,13 +475,14 @@ export default function JournalCalendar() {
       profitFactor,
       winRate,
       avgRR,
+      avgR,
       consistencyScore,
       wins: wins.length,
       losses: losses.length,
       totalTrades: closedTrades.length,
       emotionalStability,
     };
-  }, [trades, currentDate]);
+  }, [trades, currentDate, oneR]);
 
   // Calculate Finotaur Score
   const finotaurScore = useMemo(() => {
@@ -507,7 +519,7 @@ export default function JournalCalendar() {
     }
   }, [isVisible, finotaurScore]);
   
-  // ✅ OPTIMIZATION: Memoize cumulative P&L data
+  // Cumulative P&L data with actual R
   const cumulativePnLData = useMemo(() => {
     const monthTrades = trades.filter(trade => {
       const tradeDate = new Date(trade.open_at);
@@ -525,6 +537,7 @@ export default function JournalCalendar() {
       wins: number;
       losses: number;
       emotion: string;
+      avgR: number;
     }> = [];
     
     // Group by date
@@ -539,12 +552,25 @@ export default function JournalCalendar() {
     
     // Build cumulative data
     dateGroups.forEach((dayTrades, date) => {
+      // 🔥 Use pnl directly from trades
       const dayPnL = dayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
       cumulative += dayPnL;
       
       const wins = dayTrades.filter(t => t.outcome === "WIN").length;
       const losses = dayTrades.filter(t => t.outcome === "LOSS").length;
       const emotionScore = calculateEmotionScore(dayTrades);
+      
+      // Calculate average R for the day
+      let totalR = 0;
+      let rCount = 0;
+      dayTrades.forEach(t => {
+        const { actualR } = getTradeData(t, oneR);
+        if (actualR !== null && actualR !== undefined) {
+          totalR += actualR;
+          rCount++;
+        }
+      });
+      const avgR = rCount > 0 ? totalR / rCount : 0;
       
       data.push({
         date,
@@ -553,14 +579,15 @@ export default function JournalCalendar() {
         trades: dayTrades.length,
         wins,
         losses,
-        emotion: emotionScore >= 80 ? 'Calm' : emotionScore >= 60 ? 'Focused' : 'Emotional'
+        emotion: emotionScore >= 80 ? 'Calm' : emotionScore >= 60 ? 'Focused' : 'Emotional',
+        avgR,
       });
     });
     
     return data;
-  }, [trades, currentDate]);
+  }, [trades, currentDate, oneR]);
   
-  // ✅ OPTIMIZATION: Memoize radar data
+  // Radar data
   const radarData = useMemo(() => {
     return [
       {
@@ -645,9 +672,14 @@ export default function JournalCalendar() {
     
     const consistencyChange = monthStats.consistencyScore >= 80 ? '+' : '';
     
-    return `This month you traded ${tradedDays} days with ${monthStats.winRate.toFixed(0)}% win rate. ${
+    // 🔥 Add actual R to summary
+    const avgRText = monthStats.avgR !== 0 
+      ? ` Avg R: ${formatRValue(monthStats.avgR)}.`
+      : '';
+    
+    return `This month you traded ${tradedDays} days with ${monthStats.winRate.toFixed(0)}% win rate.${avgRText} ${
       monthStats.consistencyScore >= 70 ? `${consistencyChange}${Math.round(Math.random() * 15)}% higher consistency.` : 'Focus on emotional control.'
-    } Top performance: ${bestDay} in ${bestSession} session.`;
+    } Top performance: ${bestDay} in ${formatSessionDisplay(bestSession)} session.`;
   }, [trades, currentDate, monthStats]);
 
   // Calendar grid generation
@@ -681,6 +713,7 @@ export default function JournalCalendar() {
       totalPnL: number;
       tradeCount: number;
       daysTraded: number;
+      avgR: number;
     }> = [];
 
     let currentWeekDays: (Date | null)[] = [];
@@ -694,6 +727,8 @@ export default function JournalCalendar() {
         let totalPnL = 0;
         let tradeCount = 0;
         let daysTraded = 0;
+        let totalR = 0;
+        let rCount = 0;
 
         currentWeekDays.forEach(d => {
           if (d) {
@@ -703,6 +738,11 @@ export default function JournalCalendar() {
               totalPnL += dayData.netPnL;
               tradeCount += dayData.tradeCount;
               daysTraded++;
+              if (dayData.avgR !== 0) {
+                const closedCount = dayData.trades.filter(t => t.exit_price).length;
+                totalR += dayData.avgR * closedCount;
+                rCount += closedCount;
+              }
             }
           }
         });
@@ -711,7 +751,8 @@ export default function JournalCalendar() {
           weekNumber,
           totalPnL,
           tradeCount,
-          daysTraded
+          daysTraded,
+          avgR: rCount > 0 ? totalR / rCount : 0,
         });
 
         weekNumber++;
@@ -735,7 +776,7 @@ export default function JournalCalendar() {
     setCurrentDate(new Date());
   };
 
-  // ✅ FIXED: Export calendar data with impersonation info
+  // 🔥 Export with proper data and R values
   const exportCalendarData = () => {
     try {
       const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -749,10 +790,11 @@ export default function JournalCalendar() {
         'Trades',
         'Win Rate %',
         'Avg R:R',
+        'Avg R',
         'Sessions',
         'Top Mistake',
         'Violations'
-      ].filter(h => h !== ''); // Remove empty header if not impersonating
+      ].filter(h => h !== '');
 
       // Prepare CSV rows
       const rows = calendarDays
@@ -762,7 +804,7 @@ export default function JournalCalendar() {
           const dayData = dayDataMap.get(dateStr);
           
           if (!dayData || dayData.tradeCount === 0) {
-            return null; // Skip days with no trades
+            return null;
           }
 
           const dayName = day!.toLocaleDateString('en-US', { weekday: 'short' });
@@ -774,20 +816,19 @@ export default function JournalCalendar() {
             dayData.tradeCount,
             dayData.winRate.toFixed(1),
             dayData.avgRR.toFixed(2),
-            dayData.sessions.join('; '),
+            formatRValue(dayData.avgR),
+            dayData.sessions.map(s => formatSessionDisplay(s)).join('; '),
             dayData.topMistake || 'None',
             dayData.violations.join('; ') || 'None'
           ].join(',');
         })
         .filter(row => row !== null);
 
-      // Combine header and rows
       const csvContent = [
         headers.join(','),
         ...rows
       ].join('\n');
 
-      // Create blob and download
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -800,9 +841,10 @@ export default function JournalCalendar() {
       link.click();
       document.body.removeChild(link);
       
-      console.log('✅ Calendar data exported successfully!');
+      toast.success('Calendar data exported!');
     } catch (error) {
       console.error('❌ Error exporting calendar data:', error);
+      toast.error('Failed to export calendar data');
     }
   };
 
@@ -828,7 +870,6 @@ export default function JournalCalendar() {
         return "bg-red-500/10 border-red-500/30 hover:bg-red-500/20";
       
       case "strategy":
-        // Color by dominant strategy
         return "bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20";
       
       default:
@@ -836,23 +877,31 @@ export default function JournalCalendar() {
     }
   };
 
-  // ✅ FIXED: Show loading state with proper checks
-  if (!userId || userLoading || loading) {
+  // ================================================
+  // 🎯 LOADING STATE
+  // ================================================
+
+  if (!userId || userLoading || tradesLoading || riskLoading) {
     return (
       <div className="p-6 space-y-6">
         <PageTitle title="Calendar" subtitle="" />
         <div className="flex items-center justify-center h-96">
           <div className="text-zinc-400">
-            {!userId || userLoading ? 'Authenticating...' : 'Loading calendar...'}
+            {!userId || userLoading ? 'Authenticating...' : 
+             riskLoading ? 'Loading settings...' : 'Loading calendar...'}
           </div>
         </div>
       </div>
     );
   }
 
+  // ================================================
+  // 🎯 RENDER
+  // ================================================
+
   return (
     <div className="p-6 space-y-6 max-w-[1800px] mx-auto">
-      {/* ✅ Impersonation Banner - Already exists */}
+      {/* ✅ Impersonation Banner */}
       {isImpersonating && (
         <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-3 mb-4">
           <div className="flex items-center gap-2 text-sm text-yellow-500">
@@ -867,6 +916,11 @@ export default function JournalCalendar() {
         <PageTitle title="Performance Calendar" subtitle="Track your trading journey day by day" />
         
         <div className="flex items-center gap-3">
+          {/* 🔥 Show current 1R value */}
+          <div className="text-xs text-zinc-500 bg-zinc-800/50 px-3 py-1.5 rounded-lg">
+            1R = ${formatNumber(oneR, 2)}
+          </div>
+          
           <Button
             variant="outline"
             size="sm"
@@ -967,7 +1021,6 @@ export default function JournalCalendar() {
                 </Button>
               </div>
 
-              {/* ✅ Use memoized chart component */}
               <MemoizedAreaChart data={cumulativePnLData} />
             </div>
 
@@ -1025,7 +1078,6 @@ export default function JournalCalendar() {
                 </div>
               </div>
 
-              {/* ✅ Use memoized radar chart */}
               <MemoizedRadarChart data={radarData} />
               
               <div className="mt-3 text-center">
@@ -1049,8 +1101,8 @@ export default function JournalCalendar() {
         }`}
       >
       <Card className="rounded-2xl border border-yellow-200/20 bg-gradient-to-br from-zinc-900/90 to-zinc-900/50 p-6">
-        {/* KPI Cards Row */}
-        <div className="grid grid-cols-5 gap-4 mb-6">
+        {/* KPI Cards Row - 🔥 NOW WITH 6 CARDS INCLUDING AVG R */}
+        <div className="grid grid-cols-6 gap-4 mb-6">
           {/* Enhanced Net P&L */}
           <div className="rounded-xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900/60 to-zinc-950/40 p-4 hover:border-yellow-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-yellow-500/10 group"
             style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.03)' }}
@@ -1150,6 +1202,33 @@ export default function JournalCalendar() {
               monthStats.avgRR >= 2 ? 'text-emerald-400' : 'text-yellow-400'
             }`}>
               {monthStats.avgRR >= 2 ? '💎 Strong' : '📊 Acceptable'}
+            </div>
+          </div>
+
+          {/* 🔥 NEW: Avg Actual R Card */}
+          <div className="rounded-xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900/60 to-zinc-950/40 p-4 hover:border-yellow-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-yellow-500/10 group"
+            style={{ boxShadow: 'inset 0 1px 0 0 rgba(255,255,255,0.03)' }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="text-[9px] text-zinc-500 uppercase tracking-widest">Realized</span>
+                <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mt-0.5">Avg R</p>
+              </div>
+              <div className="rounded-lg bg-purple-500/15 p-2 group-hover:bg-purple-500/25 transition-colors">
+                <Award className="w-4 h-4 text-purple-400" />
+              </div>
+            </div>
+            <div className={`text-2xl font-black ${monthStats.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+              style={{ filter: 'drop-shadow(0 2px 4px rgba(255,255,255,0.2))' }}
+            >
+              {formatRValue(monthStats.avgR)}
+            </div>
+            <div className={`text-xs mt-1.5 font-medium ${
+              monthStats.avgR >= 1 ? 'text-emerald-400' : 
+              monthStats.avgR >= 0 ? 'text-yellow-400' : 
+              'text-red-400'
+            }`}>
+              {monthStats.avgR >= 1 ? '🎯 Great' : monthStats.avgR >= 0 ? '✓ Positive' : '⚠ Losing'}
             </div>
           </div>
 
@@ -1303,9 +1382,10 @@ export default function JournalCalendar() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Sessions</SelectItem>
-                <SelectItem value="Asia">Asia</SelectItem>
-                <SelectItem value="London">London</SelectItem>
-                <SelectItem value="NY">NY</SelectItem>
+                <SelectItem value="asia">Asia</SelectItem>
+                <SelectItem value="london">London</SelectItem>
+                <SelectItem value="ny_am">NY AM</SelectItem>
+                <SelectItem value="ny_pm">NY PM</SelectItem>
               </SelectContent>
             </Select>
 
@@ -1335,229 +1415,258 @@ export default function JournalCalendar() {
           <Card className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 flex-1">
             {/* Day headers */}
             <div className="grid grid-cols-7 gap-2 mb-3">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <div key={day} className="text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar days */}
-        <div className="grid grid-cols-7 gap-2">
-          {calendarDays.map((day, index) => {
-            if (!day) {
-              return (
-                <div 
-                  key={`empty-${index}`} 
-                  className="aspect-square rounded-xl bg-zinc-950/50"
-                />
-              );
-            }
-
-            const dateStr = getLocalDateString(day);
-            const dayData = dayDataMap.get(dateStr);
-            const isToday = dateStr === getLocalDateString(new Date());
-            const isHovered = hoveredDate === dateStr;
-            const weekIndex = Math.floor(index / 7);
-            const isWeekHovered = hoveredWeek === weekIndex;
-
-            return (
-              <button
-                key={dateStr}
-                onClick={() => {
-                  if (dayData && dayData.tradeCount > 0) {
-                    setSelectedDay(dayData);
-                    setModalOpen(true);
-                  } else {
-                    // Navigate to new trade with selected date
-                    navigate(`/app/journal/new?date=${dateStr}`);
-                  }
-                }}
-                className={`
-                  aspect-square rounded-xl border p-2 transition-all duration-200
-                  ${getDayColor(dayData, displayMode)}
-                  ${isToday ? 'ring-2 ring-yellow-500' : ''}
-                  ${isHovered ? 'ring-2 ring-yellow-500 scale-105 shadow-[0_0_25px_rgba(201,166,70,0.5)]' : ''}
-                  ${isWeekHovered ? 'ring-2 ring-yellow-500/70 scale-[1.02]' : ''}
-                  cursor-pointer hover:scale-105
-                  relative group
-                `}
-              >
-                {/* Date */}
-                <div className={`text-xs font-medium mb-1 ${
-                  isToday ? 'text-yellow-500' : 'text-zinc-400'
-                }`}>
-                  {day.getDate()}
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <div key={day} className="text-center text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  {day}
                 </div>
+              ))}
+            </div>
 
-                {/* Day content */}
-                {dayData && dayData.tradeCount > 0 ? (
-                  <>
-                    {/* P&L */}
-                    <div className={`text-sm font-bold mb-1 ${
-                      dayData.netPnL > 0 ? 'text-emerald-400' :
-                      dayData.netPnL < 0 ? 'text-red-400' :
-                      'text-zinc-400'
+            {/* Calendar days */}
+            <div className="grid grid-cols-7 gap-2">
+              {calendarDays.map((day, index) => {
+                if (!day) {
+                  return (
+                    <div 
+                      key={`empty-${index}`} 
+                      className="aspect-square rounded-xl bg-zinc-950/50"
+                    />
+                  );
+                }
+
+                const dateStr = getLocalDateString(day);
+                const dayData = dayDataMap.get(dateStr);
+                const isToday = dateStr === getLocalDateString(new Date());
+                const isHovered = hoveredDate === dateStr;
+                const weekIndex = Math.floor(index / 7);
+                const isWeekHovered = hoveredWeek === weekIndex;
+
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => {
+                      if (dayData && dayData.tradeCount > 0) {
+                        setSelectedDay(dayData);
+                        setModalOpen(true);
+                      } else {
+                        navigate(`/app/journal/new?date=${dateStr}`);
+                      }
+                    }}
+                    className={`
+                      aspect-square rounded-xl border p-2 transition-all duration-200
+                      ${getDayColor(dayData, displayMode)}
+                      ${isToday ? 'ring-2 ring-yellow-500' : ''}
+                      ${isHovered ? 'ring-2 ring-yellow-500 scale-105 shadow-[0_0_25px_rgba(201,166,70,0.5)]' : ''}
+                      ${isWeekHovered ? 'ring-2 ring-yellow-500/70 scale-[1.02]' : ''}
+                      cursor-pointer hover:scale-105
+                      relative group
+                    `}
+                  >
+                    {/* Date */}
+                    <div className={`text-xs font-medium mb-1 ${
+                      isToday ? 'text-yellow-500' : 'text-zinc-400'
                     }`}>
-                      {dayData.netPnL > 0 ? '+' : ''}${formatNumber(dayData.netPnL, 0)}
+                      {day.getDate()}
                     </div>
 
-                    {/* Trade count */}
-                    <div className="text-[10px] text-zinc-500">
-                      {dayData.tradeCount} {dayData.tradeCount === 1 ? 'trade' : 'trades'}
-                    </div>
+                    {/* Day content */}
+                    {dayData && dayData.tradeCount > 0 ? (
+                      <>
+                        {/* P&L */}
+                        <div className={`text-sm font-bold mb-1 ${
+                          dayData.netPnL > 0 ? 'text-emerald-400' :
+                          dayData.netPnL < 0 ? 'text-red-400' :
+                          'text-zinc-400'
+                        }`}>
+                          {dayData.netPnL > 0 ? '+' : ''}${formatNumber(dayData.netPnL, 0)}
+                        </div>
 
-                    {/* Hover tooltip */}
-                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10">
-                      <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl min-w-[200px]">
-                        <div className="space-y-2 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Trades:</span>
-                            <span className="text-white font-medium">{dayData.tradeCount}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Win Rate:</span>
-                            <span className="text-white font-medium">{dayData.winRate.toFixed(0)}%</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Net P&L:</span>
-                            <span className={`font-medium ${
-                              dayData.netPnL > 0 ? 'text-emerald-400' : 'text-red-400'
-                            }`}>
-                              ${formatNumber(dayData.netPnL, 0)}
-                            </span>
-                          </div>
-                          {dayData.sessions.length > 0 && (
-                            <div className="flex justify-between">
-                              <span className="text-zinc-400">Sessions:</span>
-                              <span className="text-white font-medium">{dayData.sessions.join(', ')}</span>
+                        {/* Trade count */}
+                        <div className="text-[10px] text-zinc-500">
+                          {dayData.tradeCount} {dayData.tradeCount === 1 ? 'trade' : 'trades'}
+                        </div>
+
+                        {/* Hover tooltip */}
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10">
+                          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl min-w-[200px]">
+                            <div className="space-y-2 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-zinc-400">Trades:</span>
+                                <span className="text-white font-medium">{dayData.tradeCount}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-zinc-400">Win Rate:</span>
+                                <span className="text-white font-medium">{dayData.winRate.toFixed(0)}%</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-zinc-400">Net P&L:</span>
+                                <span className={`font-medium ${
+                                  dayData.netPnL > 0 ? 'text-emerald-400' : 'text-red-400'
+                                }`}>
+                                  ${formatNumber(dayData.netPnL, 0)}
+                                </span>
+                              </div>
+                              {/* 🔥 NEW: Show Avg R in tooltip */}
+                              {dayData.avgR !== 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-400">Avg R:</span>
+                                  <span className={`font-medium ${
+                                    dayData.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                  }`}>
+                                    {formatRValue(dayData.avgR)}
+                                  </span>
+                                </div>
+                              )}
+                              {dayData.sessions.length > 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-400">Sessions:</span>
+                                  <span className="text-white font-medium">
+                                    {dayData.sessions.map(s => formatSessionDisplay(s)).join(', ')}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex justify-between">
+                                <span className="text-zinc-400">Emotion:</span>
+                                <span className="text-white font-medium">{dayData.emotionScore}/100</span>
+                              </div>
                             </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span className="text-zinc-400">Emotion:</span>
-                            <span className="text-white font-medium">{dayData.emotionScore}/100</span>
                           </div>
                         </div>
+                      </>
+                    ) : (
+                      /* Empty day hover hint */
+                      <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10">
+                        <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
+                          <p className="text-xs text-zinc-300">Click to add trade</p>
+                        </div>
                       </div>
-                    </div>
-                  </>
-                ) : (
-                  /* Empty day hover hint */
-                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-10">
-                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 shadow-xl whitespace-nowrap">
-                      <p className="text-xs text-zinc-300">Click to add trade</p>
-                    </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          {/* Weekly Summary Rail - Desktop */}
+          <div className="hidden xl:flex flex-col gap-2 w-64 flex-shrink-0">
+            {weeklySummaries.map((week, weekIndex) => (
+              <div
+                key={week.weekNumber}
+                onMouseEnter={() => setHoveredWeek(weekIndex)}
+                onMouseLeave={() => setHoveredWeek(null)}
+                className={`
+                  rounded-[18px] border p-3 transition-all duration-200 cursor-pointer
+                  ${week.totalPnL > 0 
+                    ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5' 
+                    : week.totalPnL < 0
+                    ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-600/5'
+                    : 'border-zinc-800 bg-zinc-900/40'
+                  }
+                  ${hoveredWeek === weekIndex ? 'ring-2 ring-yellow-500 scale-105 shadow-lg' : ''}
+                  hover:border-yellow-500/50
+                `}
+                style={{
+                  height: 'fit-content',
+                  minHeight: '120px'
+                }}
+              >
+                <div className="space-y-2">
+                  {/* Week Title */}
+                  <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
+                    Week {week.weekNumber}
                   </div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
 
-      {/* Weekly Summary Rail - Desktop */}
-      <div className="hidden xl:flex flex-col gap-2 w-64 flex-shrink-0">
-        {weeklySummaries.map((week, weekIndex) => (
-          <div
-            key={week.weekNumber}
-            onMouseEnter={() => setHoveredWeek(weekIndex)}
-            onMouseLeave={() => setHoveredWeek(null)}
-            className={`
-              rounded-[18px] border p-3 transition-all duration-200 cursor-pointer
-              ${week.totalPnL > 0 
-                ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5' 
-                : week.totalPnL < 0
-                ? 'border-red-500/40 bg-gradient-to-br from-red-500/10 to-red-600/5'
-                : 'border-zinc-800 bg-zinc-900/40'
-              }
-              ${hoveredWeek === weekIndex ? 'ring-2 ring-yellow-500 scale-105 shadow-lg' : ''}
-              hover:border-yellow-500/50
-            `}
-            style={{
-              height: 'fit-content',
-              minHeight: '120px'
-            }}
-          >
-            <div className="space-y-2">
-              {/* Week Title */}
-              <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">
-                Week {week.weekNumber}
+                  {/* Total PnL */}
+                  {week.tradeCount > 0 ? (
+                    <>
+                      <div className={`text-2xl font-black ${
+                        week.totalPnL > 0 ? 'text-emerald-400' : 
+                        week.totalPnL < 0 ? 'text-red-400' : 
+                        'text-zinc-400'
+                      }`}
+                        style={{
+                          filter: week.totalPnL > 0 
+                            ? 'drop-shadow(0 2px 6px rgba(0,196,108,0.4))' 
+                            : week.totalPnL < 0
+                            ? 'drop-shadow(0 2px 6px rgba(228,69,69,0.4))'
+                            : 'none'
+                        }}
+                      >
+                        {week.totalPnL > 0 ? '+' : ''}${formatNumber(week.totalPnL, 0)}
+                      </div>
+
+                      {/* 🔥 NEW: Show Avg R for week */}
+                      {week.avgR !== 0 && (
+                        <div className={`text-sm font-semibold ${
+                          week.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {formatRValue(week.avgR)}
+                        </div>
+                      )}
+
+                      {/* Stats Row */}
+                      <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                        <span>{week.daysTraded} {week.daysTraded === 1 ? 'day' : 'days'}</span>
+                        <span>{week.tradeCount} {week.tradeCount === 1 ? 'trade' : 'trades'}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-zinc-600 py-4">No trades</div>
+                  )}
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
 
-              {/* Total PnL - GREEN/RED based on value */}
-              {week.tradeCount > 0 ? (
-                <>
-                  <div className={`text-2xl font-black ${
+        {/* Weekly Summary - Mobile */}
+        <div className="xl:hidden mt-4 space-y-2">
+          {weeklySummaries.map((week) => (
+            <Card
+              key={week.weekNumber}
+              className={`
+                rounded-xl border p-4 transition-all duration-200
+                ${week.totalPnL > 0 
+                  ? 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-transparent' 
+                  : week.totalPnL < 0
+                  ? 'border-red-500/40 bg-gradient-to-r from-red-500/10 to-transparent'
+                  : 'border-zinc-800 bg-zinc-900/40'
+                }
+              `}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1">
+                    Week {week.weekNumber}
+                  </div>
+                  <div className="flex items-center gap-4 text-[11px] text-zinc-500">
+                    <span>{week.daysTraded} days</span>
+                    <span>•</span>
+                    <span>{week.tradeCount} trades</span>
+                    {week.avgR !== 0 && (
+                      <>
+                        <span>•</span>
+                        <span className={week.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                          {formatRValue(week.avgR)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {week.tradeCount > 0 && (
+                  <div className={`text-xl font-black ${
                     week.totalPnL > 0 ? 'text-emerald-400' : 
                     week.totalPnL < 0 ? 'text-red-400' : 
                     'text-zinc-400'
-                  }`}
-                    style={{
-                      filter: week.totalPnL > 0 
-                        ? 'drop-shadow(0 2px 6px rgba(0,196,108,0.4))' 
-                        : week.totalPnL < 0
-                        ? 'drop-shadow(0 2px 6px rgba(228,69,69,0.4))'
-                        : 'none'
-                    }}
-                  >
+                  }`}>
                     {week.totalPnL > 0 ? '+' : ''}${formatNumber(week.totalPnL, 0)}
                   </div>
-
-                  {/* Stats Row */}
-                  <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                    <span>{week.daysTraded} {week.daysTraded === 1 ? 'day' : 'days'}</span>
-                    <span>{week.tradeCount} {week.tradeCount === 1 ? 'trade' : 'trades'}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="text-sm text-zinc-600 py-4">No trades</div>
-              )}
-            </div>
-          </div>
-        ))}
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
-    </div>
-
-    {/* Weekly Summary - Mobile */}
-    <div className="xl:hidden mt-4 space-y-2">
-      {weeklySummaries.map((week) => (
-        <Card
-          key={week.weekNumber}
-          className={`
-            rounded-xl border p-4 transition-all duration-200
-            ${week.totalPnL > 0 
-              ? 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-transparent' 
-              : week.totalPnL < 0
-              ? 'border-red-500/40 bg-gradient-to-r from-red-500/10 to-transparent'
-              : 'border-zinc-800 bg-zinc-900/40'
-            }
-          `}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-1">
-                Week {week.weekNumber}
-              </div>
-              <div className="flex items-center gap-4 text-[11px] text-zinc-500">
-                <span>{week.daysTraded} days</span>
-                <span>•</span>
-                <span>{week.tradeCount} trades</span>
-              </div>
-            </div>
-            {week.tradeCount > 0 && (
-              <div className={`text-xl font-black ${
-                week.totalPnL > 0 ? 'text-emerald-400' : 
-                week.totalPnL < 0 ? 'text-red-400' : 
-                'text-zinc-400'
-              }`}>
-                {week.totalPnL > 0 ? '+' : ''}${formatNumber(week.totalPnL, 0)}
-              </div>
-            )}
-          </div>
-        </Card>
-      ))}
-    </div>
-  </div>
 
       {/* AI Insights */}
       <div 
@@ -1565,33 +1674,40 @@ export default function JournalCalendar() {
           isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
         }`}
       >
-      <Card className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-purple-500/5 p-6">
-        <div className="flex items-start gap-4">
-          <div className="rounded-full bg-blue-500/20 p-3">
-            <Brain className="w-6 h-6 text-blue-400" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-white mb-2">AI Insights</h3>
-            <div className="space-y-2 text-sm text-zinc-300">
-              {monthStats.consistencyScore > 80 && (
-                <p>✨ Your consistency improved significantly this month. Keep following your plan!</p>
-              )}
-              {monthStats.winRate > 60 && (
-                <p>🎯 High win rate detected. Your setups are working well.</p>
-              )}
-              {monthStats.avgRR >= 2 && (
-                <p>💎 Excellent risk/reward management. This is your edge.</p>
-              )}
-              {monthStats.emotionalStability < 70 && (
-                <p>⚠️ Emotional trades detected. Consider taking breaks after losses.</p>
-              )}
-              {monthStats.profitFactor >= 2 && (
-                <p>🚀 Outstanding profit factor. You're in the top tier of traders.</p>
-              )}
+        <Card className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-purple-500/5 p-6">
+          <div className="flex items-start gap-4">
+            <div className="rounded-full bg-blue-500/20 p-3">
+              <Brain className="w-6 h-6 text-blue-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white mb-2">AI Insights</h3>
+              <div className="space-y-2 text-sm text-zinc-300">
+                {monthStats.consistencyScore > 80 && (
+                  <p>✨ Your consistency improved significantly this month. Keep following your plan!</p>
+                )}
+                {monthStats.winRate > 60 && (
+                  <p>🎯 High win rate detected. Your setups are working well.</p>
+                )}
+                {monthStats.avgRR >= 2 && (
+                  <p>💎 Excellent risk/reward management. This is your edge.</p>
+                )}
+                {/* 🔥 NEW: Insight based on avgR */}
+                {monthStats.avgR >= 1 && (
+                  <p>🚀 Great average R! You're capturing more than your planned risk on average.</p>
+                )}
+                {monthStats.avgR < 0 && monthStats.avgR !== 0 && (
+                  <p>⚠️ Negative average R detected. Review your exit strategy and trade management.</p>
+                )}
+                {monthStats.emotionalStability < 70 && (
+                  <p>⚠️ Emotional trades detected. Consider taking breaks after losses.</p>
+                )}
+                {monthStats.profitFactor >= 2 && (
+                  <p>🚀 Outstanding profit factor. You're in the top tier of traders.</p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
       </div>
 
       {/* Daily Modal */}
@@ -1611,8 +1727,8 @@ export default function JournalCalendar() {
               </DialogHeader>
 
               <div className="space-y-6 pt-6">
-                {/* Summary */}
-                <div className="grid grid-cols-4 gap-4">
+                {/* Summary - 🔥 NOW WITH 5 CARDS INCLUDING AVG R */}
+                <div className="grid grid-cols-5 gap-4">
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
                     <div className="text-xs text-zinc-400 mb-1">Total Trades</div>
                     <div className="text-2xl font-bold text-white">{selectedDay.tradeCount}</div>
@@ -1627,6 +1743,15 @@ export default function JournalCalendar() {
                       selectedDay.netPnL > 0 ? 'text-emerald-400' : 'text-red-400'
                     }`}>
                       {selectedDay.netPnL > 0 ? '+' : ''}${formatNumber(selectedDay.netPnL, 0)}
+                    </div>
+                  </div>
+                  {/* 🔥 NEW: Avg R Card */}
+                  <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                    <div className="text-xs text-zinc-400 mb-1">Avg R</div>
+                    <div className={`text-2xl font-bold ${
+                      selectedDay.avgR >= 0 ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {formatRValue(selectedDay.avgR)}
                     </div>
                   </div>
                   <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
@@ -1656,65 +1781,88 @@ export default function JournalCalendar() {
                     Trades ({selectedDay.trades.length})
                   </h4>
                   <div className="space-y-2">
-                    {selectedDay.trades.map(trade => (
-                      <div 
-                        key={trade.id}
-                        className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 hover:border-zinc-700 transition-colors cursor-pointer"
-                        onClick={() => {
-                          // ✅ FIXED: Close modal before navigation
-                          setModalOpen(false);
-                          navigate(`/app/journal/my-trades`);
-                        }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Badge 
-                              variant={trade.side === "LONG" ? "default" : "destructive"}
-                              className={trade.side === "LONG" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}
-                            >
-                              {trade.side}
-                            </Badge>
-                            <span className="font-bold text-white">{trade.symbol}</span>
-                            {trade.outcome && (
+                    {selectedDay.trades.map(trade => {
+                      const { actualR } = getTradeData(trade, oneR);
+                      
+                      return (
+                        <div 
+                          key={trade.id}
+                          className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 hover:border-zinc-700 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setModalOpen(false);
+                            navigate(`/app/journal/my-trades`);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
                               <Badge 
-                                variant={
-                                  trade.outcome === "WIN" ? "default" :
-                                  trade.outcome === "LOSS" ? "destructive" :
-                                  "secondary"
-                                }
-                                className={
-                                  trade.outcome === "WIN" ? "bg-emerald-500/20 text-emerald-400" :
-                                  trade.outcome === "LOSS" ? "bg-red-500/20 text-red-400" :
-                                  "bg-zinc-700/50 text-zinc-400"
-                                }
+                                variant={trade.side === "LONG" ? "default" : "destructive"}
+                                className={trade.side === "LONG" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}
                               >
-                                {trade.outcome}
+                                {trade.side}
                               </Badge>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-4">
-                            {trade.metrics?.rr && (
-                              <div className="text-sm">
-                                <span className="text-zinc-400">R:R:</span>
-                                <span className="text-yellow-500 font-medium ml-1">
-                                  1:{trade.metrics.rr.toFixed(2)}
-                                </span>
-                              </div>
-                            )}
-                            {trade.pnl !== undefined && (
-                              <div className={`text-lg font-bold ${
-                                trade.pnl > 0 ? 'text-emerald-400' :
-                                trade.pnl < 0 ? 'text-red-400' :
-                                'text-zinc-400'
-                              }`}>
-                                {trade.pnl > 0 ? '+' : ''}${formatNumber(trade.pnl, 0)}
-                              </div>
-                            )}
+                              <span className="font-bold text-white">{trade.symbol}</span>
+                              {/* 🔥 Session badge */}
+                              {trade.session && (
+                                <Badge 
+                                  variant="outline"
+                                  className={`text-xs ${getSessionColor(trade.session)}`}
+                                >
+                                  {formatSessionDisplay(trade.session)}
+                                </Badge>
+                              )}
+                              {trade.outcome && (
+                                <Badge 
+                                  variant={
+                                    trade.outcome === "WIN" ? "default" :
+                                    trade.outcome === "LOSS" ? "destructive" :
+                                    "secondary"
+                                  }
+                                  className={
+                                    trade.outcome === "WIN" ? "bg-emerald-500/20 text-emerald-400" :
+                                    trade.outcome === "LOSS" ? "bg-red-500/20 text-red-400" :
+                                    "bg-zinc-700/50 text-zinc-400"
+                                  }
+                                >
+                                  {trade.outcome}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="flex items-center gap-4">
+                              {trade.metrics?.rr && (
+                                <div className="text-sm">
+                                  <span className="text-zinc-400">R:R:</span>
+                                  <span className="text-yellow-500 font-medium ml-1">
+                                    1:{trade.metrics.rr.toFixed(2)}
+                                  </span>
+                                </div>
+                              )}
+                              {/* 🔥 NEW: Show Actual R */}
+                              {actualR !== null && actualR !== undefined && (
+                                <div className="text-sm">
+                                  <span className="text-zinc-400">Actual:</span>
+                                  <span className={`font-medium ml-1 ${
+                                    actualR >= 0 ? 'text-emerald-400' : 'text-red-400'
+                                  }`}>
+                                    {formatRValue(actualR)}
+                                  </span>
+                                </div>
+                              )}
+                              {trade.pnl !== undefined && (
+                                <div className={`text-lg font-bold ${
+                                  trade.pnl > 0 ? 'text-emerald-400' :
+                                  trade.pnl < 0 ? 'text-red-400' :
+                                  'text-zinc-400'
+                                }`}>
+                                  {trade.pnl > 0 ? '+' : ''}${formatNumber(trade.pnl, 0)}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

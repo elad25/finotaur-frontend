@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building, ExternalLink, CheckCircle2, XCircle, DollarSign, TrendingUp, Clock, Users } from 'lucide-react';
+import { Building, ExternalLink, CheckCircle2, XCircle, DollarSign, TrendingUp, Clock, Users, AlertTriangle } from 'lucide-react';
 
 // 🎯 Types
 interface PropFirm {
@@ -33,229 +33,55 @@ interface PropFirm {
   };
   affiliateLink?: string;
   rating: number;
+  bottomLine?: string;
 }
 
-// 🏢 Sample Prop Firms Data
+// 🏢 Prop Firms Data - FundingTicks Only
 const propFirmsData: PropFirm[] = [
   {
-    id: 'ftmo',
-    name: 'FTMO',
-    description: 'One of the world\'s leading prop trading firms, specializing in forex and commodities with a professional evaluation process.',
-    assetTypes: ['forex', 'futures', 'commodities'],
-    minAccountSize: 10000,
-    maxAccountSize: 200000,
-    profitSplit: '80/20 (90/10 with Scaling Plan)',
-    challengeRules: {
-      maxDailyLoss: '5%',
-      maxTotalLoss: '10%',
-      profitTarget: '10% (Stage 1), 5% (Stage 2)',
-      tradingPeriod: 'Unlimited (minimum 4 trading days)',
-      minTradingDays: '4 days per stage',
-    },
-    payoutRules: {
-      firstPayout: '14 days after first trade',
-      subsequentPayouts: 'Every 14 days',
-      payoutMethods: ['Bank Transfer', 'Crypto', 'Skrill', 'Revolut'],
-      minimumPayout: '$100',
-    },
-    features: [
-      'Two-stage evaluation process',
-      'Free retake after 3 months',
-      'Copy trading allowed',
-      'Weekend holding allowed',
-      'Expert advisors (EAs) allowed',
-    ],
-    pros: [
-      'Excellent reputation & reliable payouts',
-      'Fast customer support',
-      'Wide range of instruments & pairs',
-      'Scaling option up to $2M',
-    ],
-    cons: [
-      'Relatively high challenge fees',
-      'Strict rules in stage one',
-      'No news trading (2 min before/after)',
-    ],
-    pricing: {
-      challenge: '$155 - $1,080 (depends on account size)',
-    },
-    rating: 4.8,
-  },
-  {
-    id: 'funded-next',
-    name: 'Funded Next',
-    description: 'Innovative prop firm with flexible models and convenient terms for traders.',
-    assetTypes: ['forex', 'stocks', 'crypto', 'futures', 'commodities'],
-    minAccountSize: 6000,
-    maxAccountSize: 300000,
-    profitSplit: '80/20 (up to 90/10)',
-    challengeRules: {
-      maxDailyLoss: '5%',
-      maxTotalLoss: '10%',
-      profitTarget: '8-10% (depends on model)',
-      tradingPeriod: 'Unlimited',
-      minTradingDays: 'None for some models',
-    },
-    payoutRules: {
-      firstPayout: 'After 7 days (Express model)',
-      subsequentPayouts: 'Bi-weekly or on-demand',
-      payoutMethods: ['Bank Transfer', 'Crypto', 'Payoneer', 'Wire'],
-      minimumPayout: '$50',
-    },
-    features: [
-      'Multiple funding models',
-      'Express evaluation (15% in 1 stage)',
-      'No minimum trading days',
-      'Crypto trading available',
-      'Aggressive traders friendly',
-    ],
-    pros: [
-      'High flexibility in models',
-      'Fast payouts',
-      'Crypto trading available',
-      'No minimum trading days required',
-    ],
-    cons: [
-      'High swap fees',
-      'Relatively new company',
-      'Less known than FTMO',
-    ],
-    pricing: {
-      challenge: '$49 - $999',
-    },
-    rating: 4.6,
-  },
-  {
-    id: 'the5ers',
-    name: 'The5%ers',
-    description: 'Established prop firm with a mentorship approach and personal guidance for traders.',
-    assetTypes: ['forex', 'commodities'],
-    minAccountSize: 6000,
-    maxAccountSize: 250000,
-    profitSplit: '50/50 (up to 100%)',
-    challengeRules: {
-      maxDailyLoss: 'None for some programs',
-      maxTotalLoss: '6-10% (depends on program)',
-      profitTarget: '6-12% per target',
-      tradingPeriod: 'Unlimited',
-      minTradingDays: 'None',
-    },
-    payoutRules: {
-      firstPayout: 'After first profit target',
-      subsequentPayouts: 'After each 6% profit',
-      payoutMethods: ['Bank Transfer', 'Crypto', 'Skrill'],
-      minimumPayout: 'Based on program',
-    },
-    features: [
-      'Bootcamp program for beginners',
-      'High-stakes program for experienced traders',
-      'Instant funding available',
-      'Mentorship and education',
-      'Progressive profit split (up to 100%)',
-    ],
-    pros: [
-      'Unique programs for experienced traders',
-      'Can reach 100% profit split',
-      'No daily drawdown in some programs',
-      'Established and reliable company',
-    ],
-    cons: [
-      'Low initial split (50/50)',
-      'Longer process',
-      'Not suitable for aggressive style',
-    ],
-    pricing: {
-      challenge: '$295 - $650',
-    },
-    rating: 4.5,
-  },
-  {
-    id: 'topstep',
-    name: 'Topstep',
-    description: 'Specializes in futures trading - industry leader with excellent reputation.',
-    assetTypes: ['futures'],
-    minAccountSize: 50000,
-    maxAccountSize: 150000,
-    profitSplit: '90/10',
-    challengeRules: {
-      maxDailyLoss: '$2,000 - $3,000',
-      maxTotalLoss: '$3,000 - $4,500',
-      profitTarget: '$3,000 - $6,000',
-      tradingPeriod: 'Unlimited',
-      minTradingDays: '5 days',
-    },
-    payoutRules: {
-      firstPayout: 'After 10 trading days',
-      subsequentPayouts: 'Every 14 days',
-      payoutMethods: ['Bank Transfer', 'Check'],
-      minimumPayout: '$100',
-    },
-    features: [
-      'Specialized in futures trading',
-      'Live trading simulations',
-      'Educational resources',
-      'Trading community',
-      'Risk management tools',
-    ],
-    pros: [
-      'Leader in futures trading',
-      'Excellent support & mentoring',
-      '90/10 profit split',
-      'Strong community',
-    ],
-    cons: [
-      'Futures only',
-      'Monthly cost after evaluation ($165/month)',
-      'Longer evaluation process',
-    ],
-    pricing: {
-      challenge: '$165/month during evaluation',
-    },
-    rating: 4.7,
-  },
-  {
-    id: 'apex-trader',
-    name: 'Apex Trader Funding',
-    description: 'Specializes in futures with convenient rules and fast payouts.',
+    id: 'funding-ticks',
+    name: 'FundingTicks',
+    description: '',
     assetTypes: ['futures'],
     minAccountSize: 25000,
-    maxAccountSize: 300000,
-    profitSplit: '90/10 (100% on first payout)',
+    maxAccountSize: 150000,
+    profitSplit: 'Up to 90/10 (varies by program)',
     challengeRules: {
-      maxDailyLoss: '$1,200 - $3,600',
-      maxTotalLoss: '$2,400 - $7,200',
-      profitTarget: 'None for Rithmic PA',
-      tradingPeriod: 'Unlimited',
-      minTradingDays: 'None',
+      maxDailyLoss: 'Defined & risk-based ',
+      maxTotalLoss: 'Clear structure ',
+      profitTarget: 'Achievable targets',
+      tradingPeriod: 'No time pressure (minimum trading days required)',
+      minTradingDays: '3 Days',
     },
     payoutRules: {
-      firstPayout: '100% to trader',
-      subsequentPayouts: 'Bi-weekly (90/10)',
-      payoutMethods: ['Bank Transfer', 'Crypto', 'PayPal'],
-      minimumPayout: '$50',
+      firstPayout: 'After meeting funded criteria',
+      subsequentPayouts: 'Regular & predictable cycles',
+      payoutMethods: ['Bank Transfer', 'Crypto (varies by region)'],
     },
     features: [
-      'No profit targets on some accounts',
-      '100% of first payout goes to trader',
-      'Fast funding (24-48 hours)',
-      'No consistency rules',
-      'Trade crypto futures',
+      'Futures-only focus — no distractions',
+      'Clean rule structure (no hidden traps)',
+      'Trader-friendly risk framework',
+      'Scalable capital for consistent traders',
+      'Suitable for Day Trading & Scalping',
+      'Built for professionals, not gamblers',
     ],
     pros: [
-      'First payout 100% to trader!',
-      'No profit target on some accounts',
-      'Very fast approval process',
-      'High flexibility',
+      'Futures-only focus — no distractions',
+      'Cheap pricing',
+      'Trader-friendly risk framework',
+      'Suitable for Day Trading & Scalping',
+      'No activation fee'
     ],
     cons: [
-      'Futures only',
-      'High reset fees',
-      'Customer service not always available',
+
     ],
     pricing: {
-      challenge: '$147 - $377',
+      challenge: 'Low & competitive (depends on account size)',
     },
-    rating: 4.4,
+    affiliateLink: 'https://app.fundingticks.com/register?ref=FINOTAUR',
+    rating: 5.0,
+    bottomLine: 'FundingTicks is not for everyone. But if you trade futures with discipline, manage risk properly, and think long-term — this is one of the cleanest paths to trading serious capital without risking your own.',
   },
 ];
 
@@ -310,7 +136,7 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
                 </span>
               ))}
               <span className="text-xs text-muted-foreground ml-1">
-                ({firm.rating})
+                (Highly Rated Futures Prop Firm)
               </span>
             </div>
           </div>
@@ -319,7 +145,7 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
         <div className="text-right">
           <div className="text-sm text-muted-foreground">Account Size</div>
           <div className="text-lg font-bold text-gold">
-            ${(firm.minAccountSize / 1000).toFixed(0)}K - ${(firm.maxAccountSize / 1000).toFixed(0)}K
+            ${(firm.minAccountSize / 1000).toFixed(0)}K - ${(firm.maxAccountSize / 1000).toFixed(0)}K+
           </div>
         </div>
       </div>
@@ -336,7 +162,7 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
           <div className="text-sm font-semibold text-green-400">{firm.profitSplit}</div>
         </div>
         <div className="bg-base-900/50 rounded-lg p-3">
-          <div className="text-xs text-muted-foreground mb-1">Challenge Cost</div>
+          <div className="text-xs text-muted-foreground mb-1">Evaluation Cost</div>
           <div className="text-sm font-semibold text-gold">{firm.pricing.challenge}</div>
         </div>
       </div>
@@ -350,24 +176,24 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
         <div className="space-y-2 bg-base-900/30 rounded-lg p-3">
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Daily Loss Limit:</span>
-            <span className="text-foreground font-medium">{firm.challengeRules.maxDailyLoss}</span>
+            <span className="text-foreground font-medium text-right max-w-[60%]">{firm.challengeRules.maxDailyLoss}</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Total Loss Limit:</span>
-            <span className="text-foreground font-medium">{firm.challengeRules.maxTotalLoss}</span>
+            <span className="text-muted-foreground">Max Loss / Drawdown:</span>
+            <span className="text-foreground font-medium text-right max-w-[60%]">{firm.challengeRules.maxTotalLoss}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Profit Target:</span>
-            <span className="text-green-400 font-medium">{firm.challengeRules.profitTarget}</span>
+            <span className="text-green-400 font-medium text-right max-w-[60%]">{firm.challengeRules.profitTarget}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Trading Period:</span>
-            <span className="text-foreground font-medium">{firm.challengeRules.tradingPeriod}</span>
+            <span className="text-foreground font-medium text-right max-w-[60%]">{firm.challengeRules.tradingPeriod}</span>
           </div>
           {firm.challengeRules.minTradingDays && (
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Min Trading Days:</span>
-              <span className="text-foreground font-medium">{firm.challengeRules.minTradingDays}</span>
+              <span className="text-foreground font-medium text-right max-w-[60%]">{firm.challengeRules.minTradingDays}</span>
             </div>
           )}
         </div>
@@ -385,12 +211,12 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
             <span className="text-foreground font-medium">{firm.payoutRules.firstPayout}</span>
           </div>
           <div className="flex justify-between text-xs">
-            <span className="text-muted-foreground">Next Payouts:</span>
+            <span className="text-muted-foreground">Payout Frequency:</span>
             <span className="text-foreground font-medium">{firm.payoutRules.subsequentPayouts}</span>
           </div>
           <div className="flex justify-between text-xs">
             <span className="text-muted-foreground">Methods:</span>
-            <span className="text-foreground font-medium text-left">
+            <span className="text-foreground font-medium text-right">
               {firm.payoutRules.payoutMethods.join(', ')}
             </span>
           </div>
@@ -402,7 +228,7 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
         <div>
           <h5 className="text-xs font-semibold text-green-400 mb-2">Advantages</h5>
           <ul className="space-y-1">
-            {firm.pros.slice(0, 3).map((pro, idx) => (
+            {firm.pros.map((pro, idx) => (
               <li key={idx} className="text-xs text-muted-foreground flex items-start gap-1">
                 <CheckCircle2 className="w-3 h-3 text-green-400 mt-0.5 flex-shrink-0" />
                 <span>{pro}</span>
@@ -413,7 +239,7 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
         <div>
           <h5 className="text-xs font-semibold text-red-400 mb-2">Disadvantages</h5>
           <ul className="space-y-1">
-            {firm.cons.slice(0, 3).map((con, idx) => (
+            {firm.cons.map((con, idx) => (
               <li key={idx} className="text-xs text-muted-foreground flex items-start gap-1">
                 <XCircle className="w-3 h-3 text-red-400 mt-0.5 flex-shrink-0" />
                 <span>{con}</span>
@@ -423,11 +249,30 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
         </div>
       </div>
 
+      {/* Bottom Line */}
+      {firm.bottomLine && (
+        <div className="mb-4 bg-gold/5 border border-gold/20 rounded-lg p-3">
+          <h5 className="text-xs font-semibold text-gold mb-1">Bottom Line</h5>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {firm.bottomLine}
+          </p>
+        </div>
+      )}
+
       {/* CTA Button */}
-      <button className="w-full bg-gradient-to-r from-gold/90 to-gold/70 hover:from-gold hover:to-gold/80 text-base-900 font-semibold py-3 rounded-lg transition-smooth flex items-center justify-center gap-2 group">
+      <a 
+        href={firm.affiliateLink}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="w-full bg-gradient-to-r from-gold/90 to-gold/70 hover:from-gold hover:to-gold/80 text-base-900 font-semibold py-3 rounded-lg transition-smooth flex items-center justify-center gap-2 group"
+      >
         <span>Get Funded Now</span>
         <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-      </button>
+      </a>
+      
+      <p className="text-center text-xs text-muted-foreground mt-2">
+        Trade real capital. Keep real profits.
+      </p>
     </div>
   );
 };
@@ -546,8 +391,8 @@ export default function PropFirmsPage() {
                 <DollarSign className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">80-90%</div>
-                <div className="text-xs text-muted-foreground">Avg. Profit Split</div>
+                <div className="text-2xl font-bold text-foreground">Up to 90%</div>
+                <div className="text-xs text-muted-foreground">Profit Split</div>
               </div>
             </div>
           </div>
@@ -558,8 +403,8 @@ export default function PropFirmsPage() {
                 <Clock className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">7-14</div>
-                <div className="text-xs text-muted-foreground">Days to Payout</div>
+                <div className="text-2xl font-bold text-foreground">Regular</div>
+                <div className="text-xs text-muted-foreground">Payout Cycles</div>
               </div>
             </div>
           </div>
@@ -570,8 +415,8 @@ export default function PropFirmsPage() {
                 <Users className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">10K+</div>
-                <div className="text-xs text-muted-foreground">Funded Traders</div>
+                <div className="text-2xl font-bold text-foreground">Futures</div>
+                <div className="text-xs text-muted-foreground">Focused Trading</div>
               </div>
             </div>
           </div>
@@ -593,6 +438,20 @@ export default function PropFirmsPage() {
             </p>
           </div>
         )}
+
+        {/* Disclaimer */}
+        <div className="bg-base-800/30 rounded-xl border border-yellow-500/20 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-yellow-500">Disclaimer</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Trading involves risk. This is not financial advice. Past performance does not guarantee future results. 
+                Always read the firm's full rules before purchasing.
+              </p>
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>

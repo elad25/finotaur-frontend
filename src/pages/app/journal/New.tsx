@@ -1,5 +1,5 @@
 // ================================================
-// PRODUCTION NEW TRADE PAGE - CLEAN v14
+// PRODUCTION NEW TRADE PAGE - CLEAN v15
 // ✅ Auto Session with manual override option
 // ✅ Zero spam logging - only critical errors
 // ✅ Fixed session detection with timezone support
@@ -15,6 +15,10 @@
 //    - Multiple exit points with percentages
 //    - Weighted average exit price calculation
 //    - Popup UI for adding exits
+// 🔥 v15 NEW: Risk Only Mode!
+//    - Direct USD input for Risk/Target/Result
+//    - Auto-calculates all metrics from $ values
+//    - Simpler workflow for quick trade logging
 // ================================================
 
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -28,7 +32,7 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign } from "lucide-react";
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
@@ -594,6 +598,12 @@ export default function New() {
   const [partialExits, setPartialExits] = useState<ExitPoint[]>([]);
   const [usePartialExits, setUsePartialExits] = useState(false);
   
+  // 🔥 NEW: Risk Only Mode (Tab toggle)
+  const [riskInputMode, setRiskInputMode] = useState<'summary' | 'risk-only'>('summary');
+  const [directRiskUSD, setDirectRiskUSD] = useState<number>(0);
+  const [directTargetUSD, setDirectTargetUSD] = useState<number>(0);
+  const [directResultUSD, setDirectResultUSD] = useState<number | null>(null);
+  
   // 🌍 Timezone support
   const timezone = useTimezone();
   
@@ -744,6 +754,14 @@ export default function New() {
           const mult = getAssetMultiplier(trade.symbol);
           st.setMultiplier(mult);
           
+          // 🔥 Check if trade was created in risk-only mode
+          if (trade.input_mode === 'risk-only' && trade.risk_usd) {
+            setRiskInputMode('risk-only');
+            setDirectRiskUSD(trade.risk_usd || 0);
+            setDirectTargetUSD(trade.reward_usd || 0);
+            setDirectResultUSD(trade.pnl ?? null);
+          }
+          
           // Load partial exits if they exist in trade data
           if (trade.partial_exits && Array.isArray(trade.partial_exits) && trade.partial_exits.length > 0) {
             setPartialExits(trade.partial_exits);
@@ -872,7 +890,42 @@ export default function New() {
     return () => clearTimeout(timer);
   }, [st.entryPrice, st.takeProfitPrice, st.stopPrice]);
 
-  // ✅ Calculate user's R multiples
+  // ================================================
+  // 🔥 RISK-ONLY MODE CALCULATIONS
+  // ================================================
+  const riskOnlyRR = useMemo(() => {
+    if (directRiskUSD <= 0 || directTargetUSD <= 0) return 0;
+    return directTargetUSD / directRiskUSD;
+  }, [directRiskUSD, directTargetUSD]);
+
+  const riskOnlyUserRiskR = useMemo(() => {
+    if (!oneRValue || oneRValue === 0 || directRiskUSD <= 0) return undefined;
+    return directRiskUSD / oneRValue;
+  }, [directRiskUSD, oneRValue]);
+
+  const riskOnlyUserRewardR = useMemo(() => {
+    if (!oneRValue || oneRValue === 0 || directTargetUSD <= 0) return undefined;
+    return directTargetUSD / oneRValue;
+  }, [directTargetUSD, oneRValue]);
+
+  const riskOnlyActualR = useMemo(() => {
+    if (directRiskUSD <= 0 || directResultUSD === null) return null;
+    return directResultUSD / directRiskUSD;
+  }, [directResultUSD, directRiskUSD]);
+
+  const riskOnlyActualUserR = useMemo(() => {
+    if (!oneRValue || oneRValue === 0 || directResultUSD === null) return null;
+    return directResultUSD / oneRValue;
+  }, [directResultUSD, oneRValue]);
+
+  const riskOnlyOutcome = useMemo((): "WIN" | "LOSS" | "BE" | "OPEN" => {
+    if (directResultUSD === null) return "OPEN";
+    if (directResultUSD > 0) return "WIN";
+    if (directResultUSD < 0) return "LOSS";
+    return "BE";
+  }, [directResultUSD]);
+
+  // ✅ Calculate user's R multiples (for Trade Summary mode)
   const userRiskR = useMemo(() => {
     if (!oneRValue || oneRValue === 0) return undefined;
     return st.riskUSD / oneRValue;
@@ -883,17 +936,24 @@ export default function New() {
     return st.rewardUSD / oneRValue;
   }, [st.rewardUSD, oneRValue]);
 
-  // Validation
-  const isValid = st.symbol && st.quantity > 0 && st.entryPrice > 0 && st.stopPrice > 0;
+  // Validation - different for each mode
+  const isValidSummaryMode = st.symbol && st.quantity > 0 && st.entryPrice > 0 && st.stopPrice > 0;
+  const isValidRiskOnlyMode = st.symbol && directRiskUSD > 0;
+  const isValid = riskInputMode === 'summary' ? isValidSummaryMode : isValidRiskOnlyMode;
   
-  const completionPercent = Math.round(
-    ((st.symbol ? 25 : 0) +
-     (st.quantity > 0 ? 25 : 0) +
-     (st.entryPrice > 0 ? 25 : 0) +
-     (st.stopPrice > 0 ? 25 : 0)) / 1
-  );
+  const completionPercent = riskInputMode === 'summary' 
+    ? Math.round(
+        ((st.symbol ? 25 : 0) +
+         (st.quantity > 0 ? 25 : 0) +
+         (st.entryPrice > 0 ? 25 : 0) +
+         (st.stopPrice > 0 ? 25 : 0)) / 1
+      )
+    : Math.round(
+        ((st.symbol ? 50 : 0) +
+         (directRiskUSD > 0 ? 50 : 0)) / 1
+      );
 
-  // ✅ Calculate P&L - supports partial exits
+  // ✅ Calculate P&L - supports partial exits (Trade Summary mode only)
   const calculatePnL = useCallback(() => {
     // If using partial exits, calculate from them
     if (usePartialExits && partialExits.length > 0) {
@@ -927,7 +987,7 @@ export default function New() {
     return netPnL;
   }, [st.exitPrice, st.entryPrice, st.side, st.quantity, st.fees, st.symbol, st.multiplier, usePartialExits, partialExits]);
 
-  // Calculate Outcome
+  // Calculate Outcome (Trade Summary mode only)
   const calculateOutcome = useCallback((): "WIN" | "LOSS" | "BE" | "OPEN" => {
     // If using partial exits
     if (usePartialExits && partialExits.length > 0) {
@@ -1012,8 +1072,43 @@ export default function New() {
     return () => window.removeEventListener('keydown', handler);
   }, [isValid]);
 
+  const getRRColorClass = (rr: number) => {
+    if (rr < 1) return "text-red-400";
+    if (rr < 1.5) return "text-orange-400";
+    if (rr < 2) return "text-yellow-400";
+    return "text-emerald-400";
+  };
+
+  // 🎯 Ticker selection handler
+  const handleTickerSelect = (ticker: any) => {
+    st.setSymbol(ticker.symbol);
+    st.setMultiplier(ticker.multiplier);
+    
+    if (ticker.asset_class) {
+      st.setAssetClass(ticker.asset_class as any);
+    }
+    
+    toast.success(`Selected ${ticker.symbol} (x${ticker.multiplier})`);
+  };
+
+  const tabBtn = (key: typeof tab, label: string) => (
+    <button
+      type="button"
+      onClick={() => setTab(key)}
+      className={`px-4 py-1.5 rounded-full text-xs font-medium transition ${
+        tab === key
+          ? "bg-yellow-500/20 text-yellow-100 border border-yellow-500/40"
+          : "text-zinc-400 border border-yellow-200/10 hover:bg-zinc-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  const quantityLabel = st.assetClass === "futures" ? "Contracts" : st.assetClass === "forex" ? "Lots" : st.assetClass === "crypto" ? "Units" : "Shares";
+
   // ================================================================
-  // 🔥🔥🔥 SUBMIT FUNCTION - v14 WITH PARTIAL EXITS! 🔥🔥🔥
+  // 🔥🔥🔥 SUBMIT FUNCTION - v15 WITH RISK-ONLY MODE! 🔥🔥🔥
   // ================================================================
   async function handleSubmit() {
     // Clean strategy_id
@@ -1021,7 +1116,7 @@ export default function New() {
       st.setStrategy(undefined);
     }
     
-// Check subscription limits (non-blocking)
+    // Check subscription limits (non-blocking)
     if (!isEditMode && limits && !canAddTrade) {
       // Check if BASIC user (25 trades limit) or FREE user (10 trades)
       if (limits.max_trades === 25) {
@@ -1033,35 +1128,46 @@ export default function New() {
     }
 
     // ================================================================
-    // VALIDATION
+    // VALIDATION - Different for each mode
     // ================================================================
     if (!st.symbol || st.symbol.trim() === "") {
       toast.error("Symbol is required");
       return;
     }
-    if (!st.assetClass) {
-      toast.error("Asset class is required");
-      return;
-    }
-    if (!st.quantity || st.quantity <= 0) {
-      toast.error("Quantity must be positive");
-      return;
-    }
+    
     if (!st.openAt) {
       toast.error("Date & Time is required");
       return;
     }
-    if (!st.entryPrice || st.entryPrice <= 0) {
-      toast.error("Entry price is required");
-      return;
-    }
-    if (!st.stopPrice || st.stopPrice <= 0) {
-      toast.error("Stop price is required");
-      return;
-    }
-    if (st.stopPrice === st.entryPrice) {
-      toast.error("Stop price cannot equal entry price");
-      return;
+
+    // 🔥 RISK-ONLY MODE VALIDATION
+    if (riskInputMode === 'risk-only') {
+      if (directRiskUSD <= 0) {
+        toast.error("Risk amount is required");
+        return;
+      }
+    } else {
+      // TRADE SUMMARY MODE VALIDATION
+      if (!st.assetClass) {
+        toast.error("Asset class is required");
+        return;
+      }
+      if (!st.quantity || st.quantity <= 0) {
+        toast.error("Quantity must be positive");
+        return;
+      }
+      if (!st.entryPrice || st.entryPrice <= 0) {
+        toast.error("Entry price is required");
+        return;
+      }
+      if (!st.stopPrice || st.stopPrice <= 0) {
+        toast.error("Stop price is required");
+        return;
+      }
+      if (st.stopPrice === st.entryPrice) {
+        toast.error("Stop price cannot equal entry price");
+        return;
+      }
     }
 
     // ================================================================
@@ -1104,140 +1210,246 @@ export default function New() {
       }
 
       // ================================================================
-      // 🔥 CALCULATIONS - All R values (with partial exits support)
+      // 🔥 BUILD PAYLOAD BASED ON MODE
       // ================================================================
-      const calculatedPnL = calculatePnL();
-      const calculatedOutcome = calculateOutcome();
-      const finalMultiplier = getAssetMultiplier(st.symbol);
-      
-      // 🔥 Determine if trade has exit (either single or partial)
-      const hasExitPrice = usePartialExits 
-        ? partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
-        : st.exitPrice && st.exitPrice > 0;
-      
-      // 🔥 Calculate weighted average exit price for partial exits
-      const finalExitPrice = usePartialExits && partialExits.length > 0
-        ? (() => {
-            const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
-            if (validExits.length === 0) return 0;
-            const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
-            if (totalPct === 0) return 0;
-            const weightedSum = validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0);
-            return weightedSum / totalPct;
-          })()
-        : st.exitPrice;
-      
-      // 🔥 Calculate risk in USD (for actual_r calculation)
-      const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
-      const calculatedRiskUSD = riskPerPoint * st.quantity * finalMultiplier + st.fees;
-      
-      // 🔥 actual_r: Contract R-multiple = PnL / Risk
-      let actual_r: number | null = null;
-      if (hasExitPrice && calculatedRiskUSD > 0) {
-        actual_r = calculatedPnL / calculatedRiskUSD;
-      }
-      
-      // 🔥 actual_user_r: User Rs achieved = PnL / User's 1R setting
-      let actual_user_r: number | null = null;
-      if (hasExitPrice && oneRValue && oneRValue > 0) {
-        actual_user_r = calculatedPnL / oneRValue;
-      }
+      let payload: any;
 
-      // ================================================================
-      // 🔥🔥🔥 BUILD PAYLOAD - MATCHES DB SCHEMA EXACTLY! 🔥🔥🔥
-      // ================================================================
-      const payload = {
-        // ═══════════════════════════════════════════
-        // CORE REQUIRED FIELDS
-        // ═══════════════════════════════════════════
-        symbol: st.symbol.toUpperCase(),
-        side: st.side,
-        quantity: st.quantity,
-        entry_price: st.entryPrice,
-        stop_price: st.stopPrice,
+      if (riskInputMode === 'risk-only') {
+        // ════════════════════════════════════════════════════════════
+        // 🔥 RISK-ONLY MODE PAYLOAD
+        // ════════════════════════════════════════════════════════════
+        const hasResult = directResultUSD !== null;
         
-        // ═══════════════════════════════════════════
-        // TIMESTAMPS
-        // ═══════════════════════════════════════════
-        open_at: st.openAt || new Date().toISOString(),
-        close_at: hasExitPrice ? new Date().toISOString() : null,  // 🔥 NOW INCLUDED!
+        // Calculate R values for risk-only mode
+        let actual_r: number | null = null;
+        let actual_user_r: number | null = null;
         
-        // ═══════════════════════════════════════════
-        // OPTIONAL TRADE FIELDS
-        // ═══════════════════════════════════════════
-        asset_class: st.assetClass || null,
-        take_profit_price: st.takeProfitPrice || null,
-        exit_price: hasExitPrice ? finalExitPrice : null,  // 🔥 Weighted average for partials
-        fees: st.fees || 0,
-        fees_mode: st.feesMode || 'auto',
-        session: validSession,  // 🔥 Normalized for DB constraint!
-        strategy_id: (st.strategy && st.strategy !== "none") ? st.strategy : null,
-        setup: st.setup || null,
-        notes: st.notes || null,
-        mistake: st.mistake || null,
-        next_time: st.nextTime || null,
-        tags: st.tags || [],
+        if (hasResult && directRiskUSD > 0) {
+          actual_r = directResultUSD! / directRiskUSD;
+        }
         
-        // ═══════════════════════════════════════════
-        // CALCULATED FIELDS (FLAT - NOT NESTED!)
-        // ═══════════════════════════════════════════
-        multiplier: finalMultiplier,
-        rr: st.rr || null,
-        risk_usd: st.riskUSD || null,
-        reward_usd: st.rewardUSD || null,
-        risk_pts: st.riskPts || null,
-        reward_pts: st.rewardPts || null,
+        if (hasResult && oneRValue && oneRValue > 0) {
+          actual_user_r = directResultUSD! / oneRValue;
+        }
+
+        payload = {
+          // ═══════════════════════════════════════════
+          // CORE REQUIRED FIELDS
+          // ═══════════════════════════════════════════
+          symbol: st.symbol.toUpperCase(),
+          side: st.side,
+          quantity: 1,  // Default to 1 for risk-only mode
+          entry_price: 0,  // Not used in risk-only mode
+          stop_price: 0,  // Not used in risk-only mode
+          
+          // ═══════════════════════════════════════════
+          // TIMESTAMPS
+          // ═══════════════════════════════════════════
+          open_at: st.openAt || new Date().toISOString(),
+          close_at: hasResult ? new Date().toISOString() : null,
+          
+          // ═══════════════════════════════════════════
+          // OPTIONAL TRADE FIELDS
+          // ═══════════════════════════════════════════
+          asset_class: st.assetClass || 'stocks',
+          take_profit_price: null,
+          exit_price: null,
+          fees: 0,
+          fees_mode: 'manual',
+          session: validSession,
+          strategy_id: (st.strategy && st.strategy !== "none") ? st.strategy : null,
+          setup: st.setup || null,
+          notes: st.notes || null,
+          mistake: st.mistake || null,
+          next_time: st.nextTime || null,
+          tags: st.tags || [],
+          
+          // ═══════════════════════════════════════════
+          // 🔥 RISK-ONLY CALCULATED FIELDS
+          // ═══════════════════════════════════════════
+          multiplier: 1,
+          rr: riskOnlyRR || null,
+          risk_usd: directRiskUSD,
+          reward_usd: directTargetUSD || null,
+          risk_pts: null,
+          reward_pts: null,
+          
+          // ═══════════════════════════════════════════
+          // 🔥 ALL 4 R-MULTIPLE FIELDS
+          // ═══════════════════════════════════════════
+          actual_r: actual_r,
+          user_risk_r: riskOnlyUserRiskR || null,
+          user_reward_r: riskOnlyUserRewardR || null,
+          actual_user_r: actual_user_r,
+          
+          // ═══════════════════════════════════════════
+          // OUTCOME & P&L
+          // ═══════════════════════════════════════════
+          outcome: hasResult ? riskOnlyOutcome : 'OPEN',
+          pnl: hasResult ? directResultUSD : null,
+          
+          // ═══════════════════════════════════════════
+          // MEDIA
+          // ═══════════════════════════════════════════
+          screenshots: screenshotUrls.length > 0 ? screenshotUrls : (st.screenshotUrls || []),
+          
+          // ═══════════════════════════════════════════
+          // 🔥 META FIELDS
+          // ═══════════════════════════════════════════
+          broker: 'manual',
+          import_source: 'manual',
+          input_mode: 'risk-only',  // 🔥 Mark as risk-only trade
+          
+          // ═══════════════════════════════════════════
+          // PARTIAL EXITS (not used in risk-only)
+          // ═══════════════════════════════════════════
+          partial_exits: null,
+        };
         
-        // ═══════════════════════════════════════════
-        // 🔥 ALL 4 R-MULTIPLE FIELDS!
-        // ═══════════════════════════════════════════
-        actual_r: actual_r,                    // Contract R: PnL / Risk
-        user_risk_r: userRiskR || null,        // User Rs risked
-        user_reward_r: userRewardR || null,    // User Rs potential reward
-        actual_user_r: actual_user_r,          // 🔥 User Rs achieved (NOW INCLUDED!)
+        if (isDev) {
+          console.log('📦 Risk-Only payload:', {
+            symbol: payload.symbol,
+            risk_usd: payload.risk_usd,
+            reward_usd: payload.reward_usd,
+            pnl: payload.pnl,
+            rr: payload.rr,
+            actual_r: payload.actual_r,
+            actual_user_r: payload.actual_user_r,
+            input_mode: payload.input_mode,
+          });
+        }
+      } else {
+        // ════════════════════════════════════════════════════════════
+        // 🔥 TRADE SUMMARY MODE PAYLOAD (Original logic)
+        // ════════════════════════════════════════════════════════════
+        const calculatedPnL = calculatePnL();
+        const calculatedOutcome = calculateOutcome();
+        const finalMultiplier = getAssetMultiplier(st.symbol);
         
-        // ═══════════════════════════════════════════
-        // OUTCOME & P&L
-        // ═══════════════════════════════════════════
-        outcome: hasExitPrice ? calculatedOutcome : 'OPEN',
-        pnl: hasExitPrice ? calculatedPnL : null,
+        // Determine if trade has exit (either single or partial)
+        const hasExitPrice = usePartialExits 
+          ? partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
+          : st.exitPrice && st.exitPrice > 0;
         
-        // ═══════════════════════════════════════════
-        // MEDIA
-        // ═══════════════════════════════════════════
-        screenshots: screenshotUrls.length > 0 ? screenshotUrls : (st.screenshotUrls || []),
+        // Calculate weighted average exit price for partial exits
+        const finalExitPrice = usePartialExits && partialExits.length > 0
+          ? (() => {
+              const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+              if (validExits.length === 0) return 0;
+              const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+              if (totalPct === 0) return 0;
+              const weightedSum = validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0);
+              return weightedSum / totalPct;
+            })()
+          : st.exitPrice;
         
-        // ═══════════════════════════════════════════
-        // 🔥 META FIELDS (NOW INCLUDED!)
-        // ═══════════════════════════════════════════
-        broker: 'manual',          // 🔥 Required by DB, defaults to 'manual'
-        import_source: 'manual',   // 🔥 Required by DB, defaults to 'manual'
+        // Calculate risk in USD (for actual_r calculation)
+        const riskPerPoint = Math.abs(st.entryPrice - st.stopPrice);
+        const calculatedRiskUSD = riskPerPoint * st.quantity * finalMultiplier + st.fees;
         
-        // ═══════════════════════════════════════════
-        // 🔥 PARTIAL EXITS DATA
-        // ═══════════════════════════════════════════
-        partial_exits: usePartialExits && partialExits.length > 0 
-          ? partialExits
-              .filter(e => e.price > 0 && (e.percentage || 0) > 0)
-              .map(e => ({
-                ...e,
-                quantity: (st.quantity * (e.percentage || 0)) / 100,
-              }))
-          : null,
-      };
-      
-      if (isDev) {
-        console.log('📦 Final payload:', {
-          symbol: payload.symbol,
-          session: payload.session,
-          close_at: payload.close_at,
-          actual_r: payload.actual_r,
-          actual_user_r: payload.actual_user_r,
-          broker: payload.broker,
-          import_source: payload.import_source,
-          partial_exits: payload.partial_exits,
-          exit_price: payload.exit_price,
-        });
+        // actual_r: Contract R-multiple = PnL / Risk
+        let actual_r: number | null = null;
+        if (hasExitPrice && calculatedRiskUSD > 0) {
+          actual_r = calculatedPnL / calculatedRiskUSD;
+        }
+        
+        // actual_user_r: User Rs achieved = PnL / User's 1R setting
+        let actual_user_r: number | null = null;
+        if (hasExitPrice && oneRValue && oneRValue > 0) {
+          actual_user_r = calculatedPnL / oneRValue;
+        }
+
+        payload = {
+          // ═══════════════════════════════════════════
+          // CORE REQUIRED FIELDS
+          // ═══════════════════════════════════════════
+          symbol: st.symbol.toUpperCase(),
+          side: st.side,
+          quantity: st.quantity,
+          entry_price: st.entryPrice,
+          stop_price: st.stopPrice,
+          
+          // ═══════════════════════════════════════════
+          // TIMESTAMPS
+          // ═══════════════════════════════════════════
+          open_at: st.openAt || new Date().toISOString(),
+          close_at: hasExitPrice ? new Date().toISOString() : null,
+          
+          // ═══════════════════════════════════════════
+          // OPTIONAL TRADE FIELDS
+          // ═══════════════════════════════════════════
+          asset_class: st.assetClass || null,
+          take_profit_price: st.takeProfitPrice || null,
+          exit_price: hasExitPrice ? finalExitPrice : null,
+          fees: st.fees || 0,
+          fees_mode: st.feesMode || 'auto',
+          session: validSession,
+          strategy_id: (st.strategy && st.strategy !== "none") ? st.strategy : null,
+          setup: st.setup || null,
+          notes: st.notes || null,
+          mistake: st.mistake || null,
+          next_time: st.nextTime || null,
+          tags: st.tags || [],
+          
+          // ═══════════════════════════════════════════
+          // CALCULATED FIELDS (FLAT - NOT NESTED!)
+          // ═══════════════════════════════════════════
+          multiplier: finalMultiplier,
+          rr: st.rr || null,
+          risk_usd: st.riskUSD || null,
+          reward_usd: st.rewardUSD || null,
+          risk_pts: st.riskPts || null,
+          reward_pts: st.rewardPts || null,
+          
+          // ═══════════════════════════════════════════
+          // ALL 4 R-MULTIPLE FIELDS
+          // ═══════════════════════════════════════════
+          actual_r: actual_r,
+          user_risk_r: userRiskR || null,
+          user_reward_r: userRewardR || null,
+          actual_user_r: actual_user_r,
+          
+          // ═══════════════════════════════════════════
+          // OUTCOME & P&L
+          // ═══════════════════════════════════════════
+          outcome: hasExitPrice ? calculatedOutcome : 'OPEN',
+          pnl: hasExitPrice ? calculatedPnL : null,
+          
+          // ═══════════════════════════════════════════
+          // MEDIA
+          // ═══════════════════════════════════════════
+          screenshots: screenshotUrls.length > 0 ? screenshotUrls : (st.screenshotUrls || []),
+          
+          // ═══════════════════════════════════════════
+          // META FIELDS
+          // ═══════════════════════════════════════════
+          broker: 'manual',
+          import_source: 'manual',
+          input_mode: 'summary',  // 🔥 Mark as summary trade
+          
+          // ═══════════════════════════════════════════
+          // PARTIAL EXITS DATA
+          // ═══════════════════════════════════════════
+          partial_exits: usePartialExits && partialExits.length > 0 
+            ? partialExits
+                .filter(e => e.price > 0 && (e.percentage || 0) > 0)
+                .map(e => ({
+                  ...e,
+                  quantity: (st.quantity * (e.percentage || 0)) / 100,
+                }))
+            : null,
+        };
+        
+        if (isDev) {
+          console.log('📦 Trade Summary payload:', {
+            symbol: payload.symbol,
+            session: payload.session,
+            close_at: payload.close_at,
+            actual_r: payload.actual_r,
+            actual_user_r: payload.actual_user_r,
+            input_mode: payload.input_mode,
+          });
+        }
       }
       
       // ================================================================
@@ -1272,9 +1484,9 @@ export default function New() {
               title: "🎉 Congratulations on Your First Trade!",
               message: "You've just taken your first step towards becoming a systematic trader. Every great journey starts with a single trade. Keep tracking, keep learning, keep growing!",
               stats: {
-                rr: st.rr,
-                risk: st.riskUSD,
-                reward: st.rewardUSD
+                rr: riskInputMode === 'risk-only' ? riskOnlyRR : st.rr,
+                risk: riskInputMode === 'risk-only' ? directRiskUSD : st.riskUSD,
+                reward: riskInputMode === 'risk-only' ? directTargetUSD : st.rewardUSD
               }
             });
             setShowInsight(true);
@@ -1297,10 +1509,10 @@ export default function New() {
               exitPrice: st.exitPrice,
               quantity: st.quantity,
               fees: st.fees,
-              multiplier: finalMultiplier,
-              rr: st.rr,
-              riskUSD: st.riskUSD,
-              rewardUSD: st.rewardUSD
+              multiplier: riskInputMode === 'risk-only' ? 1 : getAssetMultiplier(st.symbol),
+              rr: riskInputMode === 'risk-only' ? riskOnlyRR : st.rr,
+              riskUSD: riskInputMode === 'risk-only' ? directRiskUSD : st.riskUSD,
+              rewardUSD: riskInputMode === 'risk-only' ? directTargetUSD : st.rewardUSD
             };
             
             const insight = generateInsight(tradeData);
@@ -1340,41 +1552,6 @@ export default function New() {
       setLoading(false);
     }
   }
-
-  const tabBtn = (key: typeof tab, label: string) => (
-    <button
-      type="button"
-      onClick={() => setTab(key)}
-      className={`px-4 py-1.5 rounded-full text-xs font-medium transition ${
-        tab === key
-          ? "bg-yellow-500/20 text-yellow-100 border border-yellow-500/40"
-          : "text-zinc-400 border border-yellow-200/10 hover:bg-zinc-800"
-      }`}
-    >
-      {label}
-    </button>
-  );
-
-  const quantityLabel = st.assetClass === "futures" ? "Contracts" : st.assetClass === "forex" ? "Lots" : st.assetClass === "crypto" ? "Units" : "Shares";
-
-  const getRRColorClass = (rr: number) => {
-    if (rr < 1) return "text-red-400";
-    if (rr < 1.5) return "text-orange-400";
-    if (rr < 2) return "text-yellow-400";
-    return "text-emerald-400";
-  };
-
-  // 🎯 Ticker selection handler
-  const handleTickerSelect = (ticker: any) => {
-    st.setSymbol(ticker.symbol);
-    st.setMultiplier(ticker.multiplier);
-    
-    if (ticker.asset_class) {
-      st.setAssetClass(ticker.asset_class as any);
-    }
-    
-    toast.success(`Selected ${ticker.symbol} (x${ticker.multiplier})`);
-  };
 
   return (
     <>
@@ -1521,10 +1698,12 @@ export default function New() {
                   SHORT
                 </button>
               </div>
-              <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                Auto-detected from prices
-              </div>
+              {riskInputMode === 'summary' && (
+                <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Auto-detected from prices
+                </div>
+              )}
             </div>
 
             {/* Grid: Symbol, Date/Time */}
@@ -1533,7 +1712,7 @@ export default function New() {
               <div>
                 <Label htmlFor="symbol" className="text-xs text-zinc-400 mb-2 block">
                   Symbol * {st.assetClass && <span className="text-yellow-400 ml-1">({st.assetClass})</span>}
-                  {st.multiplier > 1 && <span className="text-emerald-400 ml-1">x{st.multiplier}</span>}
+                  {st.multiplier > 1 && riskInputMode === 'summary' && <span className="text-emerald-400 ml-1">x{st.multiplier}</span>}
                 </Label>
                 <TickerAutocomplete
                   value={st.symbol}
@@ -1716,417 +1895,717 @@ export default function New() {
 
         {/* BLOCK 2: PRICING & RISK */}
         <section className="mt-8">
-          <Card className="rounded-2xl border border-yellow-200/20 bg-[linear-gradient(145deg,#0b0b0b,#121212)] shadow-[0_0_40px_rgba(0,0,0,0.25)] p-8">
+          {/* 🔥 INPUT MODE TABS - Full width above card */}
+          <div className="flex w-full gap-1">
+            <button
+              type="button"
+              onClick={() => setRiskInputMode('summary')}
+              className={`flex-1 px-6 py-4 text-sm font-semibold transition-all duration-300 rounded-t-xl flex items-center justify-center gap-2 ${
+                riskInputMode === 'summary'
+                  ? 'bg-gradient-to-b from-yellow-500/20 to-[#0d0d0d] text-yellow-400 border-t-2 border-l border-r border-yellow-500/60 shadow-[0_-4px_20px_rgba(201,166,70,0.2)]'
+                  : 'bg-zinc-900/60 text-zinc-500 border border-zinc-800/50 hover:text-zinc-300 hover:bg-zinc-800/60'
+              }`}
+            >
+              <Calculator className="w-4 h-4" />
+              Trade Summary
+            </button>
+            <button
+              type="button"
+              onClick={() => setRiskInputMode('risk-only')}
+              className={`flex-1 px-6 py-4 text-sm font-semibold transition-all duration-300 rounded-t-xl flex items-center justify-center gap-2 ${
+                riskInputMode === 'risk-only'
+                  ? 'bg-gradient-to-b from-yellow-500/20 to-[#0d0d0d] text-yellow-400 border-t-2 border-l border-r border-yellow-500/60 shadow-[0_-4px_20px_rgba(201,166,70,0.2)]'
+                  : 'bg-zinc-900/60 text-zinc-500 border border-zinc-800/50 hover:text-zinc-300 hover:bg-zinc-800/60'
+              }`}
+            >
+              <DollarSign className="w-4 h-4" />
+              Risk Only
+            </button>
+          </div>
+
+          <Card className="rounded-b-2xl rounded-t-none border border-yellow-200/20 bg-[linear-gradient(145deg,#0b0b0b,#121212)] shadow-[0_0_40px_rgba(0,0,0,0.25)] p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-[#C9A646] tracking-wide uppercase text-xs">Pricing & Risk</h2>
+              <h2 className="text-[#C9A646] tracking-wide uppercase text-xs">
+                {riskInputMode === 'summary' ? 'Pricing & Risk' : 'Risk Values (USD)'}
+              </h2>
               <span className="text-xs text-zinc-500">Step 2 of 3</span>
             </div>
 
-            {/* Row 1: Quantity, Entry */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <Label htmlFor="quantity" className="text-xs text-zinc-400 mb-2 block">
-                  {quantityLabel} *
-                </Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  step="any"
-                  value={st.quantity || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setQuantity(0);
-                      return;
-                    }
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                      st.setQuantity(num);
-                    }
-                  }}
-                  onBlur={(e) => {
-                    const num = parseFloat(e.target.value);
-                    if (!isNaN(num)) {
-                      st.setQuantity(num);
-                    }
-                  }}
-                  placeholder="100"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
-                  required
-                />
-              </div>
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* 🔥 TRADE SUMMARY MODE - Original UI */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {riskInputMode === 'summary' && (
+              <>
+                {/* Row 1: Quantity, Entry */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <Label htmlFor="quantity" className="text-xs text-zinc-400 mb-2 block">
+                      {quantityLabel} *
+                    </Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      step="any"
+                      value={st.quantity || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          st.setQuantity(0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                          st.setQuantity(num);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const num = parseFloat(e.target.value);
+                        if (!isNaN(num)) {
+                          st.setQuantity(num);
+                        }
+                      }}
+                      placeholder="100"
+                      className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
+                      required
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="entryPrice" className="text-xs text-zinc-400 mb-2 block">
-                  Entry Price *
-                </Label>
-                <Input
-                  id="entryPrice"
-                  type="number"
-                  step="any"
-                  value={st.entryPrice || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setEntryPrice(0);
-                      return;
-                    }
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                      st.setEntryPrice(num);
-                    }
-                  }}
-                  placeholder="150.50"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Row 2: Stop Loss, Take Profit */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <Label htmlFor="stopPrice" className="text-xs text-zinc-400 mb-2 block">
-                  Stop Loss *
-                </Label>
-                <Input
-                  id="stopPrice"
-                  type="number"
-                  step="any"
-                  value={st.stopPrice || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setStopPrice(0);
-                      return;
-                    }
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                      st.setStopPrice(num);
-                    }
-                  }}
-                  placeholder="149.30"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="takeProfitPrice" className="text-xs text-zinc-400 mb-2 block">
-                  Take Profit (recommended)
-                </Label>
-                <Input
-                  id="takeProfitPrice"
-                  type="number"
-                  step="any"
-                  value={st.takeProfitPrice || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setTakeProfitPrice(undefined);
-                      return;
-                    }
-                    const num = parseFloat(value);
-                    if (!isNaN(num)) {
-                      st.setTakeProfitPrice(num);
-                    }
-                  }}
-                  placeholder="155.00"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
-                />
-              </div>
-            </div>
-
-            {/* Row 3: Fees & Exit */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <Label htmlFor="fees" className="text-xs text-zinc-400 mb-2 block flex items-center gap-1">
-                  Fees
-                  <span className="text-yellow-400 text-[10px]">
-                    ({st.feesMode === "auto" ? "auto" : "manual"})
-                  </span>
-                </Label>
-                <Input
-                  id="fees"
-                  type="number"
-                  step="any"
-                  value={st.fees || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      st.setFees(0);
-                      st.setFeesMode("manual");
-                      return;
-                    }
-                    const val = parseFloat(value);
-                    if (!isNaN(val)) {
-                      st.setFees(val);
-                      st.setFeesMode("manual");
-                    }
-                  }}
-                  placeholder="2.50"
-                  className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
-                />
-              </div>
-
-              {/* 🔥 Exit Price with Partial Exits Button */}
-              <div>
-                <Label htmlFor="exitPrice" className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
-                  <span>Exit Price (optional)</span>
-                  {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
-                    <span className="text-emerald-400 text-[10px] flex items-center gap-1">
-                      <Percent className="w-3 h-3" />
-                      {partialExits.filter(e => e.price > 0).length} partial exits
-                    </span>
-                  )}
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="exitPrice"
-                    type="number"
-                    step="any"
-                    value={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
-                      ? (() => {
-                          const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
-                          if (validExits.length === 0) return '';
-                          const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
-                          if (totalPct === 0) return '';
-                          return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
-                        })()
-                      : st.exitPrice || ""
-                    }
-                    onChange={(e) => {
-                      // If user types directly, disable partial exits mode
-                      if (usePartialExits) {
-                        setUsePartialExits(false);
-                        setPartialExits([]);
-                      }
-                      const value = e.target.value;
-                      if (value === "") {
-                        st.setExitPrice(undefined);
-                        return;
-                      }
-                      const num = parseFloat(value);
-                      if (!isNaN(num)) {
-                        st.setExitPrice(num);
-                      }
-                    }}
-                    placeholder={usePartialExits ? "Calculated from partials" : "152.00"}
-                    className={`bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all flex-1 ${
-                      usePartialExits ? 'bg-emerald-500/5 border-emerald-500/30' : ''
-                    }`}
-                    readOnly={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)}
-                  />
-                  
-                  {/* 🔥 Partial Exits Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (st.quantity <= 0) {
-                        toast.error("Enter quantity before adding partial exits");
-                        return;
-                      }
-                      if (st.entryPrice <= 0) {
-                        toast.error("Enter entry price before adding partial exits");
-                        return;
-                      }
-                      // Initialize with one exit at 100% if empty
-                      if (partialExits.length === 0) {
-                        setPartialExits([{
-                          id: generateExitId(),
-                          quantity: st.quantity,
-                          price: 0,
-                          percentage: 100,
-                        }]);
-                      }
-                      setShowPartialExits(true);
-                    }}
-                    className={`h-12 px-4 rounded-xl border transition-all flex items-center gap-2 ${
-                      usePartialExits && partialExits.length > 0
-                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                        : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-yellow-500/40 hover:text-yellow-400'
-                    }`}
-                    title="יציאות חלקיות"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span className="text-xs font-medium hidden sm:inline">Partials</span>
-                  </button>
+                  <div>
+                    <Label htmlFor="entryPrice" className="text-xs text-zinc-400 mb-2 block">
+                      Entry Price *
+                    </Label>
+                    <Input
+                      id="entryPrice"
+                      type="number"
+                      step="any"
+                      value={st.entryPrice || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          st.setEntryPrice(0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                          st.setEntryPrice(num);
+                        }
+                      }}
+                      placeholder="150.50"
+                      className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
+                      required
+                    />
+                  </div>
                 </div>
-                
-                {/* Partial Exits Summary */}
-                {usePartialExits && partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
-                  <div className="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-zinc-400">
-                        {partialExits.filter(e => e.price > 0).length} exits | Avg: 
-                        <span className="text-emerald-400 font-medium ml-1">
-                          {formatNumber((() => {
-                            const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
-                            if (validExits.length === 0) return 0;
-                            const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
-                            if (totalPct === 0) return 0;
-                            return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
-                          })(), 4)}
-                        </span>
+
+                {/* Row 2: Stop Loss, Take Profit */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <Label htmlFor="stopPrice" className="text-xs text-zinc-400 mb-2 block">
+                      Stop Loss *
+                    </Label>
+                    <Input
+                      id="stopPrice"
+                      type="number"
+                      step="any"
+                      value={st.stopPrice || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          st.setStopPrice(0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                          st.setStopPrice(num);
+                        }
+                      }}
+                      placeholder="149.30"
+                      className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="takeProfitPrice" className="text-xs text-zinc-400 mb-2 block">
+                      Take Profit (recommended)
+                    </Label>
+                    <Input
+                      id="takeProfitPrice"
+                      type="number"
+                      step="any"
+                      value={st.takeProfitPrice || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          st.setTakeProfitPrice(undefined);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                          st.setTakeProfitPrice(num);
+                        }
+                      }}
+                      placeholder="155.00"
+                      className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 3: Fees & Exit */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <Label htmlFor="fees" className="text-xs text-zinc-400 mb-2 block flex items-center gap-1">
+                      Fees
+                      <span className="text-yellow-400 text-[10px]">
+                        ({st.feesMode === "auto" ? "auto" : "manual"})
                       </span>
+                    </Label>
+                    <Input
+                      id="fees"
+                      type="number"
+                      step="any"
+                      value={st.fees || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          st.setFees(0);
+                          st.setFeesMode("manual");
+                          return;
+                        }
+                        const val = parseFloat(value);
+                        if (!isNaN(val)) {
+                          st.setFees(val);
+                          st.setFeesMode("manual");
+                        }
+                      }}
+                      placeholder="2.50"
+                      className="bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right"
+                    />
+                  </div>
+
+                  {/* 🔥 Exit Price with Partial Exits Button */}
+                  <div>
+                    <Label htmlFor="exitPrice" className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
+                      <span>Exit Price (optional)</span>
+                      {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                        <span className="text-emerald-400 text-[10px] flex items-center gap-1">
+                          <Percent className="w-3 h-3" />
+                          {partialExits.filter(e => e.price > 0).length} partial exits
+                        </span>
+                      )}
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="exitPrice"
+                        type="number"
+                        step="any"
+                        value={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)
+                          ? (() => {
+                              const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+                              if (validExits.length === 0) return '';
+                              const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+                              if (totalPct === 0) return '';
+                              return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
+                            })()
+                          : st.exitPrice || ""
+                        }
+                        onChange={(e) => {
+                          // If user types directly, disable partial exits mode
+                          if (usePartialExits) {
+                            setUsePartialExits(false);
+                            setPartialExits([]);
+                          }
+                          const value = e.target.value;
+                          if (value === "") {
+                            st.setExitPrice(undefined);
+                            return;
+                          }
+                          const num = parseFloat(value);
+                          if (!isNaN(num)) {
+                            st.setExitPrice(num);
+                          }
+                        }}
+                        placeholder={usePartialExits ? "Calculated from partials" : "152.00"}
+                        className={`bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 text-right transition-all flex-1 ${
+                          usePartialExits ? 'bg-emerald-500/5 border-emerald-500/30' : ''
+                        }`}
+                        readOnly={usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0)}
+                      />
+                      
+                      {/* 🔥 Partial Exits Button */}
                       <button
                         type="button"
-                        onClick={() => setShowPartialExits(true)}
-                        className="text-emerald-400 hover:text-emerald-300 underline"
+                        onClick={() => {
+                          if (st.quantity <= 0) {
+                            toast.error("Enter quantity before adding partial exits");
+                            return;
+                          }
+                          if (st.entryPrice <= 0) {
+                            toast.error("Enter entry price before adding partial exits");
+                            return;
+                          }
+                          // Initialize with one exit at 100% if empty
+                          if (partialExits.length === 0) {
+                            setPartialExits([{
+                              id: generateExitId(),
+                              quantity: st.quantity,
+                              price: 0,
+                              percentage: 100,
+                            }]);
+                          }
+                          setShowPartialExits(true);
+                        }}
+                        className={`h-12 px-4 rounded-xl border transition-all flex items-center gap-2 ${
+                          usePartialExits && partialExits.length > 0
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-yellow-500/40 hover:text-yellow-400'
+                        }`}
+                        title="יציאות חלקיות"
                       >
-                        Edit
+                        <Plus className="w-4 h-4" />
+                        <span className="text-xs font-medium hidden sm:inline">Partials</span>
                       </button>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* DYNAMIC R:R BAR */}
-            <div className="mt-8 pt-6 border-t-2 border-yellow-200/10">
-              <div className="bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Live Risk/Reward</span>
-                  <span className="text-[10px] text-zinc-500">Updates in real-time</span>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <div className="text-center p-3 bg-red-500/5 rounded-lg border border-red-500/20">
-                    <div className="text-[10px] text-red-400 mb-1">RISK</div>
-                    <div className="text-xl font-bold text-red-400">
-                      ${formatNumber(st.riskUSD, 0)}
-                    </div>
-                    <div className="text-[10px] text-zinc-500 mt-1">
-                      {formatNumber(st.riskPts, 2)} pts
-                    </div>
-                  </div>
-                  
-                  <div className="text-center p-3 bg-yellow-500/5 rounded-lg border border-yellow-500/20">
-                    <div className="text-[10px] text-yellow-400 mb-1">R:R RATIO</div>
-                    <div className={`text-2xl font-black transition-colors duration-300 ${getRRColorClass(st.rr)}`}>
-                      {st.rr > 0 ? `1:${formatNumber(st.rr, 2)}` : "—"}
-                    </div>
-                    <div className="text-[10px] text-zinc-500 mt-1">
-                      {st.rr >= 2 ? "Excellent" : st.rr >= 1 ? "Good" : st.rr > 0 ? "Poor" : "N/A"}
-                    </div>
-                  </div>
-                  
-                  <div className="text-center p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-                    <div className="text-[10px] text-emerald-400 mb-1">REWARD</div>
-                    <div className="text-xl font-bold text-emerald-400">
-                      ${formatNumber(st.rewardUSD, 0)}
-                    </div>
-                    <div className="text-[10px] text-zinc-500 mt-1">
-                      {formatNumber(st.rewardPts, 2)} pts
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Visual R:R Bar */}
-                <div className="relative h-3 bg-zinc-900 rounded-full overflow-hidden">
-                  <div 
-                    className={`absolute left-0 top-0 h-full transition-all duration-500 ${
-                      st.rr >= 2 ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
-                      st.rr >= 1 ? "bg-gradient-to-r from-yellow-600 to-yellow-400" :
-                      "bg-gradient-to-r from-red-600 to-red-400"
-                    }`}
-                    style={{ width: `${Math.min(st.rr * 33.33, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* 🔥 USER'S PERSONAL R DISPLAY */}
-              {oneRValue > 0 && userRiskR !== undefined && (
-                <div className="mt-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-xl p-5 border border-purple-500/30">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-purple-400 uppercase tracking-wider flex items-center gap-2">
-                      <Zap className="w-4 h-4" />
-                      Your Personal Risk (1R = ${formatNumber(oneRValue, 2)})
-                    </span>
-                    <span className="text-[10px] text-zinc-500">Based on your settings</span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                      <div className="text-[10px] text-zinc-400 mb-2">YOU'RE RISKING</div>
-                      <div className={`text-3xl font-black ${
-                        userRiskR <= 1 ? 'text-emerald-400' :
-                        userRiskR <= 2 ? 'text-yellow-400' :
-                        userRiskR <= 3 ? 'text-orange-400' :
-                        'text-red-400'
-                      }`}>
-                        {userRiskR.toFixed(1)}R
-                      </div>
-                      <div className="text-[10px] text-zinc-500 mt-1">
-                        {userRiskR <= 1 ? '✅ Conservative' :
-                         userRiskR <= 2 ? '⚠️ Moderate' :
-                         userRiskR <= 3 ? '🔥 Aggressive' :
-                         '🚨 Very High Risk!'}
-                      </div>
-                    </div>
                     
-                    {userRewardR !== undefined && (
-                      <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                        <div className="text-[10px] text-zinc-400 mb-2">POTENTIAL REWARD</div>
-                        <div className="text-3xl font-black text-emerald-400">
-                          +{userRewardR.toFixed(1)}R
-                        </div>
-                        <div className="text-[10px] text-zinc-500 mt-1">
-                          If TP hits
+                    {/* Partial Exits Summary */}
+                    {usePartialExits && partialExits.length > 0 && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                      <div className="mt-2 p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-zinc-400">
+                            {partialExits.filter(e => e.price > 0).length} exits | Avg: 
+                            <span className="text-emerald-400 font-medium ml-1">
+                              {formatNumber((() => {
+                                const validExits = partialExits.filter(e => e.price > 0 && (e.percentage || 0) > 0);
+                                if (validExits.length === 0) return 0;
+                                const totalPct = validExits.reduce((sum, e) => sum + (e.percentage || 0), 0);
+                                if (totalPct === 0) return 0;
+                                return validExits.reduce((sum, e) => sum + (e.price * (e.percentage || 0)), 0) / totalPct;
+                              })(), 4)}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowPartialExits(true)}
+                            className="text-emerald-400 hover:text-emerald-300 underline"
+                          >
+                            Edit
+                          </button>
                         </div>
                       </div>
                     )}
                   </div>
-                  
-                  {/* Warning if risk is too high */}
-                  {userRiskR > 2 && (
-                    <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <div className="flex items-center gap-2 text-red-400 text-xs">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="font-medium">
-                          High risk! Consider reducing position size.
+                </div>
+
+                {/* DYNAMIC R:R BAR - Trade Summary Mode */}
+                <div className="mt-8 pt-6 border-t-2 border-yellow-200/10">
+                  <div className="bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Live Risk/Reward</span>
+                      <span className="text-[10px] text-zinc-500">Updates in real-time</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="text-center p-3 bg-red-500/5 rounded-lg border border-red-500/20">
+                        <div className="text-[10px] text-red-400 mb-1">RISK</div>
+                        <div className="text-xl font-bold text-red-400">
+                          ${formatNumber(st.riskUSD, 0)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-1">
+                          {formatNumber(st.riskPts, 2)} pts
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-yellow-500/5 rounded-lg border border-yellow-500/20">
+                        <div className="text-[10px] text-yellow-400 mb-1">R:R RATIO</div>
+                        <div className={`text-2xl font-black transition-colors duration-300 ${getRRColorClass(st.rr)}`}>
+                          {st.rr > 0 ? `1:${formatNumber(st.rr, 2)}` : "—"}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-1">
+                          {st.rr >= 2 ? "Excellent" : st.rr >= 1 ? "Good" : st.rr > 0 ? "Poor" : "N/A"}
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                        <div className="text-[10px] text-emerald-400 mb-1">REWARD</div>
+                        <div className="text-xl font-bold text-emerald-400">
+                          ${formatNumber(st.rewardUSD, 0)}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-1">
+                          {formatNumber(st.rewardPts, 2)} pts
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Visual R:R Bar */}
+                    <div className="relative h-3 bg-zinc-900 rounded-full overflow-hidden">
+                      <div 
+                        className={`absolute left-0 top-0 h-full transition-all duration-500 ${
+                          st.rr >= 2 ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
+                          st.rr >= 1 ? "bg-gradient-to-r from-yellow-600 to-yellow-400" :
+                          "bg-gradient-to-r from-red-600 to-red-400"
+                        }`}
+                        style={{ width: `${Math.min(st.rr * 33.33, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 🔥 USER'S PERSONAL R DISPLAY - Trade Summary Mode */}
+                  {oneRValue > 0 && userRiskR !== undefined && (
+                    <div className="mt-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-xl p-5 border border-purple-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                          <Zap className="w-4 h-4" />
+                          Your Personal Risk (1R = ${formatNumber(oneRValue, 2)})
                         </span>
+                        <span className="text-[10px] text-zinc-500">Based on your settings</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">YOU'RE RISKING</div>
+                          <div className={`text-3xl font-black ${
+                            userRiskR <= 1 ? 'text-emerald-400' :
+                            userRiskR <= 2 ? 'text-yellow-400' :
+                            userRiskR <= 3 ? 'text-orange-400' :
+                            'text-red-400'
+                          }`}>
+                            {userRiskR.toFixed(1)}R
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-1">
+                            {userRiskR <= 1 ? '✅ Conservative' :
+                             userRiskR <= 2 ? '⚠️ Moderate' :
+                             userRiskR <= 3 ? '🔥 Aggressive' :
+                             '🚨 Very High Risk!'}
+                          </div>
+                        </div>
+                        
+                        {userRewardR !== undefined && (
+                          <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <div className="text-[10px] text-zinc-400 mb-2">POTENTIAL REWARD</div>
+                            <div className="text-3xl font-black text-emerald-400">
+                              +{userRewardR.toFixed(1)}R
+                            </div>
+                            <div className="text-[10px] text-zinc-500 mt-1">
+                              If TP hits
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Warning if risk is too high */}
+                      {userRiskR > 2 && (
+                        <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <div className="flex items-center gap-2 text-red-400 text-xs">
+                            <AlertCircle className="w-4 h-4" />
+                            <span className="font-medium">
+                              High risk! Consider reducing position size.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* P&L Display - Trade Summary Mode */}
+                  {((st.exitPrice && st.exitPrice > 0) || (usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0))) && (
+                    <div className="mt-4 bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Trade Result</span>
+                        {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
+                          <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <Percent className="w-3 h-3" />
+                            from partial exits
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">P&L</div>
+                          <div className={`text-3xl font-black ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 0)}
+                          </div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">OUTCOME</div>
+                          <div className={`text-2xl font-black ${
+                            outcome === 'WIN' ? 'text-emerald-400' :
+                            outcome === 'LOSS' ? 'text-red-400' :
+                            'text-zinc-400'
+                          }`}>
+                            {outcome}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              </>
+            )}
 
-              {/* P&L Display */}
-              {((st.exitPrice && st.exitPrice > 0) || (usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0))) && (
-                <div className="mt-4 bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Trade Result</span>
-                    {usePartialExits && partialExits.some(e => e.price > 0 && (e.percentage || 0) > 0) && (
-                      <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                        <Percent className="w-3 h-3" />
-                        from partial exits
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                      <div className="text-[10px] text-zinc-400 mb-2">P&L</div>
-                      <div className={`text-3xl font-black ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 0)}
-                      </div>
-                    </div>
-                    
-                    <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
-                      <div className="text-[10px] text-zinc-400 mb-2">OUTCOME</div>
-                      <div className={`text-2xl font-black ${
-                        outcome === 'WIN' ? 'text-emerald-400' :
-                        outcome === 'LOSS' ? 'text-red-400' :
-                        'text-zinc-400'
-                      }`}>
-                        {outcome}
-                      </div>
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {/* 🔥 RISK-ONLY MODE - New Simple UI */}
+            {/* ════════════════════════════════════════════════════════════════ */}
+            {riskInputMode === 'risk-only' && (
+              <>
+                {/* Info Banner */}
+                <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-white">Quick Risk Entry Mode</p>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        Enter dollar amounts directly. Perfect for quick logging without calculating prices.
+                      </p>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+
+                {/* Risk & Target Inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  {/* Risk $ */}
+                  <div>
+                    <Label htmlFor="directRisk" className="text-xs text-zinc-400 mb-2 block flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                      Risk Amount (USD) *
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-red-400 font-medium">$</span>
+                      <Input
+                        id="directRisk"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={directRiskUSD || ""}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setDirectRiskUSD(isNaN(val) ? 0 : val);
+                        }}
+                        placeholder="100"
+                        className="bg-[#0E0E0E] border border-red-500/30 rounded-xl h-14 text-zinc-200 text-right text-xl font-semibold pl-10 pr-4 focus:border-red-500/60 transition-all"
+                        required
+                      />
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-2">How much were you willing to lose?</p>
+                  </div>
+
+                  {/* Target $ */}
+                  <div>
+                    <Label htmlFor="directTarget" className="text-xs text-zinc-400 mb-2 block flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      Target Amount (USD)
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 font-medium">$</span>
+                      <Input
+                        id="directTarget"
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={directTargetUSD || ""}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setDirectTargetUSD(isNaN(val) ? 0 : val);
+                        }}
+                        placeholder="200"
+                        className="bg-[#0E0E0E] border border-emerald-500/30 rounded-xl h-14 text-zinc-200 text-right text-xl font-semibold pl-10 pr-4 focus:border-emerald-500/60 transition-all"
+                      />
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-2">How much were you aiming to make?</p>
+                  </div>
+                </div>
+
+                {/* Result $ */}
+                <div className="mb-6">
+                  <Label htmlFor="directResult" className="text-xs text-zinc-400 mb-2 block flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                    Actual Result (USD) - Optional
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-400 font-medium">$</span>
+                    <Input
+                      id="directResult"
+                      type="number"
+                      step="any"
+                      value={directResultUSD ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "" || value === "-") {
+                          setDirectResultUSD(null);
+                          return;
+                        }
+                        const val = parseFloat(value);
+                        setDirectResultUSD(isNaN(val) ? null : val);
+                      }}
+                      placeholder="150 (or -50 for loss)"
+                      className="bg-[#0E0E0E] border border-yellow-500/30 rounded-xl h-14 text-zinc-200 text-right text-xl font-semibold pl-10 pr-4 focus:border-yellow-500/60 transition-all"
+                    />
+                  </div>
+                  <p className="text-[10px] text-zinc-500 mt-2">
+                    Leave empty for open trade. Use negative for losses (e.g., -50).
+                  </p>
+                </div>
+
+                {/* 🔥 RISK-ONLY R:R Display */}
+                <div className="mt-8 pt-6 border-t-2 border-yellow-200/10">
+                  <div className="bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Calculated Metrics</span>
+                      <span className="text-[10px] text-zinc-500">From your USD values</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="text-center p-3 bg-red-500/5 rounded-lg border border-red-500/20">
+                        <div className="text-[10px] text-red-400 mb-1">RISK</div>
+                        <div className="text-xl font-bold text-red-400">
+                          ${formatNumber(directRiskUSD, 0)}
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-yellow-500/5 rounded-lg border border-yellow-500/20">
+                        <div className="text-[10px] text-yellow-400 mb-1">R:R RATIO</div>
+                        <div className={`text-2xl font-black transition-colors duration-300 ${getRRColorClass(riskOnlyRR)}`}>
+                          {riskOnlyRR > 0 ? `1:${formatNumber(riskOnlyRR, 2)}` : "—"}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 mt-1">
+                          {riskOnlyRR >= 2 ? "Excellent" : riskOnlyRR >= 1 ? "Good" : riskOnlyRR > 0 ? "Poor" : "N/A"}
+                        </div>
+                      </div>
+                      
+                      <div className="text-center p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
+                        <div className="text-[10px] text-emerald-400 mb-1">TARGET</div>
+                        <div className="text-xl font-bold text-emerald-400">
+                          ${formatNumber(directTargetUSD, 0)}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Visual R:R Bar */}
+                    <div className="relative h-3 bg-zinc-900 rounded-full overflow-hidden">
+                      <div 
+                        className={`absolute left-0 top-0 h-full transition-all duration-500 ${
+                          riskOnlyRR >= 2 ? "bg-gradient-to-r from-emerald-600 to-emerald-400" :
+                          riskOnlyRR >= 1 ? "bg-gradient-to-r from-yellow-600 to-yellow-400" :
+                          "bg-gradient-to-r from-red-600 to-red-400"
+                        }`}
+                        style={{ width: `${Math.min(riskOnlyRR * 33.33, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 🔥 USER'S PERSONAL R DISPLAY - Risk Only Mode */}
+                  {oneRValue > 0 && riskOnlyUserRiskR !== undefined && (
+                    <div className="mt-4 bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-xl p-5 border border-purple-500/30">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                          <Zap className="w-4 h-4" />
+                          Your Personal Risk (1R = ${formatNumber(oneRValue, 2)})
+                        </span>
+                        <span className="text-[10px] text-zinc-500">Based on your settings</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">YOU'RE RISKING</div>
+                          <div className={`text-3xl font-black ${
+                            riskOnlyUserRiskR <= 1 ? 'text-emerald-400' :
+                            riskOnlyUserRiskR <= 2 ? 'text-yellow-400' :
+                            riskOnlyUserRiskR <= 3 ? 'text-orange-400' :
+                            'text-red-400'
+                          }`}>
+                            {riskOnlyUserRiskR.toFixed(1)}R
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-1">
+                            {riskOnlyUserRiskR <= 1 ? '✅ Conservative' :
+                             riskOnlyUserRiskR <= 2 ? '⚠️ Moderate' :
+                             riskOnlyUserRiskR <= 3 ? '🔥 Aggressive' :
+                             '🚨 Very High Risk!'}
+                          </div>
+                        </div>
+                        
+                        {riskOnlyUserRewardR !== undefined && (
+                          <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                            <div className="text-[10px] text-zinc-400 mb-2">POTENTIAL REWARD</div>
+                            <div className="text-3xl font-black text-emerald-400">
+                              +{riskOnlyUserRewardR.toFixed(1)}R
+                            </div>
+                            <div className="text-[10px] text-zinc-500 mt-1">
+                              If target hits
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Warning if risk is too high */}
+                      {riskOnlyUserRiskR > 2 && (
+                        <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <div className="flex items-center gap-2 text-red-400 text-xs">
+                            <AlertCircle className="w-4 h-4" />
+                            <span className="font-medium">
+                              High risk! Consider reducing position size.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 🔥 Result Display - Risk Only Mode */}
+                  {directResultUSD !== null && (
+                    <div className="mt-4 bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Trade Result</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">P&L</div>
+                          <div className={`text-3xl font-black ${directResultUSD >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {directResultUSD >= 0 ? '+' : ''}${formatNumber(directResultUSD, 0)}
+                          </div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">OUTCOME</div>
+                          <div className={`text-2xl font-black ${
+                            riskOnlyOutcome === 'WIN' ? 'text-emerald-400' :
+                            riskOnlyOutcome === 'LOSS' ? 'text-red-400' :
+                            'text-zinc-400'
+                          }`}>
+                            {riskOnlyOutcome}
+                          </div>
+                        </div>
+                        
+                        <div className="text-center p-4 bg-zinc-900/50 rounded-lg border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 mb-2">ACTUAL R</div>
+                          <div className={`text-2xl font-black ${
+                            (riskOnlyActualR ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
+                          }`}>
+                            {riskOnlyActualR !== null ? `${riskOnlyActualR >= 0 ? '+' : ''}${formatNumber(riskOnlyActualR, 2)}R` : '—'}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Actual User R */}
+                      {oneRValue > 0 && riskOnlyActualUserR !== null && (
+                        <div className="mt-4 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-purple-400 flex items-center gap-2">
+                              <Zap className="w-3 h-3" />
+                              You achieved:
+                            </span>
+                            <span className={`text-lg font-black ${riskOnlyActualUserR >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {riskOnlyActualUserR >= 0 ? '+' : ''}{formatNumber(riskOnlyActualUserR, 2)}R
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </Card>
         </section>
 
@@ -2259,7 +2738,7 @@ export default function New() {
             
             {!isValid && (
               <div className="text-xs text-amber-400">
-                ⚠ Fill required fields
+                ⚠ {riskInputMode === 'summary' ? 'Fill required fields' : 'Enter symbol & risk amount'}
               </div>
             )}
           </div>

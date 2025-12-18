@@ -11,6 +11,7 @@
  * ✅ FIXED: Handles JSONB risk_settings + string numbers
  * ✅ FIXED: Includes trades_created_total in select
  * ✅ FIXED: Returns real data even if configured=false
+ * ✅ FIXED v8.4.5: Added updateSettingsAsync for proper async/await support
  * ================================================
  */
 
@@ -122,8 +123,8 @@ async function fetchRiskSettings(userId: string): Promise<RiskSettings> {
     ? toNumber(data?.risk_percentage || 1)
     : toNumber(data?.fixed_risk_amount || 100);
   
-  const initialPortfolio = toNumber(data?.initial_portfolio || 10000);
-  const currentPortfolio = toNumber(data?.current_portfolio || initialPortfolio);
+  const initialPortfolio = toNumber(data?.initial_portfolio || portfolioSize);
+  const currentPortfolio = toNumber(data?.current_portfolio || portfolioSize);
   const totalPnL = toNumber(data?.total_pnl || 0);
 
   return {
@@ -215,6 +216,12 @@ export function useRiskSettings() {
 
       console.log('📊 DB update object:', updateData);
 
+      // 🔥 Only update if there's something to update
+      if (Object.keys(updateData).length === 0) {
+        console.warn('⚠️ No fields to update');
+        return updated;
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update(updateData)
@@ -251,6 +258,10 @@ export function useRiskSettings() {
     },
     onSuccess: () => {
       toast.success('Settings saved successfully!');
+      // 🔥 Invalidate to refetch fresh data
+      queryClient.invalidateQueries({ 
+        queryKey: KEYS.riskSettings(user!.id) 
+      });
     },
   });
 
@@ -281,7 +292,9 @@ export function useRiskSettings() {
     loading: isLoading,
     oneR,
     calculate1R,
+    // ✅ Both sync and async versions
     updateSettings: updateMutation.mutate,
+    updateSettingsAsync: updateMutation.mutateAsync, // 🔥 ADDED: For async/await support
     isUpdating: updateMutation.isPending,
     refreshSettings,
   };

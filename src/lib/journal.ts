@@ -347,32 +347,38 @@ export async function getTrades(userId?: string) {
     }
 
     // Process trades efficiently
-    const processedData = (data || []).map(trade => {
-      const processedTrade: any = { ...trade };
-      
-      // Add strategy_name from JOIN result
-      if (trade.strategy) {
-        if (Array.isArray(trade.strategy) && trade.strategy.length > 0) {
-          processedTrade.strategy_name = trade.strategy[0].name;
-        } else if (typeof trade.strategy === 'object' && 'name' in trade.strategy) {
-          processedTrade.strategy_name = (trade.strategy as any).name;
-        }
-      }
-      
-      // 🔥 CRITICAL: Recalculate outcome with proper multiplier if needed
-      if (!trade.outcome || trade.pnl === null || trade.pnl === undefined) {
-        const { outcome, pnl, actual_r } = calculateTradeOutcome(trade);
-        processedTrade.outcome = outcome;
-        processedTrade.pnl = pnl;
-        processedTrade.metrics = {
-          ...trade.metrics,
-          actual_r
-        };
-      }
-      
-      return processedTrade;
-    });
-
+const processedData = (data || []).map(trade => {
+  const processedTrade: any = { ...trade };
+  
+  // Add strategy_name from JOIN result
+  if (trade.strategy) {
+    if (Array.isArray(trade.strategy) && trade.strategy.length > 0) {
+      processedTrade.strategy_name = trade.strategy[0].name;
+    } else if (typeof trade.strategy === 'object' && 'name' in trade.strategy) {
+      processedTrade.strategy_name = (trade.strategy as any).name;
+    }
+  }
+  
+  // 🔥 CRITICAL FIX: Always recalculate actual_r if trade has exit_price
+  // This ensures R values are always available for analytics
+  if (trade.exit_price) {
+    const { outcome, pnl, actual_r } = calculateTradeOutcome(trade);
+    
+    // Update outcome and pnl if missing
+    if (!trade.outcome || trade.pnl === null || trade.pnl === undefined) {
+      processedTrade.outcome = outcome;
+      processedTrade.pnl = pnl;
+    }
+    
+    // 🔥 ALWAYS ensure actual_r is calculated and available
+    processedTrade.metrics = {
+      ...trade.metrics,
+      actual_r
+    };
+  }
+  
+  return processedTrade;
+});
     return { ok: true, data: processedData };
     
   } catch (e: any) {

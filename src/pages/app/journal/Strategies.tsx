@@ -104,11 +104,11 @@ function calculateStrategyStatsOptimized(trades: Trade[]): StrategyStats {
     if (currentDD > maxDD) maxDD = currentDD;
   });
   
-  const durations: number[] = [];
+const durations: number[] = [];
   trades.forEach(trade => {
     const t = trade as any;
-    if (t.entryTime && t.exitTime) {
-      const duration = new Date(t.exitTime).getTime() - new Date(t.entryTime).getTime();
+    if (t.open_at && t.close_at) {
+      const duration = new Date(t.close_at).getTime() - new Date(t.open_at).getTime();
       durations.push(duration / (1000 * 60));
     }
   });
@@ -272,14 +272,13 @@ function StrategyDetailView() {
     loading,
   });
 
-  const strategyTrades = useMemo(() => {
-    if (!strategy) return [];
-    return allTrades.filter((t: any) => 
-      t.strategy_id === strategy.id || 
-      t.strategy === strategy.id || 
-      t.strategy === strategy.name
-    );
-  }, [strategy, allTrades]);
+const strategyTrades = useMemo(() => {
+  if (!strategy) return [];
+  return allTrades.filter((t: any) => 
+    t.strategy_id === strategy.id || 
+    t.strategy_name === strategy.name
+  );
+}, [strategy, allTrades]);
 
   const stats = useMemo(() => {
     if (!strategy || strategyTrades.length === 0) return null;
@@ -636,42 +635,41 @@ function StrategyDetailView() {
 
                   <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                     {strategyTrades.map((trade: any, index: number) => {
-                      const r = trade.metrics?.rr || 0;
-                      const pnl = trade.pnl || 0;
-                      const outcome = trade.outcome || (pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE');
-                      const isWin = outcome === 'WIN';
-                      const isLoss = outcome === 'LOSS';
+  const r = trade.metrics?.actual_r || trade.metrics?.rr || 0;
+  const pnl = trade.pnl || 0;
+  const outcome = trade.outcome || (pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE');
+  const isWin = outcome === 'WIN';
+  const isLoss = outcome === 'LOSS';
 
-                      return (
-                        <div
-                          key={trade.id || index}
-                          className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/5 transition-all cursor-pointer"
-                          style={{ color: '#EAEAEA' }}
-                        >
-                          {/* ✅ Date עם Timezone Support */}
-                          <div style={{ color: '#9A9A9A' }}>
-                            {trade.entryTime 
-                              ? formatTradeDateShort(trade.entryTime, timezone)
-                              : 'N/A'}
-                          </div>
-                          
-                          <div className="font-semibold">{trade.symbol || 'N/A'}</div>
-                          
-                          <div>
-                            <span 
-                              className="px-2 py-1 rounded text-xs font-medium"
-                              style={{
-                                background: trade.side === 'LONG' ? 'rgba(0,196,108,0.15)' : 'rgba(228,69,69,0.15)',
-                                color: trade.side === 'LONG' ? '#00C46C' : '#E44545',
-                              }}
-                            >
-                              {trade.side || 'N/A'}
-                            </span>
-                          </div>
-                          
-                          <div style={{ color: '#9A9A9A' }}>${trade.entryPrice?.toFixed(2) || 'N/A'}</div>
-                          <div style={{ color: '#9A9A9A' }}>${trade.exitPrice?.toFixed(2) || 'N/A'}</div>
-                          
+  return (
+    <div
+      key={trade.id || index}
+      className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/5 transition-all cursor-pointer"
+      style={{ color: '#EAEAEA' }}
+    >
+      {/* ✅ Date עם Timezone Support */}
+      <div style={{ color: '#9A9A9A' }}>
+        {trade.open_at 
+          ? formatTradeDateShort(trade.open_at, timezone)
+          : 'N/A'}
+      </div>
+      
+      <div className="font-semibold">{trade.symbol || 'N/A'}</div>
+      
+      <div>
+        <span 
+          className="px-2 py-1 rounded text-xs font-medium"
+          style={{
+            background: trade.side === 'LONG' ? 'rgba(0,196,108,0.15)' : 'rgba(228,69,69,0.15)',
+            color: trade.side === 'LONG' ? '#00C46C' : '#E44545',
+          }}
+        >
+          {trade.side || 'N/A'}
+        </span>
+      </div>
+      
+      <div style={{ color: '#9A9A9A' }}>${trade.entry_price?.toFixed(2) || 'N/A'}</div>
+      <div style={{ color: '#9A9A9A' }}>${trade.exit_price?.toFixed(2) || 'N/A'}</div>
                           <div className="text-right font-bold" style={{ color: r >= 0 ? '#00C46C' : '#E44545' }}>
                             {r >= 0 ? '+' : ''}{r.toFixed(2)}R
                           </div>
@@ -1942,19 +1940,18 @@ export default function Strategies() {
     loading,
   });
 
-  const strategiesWithStats = useMemo(() => {
-    return strategies.map(strategy => {
-      const strategyTrades = allTrades.filter((t: any) => 
-        t.strategy_id === strategy.id || 
-        t.strategy === strategy.id || 
-        t.strategy === strategy.name
-      );
-      
-      const stats = calculateStrategyStatsOptimized(strategyTrades as Trade[]);
-      
-      return { strategy, stats };
-    });
-  }, [strategies, allTrades]);
+const strategiesWithStats = useMemo(() => {
+  return strategies.map(strategy => {
+    const strategyTrades = allTrades.filter((t: any) => 
+      t.strategy_id === strategy.id || 
+      t.strategy_name === strategy.name
+    );
+    
+    const stats = calculateStrategyStatsOptimized(strategyTrades as Trade[]);
+    
+    return { strategy, stats };
+  });
+}, [strategies, allTrades]);
 
   const handleSaveStrategy = useCallback(async (strategyData: any) => {
     if (!userId) {

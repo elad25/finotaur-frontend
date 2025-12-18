@@ -38,6 +38,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Chart', path: '/app/all-markets/chart', locked: true },
       { label: 'Summary', path: '/app/all-markets/summary', locked: true },
       { label: 'News', path: '/app/all-markets/news', locked: true },
+      { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
     ],
     sidebar: [
       { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
@@ -45,8 +46,6 @@ export const domains: Record<string, Domain> = {
       { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
       { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
       { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
-      // ⚔️ WAR ZONE - פתוח! היחיד שלא נעול
-      { label: 'War Zone', path: '/app/all-markets/warzone', icon: Swords, locked: false },
     ],
   },
 

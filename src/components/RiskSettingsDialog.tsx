@@ -17,8 +17,8 @@ interface FormSettings {
 }
 
 export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialogProps) {
-  // ✅ Single hook instead of manual queries
-  const { settings, calculate1R, updateSettings, isUpdating } = useRiskSettings();
+  // ✅ Use the hook with async mutation support
+  const { settings, calculate1R, updateSettingsAsync, isUpdating } = useRiskSettings();
 
   const [formSettings, setFormSettings] = useState<FormSettings>({
     portfolioSize: 10000,
@@ -73,24 +73,31 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
     return Object.keys(newErrors).length === 0;
   };
 
+  // ✅ FIXED: Use async/await to ensure DB update completes before closing
   const handleSave = async () => {
     if (!validate()) return;
 
-    // ✅ Single mutation instead of manual Supabase calls
-    updateSettings({
-      portfolioSize: formSettings.portfolioSize,
-      riskMode: formSettings.riskMode,
-      riskPerTrade: formSettings.riskPerTrade,
-      configured: true,
-    });
-
-    onClose();
+    try {
+      // ✅ Wait for the mutation to complete before closing
+      await updateSettingsAsync({
+        portfolioSize: formSettings.portfolioSize,
+        riskMode: formSettings.riskMode,
+        riskPerTrade: formSettings.riskPerTrade,
+        // ✅ Also update initial/current portfolio if this is first setup
+        initialPortfolio: settings?.initialPortfolio || formSettings.portfolioSize,
+        currentPortfolio: formSettings.portfolioSize,
+      });
+      
+      // ✅ Only close after successful save
+      onClose();
+    } catch (error) {
+      // Error is already handled by the hook (toast.error)
+      console.error('Failed to save risk settings:', error);
+    }
   };
 
   if (!open) return null;
 
-  // ... (שאר ה-JSX נשאר זהה - רק החלפת loading ל-isUpdating)
-  
   return (
     <div
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-fadeIn"
@@ -100,7 +107,19 @@ export default function RiskSettingsDialog({ open, onClose }: RiskSettingsDialog
         className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-4xl w-full shadow-2xl relative"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ... Header ... */}
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-100">Risk Management Settings</h2>
+            <p className="text-sm text-zinc-500 mt-1">Configure your portfolio and risk parameters</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-zinc-400" />
+          </button>
+        </div>
 
         <div className="p-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

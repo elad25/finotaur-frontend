@@ -18,6 +18,45 @@ import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useMemo, useRef, useEffect } from 'react';
 
 // ================================================
+// 🔥 ASSET MULTIPLIERS - For R calculation
+// ================================================
+
+const ASSET_MULTIPLIERS: Record<string, number> = {
+  'ES': 50, 'MES': 5, 'NQ': 20, 'MNQ': 2, 'YM': 5,
+  'RTY': 50, 'CL': 1000, 'GC': 100, 'SI': 5000,
+  'ZB': 1000, 'ZN': 1000,
+};
+
+const getAssetMultiplier = (symbol: string): number => {
+  const cleanSymbol = symbol?.toUpperCase()?.trim()?.replace(/\d+$/, '') || '';
+  return ASSET_MULTIPLIERS[cleanSymbol] || 1;
+};
+
+function calculateActualR(trade: any): number {
+  if (!trade.exit_price || !trade.entry_price || !trade.stop_price || !trade.quantity) {
+    return 0;
+  }
+
+  const entry = Number(trade.entry_price);
+  const stop = Number(trade.stop_price);
+  const exit = Number(trade.exit_price);
+  const quantity = Number(trade.quantity);
+  const fees = Number(trade.fees || 0);
+  const side = trade.side || 'LONG';
+  const multiplier = trade.multiplier || getAssetMultiplier(trade.symbol || '');
+
+  const priceDiff = side === 'LONG' ? exit - entry : entry - exit;
+  const grossPnL = priceDiff * quantity * multiplier;
+  const netPnL = grossPnL - fees;
+
+  const riskPerPoint = Math.abs(entry - stop);
+  const riskUSD = riskPerPoint * quantity * multiplier;
+
+  if (riskUSD <= 0) return 0;
+  return netPnL / riskUSD;
+}
+
+// ================================================
 // 🎯 TYPES
 // ================================================
 
@@ -121,13 +160,24 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
       });
     }
 
-    // 🚀 Process trades with strategy name
-    return (data || []).map(trade => ({
-      ...trade,
-      strategy_name: (trade.strategies as any)?.name || null,
-      multiplier: trade.multiplier || 1,
-      screenshots: trade.screenshots || [],
-    })) as Trade[];
+// 🚀 Process trades with strategy name AND calculate actual_r
+    return (data || []).map(trade => {
+      // 🔥 CRITICAL: Calculate actual_r if trade has exit_price
+      let metrics = trade.metrics || {};
+      
+      if (trade.exit_price) {
+        const actual_r = calculateActualR(trade);
+        metrics = { ...metrics, actual_r };
+      }
+
+      return {
+        ...trade,
+        strategy_name: (trade.strategies as any)?.name || null,
+        multiplier: trade.multiplier || getAssetMultiplier(trade.symbol || ''),
+        screenshots: trade.screenshots || [],
+        metrics,
+      };
+    }) as Trade[];
   } catch (error) {
     console.error('❌ Failed to fetch trades:', error);
     throw error;

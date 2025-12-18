@@ -11,7 +11,8 @@ import { formatNumber } from "@/utils/smartCalc";
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
-import { useTrades } from "@/hooks/useTrades";
+import { useTrades } from "@/hooks/useTradesData";
+
 
 // 🔥 PAYMENT INTEGRATION
 import PaymentPopup from "@/components/PaymentPopup";
@@ -806,7 +807,7 @@ export default function JournalSettings() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   const { settings: riskSettings, oneR, loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
-  const { trades } = useTrades(); // Pre-cached for export
+const { data: trades = [] } = useTrades(); // Pre-cached for export
 
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
