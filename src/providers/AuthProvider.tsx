@@ -281,29 +281,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .maybeSingle();
 
           if (!existingProfile) {
-            // 🔥 Removed log: '[Auth] Creating profile for Google user...'
-            const displayName = 
-              session.user.user_metadata?.full_name || 
-              session.user.user_metadata?.name || 
-              session.user.email?.split('@')[0] || 
-              'User';
+  // 🔥 Creating profile for Google user with proper defaults
+  const displayName = 
+    session.user.user_metadata?.full_name || 
+    session.user.user_metadata?.name || 
+    session.user.email?.split('@')[0] || 
+    'User';
 
-            const affiliateCode = await generateAffiliateCode(displayName);
+  const affiliateCode = await generateAffiliateCode(displayName);
 
-            await supabase.from('profiles').insert({
-              id: userId,
-              display_name: displayName,
-              email: session.user.email,
-              affiliate_code: affiliateCode,
-              account_type: null,
-              subscription_status: null,
-              onboarding_completed: false,
-              role: 'user',
-              is_banned: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            });
-          }
+  await supabase.from('profiles').insert({
+    id: userId,
+    display_name: displayName,
+    email: session.user.email,
+    affiliate_code: affiliateCode,
+    account_type: 'free',
+    subscription_status: null,
+    max_trades: 10,
+    trade_count: 0,
+    current_month_trades_count: 0,
+    portfolio_size: 10000,
+    risk_mode: 'percentage',
+    risk_percentage: 1.0,
+    onboarding_completed: false,
+    role: 'user',
+    is_banned: false,
+    // ✅ Newsletter token
+    newsletter_unsubscribe_token: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, ''),
+    newsletter_enabled: false,
+    newsletter_status: 'inactive',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+}
         }
       } else if (event === 'SIGNED_OUT') {
         logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
@@ -398,26 +408,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (profileCheck) {
         // 🔥 Removed log: '[Auth] Profile already exists (created by trigger)'
       } else {
-        const { error: profileError } = await supabase.from('profiles').insert({
-          id: authData.user.id,
-          email: email,
-          display_name: name,
-          affiliate_code: newAffiliateCode,
-          referred_by: affiliateCode || null,
-          account_type: null,
-          subscription_status: null,
-          onboarding_completed: false,
-          role: 'user',
-          is_banned: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
+  const { error: profileError } = await supabase.from('profiles').insert({
+    id: authData.user.id,
+    email: email,
+    display_name: name,
+    affiliate_code: newAffiliateCode,
+    referred_by: affiliateCode || null,
+    // ✅ FIX: Match handle_new_user() trigger defaults
+    account_type: 'free',
+    subscription_status: null,
+    max_trades: 10,
+    current_month_trades_count: 0,
+    portfolio_size: 10000,
+    risk_mode: 'percentage',
+    risk_percentage: 1.0,
+    onboarding_completed: false,
+    role: 'user',
+    is_banned: false,
+    // ✅ Newsletter token
+    newsletter_unsubscribe_token: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, ''),
+    newsletter_enabled: false,
+    newsletter_status: 'inactive',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
 
-        // 🔥 FIX: Ignore 409 duplicate key errors
-        if (profileError && profileError.code !== '23505') {
-          throw profileError;
-        }
-      }
+  // 🔥 FIX: Ignore 409 duplicate key errors
+  if (profileError && profileError.code !== '23505') {
+    throw profileError;
+  }
+}
 
       if (affiliateCode) {
         await new Promise(resolve => setTimeout(resolve, 500));
