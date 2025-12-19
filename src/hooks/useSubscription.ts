@@ -183,7 +183,7 @@ export function useSubscription() {
       try {
         // 🎯 Single RPC call that returns EVERYTHING including Whop fields
         const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-          user_id_param: effectiveUserId
+          p_user_id: effectiveUserId
         });
         
         if (rpcError) {

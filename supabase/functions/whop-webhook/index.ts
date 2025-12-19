@@ -738,13 +738,14 @@ async function handlePaymentSucceeded(
       // FIRST PAYMENT - Call activate_whop_subscription RPC
       // ═══════════════════════════════════════════════
       
-      console.log("🆕 Calling activate_whop_subscription RPC (first payment)...");
+console.log("🆕 Calling activate_whop_subscription RPC (first payment)...");
       
       const { data: result, error } = await supabase.rpc('activate_whop_subscription', {
         p_user_email: userEmail,
         p_whop_user_id: whopUserId,
         p_whop_membership_id: membershipId,
         p_whop_product_id: productId,
+        p_finotaur_user_id: finotaurUserId || null,  // 🔥 NEW! Pass from metadata
         p_affiliate_code: promoCode || null,
         p_click_id: clickId || null,
       });
