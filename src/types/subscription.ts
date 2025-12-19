@@ -1,6 +1,6 @@
 // src/types/subscription.ts
 
-export type AccountType = 'free' | 'basic' | 'premium';
+export type AccountType = 'free' | 'basic' | 'premium' | 'trial' | 'admin' | 'vip';
 
 export type SubscriptionInterval = 'monthly' | 'yearly';
 

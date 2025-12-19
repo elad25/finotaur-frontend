@@ -1,17 +1,17 @@
 // =====================================================
-// FINOTAUR AFFILIATE DISCOUNT HOOK - v2.4.0
+// FINOTAUR AFFILIATE DISCOUNT HOOK - v2.5.0 (FIXED)
 // =====================================================
 // Place in: src/features/affiliate/hooks/useAffiliateDiscount.ts
 // 
-// 🔥 v2.4.0 CHANGES:
-// - Fixed localStorage sync with useWhopCheckout
-// - Reads discount_tier from validate_affiliate_code RPC
-// - Supports standard (10%) and vip (15%) per affiliate
+// 🔥 v2.5.0 CHANGES:
+// - Graceful error handling - no crashes if affiliates table missing
+// - Removed direct dependency on useAffiliate hooks
+// - Safe localStorage operations
+// - Returns empty state on errors instead of crashing
 // =====================================================
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { getStoredAffiliateData, clearStoredAffiliateData } from './useAffiliate';
 import type { AffiliateDiscountInfo, DiscountTier } from '../types/affiliate.types';
 
 // ============================================
@@ -36,7 +36,7 @@ const DEFAULT_DISCOUNT_RATES: Record<DiscountTier, number> = {
 } as const;
 
 // ============================================
-// STORAGE KEYS - Must match useWhopCheckout!
+// STORAGE KEYS
 // ============================================
 
 const STORAGE_KEYS = {
@@ -79,8 +79,67 @@ interface UseAffiliateDiscountResult {
 }
 
 // ============================================
-// HELPER: Save affiliate data to localStorage
+// SAFE STORAGE HELPERS (No external dependencies)
 // ============================================
+
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Silently fail
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Silently fail
+  }
+}
+
+function getStoredAffiliateData(): { code: string; clickId?: string } | null {
+  try {
+    // Try standard key first
+    const storedCode = safeGetItem(STORAGE_KEYS.code);
+    const storedExpires = safeGetItem(STORAGE_KEYS.expires);
+    
+    // Check expiration
+    if (storedExpires && Number(storedExpires) < Date.now()) {
+      clearAffiliateStorage();
+      return null;
+    }
+    
+    if (storedCode) {
+      return {
+        code: storedCode,
+        clickId: safeGetItem(STORAGE_KEYS.clickId) || undefined,
+      };
+    }
+    
+    // Fallback to JSON storage
+    const jsonData = safeGetItem(STORAGE_KEYS.fullData);
+    if (jsonData) {
+      const parsed = JSON.parse(jsonData);
+      return {
+        code: parsed.code,
+        clickId: parsed.clickId,
+      };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function saveAffiliateToStorage(
   code: string,
@@ -92,13 +151,11 @@ function saveAffiliateToStorage(
   const upperCode = code.toUpperCase();
   const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 days
 
-  // Save to standard keys (for useWhopCheckout compatibility)
-  localStorage.setItem(STORAGE_KEYS.code, upperCode);
-  localStorage.setItem(STORAGE_KEYS.clickId, clickId || '');
-  localStorage.setItem(STORAGE_KEYS.expires, String(expiresAt));
+  safeSetItem(STORAGE_KEYS.code, upperCode);
+  safeSetItem(STORAGE_KEYS.clickId, clickId || '');
+  safeSetItem(STORAGE_KEYS.expires, String(expiresAt));
 
-  // Also save full data for reference
-  localStorage.setItem(STORAGE_KEYS.fullData, JSON.stringify({
+  safeSetItem(STORAGE_KEYS.fullData, JSON.stringify({
     code: upperCode,
     affiliateId,
     affiliateName,
@@ -106,28 +163,13 @@ function saveAffiliateToStorage(
     clickId,
     timestamp: Date.now(),
   }));
-
-  console.log('💾 Saved affiliate data to localStorage:', {
-    code: upperCode,
-    affiliateId,
-    expiresAt: new Date(expiresAt).toISOString(),
-  });
 }
 
-// ============================================
-// HELPER: Clear affiliate data from localStorage
-// ============================================
-
 function clearAffiliateStorage(): void {
-  localStorage.removeItem(STORAGE_KEYS.code);
-  localStorage.removeItem(STORAGE_KEYS.clickId);
-  localStorage.removeItem(STORAGE_KEYS.expires);
-  localStorage.removeItem(STORAGE_KEYS.fullData);
-  
-  // Also call the imported function for any additional cleanup
-  clearStoredAffiliateData();
-  
-  console.log('🗑️ Cleared affiliate data from localStorage');
+  safeRemoveItem(STORAGE_KEYS.code);
+  safeRemoveItem(STORAGE_KEYS.clickId);
+  safeRemoveItem(STORAGE_KEYS.expires);
+  safeRemoveItem(STORAGE_KEYS.fullData);
 }
 
 // ============================================
@@ -169,7 +211,7 @@ export function useAffiliateDiscount(
     };
   }, []);
 
-  // Validate affiliate code via DB
+  // Validate affiliate code via DB RPC
   const validateCode = useCallback(async (code: string): Promise<{
     isValid: boolean;
     affiliateId?: string;
@@ -188,6 +230,11 @@ export function useAffiliateDiscount(
         return { isValid: false };
       }
 
+      // Handle case where RPC doesn't exist or returns empty
+      if (!data) {
+        return { isValid: false };
+      }
+
       const result: ValidateCodeResult = Array.isArray(data) ? data[0] : data;
 
       if (!result || !result.is_valid) {
@@ -203,15 +250,6 @@ export function useAffiliateDiscount(
       const discountPercent = billingInterval === 'yearly' 
         ? discountYearly 
         : discountMonthly;
-
-      console.log('🎟️ Discount from DB:', {
-        code: code.toUpperCase(),
-        discountTier: result.discount_tier,
-        discountMonthly,
-        discountYearly,
-        currentRate: discountPercent,
-        billingInterval,
-      });
 
       return {
         isValid: true,
@@ -269,67 +307,33 @@ export function useAffiliateDiscount(
       setIsLoading(true);
 
       try {
-        // Try standard key first
-        let storedCode = localStorage.getItem(STORAGE_KEYS.code);
-        let storedClickId = localStorage.getItem(STORAGE_KEYS.clickId);
-        const storedExpires = localStorage.getItem(STORAGE_KEYS.expires);
+        const storedData = getStoredAffiliateData();
 
-        // Check expiration
-        if (storedExpires && Number(storedExpires) < Date.now()) {
-          console.log('⏰ Stored affiliate code expired, clearing...');
-          clearAffiliateStorage();
-          setIsLoading(false);
-          return;
-        }
+        if (storedData?.code) {
+          console.log('📦 Found stored affiliate code:', storedData.code);
 
-        // Fallback to JSON storage
-        if (!storedCode) {
-          const jsonData = localStorage.getItem(STORAGE_KEYS.fullData);
-          if (jsonData) {
-            try {
-              const parsed = JSON.parse(jsonData);
-              storedCode = parsed.code;
-              storedClickId = parsed.clickId;
-            } catch {
-              // Invalid JSON
-            }
-          }
-        }
-
-        // Also try getStoredAffiliateData from useAffiliate hook
-        if (!storedCode) {
-          const storedData = getStoredAffiliateData();
-          if (storedData?.code) {
-            storedCode = storedData.code;
-            storedClickId = storedData.clickId;
-          }
-        }
-
-        if (storedCode) {
-          console.log('📦 Found stored affiliate code:', storedCode);
-
-          const validation = await validateCode(storedCode);
+          const validation = await validateCode(storedData.code);
 
           if (validation.isValid) {
             applyDiscountInfo(
-              storedCode,
+              storedData.code,
               validation.affiliateId,
               validation.affiliateName,
               validation.discountPercent!,
               validation.discountMonthly!,
               validation.discountYearly!,
               validation.discountTier,
-              storedClickId || undefined
+              storedData.clickId
             );
-            setManualCode(storedCode);
+            setManualCode(storedData.code);
             
             // Re-save to ensure all keys are synced
             saveAffiliateToStorage(
-              storedCode,
+              storedData.code,
               validation.affiliateId,
               validation.affiliateName,
               validation.discountTier,
-              storedClickId || undefined
+              storedData.clickId
             );
           } else {
             console.log('⚠️ Stored code is no longer valid');
@@ -337,7 +341,8 @@ export function useAffiliateDiscount(
           }
         }
       } catch (err) {
-        console.error('Error checking stored code:', err);
+        // 🔥 GRACEFUL ERROR HANDLING - Don't crash, just log
+        console.error('Error checking stored code (non-fatal):', err);
       } finally {
         setIsLoading(false);
       }
@@ -395,7 +400,7 @@ export function useAffiliateDiscount(
         validation.discountTier
       );
 
-      // 🔥 Save to localStorage with ALL keys
+      // Save to localStorage
       saveAffiliateToStorage(
         manualCode.trim(),
         validation.affiliateId,

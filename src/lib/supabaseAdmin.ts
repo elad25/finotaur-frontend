@@ -1,72 +1,38 @@
-// ================================================
-// ADMIN SUPABASE CLIENT - FOR IMPERSONATION ONLY
-// File: src/lib/supabaseAdmin.ts
-// ⚠️ This bypasses RLS - use only for admin operations
-// 🔥 FIXED: Proper service_role authentication
-// ================================================
+// src/lib/supabaseAdmin.ts - FIXED VERSION
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
-// 🔥 Support both variable names for flexibility
-const supabaseServiceKey = 
-  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || 
-  import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
+// ⚠️ Only create admin client in development
+// In production, admin operations should use Edge Functions
+const isDev = import.meta.env.DEV;
 
-if (!supabaseUrl) {
-  throw new Error('Missing VITE_SUPABASE_URL in .env');
-}
-
-// 🔥 CRITICAL FIX: Create admin client with proper configuration
-export const supabaseAdmin = supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUrl: false,
-      },
-      db: {
-        schema: 'public',
-      },
-      global: {
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-        },
-      },
-    })
-  : null;
-
-if (supabaseAdmin) {
-  console.log('✅ Admin client initialized successfully');
-} else {
-  console.error('❌ Admin client FAILED to initialize');
-  console.error('📝 Add to .env: VITE_SUPABASE_SERVICE_ROLE_KEY=your-key');
-}
-
-// 🔍 Test function to verify admin access (call manually when needed)
-export async function testAdminAccess(): Promise<boolean> {
-  if (!supabaseAdmin) {
-    console.error('❌ No admin client available');
-    return false;
+export const supabaseAdmin: SupabaseClient | null = (() => {
+  // 🔒 SECURITY: Never expose service role key in production browser
+  if (!isDev) {
+    // Silent in production - no errors, just null
+    return null;
   }
 
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .limit(1);
-
-    if (error) {
-      console.error('❌ Admin access test FAILED:', error);
-      return false;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    if (isDev) {
+      console.warn('⚠️ Admin client not available (missing service role key) - impersonation disabled');
     }
-
-    console.log('✅ Admin access test PASSED');
-    return true;
-  } catch (err) {
-    console.error('❌ Admin access test ERROR:', err);
-    return false;
+    return null;
   }
+
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+})();
+
+// Log only in dev
+if (isDev && supabaseAdmin) {
+  console.log('✅ Admin client initialized (DEV only)');
 }

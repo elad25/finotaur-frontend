@@ -1,9 +1,17 @@
+// src/components/SubNav.tsx
+// v2.0.0 - Safe affiliate queries with graceful error handling
+// CHANGES:
+// - Added tableExists check before querying affiliates
+// - Added comprehensive try-catch with graceful fallback
+// - Uses maybeSingle() instead of direct query
+// - Won't crash if affiliates table doesn't exist
+
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { Lock, Shield, Users } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
 import { useBacktestAccess } from '@/hooks/useBacktestAccess';
 import { domains } from '@/constants/nav';
@@ -12,6 +20,33 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+
+// 🔧 Helper: Check if a table exists (cached)
+const tableExistsCache = new Map<string, boolean>();
+
+async function tableExists(tableName: string): Promise<boolean> {
+  // Check cache first
+  if (tableExistsCache.has(tableName)) {
+    return tableExistsCache.get(tableName)!;
+  }
+
+  try {
+    // Try a minimal query to check if table exists
+    const { error } = await supabase
+      .from(tableName)
+      .select('id')
+      .limit(1);
+
+    // If error code is 42P01 (undefined_table) or PGRST116, table doesn't exist
+    const exists = !error || (error.code !== '42P01' && error.code !== 'PGRST116' && !error.message?.includes('does not exist'));
+    
+    tableExistsCache.set(tableName, exists);
+    return exists;
+  } catch {
+    tableExistsCache.set(tableName, false);
+    return false;
+  }
+}
 
 export const SubNav = () => {
   const navigate = useNavigate();
@@ -36,16 +71,20 @@ export const SubNav = () => {
         let userIdToCheck = user.id;
 
         if (savedImpersonation) {
-          const data = JSON.parse(savedImpersonation);
-          userIdToCheck = data.originalAdminId;
-          console.log('🎭 Checking admin status for original admin:', userIdToCheck);
+          try {
+            const data = JSON.parse(savedImpersonation);
+            userIdToCheck = data.originalAdminId;
+            console.log('🎭 Checking admin status for original admin:', userIdToCheck);
+          } catch {
+            // Invalid JSON, ignore
+          }
         }
 
         const { data, error } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', userIdToCheck)
-          .single();
+          .maybeSingle();
 
         if (!error && data) {
           const isAdminUser = 
@@ -60,6 +99,8 @@ export const SubNav = () => {
           });
           
           setIsAdmin(isAdminUser);
+        } else {
+          setIsAdmin(false);
         }
       } catch (error) {
         console.error('Error checking admin status:', error);
@@ -70,7 +111,7 @@ export const SubNav = () => {
     checkAdminStatus();
   }, [user?.id, isImpersonating]);
 
-  // 🤝 Check if user is an active affiliate
+  // 🤝 Check if user is an active affiliate - WITH SAFE ERROR HANDLING
   useEffect(() => {
     async function checkAffiliateStatus() {
       if (!user?.id) {
@@ -79,8 +120,16 @@ export const SubNav = () => {
       }
 
       try {
+        // 🔧 First check if affiliates table exists
+        const affiliatesTableExists = await tableExists('affiliates');
+        
+        if (!affiliatesTableExists) {
+          console.log('🤝 Affiliates table not found - skipping affiliate check');
+          setIsAffiliate(false);
+          return;
+        }
+
         // During impersonation, check if the IMPERSONATED user is an affiliate
-        // (not the admin)
         const { data, error } = await supabase
           .from('affiliates')
           .select('id, status')
@@ -88,7 +137,19 @@ export const SubNav = () => {
           .eq('status', 'active')
           .maybeSingle();
 
-        if (!error && data) {
+        if (error) {
+          // Handle specific error codes gracefully
+          if (error.code === '42P01' || error.code === 'PGRST116' || error.code === '406') {
+            console.log('🤝 Affiliates table/RLS issue - user is not affiliate');
+            setIsAffiliate(false);
+            return;
+          }
+          console.error('Error checking affiliate status:', error);
+          setIsAffiliate(false);
+          return;
+        }
+
+        if (data) {
           console.log('🤝 Affiliate status check:', {
             userId: user.id,
             affiliateId: data.id,
@@ -100,7 +161,8 @@ export const SubNav = () => {
           setIsAffiliate(false);
         }
       } catch (error) {
-        console.error('Error checking affiliate status:', error);
+        // Catch any unexpected errors - don't crash the app
+        console.error('Error checking affiliate status (non-fatal):', error);
         setIsAffiliate(false);
       }
     }
@@ -109,17 +171,17 @@ export const SubNav = () => {
   }, [user?.id]);
 
   // 🔒 Check if a path belongs to a locked domain
-  const isPathLocked = (path: string): boolean => {
+  const isPathLocked = useCallback((path: string): boolean => {
     // Check if path is in backtest section
     if (path.includes('/backtest')) {
       const backtestDomain = domains['journal-backtest'];
       return backtestDomain?.locked === true;
     }
     return false;
-  };
+  }, []);
 
   // 🔥 Enhanced active detection for better tab highlighting
-  const isTabActive = (itemPath: string): boolean => {
+  const isTabActive = useCallback((itemPath: string): boolean => {
     // Check exact path match first
     if (location.pathname === itemPath) return true;
     
@@ -146,9 +208,9 @@ export const SubNav = () => {
     
     // Fallback to standard check
     return isActive(itemPath);
-  };
+  }, [location.pathname, isActive]);
 
-  const handleNavigation = (path: string, itemLocked?: boolean) => {
+  const handleNavigation = useCallback((path: string, itemLocked?: boolean) => {
     // 🔒 CHECK IF INDIVIDUAL ITEM IS LOCKED
     if (itemLocked) {
       console.log('🔒 Item is locked - Coming Soon:', path);
@@ -158,18 +220,15 @@ export const SubNav = () => {
     // 🔒 BACKTEST LOCKED CHECK - Before any other logic
     if (path.includes('/backtest') && isPathLocked(path)) {
       console.log('🔒 Backtest is locked - Coming Soon');
-      // Don't navigate - the section is locked
       return;
     }
 
     // 🔐 BACKTEST ACCESS CONTROL (if not locked globally)
     if (path.includes('/backtest')) {
       if (!hasBacktestAccess) {
-        // 🔥 Redirect to landing page for non-Premium users
         navigate('/app/journal/backtest/landing');
         return;
       }
-      // Premium users can proceed to the requested page
       navigate(path);
       return;
     }
@@ -177,8 +236,6 @@ export const SubNav = () => {
     // 🤝 AFFILIATE ACCESS CONTROL
     if (path.includes('/affiliate') && !path.includes('/admin')) {
       if (!isAffiliate && !isAdmin) {
-        // Non-affiliates can't access affiliate pages
-        // Could redirect to an "apply" page or show a message
         console.log('🚫 User is not an affiliate, cannot access affiliate pages');
         return;
       }
@@ -192,10 +249,10 @@ export const SubNav = () => {
       return;
     }
     navigate(path);
-  };
+  }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain]);
 
   // 🔥 Filter function to check if item should be shown
-  const shouldShowItem = (item: any): boolean => {
+  const shouldShowItem = useCallback((item: any): boolean => {
     // Hide admin items during impersonation
     if (isImpersonating && item.adminOnly) {
       console.log('🎭 Hiding admin item during impersonation:', item.label);
@@ -213,7 +270,7 @@ export const SubNav = () => {
     }
 
     return true;
-  };
+  }, [isImpersonating, isAdmin, isAffiliate]);
 
   return (
     <div 
@@ -229,7 +286,6 @@ export const SubNav = () => {
           .map((item) => {
             const domainLocked = (activeDomain as any).locked === true;
             const backtestLocked = item.path.includes('/backtest') && isPathLocked(item.path);
-            // 🔒 NEW: Check if individual item is locked
             const itemLocked = (item as any).locked === true;
             const locked = domainLocked || backtestLocked || itemLocked;
             const active = isTabActive(item.path);
@@ -285,7 +341,7 @@ export const SubNav = () => {
               </button>
             );
 
-            // 🔒 Wrap locked items with tooltip (backtest OR individual locked items)
+            // 🔒 Wrap locked items with tooltip
             if (backtestLocked || itemLocked) {
               return (
                 <Tooltip key={item.path}>

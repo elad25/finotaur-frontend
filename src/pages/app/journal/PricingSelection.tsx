@@ -20,7 +20,6 @@ import { motion } from 'framer-motion';
 
 // 🔥 AFFILIATE IMPORTS
 import { useAffiliateDiscount } from '@/features/affiliate/hooks/useAffiliateDiscount';
-import CouponInput from '@/features/affiliate/components/CouponInput';
 
 type BillingInterval = 'monthly' | 'yearly';
 type PlanId = 'basic' | 'premium';
@@ -390,26 +389,6 @@ export default function PricingSelection() {
             >
               No credit card required • Cancel anytime
             </motion.p>
-          </motion.div>
-
-          {/* 🔥 COUPON INPUT SECTION */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.25 }}
-            className="max-w-md mx-auto mb-8"
-          >
-            <CouponInput
-              manualCode={manualCode}
-              setManualCode={setManualCode}
-              onApply={applyCode}
-              onRemove={removeCode}
-              isValidating={isValidating}
-              error={discountError}
-              validatedCode={validatedCode}
-              discountPercent={discountPercent}
-              savings={savings}
-            />
           </motion.div>
 
           {/* 🔥 DISCOUNT BANNER - Shows when discount is active */}
