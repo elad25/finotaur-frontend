@@ -65,7 +65,7 @@ import { cn } from '@/lib/utils';
 const WHOP_NEWSLETTER_PLAN_ID = 'plan_LCBG5yJpoNtW3';
 const WHOP_CHECKOUT_BASE_URL = `https://whop.com/checkout/${WHOP_NEWSLETTER_PLAN_ID}`;
 const REDIRECT_URL = 'https://www.finotaur.com/app/all-markets/warzone';
-const DISCORD_INVITE_URL = 'https://discord.gg/6zq4XqU6bF';
+const DISCORD_INVITE_URL = 'https://whop.com/joined/finotaur/discord-UJWtnrAZQebLPC/app/';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // ============================================
@@ -1051,37 +1051,35 @@ export default function WarZoneLandingSimple() {
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (!user?.id || !newsletterStatus?.newsletter_whop_membership_id) return;
-    
-    setIsCancelling(true);
-    
-    try {
-      const response = await fetch(`${API_BASE}/api/newsletter/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          membershipId: newsletterStatus.newsletter_whop_membership_id
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        await checkSubscriptionStatus();
-        setShowCancelModal(false);
-        alert('Your subscription has been cancelled. You will retain access until the end of your billing period.');
-      } else {
-        throw new Error(data.error || 'Failed to cancel');
+ const handleCancelSubscription = async () => {
+  if (!user?.id || !newsletterStatus?.newsletter_whop_membership_id) return;
+  
+  setIsCancelling(true);
+  
+  try {
+    const { data, error } = await supabase.functions.invoke('newsletter-cancel', {
+      body: {
+        userId: user.id,
+        membershipId: newsletterStatus.newsletter_whop_membership_id
       }
-    } catch (error) {
-      console.error('Cancel error:', error);
-      alert('Failed to cancel subscription. Please contact support@finotaur.com');
-    } finally {
-      setIsCancelling(false);
+    });
+
+    if (error) throw error;
+    
+    if (data?.success) {
+      await checkSubscriptionStatus();
+      setShowCancelModal(false);
+      alert('Your subscription has been cancelled. You will retain access until the end of your billing period.');
+    } else {
+      throw new Error(data?.error || 'Failed to cancel');
     }
-  };
+  } catch (error) {
+    console.error('Cancel error:', error);
+    alert('Failed to cancel subscription. Please contact support@finotaur.com');
+  } finally {
+    setIsCancelling(false);
+  }
+};
 
   const handleViewReport = async () => {
     setIsLoadingReport(true);

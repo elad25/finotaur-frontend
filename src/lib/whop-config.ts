@@ -1,29 +1,30 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v2.3.0
+// FINOTAUR WHOP CONFIGURATION - v2.4.0
 // =====================================================
 // Place in: src/lib/whop-config.ts
 // 
-// 🔥 v2.3.0 CHANGES:
-// - Added Newsletter (War Zone) plan
+// 🔥 v2.4.0 CHANGES:
+// - Added Top Secret product (monthly + yearly)
 // - Newsletter is separate from trading journal subscription
-// - Updates newsletter_enabled field, not account_type
-// - 7-day free trial support
+// - Top Secret is separate from both newsletter and journal
+// - Updates top_secret_* fields, not account_type
 // 
-// ⚠️ IMPORTANT: Update NEWSLETTER_PRODUCT_ID with actual value!
 // =====================================================
 
 // ============================================
 // TYPES
 // ============================================
 
-export type PlanName = 'basic' | 'premium' | 'newsletter';
+export type PlanName = 'basic' | 'premium' | 'newsletter' | 'top_secret';
 export type BillingInterval = 'monthly' | 'yearly';
 export type PlanId = 
   | 'basic_monthly' 
   | 'basic_yearly' 
   | 'premium_monthly' 
   | 'premium_yearly'
-  | 'newsletter_monthly';
+  | 'newsletter_monthly'
+  | 'top_secret_monthly'
+  | 'top_secret_yearly';
 
 export interface PlanConfig {
   id: PlanId;
@@ -41,10 +42,12 @@ export interface PlanConfig {
   maxTrades: number;
   trialDays?: number;
   isNewsletter?: boolean;
+  isTopSecret?: boolean;
+  discordIncluded?: boolean;
 }
 
 // ============================================
-// ⚠️ WHOP IDs - UPDATE NEWSLETTER_PRODUCT_ID!
+// WHOP IDs
 // ============================================
 
 // Plan IDs - Used for CHECKOUT URLs
@@ -53,29 +56,49 @@ export const WHOP_PLAN_IDS = {
   basic_yearly: 'plan_x0jTFLe9qNv8i',
   premium_monthly: 'plan_v7QKxkvKIZooe',
   premium_yearly: 'plan_gBG436aeJxaHU',
-  // 🔥 Newsletter (War Zone)
+  // Newsletter (War Zone)
   newsletter_monthly: 'plan_LCBG5yJpoNtW3',
+  // 🔥 Top Secret
+  top_secret_monthly: 'plan_9VxdBaa2Z5KQy',
+  top_secret_yearly: 'plan_YoeD6wWBxss7Q',
 } as const;
 
 // Product IDs - Used for WEBHOOK identification
-// ⚠️ UPDATE 'prod_XXXXXXXX' WITH ACTUAL NEWSLETTER PRODUCT ID!
 export const WHOP_PRODUCT_IDS = {
   basic_monthly: 'prod_ZaDN418HLst3r',
   basic_yearly: 'prod_bPwSoYGedsbyh',
   premium_monthly: 'prod_Kq2pmLT1JyGsU',
   premium_yearly: 'prod_vON7zlda6iuII',
-  // 🔥 Newsletter - UPDATE THIS WITH ACTUAL PRODUCT ID FROM WHOP DASHBOARD!
-  newsletter_monthly: 'prod_qlaV5Uu6LZlYn',  // ⚠️ CHANGE THIS!
+  // Newsletter
+  newsletter_monthly: 'prod_qlaV5Uu6LZlYn',
+  // 🔥 Top Secret (same product for both plans)
+  top_secret: 'prod_nl6YXbLp4t5pz',
 } as const;
 
 // Reverse lookup (for webhooks)
-export const PRODUCT_ID_TO_PLAN: Record<string, { plan: PlanName; interval: BillingInterval; isNewsletter?: boolean }> = {
+export const PRODUCT_ID_TO_PLAN: Record<string, { plan: PlanName; interval: BillingInterval; isNewsletter?: boolean; isTopSecret?: boolean }> = {
   'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly' },
   'prod_bPwSoYGedsbyh': { plan: 'basic', interval: 'yearly' },
   'prod_Kq2pmLT1JyGsU': { plan: 'premium', interval: 'monthly' },
   'prod_vON7zlda6iuII': { plan: 'premium', interval: 'yearly' },
-  // 🔥 Newsletter - UPDATE THE KEY WITH ACTUAL PRODUCT ID!
-  'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', isNewsletter: true },  // ⚠️ CHANGE KEY!
+  // Newsletter
+  'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', isNewsletter: true },
+  // 🔥 Top Secret
+  'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', isTopSecret: true },
+};
+
+// Plan ID to Name lookup (for webhook plan_id identification)
+export const PLAN_ID_TO_NAME: Record<string, string> = {
+  // Journal
+  'plan_2hIXaJbGP1tYN': 'basic_monthly',
+  'plan_x0jTFLe9qNv8i': 'basic_yearly',
+  'plan_v7QKxkvKIZooe': 'premium_monthly',
+  'plan_gBG436aeJxaHU': 'premium_yearly',
+  // Newsletter
+  'plan_LCBG5yJpoNtW3': 'newsletter_monthly',
+  // 🔥 Top Secret
+  'plan_9VxdBaa2Z5KQy': 'top_secret_monthly',
+  'plan_YoeD6wWBxss7Q': 'top_secret_yearly',
 };
 
 // ============================================
@@ -184,7 +207,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       '2 months FREE!',
     ],
   },
-  // 🔥 WAR ZONE NEWSLETTER
+  // WAR ZONE NEWSLETTER
   newsletter_monthly: {
     id: 'newsletter_monthly',
     whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,
@@ -197,6 +220,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     maxTrades: 0,
     trialDays: 7,
     isNewsletter: true,
+    discordIncluded: true,
     badge: '7-Day Free Trial',
     features: [
       'Daily institutional-grade PDF report (8-14 pages)',
@@ -210,10 +234,54 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Chart pack blueprint',
     ],
   },
+  // 🔥 TOP SECRET
+  top_secret_monthly: {
+    id: 'top_secret_monthly',
+    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,
+    whopProductId: WHOP_PRODUCT_IDS.top_secret,
+    name: 'top_secret',
+    displayName: 'Top Secret',
+    price: 35,
+    period: 'monthly',
+    periodLabel: '/month',
+    maxTrades: 0, // Content product, no trade limits
+    isTopSecret: true,
+    discordIncluded: true,
+    features: [
+      'Exclusive proprietary content',
+      'Private Discord community access',
+      'Premium trading signals',
+      'Advanced market analysis',
+      'Real-time alerts',
+    ],
+  },
+  top_secret_yearly: {
+    id: 'top_secret_yearly',
+    whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,
+    whopProductId: WHOP_PRODUCT_IDS.top_secret,
+    name: 'top_secret',
+    displayName: 'Top Secret (Annual)',
+    price: 300,
+    period: 'yearly',
+    periodLabel: '/year',
+    monthlyEquivalent: 25,
+    maxTrades: 0,
+    isTopSecret: true,
+    discordIncluded: true,
+    badge: 'Save 29%',
+    features: [
+      'Exclusive proprietary content',
+      'Private Discord community access',
+      'Premium trading signals',
+      'Advanced market analysis',
+      'Real-time alerts',
+      '29% savings vs monthly!',
+    ],
+  },
 };
 
 // ============================================
-// NEWSLETTER HELPERS
+// HELPER FUNCTIONS
 // ============================================
 
 export function isNewsletterProduct(productId: string): boolean {
@@ -221,12 +289,60 @@ export function isNewsletterProduct(productId: string): boolean {
   return planInfo?.isNewsletter === true;
 }
 
+export function isTopSecretProduct(productId: string): boolean {
+  return productId === WHOP_PRODUCT_IDS.top_secret;
+}
+
+export function isJournalProduct(productId: string): boolean {
+  return [
+    WHOP_PRODUCT_IDS.basic_monthly,
+    WHOP_PRODUCT_IDS.basic_yearly,
+    WHOP_PRODUCT_IDS.premium_monthly,
+    WHOP_PRODUCT_IDS.premium_yearly,
+  ].includes(productId as any);
+}
+
 export function getNewsletterPlan(): PlanConfig {
   return PLANS.newsletter_monthly;
 }
 
+export function getTopSecretPlans(): { monthly: PlanConfig; yearly: PlanConfig } {
+  return {
+    monthly: PLANS.top_secret_monthly,
+    yearly: PLANS.top_secret_yearly,
+  };
+}
+
 export function getNewsletterCheckoutUrl(): string {
   return `https://whop.com/checkout/${WHOP_PLAN_IDS.newsletter_monthly}`;
+}
+
+export function getTopSecretCheckoutUrl(interval: 'monthly' | 'yearly' = 'monthly'): string {
+  const planId = interval === 'yearly' ? WHOP_PLAN_IDS.top_secret_yearly : WHOP_PLAN_IDS.top_secret_monthly;
+  return `https://whop.com/checkout/${planId}`;
+}
+
+/**
+ * Determine billing interval from plan ID
+ */
+export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
+  const yearlyPlanIds = [
+    WHOP_PLAN_IDS.basic_yearly,
+    WHOP_PLAN_IDS.premium_yearly,
+    WHOP_PLAN_IDS.top_secret_yearly,
+  ];
+  
+  return yearlyPlanIds.includes(planId as any) ? 'yearly' : 'monthly';
+}
+
+/**
+ * Get price from plan ID
+ */
+export function getPriceFromPlanId(planId: string): number {
+  const planName = PLAN_ID_TO_NAME[planId];
+  if (!planName) return 0;
+  const plan = PLANS[planName as PlanId];
+  return plan?.price ?? 0;
 }
 
 // ============================================
@@ -273,6 +389,8 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
   if (plan.isNewsletter) {
     params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success`);
+  } else if (plan.isTopSecret) {
+    params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success`);
   } else {
     params.set('redirect_url', `${baseRedirect}/app/journal/overview?payment=success`);
   }
@@ -285,6 +403,14 @@ export function buildNewsletterCheckoutUrl(options: Omit<CheckoutOptions, 'planI
   return buildWhopCheckoutUrl({
     ...options,
     planId: 'newsletter_monthly',
+  });
+}
+
+export function buildTopSecretCheckoutUrl(options: Omit<CheckoutOptions, 'planId'> & { interval?: 'monthly' | 'yearly' }): string {
+  const { interval = 'monthly', ...rest } = options;
+  return buildWhopCheckoutUrl({
+    ...rest,
+    planId: interval === 'yearly' ? 'top_secret_yearly' : 'top_secret_monthly',
   });
 }
 
@@ -315,6 +441,7 @@ export const PLAN_FEATURES = {
     advancedAnalytics: false,
     prioritySupport: false,
     newsletter: false,
+    topSecret: false,
   },
   basic: {
     maxTrades: 25,
@@ -323,6 +450,7 @@ export const PLAN_FEATURES = {
     advancedAnalytics: true,
     prioritySupport: false,
     newsletter: false,
+    topSecret: false,
   },
   premium: {
     maxTrades: Infinity,
@@ -331,6 +459,7 @@ export const PLAN_FEATURES = {
     advancedAnalytics: true,
     prioritySupport: true,
     newsletter: false,
+    topSecret: false,
   },
   newsletter: {
     maxTrades: 0,
@@ -339,11 +468,21 @@ export const PLAN_FEATURES = {
     advancedAnalytics: false,
     prioritySupport: false,
     newsletter: true,
+    topSecret: false,
+  },
+  top_secret: {
+    maxTrades: 0,
+    autoSync: false,
+    aiInsights: false,
+    advancedAnalytics: false,
+    prioritySupport: false,
+    newsletter: false,
+    topSecret: true,
   },
 };
 
 // ============================================
-// HELPER FUNCTIONS
+// LEGACY HELPER FUNCTIONS
 // ============================================
 
 export const getPlanById = (planId: PlanId): PlanConfig => PLANS[planId];
@@ -353,7 +492,7 @@ export const getPlansByName = (name: PlanName): PlanConfig[] => {
 };
 
 export const getMonthlyPlans = (): PlanConfig[] => {
-  return Object.values(PLANS).filter(plan => plan.period === 'monthly' && !plan.isNewsletter);
+  return Object.values(PLANS).filter(plan => plan.period === 'monthly' && !plan.isNewsletter && !plan.isTopSecret);
 };
 
 export const getYearlyPlans = (): PlanConfig[] => {
@@ -374,10 +513,10 @@ export const getPlanId = (name: PlanName, interval: BillingInterval): PlanId => 
 
 export const getWhopPlanId = (name: PlanName, interval: BillingInterval): string => {
   const planId = getPlanId(name, interval);
-  return PLANS[planId].whopPlanId;
+  return PLANS[planId]?.whopPlanId || '';
 };
 
 export const getWhopProductId = (name: PlanName, interval: BillingInterval): string => {
   const planId = getPlanId(name, interval);
-  return PLANS[planId].whopProductId;
+  return PLANS[planId]?.whopProductId || '';
 };

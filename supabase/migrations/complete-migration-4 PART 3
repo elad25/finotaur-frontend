@@ -439,179 +439,6 @@ BEGIN
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════
--- 2.1: Admin Stats View (🆕 CRITICAL FOR ADMIN DASHBOARD)
--- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.admin_stats_view AS
-WITH 
-  time_periods AS (
-    SELECT 
-      CURRENT_TIMESTAMP as now,
-      CURRENT_DATE as today,
-      (CURRENT_TIMESTAMP - INTERVAL '1 day') as one_day_ago,
-      (CURRENT_TIMESTAMP - INTERVAL '7 days') as seven_days_ago,
-      (CURRENT_TIMESTAMP - INTERVAL '30 days') as thirty_days_ago,
-      DATE_TRUNC('week', CURRENT_DATE) as start_of_week,
-      DATE_TRUNC('month', CURRENT_DATE) as start_of_month
-  ),
-  user_counts AS (
-    SELECT
-      COUNT(*) as total_users,
-      COUNT(*) FILTER (WHERE last_login_at > (SELECT thirty_days_ago FROM time_periods)) as active_users,
-      COUNT(*) FILTER (WHERE created_at::date = (SELECT today FROM time_periods)) as new_users_today,
-      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_week FROM time_periods)) as new_users_this_week,
-      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_month FROM time_periods)) as new_users_this_month,
-      COUNT(*) FILTER (WHERE account_type = 'free') as free_users,
-      COUNT(*) FILTER (WHERE account_type = 'basic') as basic_users,
-      COUNT(*) FILTER (WHERE account_type = 'premium') as premium_users,
-      COUNT(*) FILTER (WHERE subscription_status = 'trial') as trial_users,
-      COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_interval = 'monthly') as basic_monthly_users,
-      COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_interval = 'yearly') as basic_yearly_users,
-      COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_interval = 'monthly') as premium_monthly_users,
-      COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_interval = 'yearly') as premium_yearly_users,
-      COUNT(*) FILTER (WHERE last_login_at > (SELECT one_day_ago FROM time_periods)) as daily_active_users,
-      COUNT(*) FILTER (WHERE last_login_at > (SELECT seven_days_ago FROM time_periods)) as weekly_active_users,
-      COUNT(*) FILTER (WHERE last_login_at > (SELECT thirty_days_ago FROM time_periods)) as monthly_active_users
-    FROM public.profiles
-    WHERE deleted_at IS NULL
-  ),
-  trade_counts AS (
-    SELECT
-      COUNT(*) as total_trades,
-      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_week FROM time_periods)) as trades_this_week,
-      COUNT(*) FILTER (WHERE created_at >= (SELECT start_of_month FROM time_periods)) as trades_this_month
-    FROM public.trades
-  ),
-  revenue AS (
-    SELECT
-      (uc.basic_monthly_users * 15.99 +
-       uc.basic_yearly_users * 12.99 +
-       uc.premium_monthly_users * 24.99 +
-       uc.premium_yearly_users * 19.99) as estimated_monthly_revenue
-    FROM user_counts uc
-  )
-SELECT
-  uc.total_users,
-  uc.active_users,
-  uc.new_users_today,
-  uc.new_users_this_week,
-  uc.new_users_this_month,
-  uc.free_users,
-  uc.basic_users,
-  uc.premium_users,
-  uc.trial_users,
-  uc.basic_monthly_users,
-  uc.basic_yearly_users,
-  uc.premium_monthly_users,
-  uc.premium_yearly_users,
-  r.estimated_monthly_revenue,
-  (r.estimated_monthly_revenue * 12) as estimated_yearly_revenue,
-  tc.total_trades,
-  tc.trades_this_week,
-  tc.trades_this_month,
-  CASE 
-    WHEN uc.total_users > 0 THEN ROUND((tc.total_trades::NUMERIC / uc.total_users::NUMERIC), 2)
-    ELSE 0 
-  END as average_trades_per_user,
-  uc.daily_active_users,
-  uc.weekly_active_users,
-  uc.monthly_active_users,
-  CASE 
-    WHEN (uc.free_users + uc.basic_users + uc.premium_users) > 0 
-    THEN ROUND(((uc.basic_users + uc.premium_users)::NUMERIC / 
-                (uc.free_users + uc.basic_users + uc.premium_users)::NUMERIC * 100), 2)
-    ELSE 0 
-  END as free_to_paying_conversion_rate,
-  CASE 
-    WHEN (uc.trial_users + uc.basic_users + uc.premium_users) > 0 
-    THEN ROUND(((uc.basic_users + uc.premium_users)::NUMERIC / 
-                (uc.trial_users + uc.basic_users + uc.premium_users)::NUMERIC * 100), 2)
-    ELSE 0 
-  END as trial_to_paying_conversion_rate
-FROM user_counts uc
-CROSS JOIN trade_counts tc
-CROSS JOIN revenue r;
-
-COMMENT ON VIEW public.admin_stats_view IS 
-'Platform statistics for admin dashboard - users, trades, revenue, conversions';
-
--- ═══════════════════════════════════════════════════════════════
--- 2.2: Admin Users List View (🆕 WITH INDIVIDUAL RISK SETTINGS)
--- 🔄 SYNCED: Uses correct column names from Part 1 v9.4.2
--- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.admin_users_list_view AS
-SELECT 
-  p.id,
-  p.email,
-  COALESCE(p.display_name, split_part(p.email, '@', 1)) as display_name,
-  COALESCE(p.account_type, 'free') as account_type,
-  COALESCE(p.role, 'user') as role,
-  p.subscription_status,
-  p.subscription_interval,
-  p.subscription_expires_at,  -- ✅ Correct column name (NOT subscription_end_date)
-  p.subscription_cancel_at_period_end,  -- 🆕 v9.4.2: Added
-  p.is_banned,
-  p.last_login_at,
-  p.login_count,
-  p.created_at,
-  p.updated_at,
-  p.current_portfolio,
-  p.initial_portfolio,
-  p.total_pnl,
-  p.trade_count,
-  p.risk_settings,
-  p.current_month_trades_count,
-  p.max_trades,
-  
-  -- 🔥 v9.4.2: Individual Risk Settings Columns (from Part 1)
-  p.portfolio_size,
-  p.risk_mode,
-  p.risk_percentage,
-  p.fixed_risk_amount,
-  
-  -- 🔥 Calculate 1R value based on risk mode
-  CASE 
-    WHEN p.risk_mode = 'percentage' THEN ROUND((p.portfolio_size * p.risk_percentage) / 100, 2)
-    WHEN p.risk_mode = 'fixed' THEN p.fixed_risk_amount
-    ELSE NULL
-  END as calculated_one_r,
-  
-  -- Trading Statistics
-  COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL) as total_closed_trades,
-  CASE 
-    WHEN COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL) > 0 
-    THEN ROUND(
-      (COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'WIN') * 100.0 
-      / COUNT(DISTINCT t.id) FILTER (WHERE t.exit_price IS NOT NULL)), 2
-    )
-    ELSE 0 
-  END as win_rate,
-  COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'WIN') as wins,
-  COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'LOSS') as losses,
-  COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'BE') as break_even,
-  COUNT(DISTINCT t.id) FILTER (WHERE t.outcome = 'OPEN') as open_trades,
-  MAX(t.close_at) as last_trade_date,
-  ROUND(AVG(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL), 2) as avg_r,
-  MAX(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL) as best_r,
-  MIN(t.actual_r) FILTER (WHERE t.actual_r IS NOT NULL) as worst_r
-FROM public.profiles p
-LEFT JOIN public.trades t ON t.user_id = p.id
-WHERE p.deleted_at IS NULL
-GROUP BY 
-  p.id, p.email, p.display_name, p.account_type, p.role,
-  p.subscription_status, p.subscription_interval, p.subscription_expires_at,
-  p.subscription_cancel_at_period_end,
-  p.is_banned, p.last_login_at, p.login_count, p.created_at, p.updated_at,
-  p.current_portfolio, p.initial_portfolio, p.total_pnl, p.trade_count, 
-  p.risk_settings, p.current_month_trades_count, p.max_trades,
-  p.portfolio_size, p.risk_mode, p.risk_percentage, p.fixed_risk_amount
-ORDER BY p.created_at DESC;
-
-COMMENT ON VIEW public.admin_users_list_view IS 
-'v9.4.2: Comprehensive user list with trading stats and detailed risk settings for admin user management. 
-Includes calculated_one_r based on risk_mode (percentage or fixed).
-Synced with Part 1 v9.4.2 column names.';
-
--- ═══════════════════════════════════════════════════════════════
 -- 2.3: Payment Analytics View
 -- ═══════════════════════════════════════════════════════════════
 CREATE OR REPLACE VIEW public.payment_analytics AS
@@ -758,89 +585,6 @@ DO $$
 BEGIN
   RAISE NOTICE '[2.8/10] 📊 Creating subscription management views...';
 END $$;
-
--- ═══════════════════════════════════════════════════════════════
--- 2.8.1: Subscription Health Dashboard
--- 🔄 SYNCED: Uses correct column names from Part 1 v9.4.2
--- 🆕 ADDED: subscription_cancel_at_period_end column
--- ═══════════════════════════════════════════════════════════════
-
-CREATE OR REPLACE VIEW public.subscription_health_view AS
-SELECT 
-  p.id as user_id,
-  p.email,
-  p.display_name,
-  p.account_type,
-  p.subscription_interval,
-  p.subscription_status,
-  p.subscription_expires_at,
-  p.subscription_cancel_at_period_end,  -- 🆕 v9.4.2: Added!
-  p.cancellation_requested_at,
-  p.cancellation_effective_date,
-  
-  -- Days remaining
-  CASE 
-    WHEN p.subscription_expires_at IS NULL THEN NULL
-    ELSE EXTRACT(DAY FROM (p.subscription_expires_at - NOW()))::INTEGER
-  END as days_remaining,
-  
-  -- Health status (updated to consider cancel_at_period_end)
-  CASE 
-    WHEN p.account_type = 'free' THEN 'free'
-    WHEN p.subscription_status = 'cancelled' THEN 'cancelled'
-    WHEN p.subscription_cancel_at_period_end = TRUE THEN 'cancelling_at_period_end'
-    WHEN p.subscription_expires_at < NOW() THEN 'expired'
-    WHEN p.subscription_expires_at < NOW() + INTERVAL '7 days' THEN 'expiring_soon'
-    WHEN p.subscription_expires_at < NOW() + INTERVAL '14 days' THEN 'active_expiring'
-    ELSE 'active_healthy'
-  END as health_status,
-  
-  -- Latest payment
-  (SELECT ph.created_at 
-   FROM payment_history ph 
-   WHERE ph.user_id = p.id AND ph.status = 'completed'
-   ORDER BY ph.created_at DESC LIMIT 1) as last_payment_date,
-   
-  (SELECT ph.amount 
-   FROM payment_history ph 
-   WHERE ph.user_id = p.id AND ph.status = 'completed'
-   ORDER BY ph.created_at DESC LIMIT 1) as last_payment_amount,
-  
-  -- Lifetime value
-  (SELECT COALESCE(SUM(ph.amount), 0)
-   FROM payment_history ph
-   WHERE ph.user_id = p.id AND ph.status = 'completed') as lifetime_value,
-   
-  -- Number of renewals
-  (SELECT COUNT(*)
-   FROM subscription_changes sc
-   WHERE sc.user_id = p.id AND sc.change_type = 'renew') as renewal_count,
-   
-  -- Active period details
-  (SELECT sp.period_start
-   FROM subscription_periods sp
-   WHERE sp.user_id = p.id AND sp.period_end > NOW()
-   ORDER BY sp.period_end DESC LIMIT 1) as current_period_start,
-   
-  (SELECT sp.auto_renew
-   FROM subscription_periods sp
-   WHERE sp.user_id = p.id AND sp.period_end > NOW()
-   ORDER BY sp.period_end DESC LIMIT 1) as auto_renew_enabled
-
-FROM public.profiles p
-WHERE p.deleted_at IS NULL
-ORDER BY 
-  CASE p.subscription_status
-    WHEN 'active' THEN 1
-    WHEN 'cancelled' THEN 2
-    WHEN 'expired' THEN 3
-    ELSE 4
-  END,
-  p.subscription_expires_at ASC NULLS LAST;
-
-COMMENT ON VIEW public.subscription_health_view IS 
-'📊 v9.4.2: Complete subscription health dashboard with status, days remaining, and renewal info. 
-Includes subscription_cancel_at_period_end for pending cancellations.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 2.8.2: Revenue Analytics View
@@ -1068,37 +812,71 @@ GRANT EXECUTE ON FUNCTION public.restore_user_from_archive(UUID, UUID) TO authen
 GRANT EXECUTE ON FUNCTION public.permanent_delete_from_archive(UUID, UUID) TO authenticated;
 
 -- ===============================================
--- 🆕 3.1: FIXED get_user_subscription_status - FINAL VERSION
+-- 🆕 3.1: UNIFIED get_user_subscription_status v6.0.0
+-- ===============================================
+-- Returns ALL 31 fields required by frontend including Whop integration
 -- ===============================================
 
 DO $$
 BEGIN
-  RAISE NOTICE '[3.1/10] 🔧 Creating FIXED get_user_subscription_status function...';
+  RAISE NOTICE '[3.1/10] 🔧 Creating UNIFIED get_user_subscription_status v6.0.0...';
 END $$;
 
 DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_user_subscription_status(user_id_param UUID)
 RETURNS TABLE (
-  remaining INT,
-  used INT,
-  max_trades INT,
+  -- Core trade limits
+  remaining INTEGER,
+  used INTEGER,
+  max_trades INTEGER,
   plan TEXT,
   reset_date TEXT,
+  
+  -- Account info
   account_type TEXT,
+  role TEXT,
+  
+  -- Subscription details
   subscription_interval TEXT,
   subscription_status TEXT,
   subscription_expires_at TIMESTAMPTZ,
-  subscription_cancel_at_period_end BOOLEAN,  -- ✅ חדש!
-  role TEXT,
+  subscription_cancel_at_period_end BOOLEAN,
+  subscription_started_at TIMESTAMPTZ,
+  
+  -- Portfolio & Risk
   initial_portfolio NUMERIC,
   current_portfolio NUMERIC,
-  is_lifetime_limit BOOLEAN  -- ✅ חדש! לציין אם הלימיט הוא lifetime
-) 
+  portfolio_size NUMERIC,
+  total_pnl NUMERIC,
+  risk_mode TEXT,
+  risk_percentage NUMERIC,
+  fixed_risk_amount NUMERIC,
+  
+  -- Trade counts
+  trade_count INTEGER,
+  current_month_trades_count INTEGER,
+  current_month_active_days INTEGER,
+  billing_cycle_start TEXT,
+  
+  -- Flags
+  is_lifetime BOOLEAN,
+  
+  -- Whop integration (CRITICAL!)
+  payment_provider TEXT,
+  whop_user_id TEXT,
+  whop_membership_id TEXT,
+  whop_product_id TEXT,
+  whop_plan_id TEXT,
+  whop_customer_email TEXT,
+  
+  -- Subscription management
+  pending_downgrade_plan TEXT
+)
 LANGUAGE plpgsql
-SECURITY DEFINER
 STABLE
-SET search_path = public
+SECURITY DEFINER
+SET search_path TO 'public'
 AS $$
 DECLARE
   v_profile RECORD;
@@ -1106,6 +884,7 @@ DECLARE
   v_reset_date DATE;
   v_is_lifetime BOOLEAN;
 BEGIN
+  -- Fetch all profile data in one query
   SELECT 
     p.account_type,
     p.max_trades,
@@ -1113,91 +892,142 @@ BEGIN
     p.subscription_status,
     p.subscription_expires_at,
     p.subscription_cancel_at_period_end,
+    p.subscription_started_at,
     COALESCE(p.billing_cycle_start, CURRENT_DATE) as billing_cycle_start,
     COALESCE(p.role, 'user') as role,
     COALESCE(p.current_month_trades_count, 0) as monthly_count,
     COALESCE(p.trade_count, 0) as lifetime_count,
+    COALESCE(p.current_month_active_days, 0) as active_days,
     COALESCE(p.initial_portfolio, 10000) as initial_portfolio,
-    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio
+    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio,
+    COALESCE(p.portfolio_size, p.current_portfolio, 10000) as portfolio_size,
+    COALESCE(p.total_pnl, 0) as total_pnl,
+    COALESCE(p.risk_mode, 'percentage') as risk_mode,
+    p.risk_percentage,
+    p.fixed_risk_amount,
+    p.payment_provider,
+    p.whop_user_id,
+    p.whop_membership_id,
+    p.whop_product_id,
+    p.whop_plan_id,
+    p.whop_customer_email,
+    p.pending_downgrade_plan
   INTO v_profile
   FROM public.profiles p
   WHERE p.id = user_id_param;
   
+  -- Handle user not found
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      10::INT, 0::INT, 10::INT, 'Free Plan'::TEXT, NULL::TEXT,
-      'free'::TEXT, NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE,
-      'user'::TEXT, 10000::NUMERIC, 10000::NUMERIC, TRUE;
+      10::INTEGER, 0::INTEGER, 10::INTEGER, 'Free Plan'::TEXT, NULL::TEXT,
+      'free'::TEXT, 'user'::TEXT, 
+      NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
+      'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
+      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT, TRUE,
+      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
     RETURN;
   END IF;
   
-  -- Determine if lifetime limit (FREE only)
+  -- Determine if lifetime limit (FREE users only)
   v_is_lifetime := (v_profile.account_type = 'free');
   
-  -- Calculate reset date (only for non-FREE)
+  -- Calculate reset date (only for non-FREE users)
   IF NOT v_is_lifetime THEN
     v_reset_date := (DATE_TRUNC('month', v_profile.billing_cycle_start) + INTERVAL '1 month')::DATE;
   END IF;
   
-  -- Determine which counter to use
-  IF v_is_lifetime THEN
-    v_trades_used := v_profile.lifetime_count;
-  ELSE
-    v_trades_used := v_profile.monthly_count;
-  END IF;
+  -- Determine which trade counter to use
+  v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
   
-  -- Handle unlimited users
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type = 'premium' THEN
+  -- Handle unlimited users (premium/admin/vip)
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
     RETURN QUERY SELECT
-      999999::INT,
-      v_trades_used::INT,
-      999999::INT,
-      CASE v_profile.account_type
-        WHEN 'premium' THEN 'Premium Plan'
-        ELSE 'Admin'
+      999999::INTEGER,
+      v_trades_used::INTEGER,
+      999999::INTEGER,
+      CASE v_profile.account_type 
+        WHEN 'premium' THEN 'Premium Plan' 
+        WHEN 'vip' THEN 'VIP Plan' 
+        ELSE 'Admin' 
       END::TEXT,
       v_reset_date::TEXT,
       v_profile.account_type::TEXT,
+      v_profile.role::TEXT,
       v_profile.subscription_interval::TEXT,
       v_profile.subscription_status::TEXT,
       v_profile.subscription_expires_at::TIMESTAMPTZ,
       COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
-      v_profile.role::TEXT,
+      v_profile.subscription_started_at::TIMESTAMPTZ,
       v_profile.initial_portfolio::NUMERIC,
       v_profile.current_portfolio::NUMERIC,
-      FALSE;  -- Not lifetime for premium/admin
+      v_profile.portfolio_size::NUMERIC,
+      v_profile.total_pnl::NUMERIC,
+      v_profile.risk_mode::TEXT,
+      v_profile.risk_percentage::NUMERIC,
+      v_profile.fixed_risk_amount::NUMERIC,
+      v_profile.lifetime_count::INTEGER,
+      v_profile.monthly_count::INTEGER,
+      v_profile.active_days::INTEGER,
+      v_profile.billing_cycle_start::TEXT,
+      FALSE,
+      v_profile.payment_provider::TEXT,
+      v_profile.whop_user_id::TEXT,
+      v_profile.whop_membership_id::TEXT,
+      v_profile.whop_product_id::TEXT,
+      v_profile.whop_plan_id::TEXT,
+      v_profile.whop_customer_email::TEXT,
+      v_profile.pending_downgrade_plan::TEXT;
     RETURN;
   END IF;
   
-  -- Regular user
+  -- Regular users (free/basic/trial)
   RETURN QUERY SELECT
-    GREATEST(0, v_profile.max_trades - v_trades_used)::INT,
-    v_trades_used::INT,
-    v_profile.max_trades::INT,
-    CASE v_profile.account_type
-      WHEN 'free' THEN 'Free Plan'
-      WHEN 'basic' THEN 'Basic Plan'
-      WHEN 'trial' THEN 'Trial'
-      ELSE 'Free Plan'
+    GREATEST(0, v_profile.max_trades - v_trades_used)::INTEGER,
+    v_trades_used::INTEGER,
+    v_profile.max_trades::INTEGER,
+    CASE v_profile.account_type 
+      WHEN 'free' THEN 'Free Plan' 
+      WHEN 'basic' THEN 'Basic Plan' 
+      WHEN 'trial' THEN 'Trial' 
+      ELSE 'Free Plan' 
     END::TEXT,
     v_reset_date::TEXT,
     v_profile.account_type::TEXT,
+    v_profile.role::TEXT,
     v_profile.subscription_interval::TEXT,
     v_profile.subscription_status::TEXT,
     v_profile.subscription_expires_at::TIMESTAMPTZ,
     COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
-    v_profile.role::TEXT,
+    v_profile.subscription_started_at::TIMESTAMPTZ,
     v_profile.initial_portfolio::NUMERIC,
     v_profile.current_portfolio::NUMERIC,
-    v_is_lifetime;
+    v_profile.portfolio_size::NUMERIC,
+    v_profile.total_pnl::NUMERIC,
+    v_profile.risk_mode::TEXT,
+    v_profile.risk_percentage::NUMERIC,
+    v_profile.fixed_risk_amount::NUMERIC,
+    v_profile.lifetime_count::INTEGER,
+    v_profile.monthly_count::INTEGER,
+    v_profile.active_days::INTEGER,
+    v_profile.billing_cycle_start::TEXT,
+    v_is_lifetime,
+    v_profile.payment_provider::TEXT,
+    v_profile.whop_user_id::TEXT,
+    v_profile.whop_membership_id::TEXT,
+    v_profile.whop_product_id::TEXT,
+    v_profile.whop_plan_id::TEXT,
+    v_profile.whop_customer_email::TEXT,
+    v_profile.pending_downgrade_plan::TEXT;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v9.4.2-FINAL: Returns subscription status with is_lifetime_limit flag. 
-FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset.';
+'v6.0.0 UNIFIED: Returns ALL 31 fields including Whop integration.
+FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset, PREMIUM = unlimited.';
 
 GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO anon;
 
 -- ===============================================
 -- SECTION 3: VIEW PERMISSIONS - FIXED VERSION
@@ -2072,77 +1902,6 @@ SET
 WHERE 
   stop_price IS NOT NULL 
   AND (risk_pts IS NULL OR risk_usd IS NULL OR rr IS NULL);
-
--- ===============================================
--- SECTION 6: RECALCULATE PORTFOLIO STATS
--- ===============================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '[6/10] 💰 Recalculating portfolio stats...';
-END $$;
-
-UPDATE public.profiles p
-SET total_pnl = COALESCE(
-  (SELECT SUM(t.pnl) FROM public.trades t WHERE t.user_id = p.id AND t.exit_price IS NOT NULL),
-  0
-);
-
-UPDATE public.profiles p
-SET trade_count = COALESCE(
-  (SELECT COUNT(*) FROM public.trades t WHERE t.user_id = p.id),
-  0
-);
-
-UPDATE public.profiles
-SET current_portfolio = initial_portfolio + COALESCE(total_pnl, 0)
-WHERE current_portfolio IS NULL OR current_portfolio != (initial_portfolio + COALESCE(total_pnl, 0));
-
--- ===============================================
--- SECTION 7: SETUP SUPER ADMIN
--- ===============================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '[7/10] 👑 Setting up super admin...';
-END $$;
-
-UPDATE public.profiles
-SET 
-  role = 'super_admin',
-  account_type = 'premium',
-  subscription_status = 'active',
-  subscription_interval = 'yearly',
-  max_trades = 999999,
-  is_banned = false,
-  subscription_started_at = NOW(),
-  subscription_expires_at = NOW() + INTERVAL '100 years',
-  subscription_cancel_at_period_end = FALSE,
-  metadata = jsonb_build_object(
-    'admin_setup', true, 
-    'setup_date', NOW(),
-    'setup_reason', 'Platform Owner - Full Access'
-  )
-WHERE email = 'elad2550@gmail.com';
-
-DO $$
-BEGIN
-  INSERT INTO public.admin_audit_log (admin_id, action, details)
-  SELECT 
-    id,
-    'ADMIN_SETUP',
-    jsonb_build_object(
-      'email', 'elad2550@gmail.com',
-      'role', 'super_admin',
-      'setup_type', 'initial_migration',
-      'timestamp', NOW()
-    )
-  FROM public.profiles
-  WHERE email = 'elad2550@gmail.com'
-  ON CONFLICT DO NOTHING;
-EXCEPTION WHEN undefined_table THEN
-  NULL;
-END $$;
 
 -- ===============================================
 -- 🔴 SECTION 8: RLS POLICIES - REMOVED!

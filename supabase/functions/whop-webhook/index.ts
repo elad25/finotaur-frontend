@@ -42,6 +42,12 @@ const NEWSLETTER_PRODUCT_IDS = new Set([
   'prod_qlaV5Uu6LZlYn',  // War Zone Intelligence Newsletter
 ]);
 
+// 🔥 NEW: Top Secret Product IDs
+const TOP_SECRET_PRODUCT_IDS = new Set([
+  'prod_nl6YXbLp4t5pz',  // Top Secret
+]);
+
+
 // Default commission rates (fallback if DB config not found)
 const DEFAULT_COMMISSION_RATES = {
   tier_1: 0.10,  // 10%
@@ -148,7 +154,8 @@ interface PlanInfo {
   interval: string;
   price: number;
   maxTrades: number;
-  isNewsletter: boolean;  // 🔥 NEW
+  isNewsletter: boolean;
+  isTopSecret: boolean;  // 🔥 NEW
 }
 
 interface CommissionConfig {
@@ -173,6 +180,13 @@ function isNewsletter(productId: string | undefined): boolean {
   if (!productId) return false;
   return NEWSLETTER_PRODUCT_IDS.has(productId);
 }
+
+// 🔥 NEW: Check if product is Top Secret
+function isTopSecret(productId: string | undefined): boolean {
+  if (!productId) return false;
+  return TOP_SECRET_PRODUCT_IDS.has(productId);
+}
+
 
 // ============================================
 // SIGNATURE VERIFICATION
@@ -274,24 +288,26 @@ async function getPlanInfo(
     .eq("is_active", true)
     .maybeSingle();
 
-  if (dbPlan) {
+if (dbPlan) {
     return {
       plan: dbPlan.finotaur_plan,
       interval: dbPlan.billing_interval,
       price: parseFloat(dbPlan.price_usd),
       maxTrades: dbPlan.max_trades === -1 ? 999999 : dbPlan.max_trades,
-      isNewsletter: dbPlan.finotaur_plan === 'newsletter',  // 🔥 NEW
+      isNewsletter: dbPlan.finotaur_plan === 'newsletter',
+      isTopSecret: dbPlan.finotaur_plan === 'top_secret',  // 🔥 ADD THIS
     };
   }
 
-  // Fallback for journal subscriptions
-  const fallbackMapping: Record<string, PlanInfo> = {
-    "prod_ZaDN418HLst3r": { plan: "basic", interval: "monthly", price: 19.99, maxTrades: 25, isNewsletter: false },
-    "prod_bPwSoYGedsbyh": { plan: "basic", interval: "yearly", price: 149.00, maxTrades: 25, isNewsletter: false },
-    "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false },
-    "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false },
+    const fallbackMapping: Record<string, PlanInfo> = {
+    "prod_ZaDN418HLst3r": { plan: "basic", interval: "monthly", price: 19.99, maxTrades: 25, isNewsletter: false, isTopSecret: false },
+    "prod_bPwSoYGedsbyh": { plan: "basic", interval: "yearly", price: 149.00, maxTrades: 25, isNewsletter: false, isTopSecret: false },
+    "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
+    "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     // Newsletter fallback
-    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 20.00, maxTrades: 0, isNewsletter: true },
+    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 20.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    // Top Secret fallback
+    "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 35.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },
   };
 
   return fallbackMapping[productId] || null;
@@ -542,6 +558,7 @@ serve(async (req: Request) => {
 
     // 🔥 NEW: Detect if this is a newsletter event
     const isNewsletterEvent = isNewsletter(productId);
+    const isTopSecretEvent = isTopSecret(productId);
 
     console.log("📨 Webhook received:", {
       eventType,
@@ -551,6 +568,7 @@ serve(async (req: Request) => {
       whopEmail: payload.data.user?.email,
       productId,
       isNewsletter: isNewsletterEvent,  // 🔥 Log newsletter detection
+      isTopSecret: isTopSecretEvent,
     });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -702,7 +720,7 @@ async function handlePaymentSucceeded(
     }
 
     // ═══════════════════════════════════════════════
-    // 🔥 NEWSLETTER PAYMENT - Use RPC (unchanged)
+    // NEWSLETTER PAYMENT - Use RPC
     // ═══════════════════════════════════════════════
     
     if (isNewsletterPayment) {
@@ -727,6 +745,63 @@ async function handlePaymentSucceeded(
         success: result?.success ?? true, 
         message: `Newsletter payment: ${userEmail} → ${result?.newsletter_status || 'active'}` 
       };
+    }
+
+       // ═══════════════════════════════════════════════
+    // 🔥 NEW: TOP SECRET PAYMENT - Use RPC
+    // ═══════════════════════════════════════════════
+    
+    const isTopSecretPayment = isTopSecret(productId);
+    
+    if (isTopSecretPayment) {
+      const planId = data.plan?.id || '';
+      
+      if (isFirstPayment) {
+        console.log("🔐 Calling activate_top_secret_subscription RPC (first payment)...");
+        
+        const { data: result, error } = await supabase.rpc('activate_top_secret_subscription', {
+          p_user_email: userEmail,
+          p_whop_user_id: whopUserId,
+          p_whop_membership_id: membershipId,
+          p_whop_product_id: productId,
+          p_whop_plan_id: planId,
+          p_finotaur_user_id: finotaurUserId || null,
+        });
+
+        if (error) {
+          console.error("❌ activate_top_secret_subscription RPC error:", error);
+          return { success: false, message: `Top Secret activation failed: ${error.message}` };
+        }
+
+        console.log("✅ Top Secret activation RPC result:", result);
+        return { 
+          success: result?.success ?? true, 
+          message: `Top Secret activated: ${userEmail} → ${result?.interval || 'monthly'} ($${result?.price_usd || paymentAmount})` 
+        };
+      } else {
+        console.log("🔐 Calling handle_top_secret_payment RPC (recurring payment)...");
+        
+        const { data: result, error } = await supabase.rpc('handle_top_secret_payment', {
+          p_user_email: userEmail,
+          p_whop_user_id: whopUserId,
+          p_whop_membership_id: membershipId,
+          p_whop_product_id: productId,
+          p_whop_plan_id: planId,
+          p_payment_amount: paymentAmount,
+          p_finotaur_user_id: finotaurUserId || null,
+        });
+
+        if (error) {
+          console.error("❌ handle_top_secret_payment RPC error:", error);
+          return { success: false, message: `Top Secret payment failed: ${error.message}` };
+        }
+
+        console.log("✅ Top Secret payment RPC result:", result);
+        return { 
+          success: result?.success ?? true, 
+          message: `Top Secret payment: ${userEmail} → ${result?.interval || 'monthly'}` 
+        };
+      }
     }
 
     // ═══════════════════════════════════════════════
@@ -880,18 +955,20 @@ async function handleMembershipActivated(
   const whopUserId = data.user?.id;
   const productId = data.product?.id;
 
-  // 🔥 NEW: Check if this is a newsletter activation
+  // Check product types
   const isNewsletterActivation = isNewsletter(productId);
+  const isTopSecretActivation = isTopSecret(productId);  // 🔥 NEW
 
   console.log("🎫 Processing membership.activated:", {
     membershipId,
     userEmail,
     productId,
     isNewsletter: isNewsletterActivation,
+    isTopSecret: isTopSecretActivation,  // 🔥 NEW
     finotaurUserId,
   });
 
-  // 🔥 NEW: Handle newsletter activation (trial start)
+  // Handle newsletter activation (trial start)
   if (isNewsletterActivation) {
     return await handleNewsletterActivation(supabase, {
       userEmail,
@@ -901,6 +978,18 @@ async function handleMembershipActivated(
       finotaurUserId,
     });
   }
+
+  // 🔥 NEW: Handle Top Secret activation
+  if (isTopSecretActivation) {
+    return await handleTopSecretActivation(supabase, {
+      userEmail,
+      whopUserId,
+      membershipId,
+      productId,
+      finotaurUserId,
+    });
+  }
+
 
   // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
 
@@ -983,6 +1072,60 @@ const { data: result, error } = await supabase.rpc('activate_newsletter_subscrip
 }
 
 // ============================================
+// 🔥 NEW: TOP SECRET ACTIVATION HANDLER
+// ============================================
+
+interface TopSecretActivationParams {
+  userEmail: string | undefined;
+  whopUserId: string;
+  membershipId: string;
+  productId: string;
+  finotaurUserId: string | null;
+}
+
+async function handleTopSecretActivation(
+  supabase: SupabaseClient,
+  params: TopSecretActivationParams
+): Promise<{ success: boolean; message: string }> {
+  const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
+
+  console.log("🔐 Processing TOP SECRET activation:", {
+    userEmail,
+    finotaurUserId,
+    membershipId,
+  });
+
+  try {
+    // Note: For membership.activated without payment (which shouldn't happen for Top Secret 
+    // since it has no trial), we still call activate to ensure the user is set up
+    const { data: result, error } = await supabase.rpc('activate_top_secret_subscription', {
+      p_user_email: userEmail || '',
+      p_whop_user_id: whopUserId || '',
+      p_whop_membership_id: membershipId || '',
+      p_whop_product_id: productId || '',
+      p_whop_plan_id: '', // Will be determined from payment
+      p_finotaur_user_id: finotaurUserId || null,
+    });
+
+    if (error) {
+      console.error("❌ activate_top_secret_subscription RPC error:", error);
+      return { success: false, message: `Top Secret activation failed: ${error.message}` };
+    }
+
+    console.log("✅ Top Secret activated:", result);
+
+    return { 
+      success: true, 
+      message: `Top Secret activated: ${userEmail} → ${result?.top_secret_status || 'active'}` 
+    };
+
+  } catch (error) {
+    console.error("❌ handleTopSecretActivation error:", error);
+    return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+// ============================================
 // MEMBERSHIP DEACTIVATED
 // ============================================
 
@@ -996,18 +1139,21 @@ async function handleMembershipDeactivated(
   const userEmail = data.user?.email || '';
   const productId = data.product?.id || '';
 
+ 
   const isNewsletterDeactivation = isNewsletter(productId);
+  const isTopSecretDeactivation = isTopSecret(productId);  // 🔥 NEW
 
   console.log("❌ Processing membership.deactivated:", {
     membershipId,
     userEmail,
     productId,
     isNewsletter: isNewsletterDeactivation,
+    isTopSecret: isTopSecretDeactivation,  // 🔥 NEW
     finotaurUserId,
   });
 
   // ═══════════════════════════════════════════════
-  // NEWSLETTER DEACTIVATION - Use RPC (unchanged)
+  // NEWSLETTER DEACTIVATION - Use RPC
   // ═══════════════════════════════════════════════
 
   if (isNewsletterDeactivation) {
@@ -1028,6 +1174,30 @@ async function handleMembershipDeactivated(
       message: `Newsletter deactivated: ${result?.email || userEmail}` 
     };
   }
+
+  // ═══════════════════════════════════════════════
+  // 🔥 NEW: TOP SECRET DEACTIVATION - Use RPC
+  // ═══════════════════════════════════════════════
+
+  if (isTopSecretDeactivation) {
+    console.log("🔐 Calling deactivate_top_secret_subscription RPC...");
+    
+    const { data: result, error } = await supabase.rpc('deactivate_top_secret_subscription', {
+      p_whop_membership_id: membershipId,
+    });
+
+    if (error) {
+      console.error("❌ deactivate_top_secret_subscription RPC error:", error);
+      return { success: false, message: `Top Secret deactivation failed: ${error.message}` };
+    }
+
+    console.log("✅ Top Secret deactivation RPC result:", result);
+    return { 
+      success: result?.success ?? true, 
+      message: `Top Secret deactivated: ${result?.email || userEmail}` 
+    };
+  }
+
 
   // ═══════════════════════════════════════════════
   // 🔥 JOURNAL SUBSCRIPTION - Use RPC! (NEW!)

@@ -391,16 +391,16 @@ CREATE TRIGGER trigger_initialize_risk_settings
 COMMENT ON TRIGGER trigger_initialize_risk_settings ON public.profiles IS 
 'v8.5.9: Auto-initialize risk settings on profile creation';
 
--- Auto-Create Profile on Signup (WITH AFFILIATE CODE)
+-- Auto-Create Profile on Signup (FIXED - NO AFFILIATE CODE)
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER 
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
-  v_affiliate_code TEXT;
   v_display_name TEXT;
 BEGIN
   -- Generate display name
@@ -410,25 +410,15 @@ BEGIN
     NEW.raw_user_meta_data->>'name',
     split_part(NEW.email, '@', 1)
   );
-  
-  -- Generate unique affiliate code
-  v_affiliate_code := UPPER(LEFT(COALESCE(v_display_name, 'USR'), 3)) || 
-                      LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
-  
-  -- Ensure uniqueness (retry if exists)
-  WHILE EXISTS (SELECT 1 FROM public.profiles WHERE affiliate_code = v_affiliate_code) LOOP
-    v_affiliate_code := UPPER(LEFT(COALESCE(v_display_name, 'USR'), 3)) || 
-                        LPAD(FLOOR(RANDOM() * 10000)::TEXT, 4, '0');
-  END LOOP;
 
   INSERT INTO public.profiles (
     id, 
     email, 
     display_name,
-    affiliate_code,
     account_type, 
     max_trades, 
     trade_count, 
+    current_month_trades_count,
     billing_cycle_start,
     current_portfolio, 
     total_pnl, 
@@ -438,15 +428,16 @@ BEGIN
     risk_percentage,
     role,
     is_banned,
+    subscription_status,
     created_at,
     updated_at
   ) VALUES (
     NEW.id,
     NEW.email,
     v_display_name,
-    v_affiliate_code,
     'free',
     10,
+    0,
     0,
     CURRENT_DATE,
     10000,
@@ -457,21 +448,25 @@ BEGIN
     1.0,
     'user',
     FALSE,
+    'active',
     NOW(),
     NOW()
   )
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
     display_name = COALESCE(profiles.display_name, EXCLUDED.display_name),
-    affiliate_code = COALESCE(profiles.affiliate_code, EXCLUDED.affiliate_code),
     updated_at = NOW();
   
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Log error but don't fail signup
+  RAISE WARNING 'handle_new_user failed for %: %', NEW.email, SQLERRM;
   RETURN NEW;
 END;
 $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
-'v8.5.9-WITH-AFFILIATE: Creates profile with affiliate_code on user signup';
+'v9.5.0-FIXED: Creates profile on signup. Removed affiliate_code. Has error handling.';
 
 DO $$
 BEGIN
@@ -1208,45 +1203,6 @@ BEGIN
   RAISE NOTICE '[5A/10] 🆕 Creating SnapTrade sync log functions...';
 END $$;
 
-DROP FUNCTION IF EXISTS get_latest_sync_for_user(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION get_latest_sync_for_user(p_user_id UUID)
-RETURNS public.snaptrade_sync_log AS $$
-    SELECT * 
-    FROM public.snaptrade_sync_log
-    WHERE user_id = p_user_id
-    ORDER BY created_at DESC
-    LIMIT 1;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
-COMMENT ON FUNCTION get_latest_sync_for_user IS 
-'v8.5.0: Gets the most recent sync log entry for a user';
-
-DROP FUNCTION IF EXISTS get_user_sync_stats(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION get_user_sync_stats(p_user_id UUID)
-RETURNS TABLE (
-    total_syncs BIGINT,
-    successful_syncs BIGINT,
-    failed_syncs BIGINT,
-    total_trades_imported BIGINT,
-    last_sync_at TIMESTAMPTZ,
-    avg_sync_duration_seconds NUMERIC
-) AS $$
-    SELECT 
-        COUNT(*)::BIGINT as total_syncs,
-        COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as successful_syncs,
-        COUNT(*) FILTER (WHERE status = 'failed')::BIGINT as failed_syncs,
-        COALESCE(SUM(trades_imported), 0)::BIGINT as total_trades_imported,
-        MAX(created_at) as last_sync_at,
-        ROUND(AVG(duration_seconds)::NUMERIC, 2) as avg_sync_duration_seconds
-    FROM public.snaptrade_sync_log
-    WHERE user_id = p_user_id;
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
-COMMENT ON FUNCTION get_user_sync_stats IS 
-'v8.5.0: Gets aggregated sync statistics for a user';
-
 DROP FUNCTION IF EXISTS cleanup_old_sync_logs() CASCADE;
 
 CREATE OR REPLACE FUNCTION cleanup_old_sync_logs()
@@ -1275,8 +1231,6 @@ COMMENT ON FUNCTION cleanup_old_sync_logs IS
 'v8.5.0: Deletes old sync logs, keeping only the last 100 per user';
 
 -- Grant permissions
-GRANT EXECUTE ON FUNCTION get_latest_sync_for_user(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_user_sync_stats(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION cleanup_old_sync_logs() TO service_role;
 
 DO $$
@@ -1292,20 +1246,6 @@ DO $$
 BEGIN
   RAISE NOTICE '[5B/10] 🆕 Creating SnapTrade status functions...';
 END $$;
-
-DROP FUNCTION IF EXISTS is_snaptrade_connected(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION is_snaptrade_connected(p_user_id UUID)
-RETURNS BOOLEAN AS $$
-    SELECT EXISTS (
-        SELECT 1 
-        FROM snaptrade_users 
-        WHERE user_id = p_user_id
-    );
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
-
-COMMENT ON FUNCTION is_snaptrade_connected IS 
-'v8.5.0: Returns true if user has SnapTrade connected';
 
 DROP FUNCTION IF EXISTS get_last_successful_sync_date(UUID) CASCADE;
 
@@ -1353,7 +1293,6 @@ COMMENT ON FUNCTION count_pending_snaptrade_trades IS
 'v8.5.0: Counts trades from current running sync';
 
 -- Grant permissions
-GRANT EXECUTE ON FUNCTION is_snaptrade_connected(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_last_successful_sync_date(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION count_pending_snaptrade_trades(UUID) TO authenticated;
 
@@ -1370,74 +1309,6 @@ DO $$
 BEGIN
   RAISE NOTICE '[5C/10] 🆕 Creating SnapTrade analytics functions...';
 END $$;
-
-DROP FUNCTION IF EXISTS get_snaptrade_import_stats(UUID, DATE, DATE) CASCADE;
-
-CREATE OR REPLACE FUNCTION get_snaptrade_import_stats(
-    p_user_id UUID,
-    p_start_date DATE DEFAULT NULL,
-    p_end_date DATE DEFAULT NULL
-)
-RETURNS TABLE (
-    total_imports INT,
-    unique_symbols INT,
-    total_commission NUMERIC,
-    buy_count INT,
-    sell_count INT,
-    avg_trade_size NUMERIC,
-    date_range_start DATE,
-    date_range_end DATE
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        COUNT(*)::INT as total_imports,
-        COUNT(DISTINCT symbol)::INT as unique_symbols,
-        ROUND(SUM(fees)::NUMERIC, 2) as total_commission,
-        COUNT(*) FILTER (WHERE side = 'LONG')::INT as buy_count,
-        COUNT(*) FILTER (WHERE side = 'SHORT')::INT as sell_count,
-        ROUND(AVG(quantity * entry_price)::NUMERIC, 2) as avg_trade_size,
-        COALESCE(p_start_date, MIN(open_at::DATE)) as date_range_start,
-        COALESCE(p_end_date, MAX(open_at::DATE)) as date_range_end
-    FROM trades
-    WHERE user_id = p_user_id
-    AND import_source = 'snaptrade'
-    AND (p_start_date IS NULL OR open_at::DATE >= p_start_date)
-    AND (p_end_date IS NULL OR open_at::DATE <= p_end_date);
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
-COMMENT ON FUNCTION get_snaptrade_import_stats IS 
-'v8.5.0: Gets detailed statistics for SnapTrade imports in a date range';
-
-DROP FUNCTION IF EXISTS find_duplicate_snaptrade_activities(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION find_duplicate_snaptrade_activities(p_user_id UUID)
-RETURNS TABLE (
-    snaptrade_activity_id TEXT,
-    duplicate_count BIGINT,
-    trade_ids UUID[]
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        t.snaptrade_activity_id,
-        COUNT(*)::BIGINT as duplicate_count,
-        ARRAY_AGG(t.id) as trade_ids
-    FROM trades t
-    WHERE t.user_id = p_user_id
-    AND t.snaptrade_activity_id IS NOT NULL
-    GROUP BY t.snaptrade_activity_id
-    HAVING COUNT(*) > 1;
-END;
-$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
-
-COMMENT ON FUNCTION find_duplicate_snaptrade_activities IS 
-'v8.5.0: Finds any duplicate SnapTrade imports (should be none)';
-
--- Grant permissions
-GRANT EXECUTE ON FUNCTION get_snaptrade_import_stats(UUID, DATE, DATE) TO authenticated;
-GRANT EXECUTE ON FUNCTION find_duplicate_snaptrade_activities(UUID) TO authenticated;
 
 DO $$
 BEGIN
@@ -1794,96 +1665,6 @@ $$;
 COMMENT ON FUNCTION public.admin_grant_free_access IS 
 'v8.5.9: Allows admin to grant free access without payment';
 
--- ✅ Cancel Subscription
--- Drop ALL existing versions first
-DO $$
-BEGIN
-  -- Drop all possible signatures
-  DROP FUNCTION IF EXISTS public.cancel_subscription(UUID) CASCADE;
-  DROP FUNCTION IF EXISTS public.cancel_subscription(UUID, BOOLEAN) CASCADE;
-  DROP FUNCTION IF EXISTS public.cancel_subscription(UUID, TEXT) CASCADE;
-  DROP FUNCTION IF EXISTS public.cancel_subscription(UUID, TEXT, BOOLEAN) CASCADE;
-EXCEPTION WHEN OTHERS THEN
-  NULL; -- Ignore errors
-END $$;
-
-CREATE OR REPLACE FUNCTION public.cancel_subscription(
-  p_user_id UUID,
-  p_reason TEXT DEFAULT NULL,
-  p_immediate BOOLEAN DEFAULT FALSE
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_profile RECORD;
-  v_effective_date TIMESTAMPTZ;
-  v_days_remaining INTEGER;
-BEGIN
-  SELECT * INTO v_profile
-  FROM public.profiles
-  WHERE id = p_user_id;
-  
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-  
-  IF v_profile.account_type = 'free' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'No active subscription to cancel');
-  END IF;
-  
-  IF p_immediate THEN
-    v_effective_date := NOW();
-    
-    UPDATE public.profiles
-    SET 
-      previous_account_type = account_type,
-      account_type = 'free',
-      max_trades = 10,
-      subscription_status = 'expired',
-      subscription_interval = NULL,
-      payment_provider = NULL,
-      subscription_expires_at = NOW(),
-      cancellation_reason = p_reason,
-      cancellation_requested_at = NOW(),
-      updated_at = NOW()
-    WHERE id = p_user_id;
-  ELSE
-    v_effective_date := COALESCE(v_profile.subscription_expires_at, NOW());
-    
-    UPDATE public.profiles
-    SET 
-      subscription_status = 'cancelled',
-      cancellation_reason = p_reason,
-      cancellation_requested_at = NOW(),
-      cancellation_effective_date = v_effective_date,
-      updated_at = NOW()
-    WHERE id = p_user_id;
-  END IF;
-  
-  v_days_remaining := GREATEST(0, EXTRACT(DAY FROM (v_effective_date - NOW()))::INTEGER);
-  
-  RETURN jsonb_build_object(
-    'success', true,
-    'message', CASE 
-      WHEN p_immediate THEN 'Subscription cancelled immediately'
-      ELSE format('Subscription cancelled. Access continues until %s', v_effective_date::DATE)
-    END,
-    'data', jsonb_build_object(
-      'effective_date', v_effective_date,
-      'days_remaining', v_days_remaining,
-      'immediate', p_immediate,
-      'will_downgrade_to', 'free'
-    )
-  );
-END;
-$$;
-
-COMMENT ON FUNCTION public.cancel_subscription IS 
-'v8.5.9: GRACEFUL CANCELLATION: Stops auto-renewal but keeps access until period end';
-
-
 -- ✅ Get Current Pricing
 DROP FUNCTION IF EXISTS public.get_current_price(TEXT, TEXT) CASCADE;
 
@@ -2216,57 +1997,6 @@ $$;
 COMMENT ON FUNCTION public.reactivate_subscription IS 
 'v8.5.9: REACTIVATION: Allows user to undo cancellation before period ends';
 
--- ✅ Process Expired Subscriptions (CRON)
-DROP FUNCTION IF EXISTS public.process_expired_subscriptions() CASCADE;
-
-CREATE OR REPLACE FUNCTION public.process_expired_subscriptions()
-RETURNS TABLE(
-  downgraded_count INTEGER,
-  downgraded_emails TEXT[]
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_downgraded_users RECORD;
-  v_emails TEXT[] := ARRAY[]::TEXT[];
-  v_count INTEGER := 0;
-BEGIN
-  FOR v_downgraded_users IN
-    SELECT 
-      p.id,
-      p.email,
-      p.account_type as old_plan,
-      p.subscription_expires_at
-    FROM public.profiles p
-    WHERE p.subscription_expires_at < NOW()
-      AND p.account_type IN ('basic', 'premium')
-      AND p.subscription_status IN ('active', 'cancelled')
-    ORDER BY p.subscription_expires_at ASC
-    LIMIT 1000
-  LOOP
-    UPDATE public.profiles
-    SET 
-      previous_account_type = v_downgraded_users.old_plan,
-      account_type = 'free',
-      max_trades = 10,
-      subscription_status = 'expired',
-      subscription_interval = NULL,
-      payment_provider = NULL,
-      updated_at = NOW()
-    WHERE id = v_downgraded_users.id;
-    
-    v_emails := array_append(v_emails, v_downgraded_users.email);
-    v_count := v_count + 1;
-  END LOOP;
-  
-  RETURN QUERY SELECT v_count, v_emails;
-END;
-$$;
-
-COMMENT ON FUNCTION public.process_expired_subscriptions IS 
-'v8.5.9: CRON JOB: Downgrades expired subscriptions to FREE (runs daily at 2 AM)';
-
 -- Grant permissions for payment functions
 GRANT EXECUTE ON FUNCTION public.verify_paid_access(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_grant_free_access(UUID, INTEGER, TEXT) TO authenticated;
@@ -2275,7 +2005,6 @@ GRANT EXECUTE ON FUNCTION public.calculate_prorated_upgrade(UUID, TEXT, TEXT) TO
 GRANT EXECUTE ON FUNCTION public.process_subscription_upgrade(UUID, TEXT, TEXT, TEXT, NUMERIC) TO service_role;
 GRANT EXECUTE ON FUNCTION public.renew_subscription(UUID, TEXT, NUMERIC) TO service_role;
 GRANT EXECUTE ON FUNCTION public.reactivate_subscription(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.process_expired_subscriptions() TO service_role;
 
 DO $$
 BEGIN
@@ -2285,9 +2014,6 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.validate_payment_provider(UUID, TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.process_subscription_webhook(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_payment(UUID, NUMERIC, TEXT, TEXT, TEXT, TEXT, JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION public.cancel_subscription(UUID, TEXT, BOOLEAN) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.check_subscription_status(UUID) TO authenticated;
-
 DO $$
 BEGIN
   RAISE NOTICE '✅ [6/10] Payment security functions created';
@@ -2443,59 +2169,6 @@ DO $$
 BEGIN
   RAISE NOTICE '[7/10] 🔍 Creating ticker search functions...';
 END $$;
-
--- ✅ Search Ticker Symbols
--- Drop all versions of search_ticker_symbols
-DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT) CASCADE;
-DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, INTEGER) CASCADE;
-DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, TEXT) CASCADE;
-DROP FUNCTION IF EXISTS public.search_ticker_symbols(TEXT, TEXT, INTEGER) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.search_ticker_symbols(
-  p_query TEXT,
-  p_asset_class TEXT DEFAULT NULL,
-  p_limit INTEGER DEFAULT 20
-)
-RETURNS TABLE (
-  symbol TEXT,
-  name TEXT,
-  asset_class TEXT,
-  exchange TEXT,
-  multiplier NUMERIC,
-  tick_size NUMERIC,
-  is_popular BOOLEAN
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    t.symbol,
-    t.name,
-    t.asset_class,
-    t.exchange,
-    t.multiplier,
-    t.tick_size,
-    t.is_popular
-  FROM public.ticker_symbols t
-  WHERE 
-    (p_asset_class IS NULL OR t.asset_class = p_asset_class)
-    AND (
-      t.symbol ILIKE p_query || '%'
-      OR t.name ILIKE '%' || p_query || '%'
-    )
-  ORDER BY 
-    t.is_popular DESC,
-    CASE WHEN t.symbol ILIKE p_query THEN 0 ELSE 1 END,
-    t.symbol
-  LIMIT p_limit;
-END;
-$$;
-
-COMMENT ON FUNCTION public.search_ticker_symbols IS 
-'v8.5.9: Search ticker symbols by symbol or name';
 
 -- ✅ Get Popular Tickers by Asset Class
 -- Drop all versions of get_popular_tickers
@@ -2781,7 +2454,6 @@ GRANT EXECUTE ON FUNCTION public.bulk_lookup_tickers(TEXT[]) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_ticker_stats() TO authenticated;
 
 -- Grant permissions
-GRANT EXECUTE ON FUNCTION public.search_ticker_symbols(TEXT, TEXT, INTEGER) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.get_popular_tickers(TEXT, INTEGER) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION public.validate_symbol(TEXT) TO authenticated, anon;
 
@@ -2881,57 +2553,6 @@ BEGIN
   RETURN TRUE;
 END;
 $$;
-
--- ✅ Log Admin Action
--- Drop all versions of log_admin_action
-DROP FUNCTION IF EXISTS public.log_admin_action(TEXT, TEXT, UUID, JSONB) CASCADE;
-DROP FUNCTION IF EXISTS public.log_admin_action(TEXT, UUID, TEXT, UUID, JSONB) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.log_admin_action(
-  p_action_type TEXT,
-  p_resource_type TEXT DEFAULT NULL,
-  p_resource_id UUID DEFAULT NULL,
-  p_details JSONB DEFAULT '{}'::jsonb
-)
-RETURNS UUID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_action_id UUID;
-BEGIN
-  -- Verify admin
-  IF NOT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid()
-      AND role IN ('admin', 'super_admin')
-  ) THEN
-    RAISE EXCEPTION 'Access denied';
-  END IF;
-  
-  INSERT INTO public.admin_actions (
-    action_type,
-    admin_id,
-    resource_type,
-    resource_id,
-    details,
-    created_at
-  ) VALUES (
-    p_action_type,
-    auth.uid(),
-    p_resource_type,
-    p_resource_id,
-    p_details,
-    NOW()
-  )
-  RETURNING id INTO v_action_id;
-  
-  RETURN v_action_id;
-END;
-$$;
-
-COMMENT ON FUNCTION public.log_admin_action IS 
-'v8.5.9: Logs admin actions for audit trail';
 
 -- ✅ Impersonate User (Super Admin Only)
 DROP FUNCTION IF EXISTS public.impersonate_user(UUID) CASCADE;
@@ -3222,64 +2843,6 @@ $$;
 COMMENT ON FUNCTION public.admin_update_user_account IS 
 'v8.5.9: Admin function to change user account type';
 
--- ✅ Get Admin Stats
-DROP FUNCTION IF EXISTS public.admin_get_stats() CASCADE;
-
-CREATE OR REPLACE FUNCTION public.admin_get_stats()
-RETURNS TABLE (
-  total_users BIGINT,
-  free_users BIGINT,
-  basic_users BIGINT,
-  premium_users BIGINT,
-  trial_users BIGINT,
-  banned_users BIGINT,
-  total_trades BIGINT,
-  trades_today BIGINT,
-  trades_this_month BIGINT,
-  revenue_estimate NUMERIC
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-AS $$
-BEGIN
-  -- Verify admin
-  IF NOT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid()
-      AND role IN ('admin', 'super_admin')
-      AND COALESCE(is_banned, FALSE) = FALSE
-  ) THEN
-    RAISE EXCEPTION 'Access denied';
-  END IF;
-  
-  RETURN QUERY
-  SELECT 
-    (SELECT COUNT(*) FROM public.profiles)::BIGINT as total_users,
-    (SELECT COUNT(*) FROM public.profiles WHERE account_type = 'free')::BIGINT as free_users,
-    (SELECT COUNT(*) FROM public.profiles WHERE account_type = 'basic')::BIGINT as basic_users,
-    (SELECT COUNT(*) FROM public.profiles WHERE account_type = 'premium')::BIGINT as premium_users,
-    (SELECT COUNT(*) FROM public.profiles WHERE account_type = 'trial')::BIGINT as trial_users,
-    (SELECT COUNT(*) FROM public.profiles WHERE is_banned = TRUE)::BIGINT as banned_users,
-    (SELECT COUNT(*) FROM public.trades)::BIGINT as total_trades,
-    (SELECT COUNT(*) FROM public.trades WHERE created_at >= CURRENT_DATE)::BIGINT as trades_today,
-    (SELECT COUNT(*) FROM public.trades WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE))::BIGINT as trades_this_month,
-    (
-      SELECT 
-        COALESCE(SUM(CASE account_type 
-          WHEN 'basic' THEN 19.99 
-          WHEN 'premium' THEN 39.99 
-          ELSE 0 
-        END), 0)
-      FROM public.profiles 
-      WHERE account_type IN ('basic', 'premium')
-    )::NUMERIC as revenue_estimate;
-END;
-$$;
-
-COMMENT ON FUNCTION public.admin_get_stats IS 
-'v8.5.9: Dashboard statistics for admin panel';
-
 -- ✅ Get User Activity (Admin Only)
 DROP FUNCTION IF EXISTS public.get_user_activity(UUID) CASCADE;
 
@@ -3392,13 +2955,11 @@ COMMENT ON FUNCTION public.admin_impersonate_user IS
 -- Grant admin function permissions
 GRANT EXECUTE ON FUNCTION public.enable_admin_mode() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.disable_admin_mode() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.log_admin_action(TEXT, TEXT, UUID, JSONB) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.impersonate_user(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.ban_user(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.unban_user(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_users(INTEGER, INTEGER, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_user_account(UUID, TEXT, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_activity(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_impersonate_user(UUID) TO authenticated;
 

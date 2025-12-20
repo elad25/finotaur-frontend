@@ -1866,7 +1866,7 @@ const NewsletterSub: React.FC = () => {
           ) : (
             <>
               <Sparkles className="w-5 h-5" />
-              <span>GENERATE REPORT</span>
+              <span>GENERATE DAILY REPORT</span>
             </>
           )}
         </button>

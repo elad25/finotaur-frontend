@@ -36,9 +36,27 @@
 -- 🔧 NEW v9.4.3: FIXED - payment_history columns added!
 -- 🔧 NEW v9.4.3: Helper functions INCLUDED (not moved to Part 2)!
 -- ===============================================
+-- ============================================
+-- PART 0: EXTENSIONS & HELPERS
+-- ============================================
 
-BEGIN;
+-- Wrapper for gen_random_bytes (pgcrypto is in extensions schema)
+CREATE OR REPLACE FUNCTION public.gen_random_bytes(length INTEGER)
+RETURNS BYTEA
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT extensions.gen_random_bytes(length);
+$$;
 
+-- Helper function for generating tokens
+CREATE OR REPLACE FUNCTION public.generate_random_token(length INTEGER DEFAULT 32)
+RETURNS TEXT
+LANGUAGE sql
+SECURITY DEFINER
+AS $$
+  SELECT encode(extensions.gen_random_bytes(length), 'hex');
+$$;
 -- ===============================================
 -- SECTION 1: NUCLEAR CLEANUP
 -- ===============================================
@@ -273,6 +291,9 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS previous_account_type TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS upgrade_date TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS prorated_credit NUMERIC(10,2) DEFAULT 0;
 
+-- ✅ Terms acceptance columns
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS terms_version TEXT;
 -- 🔥 UPDATE existing users with default risk values
 UPDATE public.profiles
 SET 
@@ -287,11 +308,11 @@ ALTER TABLE public.profiles ALTER COLUMN portfolio_size SET DEFAULT 10000;
 ALTER TABLE public.profiles ALTER COLUMN risk_percentage SET DEFAULT 1.0;
 ALTER TABLE public.profiles ALTER COLUMN risk_mode SET DEFAULT 'percentage';
 
--- Remove affiliate columns if they exist
-ALTER TABLE public.profiles DROP COLUMN IF EXISTS affiliate_code CASCADE;
-ALTER TABLE public.profiles DROP COLUMN IF EXISTS referred_by CASCADE;
-ALTER TABLE public.profiles DROP COLUMN IF EXISTS free_months_available CASCADE;
-ALTER TABLE public.profiles DROP COLUMN IF EXISTS referral_count CASCADE;
+-- ✅ ADD affiliate columns (needed for referral tracking)
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS affiliate_code TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS free_months_available INTEGER DEFAULT 0;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS referral_count INTEGER DEFAULT 0;
 
 -- Drop and recreate constraints
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
@@ -337,10 +358,6 @@ ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_deleted_by_fkey;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_deleted_by_fkey 
   FOREIGN KEY (deleted_by) REFERENCES public.profiles(id);
 
--- Drop affiliate-related constraints
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS fk_referred_by_affiliate_code;
-DROP INDEX IF EXISTS profiles_affiliate_code_key;
-
 -- 🔥 FIX: Remove portfolio_size constraint (too restrictive)
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS check_portfolio_size_positive;
 ALTER TABLE public.profiles ADD CONSTRAINT check_portfolio_size_positive 
@@ -379,6 +396,19 @@ CREATE INDEX IF NOT EXISTS idx_profiles_cancel_at_period_end
 ON public.profiles(subscription_cancel_at_period_end)
 WHERE subscription_cancel_at_period_end = TRUE;
 
+-- Affiliate indexes
+CREATE INDEX IF NOT EXISTS idx_profiles_affiliate_code 
+ON public.profiles(affiliate_code) 
+WHERE affiliate_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_profiles_referred_by 
+ON public.profiles(referred_by) 
+WHERE referred_by IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_affiliate_code_key 
+ON public.profiles(affiliate_code) 
+WHERE affiliate_code IS NOT NULL;
+
 COMMENT ON COLUMN public.profiles.current_portfolio IS 'Current portfolio value - auto-calculated as initial_portfolio + total_pnl';
 COMMENT ON COLUMN public.profiles.initial_portfolio IS 'Starting portfolio value for tracking growth';
 COMMENT ON COLUMN public.profiles.total_pnl IS 'Cumulative P&L across all closed trades - auto-updated';
@@ -399,7 +429,10 @@ COMMENT ON COLUMN public.profiles.prorated_credit IS 'Credit from unused portion
 COMMENT ON COLUMN public.profiles.subscription_cancel_at_period_end IS 'v9.4.3: If TRUE, subscription will cancel at end of current period';
 COMMENT ON COLUMN public.profiles.trial_used IS 'v9.4.3: TRUE if user has already used their free trial';
 COMMENT ON COLUMN public.profiles.trial_start_date IS 'v9.4.3: When user started their trial period';
-
+COMMENT ON COLUMN public.profiles.affiliate_code IS 'Unique affiliate code owned by this user (if they are an affiliate)';
+COMMENT ON COLUMN public.profiles.referred_by IS 'Affiliate code used during registration - tracks who referred this user';
+COMMENT ON COLUMN public.profiles.free_months_available IS 'Number of free subscription months available as referral reward';
+COMMENT ON COLUMN public.profiles.referral_count IS 'Number of users this person has successfully referred';
 DO $$
 BEGIN
   RAISE NOTICE '✅ [2/10] Profiles table setup complete!';
@@ -428,6 +461,7 @@ COMMENT ON COLUMN public.strategies.deleted_at IS 'Soft delete timestamp - NULL 
 -- SECTION 4: TRADES TABLE (COMPLETE + ENHANCED + SNAPTRADE + TIMEZONE)
 -- ===============================================
 -- 🔧 v9.4.3: Removed actual_user_r column (Option A - recommended)
+-- 🔧 v9.4.5: Added partial_exits with index and documentation
 
 DO $$
 BEGIN
@@ -435,6 +469,7 @@ BEGIN
   RAISE NOTICE '      📊 Adding SnapTrade integration columns...';
   RAISE NOTICE '      🌍 Adding timezone support...';
   RAISE NOTICE '      🔧 v9.4.3: actual_user_r REMOVED (calculated in Part 2)';
+  RAISE NOTICE '      🆕 v9.4.5: partial_exits column for scaling out!';
 END $$;
 
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS open_at TIMESTAMPTZ DEFAULT NOW();
@@ -474,6 +509,7 @@ ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS screenshot_url TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS screenshots TEXT[] DEFAULT '{}';
 
+-- Migrate old screenshot_url to screenshots array
 UPDATE public.trades 
 SET screenshots = ARRAY[screenshot_url]
 WHERE screenshot_url IS NOT NULL 
@@ -485,6 +521,36 @@ ON public.trades USING GIN (screenshots);
 
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS notes_search_vector tsvector;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🆕 v9.4.5: PARTIAL EXITS - For scaling out of positions
+-- ═══════════════════════════════════════════════════════════════
+-- Structure: [{price: number, quantity: number, date: string, pnl: number, fees?: number}]
+-- Example: [{"price": 100.50, "quantity": 5, "date": "2024-01-15T10:30:00Z", "pnl": 250.00}]
+-- ═══════════════════════════════════════════════════════════════
+
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS partial_exits JSONB DEFAULT '[]'::jsonb;
+
+-- Index for querying trades with partial exits
+CREATE INDEX IF NOT EXISTS idx_trades_partial_exits 
+ON public.trades USING GIN (partial_exits) 
+WHERE partial_exits != '[]'::jsonb AND partial_exits IS NOT NULL;
+
+-- Index for checking if trade has partial exits (for filtering)
+CREATE INDEX IF NOT EXISTS idx_trades_has_partial_exits
+ON public.trades ((partial_exits != '[]'::jsonb))
+WHERE partial_exits IS NOT NULL;
+
+COMMENT ON COLUMN public.trades.partial_exits IS 
+'v9.4.5: Array of partial exit objects for scaling out of positions. 
+Structure: [{price, quantity, date, pnl, fees?}]. 
+Used when trader exits position in multiple parts rather than all at once.
+Frontend can calculate weighted average exit price from this data.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- END OF PARTIAL EXITS SECTION
+-- ═══════════════════════════════════════════════════════════════
+
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS deleted_by UUID;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS snaptrade_activity_id TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS snaptrade_account_id TEXT;
@@ -515,14 +581,14 @@ UPDATE public.trades
 SET import_source = 'manual' 
 WHERE import_source IS NULL;
 
--- 🔥 COMMENTS - Explain each R column clearly
+-- 🔥 COMMENTS - Explain each column clearly
 COMMENT ON COLUMN public.trades.multiplier IS 'Asset contract multiplier - verified against CME/ICE standards';
 COMMENT ON COLUMN public.trades.actual_r IS 'Contract R-multiple: Actual PnL / Initial Risk (contract-based calculation)';
 COMMENT ON COLUMN public.trades.user_risk_r IS 'User R-multiple RISKED: Risk USD / User''s 1R setting (how many Rs user is risking)';
 COMMENT ON COLUMN public.trades.user_reward_r IS 'User R-multiple POTENTIAL REWARD: Reward USD / User''s 1R setting (potential gain in Rs)';
 COMMENT ON COLUMN public.trades.notes IS 'Trade thesis, feelings, and what worked - supports full-text search';
-COMMENT ON COLUMN public.trades.screenshot_url IS 'URL to compressed screenshot in Supabase Storage';
-COMMENT ON COLUMN public.trades.screenshots IS 'Array of screenshot URLs - supports multiple screenshots per trade';
+COMMENT ON COLUMN public.trades.screenshot_url IS 'URL to compressed screenshot in Supabase Storage (legacy - use screenshots array)';
+COMMENT ON COLUMN public.trades.screenshots IS 'Array of screenshot URLs - supports multiple screenshots per trade (1-4 recommended)';
 COMMENT ON COLUMN public.trades.deleted_at IS 'Soft delete timestamp - NULL means active';
 COMMENT ON COLUMN public.trades.snaptrade_activity_id IS 'SnapTrade activity ID - used for deduplication (unique per import)';
 COMMENT ON COLUMN public.trades.snaptrade_account_id IS 'SnapTrade account ID - identifies which broker account this trade came from';
@@ -535,9 +601,10 @@ BEGIN
   RAISE NOTICE '      ✅ actual_r - Contract R-multiple';
   RAISE NOTICE '      ✅ user_risk_r - User Rs risked';
   RAISE NOTICE '      ✅ user_reward_r - User Rs potential';
-  RAISE NOTICE '      🔧 v9.4.3: actual_user_r REMOVED (calculated in Part 2)';
+  RAISE NOTICE '      ✅ partial_exits - For scaling out of positions';
+  RAISE NOTICE '      ✅ screenshots[] - Multiple screenshots support';
+  RAISE NOTICE '      🔧 v9.4.5: partial_exits with GIN index added!';
 END $$;
-
 -- ═══════════════════════════════════════════════════════════════
 -- 🌍 SECTION 4.5: TIMEZONE & TRADING SESSIONS (v8.5.11-FINAL-FIX)
 -- ═══════════════════════════════════════════════════════════════

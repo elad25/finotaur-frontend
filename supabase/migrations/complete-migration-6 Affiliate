@@ -414,7 +414,21 @@ CREATE INDEX idx_affiliate_applications_status ON affiliate_applications(status)
 CREATE INDEX idx_affiliate_applications_created_at ON affiliate_applications(created_at DESC);
 CREATE INDEX idx_affiliate_applications_requested_code ON affiliate_applications(requested_code);
 
+-- ============================================
+-- SECTION 6.5: ADD AFFILIATE_CODE TO PROFILES
+-- ============================================
+-- This column stores the affiliate code used during registration
+-- for tracking which affiliate referred this user
 
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS affiliate_code TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_profiles_affiliate_code 
+ON public.profiles(affiliate_code) 
+WHERE affiliate_code IS NOT NULL;
+
+COMMENT ON COLUMN public.profiles.affiliate_code IS 
+'Affiliate code used during registration - links to affiliates.affiliate_code for referral tracking';
 -- ============================================
 -- SECTION 7: AFFILIATES TABLE (Main Accounts)
 -- ============================================
@@ -1275,7 +1289,6 @@ BEGIN
   RETURN v_new_tier;
 END;
 $$;
-
 
 -- ============================================
 -- SECTION 19: ADMIN COUPON FUNCTIONS
@@ -2204,104 +2217,52 @@ BEGIN
   RETURN new_click_id;
 END;
 $$;
+-- ============================================
+-- TEXT OVERLOAD for record_affiliate_click
+-- (Required for WHOP webhook compatibility)
+-- ============================================
 
-
--- Track referral signup
-CREATE OR REPLACE FUNCTION track_referral_signup(
+CREATE OR REPLACE FUNCTION record_affiliate_click(
   p_affiliate_code TEXT,
-  p_user_id UUID,
-  p_user_email TEXT,
-  p_subscription_plan TEXT DEFAULT NULL,
-  p_subscription_type TEXT DEFAULT 'monthly',
-  p_subscription_price NUMERIC(10,2) DEFAULT NULL,
-  p_click_id UUID DEFAULT NULL,
-  p_discount_percent NUMERIC(5,2) DEFAULT 0,
-  p_discount_amount NUMERIC(10,2) DEFAULT 0,
-  p_coupon_code TEXT DEFAULT NULL
+  p_ip_address TEXT DEFAULT NULL,      -- TEXT version (converts to inet)
+  p_user_agent TEXT DEFAULT NULL,
+  p_referrer_url TEXT DEFAULT NULL,
+  p_landing_page TEXT DEFAULT NULL,
+  p_utm_source TEXT DEFAULT NULL,
+  p_utm_medium TEXT DEFAULT NULL,
+  p_utm_campaign TEXT DEFAULT NULL,
+  p_utm_content TEXT DEFAULT NULL
 )
 RETURNS UUID
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_affiliate_id UUID;
-  v_referral_id UUID;
-  v_discount_tier discount_tier;
-  v_actual_discount NUMERIC(5,2);
-  v_coupon_id UUID;
+  v_ip_inet inet;
 BEGIN
-  -- Get affiliate
-  SELECT id, discount_tier INTO v_affiliate_id, v_discount_tier
-  FROM affiliates
-  WHERE (affiliate_code = UPPER(p_affiliate_code) OR coupon_code = UPPER(p_affiliate_code))
-    AND status = 'active';
-    
-  IF v_affiliate_id IS NULL THEN
-    RAISE EXCEPTION 'Invalid or inactive affiliate code';
-  END IF;
+  -- Convert TEXT to INET safely
+  BEGIN
+    IF p_ip_address IS NOT NULL AND p_ip_address != '' THEN
+      v_ip_inet := p_ip_address::inet;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_ip_inet := NULL;
+  END;
   
-  -- Check for existing referral
-  IF EXISTS (SELECT 1 FROM affiliate_referrals WHERE referred_user_id = p_user_id) THEN
-    SELECT id INTO v_referral_id FROM affiliate_referrals WHERE referred_user_id = p_user_id;
-    RETURN v_referral_id;
-  END IF;
-  
-  -- Calculate discount
-  IF p_discount_percent = 0 THEN
-    v_actual_discount := CASE v_discount_tier 
-      WHEN 'vip' THEN 15.00
-      ELSE 10.00
-    END;
-  ELSE
-    v_actual_discount := p_discount_percent;
-  END IF;
-  
-  -- Get coupon ID if coupon was used
-  IF p_coupon_code IS NOT NULL THEN
-    SELECT id INTO v_coupon_id FROM admin_coupons WHERE code = UPPER(p_coupon_code);
-  END IF;
-  
-  -- Create referral
-  INSERT INTO affiliate_referrals (
-    affiliate_id,
-    referred_user_id,
-    referred_user_email,
-    click_id,
-    signup_plan,
-    discount_percent,
-    discount_amount_usd,
-    coupon_code_used,
-    coupon_id_used,
-    status
-  ) VALUES (
-    v_affiliate_id,
-    p_user_id,
-    p_user_email,
-    p_click_id,
-    p_subscription_plan,
-    v_actual_discount,
-    p_discount_amount,
-    p_coupon_code,
-    v_coupon_id,
-    'pending'
-  )
-  RETURNING id INTO v_referral_id;
-  
-  -- Mark click as converted
-  IF p_click_id IS NOT NULL THEN
-    UPDATE affiliate_clicks
-    SET 
-      converted = TRUE,
-      converted_at = NOW(),
-      converted_user_id = p_user_id
-    WHERE id = p_click_id;
-  END IF;
-  
-  RETURN v_referral_id;
+  -- Call the original INET version
+  RETURN record_affiliate_click(
+    p_affiliate_code,
+    v_ip_inet,
+    p_user_agent,
+    p_referrer_url,
+    p_landing_page,
+    p_utm_source,
+    p_utm_medium,
+    p_utm_campaign,
+    p_utm_content
+  );
 END;
 $$;
-
-
 -- Record first payment (triggers verification period)
 CREATE OR REPLACE FUNCTION record_referral_first_payment(
   p_referral_id UUID,
@@ -3778,8 +3739,8 @@ GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO aut
 GRANT EXECUTE ON FUNCTION calculate_discounted_price(TEXT, TEXT, NUMERIC) TO anon;
 GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO authenticated;
 GRANT EXECUTE ON FUNCTION get_current_plan_prices() TO anon;
-GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, INET, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, INET, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION is_affiliate_code_available(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_affiliate_discount_rate(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION get_affiliate_discount_rate(TEXT, TEXT) TO anon;

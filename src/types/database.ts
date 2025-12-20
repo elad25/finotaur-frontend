@@ -285,7 +285,7 @@ export interface Database {
       }
       get_user_subscription_status: {
         Args: {
-          user_id_param: string
+          p_user_id: string
         }
         Returns: Array<{
           remaining: number

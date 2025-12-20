@@ -14,7 +14,8 @@
 -- PREREQUISITE: Run PART-1-SCHEMA.sql first!
 -- ===============================================
 
-BEGIN;
+SET lock_timeout = '10s';
+SET statement_timeout = '60s';
 
 DO $$
 BEGIN
@@ -43,132 +44,216 @@ END $$;
 -- 🔧 Drop old function first to avoid type conflicts
 DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
 
--- ✅ Get User Subscription Status (WITH PORTFOLIO FIELDS)
+-- ===============================================
+-- 🆕 UNIFIED get_user_subscription_status v6.0.0
+-- ===============================================
+-- Returns ALL 31 fields required by frontend including Whop integration
+-- ===============================================
+
 CREATE OR REPLACE FUNCTION public.get_user_subscription_status(user_id_param UUID)
 RETURNS TABLE (
-  remaining INT,
-  used INT,
-  max_trades INT,
+  -- Core trade limits
+  remaining INTEGER,
+  used INTEGER,
+  max_trades INTEGER,
   plan TEXT,
   reset_date TEXT,
+  
+  -- Account info
   account_type TEXT,
+  role TEXT,
+  
+  -- Subscription details
   subscription_interval TEXT,
   subscription_status TEXT,
   subscription_expires_at TIMESTAMPTZ,
-  role TEXT,
+  subscription_cancel_at_period_end BOOLEAN,
+  subscription_started_at TIMESTAMPTZ,
+  
+  -- Portfolio & Risk
   initial_portfolio NUMERIC,
-  current_portfolio NUMERIC
-) 
+  current_portfolio NUMERIC,
+  portfolio_size NUMERIC,
+  total_pnl NUMERIC,
+  risk_mode TEXT,
+  risk_percentage NUMERIC,
+  fixed_risk_amount NUMERIC,
+  
+  -- Trade counts
+  trade_count INTEGER,
+  current_month_trades_count INTEGER,
+  current_month_active_days INTEGER,
+  billing_cycle_start TEXT,
+  
+  -- Flags
+  is_lifetime BOOLEAN,
+  
+  -- Whop integration (CRITICAL!)
+  payment_provider TEXT,
+  whop_user_id TEXT,
+  whop_membership_id TEXT,
+  whop_product_id TEXT,
+  whop_plan_id TEXT,
+  whop_customer_email TEXT,
+  
+  -- Subscription management
+  pending_downgrade_plan TEXT
+)
 LANGUAGE plpgsql
-SECURITY DEFINER
 STABLE
-SET search_path = public
+SECURITY DEFINER
+SET search_path TO 'public'
 AS $$
 DECLARE
   v_profile RECORD;
   v_trades_used INT;
   v_reset_date DATE;
+  v_is_lifetime BOOLEAN;
 BEGIN
-  -- Get profile data (INCLUDING PORTFOLIO FIELDS)
+  -- Fetch all profile data in one query
   SELECT 
     p.account_type,
     p.max_trades,
     p.subscription_interval,
     p.subscription_status,
     p.subscription_expires_at,
+    p.subscription_cancel_at_period_end,
+    p.subscription_started_at,
     COALESCE(p.billing_cycle_start, CURRENT_DATE) as billing_cycle_start,
     COALESCE(p.role, 'user') as role,
     COALESCE(p.current_month_trades_count, 0) as monthly_count,
     COALESCE(p.trade_count, 0) as lifetime_count,
+    COALESCE(p.current_month_active_days, 0) as active_days,
     COALESCE(p.initial_portfolio, 10000) as initial_portfolio,
-    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio
+    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio,
+    COALESCE(p.portfolio_size, p.current_portfolio, 10000) as portfolio_size,
+    COALESCE(p.total_pnl, 0) as total_pnl,
+    COALESCE(p.risk_mode, 'percentage') as risk_mode,
+    p.risk_percentage,
+    p.fixed_risk_amount,
+    p.payment_provider,
+    p.whop_user_id,
+    p.whop_membership_id,
+    p.whop_product_id,
+    p.whop_plan_id,
+    p.whop_customer_email,
+    p.pending_downgrade_plan
   INTO v_profile
   FROM public.profiles p
   WHERE p.id = user_id_param;
   
-  -- If profile doesn't exist, return safe defaults
+  -- Handle user not found
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      10::INT,                    -- remaining
-      0::INT,                     -- used
-      10::INT,                    -- max_trades
-      'Free Plan'::TEXT,          -- plan
-      NULL::TEXT,                 -- reset_date (FREE has no reset)
-      'free'::TEXT,               -- account_type
-      NULL::TEXT,                 -- subscription_interval
-      'active'::TEXT,             -- subscription_status
-      NULL::TIMESTAMPTZ,          -- subscription_expires_at
-      'user'::TEXT,               -- role
-      10000::NUMERIC,             -- initial_portfolio
-      10000::NUMERIC;             -- current_portfolio
+      10::INTEGER, 0::INTEGER, 10::INTEGER, 'Free Plan'::TEXT, NULL::TEXT,
+      'free'::TEXT, 'user'::TEXT, 
+      NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
+      'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
+      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT, TRUE,
+      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
     RETURN;
   END IF;
   
-  -- Calculate reset date (next month for BASIC/TRIAL/PREMIUM only)
-  IF v_profile.account_type IN ('basic', 'trial', 'premium') THEN
+  -- Determine if lifetime limit (FREE users only)
+  v_is_lifetime := (v_profile.account_type = 'free');
+  
+  -- Calculate reset date (only for non-FREE users)
+  IF NOT v_is_lifetime THEN
     v_reset_date := (DATE_TRUNC('month', v_profile.billing_cycle_start) + INTERVAL '1 month')::DATE;
-  ELSE
-    -- FREE users don't have reset date
-    v_reset_date := NULL;
   END IF;
   
-  -- Determine which counter to use
-  IF v_profile.account_type = 'free' THEN
-    v_trades_used := v_profile.lifetime_count;
-  ELSE
-    v_trades_used := v_profile.monthly_count;
-  END IF;
+  -- Determine which trade counter to use
+  v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
   
-  -- Handle unlimited users (admin/premium/vip)
-  IF v_profile.role IN ('admin', 'super_admin') OR 
-     v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+  -- Handle unlimited users (premium/admin/vip)
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
     RETURN QUERY SELECT
-      999999::INT,                                    -- remaining (unlimited)
-      v_trades_used::INT,                             -- used
-      999999::INT,                                    -- max_trades
-      CASE v_profile.account_type
-        WHEN 'premium' THEN 'Premium Plan'
-        WHEN 'admin' THEN 'Admin'
-        WHEN 'vip' THEN 'VIP'
-        ELSE 'Premium Plan'
-      END::TEXT,                                      -- plan
-      v_reset_date::TEXT,                             -- reset_date
-      v_profile.account_type::TEXT,                   -- account_type
-      v_profile.subscription_interval::TEXT,          -- subscription_interval
-      v_profile.subscription_status::TEXT,            -- subscription_status
-      v_profile.subscription_expires_at::TIMESTAMPTZ, -- subscription_expires_at
-      v_profile.role::TEXT,                           -- role
-      v_profile.initial_portfolio::NUMERIC,           -- initial_portfolio
-      v_profile.current_portfolio::NUMERIC;           -- current_portfolio
+      999999::INTEGER,
+      v_trades_used::INTEGER,
+      999999::INTEGER,
+      CASE v_profile.account_type 
+        WHEN 'premium' THEN 'Premium Plan' 
+        WHEN 'vip' THEN 'VIP Plan' 
+        ELSE 'Admin' 
+      END::TEXT,
+      v_reset_date::TEXT,
+      v_profile.account_type::TEXT,
+      v_profile.role::TEXT,
+      v_profile.subscription_interval::TEXT,
+      v_profile.subscription_status::TEXT,
+      v_profile.subscription_expires_at::TIMESTAMPTZ,
+      COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+      v_profile.subscription_started_at::TIMESTAMPTZ,
+      v_profile.initial_portfolio::NUMERIC,
+      v_profile.current_portfolio::NUMERIC,
+      v_profile.portfolio_size::NUMERIC,
+      v_profile.total_pnl::NUMERIC,
+      v_profile.risk_mode::TEXT,
+      v_profile.risk_percentage::NUMERIC,
+      v_profile.fixed_risk_amount::NUMERIC,
+      v_profile.lifetime_count::INTEGER,
+      v_profile.monthly_count::INTEGER,
+      v_profile.active_days::INTEGER,
+      v_profile.billing_cycle_start::TEXT,
+      FALSE,
+      v_profile.payment_provider::TEXT,
+      v_profile.whop_user_id::TEXT,
+      v_profile.whop_membership_id::TEXT,
+      v_profile.whop_product_id::TEXT,
+      v_profile.whop_plan_id::TEXT,
+      v_profile.whop_customer_email::TEXT,
+      v_profile.pending_downgrade_plan::TEXT;
     RETURN;
   END IF;
   
-  -- Regular user result
+  -- Regular users (free/basic/trial)
   RETURN QUERY SELECT
-    GREATEST(0, v_profile.max_trades - v_trades_used)::INT, -- remaining
-    v_trades_used::INT,                                     -- used
-    v_profile.max_trades::INT,                              -- max_trades
-    CASE v_profile.account_type
-      WHEN 'free' THEN 'Free Plan'
-      WHEN 'basic' THEN 'Basic Plan'
-      WHEN 'premium' THEN 'Premium Plan'
-      WHEN 'trial' THEN 'Trial'
-      ELSE 'Free Plan'
-    END::TEXT,                                              -- plan
-    v_reset_date::TEXT,                                     -- reset_date
-    v_profile.account_type::TEXT,                           -- account_type
-    v_profile.subscription_interval::TEXT,                  -- subscription_interval
-    v_profile.subscription_status::TEXT,                    -- subscription_status
-    v_profile.subscription_expires_at::TIMESTAMPTZ,         -- subscription_expires_at
-    v_profile.role::TEXT,                                   -- role
-    v_profile.initial_portfolio::NUMERIC,                   -- initial_portfolio
-    v_profile.current_portfolio::NUMERIC;                   -- current_portfolio
+    GREATEST(0, v_profile.max_trades - v_trades_used)::INTEGER,
+    v_trades_used::INTEGER,
+    v_profile.max_trades::INTEGER,
+    CASE v_profile.account_type 
+      WHEN 'free' THEN 'Free Plan' 
+      WHEN 'basic' THEN 'Basic Plan' 
+      WHEN 'trial' THEN 'Trial' 
+      ELSE 'Free Plan' 
+    END::TEXT,
+    v_reset_date::TEXT,
+    v_profile.account_type::TEXT,
+    v_profile.role::TEXT,
+    v_profile.subscription_interval::TEXT,
+    v_profile.subscription_status::TEXT,
+    v_profile.subscription_expires_at::TIMESTAMPTZ,
+    COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+    v_profile.subscription_started_at::TIMESTAMPTZ,
+    v_profile.initial_portfolio::NUMERIC,
+    v_profile.current_portfolio::NUMERIC,
+    v_profile.portfolio_size::NUMERIC,
+    v_profile.total_pnl::NUMERIC,
+    v_profile.risk_mode::TEXT,
+    v_profile.risk_percentage::NUMERIC,
+    v_profile.fixed_risk_amount::NUMERIC,
+    v_profile.lifetime_count::INTEGER,
+    v_profile.monthly_count::INTEGER,
+    v_profile.active_days::INTEGER,
+    v_profile.billing_cycle_start::TEXT,
+    v_is_lifetime,
+    v_profile.payment_provider::TEXT,
+    v_profile.whop_user_id::TEXT,
+    v_profile.whop_membership_id::TEXT,
+    v_profile.whop_product_id::TEXT,
+    v_profile.whop_plan_id::TEXT,
+    v_profile.whop_customer_email::TEXT,
+    v_profile.pending_downgrade_plan::TEXT;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v8.5.10: Returns subscription status WITH portfolio fields. FREE uses lifetime count, BASIC/TRIAL use monthly count';
+'v6.0.0 UNIFIED: Returns ALL 31 fields including Whop integration.
+FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset, PREMIUM = unlimited.';
 
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO anon;
 -- ═══════════════════════════════════════════════════════════════
 -- ✅ v9.4.2-SYNCED: check_subscription_status (FIXED!)
 -- Uses subscription_expires_at (NOT subscription_end_date)
@@ -1310,7 +1395,7 @@ GRANT EXECUTE ON FUNCTION public.admin_toggle_user_ban(UUID, TEXT) TO authentica
 GRANT EXECUTE ON FUNCTION public.admin_reset_trade_count(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_limits_overview() TO authenticated;
 
-COMMIT;
+
 
 -- ═══════════════════════════════════════════════════════════
 -- END OF PART 1/2 - Sections 7-10 Complete
@@ -1345,7 +1430,7 @@ END $$;
 -- 🔧 v9.4.2-SYNCED: All fixes from Part 1 applied
 -- ===============================================
 
-BEGIN;
+
 
 DO $$
 BEGIN
@@ -2787,7 +2872,6 @@ WITH CHECK (
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
 'v8.5.10: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
 
-COMMIT;
 
 -- ===============================================
 -- END OF COMPLETE MIGRATION v8.5.10
