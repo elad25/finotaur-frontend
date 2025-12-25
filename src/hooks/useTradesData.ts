@@ -162,12 +162,16 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
 
 // 🚀 Process trades with strategy name AND calculate actual_r
     return (data || []).map(trade => {
-      // 🔥 CRITICAL: Calculate actual_r if trade has exit_price
+      // 🔥 FIXED: Only calculate actual_r if NOT already saved in DB
+      // This preserves Risk-Only mode trades that have actual_r calculated from USD values
       let metrics = trade.metrics || {};
       
-      if (trade.exit_price) {
-        const actual_r = calculateActualR(trade);
-        metrics = { ...metrics, actual_r };
+      // Only calculate if:
+      // 1. Trade has exit_price (closed trade)
+      // 2. No actual_r already saved in DB (from Risk-Only mode or previous calculation)
+      if (trade.exit_price && trade.actual_r == null) {
+        const calculated_actual_r = calculateActualR(trade);
+        metrics = { ...metrics, actual_r: calculated_actual_r };
       }
 
       return {
