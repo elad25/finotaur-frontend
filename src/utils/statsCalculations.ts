@@ -32,6 +32,16 @@ export interface Trade {
   outcome?: "WIN" | "LOSS" | "BE" | "OPEN";
   pnl?: number;
   quality_tag?: string;
+  // 🔥 Direct DB fields (risk-only mode support)
+  risk_usd?: number;
+  reward_usd?: number;
+  rr?: number;
+  actual_r?: number;
+  actual_user_r?: number;
+  user_risk_r?: number;
+  user_reward_r?: number;
+  input_mode?: 'summary' | 'risk-only';
+  // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
     riskUSD?: number;
@@ -91,6 +101,33 @@ export function getStrategyName(strategy: string | { id: string; name: string } 
   return 'No Strategy';
 }
 
+// 🔥 NEW: Universal "is trade closed" checker - supports both modes
+export function isTradeClosed(trade: Trade): boolean {
+  if (trade.input_mode === 'risk-only') {
+    // Risk-Only mode: closed if has outcome that isn't OPEN and has pnl
+    return trade.outcome != null && 
+           trade.outcome !== 'OPEN' && 
+           trade.pnl != null;
+  }
+  // Summary mode: closed if has exit_price
+  return trade.exit_price != null;
+}
+
+// 🔥 NEW: Get R value from trade
+export function getTradeR(trade: Trade): number {
+  // Priority: actual_user_r > actual_r > direct rr > metrics.actual_r > metrics.rr
+  return trade.actual_user_r 
+    ?? trade.actual_r 
+    ?? trade.rr 
+    ?? trade.metrics?.actual_r 
+    ?? trade.metrics?.rr 
+    ?? 0;
+}
+
+// 🔥 NEW: Get risk USD from trade
+export function getTradeRiskUSD(trade: Trade): number {
+  return trade.risk_usd ?? trade.metrics?.riskUSD ?? 0;
+}
 // ==========================================
 // 🚀 CALCULATE ALL STATS - Single Pass
 // ==========================================
@@ -125,8 +162,8 @@ export function calculateAllStats(trades: Trade[]): StrategyStats {
   let totalLossAmount = 0;
 
   // 🚀 SINGLE PASS - Calculate everything at once
-  for (const trade of trades) {
-    const r = trade.metrics?.rr || trade.metrics?.actual_r || 0;
+for (const trade of trades) {
+    const r = getTradeR(trade);
     const pnl = trade.pnl || 0;
     
     totalR += r;
@@ -296,8 +333,8 @@ export function findBestWorstTrades(trades: Trade[]): {
   let best: BestWorstTrade | null = null;
   let worst: BestWorstTrade | null = null;
 
-  trades.forEach(trade => {
-    const r = trade.metrics?.rr || trade.metrics?.actual_r || 0;
+trades.forEach(trade => {
+    const r = getTradeR(trade);
     const date = new Date(trade.open_at).toLocaleDateString();
     
     if (!best || r > best.r) {
@@ -323,7 +360,7 @@ export function getMomentumIndicator(trades: Trade[]): {
   if (trades.length < 5) return { score: 50, label: 'Neutral', color: '#C9A646' };
 
   const recent = trades.slice(-5);
-  const totalR = recent.reduce((sum, t) => sum + (t.metrics?.rr || t.metrics?.actual_r || 0), 0);
+const totalR = recent.reduce((sum, t) => sum + getTradeR(t), 0);
   const avgR = totalR / recent.length;
 
   if (avgR >= 1) return { score: 85, label: 'Strong Positive', color: '#00C46C' };

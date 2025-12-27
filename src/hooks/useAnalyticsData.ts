@@ -14,9 +14,14 @@ type TimeRange = '7D' | '30D' | '90D' | 'ALL';
 export function useAnalyticsData(timeRange: TimeRange) {
   const { data: allTrades = [], isLoading, isError } = useTrades();
   
-  // 🚀 חישוב ONCE - closedTrades
+// 🚀 חישוב ONCE - closedTrades - 🔥 FIXED: Support Risk-Only mode
   const closedTrades = useMemo(
-    () => allTrades.filter((t: any) => t.exit_price),
+    () => allTrades.filter((t: any) => {
+      if (t.input_mode === 'risk-only') {
+        return t.outcome != null && t.outcome !== 'OPEN' && t.pnl != null;
+      }
+      return t.exit_price != null;
+    }),
     [allTrades]
   );
   

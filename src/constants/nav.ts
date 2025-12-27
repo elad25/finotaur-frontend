@@ -27,11 +27,10 @@ export interface Domain {
 }
 
 export const domains: Record<string, Domain> = {
-  'all-markets': {
+'all-markets': {
     id: 'all-markets',
     label: 'All Markets',
-    locked: false, // ✅ הדומיין עצמו פתוח
-    // 🔥 DEFAULT PATH - מוביל ישירות ל-War Zone!
+    locked: false,
     defaultPath: '/app/all-markets/warzone',
     subNav: [
       { label: 'Overview', path: '/app/all-markets/overview', locked: true },
@@ -39,6 +38,8 @@ export const domains: Record<string, Domain> = {
       { label: 'Summary', path: '/app/all-markets/summary', locked: true },
       { label: 'News', path: '/app/all-markets/news', locked: true },
       { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
+      { label: 'Top Secret', path: '/app/all-markets/top-secret', adminOnly: true },
+{ label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
       { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
@@ -46,6 +47,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
       { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
       { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
+      
     ],
   },
 

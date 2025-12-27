@@ -70,16 +70,15 @@ const plans: Plan[] = [
     description: "Essential tools + automatic broker sync",
     features: [
       "Everything in Free, plus:",
-      "Broker sync (12,000+ brokers)",
-      "Up to 25 auto-synced trades/month (~2GB data)",
-      "Unlimited manual trades",
+      "Up to 25 trades per month",
       "Full performance analytics",
       "Strategy builder & tracking",
       "Calendar & trading sessions",
       "Advanced statistics & metrics",
       "Equity curve & charts",
       "Trade screenshots & notes",
-      "Email support"
+      "Email support",
+      "🔜 Coming Soon: Broker sync"
     ],
     cta: "Upgrade to Basic",
     featured: false,
@@ -95,15 +94,16 @@ const plans: Plan[] = [
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
-      "Unlimited auto-synced trades",
-      "No data limits — sync freely",
+      "Unlimited trades",
       "AI-powered insights & coach",
       "Advanced AI analysis",
       "Pattern recognition",
       "Custom AI reports",
       "Behavioral risk alerts",
+      "Backtesting system",
       "Priority support",
-      "Early access to new features"
+      "Early access to new features",
+      "🔜 Coming Soon: Auto broker sync"
     ],
     cta: "Upgrade to Premium",
     featured: true,
@@ -781,6 +781,341 @@ const UpgradePlanModal = ({
 };
 
 // ============================================
+// 🔥 CANCEL SUBSCRIPTION MODAL
+// ============================================
+const CANCEL_REASONS = [
+  { id: 'too_expensive', label: 'Too expensive' },
+  { id: 'not_using', label: 'Not using it enough' },
+  { id: 'missing_features', label: 'Missing features I need' },
+  { id: 'found_alternative', label: 'Found a better alternative' },
+  { id: 'technical_issues', label: 'Technical issues' },
+  { id: 'just_testing', label: 'Just testing / temporary' },
+] as const;
+
+// Type for cancellation data
+interface CancellationData {
+  reason_id: string;
+  reason_label: string;
+  feedback?: string;
+}
+
+const CancelSubscriptionModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  isLoading,
+  currentPlan,
+  expiresAt,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (data: CancellationData) => Promise<{ success?: boolean; subscription?: { expiresAt?: string } } | null>;
+  isLoading: boolean;
+  currentPlan: string;
+  expiresAt?: string | null;
+}) => {
+  const [selectedReason, setSelectedReason] = useState<string>('');
+  const [feedback, setFeedback] = useState('');
+  const [step, setStep] = useState<'reason' | 'confirm' | 'success'>('reason');
+  const [finalExpiresAt, setFinalExpiresAt] = useState<string | null>(null);
+
+  const handleClose = useCallback(() => {
+    setSelectedReason('');
+    setFeedback('');
+    setStep('reason');
+    setFinalExpiresAt(null);
+    onClose();
+  }, [onClose]);
+
+  const handleNext = useCallback(() => {
+    if (!selectedReason) {
+      toast.error('Please select a reason');
+      return;
+    }
+    setStep('confirm');
+  }, [selectedReason]);
+
+  const handleConfirm = useCallback(async () => {
+    const reasonLabel = CANCEL_REASONS.find(r => r.id === selectedReason)?.label || selectedReason;
+    
+    const result = await onConfirm({
+      reason_id: selectedReason,
+      reason_label: reasonLabel,
+      feedback: feedback.trim() || undefined,
+    });
+    
+    if (result?.success) {
+      setFinalExpiresAt(result.subscription?.expiresAt || expiresAt || null);
+      setStep('success');
+    }
+  }, [selectedReason, feedback, onConfirm, expiresAt]);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return 'the end of your billing period';
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const expiresDate = expiresAt
+    ? new Date(expiresAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : 'the end of your billing period';
+
+  if (!isOpen) return null;
+
+  // 🆕 SUCCESS STEP
+  if (step === 'success') {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+          {/* Header */}
+          <div className="p-6 border-b border-zinc-800">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+                <Check className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-white">
+                  Cancellation Confirmed
+                </h3>
+                <p className="text-sm text-zinc-400">
+                  We've received your request
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 space-y-5">
+            {/* Main Message */}
+            <div className="text-center space-y-3">
+              <p className="text-zinc-300 text-base leading-relaxed">
+                Your cancellation has been processed successfully.
+              </p>
+              <p className="text-zinc-300 text-base leading-relaxed">
+                Your subscription will remain active until:
+              </p>
+              <div className="py-3 px-4 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/30">
+                <p className="text-[#C9A646] text-xl font-bold">
+                  {formatDate(finalExpiresAt)}
+                </p>
+              </div>
+            </div>
+
+            {/* Friendly Message */}
+            <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
+              <p className="text-zinc-300 text-sm leading-relaxed text-center">
+                We're always here for you.
+                <br />
+                <span className="text-zinc-400">
+                  If you ever want to come back — the door is always open!
+                </span>
+              </p>
+            </div>
+
+            {/* Features reminder */}
+            <p className="text-zinc-500 text-xs text-center">
+              You'll continue to have full access to all your current plan features until the cancellation date.
+            </p>
+          </div>
+
+          {/* Footer */}
+          <div className="p-6 border-t border-zinc-800">
+            <button
+              onClick={handleClose}
+              className="w-full px-4 py-2.5 bg-[#C9A646] hover:bg-[#D4B84A] text-black rounded-lg text-sm font-medium transition-colors"
+            >
+              Got it, thanks
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+        {/* Header */}
+        <div className="p-6 border-b border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-xl font-semibold text-white">
+                {step === 'reason' ? 'Cancel Subscription' : 'Confirm Cancellation'}
+              </h3>
+              <p className="text-sm text-zinc-400">
+                {step === 'reason' ? 'We\'re sorry to see you go' : 'This action cannot be undone'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          {step === 'reason' ? (
+            <div className="space-y-5">
+              <p className="text-sm text-zinc-300 font-medium">
+                Help us improve by telling us why you're cancelling:
+              </p>
+
+              {/* Reason Selection */}
+              <div className="space-y-2">
+                {CANCEL_REASONS.map((reason) => (
+                  <button
+                    key={reason.id}
+                    onClick={() => setSelectedReason(reason.id)}
+                    className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                      selectedReason === reason.id
+                        ? 'border-red-500/50 bg-red-500/10'
+                        : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span className={`text-sm font-medium ${
+                      selectedReason === reason.id ? 'text-white' : 'text-white'
+                    }`}>
+                      {reason.label}
+                    </span>
+                    {selectedReason === reason.id && (
+                      <Check className="w-5 h-5 text-red-400" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Feedback text input - Always visible */}
+              <div className="pt-2">
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Give us feedback (optional)
+                </label>
+                <textarea
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  placeholder="Tell us how we can improve..."
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-red-500/50 resize-none"
+                  rows={3}
+                  maxLength={500}
+                />
+                <p className="text-xs text-zinc-500 mt-1 text-right">
+                  {feedback.length}/500
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Warning Box */}
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-red-200 text-sm leading-relaxed">
+                  Your <strong>{currentPlan}</strong> subscription will be cancelled. 
+                  You'll continue to have access until <strong>{expiresDate}</strong>.
+                </p>
+              </div>
+
+              {/* What you'll lose */}
+              <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
+                <p className="text-white text-sm font-medium mb-3">What you'll lose:</p>
+                <ul className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm text-zinc-300">
+                    <X className="w-4 h-4 text-red-400" />
+                    Broker sync (12,000+ brokers)
+                  </li>
+                  <li className="flex items-center gap-2 text-sm text-zinc-300">
+                    <X className="w-4 h-4 text-red-400" />
+                    Advanced analytics & statistics
+                  </li>
+                  {currentPlan?.toLowerCase() === 'premium' && (
+                    <>
+                      <li className="flex items-center gap-2 text-sm text-zinc-300">
+                        <X className="w-4 h-4 text-red-400" />
+                        AI-powered insights & coach
+                      </li>
+                      <li className="flex items-center gap-2 text-sm text-zinc-300">
+                        <X className="w-4 h-4 text-red-400" />
+                        Unlimited trades
+                      </li>
+                    </>
+                  )}
+                </ul>
+              </div>
+
+              {/* Selected reason display */}
+              <div className="p-3 rounded-lg bg-zinc-800/30 border border-zinc-800">
+                <p className="text-xs text-zinc-500 mb-1">Cancellation reason:</p>
+                <p className="text-sm text-white">
+                  {CANCEL_REASONS.find(r => r.id === selectedReason)?.label}
+                </p>
+                {feedback.trim() && (
+                  <>
+                    <p className="text-xs text-zinc-500 mb-1 mt-3">Your feedback:</p>
+                    <p className="text-sm text-zinc-300">{feedback}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-zinc-800 flex gap-3">
+          {step === 'reason' ? (
+            <>
+              <button
+                onClick={handleClose}
+                className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Keep Subscription
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={!selectedReason}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Continue
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setStep('reason')}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleConfirm}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Cancelling...
+                  </>
+                ) : (
+                  <>
+                    <X className="w-4 h-4" />
+                    Cancel Subscription
+                  </>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
 // 🔥 SAFE NUMBER HELPER - Global
 // ============================================
 const safeNumber = (value: any, fallback: number = 0): number => {
@@ -807,7 +1142,7 @@ export default function JournalSettings() {
   const { profile, isLoading: profileLoading } = useUserProfile();
   const { settings: riskSettings, oneR, loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
-const { data: trades = [] } = useTrades(); // Pre-cached for export
+  const { data: trades = [] } = useTrades(); // Pre-cached for export
 
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
@@ -816,7 +1151,11 @@ const { data: trades = [] } = useTrades(); // Pre-cached for export
     }
   });
 
+  // 🔥 SUBSCRIPTION MANAGEMENT HOOK
+  const { cancelSubscription, isLoading: isCancelling } = useSubscriptionManagement();
+
   // Local UI state
+  const [showCancelModal, setShowCancelModal] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isRiskSettingsOpen, setIsRiskSettingsOpen] = useState(false);
@@ -870,6 +1209,13 @@ const { data: trades = [] } = useTrades(); // Pre-cached for export
   const handlePaymentPopupClose = useCallback(() => {
     setShowPaymentPopup(false);
   }, []);
+
+  // 🔥 Handle subscription cancellation with feedback
+  const handleCancelSubscription = useCallback(async (data: { reason_id: string; reason_label: string; feedback?: string }) => {
+    const result = await cancelSubscription(data);
+    // Return result to modal - don't close here, let success screen show
+    return result;
+  }, [cancelSubscription]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -1220,20 +1566,32 @@ const { data: trades = [] } = useTrades(); // Pre-cached for export
                   <label className="text-sm font-medium text-zinc-300">Status</label>
                   <p className="text-xs text-zinc-500 mt-1">Current subscription status</p>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  profile.subscription_cancel_at_period_end
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    : profile.subscription_status === 'active'
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : profile.subscription_status === 'trial'
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}>
-                  {profile.subscription_cancel_at_period_end
-                    ? 'Cancelling'
-                    : profile.subscription_status?.charAt(0).toUpperCase() + profile.subscription_status?.slice(1)
-                  }
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    profile.subscription_cancel_at_period_end
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : profile.subscription_status === 'active'
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : profile.subscription_status === 'trial'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {profile.subscription_cancel_at_period_end
+                      ? 'Cancelling'
+                      : profile.subscription_status?.charAt(0).toUpperCase() + profile.subscription_status?.slice(1)
+                    }
+                  </span>
+                  
+                  {/* 🔥 NEW: Cancel Button - Only show if not already cancelling */}
+                  {!profile.subscription_cancel_at_period_end && (
+                    <button
+                      onClick={() => setShowCancelModal(true)}
+                      className="px-4 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      Cancel Subscription
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1357,6 +1715,16 @@ const { data: trades = [] } = useTrades(); // Pre-cached for export
         subscriptionExpiresAt={profile?.subscription_expires_at}
         subscriptionCancelAtPeriodEnd={profile?.subscription_cancel_at_period_end}
         pendingDowngradePlan={profile?.pending_downgrade_plan}
+      />
+
+      {/* 🔥 Cancel Subscription Modal */}
+      <CancelSubscriptionModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelSubscription}
+        isLoading={isCancelling}
+        currentPlan={profile?.account_type || 'free'}
+        expiresAt={profile?.subscription_expires_at}
       />
 
       {/* 🔥 Payment Popup - Same as PricingSelection */}

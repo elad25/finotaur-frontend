@@ -102,8 +102,10 @@ export interface Trade {
   snaptrade_account_id?: string | null
   import_source?: string | null
   imported_at?: string | null
+  // 🆕 v9.4.6: NEW FIELDS
+  input_mode?: 'summary' | 'risk-only' | null    // ✅ ADD THIS
+  partial_exits?: Json | null                     // ✅ ADD THIS
 }
-
 export interface Strategy {
   id: string
   user_id: string

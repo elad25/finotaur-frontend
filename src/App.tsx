@@ -74,7 +74,7 @@ const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"))
 const AdminSubscribers = lazy(() => import("@/pages/app/journal/admin/Subscribers"));
 const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"));
 const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
-const AdminSupportTickets = lazy(() => import("@/pages/app/journal/admin/Supporttickets"));
+const Cancellations = lazy(() => import("@/pages/app/journal/admin/Cancellations"));
 const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
 const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 
@@ -140,6 +140,11 @@ const AllMarketsCalendar = lazy(() => import("@/pages/app/all-markets/Calendar")
 const AllMarketsNews = lazy(() => import("@/pages/app/all-markets/News"));
 // ⚔️ WAR ZONE - Newsletter Hub
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
+
+const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
+
+const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
+
 
 // === Stocks ===
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
@@ -537,6 +542,11 @@ function AppContent() {
           <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
           {/* ⚔️ WAR ZONE - Newsletter Hub (shows different content for admin vs regular users) */}
           <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+          <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+
+
+          <Route path="all-markets/top-secret" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
+
           
           {/* 🔒 OPTIONS - LOCKED */}
           <Route path="options" element={<Navigate to="/app/options/chain" replace />} />
@@ -652,6 +662,7 @@ function AppContent() {
           <Route path="journal/payment/success" element={<SuspenseRoute><PaymentSuccessPage /></SuspenseRoute>} />
           <Route path="journal/payment/failure" element={<SuspenseRoute><PaymentFailurePage /></SuspenseRoute>} />
           <Route path="journal/prop-firms" element={<SuspenseRoute><PropFirmsPage /></SuspenseRoute>} />
+
           
           {/* 🔒 BACKTEST ROUTES - Now uses BacktestRoute which checks locked status */}
           <Route path="journal/backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
@@ -692,9 +703,8 @@ function AppContent() {
           <Route path="journal/admin/subscribers" element={<ProtectedAdminRoute><SuspenseRoute><AdminSubscribers /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="journal/admin/Cancellations" element={<ProtectedAdminRoute><SuspenseRoute><Cancellations /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="journal/admin/newsletter-sub" element={<ProtectedAdminRoute><SuspenseRoute><AdminNewsletterSub /></SuspenseRoute></ProtectedAdminRoute>} />
-          
           {/* 🔒 BACKTEST - Backward Compatibility Routes (also locked) */}
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />

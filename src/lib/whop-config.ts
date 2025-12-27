@@ -1,13 +1,11 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v2.4.0
+// FINOTAUR WHOP CONFIGURATION - v2.5.0
 // =====================================================
 // Place in: src/lib/whop-config.ts
 // 
-// 🔥 v2.4.0 CHANGES:
-// - Added Top Secret product (monthly + yearly)
-// - Newsletter is separate from trading journal subscription
-// - Top Secret is separate from both newsletter and journal
-// - Updates top_secret_* fields, not account_type
+// 🔥 v2.5.0 CHANGES:
+// - Fixed redirect URL to go to /pricing for risk setup
+// - Added source=whop parameter for detection
 // 
 // =====================================================
 
@@ -168,16 +166,17 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     popular: true,
     badge: 'Most Popular',
     features: [
-      'Everything in Basic, plus:',
-      'Unlimited trades (manual + auto-sync)',
-      'No data limits — sync freely',
-      'AI-powered insights & coach',
-      'Advanced AI analysis',
-      'Pattern recognition',
-      'Custom AI reports',
-      'Behavioral risk alerts',
-      'Priority support',
-      'Early access to new features',
+      "Everything in Basic, plus:",
+      "Unlimited trades",
+      "AI-powered insights & coach",
+      "Advanced AI analysis",
+      "Pattern recognition",
+      "Custom AI reports",
+      "Behavioral risk alerts",
+      "Backtesting system",
+      "Priority support",
+      "Early access to new features",
+      "🔜 Coming Soon: Auto broker sync"
     ],
   },
   premium_yearly: {
@@ -194,17 +193,17 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     popular: true,
     badge: 'Best Value',
     features: [
-      'Everything in Basic, plus:',
-      'Unlimited trades (manual + auto-sync)',
-      'No data limits — sync freely',
-      'AI-powered insights & coach',
-      'Advanced AI analysis',
-      'Pattern recognition',
-      'Custom AI reports',
-      'Behavioral risk alerts',
-      'Priority support',
-      'Early access to new features',
-      '2 months FREE!',
+      "Everything in Basic, plus:",
+      "Unlimited trades",
+      "AI-powered insights & coach",
+      "Advanced AI analysis",
+      "Pattern recognition",
+      "Custom AI reports",
+      "Behavioral risk alerts",
+      "Backtesting system",
+      "Priority support",
+      "Early access to new features",
+      "🔜 Coming Soon: Auto broker sync"
     ],
   },
   // WAR ZONE NEWSLETTER
@@ -385,14 +384,15 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
     params.set('ref', clickId);
   }
   
-  // Success redirect URL
+  // 🔥 v2.5.0: Success redirect URL - Now goes to PRICING page for risk setup
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
   if (plan.isNewsletter) {
-    params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success`);
+    params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop`);
   } else if (plan.isTopSecret) {
-    params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success`);
+    params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success&source=whop`);
   } else {
-    params.set('redirect_url', `${baseRedirect}/app/journal/overview?payment=success`);
+    // 🔥 CHANGED: Redirect to pricing page so RiskSetupModal shows
+    params.set('redirect_url', `${baseRedirect}/app/journal/pricing?payment=success&source=whop`);
   }
   
   const queryString = params.toString();

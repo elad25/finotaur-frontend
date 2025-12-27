@@ -55,7 +55,9 @@ import {
   Rocket,
   Target,
   Zap,
-  TrendingUp
+  TrendingUp,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -84,7 +86,13 @@ interface NewsletterStatus {
   is_in_trial: boolean;
   is_active: boolean;
 }
-
+interface NewsletterReport {
+  id: string;
+  date: string;
+  subject: string;
+  html: string;
+  generatedAt: string;
+}
 // ============================================
 // CSS ANIMATIONS (Inline Style)
 // ============================================
@@ -140,7 +148,145 @@ const AnimationStyles = () => (
     .delay-1500 { animation-delay: 1.5s; }
   `}</style>
 );
+// ============================================
+// REPORT VIEWER MODAL
+// ============================================
+const ReportViewerModal = ({
+  isOpen,
+  onClose,
+  report,
+  isLoading,
+  error,
+  onRefresh
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  report: NewsletterReport | null;
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  if (!isOpen) return null;
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div 
+        className="absolute inset-0 bg-black/95 backdrop-blur-md"
+        onClick={onClose}
+      />
+      
+      <div className={cn(
+        "relative bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-2 border-[#C9A646]/30 rounded-3xl shadow-2xl overflow-hidden transition-all duration-300",
+        isFullscreen ? "w-full h-full max-w-none max-h-none rounded-none" : "max-w-4xl w-full max-h-[90vh]"
+      )}
+           style={{ boxShadow: '0 0 60px rgba(201,166,70,0.2)' }}>
+        
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 rounded-xl bg-[#C9A646]/20 border border-[#C9A646]/30">
+              <FileText className="w-5 h-5 text-[#C9A646]" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">
+                {isLoading ? 'Loading Report...' : report?.subject || 'Daily Intelligence Report'}
+              </h2>
+              {report && (
+                <p className="text-zinc-500 text-sm">{formatDate(report.date)}</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50"
+              title="Refresh report"
+            >
+              <RefreshCw className={cn("w-5 h-5 text-zinc-400", isLoading && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="w-5 h-5 text-zinc-400" />
+              ) : (
+                <Maximize2 className="w-5 h-5 text-zinc-400" />
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5 text-zinc-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className={cn(
+          "overflow-y-auto",
+          isFullscreen ? "h-[calc(100%-72px)]" : "max-h-[calc(90vh-72px)]"
+        )}>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="relative">
+                <Loader2 className="w-12 h-12 animate-spin text-[#C9A646]" />
+                <div className="absolute inset-0 w-12 h-12 rounded-full blur-xl bg-[#C9A646]/30 animate-pulse" />
+              </div>
+              <p className="mt-4 text-zinc-500">Loading latest report...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="p-4 rounded-full bg-red-500/20 mb-4">
+                <AlertCircle className="w-10 h-10 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">Failed to Load Report</h3>
+              <p className="text-zinc-500 text-center max-w-md mb-6">{error}</p>
+              <button
+                onClick={onRefresh}
+                className="px-6 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold transition-colors flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Try Again
+              </button>
+            </div>
+          ) : !report ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="p-4 rounded-full bg-[#C9A646]/20 mb-4">
+                <Clock className="w-10 h-10 text-[#C9A646]" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">No Reports Yet</h3>
+              <p className="text-zinc-500 text-center max-w-md">
+                The first report will be available tomorrow at 9:00 AM NY time.
+              </p>
+            </div>
+          ) : (
+            <div 
+              className="report-content"
+              dangerouslySetInnerHTML={{ __html: report.html }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 // ============================================
 // PAYMENT SUCCESS MODAL - Premium Style
 // ============================================
@@ -886,7 +1032,7 @@ const ActiveSubscriberView = ({
 // MAIN COMPONENT
 // ============================================
 export default function WarZoneLandingSimple() {
-  const { user } = useAuth();
+const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -900,8 +1046,13 @@ export default function WarZoneLandingSimple() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isLoadingReport, setIsLoadingReport] = useState(false);
+const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [pollCount, setPollCount] = useState(0);
+  
+  // Report Viewer State
+  const [showReportViewer, setShowReportViewer] = useState(false);
+  const [currentReport, setCurrentReport] = useState<NewsletterReport | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   // Check subscription status
   const checkSubscriptionStatus = useCallback(async () => {
@@ -992,6 +1143,53 @@ export default function WarZoneLandingSimple() {
     checkSubscriptionStatus();
   }, [checkSubscriptionStatus]);
 
+  // Fetch Latest Report
+// Fetch Latest Report
+  const fetchLatestReport = useCallback(async () => {
+    setIsLoadingReport(true);
+    setReportError(null);
+    
+    try {
+      // Get session directly from Supabase
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        setReportError('Please login to view reports');
+        setIsLoadingReport(false);
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE}/api/newsletter/latest`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        if (data.requiresSubscription) {
+          setReportError('You need an active subscription to view reports');
+        } else {
+          setReportError(data.error || 'Failed to load report');
+        }
+        return;
+      }
+      
+      if (data.success && data.data) {
+        setCurrentReport(data.data);
+      } else {
+        setCurrentReport(null);
+      }
+    } catch (error) {
+      console.error('Error fetching report:', error);
+      setReportError('Failed to load report. Please try again.');
+    } finally {
+      setIsLoadingReport(false);
+    }
+  }, []);
+
   // Handlers
   const handleSubscribeClick = () => {
     if (!user) {
@@ -1081,27 +1279,9 @@ export default function WarZoneLandingSimple() {
   }
 };
 
-  const handleViewReport = async () => {
-    setIsLoadingReport(true);
-    try {
-      const response = await fetch(`${API_BASE}/api/newsletter/preview`);
-      const data = await response.json();
-      
-      if (data.success && data.data?.html) {
-        const newWindow = window.open('', '_blank');
-        if (newWindow) {
-          newWindow.document.write(data.data.html);
-          newWindow.document.close();
-        }
-      } else {
-        alert('No report available yet. Check back tomorrow at 9:00 AM NY time.');
-      }
-    } catch (error) {
-      console.error('Error fetching report:', error);
-      alert('Failed to load report. Please try again.');
-    } finally {
-      setIsLoadingReport(false);
-    }
+const handleViewReport = () => {
+    setShowReportViewer(true);
+    fetchLatestReport();
   };
 
   // ====================================
@@ -1296,7 +1476,15 @@ export default function WarZoneLandingSimple() {
           isProcessing={isCancelling}
           trialDaysRemaining={newsletterStatus.days_until_trial_ends}
         />
-        
+                {/* 🔥 הוסף את זה! */}
+        <ReportViewerModal
+          isOpen={showReportViewer}
+          onClose={() => setShowReportViewer(false)}
+          report={currentReport}
+          isLoading={isLoadingReport}
+          error={reportError}
+          onRefresh={fetchLatestReport}
+        />
         <ActiveSubscriberView
           newsletterStatus={newsletterStatus}
           onCancelClick={() => setShowCancelModal(true)}

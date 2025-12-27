@@ -116,6 +116,15 @@ interface MonthStats {
 // ================================================
 
 // Emotion score calculation (0-100)
+// 🔥 NEW: Universal "is trade closed" checker
+const isTradeClosed = (trade: Trade): boolean => {
+  if (trade.input_mode === 'risk-only') {
+    return trade.outcome != null && trade.outcome !== 'OPEN' && trade.pnl != null;
+  }
+  return trade.exit_price != null;
+};
+
+// Emotion score calculation (0-100)
 const calculateEmotionScore = (trades: Trade[]): number => {
   if (trades.length === 0) return 100;
   
@@ -430,7 +439,7 @@ export default function JournalCalendar() {
              tradeDate.getFullYear() === currentDate.getFullYear();
     });
     
-    const closedTrades = monthTrades.filter(t => t.exit_price);
+const closedTrades = monthTrades.filter(isTradeClosed);
     const wins = closedTrades.filter(t => t.outcome === "WIN");
     const losses = closedTrades.filter(t => t.outcome === "LOSS");
     
@@ -521,11 +530,11 @@ export default function JournalCalendar() {
   
   // Cumulative P&L data with actual R
   const cumulativePnLData = useMemo(() => {
-    const monthTrades = trades.filter(trade => {
+const monthTrades = trades.filter(trade => {
       const tradeDate = new Date(trade.open_at);
       return tradeDate.getMonth() === currentDate.getMonth() &&
              tradeDate.getFullYear() === currentDate.getFullYear() &&
-             trade.exit_price;
+             isTradeClosed(trade);
     }).sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
     
     let cumulative = 0;

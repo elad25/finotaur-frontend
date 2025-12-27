@@ -183,19 +183,6 @@ export default function AffiliateOverview() {
     }
   }, [profile?.affiliate_code]);
 
-  const handleCopyLink = useCallback(async () => {
-    if (!profile?.affiliate_code) return;
-    
-    const link = `https://finotaur.com/register?ref=${profile.affiliate_code}`;
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  }, [profile?.affiliate_code]);
-
   const handleNavigateToAffiliate = useCallback(() => navigate('/affiliate'), [navigate]);
   const handleNavigateToPayouts = useCallback(() => navigate('/app/journal/affiliate/payouts'), [navigate]);
   const handleNavigateToReferrals = useCallback(() => navigate('/app/journal/affiliate/referrals'), [navigate]);
@@ -449,36 +436,13 @@ export default function AffiliateOverview() {
           label="Earnings History"
           description="View all commissions"
           onClick={handleNavigateToEarnings}
-        />
+/>
         <QuickActionCard
           icon={ExternalLink}
           label="Marketing Tools"
           description="Banners & links"
           onClick={handleNavigateToMarketing}
         />
-      </div>
-
-      {/* Referral Link */}
-      <div 
-        className="rounded-xl p-6"
-        style={{
-          background: 'linear-gradient(180deg, rgba(26,26,26,0.8) 0%, rgba(20,20,20,0.9) 100%)',
-          border: '1px solid rgba(255,255,255,0.05)',
-        }}
-      >
-        <h3 className="text-white font-medium mb-3">Your Referral Link</h3>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 bg-black/40 rounded-lg px-4 py-3 text-gray-300 text-sm overflow-x-auto">
-            https://finotaur.com/register?ref={profile.affiliate_code}
-          </div>
-          <button
-            onClick={handleCopyLink}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 border border-white/10 text-white rounded-lg hover:bg-white/10 transition-colors"
-          >
-            {copied ? <CheckCircle className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-            Copy Link
-          </button>
-        </div>
       </div>
     </div>
   );

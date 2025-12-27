@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { Eye, EyeOff } from 'lucide-react';
+
 
 export default function Login() {
   const { user, login, signInWithGoogle } = useAuth();
@@ -13,6 +15,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+const [showPassword, setShowPassword] = useState(false);
 
   // Redirect if already logged in
   if (user) {
@@ -114,17 +117,25 @@ export default function Login() {
                 Forgot password?
               </Link>
             </div>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="bg-zinc-800 border-zinc-700 text-white"
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="bg-zinc-800 border-zinc-700 text-white pr-10"
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-300 transition-colors"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
-
           <Button
             type="submit"
             className="w-full bg-yellow-500 text-black hover:bg-yellow-600 font-semibold"

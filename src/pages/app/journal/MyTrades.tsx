@@ -66,7 +66,7 @@ interface Trade {
   fees: number;
   open_at: string;
   close_at?: string;
-  session?: string; // 🔥 Session field
+  session?: string;
   strategy_id?: string;
   strategy_name?: string;
   setup?: string;
@@ -81,6 +81,18 @@ interface Trade {
   created_at?: string;
   mistake?: string;
   next_time?: string;
+  // 🔥 Direct DB fields (risk-only mode support)
+  risk_usd?: number;
+  reward_usd?: number;
+  risk_pts?: number;
+  reward_pts?: number;
+  rr?: number;
+  actual_r?: number;
+  actual_user_r?: number;
+  user_risk_r?: number;
+  user_reward_r?: number;
+  input_mode?: 'summary' | 'risk-only';
+  // Legacy metrics object (backward compatibility)
   metrics?: {
     rr?: number;
     riskUSD?: number;
@@ -105,23 +117,85 @@ interface Stats {
 
 // 🔥 UPDATED: Now calculates R based on global 1R from settings
 const getTradeData = (trade: Trade, oneR: number) => {
-  const pnl = trade.pnl ?? 0;
-  const outcome = trade.outcome ?? 'OPEN';
+  const isRiskOnlyMode = trade.input_mode === 'risk-only';
   
-  // 🔥 Calculate R correctly - based on global 1R!
-  const actualR = trade.exit_price && oneR > 0 
-    ? calculateActualR(pnl, oneR)
-    : null;
+  // 🔥 Get risk from direct field OR legacy metrics
+  const riskUSD = Number(trade.risk_usd) || trade.metrics?.riskUSD || 0;
+  const rewardUSD = Number(trade.reward_usd) || trade.metrics?.rewardUSD || 0;
+  
+  // 🔥 CRITICAL FIX: Check if pnl EXISTS (not just truthy)
+  // pnl = 0 is valid for Break Even trades!
+  const hasPnlValue = trade.pnl !== null && trade.pnl !== undefined;
+  
+  // 🔥 For Risk-Only: check if trade has an ACTUAL result entered
+  const hasRiskOnlyResult = isRiskOnlyMode && hasPnlValue;
+  
+  // 🔥 Get pnl - keep as 0 if that's the actual value
+  const pnl = hasPnlValue ? Number(trade.pnl) : 0;
+  
+  // 🔥 CRITICAL: Determine outcome based on mode
+  let outcome: "WIN" | "LOSS" | "BE" | "OPEN" = trade.outcome as any ?? 'OPEN';
+  
+  // 🔥 For Risk-Only mode: calculate outcome from pnl
+  if (isRiskOnlyMode) {
+    if (hasRiskOnlyResult) {
+      if (pnl > 0) outcome = 'WIN';
+      else if (pnl < 0) outcome = 'LOSS';
+      else outcome = 'BE';
+    } else {
+      outcome = 'OPEN';
+    }
+  }
+  
+  // 🔥 Determine actual R based on mode
+  let actualR: number | null = null;
+  
+  if (isRiskOnlyMode) {
+    if (hasRiskOnlyResult) {
+      // 🔥 FIX: Priority order - check all sources for actual_r
+      if (trade.actual_user_r !== null && trade.actual_user_r !== undefined) {
+        actualR = Number(trade.actual_user_r);
+      } else if (trade.actual_r !== null && trade.actual_r !== undefined) {
+        actualR = Number(trade.actual_r);
+      } else if (trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined) {
+        actualR = Number(trade.metrics.actual_r);
+      } else if (riskUSD > 0) {
+        actualR = pnl / riskUSD;
+      }
+    } else {
+      // 🔥 OPEN trade - show planned R:R ratio
+      actualR = Number(trade.user_risk_r) || null;
+    }
+  } else {
+    // Summary mode: use stored or calculate
+    if (trade.actual_user_r !== undefined && trade.actual_user_r !== null) {
+      actualR = Number(trade.actual_user_r);
+    } else if (trade.actual_r !== undefined && trade.actual_r !== null) {
+      actualR = Number(trade.actual_r);
+    } else if (trade.metrics?.actual_r !== null && trade.metrics?.actual_r !== undefined) {
+      actualR = Number(trade.metrics.actual_r);
+    } else if (trade.exit_price && oneR > 0) {
+      actualR = calculateActualR(pnl, oneR);
+    }
+  }
+  
+  // 🔥 CRITICAL: Risk-Only = closed ONLY if user entered a result!
+  const isClosed = isRiskOnlyMode 
+    ? hasRiskOnlyResult
+    : (trade.exit_price !== null && trade.exit_price !== undefined && Number(trade.exit_price) > 0);
   
   return {
     pnl,
     actualR,
-    riskUSD: trade.metrics?.riskUSD ?? 0,
+    riskUSD,
+    rewardUSD,
     outcome,
     multiplier: trade.multiplier ?? 1,
+    isRiskOnlyMode,
+    isClosed,
+    hasRiskOnlyResult,
   };
 };
-
 const calculateDuration = (openAt: string, closeAt?: string): string => {
   const start = new Date(openAt);
   const end = closeAt ? new Date(closeAt) : new Date();
@@ -217,7 +291,10 @@ const TradeRow = memo(({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }) => {
-  const { pnl, actualR, outcome } = useMemo(() => getTradeData(trade, oneR), [trade, oneR]);
+  const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
+    () => getTradeData(trade, oneR), 
+    [trade, oneR]
+  );
   
   const handleClick = useCallback(() => onOpen(trade), [trade, onOpen]);
   const handleEdit = useCallback((e: React.MouseEvent) => {
@@ -234,12 +311,22 @@ const TradeRow = memo(({
       className="border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
       onClick={handleClick}
     >
+      {/* Date */}
       <TableCell className="text-zinc-400">
         {formatTradeDate(trade.open_at, timezone)}
       </TableCell>
+      
+      {/* Symbol */}
       <TableCell className="font-medium text-white">
         {trade.symbol}
+        {isRiskOnlyMode && (
+          <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-normal">
+            $
+          </span>
+        )}
       </TableCell>
+      
+      {/* Side */}
       <TableCell>
         <Badge 
           variant={trade.side === "LONG" ? "outline" : "destructive"}
@@ -248,7 +335,8 @@ const TradeRow = memo(({
           {trade.side}
         </Badge>
       </TableCell>
-      {/* 🔥 NEW: Session Badge Column */}
+      
+      {/* Session */}
       <TableCell>
         {trade.session ? (
           <Badge 
@@ -261,14 +349,38 @@ const TradeRow = memo(({
           <span className="text-zinc-500">—</span>
         )}
       </TableCell>
+      
+      {/* Entry - 🔥 Show Risk for Risk-Only mode */}
       <TableCell className="text-zinc-300">
-        ${formatNumber(trade.entry_price, 2)}
+        {isRiskOnlyMode ? (
+          <span className="text-red-400 text-sm">
+            ${formatNumber(riskUSD, 0)} <span className="text-zinc-500 text-xs">risk</span>
+          </span>
+        ) : (
+          `$${formatNumber(trade.entry_price, 2)}`
+        )}
       </TableCell>
+      
+      {/* Exit - 🔥 Show Target for Risk-Only mode */}
       <TableCell className="text-zinc-300">
-        {trade.exit_price ? `$${formatNumber(trade.exit_price, 2)}` : '—'}
+        {isRiskOnlyMode ? (
+          rewardUSD > 0 ? (
+            <span className="text-emerald-400 text-sm">
+              ${formatNumber(rewardUSD, 0)} <span className="text-zinc-500 text-xs">target</span>
+            </span>
+          ) : (
+            <span className="text-zinc-500">—</span>
+          )
+        ) : (
+          trade.exit_price && Number(trade.exit_price) > 0 
+            ? `$${formatNumber(trade.exit_price, 2)}` 
+            : '—'
+        )}
       </TableCell>
+      
+      {/* P&L - 🔥 FIXED: Show for both modes */}
       <TableCell>
-        {trade.exit_price ? (
+        {isClosed ? (
           <span className={pnl >= 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
             {pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}
           </span>
@@ -276,16 +388,32 @@ const TradeRow = memo(({
           <span className="text-zinc-500">—</span>
         )}
       </TableCell>
+      
+      {/* Outcome */}
       <TableCell>
         <Badge 
           variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
-          className={`text-xs ${outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : ""}`}
+          className={`text-xs ${
+            outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : 
+            outcome === "OPEN" && isRiskOnlyMode ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : ""
+          }`}
         >
           {outcome === "WIN" ? "Win" : outcome === "LOSS" ? "Loss" : outcome === "BE" ? "Break Even" : "Open"}
         </Badge>
       </TableCell>
+      
+      {/* Actual R - 🔥 Show R:R for open Risk-Only trades */}
       <TableCell>
-        {actualR !== null && actualR !== undefined ? (
+        {isRiskOnlyMode && !isClosed ? (
+          // Open Risk-Only trade - show planned R:R
+          riskUSD > 0 && rewardUSD > 0 ? (
+            <span className="text-yellow-400 font-medium">
+              1:{formatNumber(rewardUSD / riskUSD, 1)}
+            </span>
+          ) : (
+            <span className="text-zinc-500">—</span>
+          )
+        ) : actualR !== null && actualR !== undefined ? (
           <span className={`font-semibold ${
             actualR > 0 ? 'text-emerald-400' : 
             actualR < 0 ? 'text-red-400' : 
@@ -297,18 +425,8 @@ const TradeRow = memo(({
           <span className="text-zinc-500">—</span>
         )}
       </TableCell>
-      <TableCell>
-        {trade.quality_tag ? (
-          <Badge 
-            variant="outline" 
-            className="text-xs border-yellow-500/40 text-yellow-400 bg-yellow-500/10"
-          >
-            {trade.quality_tag}
-          </Badge>
-        ) : (
-          <span className="text-zinc-500">—</span>
-        )}
-      </TableCell>
+      
+      {/* Strategy */}
       <TableCell>
         {trade.strategy_name ? (
           <span className="text-yellow-400/90 text-sm font-medium">
@@ -318,6 +436,8 @@ const TradeRow = memo(({
           <span className="text-zinc-500">—</span>
         )}
       </TableCell>
+      
+      {/* Actions */}
       <TableCell className="text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -404,15 +524,23 @@ export default function MyTrades() {
   }, []);
 
   // ✅ 4. 🚀 OPTIMIZED: Stats calculation - single pass, memoized
-  const stats = useMemo<Stats>(() => {
-    const closedTrades = trades.filter(t => t.exit_price !== null && t.exit_price !== undefined);
-    const total = closedTrades.length;
-    
-    if (total === 0) {
-      return { totalTrades: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
+const stats = useMemo<Stats>(() => {
+  // 🔥 Support both modes for closed trades detection
+  const closedTrades = trades.filter(t => {
+    if (t.input_mode === 'risk-only') {
+      // 🔥 Risk-Only: closed ONLY if has result (pnl is not null)
+      return t.pnl !== null && t.pnl !== undefined;
     }
+    // Summary mode: closed if has exit_price
+    return t.exit_price != null;
+  });
+  const total = closedTrades.length;
+  
+  if (total === 0) {
+    return { totalTrades: 0, winRate: 0, totalPnL: 0, avgR: 0, wins: 0, losses: 0, breakeven: 0 };
+  }
 
-    let wins = 0, losses = 0, breakeven = 0, totalPnL = 0, totalR = 0, rCount = 0;
+  let wins = 0, losses = 0, breakeven = 0, totalPnL = 0, totalR = 0, rCount = 0;
 
     // 🚀 OPTIMIZED: Single loop instead of multiple passes
     closedTrades.forEach(trade => {
@@ -593,7 +721,35 @@ export default function MyTrades() {
   // ✅ 8. Main render
   return (
     <div className="flex flex-col h-full">
-      <PageTitle title="My Trades" />
+      {/* Header with Coming Soon Banner */}
+<div className="flex items-center px-6 py-4">
+  <h1 className="text-2xl font-bold text-white">My Trades</h1>
+  
+  {/* 🚀 Coming Soon Banner - Centered */}
+  <div className="flex-1 flex justify-center">
+    <div 
+      className="relative overflow-hidden rounded-lg px-4 py-2"
+      style={{
+        background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(161, 98, 7, 0.1) 100%)',
+        border: '1px solid rgba(234, 179, 8, 0.3)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-lg">🚀</span>
+        <span className="text-yellow-400 font-semibold text-sm">
+          COMING SOON: Auto Trade Documentation
+        </span>
+        <span className="text-yellow-500/60 text-sm hidden lg:inline">•</span>
+        <span className="text-yellow-500/70 text-xs hidden lg:inline">
+          Automatic trade capture & analysis
+        </span>
+        <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 text-xs font-bold animate-pulse">
+          STAY TUNED
+        </span>
+      </div>
+    </div>
+  </div>
+</div>
 
       {/* 🔥 Admin Impersonation Indicator */}
       {isImpersonating && (
@@ -729,21 +885,20 @@ export default function MyTrades() {
         ) : (
           <Table>
             <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-500">Date</TableHead>
-                <TableHead className="text-zinc-500">Symbol</TableHead>
-                <TableHead className="text-zinc-500">Side</TableHead>
-                <TableHead className="text-zinc-500">Session</TableHead>
-                <TableHead className="text-zinc-500">Entry</TableHead>
-                <TableHead className="text-zinc-500">Exit</TableHead>
-                <TableHead className="text-zinc-500">P&L</TableHead>
-                <TableHead className="text-zinc-500">Outcome</TableHead>
-                <TableHead className="text-zinc-500">Actual R</TableHead>
-                <TableHead className="text-zinc-500">Quality</TableHead>
-                <TableHead className="text-zinc-500">Strategy</TableHead>
-                <TableHead className="text-zinc-500 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
+  <TableRow className="border-zinc-800 hover:bg-transparent">
+    <TableHead className="text-zinc-500">Date</TableHead>
+    <TableHead className="text-zinc-500">Symbol</TableHead>
+    <TableHead className="text-zinc-500">Side</TableHead>
+    <TableHead className="text-zinc-500">Session</TableHead>
+    <TableHead className="text-zinc-500">Entry / Risk</TableHead>
+    <TableHead className="text-zinc-500">Exit / Target</TableHead>
+    <TableHead className="text-zinc-500">P&L</TableHead>
+    <TableHead className="text-zinc-500">Outcome</TableHead>
+    <TableHead className="text-zinc-500">R</TableHead>
+    <TableHead className="text-zinc-500">Strategy</TableHead>
+    <TableHead className="text-zinc-500 text-right">Actions</TableHead>
+  </TableRow>
+</TableHeader>
             <TableBody>
               {filteredTrades.map((trade) => (
                 <TradeRow
@@ -765,8 +920,7 @@ export default function MyTrades() {
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DialogContent className="max-w-[96vw] w-[1450px] h-[92vh] p-0 border-zinc-800 bg-zinc-900 overflow-hidden shadow-2xl">
           {selectedTrade && (() => {
-            const { pnl, outcome, multiplier, actualR, riskUSD } = getTradeData(selectedTrade, oneR);
-
+const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(selectedTrade, oneR);
             return (
             <div className="flex h-full max-h-full overflow-hidden">
               {/* Left Side - Trade Information */}
@@ -830,12 +984,19 @@ export default function MyTrades() {
                       </div>
                       <div>
                         <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
-                          <DollarSign className="w-3 h-3" />
-                          P&L
-                        </div>
-                        <div className={`text-base font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}
-                        </div>
+  <DollarSign className="w-3 h-3" />
+  P&L
+</div>
+<div className={`text-base font-bold ${
+  !isClosed ? 'text-zinc-500' :
+  pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+}`}>
+  {isClosed ? (
+    <>{pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 2)}</>
+  ) : (
+    '—'
+  )}
+</div>
                       </div>
                       <div>
                         <div className="text-[11px] text-zinc-500 mb-1 flex items-center gap-1">
@@ -876,100 +1037,195 @@ export default function MyTrades() {
                     </div>
                   </div>
 
-                  {/* Price Details */}
+                  {/* Price Details - 🔥 UPDATED: Handle Risk-Only mode */}
                   <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider">Price Details</h3>
+                    <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-2">
+                      {selectedTrade.input_mode === 'risk-only' ? 'Risk Details' : 'Price Details'}
+                      {selectedTrade.input_mode === 'risk-only' && (
+                        <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">RISK-ONLY</span>
+                      )}
+                    </h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Entry Price</div>
-                        <div className="text-base font-semibold text-white">
-                          ${formatNumber(selectedTrade.entry_price, 2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
-                        <div className="text-base font-semibold text-red-400">
-                          ${formatNumber(selectedTrade.stop_price, 2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Take Profit</div>
-                        <div className="text-base font-semibold text-emerald-400">
-                          {selectedTrade.take_profit_price 
-                            ? `$${formatNumber(selectedTrade.take_profit_price, 2)}` 
-                            : "—"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Exit Price</div>
-                        <div className="text-base font-semibold text-zinc-300">
-                          {selectedTrade.exit_price 
-                            ? `$${formatNumber(selectedTrade.exit_price, 2)}` 
-                            : "—"}
-                        </div>
-                      </div>
+                      {selectedTrade.input_mode === 'risk-only' ? (
+                        <>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Risk Amount</div>
+                            <div className="text-base font-semibold text-red-400">
+                              ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Target Amount</div>
+                            <div className="text-base font-semibold text-emerald-400">
+                              ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Actual Result</div>
+                            <div className={`text-base font-semibold ${(selectedTrade.pnl || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {(selectedTrade.pnl || 0) >= 0 ? '+' : ''}${formatNumber(selectedTrade.pnl || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">R:R Ratio</div>
+                            <div className="text-base font-semibold text-yellow-400">
+                              1:{formatNumber(selectedTrade.rr || 0, 2)}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Entry Price</div>
+                            <div className="text-base font-semibold text-white">
+                              ${formatNumber(selectedTrade.entry_price, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Stop Loss</div>
+                            <div className="text-base font-semibold text-red-400">
+                              ${formatNumber(selectedTrade.stop_price, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Take Profit</div>
+                            <div className="text-base font-semibold text-emerald-400">
+                              {selectedTrade.take_profit_price 
+                                ? `$${formatNumber(selectedTrade.take_profit_price, 2)}` 
+                                : "—"}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Exit Price</div>
+                            <div className="text-base font-semibold text-zinc-300">
+                              {selectedTrade.exit_price 
+                                ? `$${formatNumber(selectedTrade.exit_price, 2)}` 
+                                : "—"}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  {/* Risk/Reward - UPDATED DISPLAY */}
+                  {/* Risk/Reward - 🔥 UPDATED: Handle Risk-Only mode */}
                   <div className="rounded-lg border border-zinc-800 bg-gradient-to-br from-zinc-900/60 to-zinc-900/30 p-3 shadow-lg">
                     <h3 className="text-[11px] font-semibold text-zinc-400 mb-2 uppercase tracking-wider flex items-center gap-2">
                       Risk/Reward
-                      {multiplier && multiplier !== 1 && (
+                      {selectedTrade.input_mode === 'risk-only' && (
+                        <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-400 bg-yellow-500/10">
+                          Risk-Only Mode
+                        </Badge>
+                      )}
+                      {multiplier && multiplier !== 1 && selectedTrade.input_mode !== 'risk-only' && (
                         <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-400 bg-blue-500/10">
                           {multiplier}x Multiplier
                         </Badge>
                       )}
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
-                        <div className="text-base font-semibold text-red-400">
-                          ${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Multiplier</div>
-                        <div className="text-base font-bold text-blue-400">
-                          {multiplier}x
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Quantity</div>
-                        <div className="text-base font-semibold text-white">
-                          {selectedTrade.quantity}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Total Risk</div>
-                        <div className="text-base font-bold text-red-400">
-                          ${formatNumber(riskUSD, 2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[11px] text-zinc-500 mb-1">Fees</div>
-                        <div className="text-base font-semibold text-zinc-300">
-                          ${formatNumber(selectedTrade.fees, 2)}
-                        </div>
-                      </div>
+                      {selectedTrade.input_mode === 'risk-only' ? (
+                        <>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Risk (USD)</div>
+                            <div className="text-base font-bold text-red-400">
+                              ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Target (USD)</div>
+                            <div className="text-base font-bold text-emerald-400">
+                              ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Planned R:R</div>
+                            <div className="text-base font-semibold text-yellow-400">
+                              1:{formatNumber(selectedTrade.rr || 0, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Actual R</div>
+                            <div className={`text-base font-bold ${
+                              actualR && actualR > 0 ? 'text-emerald-400' : 
+                              actualR && actualR < 0 ? 'text-red-400' : 
+                              'text-zinc-400'
+                            }`}>
+                              {actualR !== null && actualR !== undefined ? formatRValue(actualR) : '—'}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Risk per Point</div>
+                            <div className="text-base font-semibold text-red-400">
+                              ${formatNumber(Math.abs(selectedTrade.entry_price - selectedTrade.stop_price), 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Multiplier</div>
+                            <div className="text-base font-bold text-blue-400">
+                              {multiplier}x
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Quantity</div>
+                            <div className="text-base font-semibold text-white">
+                              {selectedTrade.quantity}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Total Risk</div>
+                            <div className="text-base font-bold text-red-400">
+                              ${formatNumber(riskUSD, 2)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] text-zinc-500 mb-1">Fees</div>
+                            <div className="text-base font-semibold text-zinc-300">
+                              ${formatNumber(selectedTrade.fees, 2)}
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                     
-                    {/* Show calculation using global 1R */}
-                    <div className="mt-3 pt-3 border-t border-zinc-800/50">
-                      <div className="text-xs text-zinc-500 space-y-1">
-                        <div className="font-mono">
-                          Trade Risk = ${formatNumber(riskUSD, 2)}
-                        </div>
-                        <div className="font-mono text-blue-400">
-                          Your 1R (Settings) = ${formatNumber(oneR, 2)}
-                        </div>
-                        {selectedTrade.exit_price && actualR !== null && (
-                          <div className={`font-mono font-semibold ${actualR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {actualR.toFixed(2)}R
+                    {/* Show calculation using global 1R - 🔥 Only for Summary mode */}
+                    {selectedTrade.input_mode !== 'risk-only' && (
+                      <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                        <div className="text-xs text-zinc-500 space-y-1">
+                          <div className="font-mono">
+                            Trade Risk = ${formatNumber(riskUSD, 2)}
                           </div>
-                        )}
+                          <div className="font-mono text-blue-400">
+                            Your 1R (Settings) = ${formatNumber(oneR, 2)}
+                          </div>
+                          {selectedTrade.exit_price && actualR !== null && (
+                            <div className={`font-mono font-semibold ${actualR > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              Actual R = ${formatNumber(Math.abs(pnl), 2)} ÷ ${formatNumber(oneR, 2)} = {actualR.toFixed(2)}R
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
+                    
+                    {/* 🔥 NEW: Risk-Only mode calculation display */}
+                    {selectedTrade.input_mode === 'risk-only' && (
+                      <div className="mt-3 pt-3 border-t border-zinc-800/50">
+                        <div className="text-xs text-zinc-500 space-y-1">
+                          <div className="font-mono">
+                            Risk = ${formatNumber(selectedTrade.risk_usd || 0, 2)}
+                          </div>
+                          <div className="font-mono">
+                            Target = ${formatNumber(selectedTrade.reward_usd || 0, 2)}
+                          </div>
+                          <div className={`font-mono font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            Result = {pnl >= 0 ? '+' : ''}${formatNumber(pnl, 2)} ({actualR !== null ? formatRValue(actualR) : '—'})
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Position Details - 🔥 UPDATED WITH SESSION */}

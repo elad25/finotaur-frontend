@@ -1141,12 +1141,20 @@ export default function New() {
     }
 
     // 🔥 RISK-ONLY MODE VALIDATION
-    if (riskInputMode === 'risk-only') {
-      if (directRiskUSD <= 0) {
-        toast.error("Risk amount is required");
-        return;
-      }
-    } else {
+if (riskInputMode === 'risk-only') {
+  if (directRiskUSD <= 0) {
+    toast.error("Risk amount is required");
+    return;
+  }
+  
+  // 🔥 DEBUG: Log what we're about to save
+  console.log('🔥 Risk-Only Mode Data:', {
+    directRiskUSD,
+    directTargetUSD,
+    directResultUSD,
+    hasResult: directResultUSD !== null,
+  });
+} else {
       // TRADE SUMMARY MODE VALIDATION
       if (!st.assetClass) {
         toast.error("Asset class is required");
@@ -1218,19 +1226,36 @@ export default function New() {
         // ════════════════════════════════════════════════════════════
         // 🔥 RISK-ONLY MODE PAYLOAD
         // ════════════════════════════════════════════════════════════
-        const hasResult = directResultUSD !== null;
-        
-        // Calculate R values for risk-only mode
+// 🔥 CRITICAL: Check if result was entered (including 0 and negative values!)
+// Note: 0 is a valid result (break even), so we check for null/undefined only
+const hasResult = directResultUSD !== null && directResultUSD !== undefined;
+
+console.log('🔥 hasResult check:', { 
+  directResultUSD, 
+  hasResult, 
+  typeOf: typeof directResultUSD,
+  isZero: directResultUSD === 0 
+});
+// Calculate R values for risk-only mode
         let actual_r: number | null = null;
         let actual_user_r: number | null = null;
         
-        if (hasResult && directRiskUSD > 0) {
-          actual_r = directResultUSD! / directRiskUSD;
+if (hasResult && directRiskUSD > 0) {
+          actual_r = Number(directResultUSD) / directRiskUSD;
         }
         
         if (hasResult && oneRValue && oneRValue > 0) {
-          actual_user_r = directResultUSD! / oneRValue;
+          // 🔥 FIX: Use Number() to ensure proper calculation even for 0
+          actual_user_r = Number(directResultUSD) / oneRValue;
         }
+        
+        console.log('🔥 Risk-Only R calculations:', {
+          actual_r,
+          actual_user_r,
+          directResultUSD,
+          directRiskUSD,
+          oneRValue,
+        });
 
         payload = {
           // ═══════════════════════════════════════════
@@ -1282,11 +1307,11 @@ export default function New() {
           user_reward_r: riskOnlyUserRewardR || null,
           actual_user_r: actual_user_r,
           
-          // ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
           // OUTCOME & P&L
           // ═══════════════════════════════════════════
           outcome: hasResult ? riskOnlyOutcome : 'OPEN',
-          pnl: hasResult ? directResultUSD : null,
+          pnl: hasResult ? Number(directResultUSD) : null,
           
           // ═══════════════════════════════════════════
           // MEDIA
@@ -1306,18 +1331,18 @@ export default function New() {
           partial_exits: null,
         };
         
-        if (isDev) {
-          console.log('📦 Risk-Only payload:', {
-            symbol: payload.symbol,
-            risk_usd: payload.risk_usd,
-            reward_usd: payload.reward_usd,
-            pnl: payload.pnl,
-            rr: payload.rr,
-            actual_r: payload.actual_r,
-            actual_user_r: payload.actual_user_r,
-            input_mode: payload.input_mode,
-          });
-        }
+       // 🔥 DEBUG: Log the FULL payload to verify all fields
+        console.log('📦 Risk-Only FULL payload:', JSON.stringify({
+          pnl: payload.pnl,
+          outcome: payload.outcome,
+          actual_r: payload.actual_r,
+          actual_user_r: payload.actual_user_r,
+          input_mode: payload.input_mode,
+          risk_usd: payload.risk_usd,
+          reward_usd: payload.reward_usd,
+          hasResult_was: hasResult,
+          directResultUSD_was: directResultUSD,
+        }, null, 2));
       } else {
         // ════════════════════════════════════════════════════════════
         // 🔥 TRADE SUMMARY MODE PAYLOAD (Original logic)
@@ -2430,14 +2455,25 @@ export default function New() {
                       step="any"
                       value={directResultUSD ?? ""}
                       onChange={(e) => {
-                        const value = e.target.value;
-                        if (value === "" || value === "-") {
-                          setDirectResultUSD(null);
-                          return;
-                        }
-                        const val = parseFloat(value);
-                        setDirectResultUSD(isNaN(val) ? null : val);
-                      }}
+  const value = e.target.value.trim();
+  
+  // Empty = no result entered
+  if (value === "") {
+    setDirectResultUSD(null);
+    return;
+  }
+  
+  // Allow typing "-" for negative numbers
+  if (value === "-") {
+    return; // Don't change state, let user continue typing
+  }
+  
+  const val = parseFloat(value);
+  if (!isNaN(val)) {
+    setDirectResultUSD(val);
+    console.log('🔥 Result set to:', val, typeof val);
+  }
+}}
                       placeholder="150 (or -50 for loss)"
                       className="bg-[#0E0E0E] border border-yellow-500/30 rounded-xl h-14 text-zinc-200 text-right text-xl font-semibold pl-10 pr-4 focus:border-yellow-500/60 transition-all"
                     />

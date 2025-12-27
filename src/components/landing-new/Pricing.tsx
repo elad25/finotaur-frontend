@@ -49,19 +49,18 @@ const plans: Plan[] = [
     monthlyPrice: "$19.99",
     yearlyPrice: "$149",
     yearlyMonthlyEquivalent: "$12.42",
-    description: "Essential tools + automatic broker sync",
+    description: "Essential tools ",
     features: [
       "Everything in Free, plus:",
-      "Broker sync (12,000+ brokers)",
-      "Up to 25 auto-synced trades/month (~2GB data)",
-      "Unlimited manual trades",
+      "Up to 25 trades per month",
       "Full performance analytics",
       "Strategy builder & tracking",
       "Calendar & trading sessions",
       "Advanced statistics & metrics",
       "Equity curve & charts",
       "Trade screenshots & notes",
-      "Email support"
+      "Email support",
+      "🔜 Coming Soon: Broker sync "
     ],
     cta: "Get Basic",
     featured: false,
@@ -76,15 +75,16 @@ const plans: Plan[] = [
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
-      "Unlimited auto-synced trades",
-      "No data limits — sync freely",
+      "Unlimited trades",
       "AI-powered insights & coach",
       "Advanced AI analysis",
       "Pattern recognition",
       "Custom AI reports",
       "Behavioral risk alerts",
+      "Backtesting system",
       "Priority support",
-      "Early access to new features"
+      "Early access to new features",
+      "🔜 Coming Soon: Auto broker sync"
     ],
     cta: "Get Premium",
     featured: true,

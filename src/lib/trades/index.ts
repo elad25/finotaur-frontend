@@ -180,14 +180,25 @@ export async function createTrade(tradeData: any) {
       strategy_id: tradeData.strategy_id || null,
     };
 
-    console.log('✅ Creating trade with user_id:', user.id);
-    console.log('📦 Full payload:', {
+console.log('✅ Creating trade with user_id:', user.id);
+    
+    // 🔥 DEBUG: Log COMPLETE payload to verify ALL fields are being sent
+    console.log('📦 COMPLETE DB PAYLOAD:', JSON.stringify({
+      // Risk-Only critical fields
+      pnl: payload.pnl,
+      outcome: payload.outcome,
+      actual_r: payload.actual_r,
+      actual_user_r: payload.actual_user_r,
+      input_mode: payload.input_mode,
+      risk_usd: payload.risk_usd,
+      reward_usd: payload.reward_usd,
+      // Other fields
       symbol: payload.symbol,
-      session: payload.session,  // 🔥 Log normalized session
+      session: payload.session,
       screenshots: payload.screenshots?.length || 0,
       strategy_id: payload.strategy_id,
       multiplier: payload.multiplier,
-    });
+    }, null, 2));
 
     // 1. יצירת הטרייד
     const { data: trade, error } = await supabase

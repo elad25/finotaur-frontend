@@ -3,12 +3,14 @@
 // FINOTAUR PRICING SELECTION - WITH AFFILIATE DISCOUNTS
 // =====================================================
 // 
-// Version: 2.2 - Updated discount display text
-// - Annual discount: 10% (was 15%)
+// Version: 3.0 - Risk Setup for ALL plans
+// - Annual discount: 10%
+// - Shows RiskSetupModal after ANY plan selection
+// - Checks if returning from Whop payment
 // =====================================================
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { Check, Shield, Zap, TrendingUp, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -88,15 +90,16 @@ const plans: Plan[] = [
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
-      "Unlimited trades (manual + auto-sync)",
-      "No data limits — sync freely",
+      "Unlimited trades",
       "AI-powered insights & coach",
       "Advanced AI analysis",
       "Pattern recognition",
       "Custom AI reports",
       "Behavioral risk alerts",
+      "Backtesting system",
       "Priority support",
-      "Early access to new features"
+      "Early access to new features",
+      "🔜 Coming Soon: Auto broker sync"
     ],
     cta: "Get Premium",
     featured: true,
@@ -107,6 +110,8 @@ const plans: Plan[] = [
 export default function PricingSelection() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('basic');
@@ -130,7 +135,7 @@ export default function PricingSelection() {
     savings,
   } = useAffiliateDiscount(selectedPlan, billingInterval);
 
-  // 🔥 Check if user should be here
+  // 🔥 Check if user should be here OR if returning from Whop
   useEffect(() => {
     const checkSubscription = async () => {
       if (!user) {
@@ -142,6 +147,10 @@ export default function PricingSelection() {
       setCheckingSubscription(true);
 
       try {
+        // 🔥 Check for Whop callback parameters
+        const paymentSuccess = searchParams.get('payment') === 'success';
+        const fromWhop = searchParams.get('source') === 'whop';
+
         const { data, error } = await supabase
           .from('profiles')
           .select('account_type, subscription_status, onboarding_completed')
@@ -155,6 +164,27 @@ export default function PricingSelection() {
         }
 
         console.log('🔍 User subscription status:', data);
+
+        // 🔥 FIXED: Check onboarding_completed instead of default values
+        // DB has defaults (portfolio_size=10000, risk_mode='percentage') 
+        // so we must check onboarding_completed flag
+        const hasRiskConfigured = data?.onboarding_completed === true;
+
+        // 🔥 If returning from Whop with successful payment
+        if (paymentSuccess || fromWhop) {
+          console.log('🎉 User returned from Whop payment');
+          
+          // Clean URL params
+          window.history.replaceState({}, '', '/app/journal/pricing');
+          
+          // Check if they need to set up risk
+          if (!hasRiskConfigured) {
+            console.log('📊 Needs risk setup after payment');
+            setShowRiskSetup(true);
+            setCheckingSubscription(false);
+            return;
+          }
+        }
 
         // If already has active subscription AND completed onboarding, go to dashboard
         const hasPaidSubscription = 
@@ -175,6 +205,16 @@ export default function PricingSelection() {
           return;
         }
 
+        // 🔥 NEW: If has paid subscription but NOT completed onboarding, show risk setup
+        if (hasPaidSubscription && !data?.onboarding_completed) {
+          console.log('📊 Paid user needs to complete onboarding (risk setup)');
+          if (!hasRiskConfigured) {
+            setShowRiskSetup(true);
+            setCheckingSubscription(false);
+            return;
+          }
+        }
+
         console.log('💡 User needs to select plan');
       } catch (error) {
         console.error('❌ Error checking subscription:', error);
@@ -184,7 +224,7 @@ export default function PricingSelection() {
     };
 
     checkSubscription();
-  }, [user, navigate]);
+  }, [user, navigate, searchParams]);
 
   // 🔥 Calculate display price with discount
   const getDisplayPrice = (plan: Plan) => {
@@ -255,7 +295,7 @@ export default function PricingSelection() {
 
       if (error) throw error;
 
-      // Show Risk Setup Modal after selecting Free
+      // 🔥 Show Risk Setup Modal after selecting Free
       setShowRiskSetup(true);
     } catch (error: any) {
       console.error('❌ Error setting free plan:', error);
@@ -265,7 +305,7 @@ export default function PricingSelection() {
     }
   };
 
-  // Handle Risk Setup completion
+  // 🔥 Handle Risk Setup completion - Works for ALL plans
   const handleRiskSetupComplete = async () => {
     if (!user) return;
 
@@ -305,16 +345,21 @@ export default function PricingSelection() {
     );
   }
 
-  return (
-    <>
-      {/* Risk Setup Modal */}
-      {showRiskSetup && user && (
+  // 🔥 If returning from Whop and need risk setup - show ONLY the modal
+  if (showRiskSetup && user) {
+    return (
+      <div className="min-h-screen bg-black">
         <RiskSetupModal
           open={showRiskSetup}
           onClose={handleRiskSetupComplete}
           userId={user.id}
         />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <>
 
       {/* Payment Popup - 🔥 NOW WITH DISCOUNT INFO */}
       {showPaymentPopup && (
@@ -392,7 +437,6 @@ export default function PricingSelection() {
           </motion.div>
 
           {/* 🔥 DISCOUNT BANNER - Shows when discount is active */}
-          {/* 🔥 v2.2: Changed 15% to 10% for annual plans */}
           {hasDiscount && discountInfo && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -412,7 +456,6 @@ export default function PricingSelection() {
                     : `Code: ${discountInfo.code}`
                   }
                   {' • '}
-                  {/* 🔥 v2.2: Both monthly and yearly are now 10% */}
                   10% off {billingInterval === 'yearly' ? 'annual' : 'monthly'} plans
                 </p>
               </div>
@@ -420,7 +463,6 @@ export default function PricingSelection() {
           )}
 
           {/* Billing Toggle */}
-          {/* 🔥 v2.2: Changed 15% to 10% in toggle text */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -449,7 +491,6 @@ export default function PricingSelection() {
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  {/* 🔥 v2.2: Changed from "Save 38% + 15% off" to "Save 38% + 10% off" */}
                   {hasDiscount ? 'Save 38% + 10% off' : 'Save up to 38%'}
                 </span>
               </button>

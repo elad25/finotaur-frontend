@@ -1,9 +1,10 @@
 // =====================================================
-// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v1.0.1 FIXED
+// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v2.0.0
 // =====================================================
 // Edge Function for managing Whop subscriptions
 // 
-// 🔧 FIXED: Removed .catch() on Supabase queries
+// 🔧 v1.0.1: Removed .catch() on Supabase queries
+// 🔧 v2.0.0: Added cancellation feedback collection
 // =====================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -32,10 +33,24 @@ const corsHeaders = {
 // TYPES
 // ============================================
 
+interface CancellationFeedback {
+  reason_id: string;
+  reason_label: string;
+  feedback?: string;
+}
+
 interface CancelRequest {
   action: "cancel";
-  mode: "at_period_end" | "immediate";
-  reason?: string;
+  mode?: "at_period_end" | "immediate";
+  reason?: string;  // Legacy support
+  // 🆕 New structured feedback
+  reason_id?: string;
+  reason_label?: string;
+  feedback?: string;
+}
+
+interface UndoCancelRequest {
+  action: "undo_cancel";
 }
 
 interface DowngradeRequest {
@@ -47,7 +62,7 @@ interface StatusRequest {
   action: "status";
 }
 
-type RequestBody = CancelRequest | DowngradeRequest | StatusRequest;
+type RequestBody = CancelRequest | UndoCancelRequest | DowngradeRequest | StatusRequest;
 
 interface WhopMembership {
   id: string;
@@ -90,6 +105,38 @@ async function cancelWhopMembership(
 
   } catch (error) {
     console.error(`❌ Cancel membership error:`, error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+async function reactivateWhopMembership(
+  membershipId: string
+): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
+  try {
+    console.log(`🔄 Reactivating membership ${membershipId}`);
+
+    // Whop API: POST /memberships/{id} with cancel_at_period_end: false
+    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${WHOP_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ cancel_at_period_end: false }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
+      return { success: false, error: `Whop API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    console.log(`✅ Membership reactivated:`, data);
+    return { success: true, data };
+
+  } catch (error) {
+    console.error(`❌ Reactivate membership error:`, error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -150,6 +197,47 @@ async function logSubscriptionEvent(
 }
 
 // ============================================
+// 🆕 HELPER: Save cancellation feedback
+// ============================================
+
+async function saveCancellationFeedback(
+  supabase: any,
+  userId: string,
+  reasonId: string,
+  reasonLabel: string,
+  feedbackText: string | null,
+  planCancelled: string,
+  subscriptionType: string | null,
+  whopMembershipId: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log(`📝 Saving cancellation feedback for user ${userId}`);
+    
+    const { data, error } = await supabase.rpc("save_cancellation_feedback", {
+      p_user_id: userId,
+      p_reason_id: reasonId,
+      p_reason_label: reasonLabel,
+      p_feedback_text: feedbackText || null,
+      p_plan_cancelled: planCancelled,
+      p_subscription_type: subscriptionType,
+      p_whop_membership_id: whopMembershipId,
+    });
+
+    if (error) {
+      console.error("❌ Failed to save cancellation feedback:", error.message);
+      return { success: false, error: error.message };
+    }
+
+    console.log(`✅ Cancellation feedback saved:`, data);
+    return { success: true };
+
+  } catch (err) {
+    console.error("❌ Failed to save cancellation feedback:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -190,7 +278,7 @@ serve(async (req: Request) => {
     // Get user's profile with Whop membership ID
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, email, account_type, subscription_status, whop_membership_id, subscription_expires_at, subscription_cancel_at_period_end, pending_downgrade_plan")
+      .select("id, email, account_type, subscription_status, subscription_interval, whop_membership_id, subscription_expires_at, subscription_cancel_at_period_end, pending_downgrade_plan")
       .eq("id", user.id)
       .single();
 
@@ -216,6 +304,9 @@ serve(async (req: Request) => {
 
       case "cancel":
         return handleCancel(supabase, profile, body as CancelRequest, corsHeaders);
+
+      case "undo_cancel":
+        return handleUndoCancel(supabase, profile, corsHeaders);
 
       case "downgrade":
         return handleDowngrade(supabase, profile, body as DowngradeRequest, corsHeaders);
@@ -275,7 +366,7 @@ async function handleStatus(
 }
 
 // ============================================
-// CANCEL HANDLER
+// CANCEL HANDLER (Updated with feedback)
 // ============================================
 
 async function handleCancel(
@@ -310,7 +401,34 @@ async function handleCancel(
     );
   }
 
-  // 🔥 Always cancel at_period_end - user keeps access until cycle ends
+  // ============================================
+  // 🆕 STEP 1: Save cancellation feedback FIRST
+  // ============================================
+  
+  const reasonId = request.reason_id || "other";
+  const reasonLabel = request.reason_label || request.reason || "Other";
+  const feedbackText = request.feedback || null;
+
+  const feedbackResult = await saveCancellationFeedback(
+    supabase,
+    profile.id,
+    reasonId,
+    reasonLabel,
+    feedbackText,
+    profile.account_type,
+    profile.subscription_interval,
+    profile.whop_membership_id
+  );
+
+  if (!feedbackResult.success) {
+    console.warn("⚠️ Failed to save feedback, but continuing with cancellation:", feedbackResult.error);
+    // Don't fail the cancellation - feedback is nice to have, not critical
+  }
+
+  // ============================================
+  // STEP 2: Cancel via Whop API
+  // ============================================
+
   const cancelResult = await cancelWhopMembership(
     profile.whop_membership_id,
     "at_period_end"
@@ -323,11 +441,14 @@ async function handleCancel(
     );
   }
 
-  // Update profile - mark as pending cancellation but KEEP current plan
+  // ============================================
+  // STEP 3: Update profile
+  // ============================================
+
   const updateData: Record<string, any> = {
     subscription_cancel_at_period_end: true,
     pending_downgrade_plan: "free",
-    cancellation_reason: request.reason || null,
+    cancellation_reason: reasonLabel,
     updated_at: new Date().toISOString(),
   };
 
@@ -341,17 +462,22 @@ async function handleCancel(
     // Don't fail - Whop cancellation succeeded
   }
 
-  // Log the action (using safe helper)
+  // ============================================
+  // STEP 4: Log subscription event
+  // ============================================
+
   await logSubscriptionEvent(supabase, {
     user_id: profile.id,
     event_type: "cancel_scheduled",
     old_plan: profile.account_type,
     new_plan: "free",
-    reason: request.reason,
+    reason: reasonLabel,
     scheduled_at: profile.subscription_expires_at,
     metadata: {
       whop_membership_id: profile.whop_membership_id,
       cancelled_at: new Date().toISOString(),
+      reason_id: reasonId,
+      has_feedback: !!feedbackText,
     },
   });
 
@@ -374,6 +500,83 @@ async function handleCancel(
         cancelAtPeriodEnd: true,
         expiresAt: profile.subscription_expires_at,
         pendingDowngrade: "free",
+      },
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+// ============================================
+// 🆕 UNDO CANCEL HANDLER
+// ============================================
+
+async function handleUndoCancel(
+  supabase: any,
+  profile: any,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  // Validate
+  if (!profile.subscription_cancel_at_period_end) {
+    return new Response(
+      JSON.stringify({ error: "No pending cancellation to undo" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  if (!profile.whop_membership_id) {
+    return new Response(
+      JSON.stringify({ error: "No Whop membership found" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Reactivate via Whop API
+  const reactivateResult = await reactivateWhopMembership(profile.whop_membership_id);
+
+  if (!reactivateResult.success) {
+    return new Response(
+      JSON.stringify({ error: reactivateResult.error }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // Update profile
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      subscription_cancel_at_period_end: false,
+      pending_downgrade_plan: null,
+      cancellation_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
+
+  if (updateError) {
+    console.error("❌ Profile update error:", updateError);
+  }
+
+  // Log event
+  await logSubscriptionEvent(supabase, {
+    user_id: profile.id,
+    event_type: "reactivated",
+    old_plan: "cancelling",
+    new_plan: profile.account_type,
+    metadata: {
+      whop_membership_id: profile.whop_membership_id,
+      reactivated_at: new Date().toISOString(),
+    },
+  });
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      message: "Your subscription has been reactivated!",
+      subscription: {
+        plan: profile.account_type,
+        status: "active",
+        cancelAtPeriodEnd: false,
+        expiresAt: profile.subscription_expires_at,
+        pendingDowngrade: null,
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

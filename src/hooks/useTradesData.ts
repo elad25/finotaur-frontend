@@ -90,6 +90,17 @@ export interface Trade {
   broker?: string;
   external_id?: string;
   multiplier?: number;
+  // 🔥 ADD THESE FIELDS:
+  input_mode?: 'summary' | 'risk-only';
+  risk_usd?: number;
+  reward_usd?: number;
+  risk_pts?: number;
+  reward_pts?: number;
+  rr?: number;
+  actual_r?: number;
+  actual_user_r?: number;
+  user_risk_r?: number;
+  user_reward_r?: number;
   metrics?: {
     rr?: number;
     riskUSD?: number;
@@ -103,7 +114,6 @@ export interface Trade {
   created_at: string;
   updated_at: string;
 }
-
 export interface TradeStats {
   totalTrades: number;
   wins: number;
@@ -162,16 +172,26 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
 
 // 🚀 Process trades with strategy name AND calculate actual_r
     return (data || []).map(trade => {
-      // 🔥 FIXED: Only calculate actual_r if NOT already saved in DB
-      // This preserves Risk-Only mode trades that have actual_r calculated from USD values
       let metrics = trade.metrics || {};
       
-      // Only calculate if:
-      // 1. Trade has exit_price (closed trade)
-      // 2. No actual_r already saved in DB (from Risk-Only mode or previous calculation)
-      if (trade.exit_price && trade.actual_r == null) {
-        const calculated_actual_r = calculateActualR(trade);
-        metrics = { ...metrics, actual_r: calculated_actual_r };
+      // 🔥 FIXED: Support both modes correctly
+      if (trade.input_mode === 'risk-only') {
+        // Risk-Only mode: use stored values from DB
+        // actual_r is calculated from pnl / risk_usd when trade is created
+        if (trade.actual_r !== null && trade.actual_r !== undefined) {
+          metrics = { ...metrics, actual_r: Number(trade.actual_r) };
+        }
+        if (trade.actual_user_r !== null && trade.actual_user_r !== undefined) {
+          metrics = { ...metrics, actual_user_r: Number(trade.actual_user_r) };
+        }
+      } else {
+        // Summary mode: calculate if not already saved
+        if (trade.exit_price && trade.actual_r == null) {
+          const calculated_actual_r = calculateActualR(trade);
+          metrics = { ...metrics, actual_r: calculated_actual_r };
+        } else if (trade.actual_r != null) {
+          metrics = { ...metrics, actual_r: Number(trade.actual_r) };
+        }
       }
 
       return {
@@ -180,6 +200,9 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
         multiplier: trade.multiplier || getAssetMultiplier(trade.symbol || ''),
         screenshots: trade.screenshots || [],
         metrics,
+        // 🔥 NEW: Also spread actual_r to top level for easier access
+        actual_r: metrics.actual_r ?? trade.actual_r ?? null,
+        actual_user_r: trade.actual_user_r ?? metrics.actual_user_r ?? null,
       };
     }) as Trade[];
   } catch (error) {
@@ -256,11 +279,17 @@ export function useTradeStats(): {
   };
 }
 
-// 🚀 Extracted calculation function
+// 🚀 Extracted calculation function - 🔥 FIXED: Support Risk-Only mode
 function calculateTradeStats(trades: Trade[]): TradeStats {
-  const closedTrades = trades.filter(t => t.exit_price !== null && t.exit_price !== undefined);
+  const closedTrades = trades.filter(t => {
+    if (t.input_mode === 'risk-only') {
+      // 🔥 FIX: pnl can be 0 (break even) - check for existence, not truthiness
+      return t.pnl !== null && t.pnl !== undefined;
+    }
+    return t.exit_price != null;
+  });
+  
   const total = closedTrades.length;
-
   if (total === 0) {
     return {
       totalTrades: 0,
@@ -282,9 +311,18 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
 
   // 🚀 OPTIMIZED: Single pass
   for (const trade of closedTrades) {
-    const pnl = trade.pnl || 0;
-    const outcome = trade.outcome || 'OPEN';
-    const actualR = trade.metrics?.actual_r;
+    const pnl = Number(trade.pnl) || 0;
+    
+    // 🔥 FIX: Calculate outcome for Risk-Only trades
+    let outcome = trade.outcome || 'OPEN';
+    if (trade.input_mode === 'risk-only' && trade.pnl !== null && trade.pnl !== undefined) {
+      if (pnl > 0) outcome = 'WIN';
+      else if (pnl < 0) outcome = 'LOSS';
+      else outcome = 'BE';
+    }
+    
+    // 🔥 FIX: Get actual_r from multiple sources
+    const actualR = trade.actual_r ?? trade.metrics?.actual_r ?? null;
 
     if (outcome === 'WIN') wins++;
     else if (outcome === 'LOSS') losses++;
@@ -293,7 +331,7 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
     totalPnL += pnl;
 
     if (actualR !== null && actualR !== undefined) {
-      totalR += actualR;
+      totalR += Number(actualR);
       rCount++;
     }
   }

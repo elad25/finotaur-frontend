@@ -1,17 +1,25 @@
 // src/components/onboarding/RiskSetupModal.tsx
-// ✅ FIXED v8.4.4: Using new DB columns (portfolio_size, risk_percentage, risk_mode)
-import { useState } from 'react';
+// =====================================================
+// FINOTAUR RISK SETUP MODAL - UNIFIED v9.0
+// =====================================================
+// ✅ Synced with RiskSettingsDialog & useRiskSettings
+// ✅ Saves ALL required DB columns
+// ✅ Works for ALL plans (Free, Basic, Premium)
+// =====================================================
+
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { TrendingUp, Percent, DollarSign } from 'lucide-react';
+import { TrendingUp, Percent, DollarSign, AlertCircle, Info } from 'lucide-react';
+import { formatNumber } from '@/utils/smartCalc';
 
 interface RiskSetupModalProps {
   open: boolean;
-  onClose: () => void; // ✅ FIXED: Changed from onComplete to onClose
+  onClose: () => void;
   userId: string;
 }
 
@@ -23,9 +31,21 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
   const [riskPercentage, setRiskPercentage] = useState('1');
   const [fixedAmount, setFixedAmount] = useState('100');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  // Calculate risk value
-  const calculateRiskValue = () => {
+  // Reset form when modal opens
+  useEffect(() => {
+    if (open) {
+      setPortfolioSize('10000');
+      setRiskMode('percentage');
+      setRiskPercentage('1');
+      setFixedAmount('100');
+      setErrors({});
+    }
+  }, [open]);
+
+  // Calculate 1R value
+  const riskValue = useMemo(() => {
     const portfolio = parseFloat(portfolioSize) || 0;
     if (riskMode === 'percentage') {
       const percentage = parseFloat(riskPercentage) || 0;
@@ -33,49 +53,68 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
     } else {
       return parseFloat(fixedAmount) || 0;
     }
-  };
+  }, [portfolioSize, riskMode, riskPercentage, fixedAmount]);
 
-  const riskValue = calculateRiskValue();
-
-  const handleSave = async () => {
-    if (!portfolioSize || parseFloat(portfolioSize) <= 0) {
-      toast.error('Please enter a valid portfolio size');
-      return;
+  // Validation
+  const validate = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    const portfolio = parseFloat(portfolioSize);
+    
+    if (!portfolio || portfolio <= 0) {
+      newErrors.portfolioSize = 'Please enter a valid portfolio size';
     }
 
     if (riskMode === 'percentage') {
       const percentage = parseFloat(riskPercentage);
-      if (!percentage || percentage <= 0 || percentage > 100) {
-        toast.error('Please enter a valid risk percentage (0-100)');
-        return;
+      if (!percentage || percentage <= 0) {
+        newErrors.riskPerTrade = 'Please enter a valid risk percentage';
+      } else if (percentage > 100) {
+        newErrors.riskPerTrade = 'Risk cannot exceed 100%';
+      } else if (percentage > 10) {
+        newErrors.riskPerTrade = 'Risk > 10% is extremely dangerous!';
       }
     } else {
       const amount = parseFloat(fixedAmount);
       if (!amount || amount <= 0) {
-        toast.error('Please enter a valid fixed amount');
-        return;
+        newErrors.riskPerTrade = 'Please enter a valid fixed amount';
+      } else if (amount > portfolio * 0.1) {
+        newErrors.riskPerTrade = 'Risk per trade should not exceed 10% of portfolio';
       }
     }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validate()) return;
 
     setLoading(true);
     try {
       console.log('💾 Saving risk settings for user:', userId);
 
-      // 🔥 FIX: Build update object properly using NEW DB columns
-      const updateData: any = {
-        portfolio_size: parseFloat(portfolioSize),
+      const portfolioValue = parseFloat(portfolioSize);
+      const riskPerTradeValue = riskMode === 'percentage' 
+        ? parseFloat(riskPercentage) 
+        : parseFloat(fixedAmount);
+
+      // 🔥 UNIFIED: Save ALL fields that useRiskSettings expects
+      const updateData: Record<string, any> = {
+        // Core risk settings
+        portfolio_size: portfolioValue,
         risk_mode: riskMode,
+        
+        // Risk values based on mode
+        risk_percentage: riskMode === 'percentage' ? riskPerTradeValue : null,
+        fixed_risk_amount: riskMode === 'fixed' ? riskPerTradeValue : null,
+        
+        // 🔥 IMPORTANT: Also set initial/current portfolio for ROI tracking
+        initial_portfolio: portfolioValue,
+        current_portfolio: portfolioValue,
+        total_pnl: 0, // Start fresh
+        
         updated_at: new Date().toISOString()
       };
-
-      // Add risk values based on mode
-      if (riskMode === 'percentage') {
-        updateData.risk_percentage = parseFloat(riskPercentage);
-        updateData.fixed_risk_amount = null;
-      } else {
-        updateData.fixed_risk_amount = parseFloat(fixedAmount);
-        updateData.risk_percentage = null;
-      }
 
       console.log('📊 Update data:', updateData);
 
@@ -91,7 +130,7 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
 
       console.log('✅ Risk settings saved successfully');
       toast.success('Risk settings saved!');
-      onClose(); // ✅ FIXED: Use onClose instead of onComplete
+      onClose();
     } catch (error: any) {
       console.error('❌ Error saving risk settings:', error);
       toast.error(error.message || 'Failed to save risk settings');
@@ -102,12 +141,22 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
 
   const handleSkip = () => {
     toast.info('You can set your risk parameters later in Settings');
-    onClose(); // ✅ FIXED: Use onClose instead of onComplete
+    onClose();
   };
+
+  // Check for high risk warning
+  const isHighRisk = useMemo(() => {
+    if (riskMode === 'percentage') {
+      return parseFloat(riskPercentage) > 5;
+    } else {
+      const portfolio = parseFloat(portfolioSize) || 1;
+      return parseFloat(fixedAmount) > portfolio * 0.05;
+    }
+  }, [riskMode, riskPercentage, fixedAmount, portfolioSize]);
 
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="sm:max-w-md bg-zinc-900 border-zinc-800 text-white">
+      <DialogContent className="sm:max-w-lg bg-zinc-900 border-zinc-800 text-white max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp className="w-5 h-5 text-yellow-500" />
@@ -120,7 +169,7 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-5 py-2">
           {/* Portfolio Size */}
           <div className="space-y-2">
             <Label className="text-zinc-300 text-sm">
@@ -132,10 +181,18 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
                 type="number"
                 value={portfolioSize}
                 onChange={(e) => setPortfolioSize(e.target.value)}
-                className="pl-9 bg-zinc-800 border-zinc-700 text-white h-10"
+                className={`pl-9 bg-zinc-800 border-zinc-700 text-white h-11 text-lg font-semibold ${
+                  errors.portfolioSize ? 'border-red-500' : ''
+                }`}
                 placeholder="10000"
               />
             </div>
+            {errors.portfolioSize && (
+              <p className="text-red-400 text-xs flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {errors.portfolioSize}
+              </p>
+            )}
           </div>
 
           {/* Risk Calculation Mode */}
@@ -177,7 +234,10 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
           {/* Risk Per Trade */}
           <div className="space-y-2">
             <Label className="text-zinc-300 text-sm">
-              Risk Per Trade (1R) <span className="text-zinc-500 text-xs">(% of portfolio)</span>
+              Risk Per Trade (1R){' '}
+              <span className="text-zinc-500 text-xs">
+                ({riskMode === 'percentage' ? '% of portfolio' : 'Fixed dollar amount'})
+              </span>
             </Label>
             {riskMode === 'percentage' ? (
               <div className="relative">
@@ -187,7 +247,9 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
                   step="0.1"
                   value={riskPercentage}
                   onChange={(e) => setRiskPercentage(e.target.value)}
-                  className="pl-9 bg-zinc-800 border-zinc-700 text-white h-10"
+                  className={`pl-9 bg-zinc-800 border-zinc-700 text-white h-11 text-lg font-semibold ${
+                    errors.riskPerTrade ? 'border-red-500' : ''
+                  }`}
                   placeholder="1"
                 />
               </div>
@@ -198,15 +260,42 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
                   type="number"
                   value={fixedAmount}
                   onChange={(e) => setFixedAmount(e.target.value)}
-                  className="pl-9 bg-zinc-800 border-zinc-700 text-white h-10"
+                  className={`pl-9 bg-zinc-800 border-zinc-700 text-white h-11 text-lg font-semibold ${
+                    errors.riskPerTrade ? 'border-red-500' : ''
+                  }`}
                   placeholder="100"
                 />
               </div>
             )}
-            <p className="text-xs text-zinc-500">
-              Recommended: 0.5% - 2% per trade
-            </p>
+            {errors.riskPerTrade ? (
+              <p className="text-red-400 text-xs flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {errors.riskPerTrade}
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500">
+                {riskMode === 'percentage' 
+                  ? 'Recommended: 0.5% - 2% per trade'
+                  : 'Recommended: Keep under 10% of portfolio'
+                }
+              </p>
+            )}
           </div>
+
+          {/* High Risk Warning */}
+          {isHighRisk && (
+            <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-red-400 text-sm font-semibold">High Risk Warning</p>
+                  <p className="text-red-400/80 text-xs">
+                    Professional traders typically risk 1-2% per trade.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Risk Value Display */}
           <div className="p-4 rounded-lg bg-gradient-to-r from-yellow-500/10 to-yellow-600/5 border border-yellow-500/30">
@@ -215,26 +304,40 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
               <span className="text-xs text-zinc-400">Your 1R Value</span>
             </div>
             <div className="text-3xl font-bold text-yellow-500 mb-2">
-              ${riskValue.toFixed(2)}
+              ${formatNumber(riskValue, 2)}
             </div>
             <div className="text-xs text-zinc-400 mb-3">
-              {riskMode === 'percentage' ? `${riskPercentage}% of $${portfolioSize}` : `Fixed $${fixedAmount} per trade`}
+              {riskMode === 'percentage' 
+                ? `${riskPercentage}% of $${formatNumber(parseFloat(portfolioSize) || 0, 0)}` 
+                : `Fixed $${fixedAmount} per trade`
+              }
             </div>
 
             <div className="space-y-1.5 text-xs">
               <div className="text-zinc-400 mb-1">Example Trades</div>
               <div className="flex justify-between">
                 <span className="text-zinc-500">+2R Win:</span>
-                <span className="text-green-500 font-semibold">+${(riskValue * 2).toFixed(0)}</span>
+                <span className="text-green-500 font-semibold">+${formatNumber(riskValue * 2, 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-500">-1R Loss:</span>
-                <span className="text-red-500 font-semibold">-${riskValue.toFixed(0)}</span>
+                <span className="text-red-500 font-semibold">-${formatNumber(riskValue, 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-zinc-500">+3.5R Win:</span>
-                <span className="text-green-500 font-semibold">+${(riskValue * 3.5).toFixed(0)}</span>
+                <span className="text-yellow-400 font-semibold">+${formatNumber(riskValue * 3.5, 0)}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Info Box */}
+          <div className="p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-400 leading-relaxed">
+                <span className="font-semibold">1R</span> represents your risk per trade. 
+                This helps measure performance consistently. You can change these settings anytime in Settings.
+              </p>
             </div>
           </div>
 
@@ -244,14 +347,14 @@ export default function RiskSetupModal({ open, onClose, userId }: RiskSetupModal
               variant="outline"
               onClick={handleSkip}
               disabled={loading}
-              className="flex-1 border-zinc-700 hover:bg-zinc-800 h-10"
+              className="flex-1 border-zinc-700 hover:bg-zinc-800 h-11"
             >
               Skip for Now
             </Button>
             <Button
               onClick={handleSave}
               disabled={loading}
-              className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold hover:from-yellow-600 hover:to-yellow-700 h-10"
+              className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-bold hover:from-yellow-600 hover:to-yellow-700 h-11"
             >
               {loading ? (
                 <div className="flex items-center gap-2">

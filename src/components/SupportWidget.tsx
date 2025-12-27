@@ -4,10 +4,11 @@
 // ✨ Support for both logged-in and guest users
 // 🔒 Guests can only send one message (no history)
 // 📧 Guests must provide name + email first
+// 📢 System updates section for logged-in users
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, Paperclip, Image as ImageIcon, ChevronRight, Upload } from 'lucide-react';
+import { X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, CheckCircle2, AlertCircle, Info, Megaphone } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
@@ -33,8 +34,18 @@ interface Ticket {
   message_count: number;
 }
 
+interface SystemUpdate {
+  id: string;
+  title: string;
+  content: string;
+  type: 'info' | 'success' | 'warning' | 'announcement';
+  created_at: string;
+  read: boolean;
+}
+
 export default function SupportWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'updates' | 'support'>('support');
   const [view, setView] = useState<'list' | 'chat'>('chat');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
@@ -50,6 +61,8 @@ export default function SupportWidget() {
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestFormName, setGuestFormName] = useState('');
   const [guestFormEmail, setGuestFormEmail] = useState('');
+  const [systemUpdates, setSystemUpdates] = useState<SystemUpdate[]>([]);
+  const [loadingUpdates, setLoadingUpdates] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +128,13 @@ export default function SupportWidget() {
     }
   }, [isNewConversation, isOpen]);
 
+  // Load system updates for logged-in users
+  useEffect(() => {
+    if (isOpen && !isGuest) {
+      loadSystemUpdates();
+    }
+  }, [isOpen, isGuest]);
+
   const scrollToBottom = () => {
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -134,6 +154,7 @@ export default function SupportWidget() {
         setIsGuest(true);
         setView('chat');
         setIsNewConversation(true);
+        setActiveTab('support'); // Guests can only see support
       }
     } catch (error) {
       console.error('Error checking user status:', error);
@@ -206,6 +227,93 @@ export default function SupportWidget() {
       }
     } catch (error) {
       console.error('Error loading ticket:', error);
+    }
+  }
+
+  async function loadSystemUpdates() {
+    setLoadingUpdates(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Load active updates, pinned first
+      const { data: updates, error } = await supabase
+        .from('system_updates')
+        .select('*')
+        .eq('is_active', true)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.log('Using demo updates (table may not exist)');
+        setSystemUpdates([
+          {
+            id: '1',
+            title: 'Platform Update v2.5',
+            content: 'New backtesting features and improved trade analytics are now available.',
+            type: 'announcement',
+            created_at: new Date().toISOString(),
+            read: false,
+          },
+          {
+            id: '2',
+            title: 'Maintenance Complete',
+            content: 'Scheduled maintenance has been completed successfully.',
+            type: 'success',
+            created_at: new Date(Date.now() - 86400000).toISOString(),
+            read: true,
+          },
+        ]);
+        return;
+      }
+
+      // Load user's read status
+      const { data: readRecords } = await supabase
+        .from('user_update_reads')
+        .select('update_id')
+        .eq('user_id', user.id);
+
+      const readIds = new Set(readRecords?.map(r => r.update_id) || []);
+
+      // Map updates with read status
+      const updatesWithReadStatus = (updates || []).map(update => ({
+        ...update,
+        read: readIds.has(update.id),
+      }));
+
+      setSystemUpdates(updatesWithReadStatus);
+    } catch (error) {
+      console.error('Error loading system updates:', error);
+    } finally {
+      setLoadingUpdates(false);
+    }
+  }
+
+  async function markUpdateAsRead(updateId: string) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Insert read record (upsert to avoid duplicates)
+      await supabase
+        .from('user_update_reads')
+        .upsert({
+          user_id: user.id,
+          update_id: updateId,
+          read_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id,update_id'
+        });
+
+      // Increment views count
+      await supabase.rpc('increment_update_views', { update_id: updateId });
+      
+      setSystemUpdates(prev => 
+        prev.map(u => u.id === updateId ? { ...u, read: true } : u)
+      );
+    } catch (error) {
+      console.error('Error marking update as read:', error);
     }
   }
 
@@ -442,6 +550,16 @@ export default function SupportWidget() {
     return `${days}d`;
   }
 
+  function formatDate(timestamp: string) {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
   function getLastMessage(ticket: Ticket): string {
     if (!ticket.messages || !Array.isArray(ticket.messages) || ticket.messages.length === 0) {
       return 'No messages';
@@ -457,6 +575,34 @@ export default function SupportWidget() {
     const lastMsg = ticket.messages[ticket.messages.length - 1];
     return lastMsg.type === 'admin';
   }
+
+  function getUpdateIcon(type: SystemUpdate['type']) {
+    switch (type) {
+      case 'success':
+        return <CheckCircle2 className="h-4 w-4 text-green-400" />;
+      case 'warning':
+        return <AlertCircle className="h-4 w-4 text-yellow-400" />;
+      case 'announcement':
+        return <Megaphone className="h-4 w-4 text-[#D4AF37]" />;
+      default:
+        return <Info className="h-4 w-4 text-blue-400" />;
+    }
+  }
+
+  function getUpdateBorderColor(type: SystemUpdate['type']) {
+    switch (type) {
+      case 'success':
+        return 'border-green-500/30';
+      case 'warning':
+        return 'border-yellow-500/30';
+      case 'announcement':
+        return 'border-[#D4AF37]/30';
+      default:
+        return 'border-blue-500/30';
+    }
+  }
+
+  const unreadUpdatesCount = systemUpdates.filter(u => !u.read).length;
 
   const handleClose = () => {
     setIsOpen(false);
@@ -518,20 +664,24 @@ export default function SupportWidget() {
             <MessageCircle className="h-6 w-6 text-black" strokeWidth={2} />
           </div>
           
-          {/* Unread Badge - only for logged in users */}
-          {!isGuest && tickets.some(t => hasUnreadMessages(t)) && (
-            <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 border-2 border-[#0a0a0a] animate-pulse"></div>
+          {/* Unread Badge - for tickets and updates */}
+          {!isGuest && (tickets.some(t => hasUnreadMessages(t)) || unreadUpdatesCount > 0) && (
+            <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 border-2 border-[#0a0a0a] flex items-center justify-center animate-pulse">
+              <span className="text-[10px] text-white font-bold">
+                {(tickets.filter(t => hasUnreadMessages(t)).length + unreadUpdatesCount)}
+              </span>
+            </div>
           )}
         </button>
       )}
 
-      {/* Main Window */}
+      {/* Main Window - Taller and opens upward */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-50 w-[440px] animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-50 w-[420px] animate-in slide-in-from-bottom-4 fade-in duration-200">
           {/* Subtle Glow */}
           <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
           
-          {/* Main Container */}
+          {/* Main Container - Much taller */}
           <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30">
             {/* Header */}
             <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20">
@@ -541,7 +691,7 @@ export default function SupportWidget() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {/* Back Button - only for logged in users */}
-                  {!isGuest && view === 'chat' && !isNewConversation && (
+                  {!isGuest && activeTab === 'support' && view === 'chat' && !isNewConversation && (
                     <button
                       onClick={handleBackToList}
                       className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out"
@@ -560,10 +710,10 @@ export default function SupportWidget() {
                   
                   <div>
                     <h3 className="text-sm font-semibold text-white tracking-tight font-['Inter',sans-serif]">
-                      {view === 'chat' ? (isNewConversation ? 'New Conversation' : 'Conversation') : 'Finotaur Support'}
+                      Finotaur
                     </h3>
                     <p className="text-[10px] text-[#D4AF37] font-medium mt-0.5 font-['Inter',sans-serif]">
-                      Professional Trading Assistance
+                      Support & Updates
                     </p>
                   </div>
                 </div>
@@ -575,10 +725,46 @@ export default function SupportWidget() {
                   <X className="h-4 w-4 text-gray-400 group-hover:text-white transition-colors" />
                 </button>
               </div>
+
+              {/* Tab Switcher - Only for logged-in users */}
+              {!isGuest && (
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => setActiveTab('updates')}
+                    className={`flex-1 h-10 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ${
+                      activeTab === 'updates'
+                        ? 'bg-gradient-to-br from-[#3d3420] to-[#2d2718] border border-[#7F6823]/50 text-[#D4AF37]'
+                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-300'
+                    }`}
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="text-sm font-medium">Updates</span>
+                    {unreadUpdatesCount > 0 && (
+                      <span className="h-5 w-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                        {unreadUpdatesCount}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('support')}
+                    className={`flex-1 h-10 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ${
+                      activeTab === 'support'
+                        ? 'bg-gradient-to-br from-[#3d3420] to-[#2d2718] border border-[#7F6823]/50 text-[#D4AF37]'
+                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-300'
+                    }`}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Support</span>
+                    {tickets.some(t => hasUnreadMessages(t)) && (
+                      <span className="h-2 w-2 rounded-full bg-red-500"></span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Content Area */}
-            <div className="h-[520px] flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black">
+            <div className="h-[600px] flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black">
               {/* Guest Form Overlay */}
               {showGuestForm && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -646,143 +832,284 @@ export default function SupportWidget() {
                 </div>
               )}
 
-              {/* Conversations List View - Only for logged in users */}
-              {!isGuest && view === 'list' && (
-                <div className="flex-1 flex flex-col">
-                  {/* Conversations List */}
-                  <div className="flex-1 overflow-y-auto pt-3">
-                    {tickets.length === 0 ? (
+              {/* ==================== UPDATES TAB ==================== */}
+              {!isGuest && activeTab === 'updates' && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                    {loadingUpdates ? (
+                      <div className="flex items-center justify-center h-full">
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#D4AF37] border-t-transparent"></div>
+                      </div>
+                    ) : systemUpdates.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full p-8">
-                        <div className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center mb-4">
-                          <MessageCircle className="h-7 w-7 text-gray-600" strokeWidth={2} />
+                        <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                          <Bell className="h-8 w-8 text-gray-600" strokeWidth={1.5} />
                         </div>
                         <p className="text-sm text-gray-500 text-center font-['Inter',sans-serif]">
-                          No conversations yet
+                          No updates yet
                         </p>
                         <p className="text-xs text-gray-600 text-center mt-2 font-['Inter',sans-serif]">
-                          Start a new conversation to get help
+                          System announcements will appear here
                         </p>
                       </div>
                     ) : (
-                      tickets.map((ticket) => {
-                        const hasUnread = hasUnreadMessages(ticket);
-                        return (
-                          <button
-                            key={ticket.id}
-                            onClick={() => {
-                              setSelectedTicket(ticket);
-                              setView('chat');
-                              setIsNewConversation(false);
-                            }}
-                            className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
-                          >
-                            <div className="flex items-start gap-3">
-                              {/* Avatar */}
-                              <div className="relative flex-shrink-0">
-                                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                  <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
-                                </div>
-                                {hasUnread && (
-                                  <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-black"></div>
+                      systemUpdates.map((update) => (
+                        <div
+                          key={update.id}
+                          onClick={() => markUpdateAsRead(update.id)}
+                          className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:bg-white/5 ${
+                            getUpdateBorderColor(update.type)
+                          } ${
+                            !update.read ? 'bg-white/5' : 'bg-transparent'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              update.type === 'success' ? 'bg-green-500/10' :
+                              update.type === 'warning' ? 'bg-yellow-500/10' :
+                              update.type === 'announcement' ? 'bg-[#D4AF37]/10' :
+                              'bg-blue-500/10'
+                            }`}>
+                              {getUpdateIcon(update.type)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className={`text-sm font-medium ${!update.read ? 'text-white' : 'text-gray-300'}`}>
+                                  {update.title}
+                                </h4>
+                                {!update.read && (
+                                  <span className="h-2 w-2 rounded-full bg-[#D4AF37]"></span>
                                 )}
                               </div>
-
-                              {/* Content */}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
-                                    Support Team
-                                  </h4>
-                                  <span className="text-[11px] text-[#E6C77D] opacity-40 group-hover:opacity-60 transition-opacity">
-                                    {formatRelativeTime(ticket.updated_at)}
-                                  </span>
-                                </div>
-                                <p className={`text-xs line-clamp-2 ${hasUnread ? 'text-gray-300' : 'text-gray-500'}`}>
-                                  {getLastMessage(ticket)}
-                                </p>
-                              </div>
-
-                              {/* Chevron */}
-                              <div className="flex items-center">
-                                <ChevronRight className="h-[18px] w-[18px] text-[#E6C77D] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
-                              </div>
+                              <p className="text-xs text-gray-400 leading-relaxed">
+                                {update.content}
+                              </p>
+                              <span className="text-[10px] text-gray-600 mt-2 block">
+                                {formatDate(update.created_at)}
+                              </span>
                             </div>
-                          </button>
-                        );
-                      })
+                          </div>
+                        </div>
+                      ))
                     )}
-                  </div>
-
-                  {/* New Chat Button - Bottom of List */}
-                  <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
-                    <button
-                      onClick={handleNewChat}
-                      className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
-                    >
-                      <Plus className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
-                      <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
-                        NEW CHAT
-                      </span>
-                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Chat View */}
-              {view === 'chat' && (
+              {/* ==================== SUPPORT TAB ==================== */}
+              {(isGuest || activeTab === 'support') && (
                 <>
-                  {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-5 space-y-2">
-                    {isNewConversation ? (
-                      // Welcome message for new conversation
-                      <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
-                        <div className="flex justify-start">
-                          <div className="max-w-[70%]">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
-                              </div>
-                              <span className="text-xs font-medium text-[#D4AF37]">
-                                Support Team
-                              </span>
+                  {/* Conversations List View - Only for logged in users */}
+                  {!isGuest && view === 'list' && (
+                    <div className="flex-1 flex flex-col">
+                      {/* Conversations List */}
+                      <div className="flex-1 overflow-y-auto pt-3">
+                        {tickets.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center h-full p-8">
+                            <div className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                              <MessageCircle className="h-7 w-7 text-gray-600" strokeWidth={2} />
                             </div>
-                            
-                            <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                              <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
-                                Hey 👋
-                              </p>
-                              <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
-                                {isGuest && userName 
-                                  ? `Hi ${userName}! How can we help you today? We'll respond to ${userEmail}.`
-                                  : 'Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it\'s technical help, trade syncing, or anything else you need.'
-                                }
-                              </p>
-                              <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
-                                {formatTime(new Date().toISOString())}
-                              </span>
-                            </div>
+                            <p className="text-sm text-gray-500 text-center font-['Inter',sans-serif]">
+                              No conversations yet
+                            </p>
+                            <p className="text-xs text-gray-600 text-center mt-2 font-['Inter',sans-serif]">
+                              Start a new conversation to get help
+                            </p>
                           </div>
-                        </div>
+                        ) : (
+                          tickets.map((ticket) => {
+                            const hasUnread = hasUnreadMessages(ticket);
+                            return (
+                              <button
+                                key={ticket.id}
+                                onClick={() => {
+                                  setSelectedTicket(ticket);
+                                  setView('chat');
+                                  setIsNewConversation(false);
+                                }}
+                                className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
+                              >
+                                <div className="flex items-start gap-3">
+                                  {/* Avatar */}
+                                  <div className="relative flex-shrink-0">
+                                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                      <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                                    </div>
+                                    {hasUnread && (
+                                      <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-black"></div>
+                                    )}
+                                  </div>
+
+                                  {/* Content */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
+                                        Support Team
+                                      </h4>
+                                      <span className="text-[11px] text-[#E6C77D] opacity-40 group-hover:opacity-60 transition-opacity">
+                                        {formatRelativeTime(ticket.updated_at)}
+                                      </span>
+                                    </div>
+                                    <p className={`text-xs line-clamp-2 ${hasUnread ? 'text-gray-300' : 'text-gray-500'}`}>
+                                      {getLastMessage(ticket)}
+                                    </p>
+                                  </div>
+
+                                  {/* Chevron */}
+                                  <div className="flex items-center">
+                                    <ChevronRight className="h-[18px] w-[18px] text-[#E6C77D] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
                       </div>
-                    ) : !selectedTicket?.messages || !Array.isArray(selectedTicket.messages) || selectedTicket.messages.length === 0 ? (
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-center space-y-3">
-                          <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center mx-auto">
-                            <MessageCircle className="h-6 w-6 text-gray-600" />
-                          </div>
-                          <p className="text-sm text-gray-500 font-['Inter',sans-serif]">
-                            No messages yet
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      selectedTicket.messages.map((msg, idx) => (
-                        <div
-                          key={msg.id || idx}
-                          className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200 mb-2`}
+
+                      {/* New Chat Button - Bottom of List */}
+                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                        <button
+                          onClick={handleNewChat}
+                          className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                         >
-                          <div className="max-w-[70%]">
-                            {msg.type === 'admin' && (
+                          <Plus className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
+                          <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
+                            NEW CHAT
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Chat View */}
+                  {view === 'chat' && (
+                    <>
+                      {/* Messages */}
+                      <div className="flex-1 overflow-y-auto p-5 space-y-2">
+                        {isNewConversation ? (
+                          // Welcome message for new conversation
+                          <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                            <div className="flex justify-start">
+                              <div className="max-w-[75%]">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                    <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                  </div>
+                                  <span className="text-xs font-medium text-[#D4AF37]">
+                                    Support Team
+                                  </span>
+                                </div>
+                                
+                                <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                  <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
+                                    Hey 👋
+                                  </p>
+                                  <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
+                                    {isGuest && userName 
+                                      ? `Hi ${userName}! How can we help you today? We'll respond to ${userEmail}.`
+                                      : 'Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it\'s technical help, trade syncing, or anything else you need.'
+                                    }
+                                  </p>
+                                  <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                    {formatTime(new Date().toISOString())}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : !selectedTicket?.messages || !Array.isArray(selectedTicket.messages) || selectedTicket.messages.length === 0 ? (
+                          <div className="flex items-center justify-center h-full">
+                            <div className="text-center space-y-3">
+                              <div className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center mx-auto">
+                                <MessageCircle className="h-6 w-6 text-gray-600" />
+                              </div>
+                              <p className="text-sm text-gray-500 font-['Inter',sans-serif]">
+                                No messages yet
+                              </p>
+                            </div>
+                          </div>
+                        ) : (
+                          selectedTicket.messages.map((msg, idx) => (
+                            <div
+                              key={msg.id || idx}
+                              className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200 mb-2`}
+                            >
+                              <div className="max-w-[75%]">
+                                {msg.type === 'admin' && (
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                      <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-xs font-medium text-[#D4AF37]">
+                                      Support Team
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {msg.type === 'customer' && (
+                                  <div className="flex items-center gap-2 mb-2 justify-end">
+                                    <span className="text-xs font-medium text-[#D4AF37]">
+                                      {userName || 'You'}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                <div
+                                  className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
+                                    msg.type === 'customer'
+                                      ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
+                                      : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
+                                  }`}
+                                >
+                                  <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
+                                    msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
+                                  }`}>
+                                    {msg.content}
+                                  </p>
+
+                                  {/* Attachments */}
+                                  {msg.attachments && msg.attachments.length > 0 && (
+                                    <div className="mt-2 space-y-2">
+                                      {msg.attachments.map((url, i) => {
+                                        const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                                        return (
+                                          <div key={i}>
+                                            {isImage ? (
+                                              <img
+                                                src={url}
+                                                alt="Attachment"
+                                                className="max-w-full rounded-lg border border-white/10"
+                                              />
+                                            ) : (
+                                              <a
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-2 text-xs text-[#D4AF37] hover:text-[#C19A2F] transition-colors"
+                                              >
+                                                <Paperclip className="h-3 w-3" />
+                                                View attachment
+                                              </a>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                    {formatTime(msg.timestamp)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        
+                        {/* Typing Indicator */}
+                        {isTyping && (
+                          <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
+                            <div className="max-w-[75%]">
                               <div className="flex items-center gap-2 mb-2">
                                 <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
                                   <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
@@ -791,167 +1118,95 @@ export default function SupportWidget() {
                                   Support Team
                                 </span>
                               </div>
-                            )}
-                            
-                            {msg.type === 'customer' && (
-                              <div className="flex items-center gap-2 mb-2 justify-end">
-                                <span className="text-xs font-medium text-[#D4AF37]">
-                                  {userName || 'You'}
-                                </span>
-                              </div>
-                            )}
-                            
-                            <div
-                              className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
-                                msg.type === 'customer'
-                                  ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
-                                  : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
-                              }`}
-                            >
-                              <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
-                                msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
-                              }`}>
-                                {msg.content}
-                              </p>
-
-                              {/* Attachments */}
-                              {msg.attachments && msg.attachments.length > 0 && (
-                                <div className="mt-2 space-y-2">
-                                  {msg.attachments.map((url, i) => {
-                                    const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                                    return (
-                                      <div key={i}>
-                                        {isImage ? (
-                                          <img
-                                            src={url}
-                                            alt="Attachment"
-                                            className="max-w-full rounded-lg border border-white/10"
-                                          />
-                                        ) : (
-                                          <a
-                                            href={url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-2 text-xs text-[#D4AF37] hover:text-[#C19A2F] transition-colors"
-                                          >
-                                            <Paperclip className="h-3 w-3" />
-                                            View attachment
-                                          </a>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
+                              
+                              <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                <div className="flex gap-1">
+                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
+                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
+                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
                                 </div>
-                              )}
-
-                              <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
-                                {formatTime(msg.timestamp)}
-                              </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
-                    )}
-                    
-                    {/* Typing Indicator */}
-                    {isTyping && (
-                      <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
-                        <div className="max-w-[70%]">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                              <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
-                            </div>
-                            <span className="text-xs font-medium text-[#D4AF37]">
-                              Support Team
-                            </span>
-                          </div>
-                          
-                          <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                            <div className="flex gap-1">
-                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
-                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
-                              <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div ref={messagesEndRef} />
-                  </div>
-                  
-                  {/* Input */}
-                  <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
-                    {/* Attachments Preview */}
-                    {attachments.length > 0 && (
-                      <div className="mb-3 flex flex-wrap gap-2">
-                        {attachments.map((file, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
-                          >
-                            <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
-                            <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
-                              {file.name}
-                            </span>
-                            <button
-                              onClick={() => removeAttachment(idx)}
-                              className="ml-1 text-gray-400 hover:text-white transition-colors"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex gap-3">
-                      {/* Upload Button */}
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={sending || attachments.length >= 5}
-                        className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
-                        title="Upload file (max 20MB)"
-                      >
-                        <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
-                        <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
-                          Upload
-                        </span>
-                      </button>
-
-                      <Textarea
-                        ref={inputRef}
-                        value={currentMessage}
-                        onChange={(e) => setCurrentMessage(e.target.value)}
-                        placeholder="Type your message..."
-                        className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
-                        disabled={sending}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                            e.preventDefault();
-                            handleSendMessage();
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={handleSendMessage}
-                        disabled={!currentMessage.trim() || sending || uploadingFiles}
-                        className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
-                      >
-                        {sending || uploadingFiles ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
-                        ) : (
-                          <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
                         )}
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
-                      {isGuest 
-                        ? 'We\'ll respond to your email • Max 5 files, 20MB each'
-                        : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
-                      }
-                    </p>
-                  </div>
+                        
+                        <div ref={messagesEndRef} />
+                      </div>
+                      
+                      {/* Input */}
+                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                        {/* Attachments Preview */}
+                        {attachments.length > 0 && (
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            {attachments.map((file, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
+                              >
+                                <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
+                                <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
+                                  {file.name}
+                                </span>
+                                <button
+                                  onClick={() => removeAttachment(idx)}
+                                  className="ml-1 text-gray-400 hover:text-white transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex gap-3">
+                          {/* Upload Button */}
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={sending || attachments.length >= 5}
+                            className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
+                            title="Upload file (max 20MB)"
+                          >
+                            <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
+                            <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
+                              Upload
+                            </span>
+                          </button>
+
+                          <Textarea
+                            ref={inputRef}
+                            value={currentMessage}
+                            onChange={(e) => setCurrentMessage(e.target.value)}
+                            placeholder="Type your message..."
+                            className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
+                            disabled={sending}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                e.preventDefault();
+                                handleSendMessage();
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={handleSendMessage}
+                            disabled={!currentMessage.trim() || sending || uploadingFiles}
+                            className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
+                          >
+                            {sending || uploadingFiles ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                            ) : (
+                              <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
+                            )}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
+                          {isGuest 
+                            ? 'We\'ll respond to your email • Max 5 files, 20MB each'
+                            : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
+                          }
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
