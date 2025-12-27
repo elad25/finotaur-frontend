@@ -1,8 +1,9 @@
 // src/hooks/useDashboardData.ts
 // ================================================
-// OPTIMIZED FOR 5000+ USERS - v2.2
+// OPTIMIZED FOR 5000+ USERS - v2.3
 // ✅ FIXED: Reduced console logging for production
 // ✅ FIXED: Better caching with refetchOnMount: false
+// ✅ FIXED: Risk-Only mode trades now included in stats!
 // ✅ Calls enable_admin_mode() before queries
 // ✅ Full admin client support
 // ✅ Trading session support added
@@ -28,7 +29,9 @@ export interface Trade {
   pnl: number;
   rr: number | null;
   actual_r: number | null;
+  actual_user_r: number | null;
   risk_usd: number | null;
+  reward_usd: number | null;
   open_at: string;
   close_at: string | null;
   stop_price: number | null;
@@ -37,6 +40,7 @@ export interface Trade {
   exit_price: number | null;
   multiplier: number | null;
   session?: TradingSession;
+  input_mode?: 'summary' | 'risk-only';
 }
 
 export interface DashboardStats {
@@ -143,10 +147,37 @@ const devLog = (...args: any[]) => {
 // HELPER FUNCTIONS
 // ================================================
 
+// 🔥 NEW: Check if trade is closed (supports both modes)
+function isTradeClosed(trade: any): boolean {
+  if (trade.input_mode === 'risk-only') {
+    // Risk-Only mode: closed if pnl exists (not null/undefined)
+    return trade.pnl !== null && trade.pnl !== undefined;
+  }
+  // Summary mode: closed if has exit_price
+  return trade.exit_price !== null && trade.exit_price !== undefined;
+}
+
 function calculateRR(trade: any): number | null {
-  if (trade.rr != null && !isNaN(trade.rr) && trade.rr > 0) return trade.rr;
-  if (trade.actual_r != null && !isNaN(trade.actual_r) && trade.actual_r > 0) return trade.actual_r;
+  // 🔥 UPDATED: Check actual_user_r first (user's custom R)
+  if (trade.actual_user_r != null && !isNaN(trade.actual_user_r)) {
+    return trade.actual_user_r;
+  }
+  if (trade.actual_r != null && !isNaN(trade.actual_r)) {
+    return trade.actual_r;
+  }
+  if (trade.rr != null && !isNaN(trade.rr) && trade.rr > 0) {
+    return trade.rr;
+  }
   
+  // 🔥 Risk-Only mode calculation
+  if (trade.input_mode === 'risk-only') {
+    if (trade.pnl != null && trade.risk_usd && trade.risk_usd > 0) {
+      return trade.pnl / trade.risk_usd;
+    }
+    return null;
+  }
+  
+  // Summary mode calculation
   if (trade.pnl != null && trade.risk_usd && trade.risk_usd > 0) {
     return Math.abs(trade.pnl) / trade.risk_usd;
   }
@@ -182,9 +213,12 @@ function calculateTier(stats: Omit<DashboardStats, 'tier'>): DashboardStats['tie
 // ================================================
 
 function computeStats(trades: any[]): DashboardStats {
-  const tradeIds = trades.map(t => t.id).join(',');
+  // 🔥 CRITICAL: Filter to only closed trades using unified logic
+  const closedTrades = trades.filter(isTradeClosed);
+  
+  const tradeIds = closedTrades.map(t => t.id).join(',');
   const cached = statsCache.get(tradeIds);
-  if (cached && cached.trades === trades) {
+  if (cached && cached.trades === closedTrades) {
     return cached.result;
   }
 
@@ -206,7 +240,7 @@ function computeStats(trades: any[]): DashboardStats {
 
   const tradesByDate = new Map<string, any[]>();
 
-  const sortedTrades = [...trades].sort((a, b) => 
+  const sortedTrades = [...closedTrades].sort((a, b) => 
     new Date(a.close_at || a.open_at).getTime() - new Date(b.close_at || b.open_at).getTime()
   );
 
@@ -258,8 +292,8 @@ function computeStats(trades: any[]): DashboardStats {
     tradesByDate.get(date)!.push(trade);
   }
 
-  const cacheKey = trades.length > 0 
-    ? `${trades.length}-${trades[0]?.id}-${trades[trades.length - 1]?.id}`
+  const cacheKey = closedTrades.length > 0 
+    ? `${closedTrades.length}-${closedTrades[0]?.id}-${closedTrades[closedTrades.length - 1]?.id}`
     : 'empty';
 
   let equitySeries = equitySeriesCache.get(cacheKey);
@@ -291,8 +325,8 @@ function computeStats(trades: any[]): DashboardStats {
   const avgWin = winCount > 0 ? totalWinPnl / winCount : 0;
   const avgLoss = lossCount > 0 ? -(totalLossPnl / lossCount) : 0;
 
-  const closedTrades = trades.length;
-  const winrate = closedTrades > 0 ? wins / closedTrades : 0;
+  const totalClosedTrades = closedTrades.length;
+  const winrate = totalClosedTrades > 0 ? wins / totalClosedTrades : 0;
   const avgRR = rrCount > 0 ? totalRR / rrCount : 0;
 
   const baseStats = {
@@ -302,7 +336,7 @@ function computeStats(trades: any[]): DashboardStats {
     wins,
     losses,
     breakeven,
-    closedTrades,
+    closedTrades: totalClosedTrades,
     maxDrawdown,
     profitFactor: isFinite(profitFactor) ? profitFactor : 0,
     avgWin: isFinite(avgWin) ? avgWin : 0,
@@ -323,7 +357,7 @@ function computeStats(trades: any[]): DashboardStats {
     const firstKey = statsCache.keys().next().value;
     if (firstKey) statsCache.delete(firstKey);
   }
-  statsCache.set(tradeIds, { trades, result });
+  statsCache.set(tradeIds, { trades: closedTrades, result });
 
   return result;
 }
@@ -366,15 +400,21 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
 
       const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
 
+      // 🔥 CRITICAL FIX: Fetch ALL trades, then filter closed ones in computeStats
+      // This supports both Summary mode (exit_price) and Risk-Only mode (pnl without exit_price)
       let queryBuilder = client
         .from('trades')
-        .select('id, symbol, pnl, rr, actual_r, risk_usd, open_at, close_at, stop_price, entry_price, quantity, exit_price, multiplier, session')
+        .select(`
+          id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
+          open_at, close_at, stop_price, entry_price, quantity, exit_price, 
+          multiplier, session, input_mode
+        `)
         .eq('user_id', userId)
-        .not('exit_price', 'is', null)
         .order('open_at', { ascending: true, nullsFirst: false });
 
       if (cutoffDate) {
-        queryBuilder = queryBuilder.gte('close_at', cutoffDate);
+        // 🔥 Use open_at for date filtering (works for both modes)
+        queryBuilder = queryBuilder.gte('open_at', cutoffDate);
       }
 
       const { data, error } = await queryBuilder;
@@ -391,7 +431,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
         throw error;
       }
       
-      devLog(`✅ Loaded ${data?.length || 0} trades`);
+      devLog(`✅ Loaded ${data?.length || 0} trades (will filter closed in computeStats)`);
       
       return computeStats(data || []);
     },

@@ -1,7 +1,4 @@
-// src/hooks/useCommissionSettings.ts
-// ✅ Uses the unified useRiskSettings hook
-
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useCommissions, CommissionSettings } from '@/hooks/useRiskSettings';
 
@@ -12,22 +9,19 @@ export interface Commission {
   type: CommissionType;
 }
 
-// ============================================
-// Hook לניהול Commission Settings
-// ============================================
 export function useCommissionSettings() {
-  // ✅ Use the unified hook instead of localStorage functions
   const { commissions: initialCommissions, updateCommissions, isUpdating } = useCommissions();
   
   // Local state for form editing
   const [commissions, setCommissions] = useState<CommissionSettings>(initialCommissions);
 
-  // Sync with server state when it changes
-  useState(() => {
-    setCommissions(initialCommissions);
-  });
+  // ✅ FIX: useEffect instead of useState
+  useEffect(() => {
+    if (initialCommissions && Object.keys(initialCommissions).length > 0) {
+      setCommissions(initialCommissions);
+    }
+  }, [initialCommissions]);
 
-  // עדכון ערך של נכס ספציפי
   const updateCommission = useCallback((asset: keyof CommissionSettings, value: string) => {
     setCommissions(prev => ({
       ...prev,
@@ -35,7 +29,6 @@ export function useCommissionSettings() {
     }));
   }, []);
 
-  // עדכון סוג (percentage/flat) של נכס ספציפי
   const updateCommissionType = useCallback((asset: keyof CommissionSettings, type: CommissionType) => {
     setCommissions(prev => ({
       ...prev,
@@ -43,7 +36,6 @@ export function useCommissionSettings() {
     }));
   }, []);
 
-  // שמירה ל-Supabase
   const saveSettings = useCallback(() => {
     try {
       updateCommissions(commissions);
@@ -55,7 +47,6 @@ export function useCommissionSettings() {
     }
   }, [commissions, updateCommissions]);
 
-  // איפוס להגדרות ברירת מחדל
   const resetToDefaults = useCallback(() => {
     const defaults: CommissionSettings = {
       stocks: { value: '0.1', type: 'percentage' },
@@ -72,7 +63,7 @@ export function useCommissionSettings() {
     commissions,
     updateCommission,
     updateCommissionType,
-    saveSettings: saveSettings,
+    saveSettings,
     resetToDefaults,
     isUpdating,
   };
