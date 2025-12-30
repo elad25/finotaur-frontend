@@ -1,6 +1,6 @@
 /**
  * ================================================
- * USER PROFILE HOOK - FIXED v8.6.0
+ * USER PROFILE HOOK - FIXED v8.6.1
  * ================================================
  * ✅ React Query caching
  * ✅ 30-minute stale time (profile changes slowly)
@@ -8,6 +8,7 @@
  * ✅ Helper functions for plan display
  * ✅ Cancellation fields support
  * 🔥 v8.6.0: Updated for new pricing model
+ * 🔥 v8.6.1: Added 'admin' and 'vip' account types
  * ================================================
  */
 
@@ -18,8 +19,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import { queryKeys } from '@/lib/queryClient';
 
 export interface UserProfile {
-  // 🔥 v8.6.0: Added 'trial' for new pricing model
-  account_type: 'free' | 'basic' | 'premium' | 'trial';
+  // 🔥 v8.6.1: Added 'admin' and 'vip' for special accounts
+  account_type: 'free' | 'basic' | 'premium' | 'trial' | 'admin' | 'vip';
   subscription_interval: 'monthly' | 'yearly' | null;
   subscription_status: 'active' | 'trial' | 'inactive' | 'cancelled' | null;
   subscription_expires_at: string | null;
@@ -91,6 +92,11 @@ export function getPlanDisplay(profile: UserProfile | null | undefined) {
 
   const { account_type, subscription_interval } = profile;
 
+  // 🔥 v8.6.1: Handle 'admin' and 'vip' as Premium
+  if (account_type === 'admin' || account_type === 'vip') {
+    return { name: 'Premium', badge: 'premium' as const };
+  }
+
   // 🔥 v8.6.0: Handle 'trial' as legacy/no-plan
   if (account_type === 'free' || account_type === 'trial') {
     return { name: 'Free', badge: 'free' as const };
@@ -106,9 +112,14 @@ export function getPlanDisplay(profile: UserProfile | null | undefined) {
 }
 
 export function getNextBillingDate(profile: UserProfile | null | undefined): string {
-  // 🔥 v8.6.0: Added 'trial' check
+  // 🔥 v8.6.1: Admin and VIP don't have billing dates
   if (!profile || profile.account_type === 'free' || profile.account_type === 'trial') {
     return 'N/A';
+  }
+
+  // 🔥 v8.6.1: Admin/VIP show "Lifetime" instead of date
+  if (profile.account_type === 'admin' || profile.account_type === 'vip') {
+    return 'Lifetime';
   }
 
   if (profile.subscription_expires_at) {
