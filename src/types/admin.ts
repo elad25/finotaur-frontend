@@ -1,10 +1,14 @@
 // src/types/admin.ts
 // ============================================
-// COMPLETE & FIXED VERSION v8.5.0
+// COMPLETE & FIXED VERSION v8.6.0
+// 🔥 v8.6.0: Added 'trial' to AccountType
 // ============================================
 
 export type UserRole = 'user' | 'admin' | 'super_admin';
-export type AccountType = 'free' | 'basic' | 'premium';
+
+// 🔥 v8.6.0: Added 'trial' for new pricing model
+export type AccountType = 'free' | 'basic' | 'premium' | 'trial';
+
 export type SubscriptionInterval = 'monthly' | 'yearly';
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
 

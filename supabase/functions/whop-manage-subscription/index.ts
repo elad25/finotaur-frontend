@@ -1,10 +1,12 @@
 // =====================================================
-// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v2.0.0
+// FINOTAUR WHOP SUBSCRIPTION MANAGEMENT - v3.0.0
 // =====================================================
 // Edge Function for managing Whop subscriptions
 // 
 // 🔧 v1.0.1: Removed .catch() on Supabase queries
 // 🔧 v2.0.0: Added cancellation feedback collection
+// 🔥 v3.0.0: Removed free tier - cancellation = subscription ends
+//            Users must re-subscribe to Basic or Premium
 // =====================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -43,7 +45,7 @@ interface CancelRequest {
   action: "cancel";
   mode?: "at_period_end" | "immediate";
   reason?: string;  // Legacy support
-  // 🆕 New structured feedback
+  // New structured feedback
   reason_id?: string;
   reason_label?: string;
   feedback?: string;
@@ -55,7 +57,7 @@ interface UndoCancelRequest {
 
 interface DowngradeRequest {
   action: "downgrade";
-  targetPlan: "basic" | "free";
+  targetPlan: "basic"; // 🔥 CHANGED: Only basic, no free
 }
 
 interface StatusRequest {
@@ -115,7 +117,6 @@ async function reactivateWhopMembership(
   try {
     console.log(`🔄 Reactivating membership ${membershipId}`);
 
-    // Whop API: POST /memberships/{id} with cancel_at_period_end: false
     const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
       method: "POST",
       headers: {
@@ -168,7 +169,7 @@ async function getWhopMembership(
 }
 
 // ============================================
-// 🔧 HELPER: Safe event logging (no .catch())
+// HELPER: Safe event logging
 // ============================================
 
 async function logSubscriptionEvent(
@@ -197,7 +198,7 @@ async function logSubscriptionEvent(
 }
 
 // ============================================
-// 🆕 HELPER: Save cancellation feedback
+// HELPER: Save cancellation feedback
 // ============================================
 
 async function saveCancellationFeedback(
@@ -366,7 +367,7 @@ async function handleStatus(
 }
 
 // ============================================
-// CANCEL HANDLER (Updated with feedback)
+// CANCEL HANDLER - 🔥 UPDATED: No free tier
 // ============================================
 
 async function handleCancel(
@@ -383,12 +384,7 @@ async function handleCancel(
     );
   }
 
-  if (profile.account_type === "free") {
-    return new Response(
-      JSON.stringify({ error: "Cannot cancel free plan" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  // 🔥 REMOVED: No more free plan check - basic and premium can both be cancelled
 
   // Check if already pending cancellation
   if (profile.subscription_cancel_at_period_end) {
@@ -402,7 +398,7 @@ async function handleCancel(
   }
 
   // ============================================
-  // 🆕 STEP 1: Save cancellation feedback FIRST
+  // STEP 1: Save cancellation feedback FIRST
   // ============================================
   
   const reasonId = request.reason_id || "other";
@@ -422,7 +418,6 @@ async function handleCancel(
 
   if (!feedbackResult.success) {
     console.warn("⚠️ Failed to save feedback, but continuing with cancellation:", feedbackResult.error);
-    // Don't fail the cancellation - feedback is nice to have, not critical
   }
 
   // ============================================
@@ -443,11 +438,13 @@ async function handleCancel(
 
   // ============================================
   // STEP 3: Update profile
+  // 🔥 CHANGED: pending_downgrade_plan = null (no free tier)
+  // User will need to re-subscribe after expiration
   // ============================================
 
   const updateData: Record<string, any> = {
     subscription_cancel_at_period_end: true,
-    pending_downgrade_plan: "free",
+    pending_downgrade_plan: null, // 🔥 No downgrade target - subscription just ends
     cancellation_reason: reasonLabel,
     updated_at: new Date().toISOString(),
   };
@@ -459,7 +456,6 @@ async function handleCancel(
 
   if (updateError) {
     console.error("❌ Profile update error:", updateError);
-    // Don't fail - Whop cancellation succeeded
   }
 
   // ============================================
@@ -470,7 +466,7 @@ async function handleCancel(
     user_id: profile.id,
     event_type: "cancel_scheduled",
     old_plan: profile.account_type,
-    new_plan: "free",
+    new_plan: "cancelled", // 🔥 CHANGED: No free tier, just cancelled
     reason: reasonLabel,
     scheduled_at: profile.subscription_expires_at,
     metadata: {
@@ -493,13 +489,13 @@ async function handleCancel(
   return new Response(
     JSON.stringify({
       success: true,
-      message: `Your subscription has been cancelled. You'll continue to have ${profile.account_type} access until ${expiresDate}.`,
+      message: `Your subscription has been cancelled. You'll continue to have ${profile.account_type} access until ${expiresDate}. After that, you'll need to subscribe again to continue using Finotaur.`,
       subscription: {
         plan: profile.account_type,
         status: "active",
         cancelAtPeriodEnd: true,
         expiresAt: profile.subscription_expires_at,
-        pendingDowngrade: "free",
+        pendingDowngrade: null, // 🔥 No downgrade, just cancellation
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -507,7 +503,7 @@ async function handleCancel(
 }
 
 // ============================================
-// 🆕 UNDO CANCEL HANDLER
+// UNDO CANCEL HANDLER
 // ============================================
 
 async function handleUndoCancel(
@@ -584,7 +580,7 @@ async function handleUndoCancel(
 }
 
 // ============================================
-// DOWNGRADE HANDLER
+// DOWNGRADE HANDLER - 🔥 UPDATED: Only Premium → Basic
 // ============================================
 
 async function handleDowngrade(
@@ -595,19 +591,17 @@ async function handleDowngrade(
 ): Promise<Response> {
   const { targetPlan } = request;
 
-  // Validate downgrade path
-  const planTiers: Record<string, number> = {
-    free: 0,
-    basic: 1,
-    premium: 2,
-  };
-
-  const currentTier = planTiers[profile.account_type] ?? 0;
-  const targetTier = planTiers[targetPlan] ?? 0;
-
-  if (targetTier >= currentTier) {
+  // 🔥 UPDATED: Only valid downgrade is Premium → Basic
+  if (targetPlan !== 'basic') {
     return new Response(
-      JSON.stringify({ error: "Can only downgrade to a lower plan" }),
+      JSON.stringify({ error: "Invalid downgrade target. Only 'basic' is supported." }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  if (profile.account_type !== 'premium') {
+    return new Response(
+      JSON.stringify({ error: "Downgrade is only available for Premium users" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -623,42 +617,8 @@ async function handleDowngrade(
     );
   }
 
-  // For downgrade to Free - cancel subscription at period end
-  if (targetPlan === "free") {
-    if (!profile.whop_membership_id) {
-      // No Whop membership - just update profile
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          pending_downgrade_plan: "free",
-          subscription_cancel_at_period_end: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id);
-
-      if (error) {
-        return new Response(
-          JSON.stringify({ error: "Failed to schedule downgrade" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: "Downgrade to Free has been scheduled.",
-          subscription: { 
-            plan: profile.account_type, 
-            status: "active",
-            cancelAtPeriodEnd: true,
-            pendingDowngrade: "free",
-          },
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Cancel Whop membership at period end
+  // Cancel current Premium subscription at period end
+  if (profile.whop_membership_id) {
     const cancelResult = await cancelWhopMembership(
       profile.whop_membership_id,
       "at_period_end"
@@ -670,122 +630,52 @@ async function handleDowngrade(
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Update profile - keep current plan, mark pending downgrade
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        subscription_cancel_at_period_end: true,
-        pending_downgrade_plan: "free",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id);
-
-    if (updateError) {
-      console.error("❌ Profile update error:", updateError);
-    }
-
-    // Log event (using safe helper)
-    await logSubscriptionEvent(supabase, {
-      user_id: profile.id,
-      event_type: "downgrade_scheduled",
-      old_plan: profile.account_type,
-      new_plan: "free",
-      scheduled_at: profile.subscription_expires_at,
-      metadata: { whop_membership_id: profile.whop_membership_id },
-    });
-
-    const expiresDate = profile.subscription_expires_at 
-      ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long', 
-          day: 'numeric'
-        })
-      : 'the end of your billing period';
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Your subscription will downgrade to Free on ${expiresDate}. You'll continue to have ${profile.account_type} access until then.`,
-        subscription: {
-          plan: profile.account_type,
-          status: "active",
-          cancelAtPeriodEnd: true,
-          pendingDowngrade: "free",
-          expiresAt: profile.subscription_expires_at,
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   }
 
-  // For downgrade to Basic (from Premium)
-  if (targetPlan === "basic" && profile.account_type === "premium") {
-    // Cancel current subscription at period end
-    if (profile.whop_membership_id) {
-      const cancelResult = await cancelWhopMembership(
-        profile.whop_membership_id,
-        "at_period_end"
-      );
+  // Update profile - mark pending downgrade to Basic
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      subscription_cancel_at_period_end: true,
+      pending_downgrade_plan: "basic",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
 
-      if (!cancelResult.success) {
-        return new Response(
-          JSON.stringify({ error: cancelResult.error }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
-    // Update profile - keep Premium, mark pending downgrade to Basic
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({
-        subscription_cancel_at_period_end: true,
-        pending_downgrade_plan: "basic",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", profile.id);
-
-    if (updateError) {
-      console.error("❌ Profile update error:", updateError);
-    }
-
-    // Log event (using safe helper)
-    await logSubscriptionEvent(supabase, {
-      user_id: profile.id,
-      event_type: "downgrade_scheduled",
-      old_plan: "premium",
-      new_plan: "basic",
-      scheduled_at: profile.subscription_expires_at,
-      metadata: { whop_membership_id: profile.whop_membership_id },
-    });
-
-    const expiresDate = profile.subscription_expires_at 
-      ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long', 
-          day: 'numeric'
-        })
-      : 'the end of your billing period';
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Your Premium subscription will end on ${expiresDate}. You'll need to subscribe to Basic after that date to continue with that plan.`,
-        subscription: {
-          plan: profile.account_type,
-          status: "active",
-          cancelAtPeriodEnd: true,
-          pendingDowngrade: "basic",
-          expiresAt: profile.subscription_expires_at,
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (updateError) {
+    console.error("❌ Profile update error:", updateError);
   }
+
+  // Log event
+  await logSubscriptionEvent(supabase, {
+    user_id: profile.id,
+    event_type: "downgrade_scheduled",
+    old_plan: "premium",
+    new_plan: "basic",
+    scheduled_at: profile.subscription_expires_at,
+    metadata: { whop_membership_id: profile.whop_membership_id },
+  });
+
+  const expiresDate = profile.subscription_expires_at 
+    ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long', 
+        day: 'numeric'
+      })
+    : 'the end of your billing period';
 
   return new Response(
-    JSON.stringify({ error: "Invalid downgrade path" }),
-    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    JSON.stringify({
+      success: true,
+      message: `Your Premium subscription will end on ${expiresDate}. You'll need to subscribe to Basic after that date to continue with that plan.`,
+      subscription: {
+        plan: profile.account_type,
+        status: "active",
+        cancelAtPeriodEnd: true,
+        pendingDowngrade: "basic",
+        expiresAt: profile.subscription_expires_at,
+      },
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }

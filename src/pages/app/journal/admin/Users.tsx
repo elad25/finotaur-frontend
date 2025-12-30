@@ -1,12 +1,11 @@
 // src/pages/app/journal/admin/Users.tsx
 // ============================================
-// OPTIMIZED FOR 5000+ USERS + REALTIME - v2.0.0
+// OPTIMIZED FOR 5000+ USERS + REALTIME - v2.1.0
 // ============================================
-// 🔥 v2.0.0 CHANGES:
-// - Added Supabase Realtime for live updates
-// - Toast notifications for subscription changes
-// - Payment-provider agnostic architecture
-// - Better cache invalidation strategy
+// 🔥 v2.1.0 CHANGES:
+// - Added 'Trial' filter button for new pricing model
+// - Kept 'Free' filter for legacy users (backward compat)
+// - Updated filter button order: All → Trial → Basic → Premium → Free (Legacy)
 // ============================================
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -250,17 +249,18 @@ export default function AdminUsers() {
             )}
           </div>
 
-          {/* Filter Buttons */}
-          <div className="flex gap-2">
+          {/* 🔥 v2.1.0: Updated Filter Buttons - Added Trial, reordered */}
+          <div className="flex gap-2 flex-wrap">
             <FilterButton
               label="All"
               isActive={!filters.account_type}
               onClick={() => handleFilterChange({ account_type: undefined })}
             />
             <FilterButton
-              label="Free"
-              isActive={filters.account_type === 'free'}
-              onClick={() => handleFilterChange({ account_type: 'free' })}
+              label="Trial"
+              isActive={filters.account_type === 'trial'}
+              onClick={() => handleFilterChange({ account_type: 'trial' })}
+              color="blue"
             />
             <FilterButton
               label="Basic"
@@ -271,6 +271,14 @@ export default function AdminUsers() {
               label="Premium"
               isActive={filters.account_type === 'premium'}
               onClick={() => handleFilterChange({ account_type: 'premium' })}
+              color="gold"
+            />
+            {/* 🔥 v2.1.0: Kept Free filter for legacy users, marked as "Legacy" */}
+            <FilterButton
+              label="Free (Legacy)"
+              isActive={filters.account_type === 'free'}
+              onClick={() => handleFilterChange({ account_type: 'free' })}
+              color="gray"
             />
           </div>
 
@@ -359,22 +367,37 @@ export default function AdminUsers() {
 // SUB-COMPONENTS - All memoized
 // ============================================
 
+// 🔥 v2.1.0: Added color prop for different button styles
 const FilterButton = React.memo<{ 
   label: string; 
   isActive: boolean; 
   onClick: () => void;
-}>(({ label, isActive, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-      isActive
-        ? 'bg-[#D4AF37] text-black'
-        : 'bg-[#0A0A0A] text-gray-400 border border-gray-700 hover:border-gray-600'
-    }`}
-  >
-    {label}
-  </button>
-));
+  color?: 'default' | 'blue' | 'gold' | 'gray';
+}>(({ label, isActive, onClick, color = 'default' }) => {
+  const getActiveStyle = () => {
+    if (!isActive) return 'bg-[#0A0A0A] text-gray-400 border border-gray-700 hover:border-gray-600';
+    
+    switch (color) {
+      case 'blue':
+        return 'bg-blue-500/20 text-blue-400 border border-blue-500/40';
+      case 'gold':
+        return 'bg-[#D4AF37] text-black';
+      case 'gray':
+        return 'bg-gray-700 text-gray-300';
+      default:
+        return 'bg-[#D4AF37] text-black';
+    }
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded-lg font-medium transition-colors ${getActiveStyle()}`}
+    >
+      {label}
+    </button>
+  );
+});
 FilterButton.displayName = 'FilterButton';
 
 const StatsCard = React.memo<{ 
@@ -395,19 +418,34 @@ const TableHeader = React.memo<{ children: React.ReactNode }>(({ children }) => 
 ));
 TableHeader.displayName = 'TableHeader';
 
+// 🔥 v2.1.0: Updated badge styles for trial
 const UserRow = React.memo<{ 
   user: UserWithStats;
   onActionComplete: () => void;
   isRecentlyChanged?: boolean;
 }>(({ user, onActionComplete, isRecentlyChanged = false }) => {
-  // ⚡ Memoize badge styles
+  // ⚡ Memoize badge styles - 🔥 v2.1.0: Added trial style
   const accountTypeBadgeStyle = useMemo(() => {
     const styles: Record<string, string> = {
       free: 'bg-gray-800 text-gray-300',
-      basic: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+      trial: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+      basic: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
       premium: 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20',
     };
     return styles[user.account_type] || styles.free;
+  }, [user.account_type]);
+
+  // 🔥 v2.1.0: Display name mapping
+  const accountTypeDisplay = useMemo(() => {
+    const names: Record<string, string> = {
+      free: 'Free (Legacy)',
+      trial: 'Trial',
+      basic: 'Basic',
+      premium: 'Premium',
+      admin: 'Admin',
+      vip: 'VIP',
+    };
+    return names[user.account_type] || user.account_type;
   }, [user.account_type]);
 
   const roleBadgeStyle = useMemo(() => {
@@ -454,7 +492,7 @@ const UserRow = React.memo<{
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${accountTypeBadgeStyle}`}>
-          {user.account_type}
+          {accountTypeDisplay}
         </span>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">

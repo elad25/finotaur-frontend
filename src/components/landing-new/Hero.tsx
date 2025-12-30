@@ -106,7 +106,7 @@ const Hero = () => {
                   boxShadow: '0 4px 24px rgba(201,166,70,0.4)',
                 }}
               >
-                {user ? 'Go to Dashboard' : 'Start Free — 10 Trades'}
+                {user ? 'Go to Dashboard' : 'Start 14-Day Free Trial'}
                 <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
               </Button>
               

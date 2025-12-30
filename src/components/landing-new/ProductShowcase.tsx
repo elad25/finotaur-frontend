@@ -248,7 +248,7 @@ const ProductShowcase = () => {
                   boxShadow: '0 4px 24px rgba(201,166,70,0.4), inset 0 1px 0 rgba(255,255,255,0.2)'
                 }}
               >
-                Start Free Trial — 10 Trades
+                Start 14-Day Free Trial
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </a>
             </div>

@@ -105,8 +105,11 @@ const StrategyDetailView = lazy(() => import("@/pages/app/journal/Strategies").t
 const JournalScenarios = lazy(() => import("@/pages/app/journal/Scenarios"));
 const JournalCommunity = lazy(() => import("@/pages/app/journal/Community"));
 const JournalAcademy = lazy(() => import("@/pages/app/journal/Academy"));
-const JournalSettings = lazy(() => import("@/pages/app/journal/JournalSettings"));
-
+const JournalSettings = lazy(async () => {
+  const module = await import("@/pages/app/journal/JournalSettings");
+  const Component = (module as any).default ?? (module as any).JournalSettings ?? Object.values(module)[0];
+  return { default: Component };
+});
 // 🧪 === Backtest Pages === 
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
 const BacktestOverview = lazy(() => import("@/pages/app/journal/backtest/Overview"));
@@ -394,7 +397,7 @@ const BacktestRoute = memo(({ children }: { children: React.ReactNode }) => {
         .eq('id', user.id)
         .single();
 
-      setAccountType(data?.account_type || 'free');
+      setAccountType(data?.account_type || 'trial');
       setIsLoading(false);
     }
 

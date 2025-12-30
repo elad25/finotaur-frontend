@@ -85,7 +85,7 @@ const ContactPage = () => {
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="font-semibold text-lg mb-2">Do you offer a free trial?</h3>
               <p className="text-sm text-muted-foreground">
-                Yes! Our Free plan includes 10 trades per month at no cost. You can start journaling immediately without entering any payment information.
+                Yes! We offer a 14-day free trial with full Basic features. Start journaling immediately and explore everything Finotaur has to offer.
               </p>
             </div>
 

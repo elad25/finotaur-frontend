@@ -11,7 +11,8 @@ import { formatNumber } from "@/utils/smartCalc";
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
-import { useTrades } from "@/hooks/useTradesData";
+import { useTrades, useTradeStats } from "@/hooks/useTradesData";
+
 
 
 // 🔥 PAYMENT INTEGRATION
@@ -20,7 +21,8 @@ import { useWhopCheckout } from "@/hooks/useWhopCheckout";
 import { useSubscriptionManagement } from "@/hooks/useSubscriptionManagement";
 import type { PlanName, BillingInterval } from "@/lib/whop-config";
 
-type PlanId = 'free' | 'basic' | 'premium';
+// 🔥 v2.0: REMOVED 'free' - Only 2 plans now
+type PlanId = 'basic' | 'premium';
 
 interface Plan {
   id: PlanId;
@@ -38,29 +40,12 @@ interface Plan {
     text: string;
     icon: any;
   };
-  tier: number; // For upgrade/downgrade detection
+  tier: number;
+  trialDays?: number; // 🔥 NEW: Trial support
 }
 
+// 🔥 v2.0: Only 2 plans - Basic (with trial) and Premium (no trial)
 const plans: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    yearlyMonthlyEquivalent: 0,
-    description: "Perfect for trying Finotaur",
-    features: [
-      "10 manual trades (lifetime)",
-      "Basic trade journal",
-      "Manual trade entry only",
-      "Core performance metrics",
-      "Community access",
-      "Mobile app access"
-    ],
-    cta: "Current Plan",
-    featured: false,
-    tier: 0,
-  },
   {
     id: "basic",
     name: "Basic",
@@ -68,8 +53,9 @@ const plans: Plan[] = [
     yearlyPrice: 149,
     yearlyMonthlyEquivalent: 12.42,
     description: "Essential tools + automatic broker sync",
+    trialDays: 14, // 🔥 14-day free trial
     features: [
-      "Everything in Free, plus:",
+      "14-day free trial",
       "Up to 25 trades per month",
       "Full performance analytics",
       "Strategy builder & tracking",
@@ -80,10 +66,14 @@ const plans: Plan[] = [
       "Email support",
       "🔜 Coming Soon: Broker sync"
     ],
-    cta: "Upgrade to Basic",
+    cta: "Start Free Trial",
     featured: false,
     savings: "Save 38%",
     tier: 1,
+    badge: {
+      text: "14-Day Free Trial",
+      icon: Clock,
+    },
   },
   {
     id: "premium",
@@ -92,6 +82,7 @@ const plans: Plan[] = [
     yearlyPrice: 299,
     yearlyMonthlyEquivalent: 24.92,
     description: "Unlimited everything + AI intelligence",
+    trialDays: 0, // 🔥 No trial - payment from day 0
     features: [
       "Everything in Basic, plus:",
       "Unlimited trades",
@@ -114,6 +105,8 @@ const plans: Plan[] = [
 
 // Helper to get plan tier
 const getPlanTier = (planId: string): number => {
+  // 🔥 v2.0: Handle legacy 'free' users - treat them as tier 0 (no plan)
+  if (planId === 'free' || !planId) return 0;
   const plan = plans.find(p => p.id === planId);
   return plan?.tier ?? 0;
 };
@@ -272,6 +265,7 @@ const ChangePasswordModal = ({
 
 // ============================================
 // 🔥 UPGRADE PLAN MODAL - WITH WHOP INTEGRATION
+// 🔥 v2.0: Only 2 plans - Basic & Premium
 // ============================================
 const UpgradePlanModal = ({ 
   isOpen, 
@@ -295,15 +289,14 @@ const UpgradePlanModal = ({
   const [pendingDowngrade, setPendingDowngrade] = useState<PlanId | null>(null);
   
   // 🔥 Subscription management hook
-  const { downgradeSubscription, isLoading: isProcessingDowngrade } = useSubscriptionManagement();
+  const { downgradeSubscription, cancelSubscription, isLoading: isProcessingDowngrade } = useSubscriptionManagement();
 
   const currentTier = getPlanTier(currentPlan);
 
+  // 🔥 v2.0: Check if user needs to select a plan (legacy free users or new users)
+  const needsPlanSelection = !currentPlan || currentPlan === 'free' || currentPlan === 'trial';
+
   const getDisplayPrice = useCallback((plan: Plan) => {
-    if (plan.id === "free") {
-      return { price: "$0", period: "forever" };
-    }
-    
     if (billingInterval === 'monthly') {
       return { 
         price: `$${plan.monthlyPrice.toFixed(2)}`, 
@@ -318,7 +311,15 @@ const UpgradePlanModal = ({
     }
   }, [billingInterval]);
 
-  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade'; label: string } => {
+  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade' | 'select'; label: string } => {
+    // 🔥 v2.0: For users without a plan, show "Select" or "Start Trial"
+    if (needsPlanSelection) {
+      return { 
+        type: 'select', 
+        label: plan.trialDays ? `Start ${plan.trialDays}-Day Free Trial` : `Subscribe to ${plan.name}` 
+      };
+    }
+
     // 🔥 Check if this plan is the pending downgrade target
     if (subscriptionCancelAtPeriodEnd && pendingDowngradePlan === plan.id) {
       return { type: 'pending_downgrade', label: 'Pending Downgrade' };
@@ -333,7 +334,7 @@ const UpgradePlanModal = ({
     }
     
     return { type: 'downgrade', label: `Downgrade to ${plan.name}` };
-  }, [currentPlan, currentTier, subscriptionCancelAtPeriodEnd, pendingDowngradePlan]);
+  }, [currentPlan, currentTier, subscriptionCancelAtPeriodEnd, pendingDowngradePlan, needsPlanSelection]);
 
   const handlePlanSelect = useCallback(async (planId: PlanId) => {
     if (planId === currentPlan) {
@@ -349,7 +350,7 @@ const UpgradePlanModal = ({
 
     // 🔥 Check if already pending any downgrade
     if (subscriptionCancelAtPeriodEnd && pendingDowngradePlan) {
-      toast.warning(`Your subscription is already scheduled to ${pendingDowngradePlan === 'free' ? 'be cancelled' : `downgrade to ${pendingDowngradePlan}`}`);
+      toast.warning(`Your subscription is already scheduled to ${pendingDowngradePlan === 'cancel' ? 'be cancelled' : `downgrade to ${pendingDowngradePlan}`}`);
       return;
     }
 
@@ -358,12 +359,8 @@ const UpgradePlanModal = ({
 
     const action = getPlanAction(selectedPlan);
 
-    if (action.type === 'upgrade') {
-      // Upgrade - go to payment
-      if (planId === 'free') {
-        toast.error("Cannot upgrade to free plan");
-        return;
-      }
+    if (action.type === 'upgrade' || action.type === 'select') {
+      // Upgrade or new subscription - go to payment
       onSelectPlan(planId as PlanId, billingInterval);
       onClose();
     } else if (action.type === 'downgrade') {
@@ -376,7 +373,8 @@ const UpgradePlanModal = ({
   const handleConfirmDowngrade = useCallback(async () => {
     if (!pendingDowngrade) return;
     
-    const result = await downgradeSubscription(pendingDowngrade as 'basic' | 'free');
+    // 🔥 v2.0: Only 'basic' is valid for downgrade now
+    const result = await downgradeSubscription(pendingDowngrade as 'basic');
     
     if (result?.success) {
       setShowCancelConfirm(false);
@@ -423,30 +421,15 @@ const UpgradePlanModal = ({
           <div className="p-6 space-y-4">
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
               <p className="text-amber-200 text-sm leading-relaxed">
-                {pendingDowngrade === 'free' ? (
-                  <>
-                    Your subscription will be cancelled and you'll be downgraded to the <strong>Free</strong> plan on <strong>{expiresDate}</strong>.
-                    <br /><br />
-                    You'll lose access to:
-                    <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li>Broker sync (12,000+ brokers)</li>
-                      <li>Advanced analytics</li>
-                      {currentPlan === 'premium' && <li>AI-powered insights</li>}
-                      {currentPlan === 'premium' && <li>Unlimited trades</li>}
-                    </ul>
-                  </>
-                ) : (
-                  <>
-                    Your subscription will be downgraded to <strong>Basic</strong> on <strong>{expiresDate}</strong>.
-                    <br /><br />
-                    You'll lose access to:
-                    <ul className="list-disc ml-5 mt-2 space-y-1">
-                      <li>Unlimited trades (limited to 25/month)</li>
-                      <li>AI-powered insights & coach</li>
-                      <li>Priority support</li>
-                    </ul>
-                  </>
-                )}
+                {/* 🔥 v2.0: Only downgrade to Basic is possible now */}
+                Your subscription will be downgraded to <strong>Basic</strong> on <strong>{expiresDate}</strong>.
+                <br /><br />
+                You'll lose access to:
+                <ul className="list-disc ml-5 mt-2 space-y-1">
+                  <li>Unlimited trades (limited to 25/month)</li>
+                  <li>AI-powered insights & coach</li>
+                  <li>Priority support</li>
+                </ul>
               </p>
             </div>
 
@@ -488,12 +471,19 @@ const UpgradePlanModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl w-full max-w-7xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl w-full max-w-5xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between p-6 border-b border-zinc-800">
           <div>
-            <h3 className="text-2xl font-semibold text-zinc-100">Change Your Plan</h3>
-            <p className="text-sm text-zinc-400 mt-1">Choose the best plan for your trading journey</p>
+            <h3 className="text-2xl font-semibold text-zinc-100">
+              {needsPlanSelection ? 'Choose Your Plan' : 'Change Your Plan'}
+            </h3>
+            <p className="text-sm text-zinc-400 mt-1">
+              {needsPlanSelection 
+                ? 'Start with a 14-day free trial on Basic, or go Premium for unlimited access'
+                : 'Choose the best plan for your trading journey'
+              }
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -516,7 +506,7 @@ const UpgradePlanModal = ({
                       Subscription Change Pending
                     </p>
                     <p className="text-amber-200/80 text-sm mt-1">
-                      Your subscription will {pendingDowngradePlan === 'free' ? 'be cancelled' : `change to ${pendingDowngradePlan}`} on{' '}
+                      Your subscription will {pendingDowngradePlan === 'cancel' ? 'be cancelled' : `change to ${pendingDowngradePlan}`} on{' '}
                       {subscriptionExpiresAt ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
@@ -550,10 +540,16 @@ const UpgradePlanModal = ({
                 </div>
                 <div className="text-left flex-1">
                   <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                    Upgrade anytime, downgrade at cycle end
+                    {needsPlanSelection 
+                      ? 'Try Basic free for 14 days'
+                      : 'Upgrade anytime, downgrade at cycle end'
+                    }
                   </h4>
                   <p className="text-slate-300 text-base leading-relaxed">
-                    Upgrades take effect immediately. Downgrades will apply at the end of your current billing cycle.
+                    {needsPlanSelection 
+                      ? 'No credit card required for Basic trial. Premium requires payment upfront but gives you unlimited access immediately.'
+                      : 'Upgrades take effect immediately. Downgrades will apply at the end of your current billing cycle.'
+                    }
                   </p>
                 </div>
               </div>
@@ -589,8 +585,8 @@ const UpgradePlanModal = ({
             </div>
           </div>
 
-          {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+          {/* 🔥 v2.0: Only 2 Pricing Cards - Basic & Premium */}
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {plans.map((plan) => {
               const displayPrice = getDisplayPrice(plan);
               const action = getPlanAction(plan);
@@ -598,12 +594,14 @@ const UpgradePlanModal = ({
               const isUpgrade = action.type === 'upgrade';
               const isDowngrade = action.type === 'downgrade';
               const isPendingDowngrade = action.type === 'pending_downgrade';
+              const isSelect = action.type === 'select';
+              const hasTrial = plan.trialDays && plan.trialDays > 0;
               
               return (
                 <div
                   key={plan.id}
                   className={`p-6 relative transition-all duration-300 flex flex-col rounded-2xl ${
-                    plan.featured ? 'md:scale-[1.05]' : ''
+                    plan.featured ? 'md:scale-[1.02]' : ''
                   } ${isCurrentPlan ? 'ring-2 ring-[#C9A646]' : ''} ${isPendingDowngrade ? 'ring-2 ring-amber-500' : ''}`}
                   style={{
                     background: plan.featured 
@@ -648,6 +646,14 @@ const UpgradePlanModal = ({
                     </div>
                   )}
 
+                  {/* 🔥 Trial Badge for Basic */}
+                  {hasTrial && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
+                    <div className="absolute -top-3 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {plan.trialDays}-Day Free Trial
+                    </div>
+                  )}
+
                   {/* Current Plan Badge */}
                   {isCurrentPlan && (
                     <div className="absolute -top-3 right-4 bg-[#C9A646] text-black px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
@@ -665,7 +671,7 @@ const UpgradePlanModal = ({
                   )}
 
                   {/* Savings Badge */}
-                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
+                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !isCurrentPlan && !isPendingDowngrade && !hasTrial && (
                     <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       {plan.savings}
                     </div>
@@ -675,14 +681,29 @@ const UpgradePlanModal = ({
                   <div className="text-center mb-6 mt-2">
                     <h4 className="text-xl font-bold mb-2 text-white">{plan.name}</h4>
                     <div className="flex flex-col items-center justify-center gap-1 mb-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className={`text-4xl font-bold ${plan.featured ? 'text-[#C9A646]' : 'text-white'}`}>
-                          {displayPrice.price}
-                        </span>
-                        <span className="text-slate-400 text-sm">{displayPrice.period}</span>
-                      </div>
-                      {displayPrice.billedAs && (
-                        <span className="text-xs text-slate-500">{displayPrice.billedAs}</span>
+                      {/* 🔥 Show trial pricing for Basic */}
+                      {hasTrial && isSelect ? (
+                        <>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-4xl font-bold text-blue-400">$0</span>
+                            <span className="text-slate-400 text-sm">for {plan.trialDays} days</span>
+                          </div>
+                          <span className="text-xs text-slate-500">
+                            Then {displayPrice.price}{displayPrice.period}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-baseline gap-1">
+                            <span className={`text-4xl font-bold ${plan.featured ? 'text-[#C9A646]' : 'text-white'}`}>
+                              {displayPrice.price}
+                            </span>
+                            <span className="text-slate-400 text-sm">{displayPrice.period}</span>
+                          </div>
+                          {displayPrice.billedAs && (
+                            <span className="text-xs text-slate-500">{displayPrice.billedAs}</span>
+                          )}
+                        </>
                       )}
                     </div>
                     <p className="text-slate-400 text-sm">{plan.description}</p>
@@ -709,19 +730,23 @@ const UpgradePlanModal = ({
                   <button 
                     onClick={() => handlePlanSelect(plan.id)}
                     disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade}
-                    className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         : isPendingDowngrade
                         ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
-                        : isUpgrade
+                        : isSelect && hasTrial
+                        ? 'bg-blue-500 hover:bg-blue-400 text-white hover:scale-[1.02]'
+                        : isUpgrade || isSelect
                         ? plan.featured 
                           ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]' 
                           : 'bg-[#C9A646] hover:bg-[#D4B84A] text-black hover:scale-[1.02]'
                         : 'border-2 border-zinc-600 hover:border-zinc-500 hover:bg-zinc-800/50 text-zinc-300 hover:scale-[1.02]'
                     }`}
-                    style={!isCurrentPlan && !isPendingDowngrade && isUpgrade ? (plan.featured ? {
+                    style={!isCurrentPlan && !isPendingDowngrade && (isUpgrade || isSelect) ? (plan.featured ? {
                       boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
+                    } : hasTrial && isSelect ? {
+                      boxShadow: '0 4px 20px rgba(59,130,246,0.4)',
                     } : {
                       boxShadow: '0 4px 20px rgba(201,166,70,0.3)',
                     }) : undefined}
@@ -740,6 +765,7 @@ const UpgradePlanModal = ({
                       <>
                         {isUpgrade && <ArrowUp className="w-4 h-4" />}
                         {isDowngrade && <ArrowDown className="w-4 h-4" />}
+                        {isSelect && hasTrial && <Clock className="w-4 h-4" />}
                         {action.label}
                       </>
                     )}
@@ -1023,23 +1049,31 @@ const CancelSubscriptionModal = ({
               <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
                 <p className="text-white text-sm font-medium mb-3">What you'll lose:</p>
                 <ul className="space-y-2">
-                  <li className="flex items-center gap-2 text-sm text-zinc-300">
-                    <X className="w-4 h-4 text-red-400" />
-                    Broker sync (12,000+ brokers)
-                  </li>
-                  <li className="flex items-center gap-2 text-sm text-zinc-300">
-                    <X className="w-4 h-4 text-red-400" />
-                    Advanced analytics & statistics
-                  </li>
+                  {currentPlan?.toLowerCase() === 'basic' && (
+                    <>
+                      <li className="flex items-center gap-2 text-sm text-zinc-300">
+                        <X className="w-4 h-4 text-red-400" />
+                        25 trades per month
+                      </li>
+                      <li className="flex items-center gap-2 text-sm text-zinc-300">
+                        <X className="w-4 h-4 text-red-400" />
+                        Advanced analytics & statistics
+                      </li>
+                    </>
+                  )}
                   {currentPlan?.toLowerCase() === 'premium' && (
                     <>
+                      <li className="flex items-center gap-2 text-sm text-zinc-300">
+                        <X className="w-4 h-4 text-red-400" />
+                        Unlimited trades
+                      </li>
                       <li className="flex items-center gap-2 text-sm text-zinc-300">
                         <X className="w-4 h-4 text-red-400" />
                         AI-powered insights & coach
                       </li>
                       <li className="flex items-center gap-2 text-sm text-zinc-300">
                         <X className="w-4 h-4 text-red-400" />
-                        Unlimited trades
+                        Priority support
                       </li>
                     </>
                   )}
@@ -1144,6 +1178,8 @@ export default function JournalSettings() {
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { data: trades = [] } = useTrades(); // Pre-cached for export
 
+  const { data: tradeStats } = useTradeStats();
+
   // 🔥 PAYMENT HOOK
   const { initiateCheckout, isLoading: checkoutLoading } = useWhopCheckout({
     onError: (error) => {
@@ -1152,8 +1188,7 @@ export default function JournalSettings() {
   });
 
   // 🔥 SUBSCRIPTION MANAGEMENT HOOK
-  const { cancelSubscription, isLoading: isCancelling } = useSubscriptionManagement();
-
+const { cancelSubscription, reactivateSubscription, isLoading: isSubscriptionLoading } = useSubscriptionManagement();
   // Local UI state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -1166,27 +1201,30 @@ export default function JournalSettings() {
   const [selectedBillingInterval, setSelectedBillingInterval] = useState<BillingInterval>('monthly');
 
   // 🚀 Memoized computed values
-  const planInfo = useMemo(() => getPlanDisplay(profile), [profile]);
-  const billingDate = useMemo(() => getNextBillingDate(profile), [profile]);
-  const loading = profileLoading || riskLoading;
+const planInfo = useMemo(() => getPlanDisplay(profile), [profile]);
+const billingDate = useMemo(() => getNextBillingDate(profile), [profile]);
+const loading = profileLoading || riskLoading;
 
-  // 🔥 SAFE PORTFOLIO VALUES - Prevent NaN
-  const portfolioValues = useMemo(() => {
-    const current = safeNumber(riskSettings?.currentPortfolio || riskSettings?.portfolioSize, 0);
-    const initial = safeNumber(riskSettings?.initialPortfolio, 0);
-    const pnl = current - initial;
-    const roi = initial > 0 ? ((current - initial) / initial * 100) : 0;
-    
-    return {
-      current,
-      initial,
-      pnl,
-      roi,
-      hasInitial: initial > 0,
-      hasChanged: current !== initial && initial > 0
-    };
-  }, [riskSettings]);
-
+// 🔥 FIXED: P&L from actual trades, NOT from portfolio difference
+const portfolioValues = useMemo(() => {
+  const current = safeNumber(riskSettings?.currentPortfolio || riskSettings?.portfolioSize, 0);
+  const initial = safeNumber(riskSettings?.initialPortfolio, 0);
+  
+  // 🔥 P&L מגיע מהטריידים האמיתיים, לא מהפרש הפורטפוליו!
+  const realPnL = safeNumber(tradeStats?.totalPnL, 0);
+  
+  // 🔥 ROI מחושב על בסיס ה-P&L האמיתי
+  const roi = initial > 0 ? (realPnL / initial * 100) : 0;
+  
+  return {
+    current,
+    initial,
+    pnl: realPnL,  // 🔥 P&L אמיתי מהטריידים
+    roi,
+    hasInitial: initial > 0,
+    hasChanged: realPnL !== 0  // 🔥 יש שינוי רק אם יש טריידים עם P&L
+  };
+}, [riskSettings, tradeStats]);  // 🔥 הוספתי tradeStats לדפנדנסיס
   // ============================================
   // 🔥 HANDLERS - All memoized with useCallback
   // ============================================
@@ -1210,12 +1248,17 @@ export default function JournalSettings() {
     setShowPaymentPopup(false);
   }, []);
 
-  // 🔥 Handle subscription cancellation with feedback
+// 🔥 Handle subscription cancellation with feedback
   const handleCancelSubscription = useCallback(async (data: { reason_id: string; reason_label: string; feedback?: string }) => {
     const result = await cancelSubscription(data);
     // Return result to modal - don't close here, let success screen show
     return result;
   }, [cancelSubscription]);
+
+  // 🔥 Handle subscription reactivation (undo cancellation)
+  const handleReactivateSubscription = useCallback(async () => {
+    await reactivateSubscription();
+  }, [reactivateSubscription]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -1301,6 +1344,9 @@ export default function JournalSettings() {
       toast.error("Failed to export trades. Please try again.");
     }
   }, [trades]);
+
+  // 🔥 v2.0: Check if user needs to select a plan
+  const needsPlanSelection = !profile?.account_type || profile?.account_type === 'free' || profile?.account_type === 'trial';
 
   return (
     <div className="min-h-screen flex justify-center p-6">
@@ -1454,7 +1500,7 @@ export default function JournalSettings() {
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8">
           <h3 className="text-xl font-semibold text-zinc-100 mb-6">Account Information</h3>
           
-          {/* 🔥 CANCELLATION NOTICE - Shows when subscription is pending cancellation */}
+{/* 🔥 CANCELLATION NOTICE - Shows when subscription is pending cancellation */}
           {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at && (
             <div className="mb-6 p-4 rounded-xl border-2 border-amber-500/30 bg-amber-500/10">
               <div className="flex items-start gap-3">
@@ -1467,7 +1513,7 @@ export default function JournalSettings() {
                   </h4>
                   <p className="text-amber-200/80 text-sm leading-relaxed">
                     Your <span className="font-semibold">{profile.account_type?.charAt(0).toUpperCase() + profile.account_type?.slice(1)}</span> subscription 
-                    will {profile.pending_downgrade_plan === 'free' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan?.charAt(0).toUpperCase() + profile.pending_downgrade_plan?.slice(1)}`} on{' '}
+                    will {profile.pending_downgrade_plan === 'cancel' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan?.charAt(0).toUpperCase() + profile.pending_downgrade_plan?.slice(1)}`} on{' '}
                     <span className="font-semibold">
                       {new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
                         year: 'numeric',
@@ -1479,11 +1525,67 @@ export default function JournalSettings() {
                   <p className="text-amber-200/60 text-xs mt-2">
                     You'll continue to have full access to all {profile.account_type} features until then.
                   </p>
+                  
+                  {/* 🔥 Reactivate Button */}
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      onClick={handleReactivateSubscription}
+                      disabled={isSubscriptionLoading}
+                      className="px-4 py-2 bg-[#C9A646] hover:bg-[#D4B84A] text-black rounded-lg text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-[#C9A646]/20 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                      {isSubscriptionLoading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                          Reactivating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          Keep My Subscription
+                        </>
+                      )}
+                    </button>
+                    <span className="text-amber-200/50 text-xs">
+                      Changed your mind? Click to continue your subscription.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
-          
+
+          {/* 🔥 v2.0: No Plan Selected Notice */}
+          {needsPlanSelection && !profile?.subscription_cancel_at_period_end && (
+            <div className="mb-6 p-4 rounded-xl border-2 border-blue-500/30 bg-blue-500/10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-5 h-5 text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-blue-300 font-semibold mb-1">
+                    Choose Your Plan
+                  </h4>
+                  <p className="text-blue-200/80 text-sm leading-relaxed">
+                    Start with a <span className="font-semibold">14-day free trial</span> on Basic, 
+                    or go Premium for unlimited access.
+                  </p>
+                  
+                  <div className="mt-4">
+                    <button
+                      onClick={handleUpgrade}
+                      className="px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white rounded-lg text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20 hover:scale-[1.02]"
+                    >
+                      <Zap className="w-4 h-4" />
+                      Choose a Plan
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             {/* Plan Type */}
             <div className="flex items-center justify-between py-4 border-b border-zinc-800">
@@ -1497,13 +1599,13 @@ export default function JournalSettings() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
-                      planInfo.badge === "free"
+                      needsPlanSelection
                         ? "bg-zinc-800 text-zinc-300" 
                         : planInfo.badge === "basic"
                         ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                         : "bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30"
                     }`}>
-                      {planInfo.name}
+                      {needsPlanSelection ? 'No Plan' : planInfo.name}
                     </span>
                     {/* 🔥 Cancellation badge */}
                     {profile?.subscription_cancel_at_period_end && (
@@ -1516,51 +1618,53 @@ export default function JournalSettings() {
                 <button 
                   onClick={handleUpgrade}
                   className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    (!loading && profile?.account_type === 'free')
+                    needsPlanSelection
                       ? 'bg-[#D4AF37] hover:bg-[#E5C158] text-black'
                       : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
                   }`}
                 >
-                  {(!loading && profile?.account_type === 'free') ? 'Upgrade' : 'Change Plan'}
+                  {needsPlanSelection ? 'Choose Plan' : 'Change Plan'}
                 </button>
               </div>
             </div>
 
             {/* Billing Date - Updated to show expiration for cancelled subscriptions */}
-            <div className="flex items-center justify-between py-4 border-b border-zinc-800">
-              <div>
-                <label className="text-sm font-medium text-zinc-300">
-                  {profile?.subscription_cancel_at_period_end ? 'Access Until' : 'Billing Date'}
-                </label>
-                <p className="text-xs text-zinc-500 mt-1">
-                  {profile?.subscription_cancel_at_period_end 
-                    ? 'Your subscription ends on this date' 
-                    : 'Next billing cycle'
-                  }
-                </p>
+            {!needsPlanSelection && (
+              <div className="flex items-center justify-between py-4 border-b border-zinc-800">
+                <div>
+                  <label className="text-sm font-medium text-zinc-300">
+                    {profile?.subscription_cancel_at_period_end ? 'Access Until' : 'Billing Date'}
+                  </label>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {profile?.subscription_cancel_at_period_end 
+                      ? 'Your subscription ends on this date' 
+                      : 'Next billing cycle'
+                    }
+                  </p>
+                </div>
+                {loading ? (
+                  <div className="h-5 w-32 bg-zinc-800 animate-pulse rounded"></div>
+                ) : (
+                  <span className={`text-sm ${
+                    profile?.subscription_cancel_at_period_end 
+                      ? 'text-amber-400 font-medium' 
+                      : 'text-zinc-400'
+                  }`}>
+                    {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at
+                      ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : billingDate
+                    }
+                  </span>
+                )}
               </div>
-              {loading ? (
-                <div className="h-5 w-32 bg-zinc-800 animate-pulse rounded"></div>
-              ) : (
-                <span className={`text-sm ${
-                  profile?.subscription_cancel_at_period_end 
-                    ? 'text-amber-400 font-medium' 
-                    : 'text-zinc-400'
-                }`}>
-                  {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at
-                    ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })
-                    : billingDate
-                  }
-                </span>
-              )}
-            </div>
+            )}
 
             {/* Subscription Status */}
-            {profile && profile.account_type !== 'free' && (
+            {profile && !needsPlanSelection && (
               <div className="flex items-center justify-between py-4">
                 <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>
@@ -1603,11 +1707,14 @@ export default function JournalSettings() {
                   <p className="text-xs text-zinc-500 mt-1">Your plan after current period ends</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  profile.pending_downgrade_plan === 'free'
+                  profile.pending_downgrade_plan === 'cancel'
                     ? 'bg-zinc-700 text-zinc-300'
                     : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                 }`}>
-                  {profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)}
+                  {profile.pending_downgrade_plan === 'cancel' 
+                    ? 'Cancelled' 
+                    : profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)
+                  }
                 </span>
               </div>
             )}
@@ -1710,7 +1817,7 @@ export default function JournalSettings() {
       <UpgradePlanModal 
         isOpen={isUpgradeModalOpen}
         onClose={() => setIsUpgradeModalOpen(false)}
-        currentPlan={profile?.account_type || 'free'}
+        currentPlan={profile?.account_type || ''}
         onSelectPlan={handleSelectPlan}
         subscriptionExpiresAt={profile?.subscription_expires_at}
         subscriptionCancelAtPeriodEnd={profile?.subscription_cancel_at_period_end}
@@ -1722,8 +1829,8 @@ export default function JournalSettings() {
         isOpen={showCancelModal}
         onClose={() => setShowCancelModal(false)}
         onConfirm={handleCancelSubscription}
-        isLoading={isCancelling}
-        currentPlan={profile?.account_type || 'free'}
+        isLoading={isSubscriptionLoading}
+        currentPlan={profile?.account_type || ''}
         expiresAt={profile?.subscription_expires_at}
       />
 

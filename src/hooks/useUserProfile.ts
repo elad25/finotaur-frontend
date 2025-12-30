@@ -1,12 +1,13 @@
 /**
  * ================================================
- * USER PROFILE HOOK - FIXED
+ * USER PROFILE HOOK - FIXED v8.6.0
  * ================================================
  * ✅ React Query caching
  * ✅ 30-minute stale time (profile changes slowly)
  * ✅ Proper TypeScript types
  * ✅ Helper functions for plan display
  * ✅ Cancellation fields support
+ * 🔥 v8.6.0: Updated for new pricing model
  * ================================================
  */
 
@@ -17,13 +18,15 @@ import { useAuth } from '@/providers/AuthProvider';
 import { queryKeys } from '@/lib/queryClient';
 
 export interface UserProfile {
-  account_type: 'free' | 'basic' | 'premium';
+  // 🔥 v8.6.0: Added 'trial' for new pricing model
+  account_type: 'free' | 'basic' | 'premium' | 'trial';
   subscription_interval: 'monthly' | 'yearly' | null;
   subscription_status: 'active' | 'trial' | 'inactive' | 'cancelled' | null;
   subscription_expires_at: string | null;
   // 🔥 Cancellation fields
   subscription_cancel_at_period_end?: boolean;
-  pending_downgrade_plan?: 'free' | 'basic' | null;
+  // 🔥 v8.6.0: Changed from 'free' | 'basic' to 'basic' | 'cancel'
+  pending_downgrade_plan?: 'basic' | 'cancel' | null;
 }
 
 // ============================================
@@ -88,7 +91,8 @@ export function getPlanDisplay(profile: UserProfile | null | undefined) {
 
   const { account_type, subscription_interval } = profile;
 
-  if (account_type === 'free') {
+  // 🔥 v8.6.0: Handle 'trial' as legacy/no-plan
+  if (account_type === 'free' || account_type === 'trial') {
     return { name: 'Free', badge: 'free' as const };
   } else if (account_type === 'basic') {
     const intervalText = subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
@@ -102,7 +106,8 @@ export function getPlanDisplay(profile: UserProfile | null | undefined) {
 }
 
 export function getNextBillingDate(profile: UserProfile | null | undefined): string {
-  if (!profile || profile.account_type === 'free') {
+  // 🔥 v8.6.0: Added 'trial' check
+  if (!profile || profile.account_type === 'free' || profile.account_type === 'trial') {
     return 'N/A';
   }
 

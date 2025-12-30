@@ -1,18 +1,18 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR PRICING SELECTION - WITH AFFILIATE DISCOUNTS
+// FINOTAUR PRICING SELECTION - v4.0
 // =====================================================
 // 
-// Version: 3.0 - Risk Setup for ALL plans
-// - Annual discount: 10%
-// - Shows RiskSetupModal after ANY plan selection
-// - Checks if returning from Whop payment
+// 🔥 v4.0 CHANGES:
+// - REMOVED: Free tier completely
+// - ADDED: Basic with 14-day trial
+// - KEPT: Premium name (not Pro)
 // =====================================================
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Check, Shield, Zap, TrendingUp, Tag } from 'lucide-react';
+import { Check, Shield, Zap, TrendingUp, Tag, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PaymentPopup from '@/components/PaymentPopup';
 import RiskSetupModal from '@/components/onboarding/RiskSetupModal';
@@ -24,7 +24,7 @@ import { motion } from 'framer-motion';
 import { useAffiliateDiscount } from '@/features/affiliate/hooks/useAffiliateDiscount';
 
 type BillingInterval = 'monthly' | 'yearly';
-type PlanId = 'basic' | 'premium';
+type PlanId = 'basic' | 'premium';  // 🔥 UPDATED: removed 'free'
 
 interface Plan {
   id: string;
@@ -37,27 +37,11 @@ interface Plan {
   cta: string;
   featured: boolean;
   savings?: string;
+  trialDays?: number;
 }
 
+// 🔥 UPDATED: Only 2 plans - Basic (trial) and Premium (no trial)
 const plans: Plan[] = [
-  {
-    id: "free",
-    name: "Free",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    yearlyMonthlyEquivalent: 0,
-    description: "Perfect for trying Finotaur",
-    features: [
-      "10 manual trades (lifetime)",
-      "Basic trade journal",
-      "Manual trade entry only",
-      "Core performance metrics",
-      "Community access",
-      "Mobile app access"
-    ],
-    cta: "Start Free",
-    featured: false
-  },
   {
     id: "basic",
     name: "Basic",
@@ -65,8 +49,9 @@ const plans: Plan[] = [
     yearlyPrice: 149,
     yearlyMonthlyEquivalent: 12.42,
     description: "Essential tools + automatic broker sync",
+    trialDays: 14,  // 🔥 14-day trial
     features: [
-      "Everything in Free, plus:",
+      "14-day free trial",
       "Broker sync (12,000+ brokers)",
       "25 trades/month (manual + auto-sync)",
       "Full performance analytics",
@@ -75,11 +60,11 @@ const plans: Plan[] = [
       "Advanced statistics & metrics",
       "Equity curve & charts",
       "Trade screenshots & notes",
-      "Email support"
+      "Email support",
     ],
-    cta: "Get Basic",
+    cta: "Start 14-Day Free Trial",
     featured: false,
-    savings: "Save 38%"
+    savings: "Save 38%",
   },
   {
     id: "premium",
@@ -88,6 +73,7 @@ const plans: Plan[] = [
     yearlyPrice: 299,
     yearlyMonthlyEquivalent: 24.92,
     description: "Unlimited everything + AI intelligence",
+    // 🔥 NO trialDays - payment starts immediately
     features: [
       "Everything in Basic, plus:",
       "Unlimited trades",
@@ -99,12 +85,12 @@ const plans: Plan[] = [
       "Backtesting system",
       "Priority support",
       "Early access to new features",
-      "🔜 Coming Soon: Auto broker sync"
+      "🔜 Coming Soon: Auto broker sync",
     ],
     cta: "Get Premium",
     featured: true,
-    savings: "Save 38%"
-  }
+    savings: "Save 38%",
+  },
 ];
 
 export default function PricingSelection() {
@@ -135,7 +121,7 @@ export default function PricingSelection() {
     savings,
   } = useAffiliateDiscount(selectedPlan, billingInterval);
 
-  // 🔥 Check if user should be here OR if returning from Whop
+  // Check if user should be here OR if returning from Whop
   useEffect(() => {
     const checkSubscription = async () => {
       if (!user) {
@@ -147,7 +133,7 @@ export default function PricingSelection() {
       setCheckingSubscription(true);
 
       try {
-        // 🔥 Check for Whop callback parameters
+        // Check for Whop callback parameters
         const paymentSuccess = searchParams.get('payment') === 'success';
         const fromWhop = searchParams.get('source') === 'whop';
 
@@ -165,12 +151,9 @@ export default function PricingSelection() {
 
         console.log('🔍 User subscription status:', data);
 
-        // 🔥 FIXED: Check onboarding_completed instead of default values
-        // DB has defaults (portfolio_size=10000, risk_mode='percentage') 
-        // so we must check onboarding_completed flag
         const hasRiskConfigured = data?.onboarding_completed === true;
 
-        // 🔥 If returning from Whop with successful payment
+        // If returning from Whop with successful payment
         if (paymentSuccess || fromWhop) {
           console.log('🎉 User returned from Whop payment');
           
@@ -186,10 +169,10 @@ export default function PricingSelection() {
           }
         }
 
-        // If already has active subscription AND completed onboarding, go to dashboard
+        // 🔥 UPDATED: Check for any paid subscription (basic, premium, trial)
         const hasPaidSubscription = 
           data?.account_type && 
-          data.account_type !== 'free' &&
+          ['basic', 'premium', 'admin', 'vip'].includes(data.account_type) &&
           (data.subscription_status === 'active' || data.subscription_status === 'trial');
 
         if (hasPaidSubscription && data?.onboarding_completed) {
@@ -198,21 +181,12 @@ export default function PricingSelection() {
           return;
         }
 
-        // If has free account AND completed onboarding, also go to dashboard
-        if (data?.account_type === 'free' && data?.onboarding_completed) {
-          console.log('✅ User has free account + completed onboarding → Dashboard');
-          navigate('/app/journal/overview');
-          return;
-        }
-
-        // 🔥 NEW: If has paid subscription but NOT completed onboarding, show risk setup
+        // If has paid subscription but NOT completed onboarding, show risk setup
         if (hasPaidSubscription && !data?.onboarding_completed) {
           console.log('📊 Paid user needs to complete onboarding (risk setup)');
-          if (!hasRiskConfigured) {
-            setShowRiskSetup(true);
-            setCheckingSubscription(false);
-            return;
-          }
+          setShowRiskSetup(true);
+          setCheckingSubscription(false);
+          return;
         }
 
         console.log('💡 User needs to select plan');
@@ -226,12 +200,8 @@ export default function PricingSelection() {
     checkSubscription();
   }, [user, navigate, searchParams]);
 
-  // 🔥 Calculate display price with discount
+  // Calculate display price with discount
   const getDisplayPrice = (plan: Plan) => {
-    if (plan.id === "free") {
-      return { price: "$0", period: "forever", discountedPrice: null };
-    }
-
     const originalPrice = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
     const monthlyEquivalent = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyMonthlyEquivalent;
 
@@ -259,11 +229,9 @@ export default function PricingSelection() {
     };
   };
 
-  // Handle plan selection
+  // Handle plan selection - 🔥 SIMPLIFIED: No more free plan
   const handlePlanClick = (planId: string) => {
-    if (planId === 'free') {
-      handleSelectFreePlan();
-    } else if (planId === 'basic' || planId === 'premium') {
+    if (planId === 'basic' || planId === 'premium') {
       setSelectedPlan(planId as PlanId);
       setShowPaymentPopup(true);
     }
@@ -276,41 +244,11 @@ export default function PricingSelection() {
     }
   };
 
-  // Handle Free plan selection
-  const handleSelectFreePlan = async () => {
-    if (!user) return;
-    
-    setLoading(true);
-    try {
-      console.log('⏭️ User selected Free plan');
-      
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          account_type: 'free',
-          subscription_status: 'active',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      // 🔥 Show Risk Setup Modal after selecting Free
-      setShowRiskSetup(true);
-    } catch (error: any) {
-      console.error('❌ Error setting free plan:', error);
-      toast.error('Failed to continue. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🔥 Handle Risk Setup completion - Works for ALL plans
+  // Handle Risk Setup completion
   const handleRiskSetupComplete = async () => {
     if (!user) return;
 
     try {
-      // Mark onboarding as completed
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -345,7 +283,7 @@ export default function PricingSelection() {
     );
   }
 
-  // 🔥 If returning from Whop and need risk setup - show ONLY the modal
+  // If returning from Whop and need risk setup - show ONLY the modal
   if (showRiskSetup && user) {
     return (
       <div className="min-h-screen bg-black">
@@ -360,8 +298,7 @@ export default function PricingSelection() {
 
   return (
     <>
-
-      {/* Payment Popup - 🔥 NOW WITH DISCOUNT INFO */}
+      {/* Payment Popup with discount info */}
       {showPaymentPopup && (
         <PaymentPopup
           isOpen={showPaymentPopup}
@@ -377,7 +314,7 @@ export default function PricingSelection() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#1E1B16] to-[#0B0B0B]" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-primary/12 rounded-full blur-[160px]" />
 
-        <div className="max-w-7xl mx-auto relative z-10">
+        <div className="max-w-6xl mx-auto relative z-10">
           {/* Section Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -390,7 +327,7 @@ export default function PricingSelection() {
               <span className="text-[#C9A646]">Power Tier</span>
             </h2>
             
-            {/* Guarantee Copy */}
+            {/* 🔥 UPDATED: Trial-focused messaging */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -416,10 +353,10 @@ export default function PricingSelection() {
                   </div>
                   <div className="text-left flex-1">
                     <h3 className="text-xl md:text-2xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                      Start free — 10 manual trades
+                      Try Basic free for 14 days
                     </h3>
                     <p className="text-slate-300 text-lg leading-relaxed">
-                      If Finotaur doesn't show a pattern that's hurting you within 10 trades, don't upgrade.
+                      If Finotaur doesn't show a pattern that's hurting you within 14 days, cancel anytime — no charge.
                     </p>
                   </div>
                 </div>
@@ -432,11 +369,11 @@ export default function PricingSelection() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-lg text-slate-400"
             >
-              No credit card required • Cancel anytime
+              No commitment required • Cancel anytime during trial
             </motion.p>
           </motion.div>
 
-          {/* 🔥 DISCOUNT BANNER - Shows when discount is active */}
+          {/* DISCOUNT BANNER */}
           {hasDiscount && discountInfo && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -497,12 +434,12 @@ export default function PricingSelection() {
             </div>
           </motion.div>
 
-          {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto pt-8">
+          {/* 🔥 UPDATED: 2-column grid for 2 plans */}
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto pt-8">
             {plans.map((plan, index) => {
               const displayPrice = getDisplayPrice(plan);
               const isPlanSelected = plan.id === selectedPlan;
-              const showDiscountOnCard = hasDiscount && (plan.id === 'basic' || plan.id === 'premium');
+              const showDiscountOnCard = hasDiscount;
               
               return (
                 <motion.div
@@ -513,10 +450,10 @@ export default function PricingSelection() {
                   onClick={() => handlePlanCardClick(plan.id)}
                   className={`p-8 relative transition-all duration-300 flex flex-col rounded-2xl cursor-pointer ${
                     plan.featured 
-                      ? 'md:scale-[1.08]' 
+                      ? 'md:scale-[1.05]' 
                       : ''
                   } ${
-                    isPlanSelected && plan.id !== 'free'
+                    isPlanSelected
                       ? 'ring-2 ring-[#C9A646]'
                       : ''
                   }`}
@@ -549,7 +486,7 @@ export default function PricingSelection() {
                            : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)'
                        }} />
 
-                  {/* Featured Badge */}
+                  {/* Featured Badge (Premium) */}
                   {plan.featured && (
                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap"
                          style={{
@@ -563,7 +500,16 @@ export default function PricingSelection() {
                     </div>
                   )}
 
-                  {/* 🔥 Discount Badge */}
+                  {/* 🔥 Trial Badge (Basic only) */}
+                  {plan.trialDays && !plan.featured && (
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg"
+                         style={{ zIndex: 50 }}>
+                      <Clock className="w-4 h-4" />
+                      14-Day Free Trial
+                    </div>
+                  )}
+
+                  {/* Discount Badge */}
                   {showDiscountOnCard && hasDiscount && (
                     <div className="absolute -top-4 right-4 bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
                       <Tag className="w-3 h-3" />
@@ -572,14 +518,14 @@ export default function PricingSelection() {
                   )}
 
                   {/* Savings Badge (non-discount) */}
-                  {plan.savings && billingInterval === 'yearly' && !plan.featured && !showDiscountOnCard && (
+                  {plan.savings && billingInterval === 'yearly' && !showDiscountOnCard && (
                     <div className="absolute -top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       {plan.savings}
                     </div>
                   )}
                   
                   {/* Plan Info */}
-                  <div className="text-center mb-8">
+                  <div className="text-center mb-8 mt-4">
                     <h3 className="text-2xl font-bold mb-2 text-white">{plan.name}</h3>
                     <div className="flex flex-col items-center justify-center gap-1 mb-3">
                       <div className="flex items-baseline gap-1">
@@ -609,6 +555,12 @@ export default function PricingSelection() {
                           You save ${displayPrice.savings.toFixed(2)}!
                         </span>
                       )}
+                      {/* 🔥 Trial info text */}
+                      {plan.trialDays && (
+                        <span className="text-sm text-blue-400 font-medium mt-1">
+                          First 14 days free, then {displayPrice.price}{displayPrice.period}
+                        </span>
+                      )}
                     </div>
                     <p className="text-slate-400">{plan.description}</p>
                   </div>
@@ -636,16 +588,16 @@ export default function PricingSelection() {
                     className={`w-full ${
                       plan.featured 
                         ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black font-bold transition-all duration-500 hover:scale-[1.02]' 
-                        : hasDiscount && plan.id !== 'free'
+                        : hasDiscount
                           ? 'border-2 border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/10 text-white hover:scale-[1.02]'
-                          : 'border-2 border-[#C9A646]/40 hover:border-[#C9A646] hover:bg-[#C9A646]/10 text-white hover:scale-[1.02]'
+                          : 'border-2 border-blue-500/40 hover:border-blue-500 hover:bg-blue-500/10 text-white hover:scale-[1.02]'
                     }`}
                     size="lg"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePlanClick(plan.id);
                     }}
-                    disabled={loading && plan.id === 'free'}
+                    disabled={loading}
                     style={plan.featured ? {
                       boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
                     } : {
@@ -653,7 +605,7 @@ export default function PricingSelection() {
                       transition: 'all 0.3s ease'
                     }}
                   >
-                    {loading && plan.id === 'free' ? 'Loading...' : plan.cta}
+                    {plan.cta}
                   </Button>
                 </motion.div>
               );
@@ -675,8 +627,8 @@ export default function PricingSelection() {
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm">No credit card required</span>
+                <Clock className="w-5 h-5 text-blue-500" />
+                <span className="text-sm">14-Day Free Trial on Basic</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">

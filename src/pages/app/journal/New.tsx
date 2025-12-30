@@ -607,15 +607,16 @@ export default function New() {
   // 🌍 Timezone support
   const timezone = useTimezone();
   
-  const { 
-    canAddTrade, 
-    tradesRemaining, 
-    limits, 
-    isPremium, 
-    isUnlimitedUser,
-    warningState,
-    markWarningShown 
-  } = useSubscription();
+const { 
+  canAddTrade, 
+  tradesRemaining, 
+  limits, 
+  isPremium, 
+  isUnlimitedUser,
+  isLegacyFreeUser,
+  warningState,
+  markWarningShown 
+} = useSubscription();
   
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showUsageWarning, setShowUsageWarning] = useState(false);
@@ -1594,23 +1595,32 @@ if (hasResult && directRiskUSD > 0) {
       </style>
 
       <main className="max-w-[1100px] mx-auto px-6 pb-24 bg-[radial-gradient(80%_120%_at_50%_0%,#141414_0%,#0A0A0A_60%)]">
-        {/* Warning Banner - FREE users (10 trades limit) */}
-        {!isEditMode && limits && !isUnlimitedUser && !isPremium && limits.max_trades === 10 && tradesRemaining <= 5 && tradesRemaining > 0 && (
-          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0" />
-              <p className="text-sm text-zinc-300">
-                <span className="font-semibold text-amber-400">{tradesRemaining} free trades remaining</span> out of {limits.max_trades}. 
-                <button 
-                  onClick={() => navigate('/app/journal/pricing')}
-                  className="ml-2 underline text-amber-400 hover:text-amber-300"
-                >
-                  Upgrade to Basic or Premium
-                </button>
-              </p>
-            </div>
-          </div>
-        )}
+        {/* Warning Banner - Legacy FREE users (must select a plan) */}
+{!isEditMode && isLegacyFreeUser && (
+  <div className="mb-6 rounded-xl border border-red-500/30 bg-gradient-to-r from-red-500/10 to-amber-500/10 p-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className="p-2 rounded-lg bg-red-500/20">
+          <AlertCircle className="h-5 w-5 text-red-400" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-white">
+            Action Required: Select a Plan
+          </p>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Your free account no longer supports adding trades. Choose a plan to continue.
+          </p>
+        </div>
+      </div>
+      <button 
+        onClick={() => navigate('/app/journal/pricing')}
+        className="px-4 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-500 text-black text-sm font-semibold hover:from-amber-400 hover:to-yellow-400 transition-all shadow-lg shadow-amber-500/20"
+      >
+        Select Plan →
+      </button>
+    </div>
+  </div>
+)}
 
         {/* Warning Banner - BASIC users (25 trades limit) */}
         {!isEditMode && limits && !isUnlimitedUser && !isPremium && limits.max_trades === 25 && tradesRemaining <= 5 && tradesRemaining > 0 && (

@@ -1,4 +1,5 @@
 // src/contexts/AuthContext.tsx - OPTIMIZED + IMPERSONATION SUPPORT
+// 🔥 v2.0: New users no longer get 'free' account_type - they go to plan selection
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
@@ -240,19 +241,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
               const affiliateCode = await generateAffiliateCode(displayName);
 
+              // 🔥 v2.0: New users get 'trial' status - they need to select a plan
+              // Previously was 'free' with max_trades: 10
               await supabase.from('profiles').insert({
                 id: userId,
                 display_name: displayName,
                 email: session.user.email,
                 affiliate_code: affiliateCode,
-                account_type: 'free',
-                max_trades: 10,
+                account_type: 'trial', // 🔥 CHANGED from 'free'
+                subscription_status: 'trial', // 🔥 NEW
+                max_trades: 25, // 🔥 CHANGED from 10 - trial gets Basic limits
                 trade_count: 0,
                 role: 'user',
                 login_count: 0,
                 is_banned: false,
                 referral_count: 0,
-                free_months_available: 0
+                free_months_available: 0,
+                is_in_trial: true, // 🔥 NEW
+                trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 🔥 14 days from now
               });
             }
           }
@@ -303,20 +309,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const newAffiliateCode = await generateAffiliateCode(name);
 
+      // 🔥 v2.0: New users start in 'trial' status with 14-day trial
+      // They'll be prompted to select a plan (Basic or Premium)
       const { error: profileError } = await supabase.from('profiles').insert({
         id: authData.user.id,
         email: email,
         display_name: name,
         affiliate_code: newAffiliateCode,
         referred_by: affiliateCode || null,
-        account_type: 'free',
-        max_trades: 10,
+        account_type: 'trial', // 🔥 CHANGED from 'free'
+        subscription_status: 'trial', // 🔥 NEW
+        max_trades: 25, // 🔥 CHANGED from 10 - trial gets Basic limits
         trade_count: 0,
         role: 'user',
         login_count: 0,
         is_banned: false,
         referral_count: 0,
-        free_months_available: 0
+        free_months_available: 0,
+        is_in_trial: true, // 🔥 NEW
+        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(), // 🔥 14 days from now
       });
 
       if (profileError) throw profileError;

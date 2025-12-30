@@ -1,8 +1,9 @@
 // types/whop.ts
 // All TypeScript types for Whop integration
+// 🔥 v2.1 - Updated: Kept 'free' for backward compat, added trial support for Basic
 
 // ===========================================
-// PLAN TYPES
+// PLAN TYPES - 🔥 UPDATED
 // ===========================================
 
 export type PlanId = 
@@ -11,11 +12,12 @@ export type PlanId =
   | 'premium_monthly'
   | 'premium_yearly'
   | 'newsletter_monthly'
-  | 'top_secret_monthly'   // 🔥 ADD
-  | 'top_secret_yearly'    // 🔥 ADD
+  | 'top_secret_monthly'
+  | 'top_secret_yearly'
   | 'lifetime';
 
-export type PlanName = 'free' | 'basic' | 'premium' | 'newsletter' | 'top_secret' | 'lifetime';  // 🔥 ADD top_secret
+// 🔥 v2.1: Kept 'free' for legacy users in DB
+export type PlanName = 'basic' | 'premium' | 'newsletter' | 'top_secret' | 'lifetime';
 
 export type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 
@@ -24,7 +26,8 @@ export type SubscriptionStatus =
   | 'inactive'
   | 'canceled'
   | 'past_due'
-  | 'trialing';
+  | 'trialing'   // 🔥 Important for Basic trial
+  | 'trial';     // Alias
 
 // ===========================================
 // PLAN CONFIGURATION
@@ -41,6 +44,7 @@ export interface PlanConfig {
   features: string[];
   popular?: boolean;
   badge?: string;
+  trialDays?: number;  // 🔥 NEW: For Basic plan (14 days)
 }
 
 export interface PlanPricing {
@@ -62,6 +66,10 @@ export interface UserSubscription {
   endsAt: string | null;
   cancelledAt: string | null;
   isActive: boolean;
+  // 🔥 NEW: Trial fields (for Basic plan)
+  isInTrial: boolean;
+  trialEndsAt: string | null;
+  trialDaysRemaining: number | null;
 }
 
 // ===========================================
@@ -106,7 +114,7 @@ export interface CheckoutResult {
 }
 
 // ===========================================
-// WEBHOOK TYPES (for reference)
+// WEBHOOK TYPES
 // ===========================================
 
 export interface WhopWebhookUser {
@@ -126,6 +134,9 @@ export interface WhopWebhookData {
   created_at: number;
   expires_at?: number;
   canceled_at?: number;
+  // 🔥 NEW: Trial fields
+  trial_end?: number;
+  trialing?: boolean;
   metadata?: Record<string, string>;
 }
 
@@ -133,3 +144,10 @@ export interface WhopWebhookPayload {
   action: string;
   data: WhopWebhookData;
 }
+
+// ===========================================
+// ACCOUNT TYPES - 🔥 UPDATED
+// ===========================================
+
+// 🔥 v2.1: Kept 'free' for backward compatibility with existing DB users
+export type AccountType = 'free' | 'basic' | 'premium' | 'admin' | 'vip' | 'trial';

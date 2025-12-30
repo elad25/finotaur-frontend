@@ -5,18 +5,19 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 
+// 🔥 v2.0: Updated FAQs - removed FREE tier references
 const faqs = [
   {
     question: 'What data sources does Finotaur use?',
     answer: 'We aggregate data from multiple institutional-grade providers including major exchanges, financial data APIs, and verified news sources. Our AI layer processes and enriches this data to provide actionable insights.',
   },
   {
-    question: 'Is the data real-time or delayed?',
-    answer: 'Free plan users get 15-minute delayed data. Pro and Elite subscribers receive real-time streaming data across all asset classes. Real-time data is sourced directly from exchanges and liquidity providers.',
+    question: 'Is there a free trial?',
+    answer: 'Yes! Our Basic plan includes a 14-day free trial with full access to all Basic features. No credit card required to start. Premium subscribers get immediate access with no trial period.',
   },
   {
     question: 'Can I get a refund if I\'m not satisfied?',
-    answer: 'Yes! We offer a 14-day money-back guarantee for all paid plans. If you\'re not satisfied for any reason, contact our support team within 14 days of your purchase for a full refund.',
+    answer: 'Yes! We offer a 7-day money-back guarantee for all paid plans. If you\'re not satisfied for any reason, contact our support team within 7 days of your purchase for a full refund.',
   },
   {
     question: 'How secure is my data and API connections?',
@@ -24,19 +25,19 @@ const faqs = [
   },
   {
     question: 'What\'s on your roadmap?',
-    answer: 'We\'re constantly improving! Upcoming features include mobile apps (iOS & Android), advanced charting with TradingView integration, social trading features, and expanded Copy Trade capabilities. Join our Discord to vote on features.',
+    answer: 'We\'re constantly improving! Upcoming features include mobile apps (iOS & Android), advanced charting with TradingView integration, social trading features, and expanded broker sync capabilities. Join our Discord to vote on features.',
   },
   {
     question: 'Do you offer educational resources?',
-    answer: 'Yes! Pro and Elite members get access to our learning hub with video tutorials, strategy guides, and market analysis webinars. We also have an active community where traders share insights and strategies.',
+    answer: 'Yes! All subscribers get access to our learning hub with video tutorials, strategy guides, and market analysis webinars. We also have an active community where traders share insights and strategies.',
   },
   {
     question: 'Can I cancel or change my plan anytime?',
     answer: 'Absolutely. You can upgrade, downgrade, or cancel your subscription at any time from your account settings. Changes take effect at the start of your next billing cycle, and you\'ll keep access until then.',
   },
   {
-    question: 'How does the Trading Journal add-on work?',
-    answer: 'The Trading Journal is a $15/month add-on that works with any plan (including Free). It provides comprehensive trade logging, analytics, equity curves, and AI-powered trade review. You can add or remove it anytime.',
+    question: 'What\'s the difference between Basic and Premium?',
+    answer: 'Basic ($19.99/mo) includes 25 trades per month, full analytics, strategy tracking, and a 14-day free trial. Premium ($39.99/mo) unlocks unlimited trades, AI-powered insights, pattern recognition, and priority support.',
   },
 ];
 
