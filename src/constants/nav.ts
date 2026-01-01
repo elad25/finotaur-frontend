@@ -1,20 +1,32 @@
-// Finotaur Side Navigation Config (focused delta)
+// src/constants/nav.ts
+// =====================================================
+// FINOTAUR NAVIGATION CONFIG - v2.1.0
+// =====================================================
+// 
+// 🔥 v2.1.0 CHANGES:
+// - ADDED: hideForAdmin flag to NavItem interface
+// - UPDATED: Top Secret now hidden for admins (they use Admin version)
+// - FIXED: Double highlight issue on Top Secret tabs
+// =====================================================
+
 import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords
+  Link, Gift, type LucideIcon, Swords, Crown
 } from 'lucide-react';
 
+// 🆕 UPDATED: Added hideForAdmin to interface
 export interface NavItem { 
   label: string; 
   path: string; 
   icon?: LucideIcon; 
   adminOnly?: boolean;
   affiliateOnly?: boolean;
-  locked?: boolean; // 🔒 הוספת מאפיין נעילה לפריט בודד
+  locked?: boolean;
+  hideForAdmin?: boolean;  // 🆕 Hide this item when user is admin
 }
 
 export interface Domain { 
@@ -23,31 +35,35 @@ export interface Domain {
   subNav: NavItem[]; 
   sidebar: NavItem[]; 
   locked?: boolean;
-  defaultPath?: string; // 🔥 נתיב ברירת מחדל כשלוחצים על הדומיין
+  defaultPath?: string;
 }
 
 export const domains: Record<string, Domain> = {
-'all-markets': {
+  'all-markets': {
     id: 'all-markets',
     label: 'All Markets',
     locked: false,
     defaultPath: '/app/all-markets/warzone',
+    // 🔥 UPDATED subNav - All unlocked!
     subNav: [
-      { label: 'Overview', path: '/app/all-markets/overview', locked: true },
-      { label: 'Chart', path: '/app/all-markets/chart', locked: true },
-      { label: 'Summary', path: '/app/all-markets/summary', locked: true },
-      { label: 'News', path: '/app/all-markets/news', locked: true },
+      { label: 'Overview', path: '/app/all-markets/overview', locked: false },
+      { label: 'Chart', path: '/app/all-markets/chart', locked: false },
+      { label: 'Summary', path: '/app/all-markets/summary', locked: false },
       { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
-      { label: 'Top Secret', path: '/app/all-markets/top-secret', adminOnly: true },
-{ label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
+      { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },  // 🔐 Hidden for admins - they use Admin version
+      { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },  // 🔐 Admin only
+      { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
-      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
-      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
-      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
-      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
-      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
-      
+      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: false },
+      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: false },
+      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: false },
+      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: false },
+      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: false },
+      { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: false },
+      // 🔥 NEW: Pricing & Settings
+      { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: false },
+      { label: 'Settings', path: '/app/settings', icon: SettingsIcon, locked: false },
     ],
   },
 
@@ -151,10 +167,11 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
+  // 🔥 MACRO - NOW UNLOCKED!
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: true, // ✅ UNLOCKED!
+    locked: false, // ✅ UNLOCKED!
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
     ],

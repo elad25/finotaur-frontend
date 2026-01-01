@@ -1,4 +1,5 @@
 // src/hooks/useAdminAuth.ts
+// v1.1.0 - Production ready - No console logs
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/lib/supabase';
@@ -49,7 +50,6 @@ export function useAdminAuth() {
         .single();
 
       if (profileError) {
-        console.error('❌ Error checking admin status:', profileError);
         setState({
           isAdmin: false,
           isSuperAdmin: false,
@@ -64,13 +64,6 @@ export function useAdminAuth() {
       const isAdmin = role === 'admin' || role === 'super_admin';
       const isSuperAdmin = role === 'super_admin';
 
-      console.log('🔐 Admin auth check:', {
-        email: profile.email,
-        role,
-        isAdmin,
-        isSuperAdmin,
-      });
-
       setState({
         isAdmin,
         isSuperAdmin,
@@ -79,7 +72,6 @@ export function useAdminAuth() {
         error: null,
       });
     } catch (err: any) {
-      console.error('❌ Admin auth error:', err);
       setState({
         isAdmin: false,
         isSuperAdmin: false,

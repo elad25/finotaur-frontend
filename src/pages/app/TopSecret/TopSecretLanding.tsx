@@ -1,0 +1,628 @@
+// ================================================
+// TOP SECRET LANDING PAGE - Luxury Premium v3.1
+// File: src/pages/app/TopSecret/TopSecretLanding.tsx
+// 🔥 v3.1: Using useWhopCheckout for proper tracking
+// ================================================
+
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/providers/AuthProvider';
+import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import {
+  TrendingUp,
+  Bitcoin,
+  Building2,
+  Calendar,
+  Lock,
+  Check,
+  Shield,
+  Clock,
+  ArrowRight,
+  Crown,
+  Eye,
+  Target,
+  BarChart3,
+  Sparkles,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import type { Variants } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+
+// ========================================
+// TYPES
+// ========================================
+
+interface PricingPlan {
+  id: 'monthly' | 'yearly';
+  name: string;
+  price: number;
+  period: string;
+  savings?: string;
+  monthlyEquivalent?: number;
+}
+
+interface ReportType {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string;
+  icon: React.ElementType;
+  frequency: string;
+  accentColor: string;
+  glowColor: string;
+  borderGradient: string;
+  highlights: string[];
+}
+
+// ========================================
+// CONSTANTS
+// ========================================
+
+const PRICING_PLANS: PricingPlan[] = [
+  {
+    id: 'monthly',
+    name: 'Monthly',
+    price: 35,
+    period: '/month',
+  },
+  {
+    id: 'yearly',
+    name: 'Yearly',
+    price: 300,
+    period: '/year',
+    savings: 'Save $120',
+    monthlyEquivalent: 25,
+  },
+];
+
+const REPORT_TYPES: ReportType[] = [
+  {
+    id: 'ism',
+    name: 'ISM Manufacturing Report',
+    shortName: 'ISM Report',
+    description: 'Deep macro-economic analysis of PMI data with sector impacts and actionable trade setups.',
+    icon: TrendingUp,
+    frequency: 'Monthly (~3rd)',
+    accentColor: '#F59E0B',
+    glowColor: 'rgba(245, 158, 11, 0.4)',
+    borderGradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #F59E0B 100%)',
+    highlights: [
+      'PMI Component Breakdown',
+      'Sector Impact Analysis',
+      'Trade Ideas with R:R',
+    ],
+  },
+  {
+    id: 'company',
+    name: 'Company Deep Dive',
+    shortName: 'Company Analysis',
+    description: 'Institutional-grade fundamental research with investment thesis and valuation models.',
+    icon: Building2,
+    frequency: '2x Monthly (5th & 20th)',
+    accentColor: '#A855F7',
+    glowColor: 'rgba(168, 85, 247, 0.4)',
+    borderGradient: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 50%, #A855F7 100%)',
+    highlights: [
+      'Business Model Analysis',
+      'Competitive Moat Assessment',
+      'Price Targets & Catalysts',
+    ],
+  },
+  {
+    id: 'crypto',
+    name: 'Crypto Market Intelligence',
+    shortName: 'Crypto Report',
+    description: 'Professional crypto analysis covering derivatives, on-chain metrics, and key levels.',
+    icon: Bitcoin,
+    frequency: '2x Monthly (10th & 25th)',
+    accentColor: '#06B6D4',
+    glowColor: 'rgba(6, 182, 212, 0.4)',
+    borderGradient: 'linear-gradient(135deg, #06B6D4 0%, #0891B2 50%, #06B6D4 100%)',
+    highlights: [
+      'Market Regime Analysis',
+      'Derivatives & Funding',
+      'Key Levels & Targets',
+    ],
+  },
+];
+
+const FEATURES = [
+  { icon: Eye, text: 'Same research Wall Street pays $2,000+/month for' },
+  { icon: Target, text: 'Actionable trade ideas with entry, stop, target' },
+  { icon: BarChart3, text: 'Data-driven analysis, not opinions' },
+  { icon: Clock, text: '5 premium reports delivered monthly' },
+];
+
+// ========================================
+// ANIMATION VARIANTS
+// ========================================
+
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08, delayChildren: 0.1 },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
+};
+
+// ========================================
+// COMPONENT
+// ========================================
+
+export default function TopSecretLanding() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  
+  // 🔥 Using useWhopCheckout for proper tracking
+  const { initiateCheckout, isLoading } = useWhopCheckout({
+    onSuccess: () => {
+      console.log('✅ Top Secret checkout initiated');
+    },
+    onError: (error) => {
+      console.error('❌ Top Secret checkout error:', error);
+    },
+  });
+
+  // 🔥 Handle subscription using the hook
+  const handleSubscribe = () => {
+    initiateCheckout({
+      planName: 'top_secret',
+      billingInterval: selectedPlan,
+    });
+  };
+
+  const selectedPlanData = PRICING_PLANS.find(p => p.id === selectedPlan)!;
+
+  return (
+    <section className="min-h-screen py-8 px-4 relative overflow-hidden bg-[#0A0A0A]">
+      {/* Background Effects - Golden Warm Glow */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#12100D] to-[#0B0B0B]" />
+      
+      {/* Main Golden Glow - Top Center */}
+      <div 
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[800px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center top, rgba(201,166,70,0.15) 0%, rgba(180,140,50,0.08) 30%, transparent 70%)',
+          filter: 'blur(60px)'
+        }}
+      />
+      
+      {/* Secondary Golden Glow - Middle */}
+      <div 
+        className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[900px] h-[600px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.1) 0%, rgba(150,120,40,0.05) 40%, transparent 70%)',
+          filter: 'blur(80px)'
+        }}
+      />
+      
+      {/* Subtle warm accent - Left */}
+      <div 
+        className="absolute top-1/4 left-0 w-[500px] h-[500px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at center, rgba(180,140,50,0.06) 0%, transparent 60%)',
+          filter: 'blur(100px)'
+        }}
+      />
+      
+      {/* Subtle warm accent - Right */}
+      <div 
+        className="absolute bottom-1/4 right-0 w-[400px] h-[400px] pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle at center, rgba(201,166,70,0.05) 0%, transparent 60%)',
+          filter: 'blur(80px)'
+        }}
+      />
+
+      <motion.div
+        className="max-w-6xl mx-auto relative z-10 pt-16"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Hero Section */}
+        <motion.div variants={itemVariants} className="text-center mb-14">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-8"
+               style={{
+                 background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
+                 border: '1px solid rgba(201,166,70,0.4)',
+                 boxShadow: '0 0 40px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
+               }}>
+            <Crown className="w-5 h-5 text-[#C9A646]" />
+            <span className="text-[#C9A646] font-semibold tracking-wide">Premium Intelligence</span>
+          </div>
+
+          {/* Main Headline */}
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6" style={{ letterSpacing: '-0.03em' }}>
+            <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent"
+                  style={{ textShadow: '0 0 80px rgba(201,166,70,0.5)' }}>
+              Top Secret
+            </span>
+            <br />
+            <span className="text-white">Market Intelligence</span>
+          </h1>
+
+          {/* Subheadline */}
+          <p className="text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
+            Get the same institutional-grade research that 
+            <span className="text-white font-semibold"> hedge funds pay thousands </span>
+            for — delivered to your inbox every week.
+          </p>
+
+          {/* Value Props */}
+          <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 mb-12">
+            {FEATURES.map((feature, idx) => {
+              const Icon = feature.icon;
+              return (
+                <div key={idx} className="flex items-center gap-3 text-slate-300">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                       style={{
+                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                         border: '1px solid rgba(201,166,70,0.2)'
+                       }}>
+                    <Icon className="w-5 h-5 text-[#C9A646]" />
+                  </div>
+                  <span className="text-sm font-medium">{feature.text}</span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Report Types - Premium Cards */}
+        <motion.div variants={itemVariants} className="mb-20">
+          <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-white">
+            What You'll Receive
+          </h2>
+          <p className="text-slate-500 text-center mb-12">5 premium reports delivered every month</p>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {REPORT_TYPES.map((report) => {
+              const Icon = report.icon;
+              return (
+                <motion.div
+                  key={report.id}
+                  className="relative group"
+                  whileHover={{ scale: 1.02, y: -8 }}
+                  transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+                >
+                  {/* Glow Effect */}
+                  <div 
+                    className="absolute -inset-[1px] rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"
+                    style={{ background: report.glowColor }}
+                  />
+                  
+                  {/* Border Gradient */}
+                  <div 
+                    className="absolute -inset-[1px] rounded-2xl opacity-60 group-hover:opacity-100 transition-opacity duration-300"
+                    style={{ background: report.borderGradient, padding: '1px' }}
+                  >
+                    <div className="w-full h-full rounded-2xl bg-[#0A0A0A]" />
+                  </div>
+
+                  {/* Card Content */}
+                  <div className="relative rounded-2xl p-7 bg-gradient-to-b from-[#111111] to-[#0A0A0A]">
+                    {/* Top Accent Line */}
+                    <div 
+                      className="absolute top-0 left-6 right-6 h-[2px] rounded-full"
+                      style={{ background: report.borderGradient }}
+                    />
+
+                    {/* Icon */}
+                    <div 
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6 relative"
+                      style={{
+                        background: `linear-gradient(135deg, ${report.accentColor}20 0%, ${report.accentColor}05 100%)`,
+                        border: `1px solid ${report.accentColor}40`,
+                        boxShadow: `0 0 30px ${report.accentColor}20`
+                      }}
+                    >
+                      <Icon className="w-8 h-8" style={{ color: report.accentColor }} />
+                    </div>
+
+                    {/* Content */}
+                    <h3 className="text-xl font-bold text-white mb-3">{report.name}</h3>
+                    <p className="text-sm text-slate-400 mb-5 leading-relaxed">{report.description}</p>
+
+                    {/* Frequency Badge */}
+                    <div className="flex items-center gap-2 mb-6">
+                      <div 
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium"
+                        style={{
+                          background: `${report.accentColor}15`,
+                          border: `1px solid ${report.accentColor}30`,
+                          color: report.accentColor
+                        }}
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        {report.frequency}
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-6" />
+
+                    {/* Highlights */}
+                    <ul className="space-y-3">
+                      {report.highlights.map((highlight, idx) => (
+                        <li key={idx} className="flex items-center gap-3 text-sm text-slate-300">
+                          <div 
+                            className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{
+                              background: `${report.accentColor}20`,
+                              border: `1px solid ${report.accentColor}40`
+                            }}
+                          >
+                            <Check className="w-3 h-3" style={{ color: report.accentColor }} />
+                          </div>
+                          <span>{highlight}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Pricing Card */}
+        <motion.div variants={itemVariants} className="max-w-lg mx-auto mb-20">
+          {/* Outer Glow */}
+          <div className="relative">
+            <div className="absolute -inset-4 bg-[#C9A646]/10 rounded-[2rem] blur-2xl" />
+            
+            <div className="relative rounded-3xl p-8 md:p-10"
+                 style={{
+                   background: 'linear-gradient(180deg, rgba(20,20,20,1) 0%, rgba(10,10,10,1) 100%)',
+                   border: '1px solid rgba(201,166,70,0.3)',
+                   boxShadow: '0 0 0 1px rgba(201,166,70,0.1), 0 25px 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05)'
+                 }}>
+              
+              {/* Top Shine */}
+              <div className="absolute top-0 left-0 right-0 h-32 rounded-t-3xl overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-[#C9A646]/10 to-transparent" />
+              </div>
+
+              {/* Sparkle Icon */}
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+                     style={{
+                       background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                       boxShadow: '0 4px 20px rgba(201,166,70,0.5)'
+                     }}>
+                  <Sparkles className="w-5 h-5 text-black" />
+                </div>
+              </div>
+
+              <div className="relative pt-4">
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold text-white mb-2">Unlock Full Access</h3>
+                  <p className="text-slate-500">Cancel anytime • Instant access</p>
+                </div>
+
+                {/* Plan Toggle */}
+                <div className="flex justify-center mb-8">
+                  <div className="inline-flex p-1.5 rounded-xl"
+                       style={{
+                         background: 'rgba(0,0,0,0.5)',
+                         border: '1px solid rgba(255,255,255,0.08)'
+                       }}>
+                    {PRICING_PLANS.map((plan) => (
+                      <button
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(plan.id)}
+                        className={`relative px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
+                          selectedPlan === plan.id
+                            ? 'text-black'
+                            : 'text-slate-500 hover:text-white'
+                        }`}
+                        style={selectedPlan === plan.id ? {
+                          background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                          boxShadow: '0 4px 15px rgba(201,166,70,0.4)'
+                        } : {}}
+                      >
+                        {plan.name}
+                        {plan.savings && selectedPlan === plan.id && (
+                          <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-emerald-500 text-white text-xs font-bold rounded-full shadow-lg">
+                            {plan.savings}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Price */}
+                <div className="text-center mb-8">
+                  <div className="flex items-baseline justify-center gap-2">
+                    <span className="text-6xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
+                      ${selectedPlanData.price}
+                    </span>
+                    <span className="text-xl text-slate-500">{selectedPlanData.period}</span>
+                  </div>
+                  {selectedPlan === 'yearly' && (
+                    <p className="text-emerald-400 font-semibold mt-2">
+                      Just ${selectedPlanData.monthlyEquivalent}/month — Save $120!
+                    </p>
+                  )}
+                </div>
+
+                {/* What's Included */}
+                <ul className="space-y-4 mb-8">
+                  {[
+                    'Monthly ISM Manufacturing Report',
+                    '2x Company Deep Dive Reports',
+                    '2x Crypto Market Reports',
+                    'PDF Downloads & Archive Access',
+                    'Discord Community Access',
+                    'Email Delivery',
+                  ].map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                           style={{
+                             background: 'rgba(201,166,70,0.15)',
+                             border: '1px solid rgba(201,166,70,0.3)'
+                           }}>
+                        <Check className="w-4 h-4 text-[#C9A646]" />
+                      </div>
+                      <span className="text-slate-300">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* CTA Button */}
+                <Button
+                  onClick={handleSubscribe}
+                  disabled={isLoading}
+                  className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                    backgroundSize: '200% auto',
+                    color: '#000',
+                    boxShadow: '0 8px 32px rgba(201,166,70,0.4), inset 0 2px 0 rgba(255,255,255,0.2)'
+                  }}
+                >
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                  ) : (
+                    <span className="flex items-center justify-center gap-2">
+                      Get Access Now
+                      <ArrowRight className="w-5 h-5" />
+                    </span>
+                  )}
+                </Button>
+
+                {/* Trust Badge */}
+                <div className="flex items-center justify-center gap-2 mt-5 text-sm text-slate-500">
+                  <Shield className="w-4 h-4" />
+                  <span>Secure checkout powered by Whop</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Sample Preview - Premium Version */}
+        <motion.div variants={itemVariants} className="mb-16">
+          <h2 className="text-2xl font-bold text-center mb-3 text-white">Sample Reports</h2>
+          <p className="text-slate-500 text-center mb-10">Preview what's waiting for you inside</p>
+          
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {REPORT_TYPES.map((report) => {
+              const Icon = report.icon;
+              return (
+                <motion.div
+                  key={report.id}
+                  className="relative group cursor-pointer"
+                  whileHover={{ scale: 1.03 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {/* Card */}
+                  <div 
+                    className="relative aspect-[3/4] rounded-2xl overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(180deg, #111111 0%, #0A0A0A 100%)',
+                      border: `1px solid ${report.accentColor}30`
+                    }}
+                  >
+                    {/* Report Header Bar */}
+                    <div 
+                      className="h-2 w-full"
+                      style={{ background: report.borderGradient }}
+                    />
+
+                    {/* Fake Document Content */}
+                    <div className="p-5">
+                      {/* Title skeleton */}
+                      <div className="flex items-center gap-3 mb-4">
+                        <div 
+                          className="w-8 h-8 rounded-lg"
+                          style={{ background: `${report.accentColor}30` }}
+                        />
+                        <div>
+                          <div className="h-3 w-24 rounded bg-white/20 mb-1.5" />
+                          <div className="h-2 w-16 rounded bg-white/10" />
+                        </div>
+                      </div>
+
+                      {/* Content skeletons */}
+                      <div className="space-y-2 mb-4">
+                        <div className="h-2 w-full rounded bg-white/10" />
+                        <div className="h-2 w-5/6 rounded bg-white/10" />
+                        <div className="h-2 w-4/5 rounded bg-white/10" />
+                      </div>
+
+                      {/* Chart placeholder */}
+                      <div 
+                        className="h-20 rounded-lg mb-4"
+                        style={{ background: `linear-gradient(135deg, ${report.accentColor}10 0%, ${report.accentColor}05 100%)` }}
+                      />
+
+                      {/* More content */}
+                      <div className="space-y-2">
+                        <div className="h-2 w-full rounded bg-white/10" />
+                        <div className="h-2 w-3/4 rounded bg-white/10" />
+                      </div>
+                    </div>
+
+                    {/* Blur Overlay */}
+                    <div className="absolute inset-0 backdrop-blur-[3px] bg-black/70 flex flex-col items-center justify-center transition-all duration-300 group-hover:bg-black/80">
+                      {/* Glowing Lock Icon */}
+                      <div 
+                        className="w-20 h-20 rounded-2xl flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110"
+                        style={{
+                          background: report.borderGradient,
+                          boxShadow: `0 0 40px ${report.glowColor}`
+                        }}
+                      >
+                        <Lock className="w-10 h-10 text-white" />
+                      </div>
+                      
+                      <p className="text-white font-bold text-xl mb-2">{report.shortName}</p>
+                      <p className="text-slate-400 text-sm mb-4">Subscribe to unlock</p>
+                      
+                      {/* Mini CTA */}
+                      <div 
+                        className="px-4 py-2 rounded-lg text-sm font-semibold opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{
+                          background: `${report.accentColor}20`,
+                          border: `1px solid ${report.accentColor}50`,
+                          color: report.accentColor
+                        }}
+                      >
+                        View Sample →
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        {/* Footer */}
+        <motion.div variants={itemVariants} className="text-center pb-8">
+          <p className="text-slate-600">
+            Questions?{' '}
+            <a href="mailto:support@finotaur.com" className="text-[#C9A646] hover:underline">
+              support@finotaur.com
+            </a>
+          </p>
+        </motion.div>
+      </motion.div>
+    </section>
+  );
+}

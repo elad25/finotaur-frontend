@@ -1,10 +1,9 @@
 // src/components/SubNav.tsx
-// v2.0.0 - Safe affiliate queries with graceful error handling
+// v2.1.0 - Fixed Top Secret admin visibility and double highlight
 // CHANGES:
-// - Added tableExists check before querying affiliates
-// - Added comprehensive try-catch with graceful fallback
-// - Uses maybeSingle() instead of direct query
-// - Won't crash if affiliates table doesn't exist
+// - Added hideForAdmin support - hides regular Top Secret for admins
+// - Fixed double highlight issue for Top Secret tabs
+// - Improved path detection for admin routes
 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
@@ -180,10 +179,21 @@ export const SubNav = () => {
     return false;
   }, []);
 
-  // 🔥 Enhanced active detection for better tab highlighting
+  // 🔥 Enhanced active detection for better tab highlighting - FIXED FOR TOP SECRET
   const isTabActive = useCallback((itemPath: string): boolean => {
     // Check exact path match first
     if (location.pathname === itemPath) return true;
+    
+    // 🔥 TOP SECRET - Exact matching to prevent double highlight
+    if (itemPath === '/app/top-secret') {
+      // Regular Top Secret - active only on exact match
+      return location.pathname === '/app/top-secret';
+    }
+    
+    if (itemPath === '/app/top-secret/admin') {
+      // Admin Top Secret - active on admin paths
+      return location.pathname.startsWith('/app/top-secret/admin');
+    }
     
     // For subnav items, check if we're in their section
     if (itemPath === '/app/journal/overview' || itemPath === '/app/journal') {
@@ -202,8 +212,10 @@ export const SubNav = () => {
       return location.pathname.includes('/affiliate');
     }
     
-    if (itemPath.includes('/admin')) {
-      return location.pathname.includes('/admin');
+    // Admin paths (excluding top-secret/admin which is handled above)
+    if (itemPath.includes('/admin') && !itemPath.includes('/top-secret')) {
+      return location.pathname.includes('/admin') && 
+             !location.pathname.includes('/top-secret');
     }
     
     // Fallback to standard check
@@ -251,7 +263,7 @@ export const SubNav = () => {
     navigate(path);
   }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain]);
 
-  // 🔥 Filter function to check if item should be shown
+  // 🔥 Filter function to check if item should be shown - UPDATED WITH hideForAdmin
   const shouldShowItem = useCallback((item: any): boolean => {
     // Hide admin items during impersonation
     if (isImpersonating && item.adminOnly) {
@@ -261,6 +273,12 @@ export const SubNav = () => {
     
     // Hide admin-only items for non-admins
     if (item.adminOnly && !isAdmin) {
+      return false;
+    }
+
+    // 🆕 Hide items marked hideForAdmin when user IS admin
+    if (item.hideForAdmin && isAdmin) {
+      console.log('🔐 Hiding item for admin (has admin version):', item.label);
       return false;
     }
 

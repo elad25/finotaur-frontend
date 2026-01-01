@@ -42,7 +42,8 @@ import {
   Globe,
   Lock,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Crown
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -65,14 +66,16 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   divider?: boolean;
   locked?: boolean;
 }>> = {
+  // 🔥 ALL-MARKETS - ALL UNLOCKED!
   'all-markets': [
-    { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
-    { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
-    { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
-    { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
-    { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
-    { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
+    { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: false },
+    { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: false },
+    { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: false },
+    { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: false },
+    { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: false },
+    { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: false },
     { label: 'divider', path: '', icon: null, divider: true },
+    { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: false },
   ],
   
   'macro': [
@@ -253,7 +256,14 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     if (currentEnvironment === 'macro') {
       return { show: true, icon: Globe, label: 'Macro & News', bgColor: 'bg-emerald-500/5', textColor: 'text-emerald-400' };
     }
-    return { show: false };
+    if (currentEnvironment === 'journal') {
+      return { show: true, icon: BookOpen, label: 'Journal', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' };
+    }
+    if (currentEnvironment === 'backtest') {
+      return { show: true, icon: FlaskConical, label: 'Backtest', bgColor: 'bg-purple-500/5', textColor: 'text-purple-400' };
+    }
+    // Fallback - always show something
+    return { show: true, icon: LayoutDashboard, label: 'Dashboard', bgColor: 'bg-gray-500/5', textColor: 'text-gray-400' };
   };
 
   const envHeader = getEnvironmentHeader();

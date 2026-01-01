@@ -1,18 +1,18 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR PRICING SELECTION - v4.0
+// FINOTAUR PRICING SELECTION - v5.0
 // =====================================================
 // 
-// 🔥 v4.0 CHANGES:
-// - REMOVED: Free tier completely
-// - ADDED: Basic with 14-day trial
-// - KEPT: Premium name (not Pro)
+// 🔥 v5.0 CHANGES:
+// - ADDED: "LET ME IN" button sets platform_plan='free' and redirects to All Markets
+// - Platform FREE users can access All Markets without Journal subscription
+// - KEPT: Basic with 14-day trial, Premium immediate payment
 // =====================================================
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Check, Shield, Zap, TrendingUp, Tag, Clock } from 'lucide-react';
+import { Check, Shield, Zap, TrendingUp, Tag, Clock, ArrowLeft, LogOut, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PaymentPopup from '@/components/PaymentPopup';
 import RiskSetupModal from '@/components/onboarding/RiskSetupModal';
@@ -24,7 +24,7 @@ import { motion } from 'framer-motion';
 import { useAffiliateDiscount } from '@/features/affiliate/hooks/useAffiliateDiscount';
 
 type BillingInterval = 'monthly' | 'yearly';
-type PlanId = 'basic' | 'premium';  // 🔥 UPDATED: removed 'free'
+type PlanId = 'basic' | 'premium';
 
 interface Plan {
   id: string;
@@ -40,7 +40,7 @@ interface Plan {
   trialDays?: number;
 }
 
-// 🔥 UPDATED: Only 2 plans - Basic (trial) and Premium (no trial)
+// Only 2 plans - Basic (trial) and Premium (no trial)
 const plans: Plan[] = [
   {
     id: "basic",
@@ -49,7 +49,7 @@ const plans: Plan[] = [
     yearlyPrice: 149,
     yearlyMonthlyEquivalent: 12.42,
     description: "Essential tools + automatic broker sync",
-    trialDays: 14,  // 🔥 14-day trial
+    trialDays: 14,
     features: [
       "14-day free trial",
       "Broker sync (12,000+ brokers)",
@@ -73,7 +73,6 @@ const plans: Plan[] = [
     yearlyPrice: 299,
     yearlyMonthlyEquivalent: 24.92,
     description: "Unlimited everything + AI intelligence",
-    // 🔥 NO trialDays - payment starts immediately
     features: [
       "Everything in Basic, plus:",
       "Unlimited trades",
@@ -94,7 +93,7 @@ const plans: Plan[] = [
 ];
 
 export default function PricingSelection() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -104,21 +103,15 @@ export default function PricingSelection() {
   const [showRiskSetup, setShowRiskSetup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingSubscription, setCheckingSubscription] = useState(true);
+  
+  // 🔥 NEW: State for "LET ME IN" button loading
+  const [skippingToApp, setSkippingToApp] = useState(false);
 
   // 🔥 AFFILIATE DISCOUNT HOOK
   const {
     isLoading: discountLoading,
-    isValidating,
-    error: discountError,
     hasDiscount,
     discountInfo,
-    manualCode,
-    setManualCode,
-    applyCode,
-    removeCode,
-    validatedCode,
-    discountPercent,
-    savings,
   } = useAffiliateDiscount(selectedPlan, billingInterval);
 
   // Check if user should be here OR if returning from Whop
@@ -139,7 +132,14 @@ export default function PricingSelection() {
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('account_type, subscription_status, onboarding_completed')
+          .select(`
+            account_type, 
+            subscription_status, 
+            onboarding_completed,
+            platform_plan,
+            platform_subscription_status,
+            platform_bundle_journal_granted
+          `)
           .eq('id', user.id)
           .maybeSingle();
 
@@ -158,7 +158,7 @@ export default function PricingSelection() {
           console.log('🎉 User returned from Whop payment');
           
           // Clean URL params
-          window.history.replaceState({}, '', '/app/journal/pricing');
+          window.history.replaceState({}, '', '/pricing-selection');
           
           // Check if they need to set up risk
           if (!hasRiskConfigured) {
@@ -169,27 +169,44 @@ export default function PricingSelection() {
           }
         }
 
-        // 🔥 UPDATED: Check for any paid subscription (basic, premium, trial)
-        const hasPaidSubscription = 
+        // Check for DIRECT Journal subscription
+        const hasDirectJournalPlan = 
           data?.account_type && 
-          ['basic', 'premium', 'admin', 'vip'].includes(data.account_type) &&
+          ['basic', 'premium', 'admin', 'vip', 'trial'].includes(data.account_type) &&
           (data.subscription_status === 'active' || data.subscription_status === 'trial');
 
-        if (hasPaidSubscription && data?.onboarding_completed) {
-          console.log('✅ User has paid subscription + completed onboarding → Dashboard');
+        // Check for Journal access via Platform PRO/Enterprise bundle
+        const platformPlan = data?.platform_plan || null;
+        const platformIsActive = ['active', 'trial'].includes(data?.platform_subscription_status || '');
+        const hasJournalFromBundle = 
+          (platformPlan === 'pro' || platformPlan === 'enterprise') && 
+          platformIsActive &&
+          data?.platform_bundle_journal_granted;
+
+        const hasJournalAccess = hasDirectJournalPlan || hasJournalFromBundle;
+
+        if (hasJournalAccess && data?.onboarding_completed) {
+          console.log('✅ User has Journal access + completed onboarding → Dashboard');
           navigate('/app/journal/overview');
           return;
         }
 
-        // If has paid subscription but NOT completed onboarding, show risk setup
-        if (hasPaidSubscription && !data?.onboarding_completed) {
-          console.log('📊 Paid user needs to complete onboarding (risk setup)');
+        // If has Journal access but NOT completed onboarding, show risk setup
+        if (hasJournalAccess && !data?.onboarding_completed) {
+          console.log('📊 Journal user needs to complete onboarding (risk setup)');
           setShowRiskSetup(true);
           setCheckingSubscription(false);
           return;
         }
 
-        console.log('💡 User needs to select plan');
+        // 🔥 If user already has Platform FREE and completed onboarding, send to All Markets
+        if (platformPlan === 'free' && data?.onboarding_completed) {
+          console.log('✅ User has Platform FREE + completed onboarding → All Markets');
+          navigate('/app/all-markets/overview');
+          return;
+        }
+
+        console.log('💡 User needs to select Journal plan or skip to Platform FREE');
       } catch (error) {
         console.error('❌ Error checking subscription:', error);
       } finally {
@@ -200,12 +217,61 @@ export default function PricingSelection() {
     checkSubscription();
   }, [user, navigate, searchParams]);
 
+  // ═══════════════════════════════════════════════════════════════
+  // 🔥 NEW: Handle "LET ME IN" - Skip to Platform FREE
+  // Sets platform_plan='free' in database before redirecting
+  // ═══════════════════════════════════════════════════════════════
+  const handleSkipToApp = async () => {
+    if (!user) {
+      toast.error('Please log in first');
+      navigate('/auth/login');
+      return;
+    }
+    
+    setSkippingToApp(true);
+    
+    try {
+      console.log('🚀 User skipping to Platform FREE...');
+      
+      // Update user profile to Platform FREE
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          platform_plan: 'free',
+          platform_subscription_status: 'active',
+          // Mark as onboarded since they're skipping Journal (no risk setup needed)
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.error('❌ Error setting platform free:', error);
+        toast.error('Something went wrong. Please try again.');
+        setSkippingToApp(false);
+        return;
+      }
+
+      console.log('✅ Platform FREE activated successfully');
+      toast.success('Welcome to Finotaur! 🎉', {
+        description: 'Enjoy free access to All Markets'
+      });
+      
+      // Redirect to All Markets
+      navigate('/app/all-markets/overview');
+      
+    } catch (error) {
+      console.error('❌ Unexpected error:', error);
+      toast.error('Something went wrong. Please try again.');
+      setSkippingToApp(false);
+    }
+  };
+
   // Calculate display price with discount
   const getDisplayPrice = (plan: Plan) => {
     const originalPrice = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyPrice;
     const monthlyEquivalent = billingInterval === 'monthly' ? plan.monthlyPrice : plan.yearlyMonthlyEquivalent;
 
-    // Check if this plan has a discount applied
     const isPlanSelected = plan.id === selectedPlan;
     const showDiscount = hasDiscount && isPlanSelected;
 
@@ -229,7 +295,6 @@ export default function PricingSelection() {
     };
   };
 
-  // Handle plan selection - 🔥 SIMPLIFIED: No more free plan
   const handlePlanClick = (planId: string) => {
     if (planId === 'basic' || planId === 'premium') {
       setSelectedPlan(planId as PlanId);
@@ -237,14 +302,12 @@ export default function PricingSelection() {
     }
   };
 
-  // Handle plan card click (for highlighting)
   const handlePlanCardClick = (planId: string) => {
     if (planId === 'basic' || planId === 'premium') {
       setSelectedPlan(planId as PlanId);
     }
   };
 
-  // Handle Risk Setup completion
   const handleRiskSetupComplete = async () => {
     if (!user) return;
 
@@ -267,11 +330,11 @@ export default function PricingSelection() {
     }
   };
 
-  // Handle payment popup close
   const handlePaymentPopupClose = () => {
     setShowPaymentPopup(false);
   };
 
+  // Loading state
   if (checkingSubscription || discountLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
@@ -310,6 +373,47 @@ export default function PricingSelection() {
       )}
 
       <section className="min-h-screen py-24 px-4 relative overflow-hidden bg-black">
+        {/* 🔥 Top Navigation Buttons */}
+        <div className="absolute top-6 left-6 right-6 flex justify-between z-20">
+          {/* 🔥 UPDATED: Skip to App Button - Sets Platform FREE */}
+          <Button
+            variant="outline"
+            onClick={handleSkipToApp}
+            disabled={skippingToApp}
+            className="flex items-center gap-2 text-[#C9A646] border-[#C9A646]/50 hover:border-[#C9A646] hover:bg-[#C9A646]/10 transition-all font-semibold px-5 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {skippingToApp ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>Setting up...</span>
+              </>
+            ) : (
+              <>
+                <ArrowLeft className="h-5 w-5" />
+                <span>I DON'T WANT JOURNAL, LET ME IN</span>
+              </>
+            )}
+          </Button>
+
+          {/* EXIT Button - Right */}
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                await logout();
+                navigate('/');
+              } catch (error) {
+                console.error('Logout error:', error);
+                navigate('/');
+              }
+            }}
+            className="flex items-center gap-2 text-white border-white/30 hover:border-white/60 hover:bg-white/10 transition-all font-semibold px-5 py-2"
+          >
+            EXIT
+            <LogOut className="h-5 w-5" />
+          </Button>
+        </div>
+
         {/* Background Effects */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#1E1B16] to-[#0B0B0B]" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-primary/12 rounded-full blur-[160px]" />
@@ -327,7 +431,7 @@ export default function PricingSelection() {
               <span className="text-[#C9A646]">Power Tier</span>
             </h2>
             
-            {/* 🔥 UPDATED: Trial-focused messaging */}
+            {/* Trial-focused messaging */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -434,7 +538,7 @@ export default function PricingSelection() {
             </div>
           </motion.div>
 
-          {/* 🔥 UPDATED: 2-column grid for 2 plans */}
+          {/* 2-column grid for 2 plans */}
           <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto pt-8">
             {plans.map((plan, index) => {
               const displayPrice = getDisplayPrice(plan);
@@ -449,14 +553,8 @@ export default function PricingSelection() {
                   transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
                   onClick={() => handlePlanCardClick(plan.id)}
                   className={`p-8 relative transition-all duration-300 flex flex-col rounded-2xl cursor-pointer ${
-                    plan.featured 
-                      ? 'md:scale-[1.05]' 
-                      : ''
-                  } ${
-                    isPlanSelected
-                      ? 'ring-2 ring-[#C9A646]'
-                      : ''
-                  }`}
+                    plan.featured ? 'md:scale-[1.05]' : ''
+                  } ${isPlanSelected ? 'ring-2 ring-[#C9A646]' : ''}`}
                   style={{
                     background: plan.featured 
                       ? 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)'
@@ -500,7 +598,7 @@ export default function PricingSelection() {
                     </div>
                   )}
 
-                  {/* 🔥 Trial Badge (Basic only) */}
+                  {/* Trial Badge (Basic only) */}
                   {plan.trialDays && !plan.featured && (
                     <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg"
                          style={{ zIndex: 50 }}>
@@ -529,7 +627,6 @@ export default function PricingSelection() {
                     <h3 className="text-2xl font-bold mb-2 text-white">{plan.name}</h3>
                     <div className="flex flex-col items-center justify-center gap-1 mb-3">
                       <div className="flex items-baseline gap-1">
-                        {/* Show original price with strikethrough if discount */}
                         {displayPrice.discountedPrice && (
                           <span className="text-2xl text-zinc-500 line-through mr-2">
                             {displayPrice.originalPrice}
@@ -549,13 +646,11 @@ export default function PricingSelection() {
                       {displayPrice.billedAs && (
                         <span className="text-sm text-slate-500">{displayPrice.billedAs}</span>
                       )}
-                      {/* Show savings amount */}
                       {displayPrice.savings && displayPrice.savings > 0 && (
                         <span className="text-sm text-emerald-400 font-semibold">
                           You save ${displayPrice.savings.toFixed(2)}!
                         </span>
                       )}
-                      {/* 🔥 Trial info text */}
                       {plan.trialDays && (
                         <span className="text-sm text-blue-400 font-medium mt-1">
                           First 14 days free, then {displayPrice.price}{displayPrice.period}
@@ -572,9 +667,7 @@ export default function PricingSelection() {
                         <div className={`w-5 h-5 rounded-full ${
                           plan.featured ? 'bg-[#C9A646]/30' : 'bg-[#C9A646]/20'
                         } flex items-center justify-center shrink-0 mt-0.5`}
-                             style={{
-                               border: '1px solid rgba(201,166,70,0.4)'
-                             }}>
+                             style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
                           <Check className="h-3 w-3 text-[#C9A646]" />
                         </div>
                         <span className="text-sm text-slate-300">{feature}</span>

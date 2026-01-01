@@ -1,9 +1,11 @@
 /**
  * ================================================
  * GLOBAL REALTIME SUBSCRIPTION FOR RISK SETTINGS
+ * File: src/providers/RiskSettingsRealtimeProvider.tsx
  * ✅ Single subscription for entire app
  * ✅ Invalidates cache on changes
  * ✅ No duplicate subscriptions
+ * ✅ Removed console.logs for production
  * ================================================
  */
 
@@ -23,8 +25,6 @@ export function RiskSettingsRealtimeProvider({ children }: RiskSettingsRealtimeP
   useEffect(() => {
     if (!user?.id) return;
 
-    console.log('🔌 Setting up global risk settings realtime subscription');
-
     // ✅ Single global subscription for the entire app
     const channel = supabase
       .channel('risk_settings_global')
@@ -36,24 +36,17 @@ export function RiskSettingsRealtimeProvider({ children }: RiskSettingsRealtimeP
           table: 'profiles',
           filter: `id=eq.${user.id}`,
         },
-        (payload) => {
-          console.log('🔄 Risk settings updated in DB - invalidating cache', payload);
-          
+        () => {
           // ✅ Invalidate React Query cache - will refetch automatically
           queryClient.invalidateQueries({ 
             queryKey: ['riskSettings', user.id] 
           });
         }
       )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Risk settings realtime subscription active');
-        }
-      });
+      .subscribe();
 
     // ✅ Cleanup on unmount or user change
     return () => {
-      console.log('🔌 Removing risk settings realtime subscription');
       supabase.removeChannel(channel);
     };
   }, [user?.id, queryClient]);

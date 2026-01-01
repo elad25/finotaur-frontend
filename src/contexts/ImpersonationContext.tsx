@@ -1,9 +1,10 @@
 // src/contexts/ImpersonationContext.tsx
 // ================================================
-// OPTIMIZED IMPERSONATION CONTEXT - v2.0 WITH ADMIN MODE
+// OPTIMIZED IMPERSONATION CONTEXT - v2.1 PRODUCTION
 // ✅ Supports admin_mode flag for RLS bypass
 // ✅ Doesn't sign out on validation failure
 // ✅ Better error handling
+// ✅ Removed console.logs for production
 // ================================================
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
@@ -24,7 +25,7 @@ interface ImpersonationContextType {
   startImpersonation: (userId: string, userEmail: string, userName?: string) => Promise<void>;
   stopImpersonation: () => Promise<void>;
   refreshSession: () => Promise<void>;
-  enableAdminMode: () => Promise<boolean>; // 🔥 NEW
+  enableAdminMode: () => Promise<boolean>;
 }
 
 const ImpersonationContext = createContext<ImpersonationContextType | undefined>(undefined);
@@ -50,35 +51,27 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
   const queryClient = useQueryClient();
   const validationInProgress = useRef(false);
 
-  // 🔥 NEW: Function to enable admin mode
+  // 🔥 Function to enable admin mode
   const enableAdminMode = useCallback(async (): Promise<boolean> => {
     if (!supabaseAdmin) {
-      console.error('❌ No admin client available for admin_mode');
       return false;
     }
 
     try {
-      console.log('🔓 Enabling admin_mode...');
-      
-      // Call the enable_admin_mode() function
       const { error } = await supabaseAdmin.rpc('enable_admin_mode');
       
       if (error) {
-        console.error('❌ Failed to enable admin_mode:', error);
         return false;
       }
       
-      console.log('✅ admin_mode enabled successfully');
       return true;
-    } catch (err) {
-      console.error('❌ Error enabling admin_mode:', err);
+    } catch {
       return false;
     }
   }, []);
 
   const validateSession = useCallback(async () => {
     if (validationInProgress.current) {
-      console.log('⏭️ Validation already in progress, skipping...');
       return;
     }
 
@@ -89,7 +82,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       const storedUserData = sessionStorage.getItem(USER_DATA_KEY);
       
       if (!sessionToken) {
-        console.log('ℹ️ No session token found');
         setState(prev => ({ ...prev, isValidating: false }));
         return;
       }
@@ -98,19 +90,16 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       if (storedUserData) {
         try {
           const userData = JSON.parse(storedUserData);
-          console.log('📦 Using cached user data during validation');
           setState({
             isImpersonating: true,
             impersonatedUser: userData,
             originalAdminId: null,
             isValidating: false,
           });
-        } catch (err) {
-          console.error('Failed to parse stored user data:', err);
+        } catch {
+          // Failed to parse stored data
         }
       }
-
-      console.log('🔍 Validating impersonation session...');
 
       const { data, error } = await supabase
         .rpc('get_active_impersonation_session', {
@@ -118,7 +107,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
       if (error || !data || data.length === 0) {
-        console.warn('⚠️ Session validation failed:', error);
         setState(prev => ({ ...prev, isValidating: false }));
         return;
       }
@@ -126,12 +114,9 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       const session = data[0];
 
       if (new Date(session.expires_at) < new Date()) {
-        console.log('⏰ Session expired');
         await cleanupSession();
         return;
       }
-
-      console.log('✅ Session valid:', session);
 
       const userData = {
         id: session.impersonated_user_id,
@@ -150,8 +135,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
 
       sessionStorage.setItem(LAST_CHECK_KEY, Date.now().toString());
 
-    } catch (error) {
-      console.error('Error validating session:', error);
+    } catch {
       setState(prev => ({ ...prev, isValidating: false }));
     } finally {
       validationInProgress.current = false;
@@ -183,13 +167,11 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       const now = Date.now();
       
       if (!lastCheck || now - parseInt(lastCheck) > VALIDATION_INTERVAL) {
-        console.log('⏱️ Time to validate session (activity detected)');
         validateSession();
       }
     };
 
     const handleFocus = () => {
-      console.log('👀 Window focused, checking session...');
       checkIfValidationNeeded();
     };
 
@@ -233,13 +215,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         return;
       }
 
-      console.log('🎭 Starting secure impersonation session...', {
-        adminId: currentUser.id,
-        adminEmail: currentProfile.email,
-        targetUserId: userId,
-        targetUserEmail: userEmail
-      });
-
       const { data: sessionData, error: sessionError } = await supabase
         .rpc('start_impersonation_session_v1', {
           p_user_id: userId,
@@ -247,24 +222,19 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
       if (sessionError) {
-        console.error('Failed to create session:', sessionError);
         toast.error('Failed to start impersonation');
         return;
       }
 
       if (!sessionData || sessionData.length === 0) {
-        console.error('No session data returned');
         toast.error('Failed to create session');
         return;
       }
 
       const session = sessionData[0];
-      console.log('✅ Session created:', session);
-
       const sessionToken = session.access_token;
 
       if (!sessionToken) {
-        console.error('No session token in response');
         toast.error('Failed to create session');
         return;
       }
@@ -283,7 +253,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // 🔥 Enable admin mode immediately after starting impersonation
       if (supabaseAdmin) {
-        console.log('🔓 Enabling admin_mode for impersonation...');
         await enableAdminMode();
       }
 
@@ -292,40 +261,31 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       // 🔥 CRITICAL: Clear cache and invalidate queries
-      console.log('🔄 Clearing cache and invalidating queries...');
       queryClient.clear();
       queryClient.invalidateQueries();
 
       navigate('/app/journal/overview', { replace: true });
 
-      // 🔥 Dispatch after everything is ready
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('impersonation-started'));
       }, 150);
 
-    } catch (error) {
-      console.error('Error starting impersonation:', error);
+    } catch {
       toast.error('Failed to start impersonation');
     }
   }, [navigate, queryClient, enableAdminMode]);
 
   const stopImpersonation = useCallback(async () => {
     try {
-      console.log('🎭 Stopping impersonation session...');
-
       const sessionToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
 
       if (sessionToken) {
         try {
-          const { error } = await supabase.rpc('end_impersonation_session', {
+          await supabase.rpc('end_impersonation_session', {
             p_session_token: sessionToken
           });
-          
-          if (error) {
-            console.error('Failed to end session in DB:', error);
-          }
-        } catch (err) {
-          console.error('Failed to end session in DB:', err);
+        } catch {
+          // Failed to end session in DB
         }
       }
 
@@ -334,7 +294,6 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
       toast.success('Returned to admin view');
 
       // 🔥 CRITICAL: Clear cache when stopping
-      console.log('🔄 Clearing cache and returning to admin view...');
       queryClient.clear();
       queryClient.invalidateQueries();
 
@@ -344,8 +303,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         window.dispatchEvent(new CustomEvent('impersonation-stopped'));
       }, 150);
 
-    } catch (error) {
-      console.error('Error stopping impersonation:', error);
+    } catch {
       toast.error('Failed to stop impersonation');
     }
   }, [navigate, cleanupSession, queryClient]);
@@ -374,7 +332,7 @@ export const ImpersonationProvider: React.FC<{ children: React.ReactNode }> = ({
         startImpersonation,
         stopImpersonation,
         refreshSession,
-        enableAdminMode, // 🔥 NEW
+        enableAdminMode,
       }}
     >
       {children}

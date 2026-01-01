@@ -54,3 +54,8 @@ export type FundamentalsResponse = {
   peers?: { tickers?: string[] } | null;
   context?: { name?: string; sector?: string; industry?: string; sic?: string | number } | null;
 };
+export type FundamentalsData = FundamentalsResponse & {
+  symbol: string;
+  companyName?: string;
+  lastUpdated?: string;
+};

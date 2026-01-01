@@ -1,20 +1,48 @@
-import { Search, User, Lock } from 'lucide-react';
+// src/components/TopNav.tsx
+// =====================================================
+// FINOTAUR TOP NAVIGATION - v2.0.1
+// =====================================================
+// 
+// 🔥 v2.0.1 CHANGES:
+// - FIXED: Changed first_name/last_name to display_name (matching DB schema)
+// 
+// 🔥 v2.0.0 CHANGES:
+// - UNLOCKED: User menu (was "Coming Soon")
+// - ADDED: User dropdown with Settings, Pricing, Logout
+// - ADDED: User avatar/initials display
+// - Uses useAuth for user data
+// =====================================================
+
+import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useEffect, useState } from 'react';
 import { domains, domainOrder } from '@/constants/nav';
 import { useDomain } from '@/hooks/useDomain';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/lib/supabase';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
-// ✅ הוספה: קומפוננטת החיפוש החדשה (גודל בינוני, לא נסגר בפנים, 2 מלבנים CHART/SUMMARY)
+// ✅ קומפוננטת החיפוש
 import QuickSearch from '@/components/Search/QuickSearch';
 
 export const TopNav = () => {
   const navigate = useNavigate();
   const { domainId } = useDomain();
+  const { user } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [userInitials, setUserInitials] = useState('U');
+  const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
-  // ✅ תיקון: רישום קיצור מקלדת ב-useEffect (ולא ב-useState)
+  // ✅ Keyboard shortcut for search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -26,27 +54,88 @@ export const TopNav = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // ✅ Get user initials and platform plan
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!user?.id) return;
+
+      try {
+        // 🔥 FIXED: Changed first_name, last_name to display_name
+        const { data } = await supabase
+          .from('profiles')
+          .select('display_name, platform_plan')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (data) {
+          // Build initials from display_name
+          const displayName = data.display_name || '';
+          const nameParts = displayName.trim().split(' ');
+          
+          if (nameParts.length >= 2) {
+            // First letter of first name + first letter of last name
+            setUserInitials((nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase());
+          } else if (nameParts.length === 1 && nameParts[0]) {
+            // Just first letter of single name
+            setUserInitials(nameParts[0][0].toUpperCase());
+          } else if (user.email) {
+            // Fallback to email
+            setUserInitials(user.email[0].toUpperCase());
+          }
+          
+          // Platform plan
+          setPlatformPlan(data.platform_plan);
+        } else if (user.email) {
+          setUserInitials(user.email[0].toUpperCase());
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        // Fallback to email initial
+        if (user.email) {
+          setUserInitials(user.email[0].toUpperCase());
+        }
+      }
+    };
+
+    fetchUserData();
+  }, [user]);
+
   const handleTabClick = (id: string) => {
     const domain = domains[id];
     
-    // Check if domain is locked
     if (domain?.locked) {
-      // Optional: Show a toast notification
-      // toast.error("This section is coming soon!");
       return;
     }
     
-    // 🔥 NEW: Use defaultPath if exists, otherwise use first subNav item
     if (domain?.defaultPath) {
       navigate(domain.defaultPath);
       return;
     }
     
-    // Fallback: Navigate to the first subnav item of the domain
     if (domain?.subNav[0]) {
       navigate(domain.subNav[0].path);
     }
   };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
+  };
+
+  // ✅ Get plan badge color
+  const getPlanBadge = () => {
+    if (!platformPlan || platformPlan === 'free') return null;
+    
+    const colors: Record<string, string> = {
+      core: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
+      pro: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40',
+      enterprise: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+    };
+    
+    return colors[platformPlan] || null;
+  };
+
+  const planBadgeClass = getPlanBadge();
 
   return (
     <div 
@@ -57,7 +146,7 @@ export const TopNav = () => {
       }}
     >
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
-        {/* Logo - More compact + לינק לדשבורד */}
+        {/* Logo */}
         <div className="flex items-center gap-6 lg:gap-8">
           <button 
             onClick={() => navigate('/app/journal/overview')}
@@ -69,7 +158,7 @@ export const TopNav = () => {
             </span>
           </button>
 
-          {/* Main Tabs - More compact, hidden on mobile */}
+          {/* Main Tabs - Desktop */}
           <nav className="hidden items-center gap-0.5 lg:flex">
             {domainOrder.map((id) => {
               const domain = domains[id];
@@ -96,7 +185,6 @@ export const TopNav = () => {
                     {locked && <Lock className="h-2.5 w-2.5 opacity-60" />}
                   </span>
                   
-                  {/* Tooltip on hover */}
                   {locked && (
                     <span 
                       className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
@@ -115,9 +203,9 @@ export const TopNav = () => {
           </nav>
         </div>
 
-        {/* Right Side - More compact */}
+        {/* Right Side */}
         <div className="flex items-center gap-3">
-          {/* Search - LOCKED - Smaller */}
+          {/* Search - LOCKED */}
           <div className="relative hidden md:block group">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0]" />
             <Lock className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#C9A646]/60" />
@@ -143,6 +231,7 @@ export const TopNav = () => {
             </span>
           </div>
 
+          {/* Mobile Search Button - LOCKED */}
           <Button
             variant="ghost"
             size="icon"
@@ -153,28 +242,98 @@ export const TopNav = () => {
             <Lock className="absolute -top-1 -right-1 h-3 w-3 text-[#C9A646]/60" />
           </Button>
 
-          {/* User - LOCKED - More compact */}
-          <div className="relative group">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full cursor-not-allowed opacity-50 hover:bg-[#1A1A1A]"
-              disabled
+          {/* ═══════════════════════════════════════════
+              🔥 USER MENU - NOW UNLOCKED!
+          ═══════════════════════════════════════════ */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 rounded-full hover:bg-[#1A1A1A] px-2 py-1"
+              >
+                {/* User Avatar/Initials */}
+                <div 
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
+                    color: '#000'
+                  }}
+                >
+                  {userInitials}
+                </div>
+                
+                {/* Plan Badge (Desktop only) */}
+                {planBadgeClass && (
+                  <span className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${planBadgeClass}`}>
+                    <Crown className="w-3 h-3" />
+                    {platformPlan?.charAt(0).toUpperCase() + platformPlan?.slice(1)}
+                  </span>
+                )}
+                
+                <ChevronDown className="w-4 h-4 text-[#A0A0A0]" />
+              </Button>
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent 
+              align="end" 
+              className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20"
             >
-              <User className="h-5 w-5 text-[#A0A0A0]" />
-              <Lock className="absolute -top-1 -right-1 h-3 w-3 text-[#C9A646]/60" />
-            </Button>
-            <span 
-              className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-              style={{ 
-                background: '#0A0A0A',
-                border: '1px solid rgba(201,166,70,0.2)',
-                color: '#A0A0A0'
-              }}
-            >
-              Coming Soon
-            </span>
-          </div>
+              {/* User Info */}
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium text-white truncate">
+                    {user?.email || 'User'}
+                  </p>
+                  {platformPlan && platformPlan !== 'free' ? (
+                    <p className="text-xs text-[#C9A646] flex items-center gap-1">
+                      <Crown className="w-3 h-3" />
+                      {platformPlan.charAt(0).toUpperCase() + platformPlan.slice(1)} Plan
+                    </p>
+                  ) : (
+                    <p className="text-xs text-zinc-500">Free Plan</p>
+                  )}
+                </div>
+              </DropdownMenuLabel>
+
+              <DropdownMenuSeparator className="bg-[#C9A646]/10" />
+
+              {/* Pricing / Upgrade */}
+              <DropdownMenuItem 
+                onClick={() => navigate('/app/all-markets/pricing')}
+                className="cursor-pointer hover:bg-[#1A1A1A] focus:bg-[#1A1A1A]"
+              >
+                <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
+                <span className="text-white">
+                  {platformPlan && platformPlan !== 'free' ? 'Manage Plan' : 'Upgrade'}
+                </span>
+                {(!platformPlan || platformPlan === 'free') && (
+                  <span className="ml-auto text-xs bg-[#C9A646]/20 text-[#C9A646] px-2 py-0.5 rounded-full">
+                    Pro
+                  </span>
+                )}
+              </DropdownMenuItem>
+
+              {/* Settings */}
+              <DropdownMenuItem 
+                onClick={() => navigate('/settings')}
+                className="cursor-pointer hover:bg-[#1A1A1A] focus:bg-[#1A1A1A]"
+              >
+                <Settings className="mr-2 h-4 w-4 text-zinc-400" />
+                <span className="text-white">Settings</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator className="bg-[#C9A646]/10" />
+
+              {/* Logout */}
+              <DropdownMenuItem 
+                onClick={handleLogout}
+                className="cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 text-red-400"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Log out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -205,8 +364,10 @@ export const TopNav = () => {
         })}
       </div>
 
-      {/* ✅ החלפה: במקום המודל הישן שנסגר בכל קליק, מרנדרים את החיפוש החדש */}
+      {/* Search Modal */}
       <QuickSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 };
+
+export default TopNav;

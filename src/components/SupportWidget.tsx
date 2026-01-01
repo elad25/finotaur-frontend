@@ -1,17 +1,25 @@
 // ============================================
-// FINOTAUR SUPPORT - WITH GUEST SUPPORT
+// FINOTAUR SUPPORT WIDGET v2.0
 // ============================================
 // ✨ Support for both logged-in and guest users
 // 🔒 Guests can only send one message (no history)
 // 📧 Guests must provide name + email first
-// 📢 System updates section for logged-in users
+// 📢 System updates with PDF support for ISM reports
+// 📅 30-day notification history
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, CheckCircle2, AlertCircle, Info, Megaphone } from 'lucide-react';
+import { 
+  X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, 
+  Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
+  CheckCircle2, AlertCircle, Info, Megaphone, Download, FileText,
+  TrendingUp, TrendingDown
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+
+// ==================== INTERFACES ====================
 
 interface ChatMessage {
   id: string;
@@ -34,16 +42,28 @@ interface Ticket {
   message_count: number;
 }
 
+interface SystemUpdateMetadata {
+  report_type?: string;
+  report_month?: string;
+  report_id?: string;
+  pdf_url?: string;
+  pmi_value?: number;
+  pmi_change?: number;
+}
+
 interface SystemUpdate {
   id: string;
   title: string;
   content: string;
   type: 'info' | 'success' | 'warning' | 'announcement';
+  is_pinned?: boolean;
   created_at: string;
   read: boolean;
+  metadata?: SystemUpdateMetadata;
 }
 
 export default function SupportWidget() {
+  // ==================== STATE ====================
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'updates' | 'support'>('support');
   const [view, setView] = useState<'list' | 'chat'>('chat');
@@ -63,9 +83,12 @@ export default function SupportWidget() {
   const [guestFormEmail, setGuestFormEmail] = useState('');
   const [systemUpdates, setSystemUpdates] = useState<SystemUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ==================== EFFECTS ====================
 
   useEffect(() => {
     if (isOpen) {
@@ -73,7 +96,6 @@ export default function SupportWidget() {
     }
   }, [isOpen]);
 
-  // Show guest form immediately when opening as guest
   useEffect(() => {
     if (isGuest && isOpen && !userName && !userEmail) {
       setShowGuestForm(true);
@@ -81,8 +103,6 @@ export default function SupportWidget() {
   }, [isGuest, isOpen, userName, userEmail]);
 
   useEffect(() => {
-    // If we have tickets, show list view. If not, show new conversation chat
-    // But guests should never see list view
     if (!isGuest && tickets.length > 0) {
       setView('list');
       setIsNewConversation(false);
@@ -116,8 +136,25 @@ export default function SupportWidget() {
         )
         .subscribe();
 
+      // Also subscribe to system_updates for real-time notifications
+      const updatesChannel = supabase
+        .channel('updates-live')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'system_updates',
+          },
+          () => {
+            loadSystemUpdates();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(channel);
+        supabase.removeChannel(updatesChannel);
       };
     }
   }, [isOpen, selectedTicket?.id, isGuest]);
@@ -128,12 +165,13 @@ export default function SupportWidget() {
     }
   }, [isNewConversation, isOpen]);
 
-  // Load system updates for logged-in users
   useEffect(() => {
     if (isOpen && !isGuest) {
       loadSystemUpdates();
     }
   }, [isOpen, isGuest]);
+
+  // ==================== HELPER FUNCTIONS ====================
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -145,16 +183,14 @@ export default function SupportWidget() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Logged in user
         setIsGuest(false);
         loadUserInfo();
         loadUserTickets();
       } else {
-        // Guest user
         setIsGuest(true);
         setView('chat');
         setIsNewConversation(true);
-        setActiveTab('support'); // Guests can only see support
+        setActiveTab('support');
       }
     } catch (error) {
       console.error('Error checking user status:', error);
@@ -166,14 +202,12 @@ export default function SupportWidget() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Try to get name from user_metadata first
         if (user.user_metadata?.full_name) {
           setUserName(user.user_metadata.full_name);
           setUserEmail(user.email || '');
           return;
         }
 
-        // Try profile table
         const { data: profile } = await supabase
           .from('profiles')
           .select('full_name, email')
@@ -184,7 +218,6 @@ export default function SupportWidget() {
           setUserName(profile.full_name);
           setUserEmail(profile.email || user.email || '');
         } else {
-          // Fallback to email username
           setUserName(user.email?.split('@')[0] || 'Trader');
           setUserEmail(user.email || '');
         }
@@ -230,41 +263,46 @@ export default function SupportWidget() {
     }
   }
 
+  // ==================== SYSTEM UPDATES ====================
+
   async function loadSystemUpdates() {
     setLoadingUpdates(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load active updates, pinned first
+      // Get user's subscription tier to determine target group
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('top_secret_enabled, newsletter_enabled, newsletter_paid')
+        .eq('id', user.id)
+        .single();
+
+      // Determine user's target group
+      let userGroup = 'trading_journal';
+      if (profile?.top_secret_enabled) {
+        userGroup = 'top_secret';
+      } else if (profile?.newsletter_enabled || profile?.newsletter_paid) {
+        userGroup = 'newsletter';
+      }
+
+      // Keep 30 days of history
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      // Load active updates for user's group
       const { data: updates, error } = await supabase
         .from('system_updates')
         .select('*')
         .eq('is_active', true)
+        .or(`target_group.eq.all,target_group.eq.${userGroup}`)
+        .gte('created_at', thirtyDaysAgo.toISOString())
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (error) {
-        console.log('Using demo updates (table may not exist)');
-        setSystemUpdates([
-          {
-            id: '1',
-            title: 'Platform Update v2.5',
-            content: 'New backtesting features and improved trade analytics are now available.',
-            type: 'announcement',
-            created_at: new Date().toISOString(),
-            read: false,
-          },
-          {
-            id: '2',
-            title: 'Maintenance Complete',
-            content: 'Scheduled maintenance has been completed successfully.',
-            type: 'success',
-            created_at: new Date(Date.now() - 86400000).toISOString(),
-            read: true,
-          },
-        ]);
+        console.error('Error loading updates:', error);
         return;
       }
 
@@ -276,11 +314,26 @@ export default function SupportWidget() {
 
       const readIds = new Set(readRecords?.map(r => r.update_id) || []);
 
-      // Map updates with read status
-      const updatesWithReadStatus = (updates || []).map(update => ({
-        ...update,
-        read: readIds.has(update.id),
-      }));
+      // Map updates with read status and parse metadata
+      const updatesWithReadStatus = (updates || []).map(update => {
+        let metadata: SystemUpdateMetadata | undefined = undefined;
+        
+        if (update.metadata) {
+          try {
+            metadata = typeof update.metadata === 'string' 
+              ? JSON.parse(update.metadata) 
+              : update.metadata;
+          } catch (e) {
+            console.error('Error parsing metadata:', e);
+          }
+        }
+
+        return {
+          ...update,
+          read: readIds.has(update.id),
+          metadata,
+        };
+      });
 
       setSystemUpdates(updatesWithReadStatus);
     } catch (error) {
@@ -295,7 +348,6 @@ export default function SupportWidget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Insert read record (upsert to avoid duplicates)
       await supabase
         .from('user_update_reads')
         .upsert({
@@ -307,7 +359,11 @@ export default function SupportWidget() {
         });
 
       // Increment views count
-      await supabase.rpc('increment_update_views', { update_id: updateId });
+      try {
+        await supabase.rpc('increment_update_views', { update_id: updateId });
+      } catch (e) {
+        // Function might not exist yet
+      }
       
       setSystemUpdates(prev => 
         prev.map(u => u.id === updateId ? { ...u, read: true } : u)
@@ -316,6 +372,8 @@ export default function SupportWidget() {
       console.error('Error marking update as read:', error);
     }
   }
+
+  // ==================== FILE HANDLING ====================
 
   async function uploadFiles(files: File[]): Promise<string[]> {
     const uploadedUrls: string[] = [];
@@ -346,6 +404,36 @@ export default function SupportWidget() {
     return uploadedUrls;
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    
+    const maxSize = 20 * 1024 * 1024;
+    const validFiles = files.filter(file => {
+      if (file.size > maxSize) {
+        toast.error(`${file.name} is too large (max 20MB)`);
+        return false;
+      }
+      return true;
+    });
+
+    if (attachments.length + validFiles.length > 5) {
+      toast.error('Maximum 5 files allowed');
+      return;
+    }
+
+    setAttachments(prev => [...prev, ...validFiles]);
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  // ==================== GUEST FORM ====================
+
   function validateGuestForm(): boolean {
     if (!guestFormName.trim()) {
       toast.error('Please enter your name');
@@ -368,14 +456,14 @@ export default function SupportWidget() {
     setUserEmail(guestFormEmail.trim());
     setShowGuestForm(false);
     
-    // Focus on message input after form submission
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
   }
 
+  // ==================== MESSAGING ====================
+
   async function handleSendMessage() {
-    // Validation: Check if guest has filled their details
     if (isGuest && (!userName || !userEmail)) {
       toast.error('Please fill in your contact information first');
       return;
@@ -386,7 +474,6 @@ export default function SupportWidget() {
     setSending(true);
 
     try {
-      // Upload files if any
       let uploadedUrls: string[] = [];
       if (attachments.length > 0) {
         setUploadingFiles(true);
@@ -402,7 +489,6 @@ export default function SupportWidget() {
         attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
       };
 
-      // For guests, always create a new ticket
       if (isGuest || isNewConversation) {
         const { data, error } = await supabase
           .from('support_tickets')
@@ -420,7 +506,6 @@ export default function SupportWidget() {
 
         if (error) throw error;
 
-        // For guests, don't set selected ticket or update view
         if (!isGuest) {
           setSelectedTicket(data);
           setIsNewConversation(false);
@@ -430,7 +515,6 @@ export default function SupportWidget() {
         setCurrentMessage('');
         setAttachments([]);
         
-        // Send email
         try {
           const { data: { session } } = await supabase.auth.getSession();
           
@@ -454,7 +538,6 @@ export default function SupportWidget() {
 
         toast.success(isGuest ? 'Message sent! We\'ll respond to your email soon.' : 'Message sent');
         
-        // For guests, close the widget after sending
         if (isGuest) {
           setTimeout(() => {
             handleClose();
@@ -465,7 +548,6 @@ export default function SupportWidget() {
         return;
       }
 
-      // For logged-in users with existing ticket
       if (!selectedTicket) return;
 
       const existingMessages = Array.isArray(selectedTicket.messages) ? selectedTicket.messages : [];
@@ -497,36 +579,7 @@ export default function SupportWidget() {
     }
   }
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    
-    // Validate file size (max 20MB per file)
-    const maxSize = 20 * 1024 * 1024;
-    const validFiles = files.filter(file => {
-      if (file.size > maxSize) {
-        toast.error(`${file.name} is too large (max 20MB)`);
-        return false;
-      }
-      return true;
-    });
-
-    // Limit to 5 files
-    if (attachments.length + validFiles.length > 5) {
-      toast.error('Maximum 5 files allowed');
-      return;
-    }
-
-    setAttachments(prev => [...prev, ...validFiles]);
-    
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }
-
-  function removeAttachment(index: number) {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  }
+  // ==================== FORMATTING ====================
 
   function formatTime(timestamp: string) {
     const date = new Date(timestamp);
@@ -602,6 +655,21 @@ export default function SupportWidget() {
     }
   }
 
+  function getUpdateBgColor(type: SystemUpdate['type']) {
+    switch (type) {
+      case 'success':
+        return 'bg-green-500/10';
+      case 'warning':
+        return 'bg-yellow-500/10';
+      case 'announcement':
+        return 'bg-[#D4AF37]/10';
+      default:
+        return 'bg-blue-500/10';
+    }
+  }
+
+  // ==================== NAVIGATION ====================
+
   const unreadUpdatesCount = systemUpdates.filter(u => !u.read).length;
 
   const handleClose = () => {
@@ -622,7 +690,7 @@ export default function SupportWidget() {
   };
 
   const handleBackToList = () => {
-    if (isGuest) return; // Guests can't go back to list
+    if (isGuest) return;
     setView('list');
     setSelectedTicket(null);
     setIsNewConversation(false);
@@ -631,12 +699,14 @@ export default function SupportWidget() {
   };
 
   const handleNewChat = () => {
-    if (isGuest) return; // Guests can't create multiple chats
+    if (isGuest) return;
     setView('chat');
     setSelectedTicket(null);
     setIsNewConversation(true);
     setAttachments([]);
   };
+
+  // ==================== RENDER ====================
 
   return (
     <>
@@ -650,21 +720,28 @@ export default function SupportWidget() {
         className="hidden"
       />
 
-      {/* Floating Button */}
+      {/* Floating Button - Blue Chat Bubble */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-8 right-8 z-50 group"
         >
-          {/* Glow */}
-          <div className="absolute inset-0 rounded-full bg-[#D4AF37] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
+          {/* Glow Effect */}
+          <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
           
-          {/* Button */}
-          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out">
-            <MessageCircle className="h-6 w-6 text-black" strokeWidth={2} />
+          {/* Main Button */}
+          <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
+            {/* Chat Bubble Icon */}
+            <svg 
+              viewBox="0 0 24 24" 
+              className="h-7 w-7 text-white"
+              fill="currentColor"
+            >
+              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>
+              <path d="M4 4h16v12H5.17L4 17.17V4z" opacity="0.9"/>
+            </svg>
           </div>
           
-          {/* Unread Badge - for tickets and updates */}
           {!isGuest && (tickets.some(t => hasUnreadMessages(t)) || unreadUpdatesCount > 0) && (
             <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 border-2 border-[#0a0a0a] flex items-center justify-center animate-pulse">
               <span className="text-[10px] text-white font-bold">
@@ -675,22 +752,18 @@ export default function SupportWidget() {
         </button>
       )}
 
-      {/* Main Window - Taller and opens upward */}
+      {/* Main Window */}
       {isOpen && (
         <div className="fixed bottom-8 right-8 z-50 w-[420px] animate-in slide-in-from-bottom-4 fade-in duration-200">
-          {/* Subtle Glow */}
           <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
           
-          {/* Main Container - Much taller */}
           <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30">
             {/* Header */}
             <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20">
-              {/* Thin Gold Line */}
               <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
               
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {/* Back Button - only for logged in users */}
                   {!isGuest && activeTab === 'support' && view === 'chat' && !isNewConversation && (
                     <button
                       onClick={handleBackToList}
@@ -700,7 +773,6 @@ export default function SupportWidget() {
                     </button>
                   )}
                   
-                  {/* Icon */}
                   <div className="relative">
                     <div className="absolute inset-0 bg-[#D4AF37] opacity-20 blur-lg rounded-lg"></div>
                     <div className="relative h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
@@ -726,7 +798,7 @@ export default function SupportWidget() {
                 </button>
               </div>
 
-              {/* Tab Switcher - Only for logged-in users */}
+              {/* Tab Switcher */}
               {!isGuest && (
                 <div className="flex gap-2 mt-4">
                   <button
@@ -859,31 +931,69 @@ export default function SupportWidget() {
                           onClick={() => markUpdateAsRead(update.id)}
                           className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer hover:bg-white/5 ${
                             getUpdateBorderColor(update.type)
-                          } ${
-                            !update.read ? 'bg-white/5' : 'bg-transparent'
-                          }`}
+                          } ${!update.read ? 'bg-white/5' : 'bg-transparent'}`}
                         >
                           <div className="flex items-start gap-3">
                             <div className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                              update.type === 'success' ? 'bg-green-500/10' :
-                              update.type === 'warning' ? 'bg-yellow-500/10' :
-                              update.type === 'announcement' ? 'bg-[#D4AF37]/10' :
-                              'bg-blue-500/10'
+                              getUpdateBgColor(update.type)
                             }`}>
                               {getUpdateIcon(update.type)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <h4 className={`text-sm font-medium ${!update.read ? 'text-white' : 'text-gray-300'}`}>
                                   {update.title}
                                 </h4>
                                 {!update.read && (
                                   <span className="h-2 w-2 rounded-full bg-[#D4AF37]"></span>
                                 )}
+                                {update.is_pinned && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#D4AF37]/20 text-[#D4AF37]">
+                                    Pinned
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-gray-400 leading-relaxed">
                                 {update.content}
                               </p>
+                              
+                              {/* ISM Report specific: PDF Download Button */}
+                              {update.metadata?.pdf_url && (
+                                <a
+                                  href={update.metadata.pdf_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 border border-[#D4AF37]/30 rounded-lg text-[#D4AF37] text-xs font-medium transition-all"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                  Download PDF Report
+                                </a>
+                              )}
+                              
+                              {/* ISM Report specific: PMI Badge */}
+                              {update.metadata?.pmi_value && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+                                    update.metadata.pmi_value >= 50 
+                                      ? 'bg-green-500/20 text-green-400' 
+                                      : 'bg-red-500/20 text-red-400'
+                                  }`}>
+                                    {update.metadata.pmi_value >= 50 ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                    PMI: {update.metadata.pmi_value}
+                                    {update.metadata.pmi_change !== undefined && update.metadata.pmi_change !== null && (
+                                      <span className="ml-1">
+                                        ({update.metadata.pmi_change > 0 ? '+' : ''}{update.metadata.pmi_change.toFixed(1)})
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              )}
+                              
                               <span className="text-[10px] text-gray-600 mt-2 block">
                                 {formatDate(update.created_at)}
                               </span>
@@ -899,10 +1009,9 @@ export default function SupportWidget() {
               {/* ==================== SUPPORT TAB ==================== */}
               {(isGuest || activeTab === 'support') && (
                 <>
-                  {/* Conversations List View - Only for logged in users */}
+                  {/* Conversations List View */}
                   {!isGuest && view === 'list' && (
                     <div className="flex-1 flex flex-col">
-                      {/* Conversations List */}
                       <div className="flex-1 overflow-y-auto pt-3">
                         {tickets.length === 0 ? (
                           <div className="flex flex-col items-center justify-center h-full p-8">
@@ -930,7 +1039,6 @@ export default function SupportWidget() {
                                 className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
                               >
                                 <div className="flex items-start gap-3">
-                                  {/* Avatar */}
                                   <div className="relative flex-shrink-0">
                                     <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
                                       <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
@@ -940,7 +1048,6 @@ export default function SupportWidget() {
                                     )}
                                   </div>
 
-                                  {/* Content */}
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between mb-1">
                                       <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
@@ -955,7 +1062,6 @@ export default function SupportWidget() {
                                     </p>
                                   </div>
 
-                                  {/* Chevron */}
                                   <div className="flex items-center">
                                     <ChevronRight className="h-[18px] w-[18px] text-[#E6C77D] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
                                   </div>
@@ -966,7 +1072,6 @@ export default function SupportWidget() {
                         )}
                       </div>
 
-                      {/* New Chat Button - Bottom of List */}
                       <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
                         <button
                           onClick={handleNewChat}
@@ -984,10 +1089,8 @@ export default function SupportWidget() {
                   {/* Chat View */}
                   {view === 'chat' && (
                     <>
-                      {/* Messages */}
                       <div className="flex-1 overflow-y-auto p-5 space-y-2">
                         {isNewConversation ? (
-                          // Welcome message for new conversation
                           <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="flex justify-start">
                               <div className="max-w-[75%]">
@@ -1067,7 +1170,6 @@ export default function SupportWidget() {
                                     {msg.content}
                                   </p>
 
-                                  {/* Attachments */}
                                   {msg.attachments && msg.attachments.length > 0 && (
                                     <div className="mt-2 space-y-2">
                                       {msg.attachments.map((url, i) => {
@@ -1106,7 +1208,6 @@ export default function SupportWidget() {
                           ))
                         )}
                         
-                        {/* Typing Indicator */}
                         {isTyping && (
                           <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="max-w-[75%]">
@@ -1135,7 +1236,6 @@ export default function SupportWidget() {
                       
                       {/* Input */}
                       <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
-                        {/* Attachments Preview */}
                         {attachments.length > 0 && (
                           <div className="mb-3 flex flex-wrap gap-2">
                             {attachments.map((file, idx) => (
@@ -1159,7 +1259,6 @@ export default function SupportWidget() {
                         )}
 
                         <div className="flex gap-3">
-                          {/* Upload Button */}
                           <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={sending || attachments.length >= 5}
@@ -1211,7 +1310,6 @@ export default function SupportWidget() {
               )}
             </div>
 
-            {/* Bottom Thin Gold Line */}
             <div className="h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
           </div>
         </div>

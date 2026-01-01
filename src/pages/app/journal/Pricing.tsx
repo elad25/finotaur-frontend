@@ -82,7 +82,7 @@ const plans: Plan[] = [
     description: "Complete Trading Journal & Analytics with AI",
     features: [
       "Everything in Basic",
-      "Automatic broker sync (12,000+ brokers)",
+      "Automatic broker sync (12,000+ brokers)🔜 Coming Soon",
       "AI-powered insights & coach",
       "Advanced AI analysis",
       "Pattern recognition",

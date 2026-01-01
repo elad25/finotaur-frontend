@@ -1,6 +1,7 @@
 // ================================================
 // OPTIMIZED DAILY P&L CHART - PRODUCTION READY
 // File: src/components/charts/DailyPnLChart.tsx
+// ✅ FIXED: Negative PnL bars now display correctly below zero line
 // ✅ Disabled animations in production
 // ✅ Optimized re-renders
 // ✅ Better performance
@@ -16,6 +17,7 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  Cell,
 } from 'recharts';
 import { BarChart3 } from 'lucide-react';
 import { CHART_COLORS } from '@/constants/dashboard';
@@ -114,9 +116,9 @@ const DailyPnLChart = React.memo(({ data }: DailyPnLChartProps) => {
                 <stop offset="0%" stopColor={CHART_COLORS.profitGradientStart} stopOpacity={1}/>
                 <stop offset="100%" stopColor={CHART_COLORS.profitGradientEnd} stopOpacity={0.9}/>
               </linearGradient>
-              <linearGradient id="lossGradient" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stopColor={CHART_COLORS.lossGradientStart} stopOpacity={1}/>
-                <stop offset="100%" stopColor={CHART_COLORS.lossGradientEnd} stopOpacity={0.9}/>
+              <linearGradient id="lossGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_COLORS.lossGradientStart} stopOpacity={0.9}/>
+                <stop offset="100%" stopColor={CHART_COLORS.lossGradientEnd} stopOpacity={1}/>
               </linearGradient>
               <filter id="barShadow">
                 <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
@@ -209,30 +211,21 @@ const DailyPnLChart = React.memo(({ data }: DailyPnLChartProps) => {
                 return null;
               }}
             />
+            {/* ✅ FIXED: Use Cell components for individual bar colors */}
             <Bar 
               dataKey="pnl"
-              radius={[4, 4, 0, 0]}
               maxBarSize={14}
               filter="url(#barShadow)"
-              isAnimationActive={false} // ✅ Disable animation for performance
-              shape={(props: any) => {
-                const { x, y, width, height, payload } = props;
-                const isPositive = payload.pnl >= 0;
-                const fillColor = isPositive ? "url(#profitGradient)" : "url(#lossGradient)";
-                
-                return (
-                  <rect
-                    x={x}
-                    y={y}
-                    width={width}
-                    height={height}
-                    fill={fillColor}
-                    rx={4}
-                    ry={4}
-                  />
-                );
-              }}
-            />
+              isAnimationActive={false}
+              radius={[4, 4, 4, 4]}
+            >
+              {optimizedData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`}
+                  fill={entry.pnl >= 0 ? "url(#profitGradient)" : "url(#lossGradient)"}
+                />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>

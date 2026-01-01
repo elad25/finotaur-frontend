@@ -1513,8 +1513,7 @@ const portfolioValues = useMemo(() => {
                   </h4>
                   <p className="text-amber-200/80 text-sm leading-relaxed">
                     Your <span className="font-semibold">{profile.account_type?.charAt(0).toUpperCase() + profile.account_type?.slice(1)}</span> subscription 
-                    will {profile.pending_downgrade_plan === 'cancel' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan?.charAt(0).toUpperCase() + profile.pending_downgrade_plan?.slice(1)}`} on{' '}
-                    <span className="font-semibold">
+will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'cancel' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)}`} on{' '}                    <span className="font-semibold">
                       {new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',

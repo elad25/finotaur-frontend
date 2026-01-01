@@ -1,9 +1,10 @@
 // ================================================
-// OPTIMIZED EQUITY CHART - PRODUCTION READY
+// OPTIMIZED EQUITY CHART - PRODUCTION READY v2.0
 // File: src/components/charts/EquityChart.tsx
 // ✅ Disabled animations in production
 // ✅ Optimized re-renders
 // ✅ Better performance
+// ✅ FIXED: Protection against negative rect height
 // ================================================
 
 import React, { useMemo } from 'react';
@@ -15,6 +16,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  ReferenceLine,
 } from 'recharts';
 import { CHART_COLORS } from '@/constants/dashboard';
 
@@ -29,18 +31,44 @@ interface EquityChartProps {
 }
 
 const EquityChart = React.memo(({ data }: EquityChartProps) => {
-  // ✅ Optimize data for large datasets
+  // ✅ Optimize data for large datasets and ensure valid values
   const optimizedData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
+    // Filter out invalid data points and ensure numbers are valid
+    const validData = data
+      .filter(d => d && typeof d.equity === 'number' && !isNaN(d.equity) && isFinite(d.equity))
+      .map(d => ({
+        ...d,
+        equity: Number(d.equity) || 0,
+        pnl: Number(d.pnl) || 0,
+      }));
+    
     // If more than 200 points, downsample
-    if (data.length > 200) {
-      const step = Math.ceil(data.length / 200);
-      return data.filter((_, index) => index % step === 0);
+    if (validData.length > 200) {
+      const step = Math.ceil(validData.length / 200);
+      return validData.filter((_, index) => index % step === 0);
     }
     
-    return data;
+    return validData;
   }, [data]);
+
+  // ✅ Calculate Y-axis domain to prevent negative height issues
+  const yAxisDomain = useMemo(() => {
+    if (optimizedData.length === 0) return [0, 100];
+    
+    const values = optimizedData.map(d => d.equity);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    
+    // Add padding to prevent edge cases
+    const padding = Math.max(Math.abs(max - min) * 0.1, 10);
+    
+    return [
+      Math.floor(min - padding),
+      Math.ceil(max + padding)
+    ];
+  }, [optimizedData]);
   
   // ✅ Empty state
   if (!data || data.length === 0) {
@@ -107,9 +135,11 @@ const EquityChart = React.memo(({ data }: EquityChartProps) => {
               axisLine={{ strokeWidth: 0.5 }}
             />
             <YAxis 
+              domain={yAxisDomain}
               tick={{ fill: CHART_COLORS.textMuted, fontSize: 11, fontWeight: 300 }} 
               stroke="rgba(255,255,255,0.06)"
               axisLine={{ strokeWidth: 0.5 }}
+              allowDataOverflow={false}
               tickFormatter={(value) => {
                 if (value === 0) return '$0';
                 const absValue = Math.abs(value);
@@ -119,6 +149,8 @@ const EquityChart = React.memo(({ data }: EquityChartProps) => {
                 return `${value < 0 ? '-' : ''}$${Math.round(absValue)}`;
               }}
             />
+            {/* ✅ Add zero reference line for better visualization */}
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
             <Tooltip
               contentStyle={{ 
                 background: CHART_COLORS.backgroundDark, 
@@ -131,6 +163,7 @@ const EquityChart = React.memo(({ data }: EquityChartProps) => {
               itemStyle={{ color: CHART_COLORS.gold, fontSize: 13, fontWeight: 500 }}
               formatter={(val: any) => {
                 const value = Number(val);
+                if (isNaN(value) || !isFinite(value)) return ['$0.00', 'Equity'];
                 const sign = value < 0 ? '-' : '';
                 const abs = Math.abs(value);
                 return [`${sign}$${abs.toFixed(2)}`, "Equity"];
@@ -143,9 +176,11 @@ const EquityChart = React.memo(({ data }: EquityChartProps) => {
               fill="url(#eqGradient)"
               strokeWidth={2.5}
               filter="url(#glow)"
-              isAnimationActive={false} // ✅ Disable animation for performance
-              dot={false} // ✅ No dots for better performance
+              isAnimationActive={false}
+              dot={false}
               activeDot={{ r: 5, fill: CHART_COLORS.gold, stroke: CHART_COLORS.backgroundDark, strokeWidth: 2 }}
+              // ✅ Ensure baseValue is set to handle negative values properly
+              baseValue={yAxisDomain[0]}
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -37,7 +37,7 @@ const plans: Plan[] = [
     trialDays: 14,  // 🔥 14-day trial
     features: [
       "14-day free trial",
-      "Broker sync (12,000+ brokers)",
+      "Broker sync (12,000+ brokers) - Comming soon",
       "25 trades/month (manual + auto-sync)",
       "Full performance analytics",
       "Strategy builder & tracking",

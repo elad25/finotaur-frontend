@@ -1,12 +1,12 @@
 // =====================================================
-// FINOTAUR WHOP CHECKOUT HOOK - v3.0.0
+// FINOTAUR WHOP CHECKOUT HOOK - v4.0.0
 // =====================================================
 // Place in: src/hooks/useWhopCheckout.ts
 // 
-// 🔥 v3.0.0 CHANGES:
-// - Now uses Edge Function to create checkout sessions
-// - This ensures metadata (finotaur_user_id) is passed to Whop
-// - Fallback to direct URL if Edge Function fails
+// 🔥 v4.0.0 CHANGES:
+// - ADDED: Platform checkout functions (Core/Pro/Enterprise)
+// - Platform and Journal are separate checkout flows
+// - Added subscription_category to metadata
 // =====================================================
 
 import { useCallback, useState } from 'react';
@@ -19,7 +19,8 @@ import {
   WHOP_PLAN_IDS,
   type PlanName, 
   type BillingInterval,
-  type PlanId 
+  type PlanId,
+  type SubscriptionCategory,
 } from '@/lib/whop-config';
 import { toast } from 'sonner';
 
@@ -119,8 +120,9 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     planId: string;
     affiliateCode?: string;
     clickId?: string;
+    subscriptionCategory?: SubscriptionCategory;
   }): Promise<{ checkout_url: string } | null> => {
-    const { planId, affiliateCode, clickId } = params;
+    const { planId, affiliateCode, clickId, subscriptionCategory } = params;
 
     try {
       console.log('🔐 Creating checkout session via Edge Function...');
@@ -138,6 +140,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
           plan_id: planId,
           affiliate_code: affiliateCode,
           click_id: clickId,
+          subscription_category: subscriptionCategory, // 🔥 v4.0: Add category
         },
       });
 
@@ -167,7 +170,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
   /**
    * Initiate Whop checkout
    * 
-   * 🔥 v3.0.0: Now uses Edge Function to ensure metadata is passed
+   * 🔥 v4.0.0: Now supports both Journal and Platform plans
    */
   const initiateCheckout = useCallback(async (params: CheckoutParams) => {
     const { planName, billingInterval, discountCode } = params;
@@ -184,6 +187,14 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
       if (!plan || !whopPlanId) {
         throw new Error(`Invalid plan: ${planName} ${billingInterval}`);
       }
+      
+      // 🔥 v4.0: Check for coming soon plans
+      if (plan.comingSoon) {
+        toast.info(`${plan.displayName} is coming soon!`, {
+          description: 'Contact sales for early access.',
+        });
+        return;
+      }
 
       // Get stored affiliate data
       const { code: storedCode, clickId } = getStoredAffiliateData();
@@ -197,6 +208,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         planName,
         billingInterval,
         price: plan.price,
+        category: plan.category, // 🔥 v4.0
         userId: user?.id,
         userEmail: user?.email,
         providedDiscountCode: discountCode,
@@ -216,6 +228,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         planId: whopPlanId,
         affiliateCode: affiliateCode || undefined,
         clickId: clickId || undefined,
+        subscriptionCategory: plan.category, // 🔥 v4.0: Pass category
       });
 
       let checkoutUrl: string;
@@ -257,9 +270,10 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     }
   }, [user, options, createCheckoutSession]);
 
-  /**
-   * Quick checkout helpers
-   */
+  // ═══════════════════════════════════════════
+  // JOURNAL CHECKOUT HELPERS (existing)
+  // ═══════════════════════════════════════════
+
   const checkoutBasicMonthly = useCallback(() => {
     initiateCheckout({ planName: 'basic', billingInterval: 'monthly' });
   }, [initiateCheckout]);
@@ -276,12 +290,51 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     initiateCheckout({ planName: 'premium', billingInterval: 'yearly' });
   }, [initiateCheckout]);
 
+  // ═══════════════════════════════════════════
+  // 🔥 PLATFORM CHECKOUT HELPERS (NEW)
+  // ═══════════════════════════════════════════
+
+  const checkoutPlatformCoreMonthly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_core', billingInterval: 'monthly' });
+  }, [initiateCheckout]);
+
+  const checkoutPlatformCoreYearly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_core', billingInterval: 'yearly' });
+  }, [initiateCheckout]);
+
+  const checkoutPlatformProMonthly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_pro', billingInterval: 'monthly' });
+  }, [initiateCheckout]);
+
+  const checkoutPlatformProYearly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_pro', billingInterval: 'yearly' });
+  }, [initiateCheckout]);
+
+  /**
+   * 🔥 Contact sales for Enterprise plan
+   */
+  const contactEnterpriseSales = useCallback(() => {
+    window.open('mailto:enterprise@finotaur.com?subject=Enterprise%20Plan%20Inquiry', '_blank');
+  }, []);
+
   return {
+    // Generic checkout
     initiateCheckout,
+    
+    // Journal checkout helpers
     checkoutBasicMonthly,
     checkoutBasicYearly,
     checkoutPremiumMonthly,
     checkoutPremiumYearly,
+    
+    // 🔥 Platform checkout helpers (NEW)
+    checkoutPlatformCoreMonthly,
+    checkoutPlatformCoreYearly,
+    checkoutPlatformProMonthly,
+    checkoutPlatformProYearly,
+    contactEnterpriseSales,
+    
+    // State
     isLoading,
     error,
     userEmail: user?.email,
@@ -302,6 +355,13 @@ export function redirectToWhopCheckout(
   affiliateCode?: string
 ): void {
   const planId = getPlanId(planName, billingInterval);
+  const plan = PLANS[planId];
+  
+  // Check for coming soon
+  if (plan?.comingSoon) {
+    console.warn(`${plan.displayName} is coming soon`);
+    return;
+  }
   
   // Get stored affiliate data if not provided
   const { code: storedCode, clickId } = getStoredAffiliateData();
@@ -317,4 +377,22 @@ export function redirectToWhopCheckout(
   
   console.log('🔗 Redirect to checkout:', checkoutUrl);
   window.location.href = checkoutUrl;
+}
+
+// ============================================
+// 🔥 PLATFORM SPECIFIC CHECKOUT (NEW)
+// ============================================
+
+/**
+ * Redirect directly to Platform checkout
+ */
+export function redirectToPlatformCheckout(
+  plan: 'core' | 'pro',
+  billingInterval: BillingInterval,
+  userEmail?: string,
+  userId?: string,
+  affiliateCode?: string
+): void {
+  const planName = `platform_${plan}` as PlanName;
+  redirectToWhopCheckout(planName, billingInterval, userEmail, userId, affiliateCode);
 }

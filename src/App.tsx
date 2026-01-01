@@ -79,7 +79,7 @@ const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
 const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 
 // === Settings & Payment ===
-const Settings = lazy(() => import("@/pages/Settings"));
+const Settings = lazy(() => import("@/pages/app/Settings"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
 const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccessPage"));
@@ -135,20 +135,21 @@ const AffiliateAnalytics = lazy(() => import("@/features/affiliate/pages/Affilia
 
 // === All Markets ===
 const AllMarketsOverview = lazy(() => import("@/pages/app/all-markets/Overview"));
+const AllMarketsPricing = lazy(() => import("@/pages/app/all-markets/Pricing"));
 const AllMarketsChart = lazy(() => import("@/pages/app/all-markets/Chart"));
 const AllMarketsSummary = lazy(() => import("@/pages/app/all-markets/Summary"));
 const AllMarketsMovers = lazy(() => import("@/pages/app/all-markets/Movers"));
 const AllMarketsSentiment = lazy(() => import("@/pages/app/all-markets/Sentiment"));
 const AllMarketsCalendar = lazy(() => import("@/pages/app/all-markets/Calendar"));
 const AllMarketsNews = lazy(() => import("@/pages/app/all-markets/News"));
+const AllMarketsHeatmap = lazy(() => import("@/pages/app/all-markets/Heatmap"));  
 // ⚔️ WAR ZONE - Newsletter Hub
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 
 const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
 
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
-
-
+const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 // === Stocks ===
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -515,8 +516,11 @@ function AppContent() {
         {/* 📢 AFFILIATE PAGE */}
         <Route path="/affiliate" element={<AffiliatePage />} />
 
-        {/* 🔥 NEWSLETTER SIGNUP - War Zone Landing */}
-        <Route path="/warzone-signup" element={<NewsletterSignup />} />
+{/* 🔥 NEWSLETTER SIGNUP - War Zone Landing */}
+<Route path="/warzone-signup" element={<NewsletterSignup />} />
+
+{/* ⚔️ WAR ZONE - Full Screen (no sidebar) */}
+<Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         
         {/* ⚖️ LEGAL ROUTES */}
         <Route path="/legal/terms" element={<TermsOfUse />} />
@@ -542,13 +546,22 @@ function AppContent() {
           <Route path="all-markets/movers" element={<SuspenseRoute><AllMarketsMovers /></SuspenseRoute>} />
           <Route path="all-markets/sentiment" element={<SuspenseRoute><AllMarketsSentiment /></SuspenseRoute>} />
           <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
-          <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
-          {/* ⚔️ WAR ZONE - Newsletter Hub (shows different content for admin vs regular users) */}
-          <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
-          <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+<Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
+<Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
+{/* ⚔️ WAR ZONE - Newsletter Hub (shows different content for admin vs regular users) */}
+<Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+<Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
 
+{/* 🔐 TOP SECRET - Premium Intelligence Reports */}
+{/* Main page - Landing for non-subscribers, Dashboard for subscribers, redirects admins */}
+<Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
+<Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
 
-          <Route path="all-markets/top-secret" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
+{/* Admin panel - only for admins */}
+<Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
+<Route path="all-markets/top-secret-admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
+
+{/* 💰 PLATFORM PRICING */}          <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
 
           
           {/* 🔒 OPTIONS - LOCKED */}
@@ -735,7 +748,10 @@ function AppContent() {
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />
           <Route path="funding/brokers" element={<LockedRoute domainId="funding"><FundingBrokers /></LockedRoute>} />
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
-          <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
+<Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
+          
+          {/* ⚙️ SETTINGS */}
+          <Route path="settings" element={<SuspenseRoute><Settings /></SuspenseRoute>} />
         </Route>
         
         <Route path="/settings" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>

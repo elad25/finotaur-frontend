@@ -74,6 +74,13 @@ import { toast } from 'sonner';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // ============================================
+// DEV-ONLY LOGGING - Production Safe
+// ============================================
+const isDev = import.meta.env.DEV;
+const devLog = (...args: any[]) => { if (isDev) console.log(...args); };
+const devError = (...args: any[]) => { if (isDev) console.error(...args); };
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -389,9 +396,8 @@ const saveActiveGeneration = (reportType: string, reportId: string, ticker?: str
       startedAt: new Date().toISOString(),
     };
     localStorage.setItem(STORAGE_KEYS.activeGenerations, JSON.stringify(generations));
-    console.log(`[Storage] Saved active generation: ${reportType} -> ${reportId}`);
   } catch (err) {
-    console.error('[Storage] Failed to save active generation:', err);
+devError('[Storage] Failed to save active generation:', err);
   }
 };
 
@@ -402,7 +408,6 @@ const removeActiveGeneration = (reportType: string) => {
       const generations: Record<string, ActiveGeneration> = JSON.parse(existing);
       delete generations[reportType];
       localStorage.setItem(STORAGE_KEYS.activeGenerations, JSON.stringify(generations));
-      console.log(`[Storage] Removed active generation: ${reportType}`);
     }
   } catch (err) {
     console.error('[Storage] Failed to remove active generation:', err);
@@ -429,8 +434,7 @@ async function fetchISMStatus(month?: string): Promise<ISMStatus | null> {
     const res = await fetch(url);
     
     if (!res.ok) {
-      console.log('[ISM API] Status request failed:', res.status);
-      return null;
+devLog('[ISM API] Status request failed:', res.status);      return null;
     }
     
     const data = await res.json();
@@ -963,7 +967,6 @@ const saveReportToStorage = (reportId: string, preview: PreviewData, fullReport:
       localStorage.setItem(STORAGE_KEYS.allReports, JSON.stringify(index));
     }
     
-    console.log(`[Storage] Saved report: ${reportId}`);
   } catch (err) {
     console.error(`[Storage] Failed to save report ${reportId}:`, err);
   }
@@ -983,12 +986,11 @@ const loadReportFromStorage = (reportId: string): { preview: PreviewData | null;
     // Check if report is older than 24 hours
     const age = Date.now() - new Date(preview.generatedAt).getTime();
     if (age > 24 * 60 * 60 * 1000) {
-      console.log(`[Storage] Report ${reportId} expired, clearing...`);
+devLog(`[Storage] Report ${reportId} expired, clearing...`);
       clearReportFromStorage(reportId);
       return { preview: null, fullReport: null };
     }
     
-    console.log(`[Storage] Loaded report: ${reportId}`);
     return { preview, fullReport };
   } catch (err) {
     console.error(`[Storage] Failed to load report ${reportId}:`, err);
@@ -1009,7 +1011,6 @@ const clearReportFromStorage = (reportId: string) => {
       localStorage.setItem(STORAGE_KEYS.allReports, JSON.stringify(newIndex));
     }
     
-    console.log(`[Storage] Cleared report: ${reportId}`);
   } catch (err) {
     console.error(`[Storage] Failed to clear report ${reportId}:`, err);
   }
@@ -1399,7 +1400,7 @@ const ReportTypeCard: React.FC<{
   // Debug logging
   useEffect(() => {
     if (preview || fullReport) {
-      console.log(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, 'hasPreview:', hasPreview);
+devLog(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, 'hasPreview:', hasPreview);
     }
   }, [preview, fullReport, hasPreview, report.id]);
   
@@ -2109,8 +2110,6 @@ const TopSecretAdmin: React.FC = () => {
 
   // Debug: Log when previews or fullReports change
   useEffect(() => {
-    console.log('[State] Previews updated:', Object.keys(previews));
-    console.log('[State] FullReports updated:', Object.keys(fullReports));
   }, [previews, fullReports]);
 
   // ============================================
@@ -2122,7 +2121,7 @@ const TopSecretAdmin: React.FC = () => {
       
       // Check if status is valid
       if (!status) {
-        console.log('[ISM] No status returned from API');
+devLog('[ISM] No status returned from API');
         return;
       }
       
@@ -2521,11 +2520,9 @@ const TopSecretAdmin: React.FC = () => {
 
   // Load ALL cached reports on mount FIRST
   useEffect(() => {
-    console.log('[Init] Loading saved reports from storage...');
     const { previews: savedPreviews, fullReports: savedFullReports } = loadAllReportsFromStorage();
     
     if (Object.keys(savedPreviews).length > 0) {
-      console.log('[Init] Found saved reports:', Object.keys(savedPreviews));
       setPreviews(savedPreviews);
       setFullReports(savedFullReports);
     }
@@ -2705,8 +2702,8 @@ const TopSecretAdmin: React.FC = () => {
   // CLEAR PREVIEW - FIXED VERSION
   // ============================================
   const clearPreview = useCallback((reportId: string) => {
-    console.log(`[Clear] Clearing report: ${reportId}`);
-    console.trace('[Clear] Called from:'); // This will show the call stack
+devLog(`[Clear] Clearing report: ${reportId}`);
+// console.trace('[Clear] Called from:');
     
     // Clear from state
     setPreviews(prev => {
