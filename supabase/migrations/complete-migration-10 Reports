@@ -1,0 +1,1677 @@
+-- =====================================================
+-- FINOTAUR COMPLETE DATABASE SCHEMA (FIXED)
+-- =====================================================
+-- Includes: ISM Reports, Company Analysis, Crypto Analysis
+-- Fixed: All RLS policies properly configured
+-- Run this ENTIRE file in Supabase SQL Editor
+-- =====================================================
+
+-- ============================================
+-- UTILITY FUNCTION: update_updated_at_column
+-- ============================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- PART 1: ISM REPORTS TABLES
+-- =====================================================
+
+-- ============================================
+-- TABLE: ism_reports
+-- Main table for generated ISM reports
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_reports (
+  id TEXT PRIMARY KEY,
+  report_month TEXT NOT NULL,
+  report_title TEXT,
+  
+  -- Raw ISM Data
+  ism_data JSONB,
+  ism_release_date TIMESTAMPTZ,
+  
+  -- 5 Report Sections
+  macro_snapshot JSONB,
+  trend_analysis JSONB,
+  sector_impacts JSONB,
+  equity_logic JSONB,
+  trade_ideas JSONB,
+  
+  -- Executive Summary
+  executive_summary JSONB,
+  five_line_summary JSONB,
+  
+  -- Additional Sections
+  invalidation_scenarios TEXT[],
+  next_month_indicators TEXT[],
+  
+  -- Output Content
+  markdown_content TEXT,
+  html_content TEXT,
+  
+  -- Processing Info
+  processing_info JSONB,
+  
+  -- Quality Assurance
+  qa_score INTEGER DEFAULT 0,
+  qa_passed BOOLEAN DEFAULT false,
+  
+  -- Admin Override
+  is_admin_override BOOLEAN DEFAULT false,
+  override_reason TEXT,
+  created_by TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_ism_reports_month ON ism_reports(report_month);
+CREATE INDEX IF NOT EXISTS idx_ism_reports_created ON ism_reports(created_at DESC);
+
+-- Trigger
+DROP TRIGGER IF EXISTS update_ism_reports_updated_at ON ism_reports;
+CREATE TRIGGER update_ism_reports_updated_at
+  BEFORE UPDATE ON ism_reports
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- TABLE: ism_report_tracking
+-- Track monthly report status (one row per month)
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_report_tracking (
+  report_month TEXT PRIMARY KEY,
+  
+  -- Status
+  status TEXT NOT NULL DEFAULT 'pending_ism',
+  
+  -- ISM Data Status
+  ism_data_available BOOLEAN DEFAULT false,
+  ism_release_date TIMESTAMPTZ,
+  last_ism_check TIMESTAMPTZ,
+  
+  -- Generation Status
+  generation_started_at TIMESTAMPTZ,
+  generation_completed_at TIMESTAMPTZ,
+  report_generated_at TIMESTAMPTZ,
+  
+  -- Report Reference
+  report_id TEXT,
+  latest_report_id TEXT,
+  
+  -- Quick Reference
+  pmi_value NUMERIC(4,1),
+  
+  -- Admin Override
+  is_admin_override BOOLEAN DEFAULT false,
+  admin_id TEXT,
+  override_reason TEXT,
+  
+  -- Error Tracking
+  error_message TEXT,
+  error_count INTEGER DEFAULT 0,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Trigger
+DROP TRIGGER IF EXISTS update_ism_report_tracking_updated_at ON ism_report_tracking;
+CREATE TRIGGER update_ism_report_tracking_updated_at
+  BEFORE UPDATE ON ism_report_tracking
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- TABLE: ism_agent_logs
+-- Log each agent execution
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_agent_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id TEXT NOT NULL,
+  report_month TEXT NOT NULL,
+  
+  -- Agent Info
+  agent_id TEXT NOT NULL,
+  agent_name TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  
+  -- Execution Details
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  duration_ms INTEGER,
+  
+  -- Status
+  status TEXT NOT NULL DEFAULT 'running',
+  
+  -- Output
+  output_summary TEXT,
+  error_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_ism_agent_logs_report ON ism_agent_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_ism_agent_logs_month ON ism_agent_logs(report_month);
+CREATE INDEX IF NOT EXISTS idx_ism_agent_logs_agent ON ism_agent_logs(agent_id);
+
+-- ============================================
+-- TABLE: ism_source_cache
+-- Cache ISM data from external sources
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_source_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  data_month TEXT NOT NULL UNIQUE,
+  source_url TEXT,
+  
+  -- Data
+  raw_data JSONB,
+  parsed_data JSONB,
+  
+  -- Cache Management
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  is_valid BOOLEAN DEFAULT true,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_ism_source_cache_month ON ism_source_cache(data_month);
+
+-- ============================================
+-- TABLE: ism_report_progress
+-- Real-time progress tracking
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_report_progress (
+  report_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'running',
+  progress INTEGER DEFAULT 0,
+  current_phase TEXT,
+  current_agent_id TEXT,
+  current_agent_name TEXT,
+  completed_agents TEXT[],
+  total_agents INTEGER,
+  elapsed_seconds INTEGER,
+  error TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =====================================================
+-- PART 2: COMPANY ANALYSIS TABLES
+-- =====================================================
+
+-- ============================================
+-- TABLE: company_reports
+-- Main table for Company Analysis reports (23 AI Agents)
+-- ============================================
+CREATE TABLE IF NOT EXISTS company_reports (
+  id TEXT PRIMARY KEY,
+  ticker VARCHAR(10) NOT NULL,
+  company_name VARCHAR(255),
+  exchange VARCHAR(50),
+  market_cap BIGINT,
+  sector VARCHAR(100),
+  industry VARCHAR(100),
+  company_type VARCHAR(50),
+  
+  -- 6 Report Sections (JSONB)
+  business_reality JSONB,
+  sector_competition JSONB,
+  financial_core JSONB,
+  filings_analysis JSONB,
+  forward_view JSONB,
+  investment_decision JSONB,
+  
+  -- Executive Summary
+  executive_summary JSONB,
+  
+  -- Generated Content
+  markdown_content TEXT,
+  html_content TEXT,
+  
+  -- Processing Info
+  processing_info JSONB,
+  
+  -- Quality Assurance
+  qa_score INTEGER DEFAULT 85,
+  qa_passed BOOLEAN DEFAULT true,
+  confidence_level VARCHAR(20) DEFAULT 'medium',
+  
+  -- Admin Override
+  is_admin_override BOOLEAN DEFAULT false,
+  override_reason TEXT,
+  created_by UUID,
+  
+  -- S&P 500 Flag
+  is_sp500 BOOLEAN DEFAULT true,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add columns if table already exists
+ALTER TABLE company_reports 
+ADD COLUMN IF NOT EXISTS company_type VARCHAR(50),
+ADD COLUMN IF NOT EXISTS exchange VARCHAR(50),
+ADD COLUMN IF NOT EXISTS market_cap BIGINT,
+ADD COLUMN IF NOT EXISTS industry VARCHAR(100),
+ADD COLUMN IF NOT EXISTS business_reality JSONB,
+ADD COLUMN IF NOT EXISTS sector_competition JSONB,
+ADD COLUMN IF NOT EXISTS financial_core JSONB,
+ADD COLUMN IF NOT EXISTS filings_analysis JSONB,
+ADD COLUMN IF NOT EXISTS forward_view JSONB,
+ADD COLUMN IF NOT EXISTS investment_decision JSONB,
+ADD COLUMN IF NOT EXISTS processing_info JSONB,
+ADD COLUMN IF NOT EXISTS qa_passed BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS confidence_level VARCHAR(20) DEFAULT 'medium',
+ADD COLUMN IF NOT EXISTS is_sp500 BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS markdown_content TEXT,
+ADD COLUMN IF NOT EXISTS version VARCHAR(20) DEFAULT '6.0.0',
+ADD COLUMN IF NOT EXISTS html_content TEXT;
+
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_company_reports_ticker ON company_reports(ticker);
+CREATE INDEX IF NOT EXISTS idx_company_reports_created ON company_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_reports_sector ON company_reports(sector);
+
+-- Trigger
+DROP TRIGGER IF EXISTS update_company_reports_updated_at ON company_reports;
+CREATE TRIGGER update_company_reports_updated_at
+  BEFORE UPDATE ON company_reports
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- TABLE: company_agent_logs
+-- Log each agent execution for Company Analysis
+-- ============================================
+CREATE TABLE IF NOT EXISTS company_agent_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id TEXT NOT NULL,
+  ticker VARCHAR(10) NOT NULL,
+  
+  -- Agent Info
+  agent_id TEXT NOT NULL,
+  agent_name TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  
+  -- Execution Details
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  duration_ms INTEGER,
+  
+  -- Status
+  status TEXT NOT NULL DEFAULT 'running',
+  
+  -- Output
+  output_summary TEXT,
+  error_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_company_agent_logs_report ON company_agent_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_company_agent_logs_ticker ON company_agent_logs(ticker);
+
+-- =====================================================
+-- PART 3: CRYPTO ANALYSIS TABLES
+-- =====================================================
+
+-- ============================================
+-- TABLE: crypto_reports
+-- Main table for Crypto Analysis reports (18 AI Agents)
+-- ============================================
+CREATE TABLE IF NOT EXISTS crypto_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_date DATE NOT NULL,
+  
+  -- Market Analysis
+  market_regime VARCHAR(50),
+  market_regime_confidence INTEGER,
+  
+  -- Executive Summary (JSON)
+  executive_summary JSONB,
+  
+  -- Report Sections (JSON)
+  sections JSONB,
+  
+  -- Individual Section Data (for quick access)
+  btc_analysis JSONB,
+  eth_analysis JSONB,
+  altcoin_verdicts JSONB,
+  trade_ideas JSONB,
+  risk_assessment JSONB,
+  
+  -- Quality Metrics
+  qa_score INTEGER,
+  qa_grade VARCHAR(2),
+  qa_passed BOOLEAN DEFAULT false,
+  
+  -- Generated Content
+  markdown_content TEXT,
+  html_content TEXT,
+  pdf_path VARCHAR(255),
+  
+  -- Agent Results (for debugging/auditing)
+  agent_results JSONB,
+  
+  -- Metadata
+  generation_duration_seconds INTEGER,
+  openai_tokens_used INTEGER,
+  openai_cost_usd DECIMAL(10, 4),
+  
+  -- Timestamps
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_crypto_reports_date ON crypto_reports(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_reports_regime ON crypto_reports(market_regime);
+CREATE INDEX IF NOT EXISTS idx_crypto_reports_created ON crypto_reports(created_at DESC);
+
+-- Trigger function for crypto
+CREATE OR REPLACE FUNCTION update_crypto_reports_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger
+DROP TRIGGER IF EXISTS trigger_crypto_reports_updated_at ON crypto_reports;
+CREATE TRIGGER trigger_crypto_reports_updated_at
+  BEFORE UPDATE ON crypto_reports
+  FOR EACH ROW
+  EXECUTE FUNCTION update_crypto_reports_updated_at();
+
+-- ============================================
+-- TABLE: crypto_report_progress
+-- Real-time progress tracking for crypto reports
+-- ============================================
+CREATE TABLE IF NOT EXISTS crypto_report_progress (
+  report_id UUID PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'running',
+  progress INTEGER DEFAULT 0,
+  current_phase TEXT,
+  current_agent TEXT,
+  completed_agents TEXT[],
+  elapsed_seconds INTEGER DEFAULT 0,
+  error TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_crypto_progress_status ON crypto_report_progress(status);
+
+-- ============================================
+-- TABLE: crypto_agent_logs
+-- Log each agent execution for Crypto Analysis
+-- ============================================
+CREATE TABLE IF NOT EXISTS crypto_agent_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id UUID NOT NULL,
+  
+  -- Agent Info
+  agent_id TEXT NOT NULL,
+  agent_name TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  
+  -- Execution Details
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  duration_ms INTEGER,
+  
+  -- Status
+  status TEXT NOT NULL DEFAULT 'running',
+  
+  -- Output
+  output_summary TEXT,
+  error_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_crypto_agent_logs_report ON crypto_agent_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_crypto_agent_logs_agent ON crypto_agent_logs(agent_id);
+
+-- =====================================================
+-- PART 4: ISM FUNCTIONS
+-- =====================================================
+
+-- FUNCTION: check_ism_report_status
+CREATE OR REPLACE FUNCTION check_ism_report_status(p_month TEXT)
+RETURNS TABLE (
+  report_month TEXT,
+  status TEXT,
+  can_generate BOOLEAN,
+  reason TEXT,
+  existing_report_id TEXT,
+  ism_available BOOLEAN,
+  last_check TIMESTAMPTZ
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COALESCE(t.report_month, p_month),
+    COALESCE(t.status, 'pending_ism'),
+    CASE 
+      WHEN t.status = 'report_generated' AND NOT COALESCE(t.is_admin_override, false) THEN false
+      WHEN t.status = 'generating' THEN false
+      ELSE true
+    END,
+    CASE 
+      WHEN t.status = 'report_generated' THEN 'Report already exists for this month'
+      WHEN t.status = 'generating' THEN 'Generation in progress'
+      ELSE 'Ready to generate'
+    END,
+    t.report_id,
+    COALESCE(t.ism_data_available, false),
+    t.last_ism_check
+  FROM ism_report_tracking t
+  WHERE t.report_month = p_month
+  
+  UNION ALL
+  
+  SELECT 
+    p_month,
+    'pending_ism',
+    true,
+    'No tracking record - ready to generate',
+    NULL,
+    false,
+    NULL
+  WHERE NOT EXISTS (SELECT 1 FROM ism_report_tracking WHERE ism_report_tracking.report_month = p_month);
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: init_ism_tracking
+CREATE OR REPLACE FUNCTION init_ism_tracking(
+  p_month TEXT,
+  p_ism_available BOOLEAN DEFAULT false,
+  p_ism_release_date TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS void AS $$
+BEGIN
+  INSERT INTO ism_report_tracking (report_month, ism_data_available, ism_release_date, last_ism_check, status)
+  VALUES (
+    p_month,
+    p_ism_available,
+    p_ism_release_date,
+    NOW(),
+    CASE WHEN p_ism_available THEN 'ism_available' ELSE 'pending_ism' END
+  )
+  ON CONFLICT (report_month) DO UPDATE SET
+    ism_data_available = EXCLUDED.ism_data_available,
+    ism_release_date = COALESCE(EXCLUDED.ism_release_date, ism_report_tracking.ism_release_date),
+    last_ism_check = NOW(),
+    status = CASE 
+      WHEN ism_report_tracking.status = 'report_generated' THEN ism_report_tracking.status
+      WHEN EXCLUDED.ism_data_available THEN 'ism_available'
+      ELSE ism_report_tracking.status
+    END,
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: start_ism_generation
+CREATE OR REPLACE FUNCTION start_ism_generation(
+  p_month TEXT,
+  p_admin_id TEXT DEFAULT NULL,
+  p_is_override BOOLEAN DEFAULT false,
+  p_override_reason TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_current_status TEXT;
+BEGIN
+  SELECT status INTO v_current_status
+  FROM ism_report_tracking
+  WHERE report_month = p_month;
+  
+  IF v_current_status = 'generating' THEN
+    RETURN false;
+  END IF;
+  
+  IF v_current_status = 'report_generated' AND NOT p_is_override THEN
+    RETURN false;
+  END IF;
+  
+  INSERT INTO ism_report_tracking (
+    report_month, 
+    status, 
+    generation_started_at,
+    is_admin_override,
+    admin_id,
+    override_reason,
+    ism_data_available
+  )
+  VALUES (
+    p_month,
+    'generating',
+    NOW(),
+    p_is_override,
+    p_admin_id,
+    p_override_reason,
+    true
+  )
+  ON CONFLICT (report_month) DO UPDATE SET
+    status = 'generating',
+    generation_started_at = NOW(),
+    is_admin_override = COALESCE(p_is_override, ism_report_tracking.is_admin_override),
+    admin_id = COALESCE(p_admin_id, ism_report_tracking.admin_id),
+    override_reason = COALESCE(p_override_reason, ism_report_tracking.override_reason),
+    error_message = NULL,
+    updated_at = NOW();
+  
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: complete_ism_generation
+CREATE OR REPLACE FUNCTION complete_ism_generation(
+  p_month TEXT,
+  p_report_id TEXT DEFAULT NULL,
+  p_success BOOLEAN DEFAULT true,
+  p_error_message TEXT DEFAULT NULL
+)
+RETURNS void AS $$
+BEGIN
+  UPDATE ism_report_tracking SET
+    status = CASE WHEN p_success THEN 'report_generated' ELSE 'error' END,
+    report_id = COALESCE(p_report_id, report_id),
+    latest_report_id = COALESCE(p_report_id, latest_report_id),
+    generation_completed_at = NOW(),
+    report_generated_at = CASE WHEN p_success THEN NOW() ELSE NULL END,
+    error_message = p_error_message,
+    error_count = CASE WHEN p_success THEN 0 ELSE error_count + 1 END,
+    updated_at = NOW()
+  WHERE report_month = p_month;
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: get_ism_reports_history
+CREATE OR REPLACE FUNCTION get_ism_reports_history(p_limit INTEGER DEFAULT 12)
+RETURNS TABLE (
+  id TEXT,
+  report_month TEXT,
+  report_title TEXT,
+  created_at TIMESTAMPTZ,
+  qa_score INTEGER,
+  is_admin_override BOOLEAN,
+  executive_summary JSONB
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    r.id,
+    r.report_month,
+    r.report_title,
+    r.created_at,
+    r.qa_score,
+    r.is_admin_override,
+    r.executive_summary
+  FROM ism_reports r
+  ORDER BY r.report_month DESC
+  LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: admin_force_ism_regenerate
+CREATE OR REPLACE FUNCTION admin_force_ism_regenerate(
+  p_month TEXT,
+  p_admin_id TEXT,
+  p_reason TEXT
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+  IF p_reason IS NULL OR LENGTH(p_reason) < 5 THEN
+    RAISE EXCEPTION 'Override reason must be at least 5 characters';
+  END IF;
+  
+  INSERT INTO ism_report_tracking (
+    report_month,
+    status,
+    ism_data_available,
+    is_admin_override,
+    admin_id,
+    override_reason
+  ) VALUES (
+    p_month,
+    'ism_available',
+    true,
+    true,
+    p_admin_id,
+    p_reason
+  )
+  ON CONFLICT (report_month) DO UPDATE SET
+    status = 'ism_available',
+    is_admin_override = true,
+    admin_id = EXCLUDED.admin_id,
+    override_reason = EXCLUDED.override_reason,
+    updated_at = NOW();
+  
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql;
+
+-- FUNCTION: cleanup_ism_month
+-- Deletes ALL data for a specific month
+-- Usage: SELECT cleanup_ism_month('2025-11');
+CREATE OR REPLACE FUNCTION cleanup_ism_month(p_month TEXT)
+RETURNS TEXT AS $$
+BEGIN
+  DELETE FROM ism_reports WHERE report_month = p_month;
+  DELETE FROM ism_report_tracking WHERE report_month = p_month;
+  DELETE FROM ism_source_cache WHERE data_month = p_month;
+  DELETE FROM ism_historical_cache WHERE current_month = p_month;
+  DELETE FROM ism_sector_analysis WHERE report_month = p_month;
+  DELETE FROM ism_ticker_selections WHERE report_month = p_month;
+  DELETE FROM ism_agent_logs WHERE report_month = p_month;
+  RETURN 'Cleanup complete for ' || p_month;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- PART 5: ROW LEVEL SECURITY (RLS)
+-- =====================================================
+
+-- ============================================
+-- RLS for ism_reports
+-- ============================================
+ALTER TABLE ism_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ism_reports_service_all ON ism_reports;
+DROP POLICY IF EXISTS ism_reports_authenticated_read ON ism_reports;
+DROP POLICY IF EXISTS ism_reports_authenticated_write ON ism_reports;
+DROP POLICY IF EXISTS ism_reports_authenticated_update ON ism_reports;
+DROP POLICY IF EXISTS ism_reports_authenticated_delete ON ism_reports;
+
+CREATE POLICY ism_reports_service_all ON ism_reports
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_reports_authenticated_read ON ism_reports
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY ism_reports_authenticated_write ON ism_reports
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY ism_reports_authenticated_update ON ism_reports
+  FOR UPDATE TO authenticated
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_reports_authenticated_delete ON ism_reports
+  FOR DELETE TO authenticated
+  USING (true);
+
+-- ============================================
+-- RLS for ism_report_tracking
+-- ============================================
+ALTER TABLE ism_report_tracking ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ism_report_tracking_service_all ON ism_report_tracking;
+DROP POLICY IF EXISTS ism_report_tracking_authenticated_all ON ism_report_tracking;
+
+CREATE POLICY ism_report_tracking_service_all ON ism_report_tracking
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_report_tracking_authenticated_all ON ism_report_tracking
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- RLS for ism_agent_logs
+-- ============================================
+ALTER TABLE ism_agent_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ism_agent_logs_service_all ON ism_agent_logs;
+DROP POLICY IF EXISTS ism_agent_logs_authenticated_read ON ism_agent_logs;
+DROP POLICY IF EXISTS ism_agent_logs_authenticated_write ON ism_agent_logs;
+
+CREATE POLICY ism_agent_logs_service_all ON ism_agent_logs
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_agent_logs_authenticated_read ON ism_agent_logs
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY ism_agent_logs_authenticated_write ON ism_agent_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+-- ============================================
+-- RLS for ism_source_cache
+-- ============================================
+ALTER TABLE ism_source_cache ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ism_source_cache_service_all ON ism_source_cache;
+DROP POLICY IF EXISTS ism_source_cache_authenticated_all ON ism_source_cache;
+
+CREATE POLICY ism_source_cache_service_all ON ism_source_cache
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_source_cache_authenticated_all ON ism_source_cache
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- RLS for ism_report_progress
+-- ============================================
+ALTER TABLE ism_report_progress ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS ism_report_progress_service_all ON ism_report_progress;
+DROP POLICY IF EXISTS ism_report_progress_authenticated_all ON ism_report_progress;
+
+CREATE POLICY ism_report_progress_service_all ON ism_report_progress
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY ism_report_progress_authenticated_all ON ism_report_progress
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- RLS for company_reports
+-- ============================================
+ALTER TABLE company_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS company_reports_service_all ON company_reports;
+DROP POLICY IF EXISTS company_reports_authenticated_read ON company_reports;
+DROP POLICY IF EXISTS company_reports_authenticated_write ON company_reports;
+DROP POLICY IF EXISTS company_reports_authenticated_update ON company_reports;
+DROP POLICY IF EXISTS company_reports_authenticated_delete ON company_reports;
+DROP POLICY IF EXISTS company_reports_anon_read ON company_reports;
+
+CREATE POLICY company_reports_service_all ON company_reports
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY company_reports_authenticated_read ON company_reports
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY company_reports_authenticated_write ON company_reports
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY company_reports_authenticated_update ON company_reports
+  FOR UPDATE TO authenticated
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY company_reports_authenticated_delete ON company_reports
+  FOR DELETE TO authenticated
+  USING (true);
+
+CREATE POLICY company_reports_anon_read ON company_reports
+  FOR SELECT TO anon
+  USING (true);
+
+-- ============================================
+-- RLS for company_agent_logs
+-- ============================================
+ALTER TABLE company_agent_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS company_agent_logs_service_all ON company_agent_logs;
+DROP POLICY IF EXISTS company_agent_logs_authenticated_read ON company_agent_logs;
+DROP POLICY IF EXISTS company_agent_logs_authenticated_write ON company_agent_logs;
+
+CREATE POLICY company_agent_logs_service_all ON company_agent_logs
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY company_agent_logs_authenticated_read ON company_agent_logs
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY company_agent_logs_authenticated_write ON company_agent_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+-- ============================================
+-- RLS for crypto_reports
+-- ============================================
+ALTER TABLE crypto_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS crypto_reports_admin_all ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_service_all ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_authenticated_read ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_authenticated_write ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_authenticated_update ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_authenticated_delete ON crypto_reports;
+DROP POLICY IF EXISTS crypto_reports_anon_read ON crypto_reports;
+
+CREATE POLICY crypto_reports_service_all ON crypto_reports
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY crypto_reports_authenticated_read ON crypto_reports
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY crypto_reports_authenticated_write ON crypto_reports
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+CREATE POLICY crypto_reports_authenticated_update ON crypto_reports
+  FOR UPDATE TO authenticated
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY crypto_reports_authenticated_delete ON crypto_reports
+  FOR DELETE TO authenticated
+  USING (true);
+
+CREATE POLICY crypto_reports_anon_read ON crypto_reports
+  FOR SELECT TO anon
+  USING (true);
+
+-- ============================================
+-- RLS for crypto_report_progress
+-- ============================================
+ALTER TABLE crypto_report_progress ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS crypto_progress_service_all ON crypto_report_progress;
+DROP POLICY IF EXISTS crypto_progress_authenticated_all ON crypto_report_progress;
+
+CREATE POLICY crypto_progress_service_all ON crypto_report_progress
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY crypto_progress_authenticated_all ON crypto_report_progress
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+-- ============================================
+-- RLS for crypto_agent_logs
+-- ============================================
+ALTER TABLE crypto_agent_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS crypto_agent_logs_service_all ON crypto_agent_logs;
+DROP POLICY IF EXISTS crypto_agent_logs_authenticated_read ON crypto_agent_logs;
+DROP POLICY IF EXISTS crypto_agent_logs_authenticated_write ON crypto_agent_logs;
+
+CREATE POLICY crypto_agent_logs_service_all ON crypto_agent_logs
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY crypto_agent_logs_authenticated_read ON crypto_agent_logs
+  FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY crypto_agent_logs_authenticated_write ON crypto_agent_logs
+  FOR INSERT TO authenticated
+  WITH CHECK (true);
+
+-- =====================================================
+-- PART 6: CLEANUP - Remove test tables
+-- =====================================================
+DROP TABLE IF EXISTS v_test_user;
+
+-- =====================================================
+-- PART 7: GRANTS
+-- =====================================================
+
+-- ISM Tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON ism_reports TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ism_report_tracking TO authenticated;
+GRANT SELECT, INSERT, DELETE ON ism_agent_logs TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ism_source_cache TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ism_report_progress TO authenticated;
+
+GRANT ALL ON ism_reports TO service_role;
+GRANT ALL ON ism_report_tracking TO service_role;
+GRANT ALL ON ism_agent_logs TO service_role;
+GRANT ALL ON ism_source_cache TO service_role;
+GRANT ALL ON ism_report_progress TO service_role;
+
+-- Company Tables
+GRANT SELECT, INSERT, UPDATE, DELETE ON company_reports TO authenticated;
+GRANT SELECT, INSERT, DELETE ON company_agent_logs TO authenticated;
+GRANT SELECT ON company_reports TO anon;
+
+GRANT ALL ON company_reports TO service_role;
+GRANT ALL ON company_agent_logs TO service_role;
+
+-- Crypto Tables
+GRANT ALL ON crypto_reports TO authenticated;
+GRANT ALL ON crypto_reports TO service_role;
+GRANT SELECT ON crypto_reports TO anon;
+
+GRANT ALL ON crypto_report_progress TO authenticated;
+GRANT ALL ON crypto_report_progress TO service_role;
+
+GRANT ALL ON crypto_agent_logs TO authenticated;
+GRANT ALL ON crypto_agent_logs TO service_role;
+
+-- ISM Functions
+GRANT EXECUTE ON FUNCTION check_ism_report_status TO authenticated;
+GRANT EXECUTE ON FUNCTION init_ism_tracking TO authenticated;
+GRANT EXECUTE ON FUNCTION start_ism_generation TO authenticated;
+GRANT EXECUTE ON FUNCTION complete_ism_generation TO authenticated;
+GRANT EXECUTE ON FUNCTION get_ism_reports_history TO authenticated;
+GRANT EXECUTE ON FUNCTION admin_force_ism_regenerate TO authenticated;
+
+GRANT EXECUTE ON FUNCTION check_ism_report_status TO service_role;
+GRANT EXECUTE ON FUNCTION init_ism_tracking TO service_role;
+GRANT EXECUTE ON FUNCTION start_ism_generation TO service_role;
+GRANT EXECUTE ON FUNCTION complete_ism_generation TO service_role;
+GRANT EXECUTE ON FUNCTION get_ism_reports_history TO service_role;
+GRANT EXECUTE ON FUNCTION admin_force_ism_regenerate TO service_role;
+
+GRANT EXECUTE ON FUNCTION cleanup_ism_month TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_ism_month TO service_role;
+
+-- =====================================================
+-- VERIFICATION
+-- =====================================================
+DO $$
+DECLARE
+  table_count INTEGER;
+  rls_enabled_count INTEGER;
+BEGIN
+  -- Count tables
+  SELECT COUNT(*) INTO table_count
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  AND table_name IN (
+    'ism_reports', 'ism_report_tracking', 'ism_agent_logs', 'ism_source_cache', 'ism_report_progress',
+    'company_reports', 'company_agent_logs',
+    'crypto_reports', 'crypto_report_progress', 'crypto_agent_logs'
+  );
+  
+  -- Count RLS enabled tables
+  SELECT COUNT(*) INTO rls_enabled_count
+  FROM pg_tables t
+  JOIN pg_class c ON c.relname = t.tablename
+  WHERE t.schemaname = 'public'
+  AND t.tablename IN (
+    'ism_reports', 'ism_report_tracking', 'ism_agent_logs', 'ism_source_cache', 'ism_report_progress',
+    'company_reports', 'company_agent_logs',
+    'crypto_reports', 'crypto_report_progress', 'crypto_agent_logs'
+  )
+  AND c.relrowsecurity = true;
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ FINOTAUR DATABASE SCHEMA CREATED SUCCESSFULLY!';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Tables created: %', table_count;
+  RAISE NOTICE 'Tables with RLS enabled: %', rls_enabled_count;
+  RAISE NOTICE '';
+  RAISE NOTICE 'ISM Reports: ism_reports, ism_report_tracking, ism_agent_logs, ism_source_cache, ism_report_progress';
+  RAISE NOTICE 'Company Analysis: company_reports, company_agent_logs';
+  RAISE NOTICE 'Crypto Analysis: crypto_reports, crypto_report_progress, crypto_agent_logs';
+  RAISE NOTICE '';
+  RAISE NOTICE '✅ All RLS policies configured correctly';
+  RAISE NOTICE '✅ All grants applied';
+  RAISE NOTICE '✅ v_test_user table removed';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- Show RLS status for all tables
+SELECT 
+  t.tablename as table_name,
+  c.relrowsecurity as rls_enabled,
+  (SELECT COUNT(*) FROM pg_policies p WHERE p.tablename = t.tablename) as policy_count
+FROM pg_tables t
+JOIN pg_class c ON c.relname = t.tablename
+WHERE t.schemaname = 'public'
+AND t.tablename IN (
+  'ism_reports', 'ism_report_tracking', 'ism_agent_logs', 'ism_source_cache', 'ism_report_progress',
+  'company_reports', 'company_agent_logs',
+  'crypto_reports', 'crypto_report_progress', 'crypto_agent_logs'
+)
+ORDER BY t.tablename;
+
+-- =====================================================
+-- ISM SECTOR & TICKER STORAGE - SQL MIGRATION
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- =====================================================
+
+-- ============================================
+-- TABLE: ism_sector_analysis
+-- Stores sector rankings from each report
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_sector_analysis (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Link to report
+    report_id TEXT NOT NULL,
+    report_month TEXT NOT NULL,  -- Format: YYYY-MM
+    
+    -- Sector info
+    sector_id TEXT NOT NULL,
+    sector_name TEXT NOT NULL,
+    etf_symbol TEXT,
+    
+    -- Ranking from report
+    rank INTEGER NOT NULL,
+    impact_score DECIMAL(3,1),
+    direction TEXT,              -- 'positive', 'neutral', 'negative'
+    ism_signal TEXT,             -- 'Positive', 'Negative'
+    trend TEXT,                  -- 'Favorable', 'Unfavorable'
+    
+    -- Analysis from report
+    reasoning TEXT,
+    key_driver TEXT,
+    key_driver_value DECIMAL(4,1),
+    
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    CONSTRAINT unique_sector_per_report UNIQUE (report_id, sector_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_sector_report_month ON ism_sector_analysis(report_month DESC);
+CREATE INDEX IF NOT EXISTS idx_sector_report_id ON ism_sector_analysis(report_id);
+CREATE INDEX IF NOT EXISTS idx_sector_id ON ism_sector_analysis(sector_id);
+
+-- ============================================
+-- TABLE: ism_ticker_selections
+-- Stores ticker picks from each report
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_ticker_selections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Link to report
+    report_id TEXT NOT NULL,
+    report_month TEXT NOT NULL,
+    
+    -- Ticker info
+    ticker TEXT NOT NULL,
+    sector_id TEXT,
+    sector_name TEXT,
+    
+    -- Selection type
+    selection_type TEXT NOT NULL,  -- 'overweight', 'underweight', 'avoid', 'watchlist'
+    conviction TEXT,               -- 'high', 'medium', 'low'
+    
+    -- From report analysis
+    reasoning TEXT,
+    archetype TEXT,                -- 'quality_defensives', 'cyclical_leaders', etc.
+    
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    CONSTRAINT unique_ticker_per_report UNIQUE (report_id, ticker)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_ticker_report_month ON ism_ticker_selections(report_month DESC);
+CREATE INDEX IF NOT EXISTS idx_ticker_symbol ON ism_ticker_selections(ticker);
+CREATE INDEX IF NOT EXISTS idx_ticker_selection_type ON ism_ticker_selections(selection_type);
+
+-- ============================================
+-- VIEW: Latest sector rankings
+-- ============================================
+CREATE OR REPLACE VIEW v_sector_rankings_latest AS
+SELECT 
+    sector_id,
+    sector_name,
+    etf_symbol,
+    rank,
+    impact_score,
+    direction,
+    ism_signal,
+    trend,
+    reasoning,
+    key_driver,
+    key_driver_value,
+    report_month,
+    report_id
+FROM ism_sector_analysis
+WHERE report_month = (SELECT MAX(report_month) FROM ism_sector_analysis)
+ORDER BY rank ASC;
+
+-- ============================================
+-- VIEW: Latest ticker selections
+-- ============================================
+CREATE OR REPLACE VIEW v_ticker_selections_latest AS
+SELECT 
+    ticker,
+    sector_id,
+    sector_name,
+    selection_type,
+    conviction,
+    reasoning,
+    archetype,
+    report_month,
+    report_id
+FROM ism_ticker_selections
+WHERE report_month = (SELECT MAX(report_month) FROM ism_ticker_selections)
+ORDER BY 
+    CASE selection_type 
+        WHEN 'overweight' THEN 1 
+        WHEN 'watchlist' THEN 2 
+        WHEN 'underweight' THEN 3 
+        WHEN 'avoid' THEN 4 
+    END,
+    conviction DESC NULLS LAST;
+
+-- ============================================
+-- RLS Policies
+-- ============================================
+ALTER TABLE ism_sector_analysis ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ism_ticker_selections ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first
+DROP POLICY IF EXISTS "Read sector analysis" ON ism_sector_analysis;
+DROP POLICY IF EXISTS "Read ticker selections" ON ism_ticker_selections;
+DROP POLICY IF EXISTS "Service manage sectors" ON ism_sector_analysis;
+DROP POLICY IF EXISTS "Service manage tickers" ON ism_ticker_selections;
+
+-- Allow authenticated users to read
+CREATE POLICY "Read sector analysis" ON ism_sector_analysis
+    FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Read ticker selections" ON ism_ticker_selections 
+    FOR SELECT TO authenticated USING (true);
+
+-- Allow service role full access
+CREATE POLICY "Service manage sectors" ON ism_sector_analysis 
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Service manage tickers" ON ism_ticker_selections 
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ============================================
+-- Grant permissions on views
+-- ============================================
+GRANT SELECT ON v_sector_rankings_latest TO authenticated;
+GRANT SELECT ON v_ticker_selections_latest TO authenticated;
+
+-- ============================================
+-- Comments
+-- ============================================
+COMMENT ON TABLE ism_sector_analysis IS 'Stores sector rankings from each ISM report';
+COMMENT ON TABLE ism_ticker_selections IS 'Stores ticker selections from each ISM report';
+COMMENT ON VIEW v_sector_rankings_latest IS 'Quick access to most recent sector rankings';
+COMMENT ON VIEW v_ticker_selections_latest IS 'Quick access to most recent ticker selections';
+
+
+-- הרץ את זה ב-SQL Editor של Supabase:
+
+CREATE TABLE IF NOT EXISTS ism_quotes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_month VARCHAR(7) NOT NULL,
+  industry VARCHAR(100) NOT NULL,
+  quote_text TEXT NOT NULL,
+  sentiment VARCHAR(20) DEFAULT 'neutral',
+  key_theme VARCHAR(50),
+  leading_or_lagging VARCHAR(20) DEFAULT 'contemporaneous',
+  is_verified BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(report_month, quote_text)
+);
+
+CREATE TABLE IF NOT EXISTS ism_sector_rankings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_month VARCHAR(7) NOT NULL,
+  sector_name VARCHAR(50) NOT NULL,
+  sector_etf VARCHAR(10),
+  rank INTEGER,
+  impact_score DECIMAL(3,1),
+  direction VARCHAR(20),
+  bias VARCHAR(20),
+  reasoning TEXT,
+  key_driver VARCHAR(50),
+  change_vs_last_month VARCHAR(20),
+  why_now TEXT,
+  key_stocks TEXT[],
+  quote_support TEXT,
+  quote_support_industry VARCHAR(100),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(report_month, sector_name)
+);
+
+CREATE TABLE IF NOT EXISTS ism_trade_ideas (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_month VARCHAR(7) NOT NULL,
+  direction VARCHAR(10) NOT NULL,
+  sector VARCHAR(50) NOT NULL,
+  title VARCHAR(200),
+  etf VARCHAR(10),
+  stocks TEXT[],
+  thesis TEXT,
+  ism_connection TEXT,
+  executive_quote TEXT,
+  executive_quote_industry VARCHAR(100),
+  direct_impact TEXT,
+  conviction VARCHAR(10),
+  invalidation TEXT[],
+  risks TEXT[],
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(report_month, sector, direction)
+);
+
+CREATE INDEX IF NOT EXISTS idx_quotes_month ON ism_quotes(report_month);
+CREATE INDEX IF NOT EXISTS idx_sectors_month ON ism_sector_rankings(report_month);
+CREATE INDEX IF NOT EXISTS idx_trades_month ON ism_trade_ideas(report_month);
+
+
+-- =====================================================
+-- ISM SCHEDULER + SYSTEM UPDATES INTEGRATION v4.1
+-- =====================================================
+-- ============================================
+-- 2. CREATE ISM SCHEDULER LOGS TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ism_scheduler_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type TEXT NOT NULL DEFAULT 'monthly_generation',
+  status TEXT NOT NULL, -- 'success', 'error', 'skipped'
+  data_month TEXT,
+  report_id TEXT,
+  duration_ms INTEGER,
+  error_message TEXT,
+  executed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_scheduler_logs_month ON ism_scheduler_logs(data_month);
+CREATE INDEX IF NOT EXISTS idx_scheduler_logs_status ON ism_scheduler_logs(status);
+CREATE INDEX IF NOT EXISTS idx_scheduler_logs_executed ON ism_scheduler_logs(executed_at DESC);
+
+-- RLS
+ALTER TABLE ism_scheduler_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins view scheduler logs" ON ism_scheduler_logs;
+CREATE POLICY "Admins view scheduler logs" ON ism_scheduler_logs
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+DROP POLICY IF EXISTS "Service manage scheduler logs" ON ism_scheduler_logs;
+CREATE POLICY "Service manage scheduler logs" ON ism_scheduler_logs
+  FOR ALL TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+
+-- ============================================
+-- 3. FUNCTION TO INCREMENT UPDATE VIEWS
+-- ============================================
+
+CREATE OR REPLACE FUNCTION increment_update_views(update_id UUID)
+RETURNS void AS $$
+BEGIN
+  UPDATE system_updates 
+  SET views_count = COALESCE(views_count, 0) + 1
+  WHERE id = update_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION increment_update_views TO authenticated;
+
+-- ============================================
+-- 4. VERIFY SETUP
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ ISM SCHEDULER INTEGRATION v4.1 COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Schedule: 10:30 AM ET, days 1-5 of month';
+  RAISE NOTICE 'No retries - ISM releases at 10 AM or not at all';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Added to system_updates:';
+  RAISE NOTICE '  • metadata (JSONB) - PDF URL, report info';
+  RAISE NOTICE '  • is_pinned (BOOLEAN) - pin latest report';
+  RAISE NOTICE '  • views_count (INTEGER) - track views';
+  RAISE NOTICE '';
+  RAISE NOTICE 'New table: ism_scheduler_logs';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- CREATE STORAGE BUCKET FOR ISM REPORTS
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- =====================================================
+
+-- Create the reports bucket if it doesn't exist
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'reports',
+  'reports',
+  true,  -- Public bucket so users can download PDFs
+  52428800,  -- 50MB max file size
+  ARRAY['application/pdf']::text[]
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+-- ============================================
+-- STORAGE POLICIES
+-- ============================================
+
+-- Drop existing policies first
+DROP POLICY IF EXISTS "Authenticated users can read reports" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can manage reports" ON storage.objects;
+DROP POLICY IF EXISTS "Anyone can read public reports" ON storage.objects;
+
+-- Allow authenticated users to read reports
+CREATE POLICY "Authenticated users can read reports"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (bucket_id = 'reports');
+
+-- Allow service role to upload/manage reports
+CREATE POLICY "Service role can manage reports"
+ON storage.objects FOR ALL
+TO service_role
+USING (bucket_id = 'reports')
+WITH CHECK (bucket_id = 'reports');
+
+-- Allow anon to read (for public PDF links)
+CREATE POLICY "Anyone can read public reports"
+ON storage.objects FOR SELECT
+TO anon
+USING (bucket_id = 'reports');
+
+-- ============================================
+-- VERIFY
+-- ============================================
+
+SELECT id, name, public, file_size_limit 
+FROM storage.buckets 
+WHERE id = 'reports';
+
+-- =====================================================
+-- CRYPTO SCHEDULER - DATABASE MIGRATION
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- Creates tables for system updates and admin notifications
+-- =====================================================
+
+-- ============================================
+-- 1. SYSTEM UPDATES TABLE
+-- ============================================
+-- This table stores notifications/updates shown in the Support widget
+
+-- Drop old constraint if exists (in case table already exists with different constraint)
+ALTER TABLE system_updates DROP CONSTRAINT IF EXISTS system_updates_type_check;
+
+CREATE TABLE IF NOT EXISTS system_updates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'info',
+
+  target_group TEXT NOT NULL DEFAULT 'all' CHECK (target_group IN ('all', 'top_secret', 'newsletter', 'trading_journal')),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  metadata JSONB DEFAULT '{}',
+  views_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ DEFAULT NULL
+);
+
+-- Index for faster queries
+-- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_system_updates_target_group ON system_updates(target_group);
+CREATE INDEX IF NOT EXISTS idx_system_updates_is_active ON system_updates(is_active);
+CREATE INDEX IF NOT EXISTS idx_system_updates_created_at ON system_updates(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_updates_type ON system_updates(type);
+CREATE INDEX IF NOT EXISTS idx_system_updates_metadata ON system_updates USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_system_updates_pinned ON system_updates(is_pinned) WHERE is_pinned = true;
+
+-- Add columns if table already existed without them
+ALTER TABLE system_updates 
+ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT NULL;
+
+ALTER TABLE system_updates 
+ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT false;
+
+ALTER TABLE system_updates 
+ADD COLUMN IF NOT EXISTS views_count INTEGER DEFAULT 0;
+
+ALTER TABLE system_updates 
+ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Add constraint after table creation
+ALTER TABLE system_updates DROP CONSTRAINT IF EXISTS system_updates_type_check;
+ALTER TABLE system_updates ADD CONSTRAINT system_updates_type_check 
+  CHECK (type IN ('info', 'success', 'warning', 'announcement'));
+-- ============================================
+-- 2. USER UPDATE READS TABLE
+-- ============================================
+-- Tracks which updates each user has read
+
+CREATE TABLE IF NOT EXISTS user_update_reads (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  update_id UUID NOT NULL REFERENCES system_updates(id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, update_id)
+);
+
+-- Index for faster lookups
+CREATE INDEX IF NOT EXISTS idx_user_update_reads_user_id ON user_update_reads(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_update_reads_update_id ON user_update_reads(update_id);
+
+-- ============================================
+-- 3. ADMIN NOTIFICATIONS TABLE
+-- ============================================
+-- Notifications for admin dashboard (failures, alerts, etc.)
+
+CREATE TABLE IF NOT EXISTS admin_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+  is_read BOOLEAN NOT NULL DEFAULT false,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_is_read ON admin_notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_severity ON admin_notifications(severity);
+CREATE INDEX IF NOT EXISTS idx_admin_notifications_created_at ON admin_notifications(created_at DESC);
+
+-- ============================================
+-- 4. CRYPTO REPORTS TABLE (if not exists)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS crypto_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_date DATE NOT NULL,
+  market_regime TEXT,
+  regime_score INTEGER,
+  executive_summary JSONB,
+  sections JSONB,
+  raw_data JSONB,
+  markdown_content TEXT,
+  html_content TEXT,
+  pdf_content BYTEA,
+  quality_score INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_crypto_reports_report_date ON crypto_reports(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_crypto_reports_created_at ON crypto_reports(created_at DESC);
+
+-- ============================================
+-- 5. SCHEDULER STATUS TABLE
+-- ============================================
+-- Tracks scheduler runs and status
+
+CREATE TABLE IF NOT EXISTS scheduler_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scheduler_type TEXT NOT NULL, -- 'crypto', 'ism', 'weekly', etc.
+  status TEXT NOT NULL CHECK (status IN ('started', 'completed', 'failed')),
+  report_id UUID,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduler_runs_type ON scheduler_runs(scheduler_type);
+CREATE INDEX IF NOT EXISTS idx_scheduler_runs_status ON scheduler_runs(status);
+CREATE INDEX IF NOT EXISTS idx_scheduler_runs_started_at ON scheduler_runs(started_at DESC);
+
+-- ============================================
+-- 6. HELPER FUNCTION: INCREMENT VIEWS
+-- ============================================
+
+CREATE OR REPLACE FUNCTION increment_update_views(update_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE system_updates 
+  SET views_count = views_count + 1
+  WHERE id = update_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- 7. HELPER FUNCTION: CLEANUP OLD UPDATES
+-- ============================================
+-- Automatically deactivate updates older than 30 days (optional)
+
+CREATE OR REPLACE FUNCTION cleanup_old_updates()
+RETURNS VOID AS $$
+BEGIN
+  UPDATE system_updates 
+  SET is_active = false
+  WHERE created_at < NOW() - INTERVAL '30 days'
+    AND is_active = true
+    AND is_pinned = false;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
+-- 8. RLS POLICIES
+-- ============================================
+
+-- Enable RLS
+ALTER TABLE system_updates ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first
+DROP POLICY IF EXISTS "Anyone can read active system updates" ON system_updates;
+DROP POLICY IF EXISTS "Service role can manage system updates" ON system_updates;
+DROP POLICY IF EXISTS "Users can manage their own update reads" ON user_update_reads;
+DROP POLICY IF EXISTS "Service role can manage admin notifications" ON admin_notifications;
+DROP POLICY IF EXISTS "Admins can read crypto reports" ON crypto_reports;
+DROP POLICY IF EXISTS "Service role can manage crypto reports" ON crypto_reports;
+DROP POLICY IF EXISTS "Service role can manage scheduler runs" ON scheduler_runs;
+
+ALTER TABLE user_update_reads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crypto_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY;
+
+-- System Updates: Anyone can read active updates
+CREATE POLICY "Anyone can read active system updates" ON system_updates
+  FOR SELECT USING (is_active = true);
+
+-- System Updates: Only service role can insert/update
+CREATE POLICY "Service role can manage system updates" ON system_updates
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- User Update Reads: Users can read/insert their own
+CREATE POLICY "Users can manage their own update reads" ON user_update_reads
+  FOR ALL USING (auth.uid() = user_id);
+
+-- Admin Notifications: Only admins/service role
+CREATE POLICY "Service role can manage admin notifications" ON admin_notifications
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Crypto Reports: Admins can read
+CREATE POLICY "Admins can read crypto reports" ON crypto_reports
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Crypto Reports: Service role can manage
+CREATE POLICY "Service role can manage crypto reports" ON crypto_reports
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- Scheduler Runs: Service role only
+CREATE POLICY "Service role can manage scheduler runs" ON scheduler_runs
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- ============================================
+-- 9. GRANT PERMISSIONS
+-- ============================================
+
+-- Grant to authenticated users
+GRANT SELECT ON system_updates TO authenticated;
+GRANT SELECT, INSERT ON user_update_reads TO authenticated;
+GRANT EXECUTE ON FUNCTION increment_update_views(UUID) TO authenticated;
+
+-- Grant to anon (for public updates)
+GRANT SELECT ON system_updates TO anon;
+
+-- ============================================
+-- 10. INITIAL SEED DATA (optional)
+-- ============================================
+
+-- Insert a welcome message for TOP SECRET subscribers
+-- Using DO block to handle case where row might already exist
+-- Insert welcome message only if it doesn't exist
+INSERT INTO system_updates (title, content, type, target_group, is_active, is_pinned, metadata)
+SELECT 
+  '🎉 Welcome to TOP SECRET Reports',
+  'You now have access to institutional-grade market analysis. Crypto reports are generated automatically on the 10th and 25th of each month.',
+  'announcement',
+  'top_secret',
+  true,
+  false,
+  '{"report_type": "welcome"}'::jsonb
+WHERE NOT EXISTS (
+  SELECT 1 FROM system_updates 
+  WHERE title = '🎉 Welcome to TOP SECRET Reports' 
+  AND target_group = 'top_secret'
+);
+
+-- ============================================
+-- DONE!
+-- ============================================
+-- After running this migration:
+-- 1. Deploy the updated scheduler.js
+-- 2. Initialize the scheduler in your server startup
+-- 3. Reports will auto-generate on 10th and 25th
+-- ============================================

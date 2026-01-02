@@ -1,17 +1,14 @@
 // =====================================================
-// FINOTAUR NEWSLETTER ADMIN PANEL - v5.3.0
+// FINOTAUR NEWSLETTER ADMIN PANEL - v5.4.0
 // =====================================================
 // Place in: src/pages/app/journal/admin/NewsletterSub.tsx
 //
-// 🔥 v5.3.0 CHANGES:
-// - Real-time workflow progress tracking (2-second polling)
-// - Live agent status display with completion indicators
-// - Phase-by-phase progress with color coding
-// - Agent icons and completion grid
-// - Recent activity log display
-// - Elapsed time and estimated remaining
-// - Background generation with navigation support
-// - Fallback to legacy status endpoint
+// 🔥 v5.4.0 CHANGES:
+// - ADDED: PDF Download button (calls /api/newsletter/pdf)
+// - ADDED: downloadPDF function with proper blob handling
+// - ADDED: PDF download in ReportViewerModal header
+// - ADDED: hasPdf status indicator
+// - Previous: Real-time workflow progress tracking
 // =====================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -52,6 +49,7 @@ import {
   Settings,
   Info,
   Activity,
+  FileDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -91,6 +89,7 @@ interface PreviewData {
   generatedAt: string;
   processorInfo?: ProcessorInfo;
   story?: StoryData;
+  hasPdf?: boolean;
 }
 
 interface StoryData {
@@ -160,6 +159,7 @@ interface WorkflowProgress {
     message: string;
   }>;
   error: string | null;
+  hasPdf?: boolean;
 }
 
 // ============================================
@@ -221,6 +221,39 @@ const formatTimeAgo = (dateString: string): string => {
   if (diffMins < 60) return `${diffMins} min ago`;
   if (diffHours < 24) return `${diffHours} hours ago`;
   return `${Math.floor(diffHours / 24)} days ago`;
+};
+
+// ============================================
+// v5.4.0: DOWNLOAD PDF FUNCTION
+// ============================================
+const downloadPDF = async (): Promise<boolean> => {
+  try {
+    toast.info('Downloading PDF...', { duration: 2000 });
+    
+    const response = await fetch(`${API_BASE}/api/newsletter/pdf`);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'PDF not available');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `finotaur-report-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    toast.success('PDF downloaded!');
+    return true;
+  } catch (err: any) {
+    console.error('PDF download error:', err);
+    toast.error(err.message || 'Failed to download PDF');
+    return false;
+  }
 };
 
 // ============================================
@@ -675,18 +708,20 @@ const NewsletterSettingsSection: React.FC<{
 };
 
 // ============================================
-// FULL REPORT VIEWER MODAL
+// FULL REPORT VIEWER MODAL (v5.4.0 - with PDF download)
 // ============================================
 const ReportViewerModal: React.FC<{
   report: string;
   subject: string;
   processorInfo: ProcessorInfo | null;
   generatedAt: string;
+  hasPdf?: boolean;
   onClose: () => void;
-}> = ({ report, subject, processorInfo, generatedAt, onClose }) => {
+}> = ({ report, subject, processorInfo, generatedAt, hasPdf = true, onClose }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewMode, setViewMode] = useState<'rendered' | 'markdown'>('rendered');
   const [copied, setCopied] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -711,7 +746,7 @@ const ReportViewerModal: React.FC<{
     }
   };
 
-  const downloadReport = () => {
+  const downloadMarkdown = () => {
     const blob = new Blob([report], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -719,7 +754,13 @@ const ReportViewerModal: React.FC<{
     a.download = `finotaur-report-${new Date().toISOString().split('T')[0]}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Report downloaded');
+    toast.success('Markdown downloaded');
+  };
+
+  const handleDownloadPdf = async () => {
+    setIsDownloadingPdf(true);
+    await downloadPDF();
+    setIsDownloadingPdf(false);
   };
 
   const renderMarkdown = (md: string) => {
@@ -830,10 +871,25 @@ const ReportViewerModal: React.FC<{
               )}
             </button>
             
+            {/* v5.4.0: PDF Download Button */}
             <button
-              onClick={downloadReport}
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="p-2 rounded-lg hover:bg-red-500/20 transition-colors group"
+              title="Download PDF"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-5 h-5 text-red-400 animate-spin" />
+              ) : (
+                <FileDown className="w-5 h-5 text-red-400 group-hover:text-red-300" />
+              )}
+            </button>
+            
+            {/* Markdown Download */}
+            <button
+              onClick={downloadMarkdown}
               className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
-              title="Download report"
+              title="Download Markdown"
             >
               <Download className="w-5 h-5 text-gray-400" />
             </button>
@@ -880,13 +936,37 @@ const ReportViewerModal: React.FC<{
             <span>{report.length.toLocaleString()} characters</span>
             <span>•</span>
             <span>{(report.match(/^-+$/gm) || []).length + 1} sections</span>
+            {hasPdf && (
+              <>
+                <span>•</span>
+                <span className="text-red-400 flex items-center gap-1">
+                  <FileDown className="w-3.5 h-3.5" />
+                  PDF Available
+                </span>
+              </>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors"
-          >
-            Close
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Quick PDF Download in footer */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors text-white font-medium flex items-center gap-2"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              Download PDF
+            </button>
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1089,6 +1169,15 @@ const PreviewModal: React.FC<{
             <div className="text-sm text-gray-500">
               Recipients: <span className="text-red-400 font-medium">{recipientCount}</span>
             </div>
+            {preview.hasPdf && (
+              <>
+                <div className="w-px h-4 bg-gray-700" />
+                <div className="text-sm text-red-400 flex items-center gap-1">
+                  <FileDown className="w-3.5 h-3.5" />
+                  PDF Attached
+                </div>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1205,6 +1294,7 @@ const NewsletterSub: React.FC = () => {
   const [processorInfo, setProcessorInfo] = useState<ProcessorInfo | null>(null);
   const [adminNote, setAdminNote] = useState('');
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+  const [hasPdf, setHasPdf] = useState(false);
   
   // v5.3.0: Real-time workflow progress state
   const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null>(null);
@@ -1216,6 +1306,7 @@ const NewsletterSub: React.FC = () => {
     const savedPreview = localStorage.getItem('newsletter_preview');
     const savedProcessorInfo = localStorage.getItem('newsletter_processor_info');
     const savedReport = localStorage.getItem('newsletter_full_report');
+    const savedHasPdf = localStorage.getItem('newsletter_has_pdf');
     
     if (savedPreview) {
       try {
@@ -1223,8 +1314,10 @@ const NewsletterSub: React.FC = () => {
         const age = Date.now() - new Date(parsed.generatedAt).getTime();
         if (age < 4 * 60 * 60 * 1000) {
           setPreview(parsed);
+          setHasPdf(parsed.hasPdf || savedHasPdf === 'true');
         } else {
           localStorage.removeItem('newsletter_preview');
+          localStorage.removeItem('newsletter_has_pdf');
         }
       } catch {
         localStorage.removeItem('newsletter_preview');
@@ -1469,6 +1562,7 @@ const NewsletterSub: React.FC = () => {
           completedAgents: data.completedAgents || [],
           recentLogs: data.recentLogs || [],
           error: data.error,
+          hasPdf: data.hasPdf,
         });
         
         // Check if completed
@@ -1479,7 +1573,9 @@ const NewsletterSub: React.FC = () => {
           
           if (reportData.success && reportData.data) {
             setPreview(reportData.data);
+            setHasPdf(reportData.data.hasPdf || data.hasPdf || false);
             localStorage.setItem('newsletter_preview', JSON.stringify(reportData.data));
+            localStorage.setItem('newsletter_has_pdf', String(reportData.data.hasPdf || data.hasPdf || false));
             
             if (reportData.data.processorInfo) {
               setProcessorInfo(reportData.data.processorInfo);
@@ -1516,13 +1612,14 @@ const NewsletterSub: React.FC = () => {
         const fallbackData = await fallbackRes.json();
         
         if (fallbackData.success) {
-          const { status, hasReport, progress, currentPhase } = fallbackData.data;
+          const { status, hasReport, progress, currentPhase, hasPdf: fallbackHasPdf } = fallbackData.data;
           
           setWorkflowProgress(prev => ({
             ...prev!,
             isRunning: status === 'generating',
             currentPhase: currentPhase || prev?.currentPhase || 'GENERATING',
             progress: progress || prev?.progress || 0,
+            hasPdf: fallbackHasPdf,
           }));
           
           if (status === 'completed' && hasReport) {
@@ -1531,6 +1628,7 @@ const NewsletterSub: React.FC = () => {
             
             if (reportData.success && reportData.data) {
               setPreview(reportData.data);
+              setHasPdf(reportData.data.hasPdf || fallbackHasPdf || false);
               if (reportData.data.processorInfo) setProcessorInfo(reportData.data.processorInfo);
               if (reportData.data.markdown) setFullReport(reportData.data.markdown);
               toast.success('Report ready!');
@@ -1575,6 +1673,7 @@ const NewsletterSub: React.FC = () => {
             completedAgents: data.completedAgents || [],
             recentLogs: data.recentLogs || [],
             error: null,
+            hasPdf: data.hasPdf,
           });
           toast.info('Report generation in progress...', { duration: 5000 });
         } else if (!data.isRunning && data.progress === 100 && !preview) {
@@ -1584,6 +1683,7 @@ const NewsletterSub: React.FC = () => {
           
           if (reportData.success && reportData.data) {
             setPreview(reportData.data);
+            setHasPdf(reportData.data.hasPdf || data.hasPdf || false);
             if (reportData.data.processorInfo) setProcessorInfo(reportData.data.processorInfo);
             if (reportData.data.markdown) setFullReport(reportData.data.markdown);
           }
@@ -1660,9 +1760,11 @@ const NewsletterSub: React.FC = () => {
     setPreview(null);
     setFullReport('');
     setProcessorInfo(null);
+    setHasPdf(false);
     localStorage.removeItem('newsletter_preview');
     localStorage.removeItem('newsletter_full_report');
     localStorage.removeItem('newsletter_processor_info');
+    localStorage.removeItem('newsletter_has_pdf');
   };
 
   const sendTestEmail = async () => {
@@ -1684,7 +1786,7 @@ const NewsletterSub: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Test sent to ${testEmail}`);
+        toast.success(`Test sent to ${testEmail}${data.hasPdf ? ' with PDF' : ''}`);
         setTestEmail('');
       } else {
         toast.error(data.error || 'Failed to send');
@@ -1718,7 +1820,7 @@ const NewsletterSub: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(`Newsletter sent to ${data.data.sentCount} recipients!`);
+        toast.success(`Newsletter sent to ${data.data.sentCount} recipients!${data.data.hasPdf ? ' (with PDF)' : ''}`);
         queryClient.invalidateQueries({ queryKey: ['newsletter-stats'] });
         queryClient.invalidateQueries({ queryKey: ['newsletter-last-sent'] });
         clearPreview();
@@ -1810,6 +1912,7 @@ const NewsletterSub: React.FC = () => {
           subject={preview?.subject || 'Finotaur Intelligence Report'}
           processorInfo={processorInfo}
           generatedAt={preview?.generatedAt || new Date().toISOString()}
+          hasPdf={hasPdf}
           onClose={() => setShowReportViewer(false)}
         />
       )}
@@ -1837,39 +1940,59 @@ const NewsletterSub: React.FC = () => {
               {processorInfo.qaScore && (
                 <QAScoreBadge score={processorInfo.qaScore} passed={processorInfo.qaPassed} />
               )}
+              {hasPdf && (
+                <div className="px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-red-500/20 text-red-400 border border-red-500/30">
+                  <FileDown className="w-3 h-3" />
+                  <span>PDF Ready</span>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* SINGLE YELLOW PREVIEW BUTTON */}
-        <button
-          onClick={() => {
-            if (fullReport && preview) {
-              setShowReportViewer(true);
-            } else {
-              generatePreview();
-            }
-          }}
-          disabled={isGeneratingPreview}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-orange-500 hover:from-[#d4af4f] hover:to-orange-400 disabled:opacity-50 transition-all text-black font-bold shadow-lg shadow-[#C9A646]/20"
-        >
-          {isGeneratingPreview ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Generating ({workflowProgress?.progress || 0}%)...</span>
-            </>
-          ) : fullReport && preview ? (
-            <>
-              <Eye className="w-5 h-5" />
-              <span>VIEW REPORT</span>
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5" />
-              <span>GENERATE DAILY REPORT</span>
-            </>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* PDF Download Button (v5.4.0) */}
+          {hasPdf && preview && (
+            <button
+              onClick={downloadPDF}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 transition-all text-red-400 hover:text-red-300 text-sm font-medium"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>PDF</span>
+            </button>
           )}
-        </button>
+          
+          {/* MAIN PREVIEW BUTTON */}
+          <button
+            onClick={() => {
+              if (fullReport && preview) {
+                setShowReportViewer(true);
+              } else {
+                generatePreview();
+              }
+            }}
+            disabled={isGeneratingPreview}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#C9A646]/20 hover:bg-[#C9A646]/30 border border-[#C9A646]/50 transition-all text-[#C9A646] hover:text-[#d4af4f] disabled:opacity-50 text-sm font-medium"
+          >
+            {isGeneratingPreview ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{workflowProgress?.progress || 0}%</span>
+              </>
+            ) : fullReport && preview ? (
+              <>
+                <Eye className="w-4 h-4" />
+                <span>View Report</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Generate Report</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* v5.3.0: Real-time Agent Progress (when generating) */}
@@ -2023,8 +2146,14 @@ const NewsletterSub: React.FC = () => {
                     {processorInfo?.qaScore && (
                       <QAScoreBadge score={processorInfo.qaScore} passed={processorInfo.qaPassed} />
                     )}
+                    {hasPdf && (
+                      <span className="text-xs text-red-400 flex items-center gap-1">
+                        <FileDown className="w-3 h-3" />
+                        PDF Ready
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => setShowReportViewer(true)}
                       className="flex items-center gap-1.5 text-xs text-[#C9A646] hover:text-[#d4af4f] transition-colors font-medium"
@@ -2040,6 +2169,18 @@ const NewsletterSub: React.FC = () => {
                       <Eye className="w-3.5 h-3.5" />
                       Email Preview
                     </button>
+                    {hasPdf && (
+                      <>
+                        <span className="text-gray-700">|</span>
+                        <button
+                          onClick={downloadPDF}
+                          className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          <FileDown className="w-3.5 h-3.5" />
+                          Download PDF
+                        </button>
+                      </>
+                    )}
                     <span className="text-gray-700">|</span>
                     <button
                       onClick={generatePreview}
@@ -2085,7 +2226,7 @@ const NewsletterSub: React.FC = () => {
             {isSending ? (
               <><Loader2 className="w-5 h-5 animate-spin" />Sending...</>
             ) : (
-              <><Send className="w-5 h-5" />Send to {recipientIds.length} Recipients</>
+              <><Send className="w-5 h-5" />Send to {recipientIds.length} Recipients{hasPdf ? ' (with PDF)' : ''}</>
             )}
           </button>
 

@@ -1,275 +1,428 @@
-// ==================== USE MARKET DATA HOOK ====================
-// Custom hook for fetching and caching market data
+// src/hooks/useMarketData.ts
+// =====================================================
+// FINOTAUR MARKET DATA HOOK - TypeScript Fixed
+// =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
-import { binanceService, type Timeframe as BinanceTimeframe } from '@/services/backtest/binanceDataService';
-import { polygonService } from '@/services/backtest/polygonDataService';
-import { dataCacheService, type CandleData } from '@/services/backtest/dataCache';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
-export type DataSource = 'binance' | 'binance-futures' | 'polygon-stocks' | 'polygon-crypto' | 'polygon-forex' | 'cache';
-export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '4h' | '1d' | '1w';
+// ═══════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════
 
-export interface UseMarketDataOptions {
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+interface FetchOptions extends RequestInit {
+  headers?: Record<string, string>;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CACHE CLASS WITH PROPER TYPESCRIPT
+// ═══════════════════════════════════════════════════════════════
+
+const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+class DataCache {
+  private store: Map<string, CacheEntry<unknown>>;
+
+  constructor() {
+    this.store = new Map();
+  }
+
+  get<T>(key: string): T | null {
+    const entry = this.store.get(key) as CacheEntry<T> | undefined;
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp < CACHE_DURATION_MS) {
+      return entry.data;
+    }
+    this.store.delete(key);
+    return null;
+  }
+
+  set<T>(key: string, data: T): void {
+    this.store.set(key, { data, timestamp: Date.now() });
+  }
+
+  delete(key: string): void {
+    this.store.delete(key);
+  }
+
+  clear(): void {
+    this.store.clear();
+  }
+
+  has(key: string): boolean {
+    return this.store.has(key);
+  }
+}
+
+const dataCache = new DataCache();
+
+// ═══════════════════════════════════════════════════════════════
+// HELPER: Safe JSON fetch with proper typing
+// ═══════════════════════════════════════════════════════════════
+
+async function safeFetch<T>(url: string, options: FetchOptions = {}): Promise<T | null> {
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: { 
+        'Accept': 'application/json', 
+        ...(options.headers || {}) 
+      }
+    });
+    if (!response.ok) return null;
+    return await response.json() as T;
+  } catch (e) {
+    console.error(`[Fetch Error] ${url}:`, e);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STOCK SUMMARY TYPES
+// ═══════════════════════════════════════════════════════════════
+
+export interface StockQuote {
   symbol: string;
-  timeframe: Timeframe;
-  source: DataSource;
-  candleCount?: number;
-  autoFetch?: boolean;
-  useCache?: boolean;
-  cacheMaxAge?: number; // milliseconds
+  price: number;
+  change: number;
+  changePercent: number;
+  open: number;
+  high: number;
+  low: number;
+  volume: number;
+  previousClose: number;
+  marketCap?: number;
+  pe?: number;
+  eps?: number;
+  beta?: number;
+  dividendYield?: number;
+  high52w?: number;
+  low52w?: number;
+  avgVolume?: number;
+  timestamp: string;
+  // Market status fields
+  marketStatus?: 'open' | 'closed' | 'pre-market' | 'after-hours';
+  isMarketOpen?: boolean;
 }
 
-export interface UseMarketDataReturn {
-  data: CandleData[];
-  loading: boolean;
-  error: string | null;
-  progress: number;
-  fetchData: () => Promise<void>;
-  refreshData: () => Promise<void>;
-  clearCache: () => Promise<void>;
-  exportData: () => Promise<string | null>;
-  importData: (jsonString: string) => Promise<void>;
+export interface CompanyProfile {
+  name: string;
+  description: string | null;
+  sector: string | null;
+  industry: string | null;
+  country: string;
+  exchange: string;
+  currency: string;
+  website: string | null;
+  logo?: string | null;
+  employees?: number | null;
+  ceo?: string | null;
+  headquarters?: string | null;
+  ipoDate?: string | null;
 }
 
-export const useMarketData = (options: UseMarketDataOptions): UseMarketDataReturn => {
-  const {
-    symbol,
-    timeframe,
-    source,
-    candleCount = 500,
-    autoFetch = true,
-    useCache = true,
-    cacheMaxAge = 24 * 60 * 60 * 1000, // 24 hours
-  } = options;
+export interface AnalystRating {
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+  total: number;
+  consensus: string;
+}
 
-  const [data, setData] = useState<CandleData[]>([]);
+export interface PriceTarget {
+  targetHigh: number;
+  targetLow: number;
+  targetMean: number;
+  targetMedian: number;
+  currentPrice: number;
+  upsidePercent: number;
+  numberOfAnalysts: number;
+}
+
+export interface StockSummaryData {
+  quote: StockQuote | null;
+  profile: CompanyProfile | null;
+  analystRating: AnalystRating | null;
+  priceTarget: PriceTarget | null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// API CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app/api';
+const CACHE_KEY_PREFIX = 'finotaur.stock.';
+
+// ═══════════════════════════════════════════════════════════════
+// LOCAL STORAGE CACHE HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+function getLocalCache<T>(key: string): CacheEntry<T> | null {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const entry: CacheEntry<T> = JSON.parse(stored);
+      if (Date.now() - entry.timestamp < CACHE_DURATION_MS) {
+        return entry;
+      }
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  return null;
+}
+
+function setLocalCache<T>(key: string, data: T): void {
+  try {
+    const entry: CacheEntry<T> = { data, timestamp: Date.now() };
+    localStorage.setItem(key, JSON.stringify(entry));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// API FUNCTIONS
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchQuoteExtended(symbol: string): Promise<StockQuote | null> {
+  return safeFetch<StockQuote>(`${API_BASE}/market-data/quote-extended/${symbol}`);
+}
+
+async function fetchCompanyProfile(symbol: string): Promise<CompanyProfile | null> {
+  return safeFetch<CompanyProfile>(`${API_BASE}/market-data/company/${symbol}`);
+}
+
+interface AnalystResponse {
+  rating: AnalystRating | null;
+  priceTarget: PriceTarget | null;
+}
+
+async function fetchAnalystData(symbol: string): Promise<AnalystResponse> {
+  const data = await safeFetch<AnalystResponse>(`${API_BASE}/market-data/analyst/${symbol}`);
+  return data || { rating: null, priceTarget: null };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN HOOK: useStockSummary
+// ═══════════════════════════════════════════════════════════════
+
+export function useStockSummary(symbol: string | undefined | null) {
+  const [data, setData] = useState<StockSummaryData>({
+    quote: null,
+    profile: null,
+    analystRating: null,
+    priceTarget: null,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
+  const [isCached, setIsCached] = useState(false);
+  const [cacheAge, setCacheAge] = useState<number | null>(null);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  /**
-   * Map timeframe to service-specific format
-   */
-  const mapTimeframe = useCallback((tf: Timeframe, src: DataSource): string => {
-    if (src.startsWith('polygon')) {
-      const polygonMap: Record<Timeframe, string> = {
-        '1m': '1min',
-        '5m': '5min',
-        '15m': '15min',
-        '30m': '30min',
-        '1h': '1hour',
-        '4h': '4hour',
-        '1d': '1day',
-        '1w': '1week',
-      };
-      return polygonMap[tf] || '1day';
+  const fetchData = useCallback(async (forceRefresh = false) => {
+    if (!symbol) {
+      setData({ quote: null, profile: null, analystRating: null, priceTarget: null });
+      return;
     }
-    // Binance uses the same format
-    return tf;
-  }, []);
 
-  /**
-   * Calculate days needed based on timeframe
-   */
-  const calculateDays = useCallback((tf: Timeframe, count: number): number => {
-    const timeframeMinutes: Record<Timeframe, number> = {
-      '1m': 1,
-      '5m': 5,
-      '15m': 15,
-      '30m': 30,
-      '1h': 60,
-      '4h': 240,
-      '1d': 1440,
-      '1w': 10080,
-    };
+    const upperSymbol = symbol.toUpperCase();
+    const cacheKey = `${CACHE_KEY_PREFIX}${upperSymbol}`;
 
-    const minutes = timeframeMinutes[tf] * count;
-    return Math.ceil(minutes / 1440) + 1; // Add 1 day buffer
-  }, []);
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      // Memory cache
+      const memCached = dataCache.get<StockSummaryData>(upperSymbol);
+      if (memCached) {
+        console.log(`[Memory Cache HIT] ${upperSymbol}`);
+        setData(memCached);
+        setIsCached(true);
+        return;
+      }
 
-  /**
-   * Fetch data from Binance
-   */
-  const fetchFromBinance = useCallback(async (isFutures: boolean): Promise<CandleData[]> => {
-    setProgress(25);
-    
-    const candles = await binanceService.fetchHistoricalData(
-      symbol,
-      timeframe as BinanceTimeframe,
-      candleCount,
-      isFutures
-    );
-    
-    setProgress(75);
-    return candles;
-  }, [symbol, timeframe, candleCount]);
-
-  /**
-   * Fetch data from Polygon
-   */
-  const fetchFromPolygon = useCallback(async (type: 'stocks' | 'crypto' | 'forex'): Promise<CandleData[]> => {
-    setProgress(25);
-    
-    const interval = mapTimeframe(timeframe, source);
-    const days = calculateDays(timeframe, candleCount);
-    
-    let candles: CandleData[];
-    
-    if (type === 'stocks') {
-      candles = await polygonService.fetchStockData(symbol, interval, days);
-    } else if (type === 'crypto') {
-      candles = await polygonService.fetchCryptoData(symbol, interval, days);
-    } else {
-      candles = await polygonService.fetchForexData(symbol, interval, days);
+      // LocalStorage cache
+      const localCached = getLocalCache<StockSummaryData>(cacheKey);
+      if (localCached) {
+        console.log(`[LocalStorage Cache HIT] ${upperSymbol}`);
+        setData(localCached.data);
+        dataCache.set(upperSymbol, localCached.data);
+        setIsCached(true);
+        setCacheAge(Date.now() - localCached.timestamp);
+        return;
+      }
     }
-    
-    setProgress(75);
-    
-    // Limit to requested count
-    return candles.slice(-candleCount);
-  }, [symbol, timeframe, source, candleCount, mapTimeframe, calculateDays]);
 
-  /**
-   * Main fetch function
-   */
-  const fetchData = useCallback(async () => {
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     setLoading(true);
     setError(null);
-    setProgress(0);
+    setIsCached(false);
 
     try {
-      // Check cache first if enabled
-      if (useCache) {
-        setProgress(10);
-        
-        const cacheSource = source.startsWith('binance') ? 'binance' : 'polygon';
-        const isCached = await dataCacheService.isCached(symbol, timeframe, cacheSource, cacheMaxAge);
-        
-        if (isCached) {
-          const cached = await dataCacheService.getDataset(symbol, timeframe, cacheSource);
-          if (cached && cached.candles.length > 0) {
-            console.log('✅ Using cached data');
-            setData(cached.candles);
-            setProgress(100);
-            setLoading(false);
-            return;
-          }
-        }
-      }
+      console.log(`[API] Fetching data for ${upperSymbol}`);
+      
+      // Fetch all data in parallel for efficiency
+      const [quote, profile, analystData] = await Promise.all([
+        fetchQuoteExtended(upperSymbol),
+        fetchCompanyProfile(upperSymbol),
+        fetchAnalystData(upperSymbol),
+      ]);
 
-      // Fetch from source
-      let candles: CandleData[];
+      const newData: StockSummaryData = {
+        quote,
+        profile,
+        analystRating: analystData.rating,
+        priceTarget: analystData.priceTarget,
+      };
 
-      switch (source) {
-        case 'binance':
-          candles = await fetchFromBinance(false);
-          break;
-        
-        case 'binance-futures':
-          candles = await fetchFromBinance(true);
-          break;
-        
-        case 'polygon-stocks':
-          if (!polygonService.isConfigured()) {
-            throw new Error('Polygon API key not configured. Please set VITE_POLYGON_API_KEY in your .env file');
-          }
-          candles = await fetchFromPolygon('stocks');
-          break;
-        
-        case 'polygon-crypto':
-          if (!polygonService.isConfigured()) {
-            throw new Error('Polygon API key not configured');
-          }
-          candles = await fetchFromPolygon('crypto');
-          break;
-        
-        case 'polygon-forex':
-          if (!polygonService.isConfigured()) {
-            throw new Error('Polygon API key not configured');
-          }
-          candles = await fetchFromPolygon('forex');
-          break;
-        
-        default:
-          throw new Error(`Unknown data source: ${source}`);
-      }
-
-      if (candles.length === 0) {
-        throw new Error('No data returned from API');
-      }
-
-      setData(candles);
-      setProgress(90);
-
-      // Save to cache if enabled
-      if (useCache) {
-        const cacheSource = source.startsWith('binance') ? 'binance' : 'polygon';
-        await dataCacheService.saveDataset(symbol, timeframe, cacheSource, candles);
-      }
-
-      setProgress(100);
-      console.log(`✅ Fetched ${candles.length} candles for ${symbol} ${timeframe}`);
+      // Cache the result
+      dataCache.set(upperSymbol, newData);
+      setLocalCache(cacheKey, newData);
+      
+      setData(newData);
+      setCacheAge(0);
+      
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch data';
-      setError(errorMessage);
-      console.error('Error fetching market data:', err);
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('[Summary] Error:', err);
+        setError(err.message || 'Failed to fetch data');
+      }
     } finally {
       setLoading(false);
     }
-  }, [symbol, timeframe, source, candleCount, useCache, cacheMaxAge, fetchFromBinance, fetchFromPolygon]);
+  }, [symbol]);
 
-  /**
-   * Refresh data (bypass cache)
-   */
-  const refreshData = useCallback(async () => {
-    const cacheSource = source.startsWith('binance') ? 'binance' : 'polygon';
-    await dataCacheService.deleteDataset(symbol, timeframe, cacheSource);
-    await fetchData();
-  }, [symbol, timeframe, source, fetchData]);
-
-  /**
-   * Clear cache for this symbol/timeframe
-   */
-  const clearCache = useCallback(async () => {
-    const cacheSource = source.startsWith('binance') ? 'binance' : 'polygon';
-    await dataCacheService.deleteDataset(symbol, timeframe, cacheSource);
-    console.log('🗑️ Cache cleared');
-  }, [symbol, timeframe, source]);
-
-  /**
-   * Export data as JSON
-   */
-  const exportData = useCallback(async (): Promise<string | null> => {
-    const cacheSource = source.startsWith('binance') ? 'binance' : 'polygon';
-    return await dataCacheService.exportDataset(symbol, timeframe, cacheSource);
-  }, [symbol, timeframe, source]);
-
-  /**
-   * Import data from JSON
-   */
-  const importData = useCallback(async (jsonString: string) => {
-    await dataCacheService.importDataset(jsonString);
-    await fetchData();
+  // Initial fetch
+  useEffect(() => {
+    fetchData();
+    
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchData]);
 
-  /**
-   * Auto-fetch on mount if enabled
-   */
+  // Update cache age periodically
   useEffect(() => {
-    if (autoFetch && symbol && timeframe) {
-      fetchData();
+    if (!symbol) return;
+    
+    const interval = setInterval(() => {
+      const cacheKey = `${CACHE_KEY_PREFIX}${symbol.toUpperCase()}`;
+      const localCached = getLocalCache<StockSummaryData>(cacheKey);
+      if (localCached) {
+        setCacheAge(Date.now() - localCached.timestamp);
+      }
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  const refresh = useCallback(() => {
+    fetchData(true);
+  }, [fetchData]);
+
+  const clearCache = useCallback(() => {
+    if (symbol) {
+      const upperSymbol = symbol.toUpperCase();
+      const cacheKey = `${CACHE_KEY_PREFIX}${upperSymbol}`;
+      dataCache.delete(upperSymbol);
+      try {
+        localStorage.removeItem(cacheKey);
+      } catch {}
     }
-  }, [symbol, timeframe, source, autoFetch]); // Intentionally exclude fetchData to avoid loops
+  }, [symbol]);
 
   return {
     data,
     loading,
     error,
-    progress,
-    fetchData,
-    refreshData,
+    cacheAge,
+    isCached,
+    refresh,
     clearCache,
-    exportData,
-    importData,
   };
-};
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BULK QUOTES HOOK
+// ═══════════════════════════════════════════════════════════════
+
+interface BulkQuotesResult {
+  quotes: StockQuote[];
+  loading: boolean;
+  error: string | null;
+  refresh: () => void;
+}
+
+export function useBulkQuotes(symbols: string[]): BulkQuotesResult {
+  const [quotes, setQuotes] = useState<StockQuote[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchQuotes = useCallback(async () => {
+    if (!symbols.length) {
+      setQuotes([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const symbolsStr = symbols.map(s => s.toUpperCase()).join(',');
+      const response = await safeFetch<{ quotes: StockQuote[] }>(
+        `${API_BASE}/market-data/quotes?symbols=${symbolsStr}`
+      );
+      
+      if (response?.quotes) {
+        setQuotes(response.quotes);
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [symbols]);
+
+  useEffect(() => {
+    fetchQuotes();
+  }, [fetchQuotes]);
+
+  return { quotes, loading, error, refresh: fetchQuotes };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITY EXPORTS
+// ═══════════════════════════════════════════════════════════════
+
+export function clearAllMarketDataCache(): void {
+  dataCache.clear();
+  try {
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith(CACHE_KEY_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    });
+    console.log('[Cache] All market data caches cleared');
+  } catch {
+    // Ignore
+  }
+}
+
+export default useStockSummary;

@@ -289,8 +289,7 @@ INSERT INTO affiliate_config (config_key, config_value, description) VALUES
 
 ('commission_duration_months', '{"months": 12}', 'Maximum months to earn commission per customer'),
 
-('verification_period_days', '{"days": 7}', 'Days after FIRST PAYMENT before referral is qualified'),
-
+('verification_period_days', '{"days": 21}', 'Days before referral is qualified (14 trial + 7 after payment)'),
 ('attribution_window_days', '{"days": 30}', 'Days affiliate cookie is valid'),
 
 ('discount_rates', '{
@@ -672,6 +671,8 @@ CREATE TABLE affiliate_referrals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   affiliate_id UUID NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
   referred_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_referral_profile FOREIGN KEY (referred_user_id) 
+    REFERENCES public.profiles(id) ON DELETE CASCADE,
   referred_user_email TEXT NOT NULL,
   click_id UUID REFERENCES affiliate_clicks(id),
   
@@ -1014,6 +1015,7 @@ CREATE INDEX idx_coupon_usage_date ON coupon_usage_log(used_at DESC);
 -- ============================================
 
 -- Check if user is admin
+-- Check if user is admin (synced with main migration)
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -1022,7 +1024,10 @@ STABLE
 AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles 
-    WHERE id = auth.uid() 
+    WHERE id = COALESCE(
+      current_setting('app.admin_mode_target_user', true)::uuid,
+      auth.uid()
+    )
     AND role IN ('admin', 'super_admin')
   );
 $$;
@@ -2288,13 +2293,14 @@ BEGIN
   END IF;
   
   -- Start 7-day verification period
+-- Start 21-day verification period (14 trial + 7 post-payment)
   UPDATE affiliate_referrals
   SET 
     status = 'verification_pending',
     first_payment_amount_usd = p_payment_amount,
     first_payment_date = NOW(),
     verification_start = NOW(),
-    verification_end = NOW() + INTERVAL '7 days',
+    verification_end = NOW() + INTERVAL '21 days',
     subscription_plan = COALESCE(p_subscription_plan, subscription_plan),
     subscription_type = COALESCE(p_subscription_type, subscription_type),
     subscription_price_usd = p_payment_amount,
@@ -2312,14 +2318,14 @@ BEGIN
   )
   VALUES (
     ref_record.affiliate_id,
-    'first_payment_received',
-    'First payment of $' || p_payment_amount || ' received. 7-day verification period started.',
+ 'first_payment_received',
+    'First payment of $' || p_payment_amount || ' received. 21-day verification period started (14 trial + 7 post-payment).',
     p_referral_id,
     jsonb_build_object(
-      'payment_amount', p_payment_amount,
+'payment_amount', p_payment_amount,
       'subscription_plan', p_subscription_plan,
       'subscription_type', p_subscription_type,
-      'verification_ends', NOW() + INTERVAL '7 days'
+      'verification_ends', NOW() + INTERVAL '21 days'
     ),
     TRUE
   );
@@ -2435,6 +2441,209 @@ $$;
 
 -- Grant permission
 GRANT EXECUTE ON FUNCTION get_affiliate_analytics(UUID, DATE, DATE) TO authenticated;
+
+
+-- ============================================
+-- SECTION 21.6: AFFILIATE TRIAL TRACKING FUNCTIONS
+-- ============================================
+
+-- Check if referred user is still in trial
+CREATE OR REPLACE FUNCTION check_referral_trial_status(p_referral_id UUID)
+RETURNS TABLE (
+  is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  days_remaining INTEGER,
+  has_paid BOOLEAN,
+  can_qualify BOOLEAN
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_referral RECORD;
+  v_user_profile RECORD;
+BEGIN
+  -- Get referral info
+  SELECT * INTO v_referral FROM affiliate_referrals WHERE id = p_referral_id;
+  
+  IF v_referral IS NULL THEN
+    RETURN QUERY SELECT FALSE, NULL::TIMESTAMPTZ, 0, FALSE, FALSE;
+    RETURN;
+  END IF;
+  
+  -- Get user profile
+  SELECT * INTO v_user_profile FROM profiles WHERE id = v_referral.referred_user_id;
+  
+  IF v_user_profile IS NULL THEN
+    RETURN QUERY SELECT FALSE, NULL::TIMESTAMPTZ, 0, FALSE, FALSE;
+    RETURN;
+  END IF;
+  
+  RETURN QUERY SELECT 
+    COALESCE(v_user_profile.is_in_trial, FALSE),
+    v_user_profile.trial_ends_at,
+    CASE 
+      WHEN v_user_profile.trial_ends_at IS NOT NULL 
+      THEN EXTRACT(DAY FROM (v_user_profile.trial_ends_at - NOW()))::INTEGER
+      ELSE 0
+    END,
+    v_referral.first_payment_date IS NOT NULL,
+    -- Can qualify only after trial ends AND payment received AND 7 more days
+    v_referral.first_payment_date IS NOT NULL 
+    AND (v_referral.first_payment_date + INTERVAL '7 days') <= NOW()
+    AND v_referral.subscription_cancelled_at IS NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION check_referral_trial_status(UUID) TO authenticated;
+
+-- Get affiliate referrals with trial info
+CREATE OR REPLACE FUNCTION get_affiliate_referrals_with_trial_info(p_affiliate_id UUID)
+RETURNS TABLE (
+  referral_id UUID,
+  referred_user_email TEXT,
+  signup_date TIMESTAMPTZ,
+  status referral_status,
+  is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  days_until_trial_ends INTEGER,
+  first_payment_date TIMESTAMPTZ,
+  days_until_qualification INTEGER,
+  verification_end TIMESTAMPTZ,
+  subscription_plan TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    ar.id,
+    ar.referred_user_email,
+    ar.signup_date,
+    ar.status,
+    COALESCE(p.is_in_trial, FALSE),
+    p.trial_ends_at,
+    CASE 
+      WHEN p.trial_ends_at IS NOT NULL AND p.trial_ends_at > NOW()
+      THEN EXTRACT(DAY FROM (p.trial_ends_at - NOW()))::INTEGER
+      ELSE 0
+    END,
+    ar.first_payment_date,
+    CASE 
+      WHEN ar.verification_end IS NOT NULL AND ar.verification_end > NOW()
+      THEN EXTRACT(DAY FROM (ar.verification_end - NOW()))::INTEGER
+      ELSE 0
+    END,
+    ar.verification_end,
+    ar.subscription_plan
+  FROM affiliate_referrals ar
+  JOIN profiles p ON ar.referred_user_id = p.id
+  WHERE ar.affiliate_id = p_affiliate_id
+  ORDER BY ar.signup_date DESC;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_affiliate_referrals_with_trial_info(UUID) TO authenticated;
+
+-- ============================================
+-- track_referral_signup - CRITICAL for registration flow!
+-- ============================================
+CREATE OR REPLACE FUNCTION track_referral_signup(
+  p_affiliate_code TEXT,
+  p_user_id UUID,
+  p_user_email TEXT,
+  p_signup_plan TEXT DEFAULT 'basic',
+  p_coupon_code TEXT DEFAULT NULL,
+  p_discount_percent NUMERIC DEFAULT 0,
+  p_discount_amount NUMERIC DEFAULT 0
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_affiliate_id UUID;
+  v_referral_id UUID;
+  v_click_id UUID;
+  v_coupon_id UUID;
+  v_clean_code TEXT;
+BEGIN
+  v_clean_code := UPPER(REGEXP_REPLACE(p_affiliate_code, '[^A-Z0-9]', '', 'g'));
+  
+  -- Find affiliate
+  SELECT id INTO v_affiliate_id
+  FROM affiliates
+  WHERE (affiliate_code = v_clean_code OR coupon_code = v_clean_code)
+    AND status = 'active';
+  
+  IF v_affiliate_id IS NULL THEN
+    RETURN NULL;
+  END IF;
+  
+  -- Find recent unconverted click
+  SELECT id INTO v_click_id
+  FROM affiliate_clicks
+  WHERE affiliate_id = v_affiliate_id
+    AND converted = FALSE
+    AND expires_at > NOW()
+  ORDER BY clicked_at DESC
+  LIMIT 1;
+  
+  -- Find coupon if provided
+  IF p_coupon_code IS NOT NULL THEN
+    SELECT id INTO v_coupon_id
+    FROM admin_coupons
+    WHERE code = UPPER(p_coupon_code) AND is_active = TRUE;
+  END IF;
+  
+  -- Create referral
+  INSERT INTO affiliate_referrals (
+    affiliate_id,
+    referred_user_id,
+    referred_user_email,
+    click_id,
+    signup_plan,
+    coupon_code_used,
+    coupon_id_used,
+    discount_percent,
+    discount_amount_usd,
+    status
+  ) VALUES (
+    v_affiliate_id,
+    p_user_id,
+    p_user_email,
+    v_click_id,
+    p_signup_plan,
+    p_coupon_code,
+    v_coupon_id,
+    p_discount_percent,
+    p_discount_amount,
+    'pending'
+  )
+  RETURNING id INTO v_referral_id;
+  
+  -- Mark click as converted
+  IF v_click_id IS NOT NULL THEN
+    UPDATE affiliate_clicks
+    SET converted = TRUE, converted_at = NOW(), converted_user_id = p_user_id
+    WHERE id = v_click_id;
+  END IF;
+  
+  -- Increment signup counter
+  PERFORM increment_affiliate_signups(v_affiliate_id);
+  
+  -- Update profile with affiliate code
+  UPDATE public.profiles
+  SET affiliate_code = v_clean_code
+  WHERE id = p_user_id;
+  
+  RETURN v_referral_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION track_referral_signup(TEXT, UUID, TEXT, TEXT, TEXT, NUMERIC, NUMERIC) TO authenticated;
+GRANT EXECUTE ON FUNCTION track_referral_signup(TEXT, UUID, TEXT, TEXT, TEXT, NUMERIC, NUMERIC) TO anon;
 -- ============================================
 -- SECTION 22: VERIFICATION & COMMISSION FUNCTIONS
 -- ============================================
@@ -3563,7 +3772,7 @@ FROM admin_global_pricing
 WHERE is_active = TRUE;
 
 
--- Pending verifications view
+-- Pending verifications view (includes trial info)
 CREATE OR REPLACE VIEW affiliate_pending_verifications AS
 SELECT 
   ar.id,
@@ -3577,11 +3786,26 @@ SELECT
   ar.verification_end,
   ar.verification_end - NOW() as time_remaining,
   ar.subscription_plan,
-  ar.subscription_type
+  ar.subscription_type,
+  -- Trial info
+  p.is_in_trial,
+  p.trial_ends_at,
+  CASE 
+    WHEN p.trial_ends_at IS NOT NULL AND p.trial_ends_at > NOW()
+    THEN EXTRACT(DAY FROM (p.trial_ends_at - NOW()))::INTEGER
+    ELSE 0
+  END as trial_days_remaining,
+  -- Qualification timeline
+  CASE 
+    WHEN ar.first_payment_date IS NULL THEN 'awaiting_payment'
+    WHEN ar.verification_end > NOW() THEN 'verification_pending'
+    ELSE 'ready_to_qualify'
+  END as qualification_status
 FROM affiliate_referrals ar
 JOIN affiliates a ON ar.affiliate_id = a.id
-WHERE ar.status = 'verification_pending'
-ORDER BY ar.verification_end ASC;
+JOIN profiles p ON ar.referred_user_id = p.id
+WHERE ar.status IN ('pending', 'verification_pending')
+ORDER BY ar.verification_end ASC NULLS LAST;
 
 
 -- Applications queue view

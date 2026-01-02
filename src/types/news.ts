@@ -1,10 +1,15 @@
+// src/types/news.ts
+// הוסף את השדות האלה ל-NewsItem הקיים
+
 export type NewsItem = {
   id: string;
   headline: string;
   summary?: string;
   tickers: string[];
   source: string;
+  sourceLogo?: string;    // ✅ NEW - Logo URL for the source
   url: string;
+  imageUrl?: string;      // ✅ NEW - Article thumbnail/image
   publishedAt: string;
   importance: "high" | "medium" | "low";
   categories: ("earnings"|"macro"|"regulatory"|"mna"|"product"|"guidance"|"other")[];

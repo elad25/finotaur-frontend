@@ -363,16 +363,16 @@ BEGIN
     NEW.risk_percentage := 1.0;
   END IF;
   
-  -- 🔥 CRITICAL FIX: Set correct max_trades based on account type
-  IF NEW.max_trades IS NULL OR NEW.max_trades = 0 THEN
-    NEW.max_trades := CASE NEW.account_type
-      WHEN 'free' THEN 10        -- ✅ FREE = 10 lifetime
-      WHEN 'basic' THEN 25       -- BASIC = 25/month
-      WHEN 'trial' THEN 25       -- TRIAL = 25/month
-      WHEN 'premium' THEN 999999 -- PREMIUM = unlimited
-      ELSE 10
-    END;
-  END IF;
+-- Set correct max_trades based on account type
+IF NEW.max_trades IS NULL OR NEW.max_trades = 0 THEN
+  NEW.max_trades := CASE NEW.account_type
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'admin' THEN 999999
+    WHEN 'vip' THEN 999999
+    ELSE 25  -- Default = basic
+  END;
+END IF;
   
   RETURN NEW;
 END;
@@ -403,7 +403,6 @@ AS $$
 DECLARE
   v_display_name TEXT;
 BEGIN
-  -- Generate display name
   v_display_name := COALESCE(
     NEW.raw_user_meta_data->>'display_name',
     NEW.raw_user_meta_data->>'full_name',
@@ -411,46 +410,35 @@ BEGIN
     split_part(NEW.email, '@', 1)
   );
 
-  INSERT INTO public.profiles (
-    id, 
-    email, 
-    display_name,
+INSERT INTO public.profiles (
+    id, email, display_name,
     account_type, 
+    subscription_status,
+    is_in_trial,
+    trial_ends_at,
+    trial_used,
     max_trades, 
     trade_count, 
     current_month_trades_count,
     billing_cycle_start,
-    current_portfolio, 
-    total_pnl, 
-    initial_portfolio,
-    portfolio_size,
-    risk_mode,
-    risk_percentage,
-    role,
-    is_banned,
-    subscription_status,
-    created_at,
-    updated_at
+    current_portfolio, total_pnl, initial_portfolio,
+    portfolio_size, risk_mode, risk_percentage,
+    role, is_banned,
+    created_at, updated_at
   ) VALUES (
-    NEW.id,
-    NEW.email,
-    v_display_name,
-    'free',
-    10,
-    0,
-    0,
-    CURRENT_DATE,
-    10000,
-    0,
-    10000,
-    10000,
-    'percentage',
-    1.0,
-    'user',
-    FALSE,
-    'active',
-    NOW(),
-    NOW()
+    NEW.id, NEW.email, v_display_name,
+    'basic',                              -- חדש: מתחיל כ-basic
+    'trial',                              -- חדש: סטטוס trial
+    TRUE,                                 -- חדש: בתקופת trial
+    NOW() + INTERVAL '14 days',           -- חדש: 14 ימי trial
+TRUE,                                 -- ⚠️ CRITICAL: כבר השתמש ב-trial!
+    25,                                   -- חדש: 25 טריידים/חודש
+    0, 0,
+    CURRENT_DATE,                         -- חדש: billing מתחיל מהיום
+    10000, 0, 10000, 10000,
+    'percentage', 1.0,
+    'user', FALSE,
+    NOW(), NOW()
   )
   ON CONFLICT (id) DO UPDATE SET
     email = EXCLUDED.email,
@@ -459,14 +447,13 @@ BEGIN
   
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
-  -- Log error but don't fail signup
   RAISE WARNING 'handle_new_user failed for %: %', NEW.email, SQLERRM;
   RETURN NEW;
 END;
 $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
-'v9.5.0-FIXED: Creates profile on signup. Removed affiliate_code. Has error handling.';
+'v6.3.0: Creates profile with account_type=free. User must select Basic (14-day trial) or Premium.';
 
 DO $$
 BEGIN
@@ -845,7 +832,52 @@ BEGIN
   -- STEP 6: If trade is closed - calculate P&L
   -- ═══════════════════════════════════════
   
-  IF NEW.exit_price IS NOT NULL AND NEW.exit_price > 0 THEN
+  -- 🔥 RISK-ONLY MODE: Check if pnl was provided directly
+  IF NEW.input_mode = 'risk-only' THEN
+    
+    -- If pnl was provided, trade is closed
+    IF NEW.pnl IS NOT NULL THEN
+      -- Recalculate R values for consistency
+      IF NEW.risk_usd IS NOT NULL AND NEW.risk_usd > 0 THEN
+        NEW.actual_r := ROUND(NEW.pnl / NEW.risk_usd, 2);
+      END IF;
+      
+      IF v_user_one_r IS NOT NULL AND v_user_one_r > 0 THEN
+        NEW.actual_user_r := ROUND(NEW.pnl / v_user_one_r, 2);
+      END IF;
+      
+      -- Set outcome based on pnl
+      NEW.outcome := CASE
+        WHEN NEW.pnl > 0.01 THEN 'WIN'
+        WHEN NEW.pnl < -0.01 THEN 'LOSS'
+        ELSE 'BE'
+      END;
+      
+      IF NEW.close_at IS NULL THEN
+        NEW.close_at := NOW();
+      END IF;
+      
+      -- Update portfolio for closed risk-only trade
+      IF TG_OP = 'UPDATE' AND OLD.pnl IS NOT NULL THEN
+        v_old_pnl := COALESCE(OLD.pnl, 0);
+      END IF;
+      
+      UPDATE public.profiles
+      SET 
+        total_pnl = COALESCE(total_pnl, 0) - v_old_pnl + NEW.pnl,
+        current_portfolio = initial_portfolio + (COALESCE(total_pnl, 0) - v_old_pnl + NEW.pnl),
+        updated_at = NOW()
+      WHERE id = NEW.user_id;
+      
+    ELSE
+      -- Risk-Only without result = OPEN
+      NEW.outcome := 'OPEN';
+      NEW.actual_r := NULL;
+      NEW.actual_user_r := NULL;
+    END IF;
+    
+  -- 🔥 REGULAR MODE: Check exit_price
+  ELSIF NEW.exit_price IS NOT NULL AND NEW.exit_price > 0 THEN
     -- Calculate price difference
     IF NEW.side = 'LONG' THEN
       price_diff := NEW.exit_price - NEW.entry_price;
@@ -859,7 +891,7 @@ BEGIN
     gross_pnl := price_diff * NEW.quantity * multiplier;
     NEW.pnl := gross_pnl - COALESCE(NEW.fees, 0);
     
--- ✅ Calculate actual_user_r (User Rs achieved based on actual P&L)
+    -- Calculate actual_user_r (User Rs achieved based on actual P&L)
     IF v_user_one_r IS NOT NULL AND v_user_one_r > 0 THEN
       NEW.actual_user_r := ROUND(NEW.pnl / v_user_one_r, 2);
       -- Clear user_reward_r for closed trades (no longer relevant)
@@ -895,12 +927,11 @@ BEGIN
     WHERE id = NEW.user_id;
     
   ELSE
-    -- Trade is open
+    -- Trade is open (no exit_price and not risk-only with result)
     NEW.outcome := 'OPEN';
     NEW.pnl := NULL;
     NEW.actual_r := NULL;
   END IF;
-  
   -- ═══════════════════════════════════════
   -- STEP 7: Increment Trade Count (only on INSERT)
   -- ═══════════════════════════════════════
@@ -963,7 +994,275 @@ BEGIN
   RAISE NOTICE '      🔥 Closed trades: user_risk_r shows actual result';
 END $$;
 
+-- ===============================================
+-- SECTION 4: TRADE LIMIT FUNCTIONS (v9.4.4-FIX)
+-- ===============================================
+-- 🔥 CRITICAL: These functions are REQUIRED for RLS!
+-- 🔥 Using CREATE OR REPLACE to ensure they exist
+-- 🔥 Part 1 creates them, Part 2A ensures they're correct
+-- ===============================================
 
+DO $$
+BEGIN
+  RAISE NOTICE '[4/10] 🔒 Ensuring trade limit functions exist...';
+  RAISE NOTICE '      🔥 CRITICAL: Required for RLS INSERT policy!';
+  RAISE NOTICE '      ✅ get_trade_limit() - returns limit by plan';
+  RAISE NOTICE '      ✅ can_create_trade() - checks if user can create trade';
+  RAISE NOTICE '      ✅ get_remaining_trades() - returns remaining trades info';
+END $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- 📊 get_trade_limit - Returns trade limit based on account type
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.get_trade_limit(plan_type TEXT)
+RETURNS INTEGER
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  RETURN CASE LOWER(COALESCE(plan_type, 'basic'))
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'admin' THEN 999999
+    WHEN 'vip' THEN 999999
+    ELSE 25  -- Default = basic
+  END;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_trade_limit IS 
+'v6.3.0: basic=25, premium/admin/vip=unlimited, free=0. Trial is STATUS not account_type!';
+
+GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO service_role;
+
+COMMENT ON FUNCTION public.get_trade_limit IS 
+'v9.4.4: Returns trade limit based on account type. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 can_create_trade - Checks if user is under their trade limit
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.can_create_trade(user_id_param UUID)
+RETURNS BOOLEAN 
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_limit INTEGER;
+  v_trades_used INTEGER;
+BEGIN
+  SELECT 
+    account_type, role,
+    subscription_status,
+    COALESCE(is_in_trial, FALSE) as is_in_trial,
+    trial_ends_at,
+    subscription_expires_at,
+    max_trades,
+    COALESCE(current_month_trades_count, 0) as monthly_trades
+  INTO v_profile
+  FROM public.profiles
+  WHERE id = user_id_param;
+  
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- ✅ Admins = unlimited (by role)
+  IF v_profile.role IN ('admin', 'super_admin') THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- ✅ Admin/VIP = unlimited (by account_type)
+  IF v_profile.account_type IN ('admin', 'vip') THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- ✅ Premium = unlimited (if subscription active)
+  IF v_profile.account_type = 'premium' THEN
+    IF v_profile.subscription_status IN ('active', 'trial') THEN
+      RETURN TRUE;
+    END IF;
+    IF v_profile.subscription_status IN ('expired', 'cancelled') THEN
+      IF v_profile.subscription_expires_at IS NOT NULL 
+         AND v_profile.subscription_expires_at > NOW() THEN
+        RETURN TRUE;
+      END IF;
+      RETURN FALSE;
+    END IF;
+    RETURN TRUE;
+  END IF;
+  
+  -- ✅ Basic users - check subscription status AND limits
+  IF v_profile.account_type = 'basic' THEN
+    -- ✅ Check if subscription expired (must pay)
+    IF v_profile.subscription_status = 'expired' THEN
+      RETURN FALSE;
+    END IF;
+    
+    -- ✅ Check if trial expired (must pay)
+    IF v_profile.subscription_status = 'trial' OR v_profile.is_in_trial THEN
+      IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
+        RETURN FALSE;
+      END IF;
+    END IF;
+    
+    -- ✅ Check cancelled subscription
+    IF v_profile.subscription_status = 'cancelled' THEN
+      IF v_profile.subscription_expires_at IS NULL 
+         OR v_profile.subscription_expires_at < NOW() THEN
+        RETURN FALSE;
+      END IF;
+    END IF;
+    
+    -- ✅ Check monthly trade limit
+    v_limit := 25;
+    v_trades_used := v_profile.monthly_trades;
+    RETURN v_trades_used < v_limit;
+  END IF;
+  
+  -- ❌ FREE בוטל - Legacy FREE users יקבלו Trial
+  -- IF v_profile.account_type = 'free' THEN
+  --   RETURN FALSE;
+  -- END IF;
+  
+  -- ✅ Default: treat unknown as basic trial
+  RETURN v_profile.monthly_trades < 25;
+END;
+$$;
+
+COMMENT ON FUNCTION public.can_create_trade IS 
+'v6.3.0: Checks subscription_status, trial_ends_at, and monthly limits. Free users cannot create trades.';
+
+GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
+
+COMMENT ON FUNCTION public.can_create_trade IS 
+'v9.4.4-SECURE: Checks if user can create a trade based on their plan limits. Used by RLS policy for INSERT enforcement.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 📊 get_remaining_trades - Returns remaining trades info
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_remaining_trades(user_id_param UUID)
+RETURNS TABLE (
+  remaining INTEGER,
+  used INTEGER,
+  max_limit INTEGER,
+  can_create BOOLEAN,
+  account_type TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_limit INTEGER;
+  v_trades_used INTEGER;
+BEGIN
+  -- Get user profile
+  SELECT 
+    p.account_type,
+    p.role,
+    COALESCE(p.current_month_trades_count, 0) as monthly_trades,
+    COALESCE(p.trade_count, 0) as lifetime_trades
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = user_id_param;
+  
+  -- User not found
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 
+      0::INTEGER as remaining,
+      0::INTEGER as used,
+      10::INTEGER as max_limit,
+      FALSE as can_create,
+      'free'::TEXT as account_type;
+    RETURN;
+  END IF;
+  
+  -- Get limit
+  v_limit := public.get_trade_limit(v_profile.account_type);
+  
+  -- Determine trades used
+  IF v_profile.account_type = 'free' THEN
+    v_trades_used := v_profile.lifetime_trades;
+  ELSE
+    v_trades_used := v_profile.monthly_trades;
+  END IF;
+  
+  -- Admins/Premium = show as unlimited
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type = 'premium' THEN
+    RETURN QUERY SELECT 
+      999999::INTEGER as remaining,
+      v_trades_used::INTEGER as used,
+      999999::INTEGER as max_limit,
+      TRUE as can_create,
+      v_profile.account_type::TEXT;
+    RETURN;
+  END IF;
+  
+  -- Normal users
+  RETURN QUERY SELECT 
+    GREATEST(0, v_limit - v_trades_used)::INTEGER as remaining,
+    v_trades_used::INTEGER as used,
+    v_limit::INTEGER as max_limit,
+    (v_trades_used < v_limit) as can_create,
+    v_profile.account_type::TEXT;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO service_role;
+
+COMMENT ON FUNCTION public.get_remaining_trades IS 
+'v9.4.4: Returns detailed trade limit info for a user including remaining, used, max, and can_create flag.';
+
+-- ═══════════════════════════════════════════════════════════════
+-- ✅ VERIFY FUNCTIONS EXIST
+-- ═══════════════════════════════════════════════════════════════
+
+DO $$
+DECLARE
+  v_get_trade_limit BOOLEAN;
+  v_can_create_trade BOOLEAN;
+  v_get_remaining_trades BOOLEAN;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_trade_limit') INTO v_get_trade_limit;
+  SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'can_create_trade') INTO v_can_create_trade;
+  SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_remaining_trades') INTO v_get_remaining_trades;
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '╔════════════════════════════════════════╗';
+  RAISE NOTICE '║  ✅ SECTION 4 COMPLETE! (v9.4.4)      ║';
+  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔒 Trade Limit Functions:';
+  RAISE NOTICE '   get_trade_limit(): %', CASE WHEN v_get_trade_limit THEN '✅ EXISTS' ELSE '❌ MISSING!' END;
+  RAISE NOTICE '   can_create_trade(): %', CASE WHEN v_can_create_trade THEN '✅ EXISTS' ELSE '❌ MISSING!' END;
+  RAISE NOTICE '   get_remaining_trades(): %', CASE WHEN v_get_remaining_trades THEN '✅ EXISTS' ELSE '❌ MISSING!' END;
+  RAISE NOTICE '';
+  
+  IF v_get_trade_limit AND v_can_create_trade AND v_get_remaining_trades THEN
+    RAISE NOTICE '🎉 All trade limit functions ready!';
+    RAISE NOTICE '   RLS INSERT policy will work correctly!';
+  ELSE
+    RAISE WARNING '⚠️  Some functions missing! RLS might fail!';
+  END IF;
+  RAISE NOTICE '';
+END $$;
+
+-- ===============================================
+-- END OF SECTION 4
+-- ===============================================
 -- ===============================================
 -- SECTION 5: SEARCH & NOTES FUNCTIONS
 -- ===============================================
@@ -2039,23 +2338,41 @@ AS $$
 DECLARE
   v_count INTEGER := 0;
 BEGIN
+  -- 🔥 Step 1: Handle expired trials (Basic users with expired trial)
   UPDATE public.profiles
   SET 
-    account_type = 'free',
-    max_trades = 10,
-    subscription_id = NULL,
+    subscription_status = 'expired',
+    is_in_trial = FALSE,
     updated_at = NOW()
   WHERE 
-    account_type != 'free'
-    AND subscription_end_date IS NOT NULL
-    AND subscription_end_date < NOW()
-    AND (subscription_cancel_at_period_end = TRUE OR subscription_end_date < NOW() - INTERVAL '3 days');
+    account_type = 'basic'
+    AND subscription_status = 'trial'
+    AND trial_ends_at IS NOT NULL
+    AND trial_ends_at < NOW();
   
   GET DIAGNOSTICS v_count = ROW_COUNT;
+  
+  -- 🔥 Step 2: Handle expired paid subscriptions (3-day grace period)
+  UPDATE public.profiles
+  SET 
+    subscription_status = 'expired',
+    updated_at = NOW()
+  WHERE 
+    account_type IN ('basic', 'premium')
+    AND subscription_status = 'active'
+    AND subscription_expires_at IS NOT NULL
+    AND subscription_expires_at < NOW() - INTERVAL '3 days';
+  
+  -- ❌ Step 3 בוטל - לא מורידים ל-FREE יותר!
+  -- משתמשים נשארים basic עם subscription_status = 'expired'
+  -- הם פשוט לא יכולים ליצור טריידים עד שישלמו
   
   RETURN v_count;
 END;
 $$;
+
+COMMENT ON FUNCTION public.downgrade_expired_subscriptions IS 
+'v6.3.0: CRON job to handle expired trials and subscriptions. 3-day grace for paid, 7-day before downgrade to free.';
 
 COMMENT ON FUNCTION public.downgrade_expired_subscriptions IS 
 'v8.5.9: CRON job to downgrade expired subscriptions (3-day grace period)';
@@ -2066,7 +2383,7 @@ DROP FUNCTION IF EXISTS public.start_trial(UUID, INTEGER) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.start_trial(
   p_user_id UUID,
-  p_trial_days INTEGER DEFAULT 7
+  p_trial_days INTEGER DEFAULT 14  -- ✅ 14 ימים כברירת מחדל
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -2075,7 +2392,7 @@ AS $$
 DECLARE
   v_profile RECORD;
 BEGIN
-  SELECT account_type, trial_used INTO v_profile
+  SELECT account_type, trial_used, subscription_status INTO v_profile
   FROM public.profiles
   WHERE id = p_user_id;
   
@@ -2088,20 +2405,22 @@ BEGIN
     RAISE EXCEPTION 'Trial already used';
   END IF;
   
-  -- Only free users can start trial
-  IF v_profile.account_type != 'free' THEN
-    RAISE EXCEPTION 'Only free users can start trial';
+-- Only users with expired subscription can restart trial
+  IF v_profile.subscription_status NOT IN ('expired', 'cancelled') THEN
+    RAISE EXCEPTION 'Trial can only be started for expired/cancelled subscriptions';
   END IF;
   
   UPDATE public.profiles
   SET 
-    account_type = 'trial',
+    account_type = 'basic',              -- ✅ נכון! Trial הוא Basic עם status='trial'
+    subscription_status = 'trial',       -- ✅ חדש! Trial הוא STATUS
+    is_in_trial = TRUE,                  -- ✅ חדש! Flag לבדיקה מהירה
     trial_used = TRUE,
-    trial_start_date = NOW(),
-    subscription_end_date = NOW() + (p_trial_days || ' days')::INTERVAL,
+    trial_ends_at = NOW() + (p_trial_days || ' days')::INTERVAL,  -- ✅ שם נכון
     max_trades = 25,
     current_month_trades_count = 0,
     billing_cycle_start = CURRENT_DATE,
+    payment_provider = 'whop',           -- ✅ חדש! Whop הוא ה-provider
     updated_at = NOW()
   WHERE id = p_user_id;
   
@@ -2110,7 +2429,150 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.start_trial IS 
-'v8.5.9: Starts trial period (default 7 days, can only use once)';
+'v6.3.0: Starts 14-day trial. Sets account_type=basic, subscription_status=trial. Trial is a STATUS not account_type!';
+
+-- ===============================================
+-- 🆕 NEW: get_user_subscription_status - v6.3.0
+-- This is the RPC function that useSubscription.ts calls!
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_user_subscription_status(p_user_id UUID DEFAULT NULL)
+RETURNS TABLE (
+  -- Account info
+  account_type TEXT,
+  role TEXT,
+  
+  -- Subscription status
+  subscription_status TEXT,
+  subscription_interval TEXT,
+  subscription_expires_at TIMESTAMPTZ,
+  subscription_started_at TIMESTAMPTZ,
+  subscription_cancel_at_period_end BOOLEAN,
+  pending_downgrade_plan TEXT,
+  
+  -- Trial info
+  is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  trial_used BOOLEAN,
+  trial_days_remaining INTEGER,
+  
+  -- Trade limits
+  max_trades INTEGER,
+  remaining INTEGER,
+  used INTEGER,
+  plan TEXT,
+  reset_date TEXT,
+  
+  -- Portfolio & Risk
+  initial_portfolio NUMERIC,
+  current_portfolio NUMERIC,
+  portfolio_size NUMERIC,
+  total_pnl NUMERIC,
+  risk_mode TEXT,
+  risk_percentage NUMERIC,
+  fixed_risk_amount NUMERIC,
+  
+  -- Usage tracking
+  trade_count INTEGER,
+  current_month_trades_count INTEGER,
+  current_month_active_days INTEGER,
+  billing_cycle_start DATE,
+  
+  -- Payment provider
+  payment_provider TEXT,
+  whop_user_id TEXT,
+  whop_membership_id TEXT,
+  whop_product_id TEXT,
+  whop_plan_id TEXT,
+  whop_customer_email TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_profile RECORD;
+  v_limit INTEGER;
+  v_used INTEGER;
+  v_remaining INTEGER;
+  v_trial_days INTEGER;
+BEGIN
+  v_user_id := COALESCE(p_user_id, auth.uid());
+  
+  -- Get full profile
+  SELECT * INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = v_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+  
+  -- Calculate trade limits
+  v_limit := public.get_trade_limit(v_profile.account_type);
+  v_used := COALESCE(v_profile.current_month_trades_count, 0);
+  
+  -- For unlimited users
+  IF v_profile.role IN ('admin', 'super_admin') 
+     OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+    v_remaining := 999999;
+  ELSE
+    v_remaining := GREATEST(0, v_limit - v_used);
+  END IF;
+  
+  -- Calculate trial days remaining
+  IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW() THEN
+    v_trial_days := CEIL(EXTRACT(EPOCH FROM (v_profile.trial_ends_at - NOW())) / 86400)::INTEGER;
+  ELSE
+    v_trial_days := 0;
+  END IF;
+  
+  RETURN QUERY SELECT
+    v_profile.account_type::TEXT,
+    v_profile.role::TEXT,
+    v_profile.subscription_status::TEXT,
+    v_profile.subscription_interval::TEXT,
+    v_profile.subscription_expires_at,
+    v_profile.subscription_started_at,
+    COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+    v_profile.pending_downgrade_plan::TEXT,
+    COALESCE(v_profile.is_in_trial, FALSE),
+    v_profile.trial_ends_at,
+    COALESCE(v_profile.trial_used, FALSE),
+    v_trial_days,
+    v_limit,
+    v_remaining,
+    v_used,
+    v_profile.account_type::TEXT,
+    COALESCE(TO_CHAR(v_profile.billing_cycle_start, 'YYYY-MM-DD'), TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')),
+    COALESCE(v_profile.initial_portfolio, 10000),
+    COALESCE(v_profile.current_portfolio, 10000),
+    COALESCE(v_profile.portfolio_size, 10000),
+    COALESCE(v_profile.total_pnl, 0),
+    COALESCE(v_profile.risk_mode, 'percentage'),
+    v_profile.risk_percentage,
+    v_profile.fixed_risk_amount,
+    COALESCE(v_profile.trade_count, 0),
+    v_used,
+    COALESCE(v_profile.current_month_active_days, 0),
+    v_profile.billing_cycle_start,
+    v_profile.payment_provider::TEXT,
+    v_profile.whop_user_id::TEXT,
+    v_profile.whop_membership_id::TEXT,
+    v_profile.whop_product_id::TEXT,
+    v_profile.whop_plan_id::TEXT,
+    v_profile.whop_customer_email::TEXT;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
+
+COMMENT ON FUNCTION public.get_user_subscription_status IS 
+'v6.3.0: Returns complete subscription status for frontend useSubscription hook. Includes trial info, trade limits, and Whop details.';
 
 -- ✅ Get User Role (for admin checks)
 -- Drop all versions of get_user_role
@@ -2798,12 +3260,14 @@ BEGIN
   END IF;
   
   -- Calculate max_trades
+-- Calculate max_trades
   v_max_trades := CASE p_account_type
-    WHEN 'free' THEN 10
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
-    WHEN 'trial' THEN 25
-    ELSE 10
+    WHEN 'admin' THEN 999999
+    WHEN 'vip' THEN 999999
+    WHEN 'free' THEN 0          -- ✅ נכון! free = 0
+    ELSE 0                      -- ✅ נכון! default = 0
   END;
   
   UPDATE public.profiles

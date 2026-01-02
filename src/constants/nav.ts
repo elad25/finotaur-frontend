@@ -1,8 +1,15 @@
 // src/constants/nav.ts
 // =====================================================
-// FINOTAUR NAVIGATION CONFIG - v2.1.0
+// FINOTAUR NAVIGATION CONFIG - v2.1.2
 // =====================================================
 // 
+// 🔥 v2.1.2 CHANGES:
+// - LOCKED: Overview, Summary, Chart tabs
+// - UNLOCKED: Only War Zone and Top Secret remain open
+//
+// 🔥 v2.1.1 CHANGES:
+// - SWAPPED: Summary and Chart positions in all-markets subNav
+//
 // 🔥 v2.1.0 CHANGES:
 // - ADDED: hideForAdmin flag to NavItem interface
 // - UPDATED: Top Secret now hidden for admins (they use Admin version)
@@ -44,26 +51,25 @@ export const domains: Record<string, Domain> = {
     label: 'All Markets',
     locked: false,
     defaultPath: '/app/all-markets/warzone',
-    // 🔥 UPDATED subNav - All unlocked!
+    // 🔥 v2.1.2 - Only War Zone and Top Secret are unlocked
     subNav: [
-      { label: 'Overview', path: '/app/all-markets/overview', locked: false },
-      { label: 'Chart', path: '/app/all-markets/chart', locked: false },
-      { label: 'Summary', path: '/app/all-markets/summary', locked: false },
-      { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
-      { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },  // 🔐 Hidden for admins - they use Admin version
-      { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },  // 🔐 Admin only
+      { label: 'Overview', path: '/app/all-markets/overview', locked: true },      // 🔒 LOCKED
+      { label: 'Summary', path: '/app/all-markets/summary', locked: true },        // 🔒 LOCKED
+      { label: 'Chart', path: '/app/all-markets/chart', locked: true },            // 🔒 LOCKED
+      { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },      // ✅ OPEN
+      { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },  // ✅ OPEN
+      { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
-      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: false },
-      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: false },
-      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: false },
-      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: false },
-      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: false },
-      { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: false },
-      // 🔥 NEW: Pricing & Settings
-      { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: false },
-      { label: 'Settings', path: '/app/settings', icon: SettingsIcon, locked: false },
+      { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
+      { label: 'Heatmap', path: '/app/all-markets/heatmap', icon: Map, locked: true },
+      { label: 'Movers', path: '/app/all-markets/movers', icon: TrendingUp, locked: true },
+      { label: 'Sentiment', path: '/app/all-markets/sentiment', icon: Activity, locked: true },
+      { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
+      { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
+      { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: true },
+      { label: 'Settings', path: '/app/settings', icon: SettingsIcon, locked: true },  // Settings stays open
     ],
   },
 
@@ -167,11 +173,11 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // 🔥 MACRO - NOW UNLOCKED!
+  // 🔒 MACRO - NOW LOCKED
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: false, // ✅ UNLOCKED!
+    locked: true, // 🔒 LOCKED
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
     ],

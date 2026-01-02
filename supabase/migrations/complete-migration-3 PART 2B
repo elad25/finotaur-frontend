@@ -70,6 +70,13 @@ RETURNS TABLE (
   subscription_cancel_at_period_end BOOLEAN,
   subscription_started_at TIMESTAMPTZ,
   
+  -- ✅ Trial info (NEW!)
+    is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  trial_used BOOLEAN,
+  trial_days_remaining INTEGER,
+
+  
   -- Portfolio & Risk
   initial_portfolio NUMERIC,
   current_portfolio NUMERIC,
@@ -114,6 +121,7 @@ BEGIN
   SELECT 
     p.account_type,
     p.max_trades,
+
     p.subscription_interval,
     p.subscription_status,
     p.subscription_expires_at,
@@ -143,15 +151,19 @@ BEGIN
   WHERE p.id = user_id_param;
   
   -- Handle user not found
+-- Handle user not found
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      10::INTEGER, 0::INTEGER, 10::INTEGER, 'Free Plan'::TEXT, NULL::TEXT,
-      'free'::TEXT, 'user'::TEXT, 
-      NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      25::INTEGER, 0::INTEGER, 25::INTEGER, 'Basic Plan (Trial)'::TEXT, NULL::TEXT,
+      'basic'::TEXT, 'user'::TEXT, 
+      NULL::TEXT, 'trial'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      FALSE::BOOLEAN, NULL::TIMESTAMPTZ, FALSE::BOOLEAN, 14::INTEGER,
       10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
       'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
-      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT, TRUE,
-      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT,
+      FALSE::BOOLEAN,
+      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
+      NULL::TEXT;
     RETURN;
   END IF;
   
@@ -326,17 +338,16 @@ BEGIN
         WHERE sp2.user_id = sp.user_id AND sp2.period_end > NOW()
       )
   )
-  UPDATE public.profiles p
-  SET 
-    account_type = 'free',
-    max_trades = 10,
-    subscription_status = 'expired',
-    subscription_interval = NULL,
-    updated_at = NOW()
-  FROM expired_users eu
-  WHERE p.id = eu.user_id 
-    AND p.role NOT IN ('admin', 'super_admin')
-  RETURNING p.id, p.account_type, p.email;
+UPDATE public.profiles p
+SET 
+  previous_account_type = account_type,
+  subscription_status = 'expired',
+  subscription_interval = NULL,
+  updated_at = NOW()
+FROM expired_users eu
+WHERE p.id = eu.user_id 
+  AND p.role NOT IN ('admin', 'super_admin')
+RETURNING p.id, p.account_type, p.email;
 END;
 $$;
 
@@ -375,36 +386,34 @@ BEGIN
   END IF;
   
   IF p_immediate THEN
-    v_effective_date := NOW();
-    
-    UPDATE public.profiles
-    SET 
-      previous_account_type = account_type,
-      account_type = 'free',
-      max_trades = 10,
-      subscription_status = 'expired',
-      subscription_interval = NULL,
-      payment_provider = NULL,
-      subscription_expires_at = NOW(),
-      subscription_cancel_at_period_end = FALSE,  -- ✅ NEW!
-      cancellation_reason = p_reason,
-      cancellation_requested_at = NOW(),
-      cancellation_effective_date = NOW(),
-      updated_at = NOW()
-    WHERE id = p_user_id;
+  v_effective_date := NOW();
+  
+  UPDATE public.profiles
+  SET 
+    previous_account_type = account_type,
+    subscription_status = 'expired',
+    subscription_interval = NULL,
+    payment_provider = NULL,
+    subscription_expires_at = NOW(),
+    subscription_cancel_at_period_end = FALSE,
+    cancellation_reason = p_reason,
+    cancellation_requested_at = NOW(),
+    cancellation_effective_date = NOW(),
+    updated_at = NOW()
+  WHERE id = p_user_id;
   ELSE
     -- Graceful cancellation - cancel at period end
     v_effective_date := COALESCE(v_profile.subscription_expires_at, NOW());
     
-    UPDATE public.profiles
+UPDATE public.profiles
     SET 
-      subscription_status = 'cancelled',
-      subscription_cancel_at_period_end = TRUE,  -- ✅ NEW!
-      cancellation_reason = p_reason,
-      cancellation_requested_at = NOW(),
-      cancellation_effective_date = v_effective_date,
+      previous_account_type = v_user.account_type,
+      subscription_status = 'expired',
+      subscription_interval = NULL,
+      subscription_cancel_at_period_end = FALSE,
+      payment_provider = NULL,
       updated_at = NOW()
-    WHERE id = p_user_id;
+    WHERE id = v_user.id;
   END IF;
   
   -- Log to subscription_changes
@@ -499,17 +508,18 @@ BEGIN
     ORDER BY p.subscription_expires_at ASC
     LIMIT 1000
   LOOP
-    UPDATE public.profiles
-    SET 
-      previous_account_type = v_user.account_type,
-      account_type = 'free',
-      max_trades = 10,
-      subscription_status = 'expired',
-      subscription_interval = NULL,
-      subscription_cancel_at_period_end = FALSE,
-      payment_provider = NULL,
-      updated_at = NOW()
-    WHERE id = v_user.id;
+UPDATE public.profiles
+SET 
+  previous_account_type = v_user.account_type,
+  -- ❌ לא משנים ל-free
+  -- account_type = 'free',
+  -- max_trades = 0,
+  subscription_status = 'expired',   -- ✅ רק משנים סטטוס
+  subscription_interval = NULL,
+  subscription_cancel_at_period_end = FALSE,
+  payment_provider = NULL,
+  updated_at = NOW()
+WHERE id = v_user.id;
     
     -- Log the change
     INSERT INTO public.subscription_changes (
@@ -975,9 +985,10 @@ BEGIN
   END IF;
   
   -- Validate account type
-  IF p_account_type NOT IN ('free', 'basic', 'premium', 'trial') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Invalid account type: ' || p_account_type);
-  END IF;
+  -- Validate account type - ❌ FREE בוטל
+IF p_account_type NOT IN ('basic', 'premium', 'trial') THEN
+  RETURN jsonb_build_object('success', false, 'error', 'Invalid account type: ' || p_account_type);
+END IF;
 
   -- Validate subscription interval (only required for non-free)
   IF p_account_type != 'free' AND p_subscription_interval NOT IN ('monthly', 'yearly') THEN
@@ -1002,13 +1013,16 @@ BEGIN
     v_max_trades := public.get_trade_limit(p_account_type);
   EXCEPTION WHEN undefined_function THEN
     -- Fallback if function doesn't exist
-    v_max_trades := CASE p_account_type
-      WHEN 'free' THEN 10
-      WHEN 'basic' THEN 25
-      WHEN 'premium' THEN 999999
-      WHEN 'trial' THEN 25
-      ELSE 10
-    END;
+  -- Calculate max_trades
+  v_max_trades := CASE p_account_type
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'admin' THEN 999999
+    WHEN 'vip' THEN 999999
+    -- ❌ FREE בוטל
+    -- WHEN 'free' THEN 0
+    ELSE 25                     -- ✅ Default = basic
+  END;
   END;
   
   -- Update profile (uses subscription_expires_at - FIXED!)

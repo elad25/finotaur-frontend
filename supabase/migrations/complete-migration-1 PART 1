@@ -134,7 +134,6 @@ DROP FUNCTION IF EXISTS public.admin_reset_trade_count(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_toggle_user_ban(UUID, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_update_subscription(UUID, TEXT, TEXT, TEXT, TIMESTAMPTZ) CASCADE;
 DROP FUNCTION IF EXISTS public.calculate_trade_outcome() CASCADE;
-DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.check_expired_subscriptions() CASCADE;
 DROP FUNCTION IF EXISTS public.check_usage_warning(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.close_tradingview_trade(UUID, TEXT, TEXT, NUMERIC) CASCADE;
@@ -151,7 +150,6 @@ DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.get_revenue_analytics(INTEGER) CASCADE;
 DROP FUNCTION IF EXISTS public.get_subscription_breakdown() CASCADE;
 DROP FUNCTION IF EXISTS public.get_trade_details(UUID) CASCADE;
-DROP FUNCTION IF EXISTS public.get_trade_limit(TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.get_trades_by_broker() CASCADE;
 DROP FUNCTION IF EXISTS public.get_user_detailed_stats(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.get_user_referral_stats(UUID) CASCADE;
@@ -251,7 +249,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS fixed_risk_amount DECIMAL(1
 
 -- Add all other columns (IF NOT EXISTS pattern)
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS account_type TEXT DEFAULT 'free';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS account_type TEXT DEFAULT 'basic';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS subscription_interval TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'active';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS subscription_started_at TIMESTAMPTZ;
@@ -267,6 +265,7 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cancellation_effective_date
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS trial_start_date TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_in_trial BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS login_count INTEGER DEFAULT 0;
@@ -319,9 +318,39 @@ ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check 
   CHECK (role IN ('user', 'admin', 'super_admin'));
 
+-- 🔥 FIX: Clean invalid account_type values BEFORE adding constraint
+UPDATE public.profiles 
+SET 
+  account_type = 'basic',
+  is_in_trial = TRUE,
+  trial_used = TRUE,
+  trial_start_date = NOW(),
+  trial_ends_at = NOW() + INTERVAL '14 days',
+  subscription_status = 'trial',
+  max_trades = 25,
+  current_month_trades_count = 0,
+  billing_cycle_start = CURRENT_DATE
+WHERE account_type = 'free';
+
+-- Step 2: Migrate old 'trial' account_type to 'basic' with trial status
+UPDATE public.profiles 
+SET 
+  account_type = 'basic',
+  subscription_status = 'trial'
+WHERE account_type = 'trial';
+
+-- Step 3: Clean any remaining invalid values
+UPDATE public.profiles 
+SET 
+  account_type = 'basic',
+  subscription_status = 'expired'
+WHERE account_type IS NULL 
+   OR account_type NOT IN ('basic', 'premium', 'admin', 'vip');
+
+-- ✅ זה כבר נכון! אין 'free' ב-constraint
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_account_type_check 
-  CHECK (account_type IN ('free', 'basic', 'premium', 'trial'));
+CHECK (account_type IN ('basic', 'premium', 'admin', 'vip'));
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_subscription_interval_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_subscription_interval_check 
@@ -331,12 +360,25 @@ ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_subscription_stat
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_subscription_status_check 
   CHECK (subscription_status IN ('trial', 'active', 'expired', 'cancelled'));
 
+-- 🔥 FIX: Clean invalid subscription_interval values BEFORE adding constraint
+-- Free users should have NULL interval
+UPDATE public.profiles 
+SET subscription_interval = NULL 
+WHERE account_type = 'free' 
+  AND subscription_interval IS NOT NULL;
+
+-- Paid users (basic/premium) must have an interval - default to 'monthly'
+UPDATE public.profiles 
+SET subscription_interval = 'monthly' 
+WHERE account_type IN ('basic', 'premium') 
+  AND subscription_interval IS NULL;
+
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS check_paid_has_interval;
 ALTER TABLE public.profiles ADD CONSTRAINT check_paid_has_interval 
   CHECK (
-    (account_type = 'free' AND subscription_interval IS NULL) OR
     (account_type IN ('basic', 'premium') AND subscription_interval IS NOT NULL) OR
-    (account_type = 'trial')
+    (account_type IN ('trial', 'admin', 'vip')) OR
+    (account_type IS NULL)  -- New users without subscription
   );
 
 -- 💰 v9.4.4: FIX existing invalid payment_provider values BEFORE adding constraint
@@ -509,10 +551,18 @@ ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS screenshot_url TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS screenshots TEXT[] DEFAULT '{}';
 
+-- 🆕 v9.4.6: Input mode for Risk-Only feature
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS input_mode TEXT DEFAULT 'summary';
+
+-- Drop constraint first (if exists) to avoid errors on re-run
+ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS trades_input_mode_check;
+ALTER TABLE public.trades ADD CONSTRAINT trades_input_mode_check 
+  CHECK (input_mode IN ('summary', 'risk-only') OR input_mode IS NULL);
+
 -- Migrate old screenshot_url to screenshots array
 UPDATE public.trades 
 SET screenshots = ARRAY[screenshot_url]
-WHERE screenshot_url IS NOT NULL 
+WHERE screenshot_url IS NOT NULL
   AND screenshot_url != '' 
   AND screenshots = '{}';
 
@@ -1247,7 +1297,7 @@ COMMENT ON COLUMN public.payment_history.metadata IS 'v9.4.3: Additional payment
 CREATE TABLE IF NOT EXISTS public.subscription_periods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  plan TEXT NOT NULL CHECK (plan IN ('free', 'basic', 'premium')),
+  plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
   whop_transaction_id TEXT,
   period_start TIMESTAMPTZ NOT NULL,
   period_end TIMESTAMPTZ NOT NULL,
@@ -1752,10 +1802,12 @@ BEGIN
   RAISE NOTICE '      🔧 can_create_trade() - checks if user can create trade';
   RAISE NOTICE '      🔧 get_remaining_trades() - returns remaining trades info';
 END $$;
-
 -- ═══════════════════════════════════════════════════════════════
 -- 📊 get_trade_limit - Returns trade limit based on account type
 -- ═══════════════════════════════════════════════════════════════
+
+-- 🔥 FIX: Drop existing function first (parameter name conflict)
+DROP FUNCTION IF EXISTS public.get_trade_limit(TEXT) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.get_trade_limit(plan_type TEXT)
 RETURNS INTEGER
@@ -1763,12 +1815,12 @@ LANGUAGE plpgsql
 IMMUTABLE
 AS $$
 BEGIN
-  RETURN CASE LOWER(COALESCE(plan_type, 'free'))
-    WHEN 'free' THEN 10
-    WHEN 'basic' THEN 25
-    WHEN 'trial' THEN 25
-    WHEN 'premium' THEN 999999
-    ELSE 10
+RETURN CASE LOWER(COALESCE(plan_type, 'basic'))
+  WHEN 'basic' THEN 25
+  WHEN 'premium' THEN 999999
+  WHEN 'admin' THEN 999999
+  WHEN 'vip' THEN 999999
+  ELSE 25  -- Default = basic
   END;
 END;
 $$;
@@ -1783,6 +1835,9 @@ COMMENT ON FUNCTION public.get_trade_limit IS
 -- 🔒 can_create_trade - Checks if user is under their trade limit
 -- ═══════════════════════════════════════════════════════════════
 
+DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
+
+
 CREATE OR REPLACE FUNCTION public.can_create_trade(user_id_param UUID)
 RETURNS BOOLEAN 
 LANGUAGE plpgsql
@@ -1795,45 +1850,77 @@ DECLARE
   v_limit INTEGER;
   v_trades_used INTEGER;
 BEGIN
-  -- Get user profile
   SELECT 
     account_type,
     role,
-    max_trades,
-    COALESCE(current_month_trades_count, 0) as monthly_trades,
-    COALESCE(trade_count, 0) as lifetime_trades
+    subscription_status,
+    COALESCE(is_in_trial, FALSE) as is_in_trial,
+    trial_ends_at,
+    subscription_expires_at,
+    COALESCE(current_month_trades_count, 0) as monthly_trades
   INTO v_profile
   FROM public.profiles
   WHERE id = user_id_param;
   
-  -- User not found = cannot create
   IF NOT FOUND THEN
     RETURN FALSE;
   END IF;
   
-  -- Admins = unlimited
+  -- Admins = unlimited (by role)
   IF v_profile.role IN ('admin', 'super_admin') THEN
     RETURN TRUE;
   END IF;
   
-  -- Premium = unlimited
-  IF v_profile.account_type = 'premium' THEN
+  -- Admin/VIP = unlimited (by account_type)
+  IF v_profile.account_type IN ('admin', 'vip') THEN
     RETURN TRUE;
   END IF;
   
-  -- Get limit based on account type
-  v_limit := public.get_trade_limit(v_profile.account_type);
-  
-  -- FREE users: check lifetime trades (never resets)
-  IF v_profile.account_type = 'free' THEN
-    v_trades_used := v_profile.lifetime_trades;
-  -- BASIC/TRIAL: check monthly trades (resets each billing cycle)
-  ELSE
-    v_trades_used := v_profile.monthly_trades;
+  -- Premium = unlimited (if subscription active)
+  IF v_profile.account_type = 'premium' THEN
+    IF v_profile.subscription_status IN ('active', 'trial') THEN
+      RETURN TRUE;
+    END IF;
+    IF v_profile.subscription_status IN ('expired', 'cancelled') THEN
+      IF v_profile.subscription_expires_at IS NOT NULL 
+         AND v_profile.subscription_expires_at > NOW() THEN
+        RETURN TRUE;
+      END IF;
+      RETURN FALSE;
+    END IF;
+    RETURN TRUE;
   END IF;
   
-  -- Return TRUE if under limit
-  RETURN v_trades_used < v_limit;
+  -- Basic users - check subscription status AND limits
+  IF v_profile.account_type = 'basic' THEN
+    -- Check if subscription expired (must pay)
+    IF v_profile.subscription_status = 'expired' THEN
+      RETURN FALSE;
+    END IF;
+    
+    -- Check if trial expired (must pay)
+    IF v_profile.subscription_status = 'trial' OR v_profile.is_in_trial THEN
+      IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
+        RETURN FALSE;
+      END IF;
+    END IF;
+    
+    -- Check cancelled subscription
+    IF v_profile.subscription_status = 'cancelled' THEN
+      IF v_profile.subscription_expires_at IS NULL 
+         OR v_profile.subscription_expires_at < NOW() THEN
+        RETURN FALSE;
+      END IF;
+    END IF;
+    
+    -- Check monthly trade limit
+    v_limit := 25;
+    v_trades_used := v_profile.monthly_trades;
+    RETURN v_trades_used < v_limit;
+  END IF;
+  
+  -- Default: treat unknown as basic trial
+  RETURN v_profile.monthly_trades < 25;
 END;
 $$;
 
@@ -1853,7 +1940,10 @@ RETURNS TABLE (
   used INTEGER,
   max_limit INTEGER,
   can_create BOOLEAN,
-  account_type TEXT
+  account_type TEXT,
+  is_in_trial BOOLEAN,
+  trial_days_remaining INTEGER,
+  needs_subscription BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -1864,56 +1954,77 @@ DECLARE
   v_profile RECORD;
   v_limit INTEGER;
   v_trades_used INTEGER;
+  v_trial_days INTEGER;
+  v_needs_sub BOOLEAN;
 BEGIN
-  -- Get user profile
   SELECT 
     p.account_type,
     p.role,
-    COALESCE(p.current_month_trades_count, 0) as monthly_trades,
-    COALESCE(p.trade_count, 0) as lifetime_trades
+    p.subscription_status,
+    p.is_in_trial,
+    p.trial_ends_at,
+    COALESCE(p.current_month_trades_count, 0) as monthly_trades
   INTO v_profile
   FROM public.profiles p
   WHERE p.id = user_id_param;
   
-  -- User not found
+  -- ✅ FIXED: User not found - return 'none', not 'free'
+  -- User not found - return basic defaults
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      0::INTEGER as remaining,
-      0::INTEGER as used,
-      10::INTEGER as max_limit,
-      FALSE as can_create,
-      'free'::TEXT as account_type;
+      0::INTEGER,
+      0::INTEGER,
+      25::INTEGER,  -- Default to basic limit
+      FALSE,
+      'basic'::TEXT,
+      FALSE,
+      NULL::INTEGER,
+      TRUE;  -- needs_subscription = true
     RETURN;
   END IF;
-  
-  -- Get limit
   v_limit := public.get_trade_limit(v_profile.account_type);
   
-  -- Determine trades used
-  IF v_profile.account_type = 'free' THEN
-    v_trades_used := v_profile.lifetime_trades;
+  -- ✅ FIXED: All plans use monthly trades
+  v_trades_used := v_profile.monthly_trades;
+  
+  -- Calculate trial days
+  IF v_profile.is_in_trial AND v_profile.trial_ends_at IS NOT NULL THEN
+    v_trial_days := GREATEST(0, EXTRACT(DAY FROM v_profile.trial_ends_at - NOW())::INTEGER);
   ELSE
-    v_trades_used := v_profile.monthly_trades;
+    v_trial_days := NULL;
   END IF;
   
-  -- Admins/Premium = show as unlimited
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type = 'premium' THEN
+  -- Check if needs subscription
+  v_needs_sub := (
+    v_profile.subscription_status IS NULL OR
+    v_profile.subscription_status IN ('expired', 'cancelled') OR
+    v_profile.account_type IS NULL
+  );
+  
+  -- Premium/Admin = unlimited
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
     RETURN QUERY SELECT 
-      999999::INTEGER as remaining,
-      v_trades_used::INTEGER as used,
-      999999::INTEGER as max_limit,
-      TRUE as can_create,
-      v_profile.account_type::TEXT;
+      999999::INTEGER,
+      v_trades_used::INTEGER,
+      999999::INTEGER,
+      TRUE,
+      v_profile.account_type::TEXT,
+      COALESCE(v_profile.is_in_trial, FALSE),
+      v_trial_days,
+      FALSE;
     RETURN;
   END IF;
   
-  -- Normal users
+  -- Basic/Trial users
   RETURN QUERY SELECT 
-    GREATEST(0, v_limit - v_trades_used)::INTEGER as remaining,
-    v_trades_used::INTEGER as used,
-    v_limit::INTEGER as max_limit,
-    (v_trades_used < v_limit) as can_create,
-    v_profile.account_type::TEXT;
+    GREATEST(0, v_limit - v_trades_used)::INTEGER,
+    v_trades_used::INTEGER,
+    v_limit::INTEGER,
+    (v_trades_used < v_limit AND NOT v_needs_sub),
+    COALESCE(v_profile.account_type, 'none')::TEXT,
+    COALESCE(v_profile.is_in_trial, FALSE),
+    v_trial_days,
+    v_needs_sub;
 END;
 $$;
 
@@ -2107,8 +2218,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   id = auth.uid()
-  AND account_type = 'free'
-  AND payment_provider IS NULL
+  AND (account_type IS NULL OR account_type IN ('basic', 'trial'))
 );
 
 -- UPDATE Policy for own profile
@@ -2454,7 +2564,37 @@ BEGIN
   RAISE NOTICE '🔐 rls_check_admin(): %', CASE WHEN rls_check_admin_exists THEN '✅' ELSE '❌' END;
   RAISE NOTICE '';
 END $$;
+-- ═══════════════════════════════════════════════════════════════
+-- 🔥 ADMIN SETUP - Set specific user as Super Admin
+-- ═══════════════════════════════════════════════════════════════
 
+DO $$
+DECLARE
+  v_admin_email TEXT := 'elad2550@gmail.com';  -- 👈 שנה לאימייל שלך!
+  v_admin_id UUID;
+BEGIN
+  -- Find user by email
+  SELECT id INTO v_admin_id
+  FROM public.profiles
+  WHERE email = v_admin_email;
+  
+  IF v_admin_id IS NOT NULL THEN
+    UPDATE public.profiles
+    SET 
+      role = 'super_admin',
+      account_type = 'admin',
+      subscription_status = 'active',
+      subscription_expires_at = '2099-12-31'::TIMESTAMPTZ,
+      max_trades = 999999,
+      is_banned = FALSE,
+      updated_at = NOW()
+    WHERE id = v_admin_id;
+    
+    RAISE NOTICE '✅ Admin setup complete for: %', v_admin_email;
+  ELSE
+    RAISE NOTICE '⚠️  User not found: %. Admin will need to be set manually after registration.', v_admin_email;
+  END IF;
+END $$;
 -- ===============================================
 -- END OF PART 1/2 - v9.4.3-FIXED
 -- ===============================================

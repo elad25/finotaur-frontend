@@ -441,7 +441,9 @@ END $$;
 -- ═══════════════════════════════════════════════════════════════
 -- 2.3: Payment Analytics View
 -- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.payment_analytics AS
+CREATE OR REPLACE VIEW public.payment_analytics 
+WITH (security_invoker = true)
+AS
 SELECT 
   plan, 
   status,
@@ -460,7 +462,9 @@ COMMENT ON VIEW public.payment_analytics IS
 -- 2.4: Active Subscriptions View
 -- 🔄 SYNCED: Uses subscription_expires_at (not subscription_end_date)
 -- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.active_subscriptions AS
+CREATE OR REPLACE VIEW public.active_subscriptions 
+WITH (security_invoker = true)
+AS
 SELECT 
   sp.user_id, 
   sp.plan, 
@@ -490,7 +494,9 @@ COMMENT ON VIEW public.active_subscriptions IS
 -- ═══════════════════════════════════════════════════════════════
 -- 2.5: Pricing Info View
 -- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.pricing_info AS
+CREATE OR REPLACE VIEW public.pricing_info 
+WITH (security_invoker = true)
+AS
 SELECT 'basic' as plan, 'monthly' as interval, 19.99 as price, 19.99 as monthly_equivalent
 UNION ALL
 SELECT 'basic' as plan, 'yearly' as interval, 149.00 as price, 12.42 as monthly_equivalent
@@ -510,7 +516,9 @@ COMMENT ON VIEW public.pricing_info IS
 -- ═══════════════════════════════════════════════════════════════
 -- 🆕 v9.4.2: Archived Users View
 -- ═══════════════════════════════════════════════════════════════
-CREATE OR REPLACE VIEW public.archived_users_view AS
+CREATE OR REPLACE VIEW public.archived_users_view 
+WITH (security_invoker = true)
+AS
 SELECT 
   pa.id,
   pa.email,
@@ -590,7 +598,9 @@ END $$;
 -- 2.8.2: Revenue Analytics View
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE VIEW public.revenue_analytics_view AS
+CREATE OR REPLACE VIEW public.revenue_analytics_view 
+WITH (security_invoker = true)
+AS
 WITH monthly_revenue AS (
   SELECT 
     DATE_TRUNC('month', created_at) as month,
@@ -623,7 +633,9 @@ COMMENT ON VIEW public.revenue_analytics_view IS
 -- 2.8.3: Proration Impact View
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE VIEW public.proration_impact_view AS
+CREATE OR REPLACE VIEW public.proration_impact_view 
+WITH (security_invoker = true)
+AS
 SELECT 
   DATE_TRUNC('month', created_at) as month,
   COUNT(*) FILTER (WHERE is_prorated = TRUE) as prorated_count,
@@ -647,7 +659,9 @@ COMMENT ON VIEW public.proration_impact_view IS
 -- 2.8.4: Cancellation Analytics View
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE VIEW public.cancellation_analytics_view AS
+CREATE OR REPLACE VIEW public.cancellation_analytics_view 
+WITH (security_invoker = true)
+AS
 SELECT 
   DATE_TRUNC('month', created_at) as month,
   from_plan,
@@ -680,7 +694,9 @@ COMMENT ON VIEW public.cancellation_analytics_view IS
 -- 2.8.5: Upgrade/Downgrade Flow View
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE VIEW public.subscription_flow_view AS
+CREATE OR REPLACE VIEW public.subscription_flow_view 
+WITH (security_invoker = true)
+AS
 SELECT 
   DATE_TRUNC('week', created_at) as week,
   change_type,
@@ -810,7 +826,44 @@ $$;
 GRANT EXECUTE ON FUNCTION public.archive_soft_deleted_users() TO service_role;
 GRANT EXECUTE ON FUNCTION public.restore_user_from_archive(UUID, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.permanent_delete_from_archive(UUID, UUID) TO authenticated;
-
+-- ============================================
+-- SECTION 3.0: VERIFY WHOP COLUMNS EXIST
+-- ============================================
+DO $$
+BEGIN
+  -- Add whop columns if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'whop_user_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN whop_user_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'whop_membership_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'whop_product_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN whop_product_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'whop_plan_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN whop_plan_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'whop_customer_email') THEN
+    ALTER TABLE public.profiles ADD COLUMN whop_customer_email TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'pending_downgrade_plan') THEN
+    ALTER TABLE public.profiles ADD COLUMN pending_downgrade_plan TEXT;
+  END IF;
+  
+  RAISE NOTICE '✅ Verified all Whop columns exist in profiles';
+END $$;
 -- ===============================================
 -- 🆕 3.1: UNIFIED get_user_subscription_status v6.0.0
 -- ===============================================
@@ -916,12 +969,12 @@ BEGIN
   FROM public.profiles p
   WHERE p.id = user_id_param;
   
-  -- Handle user not found
+-- Handle user not found
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      10::INTEGER, 0::INTEGER, 10::INTEGER, 'Free Plan'::TEXT, NULL::TEXT,
-      'free'::TEXT, 'user'::TEXT, 
-      NULL::TEXT, 'active'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
+      25::INTEGER, 0::INTEGER, 25::INTEGER, 'Basic Plan (Trial)'::TEXT, NULL::TEXT,
+      'basic'::TEXT, 'user'::TEXT, 
+      NULL::TEXT, 'trial'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
       10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
       'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
       0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT, TRUE,
@@ -1055,7 +1108,7 @@ DROP VIEW IF EXISTS public.subscription_health_view CASCADE;
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE VIEW public.admin_stats_view 
-WITH (security_invoker = false)
+WITH (security_invoker = true)
 AS
 WITH 
   admin_check AS (
@@ -1166,9 +1219,8 @@ COMMENT ON VIEW public.admin_stats_view IS
 -- ═══════════════════════════════════════════════════════════════
 -- 3.3: RECREATE ADMIN USERS LIST VIEW WITH BUILT-IN SECURITY
 -- ═══════════════════════════════════════════════════════════════
-
 CREATE OR REPLACE VIEW public.admin_users_list_view 
-WITH (security_invoker = false)
+WITH (security_invoker = true)
 AS
 SELECT 
   CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.id ELSE NULL END as id,
@@ -1244,7 +1296,7 @@ COMMENT ON VIEW public.admin_users_list_view IS
 -- ═══════════════════════════════════════════════════════════════
 
 CREATE OR REPLACE VIEW public.subscription_health_view 
-WITH (security_invoker = false)
+WITH (security_invoker = true)
 AS
 SELECT 
   CASE WHEN (SELECT role IN ('admin', 'super_admin') FROM public.profiles WHERE id = auth.uid()) THEN p.id ELSE NULL END as user_id,
@@ -1691,7 +1743,7 @@ BEGIN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
   
-  RETURN QUERY SELECT * FROM public.subscription_health_view WHERE shv.user_id IS NOT NULL;
+RETURN QUERY SELECT * FROM public.subscription_health_view shv WHERE shv.user_id IS NOT NULL;
 END;
 $$;
 
@@ -1752,18 +1804,19 @@ END $$;
 
 -- Fix profiles defaults
 UPDATE public.profiles SET role = 'user' WHERE role IS NULL;
-UPDATE public.profiles SET account_type = 'free' 
-WHERE account_type IS NULL OR account_type NOT IN ('free', 'basic', 'premium', 'trial');
+UPDATE public.profiles SET account_type = 'basic' 
+WHERE account_type IS NULL OR account_type NOT IN ('basic', 'premium', 'admin', 'vip');
 UPDATE public.profiles SET subscription_status = 'active' WHERE subscription_status IS NULL;
 
 -- ✅ FIXED: Set correct trade limits per account type
+-- ✅ FIXED: Set correct trade limits per account type
 UPDATE public.profiles 
 SET max_trades = CASE account_type
-  WHEN 'free' THEN 10
   WHEN 'basic' THEN 25
-  WHEN 'trial' THEN 25
   WHEN 'premium' THEN 999999
-  ELSE 10
+  WHEN 'admin' THEN 999999
+  WHEN 'vip' THEN 999999
+  ELSE 25
 END
 WHERE max_trades IS NULL OR max_trades = 0;
 
@@ -1852,6 +1905,67 @@ BEGIN
   END IF;
 END $$;
 
+
+-- ============================================
+-- VERIFY TRIAL COLUMNS EXIST (should be from Part 1)
+-- ============================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'is_in_trial') THEN
+    ALTER TABLE public.profiles ADD COLUMN is_in_trial BOOLEAN DEFAULT FALSE;
+    RAISE NOTICE '✅ Added is_in_trial column';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'trial_ends_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN trial_ends_at TIMESTAMPTZ;
+    RAISE NOTICE '✅ Added trial_ends_at column';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'trial_used') THEN
+    ALTER TABLE public.profiles ADD COLUMN trial_used BOOLEAN DEFAULT FALSE;
+    RAISE NOTICE '✅ Added trial_used column';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'trial_start_date') THEN
+    ALTER TABLE public.profiles ADD COLUMN trial_start_date TIMESTAMPTZ;
+    RAISE NOTICE '✅ Added trial_start_date column';
+  END IF;
+END $$;
+-- ===============================================
+-- 🆕 SECTION 4.5: MIGRATE FREE USERS TO BASIC TRIAL
+-- ===============================================
+
+DO $$
+DECLARE
+  v_affected_users INTEGER;
+BEGIN
+  RAISE NOTICE '🔄 Migrating FREE users to BASIC with 14-day trial...';
+  
+  UPDATE public.profiles
+  SET 
+    account_type = 'basic',
+    subscription_status = 'trial',
+    is_in_trial = TRUE,
+    trial_ends_at = NOW() + INTERVAL '14 days',
+    trial_used = TRUE,
+    max_trades = 25,
+    current_month_trades_count = COALESCE(current_month_trades_count, 0),
+    billing_cycle_start = COALESCE(billing_cycle_start, CURRENT_DATE),
+    updated_at = NOW()
+  WHERE account_type = 'free';
+  
+  GET DIAGNOSTICS v_affected_users = ROW_COUNT;
+  
+  IF v_affected_users > 0 THEN
+    RAISE NOTICE '✅ Migrated % FREE users to BASIC trial', v_affected_users;
+  ELSE
+    RAISE NOTICE 'ℹ️  No FREE users found to migrate';
+  END IF;
+END $$;
 -- ===============================================
 -- SECTION 5: DATA MIGRATION & FIXES (TRADES)
 -- ===============================================
@@ -2461,7 +2575,389 @@ BEGIN
   RAISE NOTICE '═══════════════════════════════════════════════';
   RAISE NOTICE '';
 END $$;
+-- ===============================================
+-- 🆕 SECTION 11: TRIAL MANAGEMENT FUNCTIONS
+-- ===============================================
+-- Added for FREE → BASIC Trial migration
+-- ===============================================
 
+DO $$
+BEGIN
+  RAISE NOTICE '[11/10] 🔧 Creating trial management functions...';
+END $$;
+
+-- ===============================================
+-- 11.1: can_create_trade - עם בדיקת Trial
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.can_create_trade(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    account_type,
+    subscription_status,
+    is_in_trial,
+    trial_ends_at,
+    max_trades,
+    current_month_trades_count,
+    role
+  INTO v_profile
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  -- User not found
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Admins always can
+  IF v_profile.role IN ('admin', 'super_admin') THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- Premium/VIP always can
+  IF v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+    RETURN TRUE;
+  END IF;
+  
+  -- Check trial expiration
+  IF v_profile.subscription_status = 'trial' OR COALESCE(v_profile.is_in_trial, FALSE) THEN
+    IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
+      RETURN FALSE;  -- Trial expired, must pay
+    END IF;
+  END IF;
+  
+  -- Check subscription expiration
+  IF v_profile.subscription_status = 'expired' THEN
+    RETURN FALSE;  -- Must renew
+  END IF;
+  
+  -- Check monthly limit (basic = 25)
+  RETURN COALESCE(v_profile.current_month_trades_count, 0) < COALESCE(v_profile.max_trades, 25);
+END;
+$$;
+
+COMMENT ON FUNCTION public.can_create_trade(UUID) IS 
+'v2.0: Checks if user can create trade. Includes trial expiration check.';
+
+GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
+
+-- ===============================================
+-- 11.2: process_expired_trials - מעבד trials שפגו
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.process_expired_trials() CASCADE;
+
+CREATE OR REPLACE FUNCTION public.process_expired_trials()
+RETURNS TABLE(
+  processed_count INTEGER,
+  processed_user_ids UUID[]
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_count INTEGER := 0;
+  v_user_ids UUID[] := ARRAY[]::UUID[];
+  v_user RECORD;
+BEGIN
+  RAISE NOTICE '🔄 Processing expired trials...';
+  
+  FOR v_user IN 
+    SELECT id, email
+    FROM public.profiles
+    WHERE (subscription_status = 'trial' OR is_in_trial = TRUE)
+      AND trial_ends_at IS NOT NULL
+      AND trial_ends_at < NOW()
+      AND subscription_status != 'expired'
+  LOOP
+    UPDATE public.profiles
+    SET 
+      subscription_status = 'expired',
+      is_in_trial = FALSE,
+      updated_at = NOW()
+    WHERE id = v_user.id;
+    
+    v_user_ids := array_append(v_user_ids, v_user.id);
+    v_count := v_count + 1;
+    
+    RAISE NOTICE '  → Expired trial for user: %', v_user.email;
+  END LOOP;
+  
+  RAISE NOTICE '✅ Processed % expired trials', v_count;
+  
+  RETURN QUERY SELECT v_count, v_user_ids;
+END;
+$$;
+
+COMMENT ON FUNCTION public.process_expired_trials() IS 
+'Processes expired trials. Sets subscription_status=expired but keeps account_type=basic.';
+
+GRANT EXECUTE ON FUNCTION public.process_expired_trials() TO service_role;
+
+-- ===============================================
+-- 11.3: get_trade_limit - ללא FREE
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.get_trade_limit(TEXT) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_trade_limit(p_account_type TEXT)
+RETURNS INTEGER
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+  RETURN CASE LOWER(COALESCE(p_account_type, 'basic'))
+    WHEN 'basic' THEN 25
+    WHEN 'premium' THEN 999999
+    WHEN 'admin' THEN 999999
+    WHEN 'vip' THEN 999999
+    ELSE 25  -- Default = basic (NOT 0!)
+  END;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_trade_limit(TEXT) IS 
+'v2.0: Returns trade limit per account type. No FREE tier - default is 25 (basic).';
+
+GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
+
+-- ===============================================
+-- 11.4: get_remaining_trades - ללא FREE
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_remaining_trades(p_user_id UUID)
+RETURNS TABLE(
+  remaining INTEGER,
+  used INTEGER,
+  max_trades INTEGER,
+  account_type TEXT,
+  can_create BOOLEAN,
+  is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  trial_days_remaining INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    p.account_type,
+    p.max_trades,
+    p.current_month_trades_count,
+    p.subscription_status,
+    p.is_in_trial,
+    p.trial_ends_at,
+    p.role
+  INTO v_profile
+  FROM public.profiles p
+  WHERE p.id = p_user_id;
+  
+  -- User not found - return basic defaults
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT 
+      25::INTEGER,
+      0::INTEGER,
+      25::INTEGER,
+      'basic'::TEXT,
+      TRUE::BOOLEAN,
+      FALSE::BOOLEAN,
+      NULL::TIMESTAMPTZ,
+      0::INTEGER;
+    RETURN;
+  END IF;
+  
+  RETURN QUERY SELECT 
+    GREATEST(0, COALESCE(v_profile.max_trades, 25) - COALESCE(v_profile.current_month_trades_count, 0))::INTEGER,
+    COALESCE(v_profile.current_month_trades_count, 0)::INTEGER,
+    COALESCE(v_profile.max_trades, 25)::INTEGER,
+    COALESCE(v_profile.account_type, 'basic')::TEXT,
+    public.can_create_trade(p_user_id)::BOOLEAN,
+    COALESCE(v_profile.is_in_trial, FALSE)::BOOLEAN,
+    v_profile.trial_ends_at::TIMESTAMPTZ,
+    CASE 
+      WHEN v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW()
+      THEN EXTRACT(DAY FROM (v_profile.trial_ends_at - NOW()))::INTEGER
+      ELSE 0
+    END::INTEGER;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_remaining_trades(UUID) IS 
+'v2.0: Returns remaining trades with trial info. Default is basic (25 trades), not free.';
+
+GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
+
+-- ===============================================
+-- 11.5: start_trial - מונע ניצול לרעה
+-- ===============================================
+
+DROP FUNCTION IF EXISTS public.start_trial(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.start_trial(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_trial_used BOOLEAN;
+BEGIN
+  -- Check if user already used trial
+  SELECT trial_used INTO v_trial_used
+  FROM public.profiles
+  WHERE id = p_user_id;
+  
+  IF v_trial_used = TRUE THEN
+    RETURN jsonb_build_object(
+      'success', FALSE,
+      'error', 'Trial already used. Each user gets one trial only.',
+      'code', 'TRIAL_ALREADY_USED'
+    );
+  END IF;
+  
+  -- Start trial
+  UPDATE public.profiles
+  SET 
+    account_type = 'basic',
+    subscription_status = 'trial',
+    is_in_trial = TRUE,
+    trial_ends_at = NOW() + INTERVAL '14 days',
+    trial_used = TRUE,  -- Mark as used immediately!
+    max_trades = 25,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'message', 'Trial started successfully',
+    'trial_ends_at', NOW() + INTERVAL '14 days',
+    'max_trades', 25
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.start_trial(UUID) IS 
+'Starts 14-day trial for user. Prevents abuse - each user gets ONE trial only.';
+
+GRANT EXECUTE ON FUNCTION public.start_trial(UUID) TO authenticated;
+
+-- ===============================================
+-- 11.6: Add constraint to prevent FREE account_type
+-- ===============================================
+
+-- Step 1: Migrate FREE users
+DO $$
+BEGIN
+  UPDATE public.profiles 
+  SET 
+    account_type = 'basic',
+    subscription_status = 'expired',
+    trial_used = TRUE,
+    updated_at = NOW()
+  WHERE account_type = 'free';
+  
+  IF FOUND THEN
+    RAISE NOTICE '✅ Migrated remaining FREE users to BASIC (expired)';
+  END IF;
+END $$;
+
+-- Step 2: Drop old constraints
+DO $$
+BEGIN
+  ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
+  ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_no_free;
+EXCEPTION WHEN OTHERS THEN 
+  RAISE NOTICE 'No constraints to drop';
+END $$;
+
+-- Step 3: Add new constraint safely
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profiles_account_type_check') THEN
+    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE account_type = 'free') THEN
+      ALTER TABLE public.profiles 
+      ADD CONSTRAINT profiles_account_type_check 
+      CHECK (account_type IN ('basic', 'premium', 'admin', 'vip'));
+      RAISE NOTICE '✅ Added constraint: profiles_account_type_check';
+    ELSE
+      RAISE WARNING '⚠️  Skipping constraint - FREE users still exist';
+    END IF;
+  ELSE
+    RAISE NOTICE '✅ Constraint already exists';
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING '⚠️  Could not add constraint: %', SQLERRM;
+END $$;
+
+-- ===============================================
+-- 11.7: Schedule CRON job for expired trials
+-- ===============================================
+
+DO $$
+BEGIN
+  BEGIN
+    PERFORM cron.schedule(
+      'process-expired-trials',
+      '0 */4 * * *',  -- Every 4 hours
+      'SELECT process_expired_trials();'
+    );
+    RAISE NOTICE '✅ Scheduled: process-expired-trials (every 4 hours)';
+  EXCEPTION WHEN undefined_function THEN
+    RAISE WARNING '⚠️  pg_cron not available - schedule manually';
+  WHEN OTHERS THEN
+    RAISE WARNING '⚠️  Could not schedule: %', SQLERRM;
+  END;
+END $$;
+
+-- ===============================================
+-- VERIFICATION
+-- ===============================================
+
+DO $$
+DECLARE
+  v_free_users INTEGER;
+  v_trial_users INTEGER;
+  v_can_create_exists BOOLEAN;
+BEGIN
+  SELECT COUNT(*) INTO v_free_users FROM public.profiles WHERE account_type = 'free';
+  SELECT COUNT(*) INTO v_trial_users FROM public.profiles WHERE subscription_status = 'trial';
+  SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'can_create_trade') INTO v_can_create_exists;
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '═══════════════════════════════════════════════';
+  RAISE NOTICE '✅ SECTION 11 - TRIAL MANAGEMENT COMPLETE';
+  RAISE NOTICE '═══════════════════════════════════════════════';
+  RAISE NOTICE '';
+  RAISE NOTICE '📊 Status:';
+  RAISE NOTICE '   ├─ FREE users remaining: % (should be 0)', v_free_users;
+  RAISE NOTICE '   ├─ TRIAL users: %', v_trial_users;
+  RAISE NOTICE '   └─ can_create_trade exists: %', v_can_create_exists;
+  RAISE NOTICE '';
+  RAISE NOTICE '🆕 Functions created:';
+  RAISE NOTICE '   ├─ can_create_trade(UUID) - with trial check';
+  RAISE NOTICE '   ├─ process_expired_trials() - CRON job';
+  RAISE NOTICE '   ├─ get_trade_limit(TEXT) - no FREE tier';
+  RAISE NOTICE '   ├─ get_remaining_trades(UUID) - with trial info';
+  RAISE NOTICE '   └─ start_trial(UUID) - abuse prevention';
+  RAISE NOTICE '';
+END $$;
 -- ===============================================
 -- END OF MIGRATION v9.4.2
 -- ===============================================

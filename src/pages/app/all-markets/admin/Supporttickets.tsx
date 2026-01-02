@@ -32,8 +32,14 @@ import {
   Save,
   UserX,
   Target,
-  Crown,
+Crown,
   Sword,
+  FileText,
+  TrendingUp,
+  TrendingDown,
+  Download,
+  Calendar,
+  BarChart3,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -74,6 +80,15 @@ interface Ticket {
   last_admin_message_at: string | null;
 }
 
+interface SystemUpdateMetadata {
+  report_type?: string;
+  report_month?: string;
+  report_id?: string;
+  pdf_url?: string;
+  pmi_value?: number;
+  pmi_change?: number;
+}
+
 interface SystemUpdate {
   id: string;
   title: string;
@@ -86,6 +101,7 @@ interface SystemUpdate {
   updated_at: string;
   published_at: string | null;
   views_count: number;
+  metadata?: SystemUpdateMetadata;
 }
 
 interface ChurnedUser {
@@ -112,9 +128,18 @@ const TARGET_GROUPS: { key: TargetGroup; label: string; icon: any; color: string
   { key: 'top_secret', label: 'TOP SECRET', icon: Crown, color: 'purple' },
 ];
 
+type UpdatesSubTab = 'manual' | 'reports';
+
+const REPORT_TYPE_CONFIG: Record<string, { label: string; icon: any; color: string }> = {
+  ism: { label: 'ISM Manufacturing', icon: BarChart3, color: 'blue' },
+  crypto: { label: 'Crypto Analysis', icon: TrendingUp, color: 'purple' },
+  company: { label: 'Company Report', icon: FileText, color: 'green' },
+};
+
 export default function SupportTickets() {
-  // ==================== TAB STATE ====================
+// ==================== TAB STATE ====================
   const [activeTab, setActiveTab] = useState<TabType>('support');
+  const [updatesSubTab, setUpdatesSubTab] = useState<UpdatesSubTab>('manual');
 
   // ==================== SUPPORT STATE ====================
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -148,11 +173,19 @@ export default function SupportTickets() {
     pinned: 0,
     totalViews: 0,
   });
-  const [groupCounts, setGroupCounts] = useState<Record<string, number>>({
+const [groupCounts, setGroupCounts] = useState<Record<string, number>>({
     all: 0,
     trading_journal: 0,
     war_zone: 0,
     top_secret: 0,
+  });
+
+  // ==================== REPORT NOTIFICATIONS STATE ====================
+  const [reportNotifications, setReportNotifications] = useState<SystemUpdate[]>([]);
+  const [reportStats, setReportStats] = useState({
+    total: 0,
+    thisMonth: 0,
+    totalViews: 0,
   });
 
   // ==================== CHURNED USERS STATE ====================
@@ -172,8 +205,9 @@ export default function SupportTickets() {
       loadUnreadCount();
       loadAwaitingCount();
       loadTicketStats();
-    } else if (activeTab === 'updates') {
+} else if (activeTab === 'updates') {
       loadUpdates();
+      loadReportNotifications();
       loadGroupCounts();
     } else if (activeTab === 'churned') {
       loadChurnedUsers();
@@ -547,7 +581,7 @@ export default function SupportTickets() {
 
   // ==================== UPDATES FUNCTIONS ====================
 
-  async function loadUpdates() {
+async function loadUpdates() {
     try {
       setLoadingUpdates(true);
       const { data, error } = await supabase
@@ -557,12 +591,18 @@ export default function SupportTickets() {
 
       if (error) throw error;
 
-      setUpdates(data || []);
+      // Filter: Manual updates = no metadata.report_type
+      const manualUpdates = (data || []).filter(u => {
+        const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
+        return !metadata?.report_type;
+      });
 
-      const total = data?.length || 0;
-      const active = data?.filter(u => u.is_active).length || 0;
-      const pinned = data?.filter(u => u.is_pinned).length || 0;
-      const totalViews = data?.reduce((sum, u) => sum + (u.views_count || 0), 0) || 0;
+      setUpdates(manualUpdates);
+
+      const total = manualUpdates.length;
+      const active = manualUpdates.filter(u => u.is_active).length;
+      const pinned = manualUpdates.filter(u => u.is_pinned).length;
+      const totalViews = manualUpdates.reduce((sum, u) => sum + (u.views_count || 0), 0);
 
       setUpdateStats({ total, active, pinned, totalViews });
     } catch (error: any) {
@@ -570,6 +610,41 @@ export default function SupportTickets() {
       toast.error('Failed to load updates');
     } finally {
       setLoadingUpdates(false);
+    }
+  }
+  async function loadReportNotifications() {
+    try {
+      const { data, error } = await supabase
+        .from('system_updates')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Filter: Report notifications = has metadata.report_type
+      const reports = (data || []).filter(u => {
+        const metadata = typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata;
+        return metadata?.report_type;
+      }).map(u => ({
+        ...u,
+        metadata: typeof u.metadata === 'string' ? JSON.parse(u.metadata) : u.metadata
+      }));
+
+      setReportNotifications(reports);
+
+      const now = new Date();
+      const thisMonth = reports.filter(r => {
+        const created = new Date(r.created_at);
+        return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+      }).length;
+
+      setReportStats({
+        total: reports.length,
+        thisMonth,
+        totalViews: reports.reduce((sum, r) => sum + (r.views_count || 0), 0),
+      });
+    } catch (error: any) {
+      console.error('Error loading report notifications:', error);
     }
   }
 
@@ -662,8 +737,9 @@ export default function SupportTickets() {
         .eq('id', update.id);
 
       if (error) throw error;
-      toast.success(update.is_active ? 'Update hidden' : 'Update published');
+toast.success(update.is_active ? 'Update hidden' : 'Update published');
       loadUpdates();
+      loadReportNotifications();
     } catch (error: any) {
       console.error('Error toggling update:', error);
       toast.error('Failed to update status');
@@ -682,8 +758,9 @@ export default function SupportTickets() {
         .eq('id', id);
 
       if (error) throw error;
-      toast.success('Update deleted');
+toast.success('Update deleted');
       loadUpdates();
+      loadReportNotifications();
     } catch (error: any) {
       console.error('Error deleting update:', error);
       toast.error('Failed to delete');
@@ -832,6 +909,28 @@ export default function SupportTickets() {
     });
   }
 
+  function formatDateTime(timestamp: string) {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  function getReportTypeConfig(reportType: string) {
+    return REPORT_TYPE_CONFIG[reportType] || { label: reportType, icon: FileText, color: 'gray' };
+  }
+
+  function formatReportMonth(monthStr: string) {
+    if (!monthStr) return 'Unknown';
+    const [year, month] = monthStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
   function ticketNeedsResponse(ticket: Ticket): boolean {
     if (ticket.status === 'resolved' || ticket.status === 'closed') {
       return false;
@@ -893,11 +992,11 @@ export default function SupportTickets() {
         >
           <Bell className="h-4 w-4" />
           System Updates
-          {updateStats.active > 0 && (
+{(updateStats.active + reportStats.total) > 0 && (
             <span className={`ml-1 h-5 w-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
               activeTab === 'updates' ? 'bg-black/20' : 'bg-blue-500/20 text-blue-400'
             }`}>
-              {updateStats.active}
+              {updateStats.active + reportStats.total}
             </span>
           )}
         </button>
@@ -1280,11 +1379,50 @@ export default function SupportTickets() {
         </>
       )}
 
-      {/* ==================== UPDATES TAB ==================== */}
+{/* ==================== UPDATES TAB ==================== */}
       {activeTab === 'updates' && (
         <>
-          {/* Stats Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          {/* Sub-Tab Navigation */}
+          <div className="flex items-center gap-2 mb-6">
+            <button
+              onClick={() => setUpdatesSubTab('manual')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                updatesSubTab === 'manual'
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
+              }`}
+            >
+              <Megaphone className="h-4 w-4" />
+              Manual Updates
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                updatesSubTab === 'manual' ? 'bg-black/20' : 'bg-zinc-700'
+              }`}>
+                {updateStats.total}
+              </span>
+            </button>
+            <button
+              onClick={() => setUpdatesSubTab('reports')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                updatesSubTab === 'reports'
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'bg-zinc-800 text-gray-400 hover:text-white hover:bg-zinc-700'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Report Notifications
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                updatesSubTab === 'reports' ? 'bg-black/20' : 'bg-zinc-700'
+              }`}>
+                {reportStats.total}
+              </span>
+            </button>
+          </div>
+
+          {/* ==================== MANUAL UPDATES SUB-TAB ==================== */}
+          {updatesSubTab === 'manual' && (
+            <>
+              {/* Stats Bar */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1509,13 +1647,209 @@ export default function SupportTickets() {
                     </div>
                   );
                 })}
-              </div>
+             </div>
             )}
           </div>
+            </>
+          )}
+
+          {/* ==================== REPORT NOTIFICATIONS SUB-TAB ==================== */}
+          {updatesSubTab === 'reports' && (
+            <>
+              {/* Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Total Reports Sent</p>
+                      <p className="text-2xl font-bold text-white">{reportStats.total}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                      <FileText className="h-6 w-6 text-blue-400" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">This Month</p>
+                      <p className="text-2xl font-bold text-white">{reportStats.thisMonth}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                      <Calendar className="h-6 w-6 text-green-400" />
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-[#111111] border border-gray-800 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Total Views</p>
+                      <p className="text-2xl font-bold text-white">{reportStats.totalViews}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+                      <Eye className="h-6 w-6 text-purple-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                  <BarChart3 className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Report Notifications</h2>
+                  <p className="text-xs text-gray-400">Automated report deliveries (ISM, Crypto, etc.)</p>
+                </div>
+              </div>
+{/* Table */}
+              <div className="bg-[#111111] border border-gray-800 rounded-xl overflow-hidden">
+                {reportNotifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                    <FileText className="h-12 w-12 mb-3 opacity-30" />
+                    <p className="text-sm font-medium">No report notifications yet</p>
+                    <p className="text-xs text-gray-500 mt-1">Reports will appear here when the scheduler runs</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-zinc-900/50 border-b border-gray-800">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Report</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Period</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Sent To</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">PMI</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Sent</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Views</th>
+                          <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Status</th>
+                          <th className="text-right px-4 py-3 text-xs font-medium text-gray-400">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800">
+                        {reportNotifications.map((report) => {
+                          const reportType = getReportTypeConfig(report.metadata?.report_type || 'ism');
+                          const ReportIcon = reportType.icon;
+                          const groupConfig = getGroupConfig(report.target_group || 'all');
+                          const GroupIcon = groupConfig.icon;
+                          const pmiValue = report.metadata?.pmi_value;
+                          const pmiChange = report.metadata?.pmi_change;
+
+                          return (
+                            <tr key={report.id} className="hover:bg-zinc-900/50">
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                                    reportType.color === 'blue' ? 'bg-blue-500/10' :
+                                    reportType.color === 'purple' ? 'bg-purple-500/10' : 'bg-green-500/10'
+                                  }`}>
+                                    <ReportIcon className={`h-5 w-5 ${
+                                      reportType.color === 'blue' ? 'text-blue-400' :
+                                      reportType.color === 'purple' ? 'text-purple-400' : 'text-green-400'
+                                    }`} />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-white font-medium">{reportType.label}</p>
+                                    <p className="text-xs text-gray-500 truncate max-w-[200px]">{report.title}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className="text-sm text-gray-300">
+                                  {report.metadata?.report_month ? formatReportMonth(report.metadata.report_month) : '—'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <Badge className={`${groupConfig.bg} ${groupConfig.text} text-[10px] px-2`}>
+                                  <GroupIcon className="h-3 w-3 mr-1" />
+                                  {groupConfig.label}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-4">
+                                {pmiValue ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className={`text-sm font-bold ${pmiValue >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                                      {pmiValue.toFixed(1)}
+                                    </span>
+                                    {pmiChange != null && (
+                                      <span className={`text-xs flex items-center ${pmiChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {pmiChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                        {pmiChange > 0 ? '+' : ''}{pmiChange.toFixed(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : '—'}
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className="text-xs text-gray-400">{formatDateTime(report.created_at)}</span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <span className="text-sm text-gray-300">{report.views_count || 0}</span>
+                              </td>
+                              <td className="px-4 py-4">
+                                <Badge className={`text-[10px] px-2 ${
+                                  report.is_active 
+                                    ? 'bg-green-500/10 text-green-400' 
+                                    : 'bg-gray-500/10 text-gray-400'
+                                }`}>
+                                  {report.is_active ? 'Active' : 'Hidden'}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-4 text-right">
+  <div className="flex items-center justify-end gap-1">
+    {report.metadata?.pdf_url && (
+      <a
+        href={report.metadata.pdf_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="h-8 w-8 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 flex items-center justify-center transition-colors"
+        title="Download PDF"
+      >
+        <Download className="h-4 w-4 text-blue-400" />
+      </a>
+    )}
+    <Button
+      onClick={() => handleToggleActive(report)}
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0"
+      title={report.is_active ? 'Hide' : 'Show'}
+    >
+      {report.is_active ? (
+        <Eye className="h-4 w-4 text-green-400" />
+      ) : (
+        <EyeOff className="h-4 w-4 text-gray-400" />
+      )}
+    </Button>
+    <Button
+      onClick={() => handleDeleteUpdate(report.id)}
+      disabled={deletingUpdate === report.id}
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0 text-red-400 hover:bg-red-500/10"
+      title="Delete"
+    >
+      {deletingUpdate === report.id ? (
+        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-400"></div>
+      ) : (
+        <Trash2 className="h-4 w-4" />
+      )}
+    </Button>
+  </div>
+</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </>
       )}
-
-      {/* ==================== CHURNED USERS TAB ==================== */}
+      {/* ==================== CHURNED USERS TAB ==================== */}      {/* ==================== CHURNED USERS TAB ==================== */}
       {activeTab === 'churned' && (
         <>
           {/* Stats Bar */}

@@ -521,6 +521,7 @@ function AppContent() {
 
 {/* ⚔️ WAR ZONE - Full Screen (no sidebar) */}
 <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
+
         
         {/* ⚖️ LEGAL ROUTES */}
         <Route path="/legal/terms" element={<TermsOfUse />} />
@@ -537,7 +538,8 @@ function AppContent() {
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/app/journal/overview" replace />} />
+          {/* 🔥 DEFAULT REDIRECT TO TOP SECRET */}
+          <Route index element={<Navigate to="/app/top-secret" replace />} />
           
           {/* ✅ ALL MARKETS - UNLOCKED */}
           <Route path="all-markets/overview" element={<SuspenseRoute><AllMarketsOverview /></SuspenseRoute>} />
@@ -548,10 +550,9 @@ function AppContent() {
           <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
 <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
 <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
-{/* ⚔️ WAR ZONE - Newsletter Hub (shows different content for admin vs regular users) */}
+{/* ⚔️ WAR ZONE - Newsletter Hub (no sidebar, with TopNav + SubNav) */}
 <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
 <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
-
 {/* 🔐 TOP SECRET - Premium Intelligence Reports */}
 {/* Main page - Landing for non-subscribers, Dashboard for subscribers, redirects admins */}
 <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
@@ -632,18 +633,18 @@ function AppContent() {
           <Route path="commodities/calendar" element={<LockedRoute domainId="commodities"><CommoditiesCalendar /></LockedRoute>} />
           <Route path="commodities/news" element={<LockedRoute domainId="commodities"><CommoditiesNews /></LockedRoute>} />
           
-          {/* ✅ MACRO & NEWS - UNLOCKED */}
-          <Route path="macro/overview" element={<SuspenseRoute><MacroOverview /></SuspenseRoute>} />
-          <Route path="macro/cross-asset" element={<SuspenseRoute><MacroCrossAsset /></SuspenseRoute>} />
-          <Route path="macro/global-heatmap" element={<SuspenseRoute><MacroGlobalHeatmap /></SuspenseRoute>} />
-          <Route path="macro/models" element={<SuspenseRoute><MacroModels /></SuspenseRoute>} />
-          <Route path="macro/calendar" element={<SuspenseRoute><MacroCalendar /></SuspenseRoute>} />
-          <Route path="macro/rates" element={<SuspenseRoute><MacroRates /></SuspenseRoute>} />
-          <Route path="macro/indicators" element={<SuspenseRoute><MacroIndicators /></SuspenseRoute>} />
-          <Route path="macro/events" element={<SuspenseRoute><MacroEvents /></SuspenseRoute>} />
-          <Route path="macro/reports" element={<SuspenseRoute><MacroReports /></SuspenseRoute>} />
-          <Route path="macro/sentiment" element={<SuspenseRoute><MacroSentiment /></SuspenseRoute>} />
-          <Route path="macro/news" element={<SuspenseRoute><MacroNews /></SuspenseRoute>} />
+          {/* 🔒 MACRO & NEWS - NOW LOCKED */}
+          <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
+          <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
+          <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
+          <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />
+          <Route path="macro/calendar" element={<LockedRoute domainId="macro"><MacroCalendar /></LockedRoute>} />
+          <Route path="macro/rates" element={<LockedRoute domainId="macro"><MacroRates /></LockedRoute>} />
+          <Route path="macro/indicators" element={<LockedRoute domainId="macro"><MacroIndicators /></LockedRoute>} />
+          <Route path="macro/events" element={<LockedRoute domainId="macro"><MacroEvents /></LockedRoute>} />
+          <Route path="macro/reports" element={<LockedRoute domainId="macro"><MacroReports /></LockedRoute>} />
+          <Route path="macro/sentiment" element={<LockedRoute domainId="macro"><MacroSentiment /></LockedRoute>} />
+          <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
           {/* 🔒 AI - LOCKED */}
           <Route path="ai/overview" element={<LockedRoute domainId="ai"><AIOverview /></LockedRoute>} />

@@ -209,10 +209,10 @@ export default function SupportWidget() {
         }
 
         const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, email')
-          .eq('id', user.id)
-          .single();
+  .from('profiles')
+  .select('full_name, email, top_secret_enabled, newsletter_enabled, newsletter_paid, role')
+  .eq('id', user.id)
+  .single();
         
         if (profile?.full_name) {
           setUserName(profile.full_name);
@@ -272,19 +272,20 @@ export default function SupportWidget() {
       if (!user) return;
 
       // Get user's subscription tier to determine target group
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('top_secret_enabled, newsletter_enabled, newsletter_paid')
-        .eq('id', user.id)
-        .single();
-
+const { data: profile } = await supabase
+  .from('profiles')
+  .select('top_secret_enabled, newsletter_enabled, newsletter_paid, role')
+  .eq('id', user.id)
+  .single();
       // Determine user's target group
-      let userGroup = 'trading_journal';
-      if (profile?.top_secret_enabled) {
-        userGroup = 'top_secret';
-      } else if (profile?.newsletter_enabled || profile?.newsletter_paid) {
-        userGroup = 'newsletter';
-      }
+      // Determine user's target group
+// Admins automatically get TOP SECRET access
+let userGroup = 'trading_journal';
+if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top_secret_enabled) {
+  userGroup = 'top_secret';
+} else if (profile?.newsletter_enabled || profile?.newsletter_paid) {
+  userGroup = 'newsletter';
+}
 
       // Keep 30 days of history
       const thirtyDaysAgo = new Date();

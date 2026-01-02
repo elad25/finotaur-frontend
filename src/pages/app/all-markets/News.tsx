@@ -1,17 +1,13 @@
 // src/pages/app/all-markets/News.tsx
+
 import React from "react";
-import { PageTemplate } from "@/components/PageTemplate";
 import { NewsList } from "@/components/markets/NewsList";
 
 export default function AllMarketsNews() {
   return (
-    <PageTemplate
-      title="Markets News"
-      description="Market-wide headlines and insights across all assets."
-    >
-      <div className="grid grid-cols-1 gap-6">
-        <NewsList />
-      </div>
-    </PageTemplate>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold text-foreground mb-6">Markets News</h1>
+      <NewsList />
+    </div>
   );
 }

@@ -1,16 +1,20 @@
 // src/components/TopNav.tsx
 // =====================================================
-// FINOTAUR TOP NAVIGATION - v2.0.1
+// FINOTAUR TOP NAVIGATION - v2.2.0
 // =====================================================
 // 
-// 🔥 v2.0.1 CHANGES:
-// - FIXED: Changed first_name/last_name to display_name (matching DB schema)
+// 🔥 v2.2.0 CHANGES:
+// - LOCKED: Search functionality (Coming Soon)
+// - LOCKED: Settings menu item (Coming Soon)
+// - LOCKED: Upgrade menu item (Coming Soon)
 // 
-// 🔥 v2.0.0 CHANGES:
-// - UNLOCKED: User menu (was "Coming Soon")
-// - ADDED: User dropdown with Settings, Pricing, Logout
-// - ADDED: User avatar/initials display
-// - Uses useAuth for user data
+// 🔥 v2.1.0 CHANGES:
+// - UNLOCKED: Search functionality (was "Coming Soon")
+// - ADDED: Click to open QuickSearch modal
+// - ADDED: Keyboard shortcut indicator (⌘K)
+// 
+// 🔥 v2.0.2 CHANGES:
+// - FIXED: Logo now navigates to /app/top-secret
 // =====================================================
 
 import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown } from 'lucide-react';
@@ -31,28 +35,27 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-// ✅ קומפוננטת החיפוש
-import QuickSearch from '@/components/Search/QuickSearch';
+// ✅ קומפוננטת החיפוש (disabled for now)
+// import QuickSearch from '@/components/Search/QuickSearch';
 
 export const TopNav = () => {
   const navigate = useNavigate();
   const { domainId } = useDomain();
   const { user } = useAuth();
-  const [searchOpen, setSearchOpen] = useState(false);
   const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
-  // ✅ Keyboard shortcut for search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // 🔒 Search is LOCKED - no keyboard shortcut
+  // useEffect(() => {
+  //   const handleKeyDown = (e: KeyboardEvent) => {
+  //     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+  //       e.preventDefault();
+  //       setSearchOpen(true);
+  //     }
+  //   };
+  //   window.addEventListener('keydown', handleKeyDown);
+  //   return () => window.removeEventListener('keydown', handleKeyDown);
+  // }, []);
 
   // ✅ Get user initials and platform plan
   useEffect(() => {
@@ -146,10 +149,10 @@ export const TopNav = () => {
       }}
     >
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
-        {/* Logo */}
+        {/* Logo - 🔥 NOW NAVIGATES TO TOP SECRET */}
         <div className="flex items-center gap-6 lg:gap-8">
           <button 
-            onClick={() => navigate('/app/journal/overview')}
+            onClick={() => navigate('/app/top-secret')}
             className="flex items-center group cursor-pointer"
           >
             <span className="text-2xl md:text-3xl font-bold tracking-tight">
@@ -205,20 +208,30 @@ export const TopNav = () => {
 
         {/* Right Side */}
         <div className="flex items-center gap-3">
-          {/* Search - LOCKED */}
+          {/* ═══════════════════════════════════════════
+              🔒 SEARCH - LOCKED (Coming Soon)
+          ═══════════════════════════════════════════ */}
           <div className="relative hidden md:block group">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0]" />
-            <Lock className="absolute right-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[#C9A646]/60" />
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0] opacity-40" />
             <Input
               placeholder="Search..."
-              className="w-40 lg:w-48 pl-8 pr-8 text-xs h-9 cursor-not-allowed opacity-50"
+              className="w-40 lg:w-48 pl-8 pr-12 text-xs h-9 cursor-not-allowed opacity-50"
               style={{
                 background: 'rgba(20,20,20,0.6)',
                 border: '1px solid rgba(255, 215, 0, 0.08)',
                 color: '#A0A0A0'
               }}
+              readOnly
               disabled
             />
+            {/* Coming Soon indicator */}
+            <span 
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#A0A0A0]/60 font-medium px-1.5 py-0.5 rounded border border-[#A0A0A0]/20 flex items-center gap-1"
+              style={{ background: 'rgba(30,30,30,0.8)' }}
+            >
+              <Lock className="w-2.5 h-2.5" />
+            </span>
+            {/* Tooltip */}
             <span 
               className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
               style={{ 
@@ -231,19 +244,18 @@ export const TopNav = () => {
             </span>
           </div>
 
-          {/* Mobile Search Button - LOCKED */}
+          {/* Mobile Search Button - LOCKED 🔒 */}
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden relative group cursor-not-allowed opacity-50 hover:bg-[#1A1A1A]"
+            className="md:hidden hover:bg-[#1A1A1A] opacity-40 cursor-not-allowed"
             disabled
           >
             <Search className="h-5 w-5 text-[#A0A0A0]" />
-            <Lock className="absolute -top-1 -right-1 h-3 w-3 text-[#C9A646]/60" />
           </Button>
 
           {/* ═══════════════════════════════════════════
-              🔥 USER MENU - NOW UNLOCKED!
+              🔥 USER MENU - Simplified (No Settings/Upgrade)
           ═══════════════════════════════════════════ */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -297,34 +309,35 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* Pricing / Upgrade */}
+              {/* 🔒 Upgrade - LOCKED (Coming Soon) */}
               <DropdownMenuItem 
-                onClick={() => navigate('/app/all-markets/pricing')}
-                className="cursor-pointer hover:bg-[#1A1A1A] focus:bg-[#1A1A1A]"
+                className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
+                disabled
               >
-                <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
-                <span className="text-white">
-                  {platformPlan && platformPlan !== 'free' ? 'Manage Plan' : 'Upgrade'}
+                <Crown className="mr-2 h-4 w-4 text-[#C9A646]/50" />
+                <span className="text-white/50">Upgrade</span>
+                <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" />
+                  Soon
                 </span>
-                {(!platformPlan || platformPlan === 'free') && (
-                  <span className="ml-auto text-xs bg-[#C9A646]/20 text-[#C9A646] px-2 py-0.5 rounded-full">
-                    Pro
-                  </span>
-                )}
               </DropdownMenuItem>
 
-              {/* Settings */}
+              {/* 🔒 Settings - LOCKED (Coming Soon) */}
               <DropdownMenuItem 
-                onClick={() => navigate('/settings')}
-                className="cursor-pointer hover:bg-[#1A1A1A] focus:bg-[#1A1A1A]"
+                className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
+                disabled
               >
-                <Settings className="mr-2 h-4 w-4 text-zinc-400" />
-                <span className="text-white">Settings</span>
+                <Settings className="mr-2 h-4 w-4 text-zinc-400/50" />
+                <span className="text-white/50">Settings</span>
+                <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" />
+                  Soon
+                </span>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* Logout */}
+              {/* Logout - Still Active */}
               <DropdownMenuItem 
                 onClick={handleLogout}
                 className="cursor-pointer hover:bg-red-500/10 focus:bg-red-500/10 text-red-400"
@@ -364,8 +377,8 @@ export const TopNav = () => {
         })}
       </div>
 
-      {/* Search Modal */}
-      <QuickSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {/* 🔒 Search Modal - DISABLED */}
+      {/* <QuickSearch open={searchOpen} onClose={() => setSearchOpen(false)} /> */}
     </div>
   );
 };
