@@ -97,11 +97,11 @@ const LandingPage = () => {
       {/* Section 6: Countdown Timer - Urgency (Price goes up Jan 25) */}
       <CountdownTimer />
 
-      {/* Section 7: Pricing */}
-      <Pricing />
-
-      {/* Section 8: Trading Journal as Support Product */}
+      {/* Section 7: Trading Journal as Support Product */}
       <JournalSection />
+
+      {/* Section 8: Pricing */}
+      <Pricing />
 
       {/* Section 9: Footer */}
       <Footer />
