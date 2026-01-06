@@ -4,36 +4,32 @@ import { useAuth } from '@/providers/AuthProvider';
 import Navbar from "@/components/landing-new/Navbar";
 import Hero from "@/components/landing-new/Hero";
 import BeforeAfter from "@/components/landing-new/BeforeAfter";
+import Reframe from "@/components/landing-new/Reframe";
 import WhatIsFinotaur from "@/components/landing-new/WhatIsFinotaur";
 import ProductShowcase from "@/components/landing-new/ProductShowcase";
-import CoreSystem from "@/components/landing-new/CoreSystem";
-import AISection from "@/components/landing-new/AISection";
-import DesignPhilosophy from "@/components/landing-new/DesignPhilosophy";
-import Pricing from "@/components/landing-new/Pricing";
-import Testimonials from "@/components/landing-new/Testimonials";
-import Vision from "@/components/landing-new/Vision";
+import WhoIsThisFor from "@/components/landing-new/WhoIsThisFor";
+import RiskReversal from "@/components/landing-new/RiskReversal";
+import Scarcity from "@/components/landing-new/Scarcity";
 import Footer from "@/components/landing-new/Footer";
 import { LegalFooter } from "@/components/legal";
 
 /**
- * ✨ UPGRADED LANDING PAGE
- * 
+ * 🔥 TOP SECRET LANDING PAGE
+ *
  * 🔒 SECURITY: Authenticated users are automatically redirected to dashboard
  * Landing page is ONLY for non-authenticated visitors
- * 
- * New structure with enhanced conversion elements:
- * 1. Hero - Updated with compelling subtitle + micro trust strip
- * 2. BeforeAfter - Shows transformation above the fold
- * 3. WhatIsFinotaur - Core value proposition
- * 4. ProductShowcase - 3 annotated screenshots showing product in action
- * 5. CoreSystem - Feature breakdown
- * 6. AISection - AI capabilities
- * 7. DesignPhilosophy - Premium positioning
- * 8. Pricing - Updated copy with behavioral alerts emphasis
- * 9. Testimonials - Social proof with 4 cards
- * 10. Vision - Future roadmap
- * 11. Footer - Final CTA
- * 12. LegalFooter - Legal documents links (NEW!)
+ *
+ * Hormozi-style conversion structure:
+ * 1. Hero - TOP SECRET Report Mockup + Value Prop
+ * 2. BeforeAfter (Pain Amplification) - "You're not confused. You're overloaded."
+ * 3. Reframe - "The market doesn't reward information. It rewards conclusions."
+ * 4. WhatIsFinotaur (What TOP SECRET Is) - Outcome-oriented, not feature-based
+ * 5. ProductShowcase (Proof) - Process proof with real examples
+ * 6. WhoIsThisFor - For/Not For qualification
+ * 7. RiskReversal - No pressure, no lock-in
+ * 8. Scarcity - "TOP SECRET is intentionally kept small"
+ * 9. Footer (Final CTA) - "Ready to stop guessing?" + soft Journal intro
+ * 10. LegalFooter - Legal documents links
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
@@ -69,19 +65,35 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen">
       <Navbar />
+
+      {/* 1️⃣ Hero - TOP SECRET Report Mockup */}
       <Hero />
+
+      {/* 2️⃣ Pain Amplification - "You're not confused. You're overloaded." */}
       <BeforeAfter />
+
+      {/* 3️⃣ Reframe - Bridge to solution */}
+      <Reframe />
+
+      {/* 4️⃣ What TOP SECRET Actually Is - Outcome-oriented */}
       <WhatIsFinotaur />
+
+      {/* 5️⃣ Proof - Process examples */}
       <ProductShowcase />
-      <CoreSystem />
-      <AISection />
-      <DesignPhilosophy />
-      <Pricing />
-      <Testimonials />
-      <Vision />
+
+      {/* 6️⃣ Who Is This For / Not For */}
+      <WhoIsThisFor />
+
+      {/* 7️⃣ Risk Reversal - No pressure */}
+      <RiskReversal />
+
+      {/* 8️⃣ Scarcity - Intentionally small */}
+      <Scarcity />
+
+      {/* 9️⃣ Final CTA + Soft Journal Intro */}
       <Footer />
-      
-      {/* ⚖️ Legal Footer - Black bar with all legal document links */}
+
+      {/* ⚖️ Legal Footer */}
       <LegalFooter />
     </div>
   );
