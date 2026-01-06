@@ -13,6 +13,31 @@ const WhyNow = () => {
       <div className="absolute bottom-0 right-1/4 w-[300px] h-[300px] bg-[#D4AF37]/[0.08] rounded-full blur-[90px]" />
       <div className="absolute top-0 left-1/4 w-[250px] h-[200px] bg-[#C9A646]/[0.06] rounded-full blur-[80px]" />
 
+      {/* Animated time particles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(6)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-[#C9A646]/30 rounded-full"
+            style={{
+              left: `${15 + i * 14}%`,
+              top: `${30 + (i % 3) * 20}%`,
+            }}
+            animate={{
+              y: [0, -30, 0],
+              x: [0, (i % 2 === 0 ? 10 : -10), 0],
+              opacity: [0.2, 0.5, 0.2],
+            }}
+            transition={{
+              duration: 3 + i * 0.3,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.4,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Top border */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 
@@ -24,11 +49,21 @@ const WhyNow = () => {
           transition={{ duration: 0.8 }}
           className="text-center space-y-6"
         >
-          {/* Icon */}
+          {/* Icon with ticking animation */}
           <div className="flex justify-center">
-            <div className="w-12 h-12 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center">
+            <motion.div
+              className="w-12 h-12 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center"
+              animate={{
+                scale: [1, 1.05, 1],
+              }}
+              transition={{
+                duration: 1,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            >
               <Clock className="w-6 h-6 text-[#C9A646]" />
-            </div>
+            </motion.div>
           </div>
 
           {/* ⏳ Soft urgency - not aggressive */}

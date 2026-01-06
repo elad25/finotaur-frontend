@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
+import CountdownTimer from "./CountdownTimer";
 
 const FinalCTA = () => {
   const handleJoinClick = () => {
@@ -72,13 +73,26 @@ const FinalCTA = () => {
         </motion.div>
 
         {/* ============================================
+            COUNTDOWN TIMER
+            ============================================ */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.15 }}
+          className="mb-10"
+        >
+          <CountdownTimer />
+        </motion.div>
+
+        {/* ============================================
             CTA BUTTON
             ============================================ */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.8, delay: 0.2 }}
+          transition={{ duration: 0.8, delay: 0.3 }}
           className="flex flex-col items-center gap-4"
         >
           <Button

@@ -1,6 +1,6 @@
 // src/components/top-secret/Reframe.tsx
 import { motion } from "framer-motion";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Sparkles } from "lucide-react";
 
 const Reframe = () => {
   return (
@@ -12,6 +12,56 @@ const Reframe = () => {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-[#C9A646]/[0.12] rounded-full blur-[130px]" />
       <div className="absolute top-0 left-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.08] rounded-full blur-[110px]" />
       <div className="absolute bottom-0 right-1/4 w-[450px] h-[450px] bg-[#C9A646]/[0.07] rounded-full blur-[100px]" />
+
+      {/* Radial lines emanating from center - insight metaphor */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(12)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute top-1/2 left-1/2 w-[2px] h-[200px] bg-gradient-to-b from-[#C9A646]/20 to-transparent origin-bottom"
+            style={{
+              transform: `rotate(${i * 30}deg) translateY(-100%)`,
+            }}
+            animate={{
+              opacity: [0.1, 0.3, 0.1],
+              scaleY: [0.8, 1, 0.8],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.15,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Floating sparkles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(5)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute"
+            style={{
+              left: `${20 + i * 15}%`,
+              top: `${25 + (i % 3) * 20}%`,
+            }}
+            animate={{
+              y: [0, -15, 0],
+              opacity: [0.2, 0.5, 0.2],
+              scale: [1, 1.2, 1],
+            }}
+            transition={{
+              duration: 2.5 + i * 0.3,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.5,
+            }}
+          >
+            <Sparkles className="w-4 h-4 text-[#C9A646]/30" />
+          </motion.div>
+        ))}
+      </div>
 
       {/* Top border */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/50 to-transparent" />

@@ -25,6 +25,26 @@ const WhoThisIsFor = () => {
       <div className="absolute bottom-1/4 right-0 w-[450px] h-[450px] bg-[#C9A646]/[0.08] rounded-full blur-[120px]" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-[400px] h-[300px] bg-[#D4AF37]/[0.06] rounded-full blur-[100px]" />
 
+      {/* Diagonal lines pattern */}
+      <div className="absolute inset-0 opacity-[0.02]" style={{
+        backgroundImage: `repeating-linear-gradient(45deg, #C9A646 0, #C9A646 1px, transparent 1px, transparent 30px)`,
+      }} />
+
+      {/* Animated divider line between the two columns concept */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-px h-[200px] overflow-hidden hidden md:block">
+        <motion.div
+          className="w-full h-full bg-gradient-to-b from-transparent via-[#C9A646]/40 to-transparent"
+          animate={{
+            y: ['-100%', '100%'],
+          }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            ease: "linear",
+          }}
+        />
+      </div>
+
       {/* Top border */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 

@@ -32,6 +32,39 @@ const PainAmplification = () => {
       <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.08] rounded-full blur-[120px]" />
       <div className="absolute top-0 right-0 w-[300px] h-[400px] bg-[#C9A646]/[0.06] rounded-full blur-[100px]" />
 
+      {/* Animated grid pattern */}
+      <div className="absolute inset-0 opacity-[0.03]" style={{
+        backgroundImage: `linear-gradient(#C9A646 1px, transparent 1px), linear-gradient(90deg, #C9A646 1px, transparent 1px)`,
+        backgroundSize: '50px 50px'
+      }} />
+
+      {/* Floating alert icons - visual metaphor for chaos */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(8)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-6 h-6 text-[#C9A646]/10"
+            style={{
+              left: `${10 + i * 12}%`,
+              top: `${15 + (i % 4) * 20}%`,
+            }}
+            animate={{
+              y: [0, -20, 0],
+              opacity: [0.1, 0.25, 0.1],
+              rotate: [0, 5, -5, 0],
+            }}
+            transition={{
+              duration: 4 + i * 0.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.4,
+            }}
+          >
+            <AlertCircle className="w-full h-full" />
+          </motion.div>
+        ))}
+      </div>
+
       {/* Top border */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 

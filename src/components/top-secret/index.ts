@@ -12,3 +12,4 @@ export { default as Exclusivity } from './Exclusivity';
 export { default as WhyNow } from './WhyNow';
 export { default as FinalCTA } from './FinalCTA';
 export { default as SoftJournalIntro } from './SoftJournalIntro';
+export { default as CountdownTimer } from './CountdownTimer';
