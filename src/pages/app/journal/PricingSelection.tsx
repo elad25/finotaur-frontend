@@ -161,17 +161,15 @@ export default function PricingSelection() {
         // If returning from Whop with successful payment
         if (paymentSuccess || fromWhop) {
           console.log('🎉 User returned from Whop payment');
-          
+
           // Clean URL params
           window.history.replaceState({}, '', '/pricing-selection');
-          
-          // Check if they need to set up risk
-          if (!hasRiskConfigured) {
-            console.log('📊 Needs risk setup after payment');
-            setShowRiskSetup(true);
-            setCheckingSubscription(false);
-            return;
-          }
+
+          // 🔥 REDIRECT TO JOURNAL UPSELL PAGE (25% discount offer)
+          // Instead of going directly to the app, show the upsell opportunity
+          console.log('🚀 Redirecting to Journal Upsell page');
+          navigate('/journal-upsell');
+          return;
         }
 
         // Check for DIRECT Journal subscription

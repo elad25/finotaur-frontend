@@ -44,6 +44,9 @@ import NotFound from "./pages/NotFound";
 // 🔥 NEW: Pricing Selection Page
 import PricingSelection from "@/pages/app/journal/PricingSelection";
 
+// 🔥 NEW: Journal Upsell Page (after TOP SECRET checkout)
+import JournalUpsell from "@/pages/app/journal/JournalUpsell";
+
 // 📄 ABOUT & CONTACT PAGES
 import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
@@ -533,6 +536,9 @@ function AppContent() {
         
         {/* 🔥 Pricing Selection Route */}
         <Route path="/pricing-selection" element={<PricingSelection />} />
+
+        {/* 🔥 Journal Upsell Route (after TOP SECRET checkout) */}
+        <Route path="/journal-upsell" element={<JournalUpsell />} />
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
