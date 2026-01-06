@@ -24,11 +24,15 @@ const painPoints = [
 const PainAmplification = () => {
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0D0D0D] to-[#0A0A0A]" />
+      {/* Background with gold warmth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0F0D08] to-[#0A0A0A]" />
 
-      {/* Subtle accent */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      {/* Gold glows */}
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#C9A646]/[0.06] rounded-full blur-[130px]" />
+      <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.05] rounded-full blur-[100px]" />
+
+      {/* Top border */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
 
       <div className="max-w-4xl mx-auto px-6 lg:px-8 relative z-10">
         {/* ============================================

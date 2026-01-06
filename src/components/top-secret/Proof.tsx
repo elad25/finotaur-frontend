@@ -26,11 +26,16 @@ const proofCards = [
 const Proof = () => {
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0F0D09] to-[#0A0A0A]" />
+      {/* Background with gold warmth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#110F09] to-[#0A0A0A]" />
 
-      {/* Gold accent glow */}
-      <div className="absolute top-1/2 right-0 w-[400px] h-[600px] bg-[#C9A646]/[0.05] rounded-full blur-[120px]" />
+      {/* Multiple gold glows */}
+      <div className="absolute top-1/2 right-0 w-[500px] h-[700px] bg-[#C9A646]/[0.07] rounded-full blur-[130px]" />
+      <div className="absolute top-1/4 left-0 w-[400px] h-[400px] bg-[#D4AF37]/[0.05] rounded-full blur-[100px]" />
+      <div className="absolute bottom-0 left-1/2 w-[600px] h-[300px] bg-[#C9A646]/[0.04] rounded-full blur-[120px]" />
+
+      {/* Top border */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
 
       <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">
         {/* ============================================
