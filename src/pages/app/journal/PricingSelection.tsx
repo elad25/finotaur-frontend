@@ -13,7 +13,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Crown, Shield, LogOut, Check, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { Crown, Shield, LogOut, Check, Clock, ArrowRight, Sparkles, Flame, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -290,6 +290,36 @@ export default function PricingSelection() {
           <p className="text-lg text-slate-400 max-w-xl mx-auto leading-relaxed">
             Get the same institutional-grade research that hedge funds pay thousands for
           </p>
+        </motion.div>
+
+        {/* Early Sale Banner */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="max-w-2xl mx-auto mb-8"
+        >
+          <div
+            className="p-4 rounded-xl flex items-center justify-center gap-3"
+            style={{
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(220,38,38,0.1) 100%)',
+              border: '2px solid rgba(239,68,68,0.5)',
+              boxShadow: '0 0 30px rgba(239,68,68,0.2)'
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <Flame className="w-5 h-5 text-red-500 animate-pulse" />
+              <span className="text-red-400 font-bold text-lg">EARLY SALE IS ON</span>
+              <Flame className="w-5 h-5 text-red-500 animate-pulse" />
+            </div>
+            <span className="text-slate-300 mx-2">|</span>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-400" />
+              <span className="text-slate-300 text-sm">
+                Prices increase on <span className="text-yellow-400 font-semibold">January 31st</span>
+              </span>
+            </div>
+          </div>
         </motion.div>
 
         {/* Pricing Cards */}
