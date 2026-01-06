@@ -2,15 +2,15 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import CountdownTimer from "./CountdownTimer";
 
 const FinalCTA = () => {
+  const navigate = useNavigate();
+
   const handleJoinClick = () => {
-    // Scroll to pricing or navigate to signup
-    const pricingSection = document.getElementById('pricing');
-    if (pricingSection) {
-      pricingSection.scrollIntoView({ behavior: 'smooth' });
-    }
+    // Navigate to register with redirect to TOP SECRET pricing
+    navigate('/register?redirect=top-secret-pricing');
   };
 
   return (

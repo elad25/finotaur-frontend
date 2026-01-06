@@ -1,7 +1,7 @@
 // src/pages/auth/Register.tsx
 // 📝 REGISTRATION PAGE WITH TERMS ACCEPTANCE CHECKBOX + MODAL POPUP
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,8 @@ const saveTermsAcceptance = async (userId: string) => {
 export default function Register() {
   const { user, register, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -122,11 +124,21 @@ export default function Register() {
         }
 
         if (data?.onboarding_completed && data?.account_type) {
+          // If redirect param is set for TOP SECRET, go there instead
+          if (redirectParam === 'top-secret-pricing') {
+            navigate('/pricing-selection/top-secret', { replace: true });
+            return;
+          }
           navigate('/app/journal/overview', { replace: true });
           return;
         }
 
-        navigate('/pricing-selection', { replace: true });
+        // Redirect based on URL param or default
+        if (redirectParam === 'top-secret-pricing') {
+          navigate('/pricing-selection/top-secret', { replace: true });
+        } else {
+          navigate('/pricing-selection', { replace: true });
+        }
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
@@ -134,7 +146,7 @@ export default function Register() {
     };
 
     checkUserStatus();
-  }, [user, navigate]);
+  }, [user, navigate, redirectParam]);
 
   // Handle Enter key for form navigation
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<HTMLInputElement>) => {

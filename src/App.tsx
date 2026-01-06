@@ -41,8 +41,9 @@ import ForgotPassword from '@/pages/auth/ForgotPassword';
 import ResetPassword from '@/pages/auth/ResetPassword';
 import NotFound from "./pages/NotFound";
 
-// 🔥 NEW: Pricing Selection Page
+// 🔥 NEW: Pricing Selection Pages
 import PricingSelection from "@/pages/app/journal/PricingSelection";
+import TopSecretPricingSelection from "@/pages/app/TopSecret/TopSecretPricingSelection";
 
 // 📄 ABOUT & CONTACT PAGES
 import AboutPage from "@/pages/AboutPage";
@@ -531,8 +532,9 @@ function AppContent() {
         <Route path="/legal/refund" element={<RefundPolicy />} />
         <Route path="/legal/dmca" element={<DMCA />} />
         
-        {/* 🔥 Pricing Selection Route */}
+        {/* 🔥 Pricing Selection Routes */}
         <Route path="/pricing-selection" element={<PricingSelection />} />
+        <Route path="/pricing-selection/top-secret" element={<TopSecretPricingSelection />} />
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
