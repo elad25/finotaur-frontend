@@ -153,7 +153,6 @@ export const domains: Record<string, Domain> = {
     label: 'AI Insights',
     subNav: [
       { label: 'Overview', path: '/app/ai/overview' },
-      { label: 'Forecasts', path: '/app/ai/forecasts' },
     ],
     sidebar: [
       { label: 'Daily Summary', path: '/app/ai/overview', icon: LayoutDashboard },

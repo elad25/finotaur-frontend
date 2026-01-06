@@ -1,12 +1,12 @@
 // src/components/BrokerConnectionPopup.tsx
-// ✅ SnapTrade Broker Connection Popup - Connect 100+ brokers worldwide
+// ✅ Multi-Broker Connection Popup - Interactive Brokers + SnapTrade (100+ brokers)
 // 🔄 Syncs trades automatically with Finotaur trades table
 // 🔧 FIXED: Race condition in initialization
 
 import { useState, useEffect, useRef } from "react";
 import { 
   X, Search, AlertCircle, Loader2, ArrowRight, Lock, Crown, 
-  CheckCircle, RefreshCw, Unlink, Check
+  CheckCircle, RefreshCw, Unlink, Check, Building2
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -18,12 +18,16 @@ import { getOrCreateSnapTradeCredentials, snaptradeSupabaseService } from "@/int
 import { useSnapTradeConnectionStatus } from "@/hooks/useTrackSnapTradeActivity";
 import type { Brokerage, SnapTradeCredentials } from "@/integrations/snaptrade/snaptradeTypes";
 
+// Interactive Brokers import
+import IBConnectionPopup from "./brokers/IBConnectionPopup";
+
 // ============================================================================
 // TYPES
 // ============================================================================
 
 type ViewType = 
-  | "snaptrade-brokers"    // SnapTrade broker list (main view)
+  | "broker-selection"     // Choose between IB or SnapTrade
+  | "snaptrade-brokers"    // SnapTrade broker list
   | "connecting"           // Connection in progress
   | "connected"            // Successfully connected
   | "manage-connections"   // View/manage existing connections
@@ -41,10 +45,13 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
   const { canUseSnapTrade, limits, isUnlimitedUser } = useSubscription();
   const { markAsConnected, markAsDisconnected } = useSnapTradeConnectionStatus();
   
-  // View state - Start directly with broker list
-  const [view, setView] = useState<ViewType>("snaptrade-brokers");
-  const [loading, setLoading] = useState(true);
+  // View state - Start with broker selection
+  const [view, setView] = useState<ViewType>("broker-selection");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
+  
+  // IB state
+  const [showIBPopup, setShowIBPopup] = useState(false);
   
   // SnapTrade state
   const [snaptradeCredentials, setSnaptradeCredentials] = useState<SnapTradeCredentials | null>(null);
@@ -70,12 +77,13 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     console.log('✅ Broker connection access granted');
   }, [canUseSnapTrade, isUnlimitedUser, limits]);
 
-  // 🔧 FIXED: Sequential initialization to prevent race conditions
+  // 🔧 FIXED: Load SnapTrade brokers only when entering snaptrade-brokers view
   useEffect(() => {
-    async function initializeAndLoadBrokers() {
-      // Prevent double initialization
+    async function loadSnapTradeBrokers() {
+      // Only load when viewing snaptrade-brokers
+      if (view !== "snaptrade-brokers") return;
       if (initializationRef.current) return;
-      if (!user || view === "blocked") return;
+      if (!user) return;
       
       initializationRef.current = true;
       setLoading(true);
@@ -124,7 +132,7 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
       }
     }
     
-    initializeAndLoadBrokers();
+    loadSnapTradeBrokers();
   }, [user, view]);
 
   // ============================================================================
@@ -241,6 +249,16 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
   };
 
   // ============================================================================
+  // IB SUCCESS HANDLER
+  // ============================================================================
+
+  const handleIBSuccess = (connectionId: string) => {
+    console.log('✅ IB Connected:', connectionId);
+    setShowIBPopup(false);
+    setView("connected");
+  };
+
+  // ============================================================================
   // FILTERED BROKERS
   // ============================================================================
 
@@ -324,7 +342,128 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // SnapTrade Broker List View
+  // ============================================================================
+  // BROKER SELECTION VIEW (NEW - First Screen)
+  // ============================================================================
+
+  if (view === "broker-selection") {
+    return (
+      <div 
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        onClick={onClose}
+      >
+        <div 
+          className="bg-[#141414] border rounded-[20px] p-6 max-w-lg w-full shadow-[0_0_50px_rgba(201,166,70,0.2)]"
+          style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-1">Connect Your Broker</h2>
+              <p className="text-zinc-500 text-sm">Choose your connection method</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-zinc-400" />
+            </button>
+          </div>
+
+          {/* Connection Options */}
+          <div className="space-y-3">
+            
+            {/* Option 1: Interactive Brokers (Direct IBRIT) */}
+            <button
+              onClick={() => setShowIBPopup(true)}
+              className="w-full p-5 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-[#D71E28]/50 rounded-xl transition-all text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-[#D71E28]/10 flex items-center justify-center border border-[#D71E28]/30 group-hover:border-[#D71E28]/50 transition-colors">
+                  <span className="text-[#D71E28] font-bold text-xl">IB</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-white font-semibold group-hover:text-[#D71E28] transition-colors">
+                    Interactive Brokers
+                  </p>
+                  <p className="text-zinc-500 text-sm">
+                    Direct IBRIT integration • Stocks, Options, Futures, Forex
+                  </p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-zinc-600 group-hover:text-[#D71E28] transform group-hover:translate-x-1 transition-all" />
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded">
+                  Official API
+                </span>
+                <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
+                  Read-Only
+                </span>
+                <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">
+                  All Asset Classes
+                </span>
+              </div>
+            </button>
+
+            {/* Option 2: SnapTrade (100+ Brokers) */}
+            <button
+              onClick={() => {
+                initializationRef.current = false; // Reset to allow loading
+                setView("snaptrade-brokers");
+              }}
+              className="w-full p-5 bg-zinc-900/50 hover:bg-zinc-900 border border-zinc-800 hover:border-[#C9A646]/50 rounded-xl transition-all text-left group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-xl bg-[#C9A646]/10 flex items-center justify-center border border-[#C9A646]/30 group-hover:border-[#C9A646]/50 transition-colors">
+                  <Building2 className="w-7 h-7 text-[#C9A646]" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-white font-semibold group-hover:text-[#C9A646] transition-colors">
+                    Other Brokers
+                  </p>
+                  <p className="text-zinc-500 text-sm">
+                    100+ brokers via SnapTrade • Schwab, Robinhood, Fidelity...
+                  </p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-zinc-600 group-hover:text-[#C9A646] transform group-hover:translate-x-1 transition-all" />
+              </div>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-[10px] bg-[#C9A646]/10 text-[#C9A646] px-2 py-0.5 rounded">
+                  100+ Brokers
+                </span>
+                <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded">
+                  OAuth
+                </span>
+                <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded">
+                  Stocks & ETFs
+                </span>
+              </div>
+            </button>
+
+          </div>
+
+          {/* Footer */}
+          <p className="text-zinc-600 text-xs text-center mt-6">
+            Your credentials are encrypted and never stored on our servers
+          </p>
+        </div>
+
+        {/* IB Popup */}
+        {showIBPopup && (
+          <IBConnectionPopup 
+            onClose={() => setShowIBPopup(false)}
+            onSuccess={handleIBSuccess}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // SNAPTRADE BROKER LIST VIEW
+  // ============================================================================
+
   if (view === "snaptrade-brokers") {
     return (
       <div 
@@ -336,11 +475,20 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
           style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
+          {/* Header with Back Button */}
           <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white mb-1">Connect Your Broker</h2>
-              <p className="text-zinc-500 text-sm">Choose your brokerage to import trades automatically</p>
+            <div className="flex items-center gap-3">
+              {/* Back Button */}
+              <button
+                onClick={() => setView("broker-selection")}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <ArrowRight className="w-5 h-5 text-zinc-400 rotate-180" />
+              </button>
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">Select Your Broker</h2>
+                <p className="text-zinc-500 text-sm">Choose from 100+ supported brokers via SnapTrade</p>
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -462,7 +610,10 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // Manage Connections View
+  // ============================================================================
+  // MANAGE CONNECTIONS VIEW
+  // ============================================================================
+
   if (view === "manage-connections") {
     return (
       <div 
@@ -542,7 +693,7 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
 
           {/* Add New Connection Button */}
           <button
-            onClick={() => setView("snaptrade-brokers")}
+            onClick={() => setView("broker-selection")}
             className="w-full mt-4 p-4 border border-dashed border-zinc-700 rounded-xl flex items-center justify-center gap-2 hover:border-[#C9A646]/50 hover:bg-zinc-900/50 transition-colors text-zinc-400 hover:text-white"
           >
             <span className="text-xl">+</span>
@@ -553,7 +704,10 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // Connecting View
+  // ============================================================================
+  // CONNECTING VIEW
+  // ============================================================================
+
   if (view === "connecting") {
     return (
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -575,7 +729,10 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // Connected View
+  // ============================================================================
+  // CONNECTED VIEW
+  // ============================================================================
+
   if (view === "connected") {
     return (
       <div 
@@ -609,7 +766,10 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
     );
   }
 
-  // Error View
+  // ============================================================================
+  // ERROR VIEW
+  // ============================================================================
+
   if (view === "error") {
     return (
       <div 
@@ -642,7 +802,7 @@ export default function BrokerConnectionPopup({ onClose }: { onClose: () => void
             <button
               onClick={() => {
                 setError("");
-                setView("snaptrade-brokers");
+                setView("broker-selection");
               }}
               className="flex-1 px-6 py-3 bg-[#C9A646] hover:bg-[#B39540] text-black rounded-xl transition-colors font-bold"
             >

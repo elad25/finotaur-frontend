@@ -13,6 +13,7 @@ const NO_SIDEBAR_ROUTES = [
   '/app/top-secret',
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
+  '/app/settings',
 ];
 
 export const ProtectedAppLayout = () => {

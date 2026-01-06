@@ -1,11 +1,12 @@
 // ============================================
-// FINOTAUR SUPPORT WIDGET v2.0
+// FINOTAUR SUPPORT WIDGET v2.1 - FIXED
 // ============================================
 // ✨ Support for both logged-in and guest users
 // 🔒 Guests can only send one message (no history)
 // 📧 Guests must provide name + email first
 // 📢 System updates with PDF support for ISM reports
 // 📅 30-day notification history
+// 🛡️ FIX v2.1: Admins see ALL reports (not filtered by target_group)
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -49,6 +50,10 @@ interface SystemUpdateMetadata {
   pdf_url?: string;
   pmi_value?: number;
   pmi_change?: number;
+  ticker?: string;
+  sector?: string;
+  regime?: string;
+  regime_score?: number;
 }
 
 interface SystemUpdate {
@@ -56,11 +61,15 @@ interface SystemUpdate {
   title: string;
   content: string;
   type: 'info' | 'success' | 'warning' | 'announcement';
+  target_group?: string;
   is_pinned?: boolean;
   created_at: string;
   read: boolean;
   metadata?: SystemUpdateMetadata;
 }
+
+// ==================== ADMIN EMAIL CONSTANT ====================
+const ADMIN_EMAIL = 'elad2550@gmail.com';
 
 export default function SupportWidget() {
   // ==================== STATE ====================
@@ -83,6 +92,7 @@ export default function SupportWidget() {
   const [guestFormEmail, setGuestFormEmail] = useState('');
   const [systemUpdates, setSystemUpdates] = useState<SystemUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -184,10 +194,16 @@ export default function SupportWidget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setIsGuest(false);
+        
+        // Check if admin
+        const isAdminUser = user.email === ADMIN_EMAIL;
+        setIsAdmin(isAdminUser);
+        
         loadUserInfo();
         loadUserTickets();
       } else {
         setIsGuest(true);
+        setIsAdmin(false);
         setView('chat');
         setIsNewConversation(true);
         setActiveTab('support');
@@ -195,6 +211,7 @@ export default function SupportWidget() {
     } catch (error) {
       console.error('Error checking user status:', error);
       setIsGuest(true);
+      setIsAdmin(false);
     }
   }
 
@@ -209,10 +226,10 @@ export default function SupportWidget() {
         }
 
         const { data: profile } = await supabase
-  .from('profiles')
-  .select('full_name, email, top_secret_enabled, newsletter_enabled, newsletter_paid, role')
-  .eq('id', user.id)
-  .single();
+          .from('profiles')
+          .select('full_name, email, top_secret_enabled, newsletter_enabled, newsletter_paid, role')
+          .eq('id', user.id)
+          .single();
         
         if (profile?.full_name) {
           setUserName(profile.full_name);
@@ -220,6 +237,11 @@ export default function SupportWidget() {
         } else {
           setUserName(user.email?.split('@')[0] || 'Trader');
           setUserEmail(user.email || '');
+        }
+        
+        // Double-check admin status from profile
+        if (profile?.role === 'admin' || profile?.role === 'super_admin' || user.email === ADMIN_EMAIL) {
+          setIsAdmin(true);
         }
       }
     } catch (error) {
@@ -271,36 +293,49 @@ export default function SupportWidget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get user's subscription tier to determine target group
-const { data: profile } = await supabase
-  .from('profiles')
-  .select('top_secret_enabled, newsletter_enabled, newsletter_paid, role')
-  .eq('id', user.id)
-  .single();
-      // Determine user's target group
-      // Determine user's target group
-// Admins automatically get TOP SECRET access
-let userGroup = 'trading_journal';
-if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top_secret_enabled) {
-  userGroup = 'top_secret';
-} else if (profile?.newsletter_enabled || profile?.newsletter_paid) {
-  userGroup = 'newsletter';
-}
+      // Get user's profile to determine access level
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('top_secret_enabled, newsletter_enabled, newsletter_paid, role, email')
+        .eq('id', user.id)
+        .single();
+
+      // ✅ FIX: Check if user is admin
+      const userIsAdmin = 
+        profile?.role === 'admin' || 
+        profile?.role === 'super_admin' || 
+        user.email === ADMIN_EMAIL ||
+        profile?.email === ADMIN_EMAIL;
 
       // Keep 30 days of history
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Load active updates for user's group
-      const { data: updates, error } = await supabase
+      let query = supabase
         .from('system_updates')
         .select('*')
         .eq('is_active', true)
-        .or(`target_group.eq.all,target_group.eq.${userGroup}`)
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: false })
         .limit(50);
+
+      // ✅ FIX: Admins see ALL updates (no target_group filter)
+      if (!userIsAdmin) {
+        // Determine user's target group for non-admins
+        let userGroup = 'trading_journal';
+        if (profile?.top_secret_enabled) {
+          userGroup = 'top_secret';
+        } else if (profile?.newsletter_enabled || profile?.newsletter_paid) {
+          userGroup = 'newsletter';
+        }
+        
+        // Filter by target_group for non-admins
+        query = query.or(`target_group.eq.all,target_group.eq.${userGroup}`);
+      }
+      // If admin, no filter applied - they see everything
+
+      const { data: updates, error } = await query;
 
       if (error) {
         console.error('Error loading updates:', error);
@@ -669,6 +704,34 @@ if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top
     }
   }
 
+  function getReportTypeLabel(reportType?: string): string {
+    switch (reportType) {
+      case 'ism':
+        return '🏭 ISM Report';
+      case 'crypto_analysis':
+        return '🪙 Crypto Report';
+      case 'company_analysis':
+        return '📊 Company Report';
+      case 'weekly_analysis':
+        return '📈 Weekly Report';
+      default:
+        return '';
+    }
+  }
+
+  function getTargetGroupLabel(targetGroup?: string): string {
+    switch (targetGroup) {
+      case 'top_secret':
+        return '🔒 TOP SECRET';
+      case 'newsletter':
+        return '📧 Newsletter';
+      case 'all':
+        return '🌐 All Users';
+      default:
+        return '';
+    }
+  }
+
   // ==================== NAVIGATION ====================
 
   const unreadUpdatesCount = systemUpdates.filter(u => !u.read).length;
@@ -786,7 +849,7 @@ if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top
                       Finotaur
                     </h3>
                     <p className="text-[10px] text-[#D4AF37] font-medium mt-0.5 font-['Inter',sans-serif]">
-                      Support & Updates
+                      {isAdmin ? '🛡️ Admin View' : 'Support & Updates'}
                     </p>
                   </div>
                 </div>
@@ -908,6 +971,18 @@ if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top
               {/* ==================== UPDATES TAB ==================== */}
               {!isGuest && activeTab === 'updates' && (
                 <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Admin Badge */}
+                  {isAdmin && (
+                    <div className="px-4 pt-3">
+                      <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-purple-400" />
+                        <span className="text-xs text-purple-300">
+                          Admin View: Showing ALL reports from all target groups
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {loadingUpdates ? (
                       <div className="flex items-center justify-center h-full">
@@ -954,6 +1029,21 @@ if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top
                                   </span>
                                 )}
                               </div>
+                              
+                              {/* ✅ Admin: Show target group badge */}
+                              {isAdmin && update.target_group && (
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                    {getTargetGroupLabel(update.target_group)}
+                                  </span>
+                                  {update.metadata?.report_type && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                      {getReportTypeLabel(update.metadata.report_type)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              
                               <p className="text-xs text-gray-400 leading-relaxed">
                                 {update.content}
                               </p>
@@ -991,6 +1081,30 @@ if (profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.top
                                         ({update.metadata.pmi_change > 0 ? '+' : ''}{update.metadata.pmi_change.toFixed(1)})
                                       </span>
                                     )}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {/* Company Report specific: Ticker Badge */}
+                              {update.metadata?.ticker && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
+                                    📈 {update.metadata.ticker}
+                                    {update.metadata.sector && ` • ${update.metadata.sector}`}
+                                  </span>
+                                </div>
+                              )}
+                              
+                              {/* Crypto Report specific: Regime Badge */}
+                              {update.metadata?.regime && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+                                    update.metadata.regime_score && update.metadata.regime_score >= 50 
+                                      ? 'bg-green-500/20 text-green-400' 
+                                      : 'bg-orange-500/20 text-orange-400'
+                                  }`}>
+                                    🪙 {update.metadata.regime}
+                                    {update.metadata.regime_score && ` (${update.metadata.regime_score}/100)`}
                                   </span>
                                 </div>
                               )}

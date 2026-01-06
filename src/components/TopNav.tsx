@@ -1,17 +1,14 @@
 // src/components/TopNav.tsx
 // =====================================================
-// FINOTAUR TOP NAVIGATION - v2.2.0
+// FINOTAUR TOP NAVIGATION - v2.3.0
 // =====================================================
+// 
+// 🔥 v2.3.0 CHANGES:
+// - UNLOCKED: Settings menu item (now navigates to /app/settings)
 // 
 // 🔥 v2.2.0 CHANGES:
 // - LOCKED: Search functionality (Coming Soon)
-// - LOCKED: Settings menu item (Coming Soon)
 // - LOCKED: Upgrade menu item (Coming Soon)
-// 
-// 🔥 v2.1.0 CHANGES:
-// - UNLOCKED: Search functionality (was "Coming Soon")
-// - ADDED: Click to open QuickSearch modal
-// - ADDED: Keyboard shortcut indicator (⌘K)
 // 
 // 🔥 v2.0.2 CHANGES:
 // - FIXED: Logo now navigates to /app/top-secret
@@ -255,7 +252,7 @@ export const TopNav = () => {
           </Button>
 
           {/* ═══════════════════════════════════════════
-              🔥 USER MENU - Simplified (No Settings/Upgrade)
+              🔥 USER MENU - Settings UNLOCKED
           ═══════════════════════════════════════════ */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -322,17 +319,13 @@ export const TopNav = () => {
                 </span>
               </DropdownMenuItem>
 
-              {/* 🔒 Settings - LOCKED (Coming Soon) */}
+              {/* ✅ Settings - UNLOCKED */}
               <DropdownMenuItem 
-                className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
-                disabled
+                onClick={() => navigate('/app/settings')}
+                className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
               >
-                <Settings className="mr-2 h-4 w-4 text-zinc-400/50" />
-                <span className="text-white/50">Settings</span>
-                <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
-                  <Lock className="w-2.5 h-2.5" />
-                  Soon
-                </span>
+                <Settings className="mr-2 h-4 w-4 text-zinc-400" />
+                <span className="text-white">Settings</span>
               </DropdownMenuItem>
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />

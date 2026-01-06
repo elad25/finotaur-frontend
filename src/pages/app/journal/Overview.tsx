@@ -9,6 +9,7 @@
 // ✅ UPDATED: Green checkmark on Refer a Friend for active affiliates
 // ✅ NEW: Personalized greeting with user name
 // ✅ FIXED: Broker button completely disabled for FREE users
+// ✅ NEW: Import Trades button replacing Trader Tier
 // ✅ Production ready for 5000+ users
 // ================================================
 
@@ -20,7 +21,8 @@ import {
   PlusSquare, FileText, Layers, BarChart3, Calendar as CalendarIcon,
   MessageSquare, ListChecks, Users, GraduationCap, Settings as SettingsIcon,
   Sparkles, TrendingUp, TrendingDown, UserPlus, Link2, CheckCircle2, Lock, 
-  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check
+  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check, Upload, 
+  FileSpreadsheet, Download
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useAuth } from "@/providers/AuthProvider";
@@ -58,6 +60,9 @@ const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
+const ImportTradesPopup = lazy(() => import("@/components/Importtradespopup"));
+import { useImportTrades } from '@/hooks/useImportTrades';
+import type { FinotaurTrade } from '@/utils/importUtils';
 
 // ================================================
 // LOADING SKELETONS
@@ -768,12 +773,15 @@ function JournalOverviewContent() {
   const [showReferModal, setShowReferModal] = useState(false);
   const [showSnapTradePopup, setShowSnapTradePopup] = useState(false);
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
+  const [showImportPopup, setShowImportPopup] = useState(false);
   
   const { id: userId, isImpersonating } = useEffectiveUser();
   
   const { limits, loading: subscriptionLoading, canUseSnapTrade } = useSubscription();
-  const { data: stats, isLoading, error } = useDashboardStats(DAYS_MAP[range], userId);
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(DAYS_MAP[range], userId);
   const { data: connections, isLoading: connectionsLoading } = useSnapTradeConnections(userId);
+  const { importTrades: saveToSupabase } = useImportTrades();
+
   
   // ✅ NEW: Check if user is an affiliate
   const { isAffiliate, isLoading: affiliateLoading } = useIsAffiliate();
@@ -830,6 +838,15 @@ function JournalOverviewContent() {
     setShowFreeUserTooltip(false);
     navigate('/app/journal/pricing');
   }, [navigate]);
+
+  // ✅ NEW: Handle import completion
+const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
+  const result = await saveToSupabase(trades);
+  if (result.success) {
+    await refetchStats();
+  }
+  return result;
+}, [saveToSupabase, refetchStats]);
   
   if (error) {
     return (
@@ -859,7 +876,7 @@ function JournalOverviewContent() {
       <style>{ANIMATION_STYLES}</style>
       
       <div className="p-6 space-y-6">
-        {/* ✅ UPDATED: Header with Personalized Greeting in Subtitle */}
+        {/* ✅ UPDATED: Header with Import Button instead of Trader Tier */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex-1">
             <PageTitle 
@@ -908,26 +925,29 @@ function JournalOverviewContent() {
               )}
             </button>
 
-            {tier && (
-              <div 
-                className="flex items-center gap-3 bg-[#141414] border rounded-[16px] px-5 py-3 shadow-[0_0_30px_rgba(201,166,70,0.08)] relative overflow-hidden"
-                style={BORDER_STYLE}
-              >
-                <div className="relative z-10 flex items-center gap-3">
-                  <div className={`text-2xl ${tier.icon === '🥇' ? 'animate-pulse-gold' : ''}`}>
-                    {tier.icon}
+            {/* ✅ NEW: Import Trades Button (replaces Trader Tier) */}
+            <button
+              onClick={() => setShowImportPopup(true)}
+              className="flex items-center gap-3 bg-gradient-to-r from-[#1A1A1A] to-[#242424] hover:from-[#242424] hover:to-[#2A2A2A] border rounded-[16px] px-5 py-3 shadow-[0_0_30px_rgba(201,166,70,0.08)] transition-all duration-300 group relative overflow-hidden"
+              style={BORDER_STYLE}
+            >
+              {/* Subtle glow effect */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#C9A646]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              
+              <div className="relative z-10 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                  <Upload className="w-5 h-5 text-[#C9A646]" />
+                </div>
+                <div className="text-left">
+                  <div className="text-[10px] text-[#A0A0A0] uppercase tracking-wider font-light">
+                    Migrate Data
                   </div>
-                  <div>
-                    <div className="text-[10px] text-[#A0A0A0] uppercase tracking-wider font-light">
-                      Trader Tier
-                    </div>
-                    <div className={`text-sm font-semibold ${tier.color}`}>
-                      {tier.tier}
-                    </div>
+                  <div className="text-sm font-semibold text-[#F4F4F4] group-hover:text-[#C9A646] transition-colors">
+                    Import Trades
                   </div>
                 </div>
               </div>
-            )}
+            </button>
           </div>
         </div>
 
@@ -1167,6 +1187,20 @@ function JournalOverviewContent() {
           onClose={() => setShowFreeUserTooltip(false)}
           onUpgrade={handleUpgradeFromTooltip}
         />
+      )}
+
+      {/* ✅ NEW: Import Trades Popup */}
+      {showImportPopup && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <ImportTradesPopup
+              onClose={() => setShowImportPopup(false)}
+              onImportComplete={handleImportComplete}
+              userId={userId}
+              userTimezone={timezone}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
     </div>
   );

@@ -17,5 +17,5 @@
     // ✅ תיקון בעיית Case Sensitivity
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src", "src/pages/app/.tsx"]
 }

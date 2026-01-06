@@ -79,7 +79,7 @@ const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
 const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 
 // === Settings & Payment ===
-const Settings = lazy(() => import("@/pages/app/Settings"));
+const SettingsLayout = lazy(() => import("@/layouts/SettingsLayout"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
 const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccessPage"));
@@ -232,14 +232,12 @@ const OptionsShortcuts = lazy(() => import("@/pages/app/options/Shortcuts"));
 
 // === AI ===
 const AIOverview = lazy(() => import("@/pages/app/ai/Overview"));
-const AIDigest = lazy(() => import("@/pages/app/ai/Digest"));
-const AISentiment = lazy(() => import("@/pages/app/ai/Sentiment"));
-const AIForecasts = lazy(() => import("@/pages/app/ai/Forecasts"));
-const AIRisk = lazy(() => import("@/pages/app/ai/Risk"));
-const AIPatterns = lazy(() => import("@/pages/app/ai/Patterns"));
-const AIReports = lazy(() => import("@/pages/app/ai/Reports"));
-const AIAlerts = lazy(() => import("@/pages/app/ai/Alerts"));
-const AIBacktesting = lazy(() => import("@/pages/app/ai/Backtesting"));
+const AIMorningBrief = lazy(() => import("@/pages/app/ai/MorningBrief"));
+const AIMarketPulse = lazy(() => import("@/pages/app/ai/MarketPulse"));
+const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
+const AIMacroEarnings = lazy(() => import("@/pages/app/ai/MacroEarnings"));
+const AITradeIdeas = lazy(() => import("@/pages/app/ai/TradeIdeas"));
+const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
 
 // === Copy Trade ===
 const CopyTradeOverview = lazy(() => import("@/pages/app/copy-trade/Overview"));
@@ -646,17 +644,17 @@ function AppContent() {
           <Route path="macro/sentiment" element={<LockedRoute domainId="macro"><MacroSentiment /></LockedRoute>} />
           <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
-          {/* 🔒 AI - LOCKED */}
-          <Route path="ai/overview" element={<LockedRoute domainId="ai"><AIOverview /></LockedRoute>} />
-          <Route path="ai/digest" element={<LockedRoute domainId="ai"><AIDigest /></LockedRoute>} />
-          <Route path="ai/sentiment" element={<LockedRoute domainId="ai"><AISentiment /></LockedRoute>} />
-          <Route path="ai/forecasts" element={<LockedRoute domainId="ai"><AIForecasts /></LockedRoute>} />
-          <Route path="ai/risk" element={<LockedRoute domainId="ai"><AIRisk /></LockedRoute>} />
-          <Route path="ai/patterns" element={<LockedRoute domainId="ai"><AIPatterns /></LockedRoute>} />
-          <Route path="ai/reports" element={<LockedRoute domainId="ai"><AIReports /></LockedRoute>} />
-          <Route path="ai/alerts" element={<LockedRoute domainId="ai"><AIAlerts /></LockedRoute>} />
-          <Route path="ai/backtesting" element={<LockedRoute domainId="ai"><AIBacktesting /></LockedRoute>} />
-          
+{/* 🤖 AI INSIGHTS - UNLOCKED (using SuspenseRoute, not LockedRoute) */}
+<Route path="ai/overview" element={<SuspenseRoute><AIOverview /></SuspenseRoute>} />
+<Route path="ai/morning-brief" element={<SuspenseRoute><AIMorningBrief /></SuspenseRoute>} />
+<Route path="ai/market-pulse" element={<SuspenseRoute><AIMarketPulse /></SuspenseRoute>} />
+<Route path="ai/my-portfolio" element={<SuspenseRoute><AIMyPortfolio /></SuspenseRoute>} />
+<Route path="ai/macro-earnings" element={<SuspenseRoute><AIMacroEarnings /></SuspenseRoute>} />
+{/* These two remain locked */}
+<Route path="ai/trade-ideas" element={<LockedRoute domainId="ai"><AITradeIdeas /></LockedRoute>} />
+<Route path="ai/assistant" element={<LockedRoute domainId="ai"><AIAssistant /></LockedRoute>} />
+
+
           {/* ✅ JOURNAL - UNLOCKED */}
           <Route path="journal/overview" element={<SuspenseRoute><JournalOverview /></SuspenseRoute>} />
           <Route path="journal/new" element={<SuspenseRoute><New /></SuspenseRoute>} />
@@ -749,15 +747,12 @@ function AppContent() {
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />
           <Route path="funding/brokers" element={<LockedRoute domainId="funding"><FundingBrokers /></LockedRoute>} />
           <Route path="funding/advance" element={<LockedRoute domainId="funding"><FundingAdvance /></LockedRoute>} />
-<Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
+          <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
           
-          {/* ⚙️ SETTINGS */}
-          <Route path="settings" element={<SuspenseRoute><Settings /></SuspenseRoute>} />
+<Route path="settings" element={<SuspenseRoute><SettingsLayout /></SuspenseRoute>} />
+
         </Route>
-        
-        <Route path="/settings" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>
-          <Route index element={<SuspenseRoute><Settings /></SuspenseRoute>} />
-        </Route>
+
         
         <Route path="*" element={<NotFound />} />
       </Routes>

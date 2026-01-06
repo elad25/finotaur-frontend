@@ -1,19 +1,18 @@
 // src/constants/nav.ts
 // =====================================================
-// FINOTAUR NAVIGATION CONFIG - v2.1.2
+// FINOTAUR NAVIGATION CONFIG - v2.3.1
 // =====================================================
 // 
+// 🔥 v2.3.1 CHANGES:
+// - LOCKED: War Zone is now locked (Coming Soon)
+//
+// 🔥 v2.3.0 CHANGES:
+// - UPDATED: AI Insights sidebar to match new pages in App.tsx
+// - UNLOCKED: AI domain is now open
+//
 // 🔥 v2.1.2 CHANGES:
 // - LOCKED: Overview, Summary, Chart tabs
 // - UNLOCKED: Only War Zone and Top Secret remain open
-//
-// 🔥 v2.1.1 CHANGES:
-// - SWAPPED: Summary and Chart positions in all-markets subNav
-//
-// 🔥 v2.1.0 CHANGES:
-// - ADDED: hideForAdmin flag to NavItem interface
-// - UPDATED: Top Secret now hidden for admins (they use Admin version)
-// - FIXED: Double highlight issue on Top Secret tabs
 // =====================================================
 
 import {
@@ -22,10 +21,9 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown
+  Link, Gift, type LucideIcon, Swords, Crown, Shield
 } from 'lucide-react';
 
-// 🆕 UPDATED: Added hideForAdmin to interface
 export interface NavItem { 
   label: string; 
   path: string; 
@@ -33,7 +31,7 @@ export interface NavItem {
   adminOnly?: boolean;
   affiliateOnly?: boolean;
   locked?: boolean;
-  hideForAdmin?: boolean;  // 🆕 Hide this item when user is admin
+  hideForAdmin?: boolean;
 }
 
 export interface Domain { 
@@ -50,14 +48,13 @@ export const domains: Record<string, Domain> = {
     id: 'all-markets',
     label: 'All Markets',
     locked: false,
-    defaultPath: '/app/all-markets/warzone',
-    // 🔥 v2.1.2 - Only War Zone and Top Secret are unlocked
+    defaultPath: '/app/top-secret',  // 🔄 Changed default since War Zone is locked
     subNav: [
-      { label: 'Overview', path: '/app/all-markets/overview', locked: true },      // 🔒 LOCKED
-      { label: 'Summary', path: '/app/all-markets/summary', locked: true },        // 🔒 LOCKED
-      { label: 'Chart', path: '/app/all-markets/chart', locked: true },            // 🔒 LOCKED
-      { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },      // ✅ OPEN
-      { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },  // ✅ OPEN
+      { label: 'Overview', path: '/app/all-markets/overview', locked: true },
+      { label: 'Summary', path: '/app/all-markets/summary', locked: true },
+      { label: 'Chart', path: '/app/all-markets/chart', locked: true },
+      { label: 'War Zone', path: '/app/all-markets/warzone', locked: true },  // 🔒 LOCKED
+      { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
@@ -69,7 +66,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Calendar', path: '/app/all-markets/calendar', icon: Calendar, locked: true },
       { label: 'News', path: '/app/all-markets/news', icon: Newspaper, locked: true },
       { label: 'Pricing', path: '/app/all-markets/pricing', icon: Crown, locked: true },
-      { label: 'Settings', path: '/app/settings', icon: SettingsIcon, locked: true },  // Settings stays open
+      { label: 'Settings', path: '/app/settings', icon: SettingsIcon, locked: true },
     ],
   },
 
@@ -173,11 +170,10 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // 🔒 MACRO - NOW LOCKED
   macro: {
     id: 'macro',
     label: 'Macro & News',
-    locked: true, // 🔒 LOCKED
+    locked: true,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
     ],
@@ -195,24 +191,22 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
+  // ✅ AI INSIGHTS - UNLOCKED with NEW pages matching App.tsx
   ai: {
     id: 'ai',
     label: 'AI Insights',
-    locked: true,
+    locked: true,  // ✅ UNLOCKED
     subNav: [
       { label: 'Overview', path: '/app/ai/overview' },
-      { label: 'Forecasts', path: '/app/ai/forecasts' },
     ],
     sidebar: [
-      { label: 'Daily Summary', path: '/app/ai/overview', icon: LayoutDashboard },
-      { label: 'Weekly Digest', path: '/app/ai/digest', icon: BookOpen },
-      { label: 'Sentiment Map', path: '/app/ai/sentiment', icon: Map },
-      { label: 'Smart Forecasts', path: '/app/ai/forecasts', icon: TrendingUp },
-      { label: 'Risk Breakdown', path: '/app/ai/risk', icon: Target },
-      { label: 'Pattern Detection', path: '/app/ai/patterns', icon: Activity },
-      { label: 'AI Reports', path: '/app/ai/reports', icon: FileText },
-      { label: 'Personalized Alerts', path: '/app/ai/alerts', icon: Bell },
-      { label: 'Strategy Backtesting', path: '/app/ai/backtesting', icon: BarChart3 },
+      { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
+      { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
+      { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
+      { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
+      { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
+      { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target },
+      { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
     ],
   },
 

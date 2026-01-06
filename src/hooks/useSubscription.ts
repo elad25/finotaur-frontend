@@ -1,5 +1,5 @@
 // ================================================
-// OPTIMIZED SUBSCRIPTION HOOK - v8.0.0
+// OPTIMIZED SUBSCRIPTION HOOK - v8.1.0
 // File: src/hooks/useSubscription.ts
 // ================================================
 // 🔥 v8.0.0 CHANGES:
@@ -8,6 +8,11 @@
 // - FIXED: Platform CORE/FREE = NO Journal access
 // - ADDED: hasJournalAccess computed flag
 // - ADDED: Journal access from Platform bundle logic
+// 🔥 v8.1.0 CHANGES:
+// - FIXED: Admin/VIP users now bypass ALL limit checks
+// - FIXED: isAdmin check happens FIRST before subscription checks
+// - FIXED: canAddTrade always true for admin/vip
+// - FIXED: hasJournalAccess always true for admin/vip
 // ================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -159,7 +164,7 @@ export const subscriptionKeys = {
 };
 
 // ================================================
-// 🔥 MAIN HOOK - v8.0 WITH CORRECTED PLATFORM LOGIC
+// 🔥 MAIN HOOK - v8.1 WITH ADMIN FIX
 // ================================================
 
 export function useSubscription() {
@@ -342,6 +347,28 @@ export function useSubscription() {
   });
   
   // ═══════════════════════════════════════════
+  // 🔥 v8.1.0: ADMIN CHECK FIRST! (CRITICAL FIX)
+  // ═══════════════════════════════════════════
+  // Admin/VIP users bypass ALL subscription checks
+  // This must be checked BEFORE any other logic
+  // ═══════════════════════════════════════════
+  
+  const isAdmin = 
+    limits?.role === 'admin' || 
+    limits?.role === 'super_admin' ||
+    limits?.account_type === 'admin' ||
+    limits?.account_type === 'vip';
+  
+  // 🔥 v8.1.0: Debug log for admin detection
+  if (import.meta.env.DEV && limits) {
+    logOnce(`admin-check-${effectiveUserId}`, '🛡️ Admin check:', {
+      role: limits.role,
+      account_type: limits.account_type,
+      isAdmin,
+    });
+  }
+  
+  // ═══════════════════════════════════════════
   // 🔥 v8.0: PLATFORM COMPUTED VALUES (CORRECTED)
   // ═══════════════════════════════════════════
   
@@ -360,36 +387,39 @@ export function useSubscription() {
   const platformTrialDaysRemaining = limits?.platform_trial_days_remaining ?? null;
   
   // ═══════════════════════════════════════════
-  // 🔥 v8.0: JOURNAL ACCESS LOGIC (CORRECTED)
+  // 🔥 v8.1.0: JOURNAL ACCESS LOGIC (FIXED FOR ADMIN)
   // ═══════════════════════════════════════════
   // 
   // Journal access comes from:
-  // 1. Direct Journal subscription (basic/premium/trial)
-  // 2. Platform PRO bundle (gives Premium)
-  // 3. Platform ENTERPRISE bundle (gives Premium)
+  // 1. 🔥 ADMIN/VIP (always has access - checked FIRST!)
+  // 2. Direct Journal subscription (basic/premium/trial)
+  // 3. Platform PRO bundle (gives Premium)
+  // 4. Platform ENTERPRISE bundle (gives Premium)
   // 
   // Platform FREE/CORE = NO Journal access!
   // ═══════════════════════════════════════════
   
-  // Direct Journal subscription check
+  // Direct Journal subscription check (for non-admins)
   const hasDirectJournalSubscription = 
+    !isAdmin && // 🔥 v8.1.0: Skip this check for admins
     limits?.account_type && 
-    ['basic', 'premium', 'trial', 'admin', 'vip'].includes(limits.account_type) &&
+    ['basic', 'premium', 'trial'].includes(limits.account_type) &&
     (limits.subscription_status === 'active' || limits.subscription_status === 'trial');
   
   // 🔥 Platform PRO/Enterprise bundle gives Journal Premium
   const hasJournalFromPlatformBundle = 
+    !isAdmin && // 🔥 v8.1.0: Skip this check for admins
     (isPlatformPro || isPlatformEnterprise) && 
     isPlatformActive &&
     (limits?.platform_bundle_journal_granted === true);
   
-  // Combined Journal access check
-  const hasJournalAccess = hasDirectJournalSubscription || hasJournalFromPlatformBundle;
+  // 🔥 v8.1.0: Combined Journal access check - ADMIN FIRST!
+  const hasJournalAccess = isAdmin || hasDirectJournalSubscription || hasJournalFromPlatformBundle;
   
   // Determine effective Journal plan
   const effectiveJournalPlan = (() => {
-    // Admin/VIP always premium
-    if (limits?.account_type === 'admin' || limits?.account_type === 'vip') {
+    // 🔥 v8.1.0: Admin/VIP always premium - CHECK FIRST!
+    if (isAdmin) {
       return 'premium';
     }
     // Direct subscription takes priority
@@ -404,32 +434,35 @@ export function useSubscription() {
   })();
   
   // ═══════════════════════════════════════════
-  // JOURNAL COMPUTED VALUES (updated)
+  // JOURNAL COMPUTED VALUES (v8.1.0 - updated)
   // ═══════════════════════════════════════════
   
-  const isTrial = effectiveJournalPlan === 'trial';
-  const isBasic = effectiveJournalPlan === 'basic';
-  const isPremium = effectiveJournalPlan === 'premium';
-  const isLegacyFreeUser = limits?.account_type === 'free';
-  const isAdmin = 
-    limits?.role === 'admin' || 
-    limits?.role === 'super_admin' ||
-    limits?.account_type === 'admin';
-  const isUnlimitedUser = isPremium || isAdmin;
+  const isTrial = !isAdmin && effectiveJournalPlan === 'trial';
+  const isBasic = !isAdmin && effectiveJournalPlan === 'basic';
+  const isPremium = isAdmin || effectiveJournalPlan === 'premium'; // 🔥 Admin = always premium
+  const isLegacyFreeUser = !isAdmin && limits?.account_type === 'free';
+  const isUnlimitedUser = isAdmin || isPremium; // 🔥 Admin = always unlimited
   const isPaidUser = hasJournalAccess && (isBasic || isPremium || isTrial);
   
-  const tradesRemaining = isUnlimitedUser 
+  // 🔥 v8.1.0: CRITICAL FIX - Admin always has remaining trades
+  const tradesRemaining = isAdmin 
     ? Infinity 
-    : !hasJournalAccess 
-      ? 0 
-      : limits?.remaining ?? 0;
+    : isUnlimitedUser 
+      ? Infinity 
+      : !hasJournalAccess 
+        ? 0 
+        : limits?.remaining ?? 0;
   
-  const canAddTrade = hasJournalAccess && (isUnlimitedUser || (limits?.remaining ?? 0) > 0);
-  const isLimitReached = !isUnlimitedUser && (!hasJournalAccess || (limits?.remaining ?? 0) <= 0);
+  // 🔥 v8.1.0: CRITICAL FIX - Admin can ALWAYS add trades
+  const canAddTrade = isAdmin || (hasJournalAccess && (isUnlimitedUser || (limits?.remaining ?? 0) > 0));
   
-  const canUseSnapTrade = hasJournalAccess && (isTrial || isBasic || isPremium || isAdmin);
+  // 🔥 v8.1.0: Admin never hits limit
+  const isLimitReached = !isAdmin && !isUnlimitedUser && (!hasJournalAccess || (limits?.remaining ?? 0) <= 0);
+  
+  const canUseSnapTrade = isAdmin || (hasJournalAccess && (isTrial || isBasic || isPremium));
   
   const isExpiringSoon = (() => {
+    if (isAdmin) return false; // 🔥 Admin never expires
     if (!limits?.subscription_expires_at) return false;
     const expiresAt = new Date(limits.subscription_expires_at);
     const now = new Date();
@@ -438,6 +471,7 @@ export function useSubscription() {
   })();
   
   const daysUntilExpiry = (() => {
+    if (isAdmin) return null; // 🔥 Admin = no expiry
     if (!limits?.subscription_expires_at) return null;
     const expiresAt = new Date(limits.subscription_expires_at);
     const now = new Date();
@@ -445,6 +479,7 @@ export function useSubscription() {
   })();
   
   const isTrialExpired = (() => {
+    if (isAdmin) return false; // 🔥 Admin = no trial
     if (!isTrial) return false;
     if (!limits?.trial_ends_at) return false;
     const trialEnd = new Date(limits.trial_ends_at);
@@ -452,6 +487,7 @@ export function useSubscription() {
   })();
   
   const isTrialExpiringSoon = (() => {
+    if (isAdmin) return false; // 🔥 Admin = no trial
     if (!isTrial) return false;
     const daysLeft = limits?.trial_days_remaining ?? 0;
     return daysLeft > 0 && daysLeft <= 3;
@@ -470,26 +506,28 @@ export function useSubscription() {
   const isWhopSubscription = limits?.payment_provider === 'whop';
   const hasActiveWhopSubscription = isWhopSubscription && 
     (limits?.subscription_status === 'active' || limits?.subscription_status === 'trial');
-  const isCancelledButActive = limits?.subscription_cancel_at_period_end && 
+  const isCancelledButActive = !isAdmin && limits?.subscription_cancel_at_period_end && 
     (limits?.subscription_status === 'active' || limits?.subscription_status === 'trial');
 
-  // 🔥 v8.0: Updated - needs Journal plan selection (not platform)
-  const needsJournalPlanSelection = !hasJournalAccess && !isLoading;
+  // 🔥 v8.1.0: Admin never needs plan selection
+  const needsJournalPlanSelection = !isAdmin && !hasJournalAccess && !isLoading;
 
   // Platform feature access
-  const hasPlatformAiInsights = isPlatformPro || isPlatformEnterprise;
-  const hasPlatformApiAccess = isPlatformPro || isPlatformEnterprise;
-  const hasPlatformAdvancedScreeners = isPlatformPro || isPlatformEnterprise;
-  const hasPlatformCustomReports = isPlatformPro || isPlatformEnterprise;
-  const hasPlatformAdvancedCharts = isPlatformCore || isPlatformPro || isPlatformEnterprise;
+  const hasPlatformAiInsights = isAdmin || isPlatformPro || isPlatformEnterprise;
+  const hasPlatformApiAccess = isAdmin || isPlatformPro || isPlatformEnterprise;
+  const hasPlatformAdvancedScreeners = isAdmin || isPlatformPro || isPlatformEnterprise;
+  const hasPlatformCustomReports = isAdmin || isPlatformPro || isPlatformEnterprise;
+  const hasPlatformAdvancedCharts = isAdmin || isPlatformCore || isPlatformPro || isPlatformEnterprise;
 
   const isPlatformTrialExpiringSoon = (() => {
+    if (isAdmin) return false; // 🔥 Admin = no trial
     if (!isPlatformInTrial) return false;
     const daysLeft = platformTrialDaysRemaining ?? 0;
     return daysLeft > 0 && daysLeft <= 3;
   })();
   
   const platformDaysUntilExpiry = (() => {
+    if (isAdmin) return null; // 🔥 Admin = no expiry
     if (!limits?.platform_subscription_expires_at) return null;
     const expiresAt = new Date(limits.platform_subscription_expires_at);
     const now = new Date();
@@ -503,6 +541,9 @@ export function useSubscription() {
     loading: isLoading,
     error: error?.message || null,
     
+    // 🔥 v8.1.0: Admin flag (NEW - expose for debugging)
+    isAdmin,
+    
     // 🔥 v8.0: Journal access (NEW - most important!)
     hasJournalAccess,
     effectiveJournalPlan,
@@ -514,7 +555,6 @@ export function useSubscription() {
     isBasic,
     isPremium,
     isPaidUser,
-    isAdmin,
     isUnlimitedUser,
     isLegacyFreeUser,
     needsJournalPlanSelection,
@@ -765,6 +805,7 @@ export function useJournalAccess() {
     canAddTrade,
     tradesRemaining,
     isUnlimitedUser,
+    isAdmin,
     isLoading,
     refresh,
   } = useSubscription();
@@ -777,12 +818,14 @@ export function useJournalAccess() {
     // Source of access
     isFromDirectSubscription: hasDirectJournalSubscription,
     isFromPlatformBundle: hasJournalFromPlatformBundle,
+    isFromAdmin: isAdmin, // 🔥 v8.1.0: NEW
     
     // Plan type
     isPremium,
     isBasic,
     isTrial,
     isUnlimited: isUnlimitedUser,
+    isAdmin, // 🔥 v8.1.0: NEW
     
     // Trade limits
     canAddTrade,
@@ -823,12 +866,14 @@ export function usePlatformSubscription() {
     hasPlatformCustomReports,
     hasPlatformAdvancedCharts,
     hasJournalFromPlatformBundle,
+    isAdmin,
     isLoading,
     refresh,
   } = useSubscription();
   
   // Platform display name
   const platformDisplayName = (() => {
+    if (isAdmin) return 'Admin'; // 🔥 v8.1.0
     switch (platformPlan) {
       case 'core': return 'Core';
       case 'pro': return 'Pro';
@@ -839,6 +884,7 @@ export function usePlatformSubscription() {
   
   // Platform trial message
   const platformTrialMessage = (() => {
+    if (isAdmin) return null; // 🔥 v8.1.0
     if (!isPlatformInTrial) return null;
     if (platformTrialDaysRemaining === 0) return 'Your trial ends today!';
     if (platformTrialDaysRemaining === 1) return 'Your trial ends tomorrow!';
@@ -847,8 +893,8 @@ export function usePlatformSubscription() {
   })();
   
   // Can upgrade
-  const canUpgradeToCore = isPlatformFree;
-  const canUpgradeToPro = isPlatformFree || isPlatformCore;
+  const canUpgradeToCore = !isAdmin && isPlatformFree;
+  const canUpgradeToPro = !isAdmin && (isPlatformFree || isPlatformCore);
   
   return {
     // Plan info
@@ -861,6 +907,7 @@ export function usePlatformSubscription() {
     isPro: isPlatformPro,
     isEnterprise: isPlatformEnterprise,
     isPaid: isPlatformPaid,
+    isAdmin, // 🔥 v8.1.0: NEW
     
     // Status
     isActive: isPlatformActive,
@@ -890,7 +937,7 @@ export function usePlatformSubscription() {
     // Upgrade
     canUpgradeToCore,
     canUpgradeToPro,
-    needsUpgrade: isPlatformFree,
+    needsUpgrade: !isAdmin && isPlatformFree, // 🔥 v8.1.0
     
     // State
     isLoading,
@@ -903,16 +950,17 @@ export function usePlatformSubscription() {
 // ================================================
 
 export function usePlanSelectionGuard() {
-  const { needsJournalPlanSelection, isLegacyFreeUser, isTrialExpired, isLoading, limits, hasJournalAccess } = useSubscription();
+  const { needsJournalPlanSelection, isLegacyFreeUser, isTrialExpired, isLoading, limits, hasJournalAccess, isAdmin } = useSubscription();
   
   return {
-    shouldRedirect: needsJournalPlanSelection,
+    shouldRedirect: !isAdmin && needsJournalPlanSelection, // 🔥 v8.1.0
     isLegacyUser: isLegacyFreeUser,
     isTrialExpired,
     isLoading,
     currentPlan: limits?.account_type ?? null,
     subscriptionStatus: limits?.subscription_status ?? null,
     hasJournalAccess,
+    isAdmin, // 🔥 v8.1.0: NEW
   };
 }
 
@@ -927,6 +975,7 @@ export function useTrialStatus() {
     isTrialExpiringSoon,
     trialDaysRemaining,
     trialEndsAt,
+    isAdmin,
     isLoading 
   } = useSubscription();
   
@@ -936,8 +985,10 @@ export function useTrialStatus() {
     isTrialExpiringSoon,
     trialDaysRemaining,
     trialEndsAt,
+    isAdmin, // 🔥 v8.1.0: NEW
     isLoading,
     trialStatusMessage: (() => {
+      if (isAdmin) return null; // 🔥 v8.1.0
       if (!isTrial) return null;
       if (isTrialExpired) return 'Your free trial has ended. Upgrade to continue.';
       if (trialDaysRemaining === 0) return 'Your free trial ends today!';
@@ -964,6 +1015,7 @@ export function usePlatformFeatureAccess() {
     hasPlatformAdvancedScreeners,
     hasPlatformCustomReports,
     hasPlatformAdvancedCharts,
+    isAdmin,
     isLoading,
   } = useSubscription();
   
@@ -971,6 +1023,9 @@ export function usePlatformFeatureAccess() {
    * Check if user has access to a specific feature
    */
   const hasFeature = (feature: string): boolean => {
+    // 🔥 v8.1.0: Admin has all features
+    if (isAdmin) return true;
+    
     switch (feature) {
       case 'ai_insights':
         return hasPlatformAiInsights;
@@ -1011,6 +1066,7 @@ export function usePlatformFeatureAccess() {
   return {
     plan: platformPlan,
     isFree: isPlatformFree,
+    isAdmin, // 🔥 v8.1.0: NEW
     hasFeature,
     getRequiredPlan,
     // Quick checks

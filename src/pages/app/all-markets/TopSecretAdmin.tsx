@@ -365,6 +365,27 @@ const AGENT_ICONS: Record<string, string> = {
   altcoin_verdict_generator: '⚖️',
   risk_portfolio_advisor: '🛡️',
   coherence_summary_writer: '✅',
+   // ========== WEEKLY REPORT AGENTS (20) ==========
+  data_fetcher: '📥',
+  market_data_processor: '📊',
+  news_aggregator: '📰',
+  week_summary_writer: '📝',
+  macro_calendar_builder: '📅',
+  micro_events_compiler: '🎯',
+  tactical_macro_analyst: '🌍',
+  rate_environment_analyst: '💵',
+  fiscal_outlook_analyst: '🏛️',
+  market_structure_analyst: '🏗️',
+  technical_levels_mapper: '📐',
+  volatility_analyst: '📈',
+  sector_analyzer: '🔄',
+  options_flow_analyst: '🎲',
+  fund_flow_tracker: '💰',
+  sentiment_gauge: '🌡️',
+  trade_idea_generator_weekly: '💡',
+  risk_manager: '🛡️',
+  coherence_checker_weekly: '✅',
+  final_compiler: '📦',
 };
 
 // ============================================
@@ -557,11 +578,11 @@ function formatMonthDisplay(monthStr: string): string {
 // COMPANY ANALYSIS API FUNCTIONS
 // ============================================
 
-async function generateCompanyReport(ticker?: string): Promise<{ reportId: string; ticker: string; success: boolean }> {
+async function generateCompanyReport(ticker?: string, includeIsm: boolean = true): Promise<{ reportId: string; ticker: string; success: boolean; includeIsm: boolean }> {
   const res = await fetch(`${API_BASE}/api/company/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker, isAdminOverride: true }),
+    body: JSON.stringify({ ticker, isAdminOverride: true, includeIsm }),
   });
   const data = await res.json();
   if (!data.success) throw new Error(data.error);
@@ -844,6 +865,76 @@ async function fetchCryptoReport(reportId: string): Promise<any> {
   const data = await res.json();
   if (!data.success) throw new Error(data.error);
   return data.data;
+}
+
+// ============================================
+// WEEKLY REPORT API FUNCTIONS
+// ============================================
+
+async function generateWeeklyReportAPI(reportWeek?: string): Promise<{ reportId: string; success: boolean }> {
+  const res = await fetch(`${API_BASE}/api/reports/weekly/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      reportWeek, 
+      isAdminOverride: true 
+    }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  return data.data;
+}
+
+async function fetchWeeklyProgress(reportId: string): Promise<{
+  status: 'running' | 'completed' | 'error' | 'not_found';
+  progress: number;
+  currentPhase?: string;
+  currentAgent?: string;
+  currentAgentId?: string;
+  completedAgents: string[];
+  elapsedSeconds: number;
+  error?: string;
+}> {
+  const res = await fetch(`${API_BASE}/api/reports/weekly/progress/${reportId}`);
+  
+  if (res.status === 404) {
+    return {
+      status: 'not_found',
+      progress: 0,
+      completedAgents: [],
+      elapsedSeconds: 0,
+    };
+  }
+  
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+  
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || 'Unknown error');
+  return data.data;
+}
+
+async function fetchWeeklyReport(reportId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/api/reports/weekly/report/${reportId}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error);
+  return data.data;
+}
+
+async function downloadWeeklyPdf(reportId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/reports/weekly/report/${reportId}/pdf`);
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Weekly_Report_${new Date().toISOString().split('T')[0]}.pdf`;
+  a.click();
+  window.URL.revokeObjectURL(url);
 }
 
 // ============================================
@@ -1369,23 +1460,27 @@ const ReportTypeCard: React.FC<{
   preview: PreviewData | null;
   fullReport: string | null;
   ismStatus?: ISMStatus | null;
+  includeIsm?: boolean;
+  onToggleIsm?: (value: boolean) => void;
   onClick: () => void;
   onGenerate: (inputValue?: string) => void;
   onViewFull: () => void;
   onDownloadPdf?: () => void;
   onClearPreview: () => void;
-}> = ({ 
-  report, 
-  isSelected, 
-  generationState, 
-  preview, 
+}> = ({
+  report,
+  isSelected,
+  generationState,
+  preview,
   fullReport,
-  ismStatus, 
-  onClick, 
-  onGenerate, 
-  onViewFull, 
+  ismStatus,
+  includeIsm = true,
+  onToggleIsm,
+  onClick,
+  onGenerate,
+  onViewFull,
   onDownloadPdf,
-  onClearPreview 
+  onClearPreview
 }) => {
   const Icon = report.icon;
   const [inputValue, setInputValue] = useState('');
@@ -1522,7 +1617,7 @@ devLog(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, '
           />
         )}
 
-        {/* Ticker Input for Company Analysis */}
+{/* Ticker Input for Company Analysis */}
         {report.requiresInput && showInput && !isGenerating && !hasPreview && (
           <div className="mb-4">
             <label className="text-xs text-gray-400 mb-1.5 block">{report.inputLabel}</label>
@@ -1535,6 +1630,34 @@ devLog(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, '
               className="w-full px-3 py-2 bg-[#080812] border border-gray-700 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-purple-500/30 text-sm font-mono"
               maxLength={10}
             />
+          </div>
+        )}
+        
+        {/* ISM Toggle for Company Analysis */}
+        {report.id === 'company' && !isGenerating && !hasPreview && (
+          <div className="mb-4 flex items-center justify-between p-3 bg-[#080812] rounded-lg border border-gray-800">
+<div className="flex items-center gap-2">
+  <BarChart3 className="w-4 h-4 text-blue-400" />
+  <div>
+    <span className="text-sm text-gray-300">Include ISM Context</span>
+    <p className="text-[10px] text-gray-500">
+      {includeIsm ? '30 agents, with macro analysis' : '26 agents, company-only'}
+    </p>
+  </div>
+</div>
+            <button
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                onToggleIsm?.(!includeIsm); 
+              }}
+              className={`relative w-11 h-6 rounded-full transition-all ${
+                includeIsm ? 'bg-blue-500' : 'bg-gray-700'
+              }`}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow-md transition-transform ${
+                includeIsm ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
           </div>
         )}
         
@@ -2064,8 +2187,26 @@ const TopSecretAdmin: React.FC = () => {
   
   const [showReportViewer, setShowReportViewer] = useState(false);
   const [viewingReportId, setViewingReportId] = useState<string | null>(null);
-  const [testEmail, setTestEmail] = useState('');
-  const [adminNote, setAdminNote] = useState('');
+const [testEmail, setTestEmail] = useState('');
+const [adminNote, setAdminNote] = useState('');
+const [includeIsmInCompany, setIncludeIsmInCompany] = useState<boolean>(() => {
+  try {
+    const saved = localStorage.getItem('finotaur_company_ism_toggle');
+    return saved !== null ? JSON.parse(saved) : true;
+  } catch {
+    return true;
+  }
+}); // ISM Toggle for Company Analysis
+
+  // Save ISM toggle state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('finotaur_company_ism_toggle', JSON.stringify(includeIsmInCompany));
+    } catch (err) {
+      console.error('[Storage] Failed to save ISM toggle:', err);
+    }
+  }, [includeIsmInCompany]);
+
   const [premiumEnabled, setPremiumEnabled] = useState(false);
   const [basicEnabled, setBasicEnabled] = useState(false);
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
@@ -2467,6 +2608,97 @@ devLog('[ISM] No status returned from API');
         }
       }
     }, 2000);
+}, [updateGenerationState, clearGenerationState]);
+
+  // Resume Weekly polling
+  const resumeWeeklyPolling = useCallback((reportId: string) => {
+    console.log('[Resume] Starting Weekly polling for:', reportId);
+    
+    let errorCount = 0;
+    const maxErrors = 3;
+    
+    progressIntervalsRef.current['weekly'] = setInterval(async () => {
+      try {
+        const progress = await fetchWeeklyProgress(reportId);
+        
+        errorCount = 0;
+        
+        updateGenerationState('weekly', {
+          progress: progress.progress,
+          currentPhase: progress.currentPhase || null,
+          currentAgent: progress.currentAgent || progress.currentAgentId || null,
+          completedAgents: progress.completedAgents || [],
+          elapsedSeconds: progress.elapsedSeconds,
+        });
+
+        if (progress.status === 'completed') {
+          console.log('[Resume] Weekly generation completed!');
+          clearGenerationState('weekly');
+          removeActiveGeneration('weekly');
+
+          try {
+            const response = await fetchWeeklyReport(reportId);
+            const report = response?.report || response;
+            
+            const markdownContent = report?.markdown_content 
+              || report?.markdown
+              || report?.content 
+              || '';
+            
+            const htmlContent = report?.html_content 
+              || report?.html 
+              || '';
+
+            if (markdownContent || htmlContent) {
+              const preview: PreviewData = {
+                subject: `Weekly Tactical Review`,
+                preheader: 'Institutional-grade market intelligence',
+                sections: [],
+                html: htmlContent,
+                markdown: markdownContent,
+                generatedAt: report?.created_at || new Date().toISOString(),
+                reportType: 'weekly',
+                reportId: reportId,
+                processorInfo: {
+                  version: 'Weekly v1.0',
+                  type: 'weekly',
+                  agentCount: 20,
+                  qaScore: report?.qa_score || 85,
+                  qaPassed: true,
+                  duration: formatDuration(progress.elapsedSeconds),
+                },
+              };
+
+              setPreviews(prev => ({ ...prev, weekly: preview }));
+              setFullReports(prev => ({ ...prev, weekly: markdownContent }));
+              saveReportToStorage('weekly', preview, markdownContent);
+              toast.success('✅ Weekly Tactical Review ready!');
+            }
+          } catch (fetchErr) {
+            console.error('[Resume] Failed to fetch weekly report:', fetchErr);
+          }
+        } else if (progress.status === 'error') {
+          clearGenerationState('weekly');
+          removeActiveGeneration('weekly');
+          toast.error(`Generation failed: ${progress.error}`);
+        } else if (progress.status === 'not_found') {
+          console.log('[Resume] Weekly report not found on server, clearing...');
+          clearGenerationState('weekly');
+          removeActiveGeneration('weekly');
+          toast.error('Report not found. The server may have restarted. Please try again.');
+        }
+      } catch (err: any) {
+        console.error('[Resume] Weekly progress fetch error:', err);
+        errorCount++;
+        
+        if (errorCount >= maxErrors) {
+          console.log('[Resume] Too many errors, clearing stale Weekly generation');
+          clearGenerationState('weekly');
+          removeActiveGeneration('weekly');
+          toast.error('Generation no longer available. Please start a new one.');
+        }
+      }
+    }, 2000);
   }, [updateGenerationState, clearGenerationState]);
 
   // ============================================
@@ -2499,16 +2731,18 @@ devLog('[ISM] No status returned from API');
         error: null,
       });
       
-      // Start polling based on report type
+// Start polling based on report type
       if (reportType === 'ism') {
         resumeISMPolling(gen.reportId);
       } else if (reportType === 'company') {
         resumeCompanyPolling(gen.reportId, gen.ticker || 'Unknown');
       } else if (reportType === 'crypto') {
         resumeCryptoPolling(gen.reportId);
+      } else if (reportType === 'weekly') {
+        resumeWeeklyPolling(gen.reportId);
       }
     }
-  }, [updateGenerationState, resumeISMPolling, resumeCompanyPolling, resumeCryptoPolling]);
+  }, [updateGenerationState, resumeISMPolling, resumeCompanyPolling, resumeCryptoPolling, resumeWeeklyPolling]);
 
   // Run resume on mount
   useEffect(() => {
@@ -2767,9 +3001,15 @@ devLog(`[Clear] Clearing report: ${reportId}`);
       return;
     }
 
-    // Handle Crypto Analysis
+// Handle Crypto Analysis
     if (reportId === 'crypto') {
       await generateCryptoReportHandler();
+      return;
+    }
+
+    // Handle Weekly Report
+    if (reportId === 'weekly') {
+      await generateWeeklyReportHandler();
       return;
     }
 
@@ -2897,14 +3137,15 @@ devLog(`[Clear] Clearing report: ${reportId}`);
   // ============================================
   // COMPANY GENERATION HANDLER - FIXED
   // ============================================
-  const generateCompanyReportHandler = async (ticker?: string) => {
-    try {
-      const tickerDisplay = ticker || 'Random S&P 500';
-      toast.info(`🏢 Generating Company Analysis for ${tickerDisplay}...`, { duration: 5000 });
+const generateCompanyReportHandler = async (ticker?: string) => {
+  try {
+    const tickerDisplay = ticker || 'Random S&P 500';
+    const ismLabel = includeIsmInCompany ? 'with ISM' : 'without ISM';
+    toast.info(`🏢 Generating Company Analysis for ${tickerDisplay} (${ismLabel})...`, { duration: 5000 });
 
-      // Start generation
-      console.log('[Company] Starting generation...');
-      const result = await generateCompanyReport(ticker);
+    // Start generation
+    console.log('[Company] Starting generation... includeIsm:', includeIsmInCompany);
+    const result = await generateCompanyReport(ticker, includeIsmInCompany);
       console.log('[Company] Generation started, reportId:', result.reportId, 'ticker:', result.ticker);
       
       updateGenerationState('company', { reportId: result.reportId });
@@ -3197,6 +3438,110 @@ devLog(`[Clear] Clearing report: ${reportId}`);
       clearGenerationState('crypto');
       removeActiveGeneration('crypto');
     }
+};
+
+  // ============================================
+  // WEEKLY GENERATION HANDLER
+  // ============================================
+  const generateWeeklyReportHandler = async () => {
+    try {
+      toast.info('📅 Generating Weekly Tactical Review...', { duration: 5000 });
+
+      console.log('[Weekly] Starting generation...');
+      const result = await generateWeeklyReportAPI();
+      console.log('[Weekly] Generation started, reportId:', result.reportId);
+      
+      updateGenerationState('weekly', { reportId: result.reportId });
+      
+      saveActiveGeneration('weekly', result.reportId);
+
+      progressIntervalsRef.current['weekly'] = setInterval(async () => {
+        try {
+          const progress = await fetchWeeklyProgress(result.reportId);
+          console.log('[Weekly] Progress:', progress.progress, '%', progress.status);
+          
+          updateGenerationState('weekly', {
+            progress: progress.progress,
+            currentPhase: progress.currentPhase || null,
+            currentAgent: progress.currentAgent || progress.currentAgentId || null,
+            completedAgents: progress.completedAgents || [],
+            elapsedSeconds: progress.elapsedSeconds,
+          });
+
+          if (progress.status === 'completed') {
+            console.log('[Weekly] Generation completed! Fetching report...');
+            clearGenerationState('weekly');
+            removeActiveGeneration('weekly');
+
+            try {
+              const response = await fetchWeeklyReport(result.reportId);
+              const report = response?.report || response;
+              
+              const markdownContent = report?.markdown_content 
+                || report?.markdown
+                || report?.content 
+                || '';
+              
+              const htmlContent = report?.html_content 
+                || report?.html 
+                || '';
+
+              if (markdownContent || htmlContent) {
+                const preview: PreviewData = {
+                  subject: `Weekly Tactical Review - ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+                  preheader: 'Institutional-grade market intelligence',
+                  sections: [],
+                  html: htmlContent,
+                  markdown: markdownContent,
+                  generatedAt: report?.created_at || report?.generated_at || new Date().toISOString(),
+                  reportType: 'weekly',
+                  reportId: result.reportId,
+                  processorInfo: {
+                    version: 'Weekly v1.0',
+                    type: 'weekly',
+                    agentCount: 20,
+                    qaScore: report?.qa_score || 85,
+                    qaPassed: (report?.qa_score || 85) >= 75,
+                    duration: formatDuration(progress.elapsedSeconds),
+                  },
+                };
+
+                console.log(`[Weekly] Saving report with content length: ${markdownContent.length}`);
+                setPreviews(prev => ({ ...prev, weekly: preview }));
+                setFullReports(prev => ({ ...prev, weekly: markdownContent }));
+                saveReportToStorage('weekly', preview, markdownContent);
+
+                toast.success('✅ Weekly Tactical Review ready!');
+              } else {
+                console.error('[Weekly] Report completed but no content found');
+                toast.error('Report generated but content is empty');
+              }
+            } catch (fetchErr) {
+              console.error('[Weekly] Failed to fetch completed report:', fetchErr);
+              toast.error('Report generated but failed to load content');
+            }
+
+          } else if (progress.status === 'error') {
+            clearGenerationState('weekly');
+            removeActiveGeneration('weekly');
+            toast.error(`Generation failed: ${progress.error}`);
+          } else if (progress.status === 'not_found') {
+            console.log('[Weekly] Report not found on server, clearing...');
+            clearGenerationState('weekly');
+            removeActiveGeneration('weekly');
+            toast.error('Report not found. The server may have restarted. Please try again.');
+          }
+        } catch (err) {
+          console.error('[Weekly] Progress fetch error:', err);
+        }
+      }, 2000);
+
+    } catch (err: any) {
+      console.error('Weekly generation error:', err);
+      toast.error(`Failed: ${err.message}`);
+      clearGenerationState('weekly');
+      removeActiveGeneration('weekly');
+    }
   };
 
   // View report - FIXED with fallback
@@ -3271,21 +3616,39 @@ const handleDownloadISMPdf = async () => {
     }
   };
 
+
+  const handleDownloadWeeklyPdf = async () => {
+    const preview = previews['weekly'];
+    if (!preview?.reportId) {
+      toast.error('No Weekly report available');
+      return;
+    }
+    
+    try {
+      toast.info('Generating PDF...', { duration: 2000 });
+      await downloadWeeklyPdf(preview.reportId);
+      toast.success('PDF downloaded!');
+    } catch (err: any) {
+      toast.error(`Failed to download PDF: ${err.message}`);
+    }
+  };
+
   // Get download handler for report type
 const getDownloadHandler = (reportId: string) => {
   switch (reportId) {
     case 'ism':
-      // Check both ismStatus and preview for reportId
       const ismReportId = ismStatus?.reportId || previews['ism']?.reportId;
       return ismReportId ? handleDownloadISMPdf : undefined;
-      case 'company':
-        return previews['company']?.reportId ? handleDownloadCompanyPdf : undefined;
-      case 'crypto':
-        return previews['crypto']?.reportId ? handleDownloadCryptoPdf : undefined;
-      default:
-        return undefined;
-    }
-  };
+    case 'company':
+      return previews['company']?.reportId ? handleDownloadCompanyPdf : undefined;
+    case 'crypto':
+      return previews['crypto']?.reportId ? handleDownloadCryptoPdf : undefined;
+    case 'weekly':
+      return previews['weekly']?.reportId ? handleDownloadWeeklyPdf : undefined;
+    default:
+      return undefined;
+  }
+};
 
   // Send test email
   const sendTestEmail = async () => {
@@ -3498,21 +3861,23 @@ const getDownloadHandler = (reportId: string) => {
       {/* Report Type Cards - 2x2 Grid with inline progress/preview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {REPORT_TYPES.map(report => (
-          <ReportTypeCard
-            key={report.id}
-            report={report}
-            isSelected={selectedReportType === report.id}
-            generationState={generationStates[report.id] || null}
-            preview={previews[report.id] || null}
-            fullReport={fullReports[report.id] || null}
-            ismStatus={report.id === 'ism' ? ismStatus : undefined}
-            onClick={() => setSelectedReportType(report.id)}
-            onGenerate={(inputValue) => generateReport(report.id, inputValue)}
-            onViewFull={() => viewReport(report.id)}
-            onDownloadPdf={getDownloadHandler(report.id)}
-            onClearPreview={() => clearPreview(report.id)}
-          />
-        ))}
+  <ReportTypeCard
+    key={report.id}
+    report={report}
+    isSelected={selectedReportType === report.id}
+    generationState={generationStates[report.id] || null}
+    preview={previews[report.id] || null}
+    fullReport={fullReports[report.id] || null}
+    ismStatus={report.id === 'ism' ? ismStatus : undefined}
+    includeIsm={report.id === 'company' ? includeIsmInCompany : undefined}
+    onToggleIsm={report.id === 'company' ? setIncludeIsmInCompany : undefined}
+    onClick={() => setSelectedReportType(report.id)}
+    onGenerate={(inputValue) => generateReport(report.id, inputValue)}
+    onViewFull={() => viewReport(report.id)}
+    onDownloadPdf={getDownloadHandler(report.id)}
+    onClearPreview={() => clearPreview(report.id)}
+  />
+))}
       </div>
 
       {/* Stats Grid */}
