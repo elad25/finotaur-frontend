@@ -5,14 +5,15 @@ import { BookOpen } from "lucide-react";
 const SoftJournalIntro = () => {
   return (
     <section className="relative py-16 md:py-20 overflow-hidden">
-      {/* Background with subtle gold */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0D0C0A] to-[#0A0A0A]" />
+      {/* Background with gold warmth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#12100A] to-[#0A0A0A]" />
 
-      {/* Subtle gold glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[200px] bg-[#C9A646]/[0.04] rounded-full blur-[80px]" />
+      {/* Gold glows */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#C9A646]/[0.08] rounded-full blur-[100px]" />
+      <div className="absolute bottom-0 right-1/3 w-[250px] h-[200px] bg-[#D4AF37]/[0.06] rounded-full blur-[80px]" />
 
       {/* Top border with gold */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
 
       <div className="max-w-4xl mx-auto px-6 lg:px-8 relative z-10">
         <motion.div

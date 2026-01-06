@@ -14,14 +14,16 @@ const FinalCTA = () => {
 
   return (
     <section id="pricing" className="relative py-24 md:py-32 overflow-hidden">
-      {/* Background with strong gold presence */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#12100A] to-[#0A0A0A]" />
+      {/* Background with very strong gold presence */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#18140A] to-[#0A0A0A]" />
 
-      {/* Large gold glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#C9A646]/[0.08] rounded-full blur-[150px]" />
+      {/* Multiple large gold glows - maximum impact */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#C9A646]/[0.14] rounded-full blur-[150px]" />
+      <div className="absolute top-0 left-1/3 w-[400px] h-[400px] bg-[#D4AF37]/[0.10] rounded-full blur-[120px]" />
+      <div className="absolute bottom-0 right-1/3 w-[450px] h-[350px] bg-[#C9A646]/[0.08] rounded-full blur-[110px]" />
 
       {/* Top border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/60 to-transparent" />
 
       <div className="max-w-3xl mx-auto px-6 lg:px-8 relative z-10 text-center">
         {/* ============================================

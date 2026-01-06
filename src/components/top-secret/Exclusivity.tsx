@@ -6,14 +6,15 @@ const Exclusivity = () => {
   return (
     <section className="relative py-20 md:py-24 overflow-hidden">
       {/* Background with gold tint */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#100E09] to-[#0A0A0A]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#14110A] to-[#0A0A0A]" />
 
-      {/* Gold glows */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#C9A646]/[0.07] rounded-full blur-[100px]" />
-      <div className="absolute top-0 left-1/3 w-[200px] h-[200px] bg-[#D4AF37]/[0.04] rounded-full blur-[80px]" />
+      {/* Gold glows - stronger */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#C9A646]/[0.10] rounded-full blur-[120px]" />
+      <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-[#D4AF37]/[0.07] rounded-full blur-[100px]" />
+      <div className="absolute bottom-0 right-1/4 w-[350px] h-[250px] bg-[#C9A646]/[0.06] rounded-full blur-[90px]" />
 
       {/* Top border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/45 to-transparent" />
 
       <div className="max-w-4xl mx-auto px-6 lg:px-8 relative z-10">
         <motion.div

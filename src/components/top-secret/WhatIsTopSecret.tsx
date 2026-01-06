@@ -28,11 +28,16 @@ const features = [
 const WhatIsTopSecret = () => {
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0D0D0D] to-[#0A0A0A]" />
+      {/* Background with gold warmth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#13100A] to-[#0A0A0A]" />
+
+      {/* Gold glows */}
+      <div className="absolute top-1/3 left-0 w-[500px] h-[600px] bg-[#C9A646]/[0.08] rounded-full blur-[130px]" />
+      <div className="absolute bottom-1/4 right-0 w-[450px] h-[500px] bg-[#D4AF37]/[0.07] rounded-full blur-[120px]" />
+      <div className="absolute top-0 left-1/2 w-[400px] h-[300px] bg-[#C9A646]/[0.05] rounded-full blur-[100px]" />
 
       {/* Top border accent */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 
       <div className="max-w-5xl mx-auto px-6 lg:px-8 relative z-10">
         {/* ============================================

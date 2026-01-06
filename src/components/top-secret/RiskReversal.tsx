@@ -6,15 +6,15 @@ const RiskReversal = () => {
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
       {/* Background with gold tint */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#12100A] to-[#0A0A0A]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#16120A] to-[#0A0A0A]" />
 
-      {/* Gold glows - stronger */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-[#C9A646]/[0.08] rounded-full blur-[120px]" />
-      <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-[#D4AF37]/[0.05] rounded-full blur-[100px]" />
-      <div className="absolute bottom-0 left-1/4 w-[250px] h-[250px] bg-[#C9A646]/[0.06] rounded-full blur-[80px]" />
+      {/* Gold glows - very strong */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#C9A646]/[0.12] rounded-full blur-[130px]" />
+      <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.08] rounded-full blur-[110px]" />
+      <div className="absolute bottom-0 left-1/4 w-[350px] h-[350px] bg-[#C9A646]/[0.09] rounded-full blur-[100px]" />
 
       {/* Top border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/50 to-transparent" />
 
       <div className="max-w-3xl mx-auto px-6 lg:px-8 relative z-10 text-center">
         {/* ============================================
