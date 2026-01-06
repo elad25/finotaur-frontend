@@ -78,8 +78,8 @@ const HeroSection = () => {
         transition={{ duration: 0.6 }}
         className="absolute top-6 left-6 z-20"
       >
-        <Link 
-          to="/app/all-markets/overview"
+        <Link
+          to="/app/top-secret"
           className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300 hover:scale-105"
           style={{
             background: 'rgba(255, 255, 255, 0.05)',
