@@ -34,6 +34,7 @@ import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTrack
 // PUBLIC PAGES - Load immediately (no lazy)
 // ===============================================
 import LandingPage from "@/pages/landing/LandingPage";
+import Warzonelanding from "@/pages/app/all-markets/Warzonelanding";
 import NewsletterSignup from "@/pages/landing/NewsletterSignup";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
@@ -497,7 +498,7 @@ function AppContent() {
       
       <Routes>
         {/* PUBLIC ROUTES */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<Warzonelanding />} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
