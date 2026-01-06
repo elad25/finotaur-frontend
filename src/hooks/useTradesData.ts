@@ -341,7 +341,7 @@ function calculateTradeStats(trades: Trade[]): TradeStats {
     wins,
     losses,
     breakeven,
-    winRate: (wins / total) * 100,
+    winRate: total > 0 ? (wins / total) * 100 : 0,
     totalPnL,
     avgR: rCount > 0 ? totalR / rCount : 0,
   };
