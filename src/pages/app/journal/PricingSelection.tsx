@@ -1,17 +1,19 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR PRICING SELECTION - v5.1
+// FINOTAUR PRICING SELECTION - v6.0
 // =====================================================
-// 
+//
+// 🔥 v6.0 CHANGES:
+// - REMOVED: Access to pricing selection page entirely
+// - ALL REDIRECTS:
+//   - Users WITH Journal access → /app/journal/overview
+//   - Users WITHOUT Journal access → /app/top-secret
+// - Users without any plan get platform_plan='free' automatically
+//
 // 🔥 v5.1 CHANGES:
 // - UPDATED: "LET ME IN" button redirects to Top Secret (not All Markets)
 // - Journal purchasers go to Journal Overview
 // - Platform FREE users redirected to Top Secret
-// 
-// 🔥 v5.0 CHANGES:
-// - ADDED: "LET ME IN" button sets platform_plan='free' and redirects
-// - Platform FREE users can access Top Secret without Journal subscription
-// - KEPT: Basic with 14-day trial, Premium immediate payment
 // =====================================================
 
 import { useState, useEffect } from 'react';
@@ -204,16 +206,31 @@ export default function PricingSelection() {
           return;
         }
 
-        // 🔥 If user already has Platform FREE and completed onboarding, send to Top Secret
-        if (platformPlan === 'free' && data?.onboarding_completed) {
-          console.log('✅ User has Platform FREE + completed onboarding → Top Secret');
-          navigate('/app/top-secret');
-          return;
+        // 🔥 REDIRECT ALL USERS WITHOUT JOURNAL ACCESS TO TOP SECRET
+        // No one should see the pricing selection page anymore
+        console.log('🔥 No journal access → Redirecting to Top Secret');
+
+        // First, ensure they have platform_plan set to 'free' if they don't have any plan
+        if (!platformPlan) {
+          console.log('📝 Setting platform_plan to free before redirect...');
+          await supabase
+            .from('profiles')
+            .update({
+              platform_plan: 'free',
+              platform_subscription_status: 'active',
+              onboarding_completed: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', user.id);
         }
 
-        console.log('💡 User needs to select Journal plan or skip to Platform FREE');
+        navigate('/app/top-secret');
+        return;
       } catch (error) {
         console.error('❌ Error checking subscription:', error);
+        // 🔥 Fallback: Even on error, redirect to Top Secret
+        console.log('🔥 Error occurred → Redirecting to Top Secret as fallback');
+        navigate('/app/top-secret');
       } finally {
         setCheckingSubscription(false);
       }
