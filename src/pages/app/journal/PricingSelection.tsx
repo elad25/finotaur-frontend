@@ -242,9 +242,10 @@ export default function PricingSelection() {
       <div className="absolute top-6 left-6 z-20">
         <button
           onClick={handleSkip}
-          className="text-slate-500 hover:text-slate-300 transition-colors text-sm underline underline-offset-4"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-[#C9A646] font-semibold transition-all hover:bg-[#C9A646]/10 border border-[#C9A646]/50 hover:border-[#C9A646]"
         >
-          Continue without Top Secret
+          <ArrowRight className="w-4 h-4 rotate-180" />
+          Skip
         </button>
       </div>
 
