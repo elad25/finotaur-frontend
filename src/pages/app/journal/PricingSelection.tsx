@@ -1,23 +1,23 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR PRICING SELECTION - v5.1
+// FINOTAUR TOP SECRET CHECKOUT - v6.0
 // =====================================================
-// 
+//
+// 🔥 v6.0 CHANGES:
+// - REDESIGNED: Full TOP SECRET theme matching WAR ZONE landing page
+// - Military-style design with exclusive intelligence positioning
+// - Same functionality, new premium look
+//
 // 🔥 v5.1 CHANGES:
 // - UPDATED: "LET ME IN" button redirects to Top Secret (not All Markets)
 // - Journal purchasers go to Journal Overview
 // - Platform FREE users redirected to Top Secret
-// 
-// 🔥 v5.0 CHANGES:
-// - ADDED: "LET ME IN" button sets platform_plan='free' and redirects
-// - Platform FREE users can access Top Secret without Journal subscription
-// - KEPT: Basic with 14-day trial, Premium immediate payment
 // =====================================================
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Check, Shield, Zap, TrendingUp, Tag, Clock, ArrowLeft, LogOut, Loader2 } from 'lucide-react';
+import { Check, Shield, Zap, TrendingUp, Tag, Clock, ArrowLeft, LogOut, Loader2, Lock, Eye, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import PaymentPopup from '@/components/PaymentPopup';
 import RiskSetupModal from '@/components/onboarding/RiskSetupModal';
@@ -45,24 +45,24 @@ interface Plan {
   trialDays?: number;
 }
 
-// Only 2 plans - Basic (trial) and Premium (no trial)
+// Only 2 plans - Operative (trial) and Commander (no trial)
 const plans: Plan[] = [
   {
     id: "basic",
-    name: "Basic",
+    name: "Operative",
     monthlyPrice: 19.99,
     yearlyPrice: 149,
     yearlyMonthlyEquivalent: 12.42,
-    description: "Essential tools + automatic broker sync",
+    description: "Essential intelligence + execution tools",
     trialDays: 14,
     features: [
       "14-day free trial",
-      "Broker sync (12,000+ brokers)",
-      "25 trades/month (manual + auto-sync)",
-      "Full performance analytics",
+      "Monthly macro conclusions",
+      "Market bias reports",
+      "Full trading journal",
+      "Performance analytics",
       "Strategy builder & tracking",
       "Calendar & trading sessions",
-      "Advanced statistics & metrics",
       "Equity curve & charts",
       "Trade screenshots & notes",
       "Email support",
@@ -73,13 +73,14 @@ const plans: Plan[] = [
   },
   {
     id: "premium",
-    name: "Premium",
+    name: "Commander",
     monthlyPrice: 39.99,
     yearlyPrice: 299,
     yearlyMonthlyEquivalent: 24.92,
-    description: "Unlimited everything + AI intelligence",
+    description: "Full intelligence suite + AI analysis",
     features: [
-      "Everything in Basic, plus:",
+      "Everything in Operative, plus:",
+      "Deep company analysis",
       "Unlimited trades",
       "AI-powered insights & coach",
       "Advanced AI analysis",
@@ -89,9 +90,8 @@ const plans: Plan[] = [
       "Backtesting system",
       "Priority support",
       "Early access to new features",
-      "🔜 Coming Soon: Auto broker sync",
     ],
-    cta: "Get Premium",
+    cta: "Unlock Commander Access",
     featured: true,
     savings: "Save 38%",
   },
@@ -397,7 +397,7 @@ export default function PricingSelection() {
             ) : (
               <>
                 <ArrowLeft className="h-5 w-5" />
-                <span>I DON'T WANT JOURNAL, LET ME IN</span>
+                <span>SKIP TO FREE ACCESS</span>
               </>
             )}
           </Button>
@@ -421,36 +421,87 @@ export default function PricingSelection() {
           </Button>
         </div>
 
-        {/* Background Effects */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#1E1B16] to-[#0B0B0B]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-primary/12 rounded-full blur-[160px]" />
+        {/* TOP SECRET Background Effects */}
+        <div className="absolute inset-0 bg-gradient-to-br from-[#0A0A0C] via-[#12110F] to-[#0A0D12]" />
+
+        {/* Animated Grid Pattern - Military Feel */}
+        <div className="absolute inset-0 opacity-[0.03]"
+             style={{
+               backgroundImage: `
+                 linear-gradient(rgba(201,166,70,0.3) 1px, transparent 1px),
+                 linear-gradient(90deg, rgba(201,166,70,0.3) 1px, transparent 1px)
+               `,
+               backgroundSize: '60px 60px'
+             }} />
+
+        {/* TOP SECRET Glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-gradient-to-br from-[#C9A646]/15 via-[#8B0000]/08 to-transparent rounded-full blur-[150px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#C9A646]/[0.06] rounded-full blur-[120px]" />
 
         <div className="max-w-6xl mx-auto relative z-10">
-          {/* Section Header */}
+          {/* TOP SECRET Badge */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6 }}
+            className="flex justify-center mb-8"
+          >
+            <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-[#8B0000]/30 via-[#C9A646]/20 to-[#8B0000]/30 border-2 border-[#C9A646]/50 rounded-lg backdrop-blur-xl"
+                 style={{
+                   boxShadow: '0 0 40px rgba(139,0,0,0.3), 0 0 60px rgba(201,166,70,0.2)'
+                 }}>
+              <Lock className="w-5 h-5 text-[#C9A646]" />
+              <span className="text-[#C9A646] font-bold text-sm tracking-[0.3em] uppercase">Top Secret Access</span>
+              <Lock className="w-5 h-5 text-[#C9A646]" />
+            </div>
+          </motion.div>
+
+          {/* Section Header - TOP SECRET Style */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             className="text-center mb-12"
           >
-            <h2 className="text-4xl md:text-5xl font-semibold mb-6" style={{ letterSpacing: '-0.02em' }}>
-              <span className="text-white">Choose Your </span>
-              <span className="text-[#C9A646]">Power Tier</span>
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6" style={{ letterSpacing: '-0.02em' }}>
+              <span className="text-white">Unlock Your </span>
+              <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
+                Intelligence Tier
+              </span>
             </h2>
-            
-            {/* Trial-focused messaging */}
+
+            {/* Value Props Grid */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="flex flex-wrap justify-center gap-6 mb-8"
+            >
+              {[
+                { icon: Eye, text: "Exclusive Insights" },
+                { icon: Target, text: "Clear Market Bias" },
+                { icon: Shield, text: "Competitive Edge" }
+              ].map((item, index) => (
+                <div key={index} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.03] border border-white/[0.08]">
+                  <item.icon className="w-4 h-4 text-[#C9A646]" />
+                  <span className="text-slate-300 text-sm font-medium">{item.text}</span>
+                </div>
+              ))}
+            </motion.div>
+
+            {/* Trial-focused messaging - TOP SECRET Style */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="max-w-4xl mx-auto mb-6"
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="max-w-3xl mx-auto mb-6"
             >
               <div className="p-6 rounded-2xl relative overflow-hidden"
                    style={{
-                     background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.04) 100%)',
+                     background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(139,0,0,0.08) 50%, rgba(201,166,70,0.04) 100%)',
                      backdropFilter: 'blur(12px)',
                      border: '2px solid rgba(201,166,70,0.4)',
-                     boxShadow: '0 0 40px rgba(201,166,70,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                     boxShadow: '0 0 40px rgba(201,166,70,0.2), 0 0 60px rgba(139,0,0,0.1)'
                    }}>
                 <div className="absolute inset-0 bg-gradient-to-br from-[#C9A646]/[0.08] via-transparent to-transparent pointer-events-none" />
                 <div className="flex items-start gap-4 relative">
@@ -460,14 +511,14 @@ export default function PricingSelection() {
                          border: '1px solid rgba(201,166,70,0.4)',
                          boxShadow: '0 4px 16px rgba(201,166,70,0.2)'
                        }}>
-                    <Shield className="w-6 h-6 text-[#C9A646]" />
+                    <Clock className="w-6 h-6 text-[#C9A646]" />
                   </div>
                   <div className="text-left flex-1">
                     <h3 className="text-xl md:text-2xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                      Try Basic free for 14 days
+                      14-Day Risk-Free Trial
                     </h3>
                     <p className="text-slate-300 text-lg leading-relaxed">
-                      If Finotaur doesn't show a pattern that's hurting you within 14 days, cancel anytime — no charge.
+                      Full access to all intelligence. If it doesn't transform your trading, cancel anytime — no charge.
                     </p>
                   </div>
                 </div>
@@ -591,7 +642,7 @@ export default function PricingSelection() {
                            : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)'
                        }} />
 
-                  {/* Featured Badge (Premium) */}
+                  {/* Featured Badge (Commander) */}
                   {plan.featured && (
                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap"
                          style={{
@@ -600,17 +651,20 @@ export default function PricingSelection() {
                            color: '#000',
                            zIndex: 50
                          }}>
-                      <TrendingUp className="w-4 h-4" />
-                      Most Popular
+                      <Target className="w-4 h-4" />
+                      Top Clearance
                     </div>
                   )}
 
-                  {/* Trial Badge (Basic only) */}
+                  {/* Trial Badge (Operative only) */}
                   {plan.trialDays && !plan.featured && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-blue-500 text-white shadow-lg"
-                         style={{ zIndex: 50 }}>
-                      <Clock className="w-4 h-4" />
-                      14-Day Free Trial
+                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-gradient-to-r from-[#8B0000] to-[#C9A646] text-white shadow-lg"
+                         style={{
+                           zIndex: 50,
+                           boxShadow: '0 4px 20px rgba(139,0,0,0.4)'
+                         }}>
+                      <Lock className="w-4 h-4" />
+                      14-Day Risk-Free
                     </div>
                   )}
 
@@ -712,7 +766,7 @@ export default function PricingSelection() {
             })}
           </div>
 
-          {/* Bottom Trust Indicators */}
+          {/* Bottom Trust Indicators - TOP SECRET Style */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -722,13 +776,13 @@ export default function PricingSelection() {
             {/* Trust Badges */}
             <div className="flex flex-wrap items-center justify-center gap-8 text-slate-400">
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[#C9A646]" />
-                <span className="text-sm">Bank-grade security</span>
+                <Lock className="w-5 h-5 text-[#C9A646]" />
+                <span className="text-sm">Classified Security</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-500" />
-                <span className="text-sm">14-Day Free Trial on Basic</span>
+                <Clock className="w-5 h-5 text-[#C9A646]" />
+                <span className="text-sm">14-Day Risk-Free Trial</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
               <div className="flex items-center gap-2">
@@ -740,7 +794,7 @@ export default function PricingSelection() {
                   <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
                   <div className="flex items-center gap-2">
                     <Tag className="w-5 h-5 text-emerald-400" />
-                    <span className="text-sm text-emerald-400">Referral discount active</span>
+                    <span className="text-sm text-emerald-400">Intel discount active</span>
                   </div>
                 </>
               )}
@@ -749,7 +803,7 @@ export default function PricingSelection() {
             {/* Privacy */}
             <div className="text-center">
               <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-                Your data stays yours. We never sell your information. Cancel with one click, no questions asked.
+                Your intelligence stays classified. We never share your data. Cancel with one click, no questions asked.
               </p>
             </div>
           </motion.div>
