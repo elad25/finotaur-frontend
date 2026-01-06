@@ -14,6 +14,7 @@ import {
   WhoThisIsFor,
   RiskReversal,
   Exclusivity,
+  WhyNow,
   FinalCTA,
   SoftJournalIntro
 } from '@/components/top-secret';
@@ -92,6 +93,9 @@ const LandingPage = () => {
 
       {/* 8️⃣ EXCLUSIVITY / SCARCITY */}
       <Exclusivity />
+
+      {/* ⏳ WHY NOW - Soft urgency */}
+      <WhyNow />
 
       {/* 9️⃣ FINAL CTA */}
       <FinalCTA />

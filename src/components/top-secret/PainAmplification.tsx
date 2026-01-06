@@ -72,6 +72,22 @@ const PainAmplification = () => {
         </div>
 
         {/* ============================================
+            🔥 MIRROR MOMENT - Gut punch line
+            ============================================ */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 1, delay: 0.3 }}
+          className="text-center mb-12"
+        >
+          <p className="text-xl md:text-2xl text-slate-400 italic">
+            "You open your platform every morning…<br />
+            <span className="text-white">and still don't know what matters today.</span>"
+          </p>
+        </motion.div>
+
+        {/* ============================================
             STRONG CLOSING - The real problem
             ============================================ */}
         <motion.div

@@ -9,5 +9,6 @@ export { default as Proof } from './Proof';
 export { default as WhoThisIsFor } from './WhoThisIsFor';
 export { default as RiskReversal } from './RiskReversal';
 export { default as Exclusivity } from './Exclusivity';
+export { default as WhyNow } from './WhyNow';
 export { default as FinalCTA } from './FinalCTA';
 export { default as SoftJournalIntro } from './SoftJournalIntro';

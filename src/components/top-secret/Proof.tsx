@@ -92,17 +92,20 @@ const Proof = () => {
         </div>
 
         {/* ============================================
-            CAPTION
+            👤 HUMAN PROOF - Personal presence
             ============================================ */}
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-center"
+          className="text-center space-y-3"
         >
-          <p className="text-slate-400 italic">
-            This is how I personally build my market bias.
+          <p className="text-slate-300 text-lg">
+            This is the same framework I use <span className="text-white font-medium">before I risk my own capital.</span>
+          </p>
+          <p className="text-slate-500 text-sm">
+            I don't publish content. I document decisions.
           </p>
         </motion.div>
       </div>

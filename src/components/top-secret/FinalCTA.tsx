@@ -95,6 +95,16 @@ const FinalCTA = () => {
           <p className="text-slate-400 text-sm">
             Instant access. Cancel anytime.
           </p>
+
+          {/* 🧠 Micro-objection handling */}
+          <div className="mt-6 pt-6 border-t border-slate-800/50">
+            <p className="text-slate-500 text-sm">
+              No signals. No hype. No predictions.
+            </p>
+            <p className="text-slate-400 text-sm mt-1">
+              This won't tell you what to buy. <span className="text-slate-300">It will tell you how to think.</span>
+            </p>
+          </div>
         </motion.div>
       </div>
     </section>
