@@ -298,7 +298,7 @@ export default function PricingSelection() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.15 }}
-          className="max-w-2xl mx-auto mb-8"
+          className="max-w-2xl mx-auto mb-4"
         >
           <div
             className="p-4 rounded-xl flex items-center justify-center gap-3"
@@ -321,6 +321,22 @@ export default function PricingSelection() {
               </span>
             </div>
           </div>
+          {/* 6️⃣ Scarcity - Under banner */}
+          <p className="text-center text-slate-500 text-xs mt-2">
+            TOP SECRET is intentionally kept small. Access may close without notice.
+          </p>
+        </motion.div>
+
+        {/* 1️⃣ Outcome Reminder - Above pricing cards */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.18 }}
+          className="text-center mb-8"
+        >
+          <p className="text-slate-300 text-lg italic">
+            You're not paying for content. <span className="text-white font-semibold">You're paying for clarity and conviction.</span>
+          </p>
         </motion.div>
 
         {/* Pricing Cards */}
@@ -359,6 +375,10 @@ export default function PricingSelection() {
                 <p className="text-sm text-blue-400 mt-2">
                   First 14 days free
                 </p>
+                {/* 7️⃣ Mental Math Anchor */}
+                <p className="text-xs text-slate-500 mt-1">
+                  Less than one bad trade.
+                </p>
               </div>
 
               {/* Features */}
@@ -394,6 +414,10 @@ export default function PricingSelection() {
                   </span>
                 )}
               </Button>
+              {/* 2️⃣ Risk Reversal */}
+              <p className="text-xs text-slate-500 text-center mt-3">
+                If it doesn't change how you think about the market, cancel. No questions.
+              </p>
             </div>
           </div>
 
@@ -466,8 +490,48 @@ export default function PricingSelection() {
                   </span>
                 )}
               </Button>
+              {/* 3️⃣ Why most choose yearly */}
+              <p className="text-xs text-slate-500 text-center mt-3">
+                Most serious members choose yearly to lock in clarity long-term.
+              </p>
             </div>
           </div>
+        </motion.div>
+
+        {/* 4️⃣ Friction Killer - One-click cancel */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35 }}
+          className="flex items-center justify-center gap-2 mb-6 text-slate-500"
+        >
+          <Shield className="w-4 h-4 text-emerald-500" />
+          <span className="text-sm">One-click cancel. No emails. No retention tricks.</span>
+        </motion.div>
+
+        {/* 5️⃣ What this is NOT */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-center mb-8"
+        >
+          <div className="inline-flex flex-wrap items-center justify-center gap-4 text-slate-500 text-sm">
+            <span className="flex items-center gap-1">
+              <span className="text-slate-600">✕</span> No signals
+            </span>
+            <span className="text-slate-700">•</span>
+            <span className="flex items-center gap-1">
+              <span className="text-slate-600">✕</span> No alerts
+            </span>
+            <span className="text-slate-700">•</span>
+            <span className="flex items-center gap-1">
+              <span className="text-slate-600">✕</span> No hype
+            </span>
+          </div>
+          <p className="text-slate-400 text-xs mt-2 italic">
+            This won't tell you what to buy. It will tell you how to think.
+          </p>
         </motion.div>
 
         {/* Trust Badges */}
