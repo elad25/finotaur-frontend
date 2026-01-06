@@ -225,58 +225,240 @@ export default function TopSecretLanding() {
       />
 
       <motion.div
-        className="max-w-6xl mx-auto relative z-10 pt-16"
+        className="max-w-7xl mx-auto relative z-10 pt-8"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-        {/* Hero Section */}
-        <motion.div variants={itemVariants} className="text-center mb-14">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-8"
-               style={{
-                 background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
-                 border: '1px solid rgba(201,166,70,0.4)',
-                 boxShadow: '0 0 40px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
-               }}>
-            <Crown className="w-5 h-5 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-semibold tracking-wide">Premium Intelligence</span>
+        {/* Hero Section - Two Column Layout */}
+        <motion.div variants={itemVariants} className="grid lg:grid-cols-2 gap-12 items-center mb-20 px-4">
+          {/* Left Column - Text Content */}
+          <div className="text-left">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-8"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
+                   border: '1px solid rgba(201,166,70,0.4)',
+                   boxShadow: '0 0 40px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
+                 }}>
+              <Lock className="w-5 h-5 text-[#C9A646]" />
+              <span className="text-[#C9A646] font-semibold tracking-wide">Top Secret Intelligence</span>
+            </div>
+
+            {/* Main Headline */}
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6" style={{ letterSpacing: '-0.03em' }}>
+              <span className="text-white italic">Institutional</span>
+              <br />
+              <span className="text-white italic">Research</span>
+              <br />
+              <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
+                Delivered Monthly
+              </span>
+            </h1>
+
+            {/* Subheadline */}
+            <p className="text-lg text-slate-400 max-w-lg mb-8 leading-relaxed">
+              The same market intelligence that hedge funds pay <span className="text-white font-semibold">$2,000+/month</span> for —
+              now available for serious traders who want an edge.
+            </p>
+
+            {/* CTA Button */}
+            <Button
+              onClick={handleSubscribe}
+              disabled={isLoading}
+              className="px-8 py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
+              style={{
+                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                color: '#000',
+                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+              }}
+            >
+              {isLoading ? (
+                <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+              ) : (
+                <span className="flex items-center gap-2">
+                  Start 14-Day Free Trial
+                  <ArrowRight className="w-5 h-5" />
+                </span>
+              )}
+            </Button>
+
+            {/* Stats Row */}
+            <div className="flex flex-wrap items-center gap-6 mt-10">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+                  <TrendingUp className="w-4 h-4 text-[#C9A646]" />
+                </div>
+                <div>
+                  <p className="text-white font-bold">5 Reports</p>
+                  <p className="text-xs text-slate-500">Every Month</p>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-700" />
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+                  <Shield className="w-4 h-4 text-[#C9A646]" />
+                </div>
+                <div>
+                  <p className="text-white font-bold">Institutional Grade</p>
+                  <p className="text-xs text-slate-500">Research Quality</p>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-700" />
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
+                  <Target className="w-4 h-4 text-[#C9A646]" />
+                </div>
+                <div>
+                  <p className="text-white font-bold">Actionable</p>
+                  <p className="text-xs text-slate-500">Trade Ideas</p>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Main Headline */}
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6" style={{ letterSpacing: '-0.03em' }}>
-            <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent"
-                  style={{ textShadow: '0 0 80px rgba(201,166,70,0.5)' }}>
-              Top Secret
-            </span>
-            <br />
-            <span className="text-white">Market Intelligence</span>
-          </h1>
+          {/* Right Column - Report Preview Mockup */}
+          <div className="relative">
+            {/* Glow Effect Behind */}
+            <div
+              className="absolute -inset-4 rounded-3xl opacity-40"
+              style={{
+                background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.3) 0%, transparent 70%)',
+                filter: 'blur(40px)'
+              }}
+            />
 
-          {/* Subheadline */}
-          <p className="text-xl md:text-2xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Get the same institutional-grade research that 
-            <span className="text-white font-semibold"> hedge funds pay thousands </span>
-            for — delivered to your inbox every week.
-          </p>
-
-          {/* Value Props */}
-          <div className="flex flex-wrap justify-center gap-x-8 gap-y-4 mb-12">
-            {FEATURES.map((feature, idx) => {
-              const Icon = feature.icon;
-              return (
-                <div key={idx} className="flex items-center gap-3 text-slate-300">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                       style={{
-                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                         border: '1px solid rgba(201,166,70,0.2)'
-                       }}>
-                    <Icon className="w-5 h-5 text-[#C9A646]" />
+            {/* Report Card */}
+            <motion.div
+              className="relative"
+              initial={{ opacity: 0, y: 20, rotateY: -5 }}
+              animate={{ opacity: 1, y: 0, rotateY: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+            >
+              <div
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  background: 'linear-gradient(180deg, #151515 0%, #0A0A0A 100%)',
+                  border: '1px solid rgba(201,166,70,0.3)',
+                  boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.1)'
+                }}
+              >
+                {/* Report Header */}
+                <div
+                  className="p-5 flex items-center justify-between"
+                  style={{ borderBottom: '1px solid rgba(201,166,70,0.2)' }}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{
+                        background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)'
+                      }}
+                    >
+                      <span className="text-black font-bold text-sm">F</span>
+                    </div>
+                    <div>
+                      <p className="text-white font-bold">FINOTAUR</p>
+                      <p className="text-[#C9A646] text-xs font-semibold">TOP SECRET</p>
+                    </div>
                   </div>
-                  <span className="text-sm font-medium">{feature.text}</span>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#C9A646]/10 border border-[#C9A646]/30">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[#C9A646] text-xs font-semibold">LIVE</span>
+                  </div>
                 </div>
-              );
-            })}
+
+                {/* Report Content Preview */}
+                <div className="p-6">
+                  {/* Report Title */}
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="w-5 h-5 text-amber-400" />
+                      <span className="text-amber-400 text-sm font-semibold">ISM Manufacturing Report</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-1">January 2025 Analysis</h3>
+                    <p className="text-slate-500 text-sm">Published Jan 3, 2025</p>
+                  </div>
+
+                  {/* Key Metrics Preview */}
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <p className="text-emerald-400 text-xs font-semibold mb-1">PMI Index</p>
+                      <p className="text-white text-xl font-bold">52.8</p>
+                      <p className="text-emerald-400 text-xs">+1.2 vs prev</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                      <p className="text-blue-400 text-xs font-semibold mb-1">New Orders</p>
+                      <p className="text-white text-xl font-bold">54.3</p>
+                      <p className="text-blue-400 text-xs">Expanding</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                      <p className="text-amber-400 text-xs font-semibold mb-1">Market Bias</p>
+                      <p className="text-white text-xl font-bold">RISK ON</p>
+                      <p className="text-amber-400 text-xs">Bullish setup</p>
+                    </div>
+                  </div>
+
+                  {/* Chart Placeholder */}
+                  <div
+                    className="h-32 rounded-xl mb-4 relative overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)' }}
+                  >
+                    {/* Fake chart lines */}
+                    <svg className="w-full h-full" preserveAspectRatio="none">
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#C9A646" stopOpacity="0.3" />
+                          <stop offset="100%" stopColor="#C9A646" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path
+                        d="M0,80 Q50,60 100,65 T200,50 T300,55 T400,30"
+                        fill="none"
+                        stroke="#C9A646"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M0,80 Q50,60 100,65 T200,50 T300,55 T400,30 L400,128 L0,128 Z"
+                        fill="url(#chartGradient)"
+                      />
+                    </svg>
+                    <div className="absolute bottom-2 right-2 text-xs text-[#C9A646]/60">
+                      Sector Performance
+                    </div>
+                  </div>
+
+                  {/* Trade Ideas Teaser */}
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-white font-semibold text-sm">Trade Ideas</span>
+                      <span className="text-[#C9A646] text-xs">3 setups included</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-2 w-full rounded bg-white/10" />
+                      <div className="h-2 w-4/5 rounded bg-white/10" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Blur Overlay */}
+                <div className="absolute inset-0 backdrop-blur-[2px] bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-end justify-center pb-8">
+                  <div className="text-center">
+                    <div
+                      className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                      style={{
+                        background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                        boxShadow: '0 0 40px rgba(201,166,70,0.5)'
+                      }}
+                    >
+                      <Lock className="w-8 h-8 text-black" />
+                    </div>
+                    <p className="text-white font-bold text-lg mb-1">Unlock Full Report</p>
+                    <p className="text-slate-400 text-sm">Subscribe to access all reports</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </motion.div>
 
