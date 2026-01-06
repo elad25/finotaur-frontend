@@ -2,45 +2,44 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import Navbar from "@/components/landing-new/Navbar";
-import Hero from "@/components/landing-new/Hero";
-import BeforeAfter from "@/components/landing-new/BeforeAfter";
-import WhatIsFinotaur from "@/components/landing-new/WhatIsFinotaur";
-import ProductShowcase from "@/components/landing-new/ProductShowcase";
-import CoreSystem from "@/components/landing-new/CoreSystem";
-import AISection from "@/components/landing-new/AISection";
-import DesignPhilosophy from "@/components/landing-new/DesignPhilosophy";
-import Pricing from "@/components/landing-new/Pricing";
-import Testimonials from "@/components/landing-new/Testimonials";
-import Vision from "@/components/landing-new/Vision";
-import Footer from "@/components/landing-new/Footer";
 import { LegalFooter } from "@/components/legal";
 
+// TOP SECRET Landing Page Components
+import {
+  TopSecretHero,
+  PainAmplification,
+  Reframe,
+  WhatIsTopSecret,
+  Proof,
+  WhoThisIsFor,
+  RiskReversal,
+  Exclusivity,
+  FinalCTA,
+  SoftJournalIntro
+} from '@/components/top-secret';
+
 /**
- * ✨ UPGRADED LANDING PAGE
- * 
- * 🔒 SECURITY: Authenticated users are automatically redirected to dashboard
- * Landing page is ONLY for non-authenticated visitors
- * 
- * New structure with enhanced conversion elements:
- * 1. Hero - Updated with compelling subtitle + micro trust strip
- * 2. BeforeAfter - Shows transformation above the fold
- * 3. WhatIsFinotaur - Core value proposition
- * 4. ProductShowcase - 3 annotated screenshots showing product in action
- * 5. CoreSystem - Feature breakdown
- * 6. AISection - AI capabilities
- * 7. DesignPhilosophy - Premium positioning
- * 8. Pricing - Updated copy with behavioral alerts emphasis
- * 9. Testimonials - Social proof with 4 cards
- * 10. Vision - Future roadmap
- * 11. Footer - Final CTA
- * 12. LegalFooter - Legal documents links (NEW!)
+ * 🔥 TOP SECRET LANDING PAGE
+ *
+ * Full conversion-optimized structure:
+ * 1. Hero - Stop guessing. Read the market like money actually moves.
+ * 2. Pain Amplification - "You're not confused. You're overloaded."
+ * 3. Reframe - "The market doesn't reward information. It rewards conclusions."
+ * 4. What Is TOP SECRET - Outcome-oriented features
+ * 5. Proof - Process proof without promises
+ * 6. Who This Is For - Audience filtering (raises status, reduces refunds)
+ * 7. Risk Reversal - "No pressure. No lock-in."
+ * 8. Exclusivity - "TOP SECRET is intentionally kept small."
+ * 9. Final CTA - "Ready to stop guessing?"
+ * 10. Soft Journal Intro - Subtle upsell hint
+ *
+ * 🔒 SECURITY: Authenticated users are redirected to dashboard
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  // 🔥 FIX: Redirect authenticated users to dashboard
-  // This ensures the landing page is ONLY for visitors, not logged-in users
+  // Redirect authenticated users to dashboard
   useEffect(() => {
     if (!isLoading && user) {
       console.log('[LandingPage] ✅ User is authenticated, redirecting to dashboard...');
@@ -48,7 +47,7 @@ const LandingPage = () => {
     }
   }, [user, isLoading, navigate]);
 
-  // Show loading spinner while checking authentication status
+  // Loading state
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -60,28 +59,47 @@ const LandingPage = () => {
     );
   }
 
-  // Don't render landing page if user is authenticated (will redirect)
+  // Don't render if user is authenticated (will redirect)
   if (user) {
     return null;
   }
 
-  // Only show landing page to non-authenticated users
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#0A0A0A]">
+      {/* Navigation */}
       <Navbar />
-      <Hero />
-      <BeforeAfter />
-      <WhatIsFinotaur />
-      <ProductShowcase />
-      <CoreSystem />
-      <AISection />
-      <DesignPhilosophy />
-      <Pricing />
-      <Testimonials />
-      <Vision />
-      <Footer />
-      
-      {/* ⚖️ Legal Footer - Black bar with all legal document links */}
+
+      {/* 1️⃣ HERO SECTION (Above the Fold) */}
+      <TopSecretHero />
+
+      {/* 2️⃣ PAIN AMPLIFICATION */}
+      <PainAmplification />
+
+      {/* 3️⃣ REFRAME */}
+      <Reframe />
+
+      {/* 4️⃣ WHAT IS TOP SECRET */}
+      <WhatIsTopSecret />
+
+      {/* 5️⃣ PROOF (Process Proof) */}
+      <Proof />
+
+      {/* 6️⃣ WHO THIS IS FOR / NOT FOR */}
+      <WhoThisIsFor />
+
+      {/* 7️⃣ RISK REVERSAL */}
+      <RiskReversal />
+
+      {/* 8️⃣ EXCLUSIVITY / SCARCITY */}
+      <Exclusivity />
+
+      {/* 9️⃣ FINAL CTA */}
+      <FinalCTA />
+
+      {/* 🔟 OPTIONAL - SOFT INTRO TO JOURNAL */}
+      <SoftJournalIntro />
+
+      {/* ⚖️ Legal Footer */}
       <LegalFooter />
     </div>
   );
