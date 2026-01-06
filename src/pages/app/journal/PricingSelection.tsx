@@ -1,22 +1,19 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR POST-SIGNUP - TOP SECRET CHECKOUT v7.0
+// FINOTAUR POST-SIGNUP - TOP SECRET CHECKOUT v8.0
 // =====================================================
 //
-// v7.0 CHANGES:
-// - REMOVED: Payment popup - checkout is now inline
-// - ADDED: Billing toggle (Monthly/Yearly) on page
-// - SIMPLIFIED: Single page checkout flow
-//
-// Pricing:
-// - Monthly: $35/month with 14-day free trial
-// - Yearly: $300/year with 14-day free trial (Save $120)
+// v8.0 CHANGES:
+// - TWO SEPARATE CARDS: Monthly & Yearly
+// - Monthly: $35/month with 14-day free trial badge
+// - Yearly: $300/year (Save $120)
+// - Added "Continue without TOP SECRET" button
 // =====================================================
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Crown, Shield, LogOut, Check, Clock, Mail, ArrowRight, CreditCard, Lock } from 'lucide-react';
+import { Crown, Shield, LogOut, Check, Clock, ArrowRight, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -24,41 +21,16 @@ import { motion } from 'framer-motion';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 
 // =====================================================
-// TYPES
-// =====================================================
-
-type BillingInterval = 'monthly' | 'yearly';
-
-// =====================================================
-// PLAN DETAILS
-// =====================================================
-
-const planDetails = {
-  monthly: {
-    price: 35,
-    period: '/month',
-    label: 'Monthly',
-  },
-  yearly: {
-    price: 300,
-    period: '/year',
-    monthlyEquivalent: 25,
-    label: 'Yearly',
-    savings: 120,
-  }
-};
-
-// =====================================================
 // FEATURES LIST
 // =====================================================
 
 const features = [
-  { text: 'Monthly ISM Manufacturing Report', icon: '📊' },
-  { text: '2x Company Deep Dive Reports', icon: '🏢' },
-  { text: '2x Crypto Market Reports', icon: '🪙' },
-  { text: 'PDF Downloads & Archive Access', icon: '📁' },
-  { text: 'Discord Community Access', icon: '💬' },
-  { text: 'Email Delivery', icon: '📧' },
+  'Monthly ISM Manufacturing Report',
+  '2x Company Deep Dive Reports',
+  '2x Crypto Market Reports',
+  'PDF Downloads & Archive Access',
+  'Discord Community Access',
+  'Email Delivery',
 ];
 
 // =====================================================
@@ -70,8 +42,8 @@ export default function PricingSelection() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const [checkingSubscription, setCheckingSubscription] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
 
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
@@ -81,9 +53,6 @@ export default function PricingSelection() {
       toast.error('Checkout failed', { description: error.message });
     }
   });
-
-  const selectedPlan = planDetails[billingInterval];
-  const isYearly = billingInterval === 'yearly';
 
   // =====================================================
   // Check subscription status and handle redirects
@@ -100,7 +69,6 @@ export default function PricingSelection() {
       setCheckingSubscription(true);
 
       try {
-        // Check for Whop callback parameters
         const paymentSuccess = searchParams.get('payment') === 'success';
         const fromWhop = searchParams.get('source') === 'whop';
 
@@ -120,16 +88,9 @@ export default function PricingSelection() {
           return;
         }
 
-        console.log('User subscription status:', data);
-
-        // If returning from Whop with successful payment
         if (paymentSuccess || fromWhop) {
-          console.log('User returned from Whop payment');
-
-          // Clean URL params
           window.history.replaceState({}, '', '/pricing-selection');
 
-          // Mark onboarding as completed
           await supabase
             .from('profiles')
             .update({
@@ -138,10 +99,8 @@ export default function PricingSelection() {
             })
             .eq('id', user.id);
 
-          // Create welcome notification
           await createWelcomeNotification(user.id);
 
-          // Redirect to TOP SECRET
           toast.success('Welcome to Finotaur!', {
             description: 'Your subscription is being activated...'
           });
@@ -150,17 +109,13 @@ export default function PricingSelection() {
           return;
         }
 
-        // If user already has TOP SECRET active, redirect to dashboard
         const hasTopSecret = data?.top_secret_status === 'active' && data?.top_secret_enabled === true;
 
         if (hasTopSecret) {
-          console.log('User already has TOP SECRET, redirecting to dashboard');
           navigate('/app/top-secret');
           return;
         }
 
-        // New user - show checkout page
-        console.log('New user, showing TOP SECRET checkout');
         setCheckingSubscription(false);
 
       } catch (error) {
@@ -182,7 +137,7 @@ export default function PricingSelection() {
         .from('system_updates')
         .insert({
           title: 'Welcome to Top Secret Intelligence!',
-          content: 'Your 14-day free trial has started. Check your email for upcoming report alerts. You will receive 5 premium reports monthly.',
+          content: 'Your 14-day free trial has started. Check your email for upcoming report alerts.',
           type: 'success',
           target_group: 'top_secret',
           is_active: true,
@@ -191,8 +146,6 @@ export default function PricingSelection() {
             user_id: userId
           }
         });
-
-      console.log('Welcome notification created');
     } catch (error) {
       console.error('Error creating welcome notification:', error);
     }
@@ -202,21 +155,41 @@ export default function PricingSelection() {
   // Handle Payment
   // =====================================================
 
-  const handlePayment = async () => {
+  const handlePayment = async (billingInterval: 'monthly' | 'yearly') => {
     if (!user) {
       toast.error("Please log in to continue");
       return;
     }
 
-    console.log('Starting TOP SECRET checkout:', {
-      billingInterval,
-      userEmail: user.email,
-    });
+    setSelectedPlan(billingInterval);
 
     await initiateCheckout({
       planName: 'top_secret',
       billingInterval,
     });
+  };
+
+  // =====================================================
+  // Handle Skip (Continue without TOP SECRET)
+  // =====================================================
+
+  const handleSkip = async () => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      navigate('/app/dashboard');
+    } catch (error) {
+      console.error('Error skipping:', error);
+      navigate('/app/dashboard');
+    }
   };
 
   // =====================================================
@@ -228,7 +201,6 @@ export default function PricingSelection() {
       await logout();
       navigate('/');
     } catch (error) {
-      console.error('Logout error:', error);
       navigate('/');
     }
   };
@@ -278,13 +250,13 @@ export default function PricingSelection() {
         </Button>
       </div>
 
-      <div className="max-w-4xl mx-auto relative z-10 pt-8">
+      <div className="max-w-5xl mx-auto relative z-10 pt-8">
         {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center mb-8"
+          className="text-center mb-10"
         >
           {/* Crown Badge */}
           <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-6"
@@ -299,7 +271,7 @@ export default function PricingSelection() {
 
           {/* Main Headline */}
           <h1 className="text-4xl md:text-5xl font-bold mb-4" style={{ letterSpacing: '-0.03em' }}>
-            <span className="text-white">Welcome to </span>
+            <span className="text-white">Unlock </span>
             <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
               Top Secret
             </span>
@@ -310,181 +282,184 @@ export default function PricingSelection() {
           </p>
         </motion.div>
 
-        {/* Main Card */}
+        {/* Pricing Cards */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="max-w-lg mx-auto"
+          className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto mb-8"
         >
+          {/* Monthly Card */}
           <div
-            className="p-6 rounded-2xl"
+            className="relative p-6 rounded-2xl"
             style={{
-              background: 'linear-gradient(135deg, rgba(20,20,20,0.9) 0%, rgba(10,10,10,0.95) 100%)',
-              border: '1px solid rgba(201,166,70,0.3)',
-              boxShadow: '0 0 60px rgba(201,166,70,0.15)'
+              background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(15,15,15,0.98) 100%)',
+              border: '2px solid rgba(59,130,246,0.5)',
+              boxShadow: '0 0 40px rgba(59,130,246,0.15)'
             }}
           >
-            {/* 14-Day Trial Badge */}
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <div className="text-blue-400 font-semibold">14-Day Free Trial</div>
-                <p className="text-xs text-blue-400/70">No charge today. Cancel anytime during trial.</p>
+            {/* Trial Badge */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-blue-500 text-white text-sm font-bold shadow-lg">
+                <Clock className="w-4 h-4" />
+                14-Day Free Trial
               </div>
             </div>
 
-            {/* Billing Toggle */}
-            <div className="flex justify-center mb-5">
-              <div
-                className="inline-flex p-1.5 rounded-xl"
+            <div className="pt-4">
+              <h3 className="text-xl font-bold text-white mb-1 text-center">Monthly</h3>
+
+              {/* Price */}
+              <div className="text-center py-4">
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-4xl font-bold text-white">$35</span>
+                  <span className="text-lg text-slate-400">/month</span>
+                </div>
+                <p className="text-sm text-blue-400 mt-2">
+                  First 14 days free
+                </p>
+              </div>
+
+              {/* Features */}
+              <div className="space-y-2 mb-5">
+                {features.map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <span className="text-sm text-slate-300">{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA Button */}
+              <Button
+                onClick={() => handlePayment('monthly')}
+                disabled={isLoading}
+                className="w-full py-5 text-base font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
                 style={{
-                  background: 'rgba(0,0,0,0.5)',
-                  border: '1px solid rgba(255,255,255,0.08)'
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #60A5FA 50%, #3B82F6 100%)',
+                  color: '#fff',
+                  boxShadow: '0 8px 32px rgba(59,130,246,0.4)'
                 }}
               >
-                <button
-                  onClick={() => setBillingInterval('monthly')}
-                  className={`relative px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
-                    billingInterval === 'monthly'
-                      ? 'text-black'
-                      : 'text-slate-500 hover:text-white'
-                  }`}
-                  style={billingInterval === 'monthly' ? {
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    boxShadow: '0 4px 15px rgba(201,166,70,0.4)'
-                  } : {}}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBillingInterval('yearly')}
-                  className={`relative px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
-                    billingInterval === 'yearly'
-                      ? 'text-black'
-                      : 'text-slate-500 hover:text-white'
-                  }`}
-                  style={billingInterval === 'yearly' ? {
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    boxShadow: '0 4px 15px rgba(201,166,70,0.4)'
-                  } : {}}
-                >
-                  Yearly
-                  {billingInterval === 'yearly' && (
-                    <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded-full shadow-lg">
-                      Save $120
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Price Display */}
-            <div className="text-center py-4">
-              <div className="flex items-baseline justify-center gap-2">
-                <span className="text-5xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
-                  ${selectedPlan.price}
-                </span>
-                <span className="text-xl text-slate-500">{selectedPlan.period}</span>
-              </div>
-              {isYearly && (
-                <p className="text-emerald-400 font-semibold mt-1">
-                  Just $25/month - Save $120!
-                </p>
-              )}
-              <p className="text-sm text-blue-400 mt-2">
-                First 14 days free, then ${selectedPlan.price}{selectedPlan.period}
-              </p>
-            </div>
-
-            {/* Features List */}
-            <div className="space-y-2 mb-5">
-              {features.map((feature, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{
-                      background: 'rgba(201,166,70,0.15)',
-                      border: '1px solid rgba(201,166,70,0.3)'
-                    }}
-                  >
-                    <Check className="w-3 h-3 text-[#C9A646]" />
+                {isLoading && selectedPlan === 'monthly' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Redirecting...
                   </div>
-                  <span className="text-sm text-slate-300">{feature.text}</span>
-                </div>
-              ))}
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    Start Free Trial
+                    <ArrowRight className="w-5 h-5" />
+                  </span>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Yearly Card */}
+          <div
+            className="relative p-6 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(15,15,15,0.98) 100%)',
+              border: '2px solid rgba(201,166,70,0.5)',
+              boxShadow: '0 0 40px rgba(201,166,70,0.15)'
+            }}
+          >
+            {/* Best Value Badge */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+              <div className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000'
+                }}
+              >
+                <Sparkles className="w-4 h-4" />
+                Save $120
+              </div>
             </div>
 
-            {/* Security Features */}
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Shield className="w-4 h-4 text-[#C9A646]" />
-                <span>Secure payment</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Lock className="w-4 h-4 text-[#C9A646]" />
-                <span>Cancel anytime</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <CreditCard className="w-4 h-4 text-[#C9A646]" />
-                <span>Powered by Whop</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Clock className="w-4 h-4 text-blue-400" />
-                <span>No charge today</span>
-              </div>
-            </div>
+            <div className="pt-4">
+              <h3 className="text-xl font-bold text-white mb-1 text-center">Yearly</h3>
 
-            {/* CTA Button */}
-            <Button
-              onClick={handlePayment}
-              disabled={isLoading || !user}
-              className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                backgroundSize: '200% auto',
-                color: '#000',
-                boxShadow: '0 8px 32px rgba(201,166,70,0.4), inset 0 2px 0 rgba(255,255,255,0.2)'
-              }}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  Redirecting to checkout...
+              {/* Price */}
+              <div className="text-center py-4">
+                <div className="flex items-baseline justify-center gap-1">
+                  <span className="text-4xl font-bold bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">$300</span>
+                  <span className="text-lg text-slate-400">/year</span>
                 </div>
-              ) : (
-                <span className="flex items-center justify-center gap-2">
-                  Start 14-Day Free Trial
-                  <ArrowRight className="w-5 h-5" />
-                </span>
-              )}
-            </Button>
+                <p className="text-sm text-emerald-400 mt-2">
+                  Just $25/month
+                </p>
+              </div>
 
-            <p className="text-[10px] text-center text-slate-500 mt-4">
-              By starting your trial, you agree to our Terms of Service.
-              You won't be charged until after your 14-day trial ends.
-            </p>
+              {/* Features */}
+              <div className="space-y-2 mb-5">
+                {features.map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                    <span className="text-sm text-slate-300">{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTA Button */}
+              <Button
+                onClick={() => handlePayment('yearly')}
+                disabled={isLoading}
+                className="w-full py-5 text-base font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000',
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+                }}
+              >
+                {isLoading && selectedPlan === 'yearly' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    Redirecting...
+                  </div>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    Get Yearly
+                    <ArrowRight className="w-5 h-5" />
+                  </span>
+                )}
+              </Button>
+            </div>
           </div>
         </motion.div>
 
-        {/* Email Notification Info */}
+        {/* Trust Badges */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="flex flex-wrap items-center justify-center gap-6 mb-8 text-slate-400"
+        >
+          <div className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-[#C9A646]" />
+            <span className="text-sm">Secure payment</span>
+          </div>
+          <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <Check className="w-5 h-5 text-[#C9A646]" />
+            <span className="text-sm">Cancel anytime</span>
+          </div>
+        </motion.div>
+
+        {/* Skip Button */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="max-w-lg mx-auto mt-6"
+          transition={{ delay: 0.5 }}
+          className="text-center"
         >
-          <div className="flex items-center gap-3 p-4 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/30">
-            <Mail className="w-6 h-6 text-[#C9A646]" />
-            <div>
-              <p className="text-[#C9A646] font-medium">Email notifications enabled</p>
-              <p className="text-sm text-[#C9A646]/70">
-                You'll receive alerts when new reports are ready
-              </p>
-            </div>
-          </div>
+          <button
+            onClick={handleSkip}
+            className="text-slate-500 hover:text-slate-300 transition-colors text-sm underline underline-offset-4"
+          >
+            Continue without Top Secret
+          </button>
         </motion.div>
       </div>
     </section>
