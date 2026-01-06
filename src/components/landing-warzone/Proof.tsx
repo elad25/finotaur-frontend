@@ -1,16 +1,41 @@
 // src/components/landing-warzone/Proof.tsx
 import { motion } from "framer-motion";
-import { Quote, BarChart3, Building2, TrendingUp, FileText, Shield } from "lucide-react";
+import { Quote, BarChart3, Building2, TrendingUp, FileText, Shield, ArrowRight, Brain } from "lucide-react";
 
 /**
- * 🧠 Proof Section
+ * 🧠 Proof Section - ENHANCED
  *
  * Shows:
+ * - Before/After thinking transformations
  * - Screenshot of ISM analysis
  * - Example of company analysis
  * - Authority statements
+ *
+ * Based on Hormozi: "Specific proof beats generic authority."
  */
 const Proof = () => {
+  // Before/After Examples - Specific thinking transformations
+  const transformations = [
+    {
+      before: "ISM comes out at 48.2... what does that even mean for my trades?",
+      after: "ISM → Manufacturing contraction confirmed. Bias shifts from bullish to neutral on industrials. Clear.",
+      icon: BarChart3,
+      category: "Macro Analysis"
+    },
+    {
+      before: "NVDA earnings beat expectations... should I buy? Everyone's talking about it...",
+      after: "NVDA → Forward guidance weak despite beat. We avoided while headlines were bullish. Saved 12%.",
+      icon: Building2,
+      category: "Company Research"
+    },
+    {
+      before: "Fed says 'data dependent'... I have no idea what to expect next month.",
+      after: "Fed → 73% probability of hold. Market already priced it. Focus on earnings season instead.",
+      icon: Brain,
+      category: "Decision Clarity"
+    }
+  ];
+
   const proofItems = [
     {
       icon: BarChart3,
@@ -56,6 +81,66 @@ const Proof = () => {
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
             Real analysis. Real insights. Real edge.
           </p>
+        </motion.div>
+
+        {/* ============================================
+            NEW: Before/After Thinking Transformations
+            ============================================ */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="mb-16"
+        >
+          <h3 className="text-2xl md:text-3xl font-bold text-white text-center mb-8">
+            Before TOP SECRET <span className="text-slate-500">vs</span> <span className="text-[#C9A646]">After</span>
+          </h3>
+
+          <div className="space-y-6">
+            {transformations.map((item, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="relative"
+              >
+                <div className="grid md:grid-cols-[1fr,auto,1fr] gap-4 items-stretch">
+                  {/* Before */}
+                  <div className="p-5 rounded-xl bg-red-500/5 border border-red-500/20 backdrop-blur-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-bold text-red-400 uppercase tracking-wider">Before</span>
+                      <span className="text-xs text-slate-600">• Confused</span>
+                    </div>
+                    <p className="text-slate-400 italic">"{item.before}"</p>
+                  </div>
+
+                  {/* Arrow */}
+                  <div className="hidden md:flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-[#C9A646]/20 border border-[#C9A646]/40 flex items-center justify-center">
+                      <ArrowRight className="w-5 h-5 text-[#C9A646]" />
+                    </div>
+                  </div>
+
+                  {/* After */}
+                  <div className="p-5 rounded-xl bg-[#C9A646]/5 border border-[#C9A646]/30 backdrop-blur-sm">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-bold text-[#C9A646] uppercase tracking-wider">After</span>
+                      <span className="text-xs text-slate-600">• Clear Decision</span>
+                    </div>
+                    <p className="text-white font-medium">"{item.after}"</p>
+                  </div>
+                </div>
+
+                {/* Category Tag */}
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-slate-800 border border-slate-700 rounded-full">
+                  <span className="text-xs text-slate-400">{item.category}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
 
         {/* Proof Cards - 2 Columns */}

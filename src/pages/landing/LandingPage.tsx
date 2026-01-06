@@ -7,48 +7,47 @@ import Footer from "@/components/landing-new/Footer";
 import { LegalFooter } from "@/components/legal";
 
 // WAR ZONE Landing Page Components
-import { WarzoneHero, WhoIsItFor, Proof, JournalSection } from "@/components/landing-warzone";
+import {
+  WarzoneHero,
+  PainAmplification,
+  WhoIsItFor,
+  Proof,
+  RiskReversal,
+  CountdownTimer,
+  JournalSection
+} from "@/components/landing-warzone";
 
 /**
- * 🔥 WAR ZONE LANDING PAGE
+ * 🔥 WAR ZONE LANDING PAGE - Hormozi Optimized
  *
  * Strategy based on Alex Hormozi principles:
  * - People don't buy tools, they buy OUTCOMES
  * - TOP SECRET = Emotional + Status + Money
  * - The Journal = Support Product (not the hero)
  *
+ * Hormozi Elements Added:
+ * 1. Pain Amplification - "If they don't feel stupid without you, they won't buy"
+ * 2. Risk Reversal - "Fear of loss must be lower than desire"
+ * 3. Specific Proof - "Specific proof beats generic authority"
+ * 4. Scarcity/Urgency - Countdown timer with price increase
+ *
  * Structure:
  * 1. WarzoneHero - TOP SECRET focused (Above the Fold)
- *    "Stop guessing. Read the market like money actually moves."
- *
- * 2. WhoIsItFor - Target audience definition
- *    - Tired of reading news without action
- *    - Want clear market bias
- *    - Willing to pay for better decisions
- *
- * 3. Proof - Screenshots + Authority statements
- *    - ISM analysis example
- *    - Company analysis example
- *    - "This is how I personally build my market bias."
- *
- * 4. JournalSection - Trading Journal as SUPPORT product
- *    "Execution matters too."
- *
- * 5. Pricing - Subscription tiers
- * 6. Footer - Final CTA
- * 7. LegalFooter - Legal documents
- *
- * Stack Strategy:
- * - TOP SECRET = They come in
- * - Journal = They stay
- * - WAR ZONE = LTV growth
+ * 2. PainAmplification - Make them feel the pain of confusion
+ * 3. WhoIsItFor - Target audience definition
+ * 4. Proof - Before/After + Screenshots + Authority
+ * 5. RiskReversal - Remove fear, add safety
+ * 6. CountdownTimer - Urgency (price goes up Jan 25)
+ * 7. Pricing - Subscription tiers
+ * 8. JournalSection - Trading Journal as SUPPORT product
+ * 9. Footer - Final CTA
+ * 10. LegalFooter - Legal documents
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
 
   // 🔥 FIX: Redirect authenticated users to dashboard
-  // This ensures the landing page is ONLY for visitors, not logged-in users
   useEffect(() => {
     if (!isLoading && user) {
       console.log('[LandingPage] ✅ User is authenticated, redirecting to dashboard...');
@@ -78,24 +77,33 @@ const LandingPage = () => {
     <div className="min-h-screen">
       <Navbar />
 
-      {/* 🔥 WAR ZONE Structure */}
+      {/* 🔥 WAR ZONE Structure - Hormozi Optimized */}
 
       {/* Section 1: Above the Fold - TOP SECRET Hero */}
       <WarzoneHero />
 
-      {/* Section 2: Who Is This For */}
+      {/* Section 2: Pain Amplification - "Sound Familiar?" */}
+      <PainAmplification />
+
+      {/* Section 3: Who Is This For */}
       <WhoIsItFor />
 
-      {/* Section 3: Proof - Screenshots + Authority */}
+      {/* Section 4: Proof - Before/After + Screenshots + Authority */}
       <Proof />
 
-      {/* Section 4: Trading Journal as Support Product */}
-      <JournalSection />
+      {/* Section 5: Risk Reversal - Remove Fear */}
+      <RiskReversal />
 
-      {/* Section 5: Pricing */}
+      {/* Section 6: Countdown Timer - Urgency (Price goes up Jan 25) */}
+      <CountdownTimer />
+
+      {/* Section 7: Pricing */}
       <Pricing />
 
-      {/* Section 6: Footer */}
+      {/* Section 8: Trading Journal as Support Product */}
+      <JournalSection />
+
+      {/* Section 9: Footer */}
       <Footer />
 
       {/* Legal Footer */}
