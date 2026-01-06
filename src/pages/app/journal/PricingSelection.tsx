@@ -185,10 +185,10 @@ export default function PricingSelection() {
         })
         .eq('id', user.id);
 
-      navigate('/app/dashboard');
+      navigate('/app/top-secret');
     } catch (error) {
       console.error('Error skipping:', error);
-      navigate('/app/dashboard');
+      navigate('/app/top-secret');
     }
   };
 
@@ -237,6 +237,16 @@ export default function PricingSelection() {
           filter: 'blur(60px)'
         }}
       />
+
+      {/* Skip Button - Top Left */}
+      <div className="absolute top-6 left-6 z-20">
+        <button
+          onClick={handleSkip}
+          className="text-slate-500 hover:text-slate-300 transition-colors text-sm underline underline-offset-4"
+        >
+          Continue without Top Secret
+        </button>
+      </div>
 
       {/* Exit Button - Top Right */}
       <div className="absolute top-6 right-6 z-20">
@@ -447,20 +457,6 @@ export default function PricingSelection() {
           </div>
         </motion.div>
 
-        {/* Skip Button */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="text-center"
-        >
-          <button
-            onClick={handleSkip}
-            className="text-slate-500 hover:text-slate-300 transition-colors text-sm underline underline-offset-4"
-          >
-            Continue without Top Secret
-          </button>
-        </motion.div>
       </div>
     </section>
   );
