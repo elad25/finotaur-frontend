@@ -45,57 +45,29 @@ interface Plan {
   trialDays?: number;
 }
 
-// Only 2 plans - Operative (trial) and Commander (no trial)
-const plans: Plan[] = [
-  {
-    id: "basic",
-    name: "Operative",
-    monthlyPrice: 19.99,
-    yearlyPrice: 149,
-    yearlyMonthlyEquivalent: 12.42,
-    description: "Essential intelligence + execution tools",
-    trialDays: 14,
-    features: [
-      "14-day free trial",
-      "Monthly macro conclusions",
-      "Market bias reports",
-      "Full trading journal",
-      "Performance analytics",
-      "Strategy builder & tracking",
-      "Calendar & trading sessions",
-      "Equity curve & charts",
-      "Trade screenshots & notes",
-      "Email support",
-    ],
-    cta: "Start 14-Day Free Trial",
-    featured: false,
-    savings: "Save 38%",
-  },
-  {
-    id: "premium",
-    name: "Commander",
-    monthlyPrice: 39.99,
-    yearlyPrice: 299,
-    yearlyMonthlyEquivalent: 24.92,
-    description: "Full intelligence suite + AI analysis",
-    features: [
-      "Everything in Operative, plus:",
-      "Deep company analysis",
-      "Unlimited trades",
-      "AI-powered insights & coach",
-      "Advanced AI analysis",
-      "Pattern recognition",
-      "Custom AI reports",
-      "Behavioral risk alerts",
-      "Backtesting system",
-      "Priority support",
-      "Early access to new features",
-    ],
-    cta: "Unlock Commander Access",
-    featured: true,
-    savings: "Save 38%",
-  },
-];
+// Single TOP SECRET plan with monthly/yearly options
+const topSecretPlan = {
+  id: "top-secret",
+  name: "TOP SECRET",
+  monthlyPrice: 35,
+  yearlyPrice: 300,
+  yearlyMonthlyEquivalent: 25,
+  description: "Full intelligence access",
+  trialDays: 14,
+  features: [
+    "14-day free trial",
+    "Monthly macro conclusions",
+    "Deep company analysis",
+    "Market bias reports",
+    "Exclusive insights",
+    "Clear trading signals",
+    "Priority updates",
+    "Members-only content",
+  ],
+  cta: "Start 14-Day Free Trial",
+  yearlyCta: "Get Annual Access",
+  savings: "Save $120/year",
+};
 
 export default function PricingSelection() {
   const { user, logout } = useAuth();
@@ -299,15 +271,10 @@ export default function PricingSelection() {
   };
 
   const handlePlanClick = (planId: string) => {
-    if (planId === 'basic' || planId === 'premium') {
-      setSelectedPlan(planId as PlanId);
+    // For TOP SECRET single plan
+    if (planId === 'top-secret') {
+      setSelectedPlan('basic' as PlanId); // Use 'basic' for Whop integration
       setShowPaymentPopup(true);
-    }
-  };
-
-  const handlePlanCardClick = (planId: string) => {
-    if (planId === 'basic' || planId === 'premium') {
-      setSelectedPlan(planId as PlanId);
     }
   };
 
@@ -588,181 +555,109 @@ export default function PricingSelection() {
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  {hasDiscount ? 'Save 38% + 10% off' : 'Save up to 38%'}
+                  Save $120/year
                 </span>
               </button>
             </div>
           </motion.div>
 
-          {/* 2-column grid for 2 plans */}
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto pt-8">
-            {plans.map((plan, index) => {
-              const displayPrice = getDisplayPrice(plan);
-              const isPlanSelected = plan.id === selectedPlan;
-              const showDiscountOnCard = hasDiscount;
-              
-              return (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: 0.4 + index * 0.1 }}
-                  onClick={() => handlePlanCardClick(plan.id)}
-                  className={`p-8 relative transition-all duration-300 flex flex-col rounded-2xl cursor-pointer ${
-                    plan.featured ? 'md:scale-[1.05]' : ''
-                  } ${isPlanSelected ? 'ring-2 ring-[#C9A646]' : ''}`}
-                  style={{
-                    background: plan.featured 
-                      ? 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)'
-                      : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
-                    backdropFilter: 'blur(20px)',
-                    border: plan.featured 
-                      ? '2px solid rgba(201,166,70,0.6)' 
-                      : '1px solid rgba(255,255,255,0.12)',
-                    boxShadow: plan.featured
-                      ? '0 12px 50px rgba(201,166,70,0.5), 0 4px 20px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.15)'
-                      : '0 6px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.08)'
-                  }}
-                >
-                  {/* Gradient Overlay */}
-                  <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl"
-                       style={{
-                         background: plan.featured
-                           ? 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.2), transparent 60%)'
-                           : 'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.08), transparent 60%)'
-                       }} />
-                  
-                  {/* Shine Effect */}
-                  <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
-                       style={{
-                         background: plan.featured
-                           ? 'linear-gradient(180deg, rgba(244,217,123,0.15) 0%, transparent 100%)'
-                           : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)'
-                       }} />
+          {/* Single TOP SECRET Plan Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="max-w-lg mx-auto pt-8"
+          >
+            <div className="p-8 relative rounded-2xl"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)',
+                   backdropFilter: 'blur(20px)',
+                   border: '2px solid rgba(201,166,70,0.6)',
+                   boxShadow: '0 12px 50px rgba(201,166,70,0.5), 0 4px 20px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.15)'
+                 }}>
 
-                  {/* Featured Badge (Commander) */}
-                  {plan.featured && (
-                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap"
-                         style={{
-                           background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                           boxShadow: '0 4px 20px rgba(201,166,70,0.6), inset 0 1px 0 rgba(255,255,255,0.4)',
-                           color: '#000',
-                           zIndex: 50
-                         }}>
-                      <Target className="w-4 h-4" />
-                      Top Clearance
-                    </div>
-                  )}
+              {/* Shine Effect */}
+              <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                   style={{
+                     background: 'linear-gradient(180deg, rgba(244,217,123,0.15) 0%, transparent 100%)'
+                   }} />
 
-                  {/* Trial Badge (Operative only) */}
-                  {plan.trialDays && !plan.featured && (
-                    <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-gradient-to-r from-[#8B0000] to-[#C9A646] text-white shadow-lg"
-                         style={{
-                           zIndex: 50,
-                           boxShadow: '0 4px 20px rgba(139,0,0,0.4)'
-                         }}>
-                      <Lock className="w-4 h-4" />
-                      14-Day Risk-Free
-                    </div>
-                  )}
+              {/* Badge */}
+              {billingInterval === 'monthly' ? (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-gradient-to-r from-[#8B0000] to-[#C9A646] text-white shadow-lg"
+                     style={{ zIndex: 50, boxShadow: '0 4px 20px rgba(139,0,0,0.4)' }}>
+                  <Lock className="w-4 h-4" />
+                  14-Day Free Trial
+                </div>
+              ) : (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 whitespace-nowrap bg-green-500 text-white shadow-lg"
+                     style={{ zIndex: 50 }}>
+                  <Zap className="w-4 h-4" />
+                  Save $120/year
+                </div>
+              )}
 
-                  {/* Discount Badge */}
-                  {showDiscountOnCard && hasDiscount && (
-                    <div className="absolute -top-4 right-4 bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
-                      <Tag className="w-3 h-3" />
-                      {discountInfo?.discountPercent}% OFF
-                    </div>
-                  )}
+              {/* Plan Info */}
+              <div className="text-center mb-8 mt-4">
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <Lock className="w-6 h-6 text-[#C9A646]" />
+                  <h3 className="text-3xl font-bold text-[#C9A646]">{topSecretPlan.name}</h3>
+                  <Lock className="w-6 h-6 text-[#C9A646]" />
+                </div>
 
-                  {/* Savings Badge (non-discount) */}
-                  {plan.savings && billingInterval === 'yearly' && !showDiscountOnCard && (
-                    <div className="absolute -top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
-                      {plan.savings}
-                    </div>
-                  )}
-                  
-                  {/* Plan Info */}
-                  <div className="text-center mb-8 mt-4">
-                    <h3 className="text-2xl font-bold mb-2 text-white">{plan.name}</h3>
-                    <div className="flex flex-col items-center justify-center gap-1 mb-3">
-                      <div className="flex items-baseline gap-1">
-                        {displayPrice.discountedPrice && (
-                          <span className="text-2xl text-zinc-500 line-through mr-2">
-                            {displayPrice.originalPrice}
-                          </span>
-                        )}
-                        <span className={`text-5xl font-bold ${
-                          displayPrice.discountedPrice 
-                            ? 'text-emerald-400' 
-                            : plan.featured 
-                              ? 'text-[#C9A646]' 
-                              : 'text-white'
-                        }`}>
-                          {displayPrice.discountedPrice || displayPrice.price}
-                        </span>
-                        <span className="text-slate-400">{displayPrice.period}</span>
-                      </div>
-                      {displayPrice.billedAs && (
-                        <span className="text-sm text-slate-500">{displayPrice.billedAs}</span>
-                      )}
-                      {displayPrice.savings && displayPrice.savings > 0 && (
-                        <span className="text-sm text-emerald-400 font-semibold">
-                          You save ${displayPrice.savings.toFixed(2)}!
-                        </span>
-                      )}
-                      {plan.trialDays && (
-                        <span className="text-sm text-blue-400 font-medium mt-1">
-                          First 14 days free, then {displayPrice.price}{displayPrice.period}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-slate-400">{plan.description}</p>
+                <div className="flex flex-col items-center justify-center gap-1 mb-3">
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-6xl font-bold text-[#C9A646]">
+                      ${billingInterval === 'monthly' ? topSecretPlan.monthlyPrice : topSecretPlan.yearlyPrice}
+                    </span>
+                    <span className="text-slate-400 text-xl">
+                      {billingInterval === 'monthly' ? '/month' : '/year'}
+                    </span>
                   </div>
 
-                  {/* Features List */}
-                  <ul className="space-y-4 mb-8 flex-1">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-3">
-                        <div className={`w-5 h-5 rounded-full ${
-                          plan.featured ? 'bg-[#C9A646]/30' : 'bg-[#C9A646]/20'
-                        } flex items-center justify-center shrink-0 mt-0.5`}
-                             style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
-                          <Check className="h-3 w-3 text-[#C9A646]" />
-                        </div>
-                        <span className="text-sm text-slate-300">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {billingInterval === 'monthly' && (
+                    <span className="text-sm text-emerald-400 font-medium mt-2">
+                      First 14 days free, then ${topSecretPlan.monthlyPrice}/month
+                    </span>
+                  )}
 
-                  {/* CTA Button */}
-                  <Button 
-                    variant={plan.featured ? "default" : "outline"} 
-                    className={`w-full ${
-                      plan.featured 
-                        ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black font-bold transition-all duration-500 hover:scale-[1.02]' 
-                        : hasDiscount
-                          ? 'border-2 border-emerald-500/40 hover:border-emerald-500 hover:bg-emerald-500/10 text-white hover:scale-[1.02]'
-                          : 'border-2 border-blue-500/40 hover:border-blue-500 hover:bg-blue-500/10 text-white hover:scale-[1.02]'
-                    }`}
-                    size="lg"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePlanClick(plan.id);
-                    }}
-                    disabled={loading}
-                    style={plan.featured ? {
-                      boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
-                    } : {
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    {plan.cta}
-                  </Button>
-                </motion.div>
-              );
-            })}
-          </div>
+                  {billingInterval === 'yearly' && (
+                    <span className="text-sm text-emerald-400 font-medium mt-2">
+                      Only ${topSecretPlan.yearlyMonthlyEquivalent}/month • Save $120
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-slate-400 text-lg">{topSecretPlan.description}</p>
+              </div>
+
+              {/* Features List */}
+              <ul className="space-y-3 mb-8">
+                {topSecretPlan.features.map((feature, i) => (
+                  <li key={i} className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-[#C9A646]/30 flex items-center justify-center shrink-0"
+                         style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
+                      <Check className="h-3 w-3 text-[#C9A646]" />
+                    </div>
+                    <span className="text-slate-300">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* CTA Button */}
+              <Button
+                className="w-full py-7 text-xl font-bold bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black rounded-xl transition-all duration-500 hover:scale-[1.02]"
+                size="lg"
+                onClick={() => handlePlanClick(topSecretPlan.id)}
+                disabled={loading}
+                style={{
+                  boxShadow: '0 6px 30px rgba(201,166,70,0.5), inset 0 2px 0 rgba(255,255,255,0.3)',
+                }}
+              >
+                {billingInterval === 'monthly' ? topSecretPlan.cta : topSecretPlan.yearlyCta}
+              </Button>
+            </div>
+          </motion.div>
 
           {/* Bottom Trust Indicators - TOP SECRET Style */}
           <motion.div
