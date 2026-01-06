@@ -5,11 +5,14 @@ import { BookOpen } from "lucide-react";
 const SoftJournalIntro = () => {
   return (
     <section className="relative py-16 md:py-20 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] to-[#0D0D0D]" />
+      {/* Background with subtle gold */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0D0C0A] to-[#0A0A0A]" />
 
-      {/* Top border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-800 to-transparent" />
+      {/* Subtle gold glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[200px] bg-[#C9A646]/[0.04] rounded-full blur-[80px]" />
+
+      {/* Top border with gold */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
 
       <div className="max-w-4xl mx-auto px-6 lg:px-8 relative z-10">
         <motion.div

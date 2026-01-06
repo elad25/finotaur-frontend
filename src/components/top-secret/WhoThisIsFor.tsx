@@ -17,11 +17,15 @@ const notForItems = [
 const WhoThisIsFor = () => {
   return (
     <section className="relative py-24 md:py-32 overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0D0D0D] to-[#0A0A0A]" />
+      {/* Background with gold tint */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A] via-[#0F0D09] to-[#0A0A0A]" />
+
+      {/* Gold glows */}
+      <div className="absolute top-1/4 left-0 w-[400px] h-[400px] bg-[#C9A646]/[0.04] rounded-full blur-[120px]" />
+      <div className="absolute bottom-1/4 right-0 w-[350px] h-[350px] bg-[#C9A646]/[0.05] rounded-full blur-[100px]" />
 
       {/* Top border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
 
       <div className="max-w-5xl mx-auto px-6 lg:px-8 relative z-10">
         {/* ============================================
