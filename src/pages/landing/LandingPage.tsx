@@ -3,37 +3,35 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import Navbar from "@/components/landing-new/Navbar";
 import Hero from "@/components/landing-new/Hero";
-import BeforeAfter from "@/components/landing-new/BeforeAfter";
-import WhatIsFinotaur from "@/components/landing-new/WhatIsFinotaur";
-import ProductShowcase from "@/components/landing-new/ProductShowcase";
-import CoreSystem from "@/components/landing-new/CoreSystem";
-import AISection from "@/components/landing-new/AISection";
-import DesignPhilosophy from "@/components/landing-new/DesignPhilosophy";
+import ForWho from "@/components/landing-new/ForWho";
+import Proof from "@/components/landing-new/Proof";
+import JournalSupport from "@/components/landing-new/JournalSupport";
 import Pricing from "@/components/landing-new/Pricing";
-import Testimonials from "@/components/landing-new/Testimonials";
-import Vision from "@/components/landing-new/Vision";
 import Footer from "@/components/landing-new/Footer";
 import { LegalFooter } from "@/components/legal";
 
 /**
- * ✨ UPGRADED LANDING PAGE
- * 
+ * ✨ LANDING PAGE - TOP SECRET FOCUSED
+ *
+ * Strategy based on Alex Hormozi's principle:
+ * "People don't buy tools. They buy outcomes."
+ *
  * 🔒 SECURITY: Authenticated users are automatically redirected to dashboard
  * Landing page is ONLY for non-authenticated visitors
- * 
- * New structure with enhanced conversion elements:
- * 1. Hero - Updated with compelling subtitle + micro trust strip
- * 2. BeforeAfter - Shows transformation above the fold
- * 3. WhatIsFinotaur - Core value proposition
- * 4. ProductShowcase - 3 annotated screenshots showing product in action
- * 5. CoreSystem - Feature breakdown
- * 6. AISection - AI capabilities
- * 7. DesignPhilosophy - Premium positioning
- * 8. Pricing - Updated copy with behavioral alerts emphasis
- * 9. Testimonials - Social proof with 4 cards
- * 10. Vision - Future roadmap
- * 11. Footer - Final CTA
- * 12. LegalFooter - Legal documents links (NEW!)
+ *
+ * New structure:
+ * 1. Hero - TOP SECRET focus (outcomes, conclusions, bias)
+ * 2. ForWho - Target audience ("למי זה")
+ * 3. Proof - Analysis examples + Authority positioning
+ * 4. JournalSupport - Trading journal as SUPPORT product (not the star)
+ * 5. Pricing - Membership options
+ * 6. Footer - Final CTA
+ * 7. LegalFooter - Legal documents links
+ *
+ * Stack Strategy:
+ * - TOP SECRET = Entry point (outcomes, exclusivity)
+ * - Journal = Retention tool (execution support)
+ * - WAR ZONE = LTV expansion (future)
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
@@ -69,18 +67,25 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen">
       <Navbar />
+
+      {/* 🔥 Above the Fold - TOP SECRET Focus */}
       <Hero />
-      <BeforeAfter />
-      <WhatIsFinotaur />
-      <ProductShowcase />
-      <CoreSystem />
-      <AISection />
-      <DesignPhilosophy />
+
+      {/* 🔍 Section 2 - Who is this for */}
+      <ForWho />
+
+      {/* 🧠 Section 3 - Proof & Authority */}
+      <Proof />
+
+      {/* ⚙️ Section 4 - Journal as Support Product */}
+      <JournalSupport />
+
+      {/* 💰 Pricing */}
       <Pricing />
-      <Testimonials />
-      <Vision />
+
+      {/* 🎯 Final CTA */}
       <Footer />
-      
+
       {/* ⚖️ Legal Footer - Black bar with all legal document links */}
       <LegalFooter />
     </div>
