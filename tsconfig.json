@@ -12,10 +12,9 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
-    // ✅ תיקון בעיית Case Sensitivity
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "src/pages/app/.tsx"]
+  "include": ["src"]
 }
