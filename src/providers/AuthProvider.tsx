@@ -469,7 +469,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/pricing-selection`,
+          // 🔥 Redirect to Top Secret (not pricing-selection)
+          redirectTo: `${window.location.origin}/app/top-secret`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

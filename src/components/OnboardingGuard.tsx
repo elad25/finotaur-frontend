@@ -173,12 +173,12 @@ export function OnboardingGuard({ children }: OnboardingGuardProps) {
           return;
         }
 
-        // ❌ No Journal access - redirect to pricing
-        console.log('⚠️ OnboardingGuard: No Journal access → pricing');
+        // ❌ No Journal access - redirect to Top Secret
+        console.log('⚠️ OnboardingGuard: No Journal access → Top Secret');
         lastCheckedKey.current = checkKey;
         setShouldRender(false);
         setChecking(false);
-        navigate('/pricing-selection', { replace: true });
+        navigate('/app/top-secret', { replace: true });
         return;
       }
 

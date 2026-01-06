@@ -121,12 +121,18 @@ export default function Register() {
           return;
         }
 
-        if (data?.onboarding_completed && data?.account_type) {
+        // Check for Journal access
+        const hasJournalAccess = data?.account_type &&
+          ['basic', 'premium', 'admin', 'vip', 'trial'].includes(data.account_type) &&
+          (data.subscription_status === 'active' || data.subscription_status === 'trial');
+
+        if (hasJournalAccess && data?.onboarding_completed) {
           navigate('/app/journal/overview', { replace: true });
           return;
         }
 
-        navigate('/pricing-selection', { replace: true });
+        // 🔥 No journal access → Top Secret (not pricing-selection)
+        navigate('/app/top-secret', { replace: true });
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
