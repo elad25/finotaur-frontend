@@ -1212,66 +1212,238 @@ COMMENT ON VIEW v_sector_rankings_latest IS 'Quick access to most recent sector 
 COMMENT ON VIEW v_ticker_selections_latest IS 'Quick access to most recent ticker selections';
 
 
--- הרץ את זה ב-SQL Editor של Supabase:
-
+-- ============================================
+-- ISM QUOTES TABLE
+-- ============================================
 CREATE TABLE IF NOT EXISTS ism_quotes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_id TEXT,
   report_month VARCHAR(7) NOT NULL,
   industry VARCHAR(100) NOT NULL,
-  quote_text TEXT NOT NULL,
+  sector VARCHAR(50),
+  comment TEXT NOT NULL,
   sentiment VARCHAR(20) DEFAULT 'neutral',
   key_theme VARCHAR(50),
-  leading_or_lagging VARCHAR(20) DEFAULT 'contemporaneous',
   is_verified BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(report_month, quote_text)
+  source VARCHAR(100) DEFAULT 'ISM Report',
+  display_order INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ============================================
+-- ISM SECTOR RANKINGS TABLE
+-- ============================================
 CREATE TABLE IF NOT EXISTS ism_sector_rankings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_id TEXT NOT NULL,
   report_month VARCHAR(7) NOT NULL,
   sector_name VARCHAR(50) NOT NULL,
   sector_etf VARCHAR(10),
   rank INTEGER,
   impact_score DECIMAL(3,1),
   direction VARCHAR(20),
-  bias VARCHAR(20),
   reasoning TEXT,
-  key_driver VARCHAR(50),
+  quote_support TEXT,
+  quote_support_industry VARCHAR(100),
   change_vs_last_month VARCHAR(20),
   why_now TEXT,
   key_stocks TEXT[],
-  quote_support TEXT,
-  quote_support_industry VARCHAR(100),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(report_month, sector_name)
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ============================================
+-- ISM TRADE IDEAS TABLE
+-- ============================================
 CREATE TABLE IF NOT EXISTS ism_trade_ideas (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_id TEXT NOT NULL,
   report_month VARCHAR(7) NOT NULL,
   direction VARCHAR(10) NOT NULL,
-  sector VARCHAR(50) NOT NULL,
-  title VARCHAR(200),
+  sector VARCHAR(50),
+  title VARCHAR(200) NOT NULL,
   etf VARCHAR(10),
   stocks TEXT[],
   thesis TEXT,
-  ism_connection TEXT,
   executive_quote TEXT,
   executive_quote_industry VARCHAR(100),
   direct_impact TEXT,
-  conviction VARCHAR(10),
+  conviction VARCHAR(10) DEFAULT 'medium',
   invalidation TEXT[],
   risks TEXT[],
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(report_month, sector, direction)
+  display_order INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ============================================
+-- ADD COLUMNS IF TABLES ALREADY EXIST (FIX)
+-- ============================================
+ALTER TABLE ism_quotes 
+ADD COLUMN IF NOT EXISTS report_id TEXT,
+ADD COLUMN IF NOT EXISTS sector VARCHAR(50),
+ADD COLUMN IF NOT EXISTS source VARCHAR(100) DEFAULT 'ISM Report',
+ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 1;
+
+ALTER TABLE ism_sector_rankings 
+ADD COLUMN IF NOT EXISTS report_id TEXT,
+ADD COLUMN IF NOT EXISTS quote_support TEXT,
+ADD COLUMN IF NOT EXISTS quote_support_industry VARCHAR(100),
+ADD COLUMN IF NOT EXISTS why_now TEXT,
+ADD COLUMN IF NOT EXISTS key_stocks TEXT[];
+
+ALTER TABLE ism_trade_ideas 
+ADD COLUMN IF NOT EXISTS report_id TEXT,
+ADD COLUMN IF NOT EXISTS executive_quote TEXT,
+ADD COLUMN IF NOT EXISTS executive_quote_industry VARCHAR(100),
+ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 1;
+
+-- ============================================
+-- ISM SECTOR RANKINGS TABLE
+-- Stores sector impact analysis from each report
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_sector_rankings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_id TEXT NOT NULL,                           -- ★ NEW: Required link to report
+  report_month VARCHAR(7) NOT NULL,
+  sector_name VARCHAR(50) NOT NULL,
+  sector_etf VARCHAR(10),
+  rank INTEGER,
+  impact_score DECIMAL(3,1),
+  direction VARCHAR(20),                             -- 'positive', 'neutral', 'negative'
+  reasoning TEXT,
+  quote_support TEXT,                                -- Executive quote supporting this ranking
+  quote_support_industry VARCHAR(100),               -- Industry of the supporting quote
+  change_vs_last_month VARCHAR(20),
+  why_now TEXT,
+  key_stocks TEXT[],                                 -- Array of ticker symbols
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(report_id, sector_name)                     -- ★ CHANGED: Unique per report
+);
+
+-- ============================================
+-- ISM TRADE IDEAS TABLE
+-- Stores actionable trade ideas from each report
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_trade_ideas (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  report_id TEXT NOT NULL,                           -- ★ NEW: Required link to report
+  report_month VARCHAR(7) NOT NULL,
+  direction VARCHAR(10) NOT NULL,                    -- 'long' or 'short'
+  sector VARCHAR(50),
+  title VARCHAR(200) NOT NULL,
+  etf VARCHAR(10),
+  stocks TEXT[],                                     -- Array of alternative stock tickers
+  thesis TEXT,
+  executive_quote TEXT,                              -- ★ RENAMED from ism_connection
+  executive_quote_industry VARCHAR(100),
+  direct_impact TEXT,
+  conviction VARCHAR(10) DEFAULT 'medium',           -- 'high', 'medium', 'low'
+  invalidation TEXT[],
+  risks TEXT[],
+  display_order INTEGER DEFAULT 1,                   -- ★ NEW
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(report_id, title)                           -- ★ CHANGED: Unique per report
+);
+
+-- ============================================
+-- INDEXES
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_quotes_report_id ON ism_quotes(report_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_month ON ism_quotes(report_month);
+CREATE INDEX IF NOT EXISTS idx_quotes_industry ON ism_quotes(industry);
+
+CREATE INDEX IF NOT EXISTS idx_sectors_report_id ON ism_sector_rankings(report_id);
 CREATE INDEX IF NOT EXISTS idx_sectors_month ON ism_sector_rankings(report_month);
+CREATE INDEX IF NOT EXISTS idx_sectors_rank ON ism_sector_rankings(rank);
+
+CREATE INDEX IF NOT EXISTS idx_trades_report_id ON ism_trade_ideas(report_id);
 CREATE INDEX IF NOT EXISTS idx_trades_month ON ism_trade_ideas(report_month);
+CREATE INDEX IF NOT EXISTS idx_trades_direction ON ism_trade_ideas(direction);
 
+-- ============================================
+-- RLS POLICIES
+-- ============================================
+ALTER TABLE ism_quotes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ism_sector_rankings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ism_trade_ideas ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies
+DROP POLICY IF EXISTS "Read ism_quotes" ON ism_quotes;
+DROP POLICY IF EXISTS "Service manage ism_quotes" ON ism_quotes;
+DROP POLICY IF EXISTS "Read ism_sector_rankings" ON ism_sector_rankings;
+DROP POLICY IF EXISTS "Service manage ism_sector_rankings" ON ism_sector_rankings;
+DROP POLICY IF EXISTS "Read ism_trade_ideas" ON ism_trade_ideas;
+DROP POLICY IF EXISTS "Service manage ism_trade_ideas" ON ism_trade_ideas;
+
+-- ism_quotes policies
+CREATE POLICY "Read ism_quotes" ON ism_quotes
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_quotes" ON ism_quotes
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ism_sector_rankings policies
+CREATE POLICY "Read ism_sector_rankings" ON ism_sector_rankings
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_sector_rankings" ON ism_sector_rankings
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ism_trade_ideas policies
+CREATE POLICY "Read ism_trade_ideas" ON ism_trade_ideas
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_trade_ideas" ON ism_trade_ideas
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ============================================
+-- GRANTS
+-- ============================================
+GRANT SELECT ON ism_quotes TO authenticated;
+GRANT SELECT ON ism_sector_rankings TO authenticated;
+GRANT SELECT ON ism_trade_ideas TO authenticated;
+
+GRANT ALL ON ism_quotes TO service_role;
+GRANT ALL ON ism_sector_rankings TO service_role;
+GRANT ALL ON ism_trade_ideas TO service_role;
+
+-- ============================================
+-- VIEWS FOR EASY ACCESS
+-- ============================================
+
+-- Latest sector rankings view
+CREATE OR REPLACE VIEW v_ism_sector_rankings_latest AS
+SELECT 
+  sector_name,
+  sector_etf,
+  rank,
+  impact_score,
+  direction,
+  reasoning,
+  key_stocks,
+  quote_support,
+  report_month,
+  report_id
+FROM ism_sector_rankings
+WHERE report_month = (SELECT MAX(report_month) FROM ism_sector_rankings)
+ORDER BY rank ASC;
+
+-- Latest trade ideas view
+CREATE OR REPLACE VIEW v_ism_trade_ideas_latest AS
+SELECT 
+  title,
+  direction,
+  sector,
+  etf,
+  stocks,
+  thesis,
+  executive_quote,
+  conviction,
+  report_month,
+  report_id
+FROM ism_trade_ideas
+WHERE report_month = (SELECT MAX(report_month) FROM ism_trade_ideas)
+ORDER BY display_order ASC;
+
+-- Grant access to views
+GRANT SELECT ON v_ism_sector_rankings_latest TO authenticated;
+GRANT SELECT ON v_ism_trade_ideas_latest TO authenticated;
 -- =====================================================
 -- ISM SCHEDULER + SYSTEM UPDATES INTEGRATION v4.1
 -- =====================================================
@@ -1675,3 +1847,731 @@ WHERE NOT EXISTS (
 -- 2. Initialize the scheduler in your server startup
 -- 3. Reports will auto-generate on 10th and 25th
 -- ============================================
+
+-- =====================================================
+-- COMPANY SCHEDULER ISM + EARNINGS INTEGRATION
+-- =====================================================
+-- 
+-- 📍 החלף את כל הקטע מ-"COMPANY SCHEDULER ISM INTEGRATION"
+--    ועד סוף ה-VERIFICATION (שורות ~1867-1975 בקובץ שלך)
+--    בקוד הזה:
+--
+-- =====================================================
+
+-- ============================================
+-- 1. ADD ISM COLUMNS TO company_reports
+-- ============================================
+ALTER TABLE company_reports 
+ADD COLUMN IF NOT EXISTS is_ism_triggered BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS ism_report_month TEXT,
+ADD COLUMN IF NOT EXISTS ism_context JSONB,
+ADD COLUMN IF NOT EXISTS pdf_path TEXT;
+
+-- Indexes for ISM queries
+CREATE INDEX IF NOT EXISTS idx_company_reports_ism_triggered 
+ON company_reports(is_ism_triggered) WHERE is_ism_triggered = true;
+
+CREATE INDEX IF NOT EXISTS idx_company_reports_ism_month 
+ON company_reports(ism_report_month);
+
+-- ============================================
+-- 2. ADD EARNINGS COLUMNS TO company_reports
+-- ============================================
+ALTER TABLE company_reports 
+ADD COLUMN IF NOT EXISTS is_earnings_triggered BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS earnings_context JSONB,
+ADD COLUMN IF NOT EXISTS earnings_date DATE,
+ADD COLUMN IF NOT EXISTS earnings_price_change DECIMAL(10,2);
+
+-- Indexes for Earnings queries
+CREATE INDEX IF NOT EXISTS idx_company_reports_earnings_triggered 
+ON company_reports(is_earnings_triggered) WHERE is_earnings_triggered = true;
+
+CREATE INDEX IF NOT EXISTS idx_company_reports_earnings_date 
+ON company_reports(earnings_date);
+
+-- ============================================
+-- 3. CREATE company_scheduler_logs TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS company_scheduler_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type TEXT NOT NULL DEFAULT 'weekly_generation',
+  status TEXT NOT NULL,
+  ticker VARCHAR(10),
+  report_id TEXT,
+  duration_ms INTEGER,
+  error_message TEXT,
+  admin_id TEXT,
+  metadata JSONB DEFAULT '{}',
+  executed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_company_scheduler_logs_ticker ON company_scheduler_logs(ticker);
+CREATE INDEX IF NOT EXISTS idx_company_scheduler_logs_status ON company_scheduler_logs(status);
+CREATE INDEX IF NOT EXISTS idx_company_scheduler_logs_executed ON company_scheduler_logs(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_company_scheduler_logs_job_type ON company_scheduler_logs(job_type);
+
+-- RLS
+ALTER TABLE company_scheduler_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service manage company scheduler logs" ON company_scheduler_logs;
+CREATE POLICY "Service manage company scheduler logs" ON company_scheduler_logs
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins view company scheduler logs" ON company_scheduler_logs;
+CREATE POLICY "Admins view company scheduler logs" ON company_scheduler_logs
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Grants
+GRANT ALL ON company_scheduler_logs TO service_role;
+GRANT SELECT ON company_scheduler_logs TO authenticated;
+
+-- ============================================
+-- 4. CREATE company_report_queue TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS company_report_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  priority TEXT DEFAULT 'normal',
+  status TEXT DEFAULT 'pending',
+  requested_by UUID,
+  scheduled_for TIMESTAMPTZ,
+  include_ism BOOLEAN DEFAULT false,
+  report_id TEXT,
+  error_message TEXT,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_company_queue_status ON company_report_queue(status);
+CREATE INDEX IF NOT EXISTS idx_company_queue_ticker ON company_report_queue(ticker);
+CREATE INDEX IF NOT EXISTS idx_company_queue_priority ON company_report_queue(priority);
+
+-- RLS
+ALTER TABLE company_report_queue ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service manage company queue" ON company_report_queue;
+CREATE POLICY "Service manage company queue" ON company_report_queue
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins view company queue" ON company_report_queue;
+CREATE POLICY "Admins view company queue" ON company_report_queue
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Grants
+GRANT ALL ON company_report_queue TO service_role;
+GRANT SELECT ON company_report_queue TO authenticated;
+
+-- ============================================
+-- 5. CREATE earnings_auto_company_reports TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS earnings_auto_company_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  company_name VARCHAR(255),
+  earnings_date DATE NOT NULL,
+  price_change DECIMAL(10,2) NOT NULL,
+  price_change_direction VARCHAR(10) GENERATED ALWAYS AS (
+    CASE WHEN price_change > 0 THEN 'up' ELSE 'down' END
+  ) STORED,
+  eps_estimate DECIMAL(10,4),
+  eps_actual DECIMAL(10,4),
+  eps_surprise VARCHAR(20),
+  report_type VARCHAR(20) DEFAULT 'quarterly',
+  source VARCHAR(50),
+  status VARCHAR(20) DEFAULT 'pending' 
+    CHECK (status IN ('pending', 'generating', 'completed', 'failed', 'cancelled')),
+  company_report_id VARCHAR(100),
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_earnings_auto_reports_status ON earnings_auto_company_reports(status);
+CREATE INDEX IF NOT EXISTS idx_earnings_auto_reports_ticker ON earnings_auto_company_reports(ticker);
+CREATE INDEX IF NOT EXISTS idx_earnings_auto_reports_date ON earnings_auto_company_reports(earnings_date);
+CREATE INDEX IF NOT EXISTS idx_earnings_auto_reports_created ON earnings_auto_company_reports(created_at DESC);
+
+-- Trigger for updated_at
+CREATE OR REPLACE FUNCTION update_earnings_auto_reports_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_earnings_auto_reports ON earnings_auto_company_reports;
+CREATE TRIGGER trigger_update_earnings_auto_reports
+  BEFORE UPDATE ON earnings_auto_company_reports
+  FOR EACH ROW
+  EXECUTE FUNCTION update_earnings_auto_reports_updated_at();
+
+-- RLS
+ALTER TABLE earnings_auto_company_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service manage earnings auto reports" ON earnings_auto_company_reports;
+CREATE POLICY "Service manage earnings auto reports" ON earnings_auto_company_reports
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins view earnings auto reports" ON earnings_auto_company_reports;
+CREATE POLICY "Admins view earnings auto reports" ON earnings_auto_company_reports
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Grants
+GRANT ALL ON earnings_auto_company_reports TO service_role;
+GRANT SELECT ON earnings_auto_company_reports TO authenticated;
+
+-- ============================================
+-- 6. EARNINGS HELPER FUNCTIONS
+-- ============================================
+
+-- Function to get pending earnings reports
+CREATE OR REPLACE FUNCTION get_pending_earnings_company_reports(p_limit INT DEFAULT 5)
+RETURNS TABLE (
+  id UUID,
+  ticker VARCHAR,
+  company_name VARCHAR,
+  earnings_date DATE,
+  price_change DECIMAL,
+  eps_surprise VARCHAR,
+  source VARCHAR
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id, e.ticker, e.company_name, e.earnings_date,
+    e.price_change, e.eps_surprise, e.source
+  FROM earnings_auto_company_reports e
+  WHERE e.status = 'pending'
+  ORDER BY ABS(e.price_change) DESC, e.created_at ASC
+  LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update earnings report status
+CREATE OR REPLACE FUNCTION update_earnings_report_status(
+  p_id UUID,
+  p_status VARCHAR,
+  p_company_report_id VARCHAR DEFAULT NULL,
+  p_error_message TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE earnings_auto_company_reports
+  SET 
+    status = p_status,
+    company_report_id = COALESCE(p_company_report_id, company_report_id),
+    error_message = p_error_message,
+    processed_at = CASE WHEN p_status IN ('completed', 'failed') THEN NOW() ELSE processed_at END
+  WHERE id = p_id;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION get_pending_earnings_company_reports(INT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_pending_earnings_company_reports(INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_earnings_report_status(UUID, VARCHAR, VARCHAR, TEXT) TO service_role;
+
+-- ============================================
+-- 6.5 ISM AUTO COMPANY REPORTS TABLE
+-- ============================================
+-- This table stores ISM-triggered company report requests
+-- Used by scheduler.js on 10th and 20th of each month
+-- Schedule: 9:00 AM ET (America/New_York)
+
+CREATE TABLE IF NOT EXISTS ism_auto_company_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Ticker info
+  ticker VARCHAR(10) NOT NULL,
+  sector TEXT,
+  
+  -- ISM link
+  ism_report_month TEXT NOT NULL,
+  conviction TEXT DEFAULT 'medium',
+  reasoning TEXT,
+  
+  -- Status tracking
+  status VARCHAR(20) DEFAULT 'pending' 
+    CHECK (status IN ('pending', 'generating', 'completed', 'failed', 'cancelled')),
+  
+  -- Report references
+  report_id TEXT,
+  company_report_id TEXT,
+  
+  -- Error tracking
+  error_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_ism_auto_reports_status ON ism_auto_company_reports(status);
+CREATE INDEX IF NOT EXISTS idx_ism_auto_reports_ticker ON ism_auto_company_reports(ticker);
+CREATE INDEX IF NOT EXISTS idx_ism_auto_reports_month ON ism_auto_company_reports(ism_report_month);
+CREATE INDEX IF NOT EXISTS idx_ism_auto_reports_created ON ism_auto_company_reports(created_at DESC);
+
+-- Trigger for updated_at
+CREATE OR REPLACE FUNCTION update_ism_auto_reports_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_ism_auto_reports ON ism_auto_company_reports;
+CREATE TRIGGER trigger_update_ism_auto_reports
+  BEFORE UPDATE ON ism_auto_company_reports
+  FOR EACH ROW
+  EXECUTE FUNCTION update_ism_auto_reports_updated_at();
+
+-- RLS
+ALTER TABLE ism_auto_company_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service manage ism auto reports" ON ism_auto_company_reports;
+CREATE POLICY "Service manage ism auto reports" ON ism_auto_company_reports
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins view ism auto reports" ON ism_auto_company_reports;
+CREATE POLICY "Admins view ism auto reports" ON ism_auto_company_reports
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Grants
+GRANT ALL ON ism_auto_company_reports TO service_role;
+GRANT SELECT ON ism_auto_company_reports TO authenticated;
+
+-- ============================================
+-- 6.6 ISM AUTO COMPANY REPORTS FUNCTIONS
+-- ============================================
+
+-- Function: schedule_company_reports_from_ism
+-- Called by company-hook.js after ISM report is generated
+CREATE OR REPLACE FUNCTION schedule_company_reports_from_ism(
+  p_ism_report_month TEXT,
+  p_count INT DEFAULT 2
+)
+RETURNS TABLE (
+  ticker TEXT,
+  sector TEXT,
+  scheduled BOOLEAN
+) AS $$
+BEGIN
+  RETURN QUERY
+  WITH top_tickers AS (
+    SELECT 
+      ts.ticker,
+      ts.sector_name as sector,
+      ts.conviction
+    FROM ism_ticker_selections ts
+    WHERE ts.report_month = p_ism_report_month
+      AND ts.selection_type = 'overweight'
+    ORDER BY 
+      CASE ts.conviction 
+        WHEN 'high' THEN 1 
+        WHEN 'medium' THEN 2 
+        ELSE 3 
+      END
+    LIMIT p_count
+  ),
+  inserted AS (
+    INSERT INTO ism_auto_company_reports (ticker, sector, ism_report_month, conviction, status)
+    SELECT 
+      tt.ticker,
+      tt.sector,
+      p_ism_report_month,
+      tt.conviction,
+      'pending'
+    FROM top_tickers tt
+    WHERE NOT EXISTS (
+      SELECT 1 FROM ism_auto_company_reports iar
+      WHERE iar.ticker = tt.ticker 
+        AND iar.ism_report_month = p_ism_report_month
+    )
+    RETURNING ticker, sector
+  )
+  SELECT 
+    tt.ticker::TEXT,
+    tt.sector::TEXT,
+    EXISTS (SELECT 1 FROM inserted i WHERE i.ticker = tt.ticker) as scheduled
+  FROM top_tickers tt;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: get_pending_auto_company_reports
+-- Called by company-hook.js to process pending reports
+CREATE OR REPLACE FUNCTION get_pending_auto_company_reports(p_limit INT DEFAULT 5)
+RETURNS TABLE (
+  id UUID,
+  ticker VARCHAR,
+  sector TEXT,
+  ism_report_month TEXT,
+  conviction TEXT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    iar.id,
+    iar.ticker,
+    iar.sector,
+    iar.ism_report_month,
+    iar.conviction
+  FROM ism_auto_company_reports iar
+  WHERE iar.status = 'pending'
+  ORDER BY 
+    CASE iar.conviction 
+      WHEN 'high' THEN 1 
+      WHEN 'medium' THEN 2 
+      ELSE 3 
+    END,
+    iar.created_at ASC
+  LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: update_auto_company_report_status
+-- Called by company-hook.js to update report status
+CREATE OR REPLACE FUNCTION update_auto_company_report_status(
+  p_id UUID,
+  p_status VARCHAR,
+  p_company_report_id TEXT DEFAULT NULL,
+  p_error_message TEXT DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE ism_auto_company_reports
+  SET 
+    status = p_status,
+    company_report_id = COALESCE(p_company_report_id, company_report_id),
+    report_id = COALESCE(p_company_report_id, report_id),
+    error_message = p_error_message,
+    processed_at = CASE WHEN p_status IN ('completed', 'failed') THEN NOW() ELSE processed_at END,
+    updated_at = NOW()
+  WHERE id = p_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: get_ism_sector_context
+-- Called by company-hook.js to get ISM context for sector
+CREATE OR REPLACE FUNCTION get_ism_sector_context(p_sector TEXT)
+RETURNS JSONB AS $$
+DECLARE
+  v_context JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'sector', p_sector,
+    'latest_ranking', (
+      SELECT jsonb_build_object(
+        'rank', rank,
+        'impact_score', impact_score,
+        'direction', direction,
+        'reasoning', reasoning,
+        'report_month', report_month
+      )
+      FROM ism_sector_analysis
+      WHERE sector_name ILIKE '%' || p_sector || '%'
+      ORDER BY report_month DESC
+      LIMIT 1
+    ),
+    'trade_ideas', (
+      SELECT jsonb_agg(jsonb_build_object(
+        'title', title,
+        'thesis', thesis,
+        'conviction', conviction,
+        'etf', etf
+      ))
+      FROM (
+        SELECT title, thesis, conviction, etf
+        FROM ism_trade_ideas
+        WHERE sector ILIKE '%' || p_sector || '%'
+        ORDER BY report_month DESC
+        LIMIT 2
+      ) sub
+    )
+  ) INTO v_context;
+  
+  RETURN COALESCE(v_context, '{}'::jsonb);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Grants for ISM auto functions
+GRANT EXECUTE ON FUNCTION schedule_company_reports_from_ism(TEXT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION schedule_company_reports_from_ism(TEXT, INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_pending_auto_company_reports(INT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_pending_auto_company_reports(INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_auto_company_report_status(UUID, VARCHAR, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_ism_sector_context(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_ism_sector_context(TEXT) TO authenticated;
+
+-- ============================================
+-- 7. VERIFICATION
+-- ============================================
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ COMPANY SCHEDULER ISM + EARNINGS INTEGRATION COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Added to company_reports:';
+  RAISE NOTICE '  • is_ism_triggered (BOOLEAN)';
+  RAISE NOTICE '  • ism_report_month (TEXT)';
+  RAISE NOTICE '  • ism_context (JSONB)';
+  RAISE NOTICE '  • pdf_path (TEXT)';
+  RAISE NOTICE '  • is_earnings_triggered (BOOLEAN)';
+  RAISE NOTICE '  • earnings_context (JSONB)';
+  RAISE NOTICE '  • earnings_date (DATE)';
+  RAISE NOTICE '  • earnings_price_change (DECIMAL)';
+  RAISE NOTICE '';
+  RAISE NOTICE 'New tables:';
+  RAISE NOTICE '  • company_scheduler_logs';
+  RAISE NOTICE '  • company_report_queue';
+  RAISE NOTICE '  • earnings_auto_company_reports';
+  RAISE NOTICE '  • ism_auto_company_reports';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Schedule (All times ET - America/New_York):';
+  RAISE NOTICE '  • 10th at 9:00 AM ET - ISM Company Report #1';
+  RAISE NOTICE '  • 20th at 9:00 AM ET - ISM Company Report #2';
+  RAISE NOTICE '  • 30th at 9:00 AM ET - Earnings Company Report';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- Verify columns were added
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'company_reports' 
+AND column_name IN (
+  'is_ism_triggered', 'ism_report_month', 'ism_context', 'pdf_path',
+  'is_earnings_triggered', 'earnings_context', 'earnings_date', 'earnings_price_change'
+)
+ORDER BY column_name;
+
+-- =====================================================
+-- ADMIN SEES ALL REPORTS - SQL MIGRATION
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- =====================================================
+
+-- ============================================
+-- 1. FUNCTION: Get system updates for user
+-- Returns ALL updates for admins, filtered for regular users
+-- ============================================
+
+CREATE OR REPLACE FUNCTION get_system_updates_for_user(
+  p_user_id UUID,
+  p_limit INTEGER DEFAULT 20
+)
+RETURNS TABLE (
+  id UUID,
+  title TEXT,
+  content TEXT,
+  type TEXT,
+  target_group TEXT,
+  is_active BOOLEAN,
+  is_pinned BOOLEAN,
+  metadata JSONB,
+  views_count INTEGER,
+  created_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  is_read BOOLEAN
+) AS $$
+DECLARE
+  v_user_role TEXT;
+  v_user_email TEXT;
+  v_account_type TEXT;
+  v_top_secret_enabled BOOLEAN;
+  v_newsletter_paid BOOLEAN;
+BEGIN
+  -- Get user info
+  SELECT 
+    p.role,
+    p.email,
+    COALESCE(p.account_type, 'free'),
+    COALESCE(p.top_secret_enabled, false),
+    COALESCE(p.newsletter_paid, false)
+  INTO v_user_role, v_user_email, v_account_type, v_top_secret_enabled, v_newsletter_paid
+  FROM profiles p
+  WHERE p.id = p_user_id;
+  
+  -- Admin check: role is admin/super_admin OR email is admin email
+  IF v_user_role IN ('admin', 'super_admin') OR v_user_email = 'elad2550@gmail.com' THEN
+    -- Admins see ALL active updates
+    RETURN QUERY
+    SELECT 
+      su.id,
+      su.title,
+      su.content,
+      su.type,
+      su.target_group,
+      su.is_active,
+      su.is_pinned,
+      su.metadata,
+      su.views_count,
+      su.created_at,
+      su.expires_at,
+      COALESCE(uur.read_at IS NOT NULL, false) as is_read
+    FROM system_updates su
+    LEFT JOIN user_update_reads uur ON uur.update_id = su.id AND uur.user_id = p_user_id
+    WHERE su.is_active = true
+      AND (su.expires_at IS NULL OR su.expires_at > NOW())
+    ORDER BY su.is_pinned DESC, su.created_at DESC
+    LIMIT p_limit;
+  ELSE
+    -- Regular users: filter by target_group
+    RETURN QUERY
+    SELECT 
+      su.id,
+      su.title,
+      su.content,
+      su.type,
+      su.target_group,
+      su.is_active,
+      su.is_pinned,
+      su.metadata,
+      su.views_count,
+      su.created_at,
+      su.expires_at,
+      COALESCE(uur.read_at IS NOT NULL, false) as is_read
+    FROM system_updates su
+    LEFT JOIN user_update_reads uur ON uur.update_id = su.id AND uur.user_id = p_user_id
+    WHERE su.is_active = true
+      AND (su.expires_at IS NULL OR su.expires_at > NOW())
+      AND (
+        su.target_group = 'all'
+        OR (su.target_group = 'top_secret' AND v_top_secret_enabled = true)
+        OR (su.target_group = 'newsletter' AND v_newsletter_paid = true)
+        OR (su.target_group = 'trading_journal' AND v_account_type IN ('basic', 'premium', 'pro'))
+      )
+    ORDER BY su.is_pinned DESC, su.created_at DESC
+    LIMIT p_limit;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute to authenticated users
+GRANT EXECUTE ON FUNCTION get_system_updates_for_user(UUID, INTEGER) TO authenticated;
+
+-- ============================================
+-- 2. FUNCTION: Check if user is admin
+-- ============================================
+
+CREATE OR REPLACE FUNCTION is_admin_user(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_role TEXT;
+  v_email TEXT;
+BEGIN
+  SELECT role, email 
+  INTO v_role, v_email
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  RETURN v_role IN ('admin', 'super_admin') OR v_email = 'elad2550@gmail.com';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION is_admin_user(UUID) TO authenticated;
+
+-- ============================================
+-- 3. UPDATE RLS POLICY for system_updates
+-- Allow admins to see all, others see filtered
+-- ============================================
+
+-- Drop old policies
+DROP POLICY IF EXISTS "Anyone can read active system updates" ON system_updates;
+DROP POLICY IF EXISTS "Users see relevant system updates" ON system_updates;
+
+-- New policy: Admins see all, others see based on target_group
+CREATE POLICY "Users see relevant system updates" ON system_updates
+  FOR SELECT TO authenticated
+  USING (
+    is_active = true
+    AND (expires_at IS NULL OR expires_at > NOW())
+    AND (
+      -- Admins see everything
+      is_admin_user(auth.uid())
+      OR
+      -- Others see based on target_group
+      target_group = 'all'
+      OR
+      (target_group = 'top_secret' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND top_secret_enabled = true
+      ))
+      OR
+      (target_group = 'newsletter' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND newsletter_paid = true
+      ))
+      OR
+      (target_group = 'trading_journal' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND account_type IN ('basic', 'premium', 'pro')
+      ))
+    )
+  );
+
+-- ============================================
+-- 4. VERIFY ADMIN EMAIL
+-- ============================================
+
+-- Make sure your profile has admin role
+UPDATE profiles 
+SET role = 'admin'
+WHERE email = 'elad2550@gmail.com'
+  AND role NOT IN ('admin', 'super_admin');
+
+-- ============================================
+-- DONE!
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ ADMIN SEES ALL REPORTS - MIGRATION COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Admin email: elad2550@gmail.com';
+  RAISE NOTICE 'Now sees ALL system_updates regardless of target_group';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Access rules:';
+  RAISE NOTICE '  • top_secret → top_secret_enabled = true';
+  RAISE NOTICE '  • newsletter → newsletter_paid = true';
+  RAISE NOTICE '  • trading_journal → account_type IN (basic, premium, pro)';
+  RAISE NOTICE '=====================================================';
+END $$;

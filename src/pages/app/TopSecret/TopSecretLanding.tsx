@@ -464,7 +464,7 @@ export default function TopSecretLanding() {
                 <ul className="space-y-4 mb-8">
                   {[
                     'Monthly ISM Manufacturing Report',
-                    '2x Company Deep Dive Reports',
+                    '3x Company Deep Dive Reports',
                     '2x Crypto Market Reports',
                     'PDF Downloads & Archive Access',
                     'Discord Community Access',
