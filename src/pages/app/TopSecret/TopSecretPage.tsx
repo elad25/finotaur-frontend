@@ -1,7 +1,12 @@
 // ================================================
-// TOP SECRET PAGE - Router Component v2.0
+// TOP SECRET PAGE - Router Component v3.0
 // File: src/pages/app/TopSecret/TopSecretPage.tsx
-// 
+//
+// 🔥 v3.0 CHANGES:
+// - Added Journal discount popup after payment success
+// - Shows 25% one-time discount offer for Trading Journal
+// - Improved payment success flow
+//
 // 🔥 v2.0 CHANGES:
 // - Added payment success detection from URL params
 // - Added polling for subscription status after payment
@@ -15,6 +20,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import JournalDiscountPopup from '@/components/JournalDiscountPopup';
 
 // Lazy load the components
 const TopSecretLanding = React.lazy(() => import('./TopSecretLanding'));
@@ -31,10 +37,10 @@ interface TopSecretStatus {
   expiresAt: Date | null;
 }
 
-type PageState = 
+type PageState =
   | 'loading'           // Initial load
   | 'checking_payment'  // After payment, waiting for webhook
-  | 'payment_success'   // Payment confirmed, showing dashboard
+  | 'payment_success'   // Payment confirmed, show success + discount offer
   | 'show_landing'      // Not subscribed, show landing
   | 'show_dashboard';   // Subscribed, show dashboard
 
@@ -53,11 +59,15 @@ export default function TopSecretPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoading: authLoading } = useAuth();
-  
+
   const [pageState, setPageState] = useState<PageState>('loading');
   const [status, setStatus] = useState<TopSecretStatus | null>(null);
   const [pollAttempts, setPollAttempts] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Journal discount popup state
+  const [showJournalDiscount, setShowJournalDiscount] = useState(false);
+  const [hasShownDiscount, setHasShownDiscount] = useState(false);
 
   // Check if returning from payment
   const isPaymentReturn = searchParams.get('payment') === 'success';
@@ -118,16 +128,27 @@ export default function TopSecretPage() {
       
       if (newStatus?.isActive) {
         // Subscription is now active!
-        console.log('✅ Subscription confirmed!');
+        console.log('Subscription confirmed!');
         setStatus(newStatus);
         setPageState('payment_success');
-        
-        // Clear URL params after successful confirmation
+
+        // Clear URL params
+        setSearchParams({});
+
+        // Check if user has already dismissed the discount
+        const hasDismissedDiscount = localStorage.getItem('journal_discount_dismissed') === 'true';
+
+        // Show Journal discount popup after a brief celebration (if not dismissed before)
         setTimeout(() => {
-          setSearchParams({});
-          setPageState('show_dashboard');
-        }, 3000); // Show success message for 3 seconds
-        
+          if (!hasDismissedDiscount && !hasShownDiscount) {
+            setShowJournalDiscount(true);
+            setHasShownDiscount(true);
+          } else {
+            // If already dismissed, go directly to dashboard
+            setPageState('show_dashboard');
+          }
+        }, 2500); // Show success message for 2.5 seconds before popup
+
         return;
       }
 
@@ -254,33 +275,56 @@ export default function TopSecretPage() {
     );
   }
 
-  // Payment success state (brief celebration before dashboard)
+  // Handle Journal discount popup close
+  const handleJournalDiscountClose = () => {
+    setShowJournalDiscount(false);
+    setPageState('show_dashboard');
+  };
+
+  // Handle Journal discount dismiss
+  const handleJournalDiscountDismiss = () => {
+    setShowJournalDiscount(false);
+    localStorage.setItem('journal_discount_dismissed', 'true');
+    setPageState('show_dashboard');
+  };
+
+  // Payment success state (brief celebration + discount offer)
   if (pageState === 'payment_success') {
     return (
       <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
-        <motion.div 
-          className="text-center max-w-md mx-auto p-8"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-        >
-          <motion.div 
-            className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-6"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, damping: 10 }}
+        {/* Journal Discount Popup */}
+        <JournalDiscountPopup
+          isOpen={showJournalDiscount}
+          onClose={handleJournalDiscountClose}
+          onDismiss={handleJournalDiscountDismiss}
+        />
+
+        {/* Success Animation (shown briefly before popup) */}
+        {!showJournalDiscount && (
+          <motion.div
+            className="text-center max-w-md mx-auto p-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
           >
-            <CheckCircle className="w-10 h-10 text-green-400" />
+            <motion.div
+              className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-6"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 10 }}
+            >
+              <CheckCircle className="w-10 h-10 text-green-400" />
+            </motion.div>
+
+            <h2 className="text-2xl font-bold text-white mb-3">
+              Welcome to Top Secret!
+            </h2>
+            <p className="text-gray-400">
+              Your 14-day free trial has started.
+              <br />
+              <span className="text-amber-400">Check your notification center for updates!</span>
+            </p>
           </motion.div>
-          
-          <h2 className="text-2xl font-bold text-white mb-3">
-            Welcome to Top Secret! 🎉
-          </h2>
-          <p className="text-gray-400">
-            Your subscription has been activated.
-            <br />
-            Redirecting to dashboard...
-          </p>
-        </motion.div>
+        )}
       </div>
     );
   }
