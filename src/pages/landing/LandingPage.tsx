@@ -2,38 +2,46 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import Navbar from "@/components/landing-new/Navbar";
-import Hero from "@/components/landing-new/Hero";
-import BeforeAfter from "@/components/landing-new/BeforeAfter";
-import WhatIsFinotaur from "@/components/landing-new/WhatIsFinotaur";
-import ProductShowcase from "@/components/landing-new/ProductShowcase";
-import CoreSystem from "@/components/landing-new/CoreSystem";
-import AISection from "@/components/landing-new/AISection";
-import DesignPhilosophy from "@/components/landing-new/DesignPhilosophy";
 import Pricing from "@/components/landing-new/Pricing";
-import Testimonials from "@/components/landing-new/Testimonials";
-import Vision from "@/components/landing-new/Vision";
 import Footer from "@/components/landing-new/Footer";
 import { LegalFooter } from "@/components/legal";
 
+// WAR ZONE Landing Page Components
+import { WarzoneHero, WhoIsItFor, Proof, JournalSection } from "@/components/landing-warzone";
+
 /**
- * ✨ UPGRADED LANDING PAGE
- * 
- * 🔒 SECURITY: Authenticated users are automatically redirected to dashboard
- * Landing page is ONLY for non-authenticated visitors
- * 
- * New structure with enhanced conversion elements:
- * 1. Hero - Updated with compelling subtitle + micro trust strip
- * 2. BeforeAfter - Shows transformation above the fold
- * 3. WhatIsFinotaur - Core value proposition
- * 4. ProductShowcase - 3 annotated screenshots showing product in action
- * 5. CoreSystem - Feature breakdown
- * 6. AISection - AI capabilities
- * 7. DesignPhilosophy - Premium positioning
- * 8. Pricing - Updated copy with behavioral alerts emphasis
- * 9. Testimonials - Social proof with 4 cards
- * 10. Vision - Future roadmap
- * 11. Footer - Final CTA
- * 12. LegalFooter - Legal documents links (NEW!)
+ * 🔥 WAR ZONE LANDING PAGE
+ *
+ * Strategy based on Alex Hormozi principles:
+ * - People don't buy tools, they buy OUTCOMES
+ * - TOP SECRET = Emotional + Status + Money
+ * - The Journal = Support Product (not the hero)
+ *
+ * Structure:
+ * 1. WarzoneHero - TOP SECRET focused (Above the Fold)
+ *    "Stop guessing. Read the market like money actually moves."
+ *
+ * 2. WhoIsItFor - Target audience definition
+ *    - Tired of reading news without action
+ *    - Want clear market bias
+ *    - Willing to pay for better decisions
+ *
+ * 3. Proof - Screenshots + Authority statements
+ *    - ISM analysis example
+ *    - Company analysis example
+ *    - "This is how I personally build my market bias."
+ *
+ * 4. JournalSection - Trading Journal as SUPPORT product
+ *    "Execution matters too."
+ *
+ * 5. Pricing - Subscription tiers
+ * 6. Footer - Final CTA
+ * 7. LegalFooter - Legal documents
+ *
+ * Stack Strategy:
+ * - TOP SECRET = They come in
+ * - Journal = They stay
+ * - WAR ZONE = LTV growth
  */
 const LandingPage = () => {
   const { user, isLoading } = useAuth();
@@ -69,19 +77,28 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <Hero />
-      <BeforeAfter />
-      <WhatIsFinotaur />
-      <ProductShowcase />
-      <CoreSystem />
-      <AISection />
-      <DesignPhilosophy />
+
+      {/* 🔥 WAR ZONE Structure */}
+
+      {/* Section 1: Above the Fold - TOP SECRET Hero */}
+      <WarzoneHero />
+
+      {/* Section 2: Who Is This For */}
+      <WhoIsItFor />
+
+      {/* Section 3: Proof - Screenshots + Authority */}
+      <Proof />
+
+      {/* Section 4: Trading Journal as Support Product */}
+      <JournalSection />
+
+      {/* Section 5: Pricing */}
       <Pricing />
-      <Testimonials />
-      <Vision />
+
+      {/* Section 6: Footer */}
       <Footer />
-      
-      {/* ⚖️ Legal Footer - Black bar with all legal document links */}
+
+      {/* Legal Footer */}
       <LegalFooter />
     </div>
   );
