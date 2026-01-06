@@ -1,9 +1,14 @@
 // =====================================================
-// FINOTAUR CREATE WHOP CHECKOUT - v1.1.0 (FIXED)
+// FINOTAUR CREATE WHOP CHECKOUT - v1.2.0
 // =====================================================
 // 
-// 🔥 FIX: Changed from v5 to v2 API endpoint
-// The correct endpoint is: https://api.whop.com/api/v2/checkout_sessions
+// 🔥 v1.2.0 CHANGES:
+// - ADDED: Email prefill in checkout form
+// - ADDED: finotaur_email in metadata (always uses original email)
+// - Even if user changes email in checkout, Finotaur account gets the sub
+// 
+// 🔥 v1.1.0 CHANGES:
+// - Changed from v5 to v2 API endpoint
 // 
 // Deploy: supabase functions deploy create-whop-checkout
 // 
@@ -45,6 +50,9 @@ interface CheckoutRequest {
   affiliate_code?: string;
   click_id?: string;
   redirect_url?: string;
+  subscription_category?: string;
+  email?: string;       // 🔥 v1.2: Email for prefill
+  user_id?: string;     // 🔥 v1.2: User ID from client (backup)
 }
 
 interface WhopCheckoutResponse {
@@ -125,7 +133,14 @@ serve(async (req: Request) => {
     // ============================================
 
     const body: CheckoutRequest = await req.json();
-    const { plan_id, affiliate_code, click_id, redirect_url } = body;
+    const { 
+      plan_id, 
+      affiliate_code, 
+      click_id, 
+      redirect_url,
+      subscription_category,
+      email: clientEmail,  // 🔥 v1.2: Email from client (backup)
+    } = body;
 
     if (!plan_id) {
       return new Response(
@@ -134,12 +149,18 @@ serve(async (req: Request) => {
       );
     }
 
+    // 🔥 v1.2: Use authenticated user's email (most reliable), fallback to client email
+    const finotaurEmail = user.email || clientEmail;
+
     console.log("📦 Checkout request:", {
       plan_id,
       user_id: user.id,
       user_email: user.email,
+      client_email: clientEmail,
+      finotaur_email: finotaurEmail,
       affiliate_code,
       click_id,
+      subscription_category,
     });
 
     // ============================================
@@ -156,18 +177,27 @@ serve(async (req: Request) => {
 
     // ============================================
     // 4. BUILD METADATA
+    // 🔥 v1.2: finotaur_email ensures we ALWAYS know which 
+    //          Finotaur account should get the subscription,
+    //          even if user changes email in checkout!
     // ============================================
 
     const metadata: Record<string, string> = {
       finotaur_user_id: user.id,
+      finotaur_email: finotaurEmail || '',  // 🔥 CRITICAL: Original email for webhook
     };
 
     if (click_id) {
       metadata.click_id = click_id;
     }
 
-    if (user.email) {
-      metadata.expected_email = user.email;
+    if (subscription_category) {
+      metadata.subscription_category = subscription_category;
+    }
+
+    // Keep expected_email for backwards compatibility
+    if (finotaurEmail) {
+      metadata.expected_email = finotaurEmail;
     }
 
     // ============================================
@@ -188,16 +218,22 @@ serve(async (req: Request) => {
 
     // ============================================
     // 6. CREATE WHOP CHECKOUT SESSION (V2 API)
+    // 🔥 v1.2: Added email field for prefill
     // ============================================
 
     console.log("🛒 Creating Whop checkout session (V2 API)...");
 
-    // 🔥 V2 API format
+    // 🔥 V2 API format with email prefill
     const whopRequestBody: Record<string, any> = {
       plan_id: plan_id,
       metadata: metadata,
       redirect_url: finalRedirectUrl,
     };
+
+    // 🔥 v1.2: Add email for prefill in checkout form
+    if (finotaurEmail) {
+      whopRequestBody.email = finotaurEmail;
+    }
 
     // Add affiliate code if provided
     if (affiliate_code) {
@@ -250,6 +286,7 @@ serve(async (req: Request) => {
       id: checkoutData.id,
       purchase_url: checkoutUrl,
       metadata: checkoutData.metadata,
+      prefilled_email: finotaurEmail,
     });
 
     // ============================================
@@ -262,6 +299,7 @@ serve(async (req: Request) => {
         checkout_url: checkoutUrl,  // 🔥 Map purchase_url to checkout_url for consistency
         checkout_id: checkoutData.id,
         metadata: metadata,
+        prefilled_email: finotaurEmail,  // 🔥 v1.2: Return for debugging
       }),
       { 
         status: 200, 

@@ -1,8 +1,12 @@
 // =====================================================
-// FINOTAUR WHOP CHECKOUT HOOK - v4.0.0
+// FINOTAUR WHOP CHECKOUT HOOK - v4.1.0
 // =====================================================
 // Place in: src/hooks/useWhopCheckout.ts
 // 
+// 🔥 v4.1.0 CHANGES:
+// - FIXED: Email now passed to Edge Function for Whop prefill
+// - FIXED: userId passed for better metadata tracking
+//
 // 🔥 v4.0.0 CHANGES:
 // - ADDED: Platform checkout functions (Core/Pro/Enterprise)
 // - Platform and Journal are separate checkout flows
@@ -113,19 +117,21 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 🔥 v3.0.0: Create checkout session via Edge Function
-   * This ensures metadata is properly passed to Whop webhooks
+   * 🔥 v4.1.0: Create checkout session via Edge Function
+   * Now includes email for Whop prefill!
    */
   const createCheckoutSession = useCallback(async (params: {
     planId: string;
     affiliateCode?: string;
     clickId?: string;
     subscriptionCategory?: SubscriptionCategory;
+    email?: string;      // 🔥 v4.1: Add email for prefill
+    userId?: string;     // 🔥 v4.1: Add userId for metadata
   }): Promise<{ checkout_url: string } | null> => {
-    const { planId, affiliateCode, clickId, subscriptionCategory } = params;
+    const { planId, affiliateCode, clickId, subscriptionCategory, email, userId } = params;
 
     try {
-      console.log('🔐 Creating checkout session via Edge Function...');
+      console.log('🔐 Creating checkout session via Edge Function...', { email, userId });
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
@@ -140,7 +146,9 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
           plan_id: planId,
           affiliate_code: affiliateCode,
           click_id: clickId,
-          subscription_category: subscriptionCategory, // 🔥 v4.0: Add category
+          subscription_category: subscriptionCategory,
+          email: email,           // 🔥 v4.1: Pass email for Whop prefill
+          user_id: userId,        // 🔥 v4.1: Pass userId for metadata
         },
       });
 
@@ -170,7 +178,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
   /**
    * Initiate Whop checkout
    * 
-   * 🔥 v4.0.0: Now supports both Journal and Platform plans
+   * 🔥 v4.1.0: Now passes email and userId to Edge Function
    */
   const initiateCheckout = useCallback(async (params: CheckoutParams) => {
     const { planName, billingInterval, discountCode } = params;
@@ -208,7 +216,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         planName,
         billingInterval,
         price: plan.price,
-        category: plan.category, // 🔥 v4.0
+        category: plan.category,
         userId: user?.id,
         userEmail: user?.email,
         providedDiscountCode: discountCode,
@@ -223,12 +231,14 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         duration: 3000,
       });
 
-      // 🔥 TRY EDGE FUNCTION FIRST (for proper metadata)
+      // 🔥 v4.1: TRY EDGE FUNCTION FIRST (now with email!)
       const checkoutSession = await createCheckoutSession({
         planId: whopPlanId,
         affiliateCode: affiliateCode || undefined,
         clickId: clickId || undefined,
-        subscriptionCategory: plan.category, // 🔥 v4.0: Pass category
+        subscriptionCategory: plan.category,
+        email: user?.email || undefined,    // 🔥 v4.1: Pass email!
+        userId: user?.id || undefined,      // 🔥 v4.1: Pass userId!
       });
 
       let checkoutUrl: string;
@@ -236,7 +246,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
       if (checkoutSession?.checkout_url) {
         // ✅ Edge Function succeeded - metadata will be in webhook!
         checkoutUrl = checkoutSession.checkout_url;
-        console.log('✅ Using Edge Function checkout URL (metadata included)');
+        console.log('✅ Using Edge Function checkout URL (metadata + email included)');
       } else {
         // ⚠️ Fallback to direct URL (metadata may not work)
         console.warn('⚠️ Falling back to direct URL (metadata may not be passed)');

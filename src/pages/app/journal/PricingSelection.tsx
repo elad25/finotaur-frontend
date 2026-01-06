@@ -1,11 +1,16 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR PRICING SELECTION - v5.0
+// FINOTAUR PRICING SELECTION - v5.1
 // =====================================================
 // 
+// 🔥 v5.1 CHANGES:
+// - UPDATED: "LET ME IN" button redirects to Top Secret (not All Markets)
+// - Journal purchasers go to Journal Overview
+// - Platform FREE users redirected to Top Secret
+// 
 // 🔥 v5.0 CHANGES:
-// - ADDED: "LET ME IN" button sets platform_plan='free' and redirects to All Markets
-// - Platform FREE users can access All Markets without Journal subscription
+// - ADDED: "LET ME IN" button sets platform_plan='free' and redirects
+// - Platform FREE users can access Top Secret without Journal subscription
 // - KEPT: Basic with 14-day trial, Premium immediate payment
 // =====================================================
 
@@ -186,7 +191,7 @@ export default function PricingSelection() {
         const hasJournalAccess = hasDirectJournalPlan || hasJournalFromBundle;
 
         if (hasJournalAccess && data?.onboarding_completed) {
-          console.log('✅ User has Journal access + completed onboarding → Dashboard');
+          console.log('✅ User has Journal access + completed onboarding → Journal Dashboard');
           navigate('/app/journal/overview');
           return;
         }
@@ -199,10 +204,10 @@ export default function PricingSelection() {
           return;
         }
 
-        // 🔥 If user already has Platform FREE and completed onboarding, send to All Markets
+        // 🔥 If user already has Platform FREE and completed onboarding, send to Top Secret
         if (platformPlan === 'free' && data?.onboarding_completed) {
-          console.log('✅ User has Platform FREE + completed onboarding → All Markets');
-          navigate('/app/all-markets/overview');
+          console.log('✅ User has Platform FREE + completed onboarding → Top Secret');
+          navigate('/app/top-secret');
           return;
         }
 
@@ -218,7 +223,7 @@ export default function PricingSelection() {
   }, [user, navigate, searchParams]);
 
   // ═══════════════════════════════════════════════════════════════
-  // 🔥 NEW: Handle "LET ME IN" - Skip to Platform FREE
+  // 🔥 Handle "LET ME IN" - Skip to Platform FREE → Top Secret
   // Sets platform_plan='free' in database before redirecting
   // ═══════════════════════════════════════════════════════════════
   const handleSkipToApp = async () => {
@@ -254,11 +259,11 @@ export default function PricingSelection() {
 
       console.log('✅ Platform FREE activated successfully');
       toast.success('Welcome to Finotaur! 🎉', {
-        description: 'Enjoy free access to All Markets'
+        description: 'Enjoy free access to Top Secret Intelligence'
       });
       
-      // Redirect to All Markets
-      navigate('/app/all-markets/overview');
+      // 🔥 Redirect to Top Secret
+      navigate('/app/top-secret');
       
     } catch (error) {
       console.error('❌ Unexpected error:', error);
@@ -308,6 +313,7 @@ export default function PricingSelection() {
     }
   };
 
+  // 🔥 After Risk Setup Complete → Go to Journal Overview
   const handleRiskSetupComplete = async () => {
     if (!user) return;
 
@@ -323,6 +329,7 @@ export default function PricingSelection() {
       if (error) throw error;
 
       toast.success('Welcome to Finotaur! 🎉');
+      // 🔥 Journal purchasers go to Journal Overview
       navigate('/app/journal/overview');
     } catch (error: any) {
       console.error('Error completing onboarding:', error);
@@ -375,7 +382,7 @@ export default function PricingSelection() {
       <section className="min-h-screen py-24 px-4 relative overflow-hidden bg-black">
         {/* 🔥 Top Navigation Buttons */}
         <div className="absolute top-6 left-6 right-6 flex justify-between z-20">
-          {/* 🔥 UPDATED: Skip to App Button - Sets Platform FREE */}
+          {/* 🔥 Skip to App Button - Goes to Top Secret */}
           <Button
             variant="outline"
             onClick={handleSkipToApp}
