@@ -13,11 +13,16 @@ const Footer = () => {
     <footer className="relative overflow-hidden">
       {/* Final CTA Section */}
       <section className="py-24 px-4 relative">
-        {/* Background */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0b08] to-[#0a0a0a]" />
+        {/* Luxury Background */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
 
-        {/* Gold Glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#C9A646]/[0.1] rounded-full blur-[150px]" />
+        {/* Gold Border Line at Top */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+
+        {/* Enhanced Gold Glows - More visible */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px] bg-[#C9A646]/[0.12] rounded-full blur-[180px]" />
+        <div className="absolute top-1/3 left-1/4 w-[500px] h-[400px] bg-[#D4AF37]/[0.08] rounded-full blur-[140px]" />
+        <div className="absolute bottom-1/3 right-1/4 w-[450px] h-[350px] bg-[#F4D97B]/[0.06] rounded-full blur-[120px]" />
 
         <div className="max-w-3xl mx-auto text-center relative z-10">
           <motion.div
