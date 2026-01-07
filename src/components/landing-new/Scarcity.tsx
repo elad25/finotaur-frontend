@@ -10,12 +10,17 @@ import { Lock } from "lucide-react";
 const Scarcity = () => {
   return (
     <section className="py-16 px-4 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0b08] to-[#0a0a0a]" />
+      {/* Luxury Background with Gold Undertone */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#110d08] to-[#0a0a0a]" />
 
-      {/* Subtle Gold Border */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      {/* Stronger Gold Border */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/50 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/45 to-transparent" />
+
+      {/* Enhanced Gold Glows */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-[#C9A646]/[0.12] rounded-full blur-[140px]" />
+      <div className="absolute top-1/3 right-1/3 w-[350px] h-[250px] bg-[#D4AF37]/[0.08] rounded-full blur-[100px]" />
+      <div className="absolute bottom-1/3 left-1/3 w-[300px] h-[200px] bg-[#F4D97B]/[0.06] rounded-full blur-[90px]" />
 
       <div className="max-w-3xl mx-auto relative z-10">
         <motion.div

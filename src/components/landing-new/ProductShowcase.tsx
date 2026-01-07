@@ -34,17 +34,17 @@ const proofExamples = [
 const ProductShowcase = () => {
   return (
     <section className="py-24 px-4 relative overflow-hidden">
-      {/* Luxury Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0b08] to-[#0a0a0a]" />
+      {/* Luxury Background with Rich Gold */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
 
-      {/* Gold Border Lines */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/25 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      {/* Stronger Gold Border Lines */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
 
-      {/* Enhanced Gold Glows */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-[#C9A646]/[0.07] rounded-full blur-[160px]" />
-      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.05] rounded-full blur-[120px]" />
-      <div className="absolute bottom-1/3 right-1/4 w-[350px] h-[350px] bg-[#F4D97B]/[0.04] rounded-full blur-[100px]" />
+      {/* Intense Gold Glows */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[800px] bg-[#C9A646]/[0.12] rounded-full blur-[180px]" />
+      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.09] rounded-full blur-[140px]" />
+      <div className="absolute bottom-1/3 right-1/4 w-[450px] h-[450px] bg-[#F4D97B]/[0.07] rounded-full blur-[120px]" />
 
       <div className="max-w-6xl mx-auto relative z-10">
         {/* Section Header */}

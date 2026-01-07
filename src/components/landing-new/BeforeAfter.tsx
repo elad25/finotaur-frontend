@@ -29,19 +29,20 @@ const painPoints = [
 const BeforeAfter = () => {
   return (
     <section className="py-24 px-4 relative overflow-hidden">
-      {/* Luxury Dark Background with Gold Undertone */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0c0a08] to-[#0a0a0a]" />
+      {/* Luxury Dark Background with Rich Gold Undertone */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100c08] to-[#0a0a0a]" />
 
-      {/* Gold Border Lines */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/20 to-transparent" />
+      {/* Stronger Gold Border Lines */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
 
-      {/* Subtle Gold Ambient Glows */}
-      <div className="absolute top-1/4 left-1/6 w-[500px] h-[400px] bg-[#C9A646]/[0.04] rounded-full blur-[150px]" />
-      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#C9A646]/[0.03] rounded-full blur-[120px]" />
+      {/* Enhanced Gold Ambient Glows */}
+      <div className="absolute top-1/4 left-1/6 w-[600px] h-[500px] bg-[#C9A646]/[0.10] rounded-full blur-[160px]" />
+      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.08] rounded-full blur-[140px]" />
+      <div className="absolute top-1/2 right-1/3 w-[400px] h-[350px] bg-[#F4D97B]/[0.06] rounded-full blur-[120px]" />
 
       {/* Subtle Red Glow for Pain */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-red-500/[0.02] rounded-full blur-[150px]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[350px] bg-red-500/[0.015] rounded-full blur-[150px]" />
 
       <div className="max-w-4xl mx-auto relative z-10">
         {/* Main Headline */}
