@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { X, Gift, Loader2 } from 'lucide-react';
 import { grantFreeAccess } from '@/services/adminService';
 import { UserWithStats } from '@/types/admin';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/providers/AuthProvider';
 import { toast } from 'react-hot-toast';
 
 interface GrantPremiumModalProps {
