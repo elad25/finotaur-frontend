@@ -1,7 +1,11 @@
 // src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR POST-SIGNUP - TOP SECRET CHECKOUT v10.0
+// FINOTAUR POST-SIGNUP - TOP SECRET CHECKOUT v10.1
 // =====================================================
+//
+// v10.1 CHANGES:
+// - ADDED: "GO TO APP" button on the left side (symmetric to EXIT)
+// - Users can skip pricing and go directly to Top Secret App
 //
 // v10.0 CHANGES:
 // - ADDED: PromoCodePopup before checkout
@@ -206,6 +210,32 @@ export default function PricingSelection() {
   };
 
   // =====================================================
+  // 🔥 v10.1: Handle Go to App
+  // =====================================================
+
+  const handleGoToApp = async () => {
+    if (!user) {
+      navigate('/app/top-secret');
+      return;
+    }
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          onboarding_completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      navigate('/app/top-secret');
+    } catch (error) {
+      console.error('Error navigating to app:', error);
+      navigate('/app/top-secret');
+    }
+  };
+
+  // =====================================================
   // Handle exit
   // =====================================================
 
@@ -263,6 +293,18 @@ export default function PricingSelection() {
           filter: 'blur(60px)'
         }}
       />
+
+      {/* 🔥 v10.1: Go to App Button - Top Left */}
+      <div className="absolute top-6 left-6 z-20">
+        <Button
+          variant="outline"
+          onClick={handleGoToApp}
+          className="flex items-center gap-2 text-[#C9A646] border-[#C9A646]/50 hover:border-[#C9A646] hover:bg-[#C9A646]/10 transition-all font-semibold px-5 py-2"
+        >
+          <ArrowRight className="h-5 w-5 rotate-180" />
+          GO TO APP
+        </Button>
+      </div>
 
       {/* Exit Button - Top Right */}
       <div className="absolute top-6 right-6 z-20">
