@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import {
   FileText,
@@ -55,6 +54,11 @@ interface ReportTypeConfig {
   iconBg: string;
   schedule: string;
   description: string;
+}
+
+// 🔥 Props interface - receives user from parent
+interface TopSecretDashboardProps {
+  userId?: string;
 }
 
 // ========================================
@@ -303,11 +307,11 @@ function ReportCard({ report, config, onView, onDownload }: ReportCardProps) {
 
 // ========================================
 // MAIN COMPONENT
+// 🔥 Now receives userId as prop instead of using useAuth
 // ========================================
 
-export default function TopSecretDashboard() {
+export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -316,11 +320,11 @@ export default function TopSecretDashboard() {
   // Fetch subscription status
   useEffect(() => {
     async function fetchSubscription() {
-      if (!user?.id) return;
+      if (!userId) return;
       
       try {
         const { data, error } = await supabase
-          .rpc('get_top_secret_status', { p_user_id: user.id });
+          .rpc('get_top_secret_status', { p_user_id: userId });
         
         if (error) throw error;
         
@@ -339,7 +343,7 @@ export default function TopSecretDashboard() {
     }
     
     fetchSubscription();
-  }, [user]);
+  }, [userId]);
 
   // Fetch reports (mock data for now - replace with actual API call)
   useEffect(() => {

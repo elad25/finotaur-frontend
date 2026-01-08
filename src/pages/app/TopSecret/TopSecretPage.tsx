@@ -1,6 +1,10 @@
 // ================================================
-// TOP SECRET PAGE - Router Component v3.0
+// TOP SECRET PAGE - Router Component v3.1
 // File: src/pages/app/TopSecret/TopSecretPage.tsx
+//
+// 🔥 v3.1 CHANGES:
+// - FIXED: Pass userId to TopSecretDashboard instead of using useAuth inside
+// - This fixes "useAuth must be used within AuthProvider" error
 //
 // 🔥 v3.0 CHANGES:
 // - Added Journal discount popup after payment success
@@ -128,7 +132,7 @@ export default function TopSecretPage() {
       
       if (newStatus?.isActive) {
         // Subscription is now active!
-        console.log('Subscription confirmed!');
+        console.log('✅ Subscription confirmed!');
         setStatus(newStatus);
         setPageState('payment_success');
 
@@ -164,7 +168,7 @@ export default function TopSecretPage() {
     return () => {
       if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [pageState, pollAttempts, checkTopSecretStatus, setSearchParams]);
+  }, [pageState, pollAttempts, checkTopSecretStatus, setSearchParams, hasShownDiscount]);
 
   // ========================================
   // Initial Load
@@ -361,6 +365,7 @@ export default function TopSecretPage() {
   }
 
   // Render appropriate page based on status
+  // 🔥 Pass userId to TopSecretDashboard
   return (
     <React.Suspense
       fallback={
@@ -369,7 +374,11 @@ export default function TopSecretPage() {
         </div>
       }
     >
-      {pageState === 'show_dashboard' ? <TopSecretDashboard /> : <TopSecretLanding />}
+      {pageState === 'show_dashboard' ? (
+        <TopSecretDashboard userId={user?.id} />
+      ) : (
+        <TopSecretLanding />
+      )}
     </React.Suspense>
   );
 }
