@@ -1,7 +1,7 @@
 // ================================================
-// TOP SECRET LANDING PAGE - Luxury Premium v3.1
+// TOP SECRET LANDING PAGE - Luxury Premium v3.2
 // File: src/pages/app/TopSecret/TopSecretLanding.tsx
-// 🔥 v3.1: Using useWhopCheckout for proper tracking
+// 🔥 v3.2: Updated pricing - $70/month, $500/year
 // ================================================
 
 import React, { useState } from 'react';
@@ -23,6 +23,7 @@ import {
   Target,
   BarChart3,
   Sparkles,
+  Gift,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { Variants } from 'framer-motion';
@@ -62,16 +63,16 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'monthly',
     name: 'Monthly',
-    price: 35,
+    price: 70,
     period: '/month',
   },
   {
     id: 'yearly',
     name: 'Yearly',
-    price: 300,
+    price: 500,
     period: '/year',
-    savings: 'Save $120',
-    monthlyEquivalent: 25,
+    savings: 'Save $340',
+    monthlyEquivalent: 41.67,
   },
 ];
 
@@ -161,7 +162,7 @@ const itemVariants: Variants = {
 export default function TopSecretLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
   
   // 🔥 Using useWhopCheckout for proper tracking
   const { initiateCheckout, isLoading } = useWhopCheckout({
@@ -261,6 +262,18 @@ export default function TopSecretLanding() {
               The same market intelligence that hedge funds pay <span className="text-white font-semibold">$2,000+/month</span> for —
               now available for serious traders who want an edge.
             </p>
+
+            {/* 🆕 14-Day Free Trial Badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl mb-6"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%)',
+                   border: '1px solid rgba(16,185,129,0.3)',
+                   boxShadow: '0 0 30px rgba(16,185,129,0.1)'
+                 }}>
+              <Gift className="w-5 h-5 text-emerald-400" />
+              <span className="text-emerald-300 font-bold">14-Day Free Trial</span>
+              <span className="text-emerald-500 text-sm">• Cancel Anytime</span>
+            </div>
 
             {/* CTA Button */}
             <Button
@@ -590,9 +603,21 @@ export default function TopSecretLanding() {
 
               <div className="relative pt-4">
                 {/* Header */}
-                <div className="text-center mb-8">
+                <div className="text-center mb-6">
                   <h3 className="text-2xl font-bold text-white mb-2">Unlock Full Access</h3>
-                  <p className="text-slate-500">Cancel anytime • Instant access</p>
+                  <p className="text-slate-500">Start with 14-day free trial</p>
+                </div>
+
+                {/* 🆕 Special Offer Badge */}
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl"
+                       style={{
+                         background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%)',
+                         border: '1px solid rgba(16,185,129,0.3)',
+                       }}>
+                    <Gift className="w-4 h-4 text-emerald-400" />
+                    <span className="text-emerald-300 text-sm font-bold">First 2 Months: 50% Off</span>
+                  </div>
                 </div>
 
                 {/* Plan Toggle */}
@@ -637,7 +662,12 @@ export default function TopSecretLanding() {
                   </div>
                   {selectedPlan === 'yearly' && (
                     <p className="text-emerald-400 font-semibold mt-2">
-                      Just ${selectedPlanData.monthlyEquivalent}/month — Save $120!
+                      Just ${selectedPlanData.monthlyEquivalent}/month — Save $340!
+                    </p>
+                  )}
+                  {selectedPlan === 'monthly' && (
+                    <p className="text-emerald-400 font-semibold mt-2">
+                      First 2 months: Just $35/month (50% off)
                     </p>
                   )}
                 </div>
@@ -645,12 +675,14 @@ export default function TopSecretLanding() {
                 {/* What's Included */}
                 <ul className="space-y-4 mb-8">
                   {[
+                    '14-day free trial',
                     'Monthly ISM Manufacturing Report',
                     '2x Company Deep Dive Reports',
                     '2x Crypto Market Reports',
                     'PDF Downloads & Archive Access',
                     'Discord Community Access',
                     'Email Delivery',
+                    'Cancel anytime',
                   ].map((item, idx) => (
                     <li key={idx} className="flex items-center gap-3">
                       <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
@@ -681,7 +713,7 @@ export default function TopSecretLanding() {
                     <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
                   ) : (
                     <span className="flex items-center justify-center gap-2">
-                      Get Access Now
+                      Start Free Trial Now
                       <ArrowRight className="w-5 h-5" />
                     </span>
                   )}

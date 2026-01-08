@@ -1,9 +1,28 @@
 // types/whop.ts
 // All TypeScript types for Whop integration
-// 🔥 v2.1 - Updated: Kept 'free' for backward compat, added trial support for Basic
+// 🔥 v3.1 - 14-Day Free Trial + Intro Discount Support
+// 
+// TRIAL FLOW:
+// 1. User signs up → Free trial starts (7-14 days depending on plan)
+// 2. During trial → Full access, no payment required
+// 3. Trial ends → Automatic billing (with intro discount if applicable)
+// 4. If payment succeeds → Subscription becomes 'active'
+// 5. If payment fails → Subscription becomes 'past_due'
+// 
+// 🔥 v3.1 INTRO DISCOUNT:
+// - Newsletter: 7-day trial → $10/mo for 2 months (50% off) → $20/mo
+// - Top Secret: 14-day trial → $17.50/mo for 2 months (50% off) → $35/mo
+// 
+// TRIAL RULES:
+// - Basic Monthly: 14-day trial (can be used multiple times)
+// - Basic Yearly: 14-day trial (can be used multiple times)
+// - Premium: NO trial (immediate billing)
+// - Platform Pro: 14-day trial (ONE-TIME ONLY - tracked in DB)
+// - Newsletter: 7-day trial + 50% OFF first 2 months
+// - Top Secret: 14-day trial + 50% OFF first 2 months
 
 // ===========================================
-// PLAN TYPES - 🔥 UPDATED
+// PLAN TYPES
 // ===========================================
 
 export type PlanId = 
@@ -16,21 +35,27 @@ export type PlanId =
   | 'top_secret_yearly'
   | 'lifetime';
 
-// 🔥 v2.1: Kept 'free' for legacy users in DB
 export type PlanName = 'basic' | 'premium' | 'newsletter' | 'top_secret' | 'lifetime';
 
 export type BillingPeriod = 'monthly' | 'yearly' | 'lifetime';
 
+// ===========================================
+// SUBSCRIPTION STATUS - 🔥 EXPANDED
+// ===========================================
+
 export type SubscriptionStatus = 
-  | 'active'
-  | 'inactive'
-  | 'canceled'
-  | 'past_due'
-  | 'trialing'   // 🔥 Important for Basic trial
-  | 'trial';     // Alias
+  | 'active'          // Paid subscription, active
+  | 'inactive'        // No subscription
+  | 'canceled'        // User cancelled, still has access until period end
+  | 'past_due'        // Payment failed
+  | 'trialing'        // In free trial period
+  | 'trial'           // Alias for 'trialing'
+  | 'trial_expired'   // Trial ended, awaiting first payment
+  | 'incomplete'      // Payment setup incomplete
+  | 'unpaid';         // Payment failed, access revoked
 
 // ===========================================
-// PLAN CONFIGURATION
+// PLAN CONFIGURATION - 🔥 v3.1 UPDATED
 // ===========================================
 
 export interface PlanConfig {
@@ -44,17 +69,44 @@ export interface PlanConfig {
   features: string[];
   popular?: boolean;
   badge?: string;
-  trialDays?: number;  // 🔥 NEW: For Basic plan (14 days)
+  
+  // 🔥 TRIAL CONFIGURATION
+  trialDays?: number;           // Number of free trial days (0 = no trial)
+  trialOnceOnly?: boolean;      // If true, trial can only be used once per user
+  
+  // 🔥 v3.1: INTRO DISCOUNT CONFIGURATION
+  hasIntroDiscount?: boolean;   // Has introductory pricing?
+  introDiscountMonths?: number; // How many months of intro pricing (e.g., 2)
+  introDiscountPercent?: number;// Discount percentage (e.g., 50 = 50% off)
+  introPrice?: number;          // Intro price per month (e.g., $10 instead of $20)
+  
+  // EXAMPLE:
+  // Newsletter:
+  //   trialDays: 7 (free)
+  //   hasIntroDiscount: true
+  //   introDiscountMonths: 2
+  //   introPrice: 10 ($10/mo for 2 months)
+  //   price: 20 (regular price after intro)
+  //
+  // Top Secret:
+  //   trialDays: 14 (free)
+  //   hasIntroDiscount: true
+  //   introDiscountMonths: 2
+  //   introPrice: 17.50 ($17.50/mo for 2 months)
+  //   price: 35 (regular price after intro)
 }
 
 export interface PlanPricing {
   price: number;
   period: string;
   savings?: string;
+  // 🔥 v3.1: Intro pricing
+  introPrice?: number;
+  introMonths?: number;
 }
 
 // ===========================================
-// USER SUBSCRIPTION
+// USER SUBSCRIPTION - 🔥 UPDATED
 // ===========================================
 
 export interface UserSubscription {
@@ -66,10 +118,42 @@ export interface UserSubscription {
   endsAt: string | null;
   cancelledAt: string | null;
   isActive: boolean;
-  // 🔥 NEW: Trial fields (for Basic plan)
-  isInTrial: boolean;
-  trialEndsAt: string | null;
-  trialDaysRemaining: number | null;
+  
+  // 🔥 TRIAL STATUS
+  isInTrial: boolean;                    // Currently in trial period?
+  trialEndsAt: string | null;            // When trial ends (ISO timestamp)
+  trialDaysRemaining: number | null;     // Days remaining in trial
+  
+  // 🔥 TRIAL HISTORY (for one-time trials like Platform Pro)
+  hasUsedTrial: boolean;                 // Has user ever used a trial for this plan?
+  trialUsedAt: string | null;            // When trial was first used (ISO timestamp)
+  
+  // 🔥 v3.1: INTRO DISCOUNT STATUS
+  isInIntroDiscount: boolean;            // Currently paying intro price?
+  introMonthsRemaining: number | null;   // Months of intro pricing remaining
+  introEndsAt: string | null;            // When intro pricing ends
+  nextBillingAmount: number | null;      // What they'll pay next billing cycle
+  
+  // EXAMPLE:
+  // Newsletter user in trial:
+  //   isInTrial: true
+  //   trialEndsAt: "2026-01-15T00:00:00Z"
+  //   trialDaysRemaining: 5
+  //   status: "trialing"
+  //
+  // Newsletter user in intro period:
+  //   isInTrial: false
+  //   isInIntroDiscount: true
+  //   introMonthsRemaining: 1
+  //   nextBillingAmount: 10  (still $10/mo)
+  //   status: "active"
+  //
+  // Newsletter user after intro:
+  //   isInTrial: false
+  //   isInIntroDiscount: false
+  //   introMonthsRemaining: 0
+  //   nextBillingAmount: 20  (full price)
+  //   status: "active"
 }
 
 // ===========================================
@@ -114,7 +198,7 @@ export interface CheckoutResult {
 }
 
 // ===========================================
-// WEBHOOK TYPES
+// WEBHOOK TYPES - 🔥 UPDATED
 // ===========================================
 
 export interface WhopWebhookUser {
@@ -134,9 +218,12 @@ export interface WhopWebhookData {
   created_at: number;
   expires_at?: number;
   canceled_at?: number;
-  // 🔥 NEW: Trial fields
-  trial_end?: number;
-  trialing?: boolean;
+  
+  // 🔥 TRIAL FIELDS
+  trial_end?: number;              // Unix timestamp when trial ends
+  trialing?: boolean;              // Is currently in trial?
+  trial_start?: number;            // Unix timestamp when trial started
+  
   metadata?: Record<string, string>;
 }
 
@@ -146,8 +233,59 @@ export interface WhopWebhookPayload {
 }
 
 // ===========================================
-// ACCOUNT TYPES - 🔥 UPDATED
+// ACCOUNT TYPES
 // ===========================================
 
-// 🔥 v2.1: Kept 'free' for backward compatibility with existing DB users
 export type AccountType = 'free' | 'basic' | 'premium' | 'admin' | 'vip' | 'trial';
+
+// ===========================================
+// TRIAL HELPER TYPES - 🔥 v3.1 UPDATED
+// ===========================================
+
+/**
+ * Trial eligibility check result
+ */
+export interface TrialEligibility {
+  isEligible: boolean;              // Can user start a trial?
+  reason?: string;                  // Why not eligible? (if !isEligible)
+  trialDays: number;                // How many days in trial
+  requiresPaymentMethod: boolean;   // Must provide payment upfront?
+  autoChargeDate: string | null;    // When automatic billing occurs (ISO timestamp)
+  // 🔥 v3.1: Intro discount info
+  hasIntroDiscount: boolean;        // Will get intro pricing after trial?
+  introMonths?: number;             // How many months of intro pricing
+  introPrice?: number;              // Price during intro period
+  regularPrice?: number;            // Regular price after intro
+}
+
+/**
+ * Trial state snapshot
+ */
+export interface TrialState {
+  status: 'active' | 'expired' | 'converted' | 'cancelled';
+  startedAt: string;                // ISO timestamp
+  endsAt: string;                   // ISO timestamp
+  daysRemaining: number;
+  willAutoBill: boolean;            // Will auto-charge at end?
+  nextBillingDate: string | null;   // When next charge occurs
+  // 🔥 v3.1: Intro discount info
+  hasIntroDiscount: boolean;
+  introMonthsRemaining?: number;
+  introPrice?: number;
+}
+
+// ===========================================
+// 🔥 v3.1: PRICING DISPLAY HELPERS
+// ===========================================
+
+/**
+ * Get display price for a plan (accounting for intro pricing)
+ */
+export interface PlanPricingDisplay {
+  displayPrice: number;             // What to show prominently
+  regularPrice: number;             // Regular price (strikethrough if intro)
+  hasDiscount: boolean;             // Show discount badge?
+  discountText?: string;            // E.g., "50% OFF first 2 months"
+  priceBreakdown?: string;          // E.g., "$10/mo for 2 months, then $20/mo"
+  trialText?: string;               // E.g., "7 days free"
+}

@@ -1,12 +1,16 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v4.1.0
+// FINOTAUR WHOP CONFIGURATION - v4.2.2
 // =====================================================
-// 🔥 v4.1.0 CHANGES:
-// - UPDATED: Real Platform Product IDs from Whop Dashboard
-// - Core Monthly: prod_HDYzeNp6WOJwh ($39/mo, 7-day trial)
-// - Core Yearly: prod_YAdXQrHtt72Gd ($349/yr, no trial)
-// - Pro Monthly: prod_lhe19l7l48lKW ($69/mo, 14-day ONE-TIME trial)
-// - Pro Yearly: prod_3AyUOETP3CoK6 ($619/yr, no trial)
+// 🔥 v4.2.2 CHANGES:
+// - War Zone: UPDATED pricing - $39/mo regular, $19.50/mo intro (was $20/$10)
+// - War Zone: ADDED yearly plan - $329/year (saves $139)
+// - Top Secret: FIXED pricing - $70/mo regular, $35/mo intro (was $35/$17.50)
+// - Top Secret Yearly: $500/year (saves $340)
+// 
+// 🔥 v4.2.0 CHANGES:
+// - Newsletter: 7-day trial + 50% OFF first 2 months
+// - Top Secret: 14-day trial + 50% OFF first 2 months
+// - Updated badges and messaging
 // =====================================================
 
 // ============================================
@@ -41,6 +45,7 @@ export type PlanId =
   | 'platform_enterprise'
   // Other products
   | 'newsletter_monthly'
+  | 'newsletter_yearly'  // 🔥 v4.2.2: Added War Zone Yearly
   | 'top_secret_monthly'
   | 'top_secret_yearly';
 
@@ -69,6 +74,11 @@ export interface PlanConfig {
   contactSales?: boolean;
   includesJournal?: 'basic' | 'premium';
   includesNewsletterChoice?: boolean;
+  // 🔥 v4.2.0: Discount info
+  hasIntroDiscount?: boolean;
+  introDiscountMonths?: number;
+  introDiscountPercent?: number;
+  introPrice?: number;
 }
 
 // ============================================
@@ -97,9 +107,10 @@ export const WHOP_PLAN_IDS = {
   
   // Newsletter (War Zone)
   newsletter_monthly: 'plan_LCBG5yJpoNtW3',
+  newsletter_yearly: 'prod_8b3VWkZdena4B',  // 🔥 v4.2.2: War Zone Yearly
   
   // Top Secret
-  top_secret_monthly: 'plan_9VxdBaa2Z5KQy',
+  top_secret_monthly: 'plan_mAOfrSszpymjL',  // 🔥 v4.2.2: Updated to $70 plan
   top_secret_yearly: 'plan_YoeD6wWBxss7Q',
 } as const;
 
@@ -120,6 +131,7 @@ export const WHOP_PRODUCT_IDS = {
   
   // Other
   newsletter_monthly: 'prod_qlaV5Uu6LZlYn',
+  newsletter_yearly: 'prod_8b3VWkZdena4B',  // 🔥 v4.2.2: War Zone Yearly
   top_secret: 'prod_nl6YXbLp4t5pz',
 } as const;
 
@@ -156,6 +168,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   
   // Other
   'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true },
+  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },  // 🔥 v4.2.2
   'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
 };
 
@@ -176,7 +189,8 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   
   // Other
   'plan_LCBG5yJpoNtW3': 'newsletter_monthly',
-  'plan_9VxdBaa2Z5KQy': 'top_secret_monthly',
+  'prod_8b3VWkZdena4B': 'newsletter_yearly',  // 🔥 v4.2.2
+  'plan_mAOfrSszpymjL': 'top_secret_monthly',  // 🔥 v4.2.2: Updated to $70 plan
   'plan_YoeD6wWBxss7Q': 'top_secret_yearly',
 };
 
@@ -469,7 +483,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // NEWSLETTER & TOP SECRET (unchanged)
+  // 🔥 v4.2.2: NEWSLETTER (WAR ZONE) - 7-day trial + 50% OFF first 2 months
+  // UPDATED: $39/month regular, $19.50/month intro
   // ═══════════════════════════════════════════
   newsletter_monthly: {
     id: 'newsletter_monthly',
@@ -477,16 +492,24 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,
     name: 'newsletter',
     displayName: 'War Zone Intelligence',
-    price: 20,
+    price: 39,  // 🔥 UPDATED: Was 20, now 39
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 7,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '7-Day Free Trial',
+    badge: '🔥 7-Day Trial + 50% OFF First 2 Months',
     category: 'journal',
+    // 🔥 v4.2.2: Discount info - UPDATED
+    hasIntroDiscount: true,
+    introDiscountMonths: 2,
+    introDiscountPercent: 50,
+    introPrice: 19.50,  // 🔥 UPDATED: Was 10, now 19.50
     features: [
+      '🎁 7 days FREE trial',
+      '🔥 Then $19.50/month for 2 months (50% OFF)',
+      '💰 Regular price: $39/month after',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -498,23 +521,67 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Chart pack blueprint',
     ],
   },
+
+  // 🔥 v4.2.2: WAR ZONE YEARLY - NEW!
+  newsletter_yearly: {
+    id: 'newsletter_yearly',
+    whopPlanId: WHOP_PLAN_IDS.newsletter_yearly,
+    whopProductId: WHOP_PRODUCT_IDS.newsletter_yearly,
+    name: 'newsletter',
+    displayName: 'War Zone Intelligence (Annual)',
+    price: 329,
+    period: 'yearly',
+    periodLabel: '/year',
+    monthlyEquivalent: 27.42,  // $329/12 = ~$27.42/month
+    maxTrades: 0,
+    trialDays: 7,
+    isNewsletter: true,
+    discordIncluded: true,
+    badge: '🔥 7-Day Trial + Save $139/year',  // ($39*12) - $329 = $139 savings
+    category: 'journal',
+    features: [
+      '🎁 7 days FREE trial',
+      '💰 Save $139/year vs monthly',
+      'Daily institutional-grade PDF report (8-14 pages)',
+      'Macro breakdown & market structure analysis',
+      'Unusual Options Activity (UOA) tracking',
+      'Technical outlook (24-72h)',
+      'Earnings & corporate intel',
+      'Private Discord community',
+      'Finotaur Trading Room access',
+      'Real-time alerts',
+      'Chart pack blueprint',
+    ],
+  },
+
+  // ═══════════════════════════════════════════
+  // 🔥 v4.2.1: TOP SECRET - 14-day trial + 50% OFF first 2 months
+  // FIXED: $70/month regular, $35/month intro
+  // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
     whopPlanId: WHOP_PLAN_IDS.top_secret_monthly,
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
-    price: 35,
+    price: 70,  // 🔥 FIXED: Was 35, now 70
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '14-Day Free Trial',
+    badge: '🔥 14-Day Trial + 50% OFF First 2 Months',
     category: 'journal',
+    // 🔥 v4.2.1: Discount info - FIXED
+    hasIntroDiscount: true,
+    introDiscountMonths: 2,
+    introDiscountPercent: 50,
+    introPrice: 35,  // 🔥 FIXED: Was 17.50, now 35
     features: [
-      '14-day free trial',
+      '🎁 14 days FREE trial',
+      '🔥 Then $35/month for 2 months (50% OFF)',
+      '💰 Regular price: $70/month after',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
@@ -529,25 +596,25 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret (Annual)',
-    price: 300,
+    price: 500,  // 🔥 UPDATED: Was 600, now 500
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 25,
+    monthlyEquivalent: 41.67,  // 🔥 UPDATED: $500/12 = ~$41.67/month
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '14-Day Free Trial + Save $120',
+    badge: '🔥 14-Day Trial + Save $340/year',  // 🔥 UPDATED: ($70*12) - $500 = $340
     category: 'journal',
     features: [
-      '14-day free trial',
+      '🎁 14 days FREE trial',
+      '💰 Save $340/year vs monthly',  // 🔥 UPDATED
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
       'PDF Downloads & Archive Access',
       'Discord Community Access',
       'Email Delivery',
-      'Save $120/year!',
     ],
   },
 };
@@ -646,6 +713,19 @@ export function isTrialOnceOnly(planId: PlanId): boolean {
   return PLANS[planId]?.trialOnceOnly ?? false;
 }
 
+// 🔥 v4.2.0: New helper functions
+export function hasIntroDiscount(planId: PlanId): boolean {
+  return PLANS[planId]?.hasIntroDiscount ?? false;
+}
+
+export function getIntroPrice(planId: PlanId): number | undefined {
+  return PLANS[planId]?.introPrice;
+}
+
+export function getIntroDiscountMonths(planId: PlanId): number {
+  return PLANS[planId]?.introDiscountMonths ?? 0;
+}
+
 export function isBasicPlan(planName: PlanName): boolean {
   return planName === 'basic';
 }
@@ -660,6 +740,7 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
     WHOP_PLAN_IDS.premium_yearly,
     WHOP_PLAN_IDS.platform_core_yearly,
     WHOP_PLAN_IDS.platform_pro_yearly,
+    WHOP_PLAN_IDS.newsletter_yearly,  // 🔥 v4.2.2: Added
     WHOP_PLAN_IDS.top_secret_yearly,
   ];
   
@@ -717,9 +798,11 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
     }
   }
   
-  if (affiliateCode) {
-    params.set('d', affiliateCode);
+  // 🔥 v4.2.2: Auto-apply intro discount coupon for eligible plans
+  if (plan.hasIntroDiscount) {
+    params.set('d', 'FINOTAUR50');  // Coupon code for 50% off first 2 payments
   }
+  // NOTE: Affiliate codes removed - intro discount takes priority
   
   if (clickId) {
     params.set('ref', clickId);

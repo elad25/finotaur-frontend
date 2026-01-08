@@ -1,14 +1,17 @@
 // =====================================================
-// FINOTAUR CREATE WHOP CHECKOUT - v1.2.0
+// FINOTAUR CREATE WHOP CHECKOUT - v1.4.0
 // =====================================================
 // 
-// 🔥 v1.2.0 CHANGES:
-// - ADDED: Email prefill in checkout form
-// - ADDED: finotaur_email in metadata (always uses original email)
-// - Even if user changes email in checkout, Finotaur account gets the sub
+// 🔥 v1.4.0 CHANGES:
+// - ADDED: Auto-apply FINOTAUR50 coupon for Top Secret & War Zone
+// - 50% off first 2 payments for intro discount plans
+// - Coupon applied via 'd' URL parameter
 // 
-// 🔥 v1.1.0 CHANGES:
-// - Changed from v5 to v2 API endpoint
+// 🔥 v1.3.0 CHANGES:
+// - FIXED: Email prefill now works via URL parameter
+// - Whop V2 API doesn't prefill email in body - must append to URL
+// - Added email validation
+// - Enhanced logging for debugging
 // 
 // Deploy: supabase functions deploy create-whop-checkout
 // 
@@ -31,6 +34,19 @@ const BASE_REDIRECT_URL = "https://www.finotaur.com";
 // 🔥 CORRECT V2 API ENDPOINT
 const WHOP_API_URL = "https://api.whop.com/api/v2/checkout_sessions";
 
+// 🔥 v1.4.0: Intro discount coupon code
+const INTRO_DISCOUNT_COUPON = "FINOTAUR50";
+
+// 🔥 v1.4.0: Plans that get the intro discount coupon
+const INTRO_DISCOUNT_PLAN_IDS = new Set([
+  // Top Secret
+  'plan_mAOfrSszpymjL',   // Top Secret Monthly ($70) - 🔥 UPDATED
+  'plan_YoeD6wWBxss7Q',   // Top Secret Yearly
+  // War Zone Newsletter
+  'plan_LCBG5yJpoNtW3',   // War Zone Monthly
+  'prod_8b3VWkZdena4B',   // War Zone Yearly
+]);
+
 // ============================================
 // CORS HEADERS
 // ============================================
@@ -51,13 +67,13 @@ interface CheckoutRequest {
   click_id?: string;
   redirect_url?: string;
   subscription_category?: string;
-  email?: string;       // 🔥 v1.2: Email for prefill
-  user_id?: string;     // 🔥 v1.2: User ID from client (backup)
+  email?: string;       // Email for prefill
+  user_id?: string;     // User ID from client (backup)
 }
 
 interface WhopCheckoutResponse {
   id: string;
-  purchase_url: string;  // 🔥 V2 returns purchase_url, not checkout_url
+  purchase_url: string;  // V2 returns purchase_url
   redirect_url?: string;
   affiliate_code?: string;
   metadata?: Record<string, any>;
@@ -74,12 +90,30 @@ const PLAN_REDIRECT_PATHS: Record<string, string> = {
   'plan_x0jTFLe9qNv8i': '/app/journal/pricing?payment=success&source=whop',
   'plan_v7QKxkvKIZooe': '/app/journal/pricing?payment=success&source=whop',
   'plan_gBG436aeJxaHU': '/app/journal/pricing?payment=success&source=whop',
-  // Newsletter
+  // Newsletter (War Zone)
   'plan_LCBG5yJpoNtW3': '/app/all-markets/warzone?payment=success&source=whop',
+  'prod_8b3VWkZdena4B': '/app/all-markets/warzone?payment=success&source=whop',
   // Top Secret
-  'plan_9VxdBaa2Z5KQy': '/app/top-secret?payment=success&source=whop',
+  'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',  // 🔥 UPDATED
   'plan_YoeD6wWBxss7Q': '/app/top-secret?payment=success&source=whop',
 };
+
+// ============================================
+// HELPER: Validate email format
+// ============================================
+
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// ============================================
+// 🔥 v1.4.0: Check if plan should get intro discount
+// ============================================
+
+function shouldApplyIntroDiscount(planId: string): boolean {
+  return INTRO_DISCOUNT_PLAN_IDS.has(planId);
+}
 
 // ============================================
 // MAIN HANDLER
@@ -139,18 +173,30 @@ serve(async (req: Request) => {
       click_id, 
       redirect_url,
       subscription_category,
-      email: clientEmail,  // 🔥 v1.2: Email from client (backup)
+      email: clientEmail,
     } = body;
 
     if (!plan_id) {
       return new Response(
         JSON.stringify({ error: "Missing plan_id" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+    }
+
+    // 🔥 v1.3: Use authenticated user's email (most reliable), fallback to client email
+    const finotaurEmail = user.email || clientEmail || '';
+
+    // Validate email
+    if (!finotaurEmail || !isValidEmail(finotaurEmail)) {
+      console.error("❌ Invalid or missing email:", finotaurEmail);
+      return new Response(
+        JSON.stringify({ error: "Valid email is required for checkout" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 🔥 v1.2: Use authenticated user's email (most reliable), fallback to client email
-    const finotaurEmail = user.email || clientEmail;
+    // 🔥 v1.4.0: Check if this plan should get intro discount
+    const applyIntroDiscount = shouldApplyIntroDiscount(plan_id);
 
     console.log("📦 Checkout request:", {
       plan_id,
@@ -161,6 +207,7 @@ serve(async (req: Request) => {
       affiliate_code,
       click_id,
       subscription_category,
+      apply_intro_discount: applyIntroDiscount,  // 🔥 v1.4.0
     });
 
     // ============================================
@@ -177,14 +224,11 @@ serve(async (req: Request) => {
 
     // ============================================
     // 4. BUILD METADATA
-    // 🔥 v1.2: finotaur_email ensures we ALWAYS know which 
-    //          Finotaur account should get the subscription,
-    //          even if user changes email in checkout!
     // ============================================
 
     const metadata: Record<string, string> = {
       finotaur_user_id: user.id,
-      finotaur_email: finotaurEmail || '',  // 🔥 CRITICAL: Original email for webhook
+      finotaur_email: finotaurEmail,
     };
 
     if (click_id) {
@@ -195,10 +239,7 @@ serve(async (req: Request) => {
       metadata.subscription_category = subscription_category;
     }
 
-    // Keep expected_email for backwards compatibility
-    if (finotaurEmail) {
-      metadata.expected_email = finotaurEmail;
-    }
+    metadata.expected_email = finotaurEmail;
 
     // ============================================
     // 5. DETERMINE REDIRECT URL
@@ -211,32 +252,25 @@ serve(async (req: Request) => {
       finalRedirectUrl = `${BASE_REDIRECT_URL}${planPath}`;
     }
 
-    // Add user_id to redirect URL for client-side verification
     const redirectUrlObj = new URL(finalRedirectUrl);
     redirectUrlObj.searchParams.set('uid', user.id);
     finalRedirectUrl = redirectUrlObj.toString();
 
     // ============================================
     // 6. CREATE WHOP CHECKOUT SESSION (V2 API)
-    // 🔥 v1.2: Added email field for prefill
     // ============================================
 
     console.log("🛒 Creating Whop checkout session (V2 API)...");
 
-    // 🔥 V2 API format with email prefill
     const whopRequestBody: Record<string, any> = {
       plan_id: plan_id,
       metadata: metadata,
       redirect_url: finalRedirectUrl,
     };
 
-    // 🔥 v1.2: Add email for prefill in checkout form
-    if (finotaurEmail) {
-      whopRequestBody.email = finotaurEmail;
-    }
-
-    // Add affiliate code if provided
-    if (affiliate_code) {
+    // 🔥 v1.4.0: Only add affiliate code if NOT applying intro discount
+    // (they use the same 'd' parameter in the URL)
+    if (!applyIntroDiscount && affiliate_code) {
       whopRequestBody.affiliate_code = affiliate_code;
     }
 
@@ -279,27 +313,59 @@ serve(async (req: Request) => {
 
     const checkoutData: WhopCheckoutResponse = JSON.parse(responseText);
 
-    // 🔥 V2 API returns purchase_url
-    const checkoutUrl = checkoutData.purchase_url;
+    // ============================================
+    // 7. 🔥 v1.4.0: BUILD FINAL CHECKOUT URL
+    // - Add email prefill
+    // - Add intro discount coupon if applicable
+    // ============================================
+
+    let checkoutUrl = checkoutData.purchase_url;
+
+    if (checkoutUrl) {
+      try {
+        const urlObj = new URL(checkoutUrl);
+        
+        // Add email prefill
+        if (finotaurEmail) {
+          urlObj.searchParams.set('email', finotaurEmail);
+          console.log("✅ Email prefill added to checkout URL");
+        }
+        
+        // 🔥 v1.4.0: Add intro discount coupon
+        if (applyIntroDiscount) {
+          urlObj.searchParams.set('d', INTRO_DISCOUNT_COUPON);
+          console.log(`✅ Intro discount coupon '${INTRO_DISCOUNT_COUPON}' added to checkout URL`);
+        }
+        
+        checkoutUrl = urlObj.toString();
+      } catch (urlError) {
+        console.warn("⚠️ Failed to modify checkout URL:", urlError);
+        // Continue with original URL if parsing fails
+      }
+    }
 
     console.log("✅ Checkout session created:", {
       id: checkoutData.id,
-      purchase_url: checkoutUrl,
-      metadata: checkoutData.metadata,
+      original_url: checkoutData.purchase_url,
+      final_url: checkoutUrl,
+      metadata: metadata,
       prefilled_email: finotaurEmail,
+      intro_discount_applied: applyIntroDiscount,  // 🔥 v1.4.0
+      coupon_code: applyIntroDiscount ? INTRO_DISCOUNT_COUPON : null,  // 🔥 v1.4.0
     });
 
     // ============================================
-    // 7. RETURN CHECKOUT URL
+    // 8. RETURN CHECKOUT URL
     // ============================================
 
     return new Response(
       JSON.stringify({
         success: true,
-        checkout_url: checkoutUrl,  // 🔥 Map purchase_url to checkout_url for consistency
+        checkout_url: checkoutUrl,
         checkout_id: checkoutData.id,
         metadata: metadata,
-        prefilled_email: finotaurEmail,  // 🔥 v1.2: Return for debugging
+        prefilled_email: finotaurEmail,
+        intro_discount_applied: applyIntroDiscount,  // 🔥 v1.4.0
       }),
       { 
         status: 200, 
