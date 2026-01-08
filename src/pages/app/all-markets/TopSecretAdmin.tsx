@@ -70,6 +70,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import PublishReportModal from '@/components/admin/PublishReportModal';
+import PublishedReportsManager from '@/components/admin/PublishedReportsManager';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -1300,7 +1302,8 @@ const InlinePreview: React.FC<{
   onDownloadPdf?: () => void;
   onRegenerate: () => void;
   onClear: () => void;
-}> = ({ preview, fullReport, reportType, onViewFull, onDownloadPdf, onRegenerate, onClear }) => {
+  onPublish: () => void;
+}> = ({ preview, fullReport, reportType, onViewFull, onDownloadPdf, onRegenerate, onClear, onPublish }) => {
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
@@ -1385,7 +1388,7 @@ const InlinePreview: React.FC<{
       {/* ACTION BUTTONS - CLEAR SEPARATION */}
       {/* ============================================ */}
       <div className="pt-3 border-t border-gray-800/50 space-y-3">
-        {/* Primary Actions Row */}
+{/* Primary Actions Row */}
         <div className="flex items-center gap-2">
           <button
             onClick={onViewFull}
@@ -1405,6 +1408,15 @@ const InlinePreview: React.FC<{
             </button>
           )}
         </div>
+
+        {/* Publish to Dashboard Button */}
+        <button
+          onClick={onPublish}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-[#C9A646] to-orange-500 hover:opacity-90 transition-all text-white text-sm font-medium"
+        >
+          <Send className="w-4 h-4" />
+          Publish to User Dashboard
+        </button>
 
         {/* Secondary Actions Row - Clear Delete & Regenerate */}
         <div className="flex items-center gap-2">
@@ -1467,8 +1479,8 @@ const ReportTypeCard: React.FC<{
   onViewFull: () => void;
   onDownloadPdf?: () => void;
   onClearPreview: () => void;
-}> = ({
-  report,
+  onPublish: () => void;
+}> = ({  report,
   isSelected,
   generationState,
   preview,
@@ -1480,7 +1492,8 @@ const ReportTypeCard: React.FC<{
   onGenerate,
   onViewFull,
   onDownloadPdf,
-  onClearPreview
+onClearPreview,
+  onPublish
 }) => {
   const Icon = report.icon;
   const [inputValue, setInputValue] = useState('');
@@ -1604,7 +1617,7 @@ devLog(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, '
           />
         )}
 
-        {/* INLINE PREVIEW - When report is ready */}
+{/* INLINE PREVIEW - When report is ready */}
         {!isGenerating && hasPreview && (
           <InlinePreview
             preview={preview}
@@ -1614,6 +1627,7 @@ devLog(`[Card ${report.id}] preview:`, !!preview, 'fullReport:', !!fullReport, '
             onDownloadPdf={onDownloadPdf}
             onRegenerate={() => onGenerate()}
             onClear={onClearPreview}
+            onPublish={onPublish}
           />
         )}
 
@@ -2168,6 +2182,9 @@ const JournalPlanBadge: React.FC<{ type: string }> = ({ type }) => {
 const TopSecretAdmin: React.FC = () => {
   const queryClient = useQueryClient();
   
+  // Tab Navigation State
+  const [activeTab, setActiveTab] = useState<'generator' | 'published'>('generator');
+  
   // State
   const [selectedReportType, setSelectedReportType] = useState<string>(REPORT_TYPES[0].id);
   const [selectedReportToSend, setSelectedReportToSend] = useState<string | null>(null);
@@ -2208,8 +2225,12 @@ const [includeIsmInCompany, setIncludeIsmInCompany] = useState<boolean>(() => {
   }, [includeIsmInCompany]);
 
   const [premiumEnabled, setPremiumEnabled] = useState(false);
-  const [basicEnabled, setBasicEnabled] = useState(false);
+const [basicEnabled, setBasicEnabled] = useState(false);
   const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
+  
+  // Publish Modal State
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishingReportId, setPublishingReportId] = useState<string | null>(null);
   
   // ISM Specific State
   const [ismStatus, setIsmStatus] = useState<ISMStatus | null>(null);
@@ -2967,6 +2988,14 @@ devLog(`[Clear] Clearing report: ${reportId}`);
     
     toast.success('Report deleted');
   }, [selectedReportToSend]);
+
+// ============================================
+  // PUBLISH TO DASHBOARD HANDLER
+  // ============================================
+  const handleOpenPublishModal = (reportId: string) => {
+    setPublishingReportId(reportId);
+    setShowPublishModal(true);
+  };
 
   // ============================================
   // GENERATE REPORT (ISM, Company, or Generic)
@@ -3858,9 +3887,40 @@ const getDownloadHandler = (reportId: string) => {
         </div>
       </div>
 
-      {/* Report Type Cards - 2x2 Grid with inline progress/preview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {REPORT_TYPES.map(report => (
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 p-1 bg-[#0d0d18] rounded-xl border border-gray-800/50 w-fit">
+        <button
+          onClick={() => setActiveTab('generator')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+            activeTab === 'generator'
+              ? 'bg-gradient-to-r from-[#C9A646] to-orange-500 text-white shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          Generate Reports
+        </button>
+        <button
+          onClick={() => setActiveTab('published')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
+            activeTab === 'published'
+              ? 'bg-gradient-to-r from-[#C9A646] to-orange-500 text-white shadow-lg'
+              : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          Published Reports
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'published' ? (
+        <PublishedReportsManager />
+      ) : (
+        <>
+          {/* Report Type Cards - 2x2 Grid with inline progress/preview */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+{REPORT_TYPES.map(report => (
   <ReportTypeCard
     key={report.id}
     report={report}
@@ -3876,6 +3936,7 @@ const getDownloadHandler = (reportId: string) => {
     onViewFull={() => viewReport(report.id)}
     onDownloadPdf={getDownloadHandler(report.id)}
     onClearPreview={() => clearPreview(report.id)}
+    onPublish={() => handleOpenPublishModal(report.id)}
   />
 ))}
       </div>
@@ -4040,336 +4101,48 @@ const getDownloadHandler = (reportId: string) => {
           </div>
         </div>
       </div>
+</>
+      )}
 
-      {/* Send Report Section - UPDATED */}
-      <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 overflow-hidden">
-        <div className="p-5 border-b border-gray-800/50 bg-[#080812]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Send className="w-5 h-5 text-[#C9A646]" />
-              <h2 className="text-lg font-semibold text-white">Send Report</h2>
-              {readyReportsCount > 0 && (
-                <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  {readyReportsCount} ready to send
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Will receive:</span>
-              <span className="text-[#C9A646] font-bold">{recipientIds.length}</span>
-              <span className="text-gray-600">users</span>
-              {useCustomSelection && (
-                <button 
-                  onClick={clearCustomSelection}
-                  className="ml-2 text-xs text-blue-400 hover:text-blue-300"
-                >
-                  (Reset to auto)
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 space-y-5">
-          {/* Recipient Summary */}
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-[#080812] rounded-xl border border-gray-800/50">
-            <span className="text-sm text-gray-500">Recipients based on settings:</span>
-            <span className="px-2 py-1 rounded-lg bg-[#C9A646]/20 text-[#C9A646] text-xs font-medium flex items-center gap-1">
-              <Lock className="w-3 h-3" />
-              Newsletter Subscribers
-            </span>
-            {premiumEnabled && (
-              <span className="px-2 py-1 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium">
-                + Premium Users
-              </span>
-            )}
-            {basicEnabled && (
-              <span className="px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-400 text-xs font-medium">
-                + Basic Users
-              </span>
-            )}
-          </div>
-
-          {/* Admin Note */}
-          <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare className="w-4 h-4 text-orange-400" />
-              <p className="text-sm font-medium text-white">Admin Note (Optional)</p>
-            </div>
-            <textarea
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              placeholder="Add a personal message that will appear at the top of the report..."
-              className="w-full px-4 py-3 bg-[#0d0d18] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-[#C9A646]/30 resize-none text-sm"
-              rows={3}
-              maxLength={500}
-            />
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-gray-600">
-                Appears before the report content
-              </p>
-              <p className="text-xs text-gray-500">
-                {adminNote.length}/500
-              </p>
-            </div>
-          </div>
-
-          {/* Test Email Section - Compact */}
-          <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-            <div className="flex items-center gap-2 mb-3">
-              <Send className="w-4 h-4 text-blue-400" />
-              <p className="text-sm font-medium text-white">Send Test Email</p>
-            </div>
-            
-            {/* Report Selection Toggles */}
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <span className="text-xs text-gray-500">Select report:</span>
-              {REPORT_TYPES.map(report => {
-                const Icon = report.icon;
-                const preview = previews[report.id];
-                const hasReport = !!(preview && (fullReports[report.id] || preview.markdown || preview.html));
-                const isSelected = selectedReportToSend === report.id;
-                
-                return (
-                  <button
-                    key={report.id}
-                    onClick={() => hasReport && setSelectedReportToSend(isSelected ? null : report.id)}
-                    disabled={!hasReport}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                      isSelected
-                        ? `bg-gradient-to-r ${report.gradient} text-white`
-                        : hasReport
-                          ? `${report.iconBg} ${report.iconColor} border border-current/20 hover:opacity-80`
-                          : 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {report.name.split(' ')[0]}
-                    {hasReport && <CheckCircle className="w-3 h-3" />}
-                  </button>
-                );
-              })}
-            </div>
-            
-            {/* Email Input + Send */}
-            <div className="flex gap-2">
-              <input
-                type="email"
-                placeholder="test@example.com"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-                className="flex-1 px-3 py-2.5 bg-[#0d0d18] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-[#C9A646]/30 text-sm"
-              />
-              <button
-                onClick={sendTestEmail}
-                disabled={!testEmail || !selectedReportToSend || !previews[selectedReportToSend]}
-                className={`px-4 py-2.5 rounded-xl transition-colors text-white font-medium text-sm disabled:opacity-50 ${
-                  selectedReportToSend 
-                    ? `bg-gradient-to-r ${reportToSendType.gradient} hover:opacity-90`
-                    : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                Test
-              </button>
-            </div>
-            
-            {/* Selected report info */}
-            {selectedReportToSend && previews[selectedReportToSend] && (
-              <div className="mt-3 pt-3 border-t border-gray-800/50 flex items-center justify-between">
-                <span className="text-xs text-gray-500">
-                  Will send: <span className="text-white font-medium">{previews[selectedReportToSend].subject}</span>
-                </span>
-                <button
-                  onClick={() => viewReport(selectedReportToSend)}
-                  className={`flex items-center gap-1 text-xs ${reportToSendType.iconColor} hover:opacity-80`}
-                >
-                  <Eye className="w-3 h-3" />
-                  Preview
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Send Button */}
-          <button
-            onClick={sendReport}
-            disabled={isSending || recipientIds.length === 0 || !reportToSendPreview || !reportToSendFullReport}
-            className={`w-full py-4 rounded-xl bg-gradient-to-r ${reportToSendType.gradient} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-white font-bold text-lg flex items-center justify-center gap-3`}
-          >
-            {isSending ? (
-              <><Loader2 className="w-5 h-5 animate-spin" />Sending...</>
-            ) : (
-              <><Send className="w-5 h-5" />Send {reportToSendType.name} to {recipientIds.length} Recipients</>
-            )}
-          </button>
-
-          {!reportToSendPreview && readyReportsCount === 0 && (
-            <p className="text-center text-sm text-gray-500">Generate a report before sending</p>
-          )}
-          
-          {!reportToSendPreview && readyReportsCount > 0 && (
-            <p className="text-center text-sm text-gray-500">Select a report above to send</p>
-          )}
-        </div>
-      </div>
-
-      {/* Users Table */}
-      <div className="space-y-4">
-        <div className="bg-[#0d0d18] rounded-xl p-4 border border-gray-800/50">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
-              <input
-                type="text"
-                placeholder="Search by name or email..."
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 bg-[#080812] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-[#C9A646]/30"
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => { setFilterStatus(e.target.value as any); setPage(1); }}
-              className="px-4 py-2.5 bg-[#080812] border border-gray-800 rounded-xl text-white focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active (Paid)</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="inactive">Not Subscribed</option>
-            </select>
-            <button
-              onClick={() => { refetch(); loadISMStatus(); }}
-              className="p-2.5 rounded-xl border border-gray-800 bg-[#080812] hover:bg-[#151520]"
-            >
-              <RefreshCw className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-800/50 bg-[#080812]">
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase w-12">
-                  <Square className="w-4 h-4 text-gray-500" />
-                </th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Plan</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Eligible</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/30">
-              {usersLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-16 text-center">
-                    <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-[#C9A646]" />
-                    <p className="text-gray-500">Loading users...</p>
-                  </td>
-                </tr>
-              ) : paginatedUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-16 text-center">
-                    <Users className="w-10 h-10 text-gray-700 mx-auto mb-4" />
-                    <p className="text-gray-400">No users found</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedUsers.map((user) => {
-                  const isSelected = isUserSelected(user.id);
-                  const isEligible = isUserEligible(user);
-                  const isSubscriber = user.top_secret_status === 'active';
-                  const trialInfo = getTrialInfo(user);
-                  
-                  return (
-                    <tr 
-                      key={user.id} 
-                      className={`hover:bg-[#080812]/50 transition-colors ${isSelected ? 'bg-[#C9A646]/5' : ''}`}
-                    >
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => toggleUserSelection(user.id)}
-                          className="p-1 hover:bg-gray-700 rounded"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-[#C9A646]" />
-                          ) : (
-                            <Square className="w-4 h-4 text-gray-500" />
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            isSubscriber ? 'bg-gradient-to-br from-[#C9A646]/20 to-orange-500/10' : 'bg-gray-800'
-                          }`}>
-                            <span className={`font-medium ${isSubscriber ? 'text-[#C9A646]' : 'text-gray-400'}`}>
-                              {(user.display_name?.[0] || user.email[0]).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-white">{getDisplayName(user)}</p>
-                            {trialInfo && (
-                              <p className="text-xs text-blue-400">{trialInfo}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-gray-400">{user.email}</td>
-                      <td className="px-5 py-4">
-                        <StatusBadge status={user.top_secret_status} />
-                      </td>
-                      <td className="px-5 py-4">
-                        <JournalPlanBadge type={user.account_type} />
-                      </td>
-                      <td className="px-5 py-4">
-                        {isEligible ? (
-                          <span className="flex items-center gap-1 text-xs text-emerald-400">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <X className="w-3.5 h-3.5" />
-                            No
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-gray-800/50 bg-[#080812]">
-              <p className="text-sm text-gray-500">
-                Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-2 rounded-lg border border-gray-800 bg-[#0d0d18] hover:bg-[#151520] disabled:opacity-40"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-500" />
-                </button>
-                <span className="px-3 text-gray-400">{page} / {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="p-2 rounded-lg border border-gray-800 bg-[#0d0d18] hover:bg-[#151520] disabled:opacity-40"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Publish Report Modal - OUTSIDE the tab condition */}
+      {showPublishModal && publishingReportId && previews[publishingReportId] && (
+        <PublishReportModal
+          isOpen={showPublishModal}
+          onClose={() => {
+            setShowPublishModal(false);
+            setPublishingReportId(null);
+          }}
+          reportType={publishingReportId as 'ism' | 'company' | 'crypto' | 'weekly'}
+          reportId={previews[publishingReportId]?.reportId || publishingReportId}
+reportData={{
+            title: previews[publishingReportId]?.subject || REPORT_TYPES.find(r => r.id === publishingReportId)?.name || 'Report',
+            subtitle: publishingReportId === 'ism' 
+              ? `ISM Manufacturing Report - ${formatMonthDisplay(ismStatus?.month || getCurrentISMMonth())}` 
+              : publishingReportId === 'company'
+                ? `Deep-Dive Analysis`
+                : undefined,
+            highlights: previews[publishingReportId]?.sections?.map(s => s.title) || [],
+            keyMetricLabel: publishingReportId === 'ism' ? 'PMI' : publishingReportId === 'company' ? 'Ticker' : undefined,
+            keyMetricValue: publishingReportId === 'company' 
+              ? previews[publishingReportId]?.subject?.replace('Company Analysis: ', '') 
+              : undefined,
+            keyInsightsCount: previews[publishingReportId]?.sections?.length || 12,
+            pdfUrl: `${API_BASE}/api/${publishingReportId}/report/${previews[publishingReportId]?.reportId}/pdf`,
+            markdownPreview: fullReports[publishingReportId]?.slice(0, 500),
+            markdownContent: fullReports[publishingReportId],
+            htmlContent: previews[publishingReportId]?.html,
+            qaScore: previews[publishingReportId]?.processorInfo?.qaScore,
+            ticker: publishingReportId === 'company' 
+              ? previews[publishingReportId]?.subject?.replace('Company Analysis: ', '') 
+              : undefined,
+            reportMonth: publishingReportId === 'ism' ? ismStatus?.month : undefined,
+            marketRegime: publishingReportId === 'crypto' ? 'Market Analysis' : undefined,
+          }}
+          onPublishSuccess={() => {
+            toast.success('Report published to user dashboards!');
+          }}
+        />
+      )}
     </div>
   );
 };

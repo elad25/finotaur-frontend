@@ -1,4 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// =====================================================
+// TopSecretDashboard.tsx - FULL ARCHIVE VERSION v2.0
+// =====================================================
+// Features:
+// 1. All historical reports accessible with PDF download
+// 2. Reports grouped by month for easy browsing
+// 3. Search functionality
+// 4. Filter by report type
+// 5. Load more pagination
+// 6. Archive section with expandable months
+// 7. ✅ API-based PDF generation (on-the-fly)
+// =====================================================
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import {
@@ -6,645 +19,1457 @@ import {
   TrendingUp,
   Bitcoin,
   Building2,
-  Calendar,
   Download,
   Eye,
   Clock,
-  ChevronRight,
-  Check,
   Sparkles,
   Bell,
   Settings,
   ExternalLink,
-  AlertCircle,
   Loader2,
   CalendarDays,
-  RefreshCw,
+  MessageCircle,
+  HelpCircle,
+  Users,
+  Wand2,
+  Crown,
+  Share2,
+  ChevronDown,
+  ChevronRight,
+  ThumbsUp,
+  MessageSquare,
+  Bookmark,
+  Flame,
+  Target,
+  Shield,
+  Zap,
+  X,
+  Maximize2,
+  Copy,
+  Check,
+  AlertCircle,
+  FileDown,
+  Archive,
+  Calendar,
+  Search,
+  Filter,
+  FolderOpen,
+  ChevronUp,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, addDays, differenceInDays, isBefore, isAfter, setDate, addMonths } from 'date-fns';
+import { format, startOfMonth, isSameMonth, parseISO } from 'date-fns';
+import { he } from 'date-fns/locale';
+import { useAuth } from '@/hooks/useAuth';
 
 // ========================================
 // TYPES
 // ========================================
 
 interface SubscriptionInfo {
-  status: 'active' | 'cancelled' | 'expired';
+  status: 'active' | 'cancelled' | 'expired' | 'trial';
   expiresAt: Date | null;
-  interval: 'monthly' | 'yearly' | null;
-  cancelAtPeriodEnd: boolean;
+  isInTrial: boolean;
+  trialEndsAt: Date | null;
 }
 
 interface Report {
   id: string;
-  type: 'ism' | 'company' | 'crypto';
+  type: 'macro' | 'company' | 'crypto' | 'weekly';
   title: string;
+  subtitle?: string;
   date: Date;
   pdfUrl?: string;
   status: 'published' | 'upcoming' | 'generating';
-  subject?: string;
+  highlights?: string[];
+  keyMetric?: string;
+  keyMetricValue?: string;
+  keyInsights?: number;
+  qaScore?: number;
+  commentsCount?: number;
+  likesCount?: number;
+  isFeatured?: boolean;
+  isPinned?: boolean;
+  ticker?: string;
+  companyName?: string;
+  sector?: string;
+  reportMonth?: string;
+  marketRegime?: string;
+  markdownContent?: string;
+  htmlContent?: string;
+  pdfStoragePath?: string;
+  originalReportId?: string;
+  isLoadingContent?: boolean;
 }
 
-interface ReportTypeConfig {
-  id: 'ism' | 'company' | 'crypto';
-  name: string;
-  shortName: string;
-  icon: React.ElementType;
-  gradient: string;
-  iconBg: string;
-  schedule: string;
-  description: string;
+interface GroupedReports {
+  [monthKey: string]: Report[];
 }
 
-// 🔥 Props interface - receives user from parent
 interface TopSecretDashboardProps {
   userId?: string;
+}
+
+interface UserReportInteractions {
+  likedReportIds: Set<string>;
+  bookmarkedReportIds: Set<string>;
 }
 
 // ========================================
 // CONSTANTS
 // ========================================
 
-const REPORT_CONFIGS: ReportTypeConfig[] = [
-  {
-    id: 'ism',
-    name: 'ISM Manufacturing Report',
-    shortName: 'ISM',
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+const REPORT_TYPE_CONFIG = {
+  macro: {
+    name: 'Macro Report',
+    shortName: 'Macro',
     icon: TrendingUp,
-    gradient: 'from-amber-500/20 to-orange-500/20',
+    gradient: 'from-amber-500 to-orange-600',
+    bgGradient: 'from-amber-500/20 to-orange-500/10',
+    borderColor: 'border-amber-500/30',
+    textColor: 'text-amber-400',
     iconBg: 'bg-gradient-to-br from-amber-500 to-orange-600',
-    schedule: '~3rd of month (2 days after ISM release)',
-    description: 'Macro-economic PMI analysis with sector impacts',
+    apiPath: 'ism', // ISM = Macro reports
   },
-  {
-    id: 'company',
+  company: {
     name: 'Company Analysis',
     shortName: 'Company',
     icon: Building2,
-    gradient: 'from-purple-500/20 to-pink-500/20',
-    iconBg: 'bg-gradient-to-br from-purple-500 to-pink-600',
-    schedule: '5th & 20th of each month',
-    description: 'Deep-dive fundamental research on major companies',
+    gradient: 'from-purple-500 to-violet-600',
+    bgGradient: 'from-purple-500/20 to-violet-500/10',
+    borderColor: 'border-purple-500/30',
+    textColor: 'text-purple-400',
+    iconBg: 'bg-gradient-to-br from-purple-500 to-violet-600',
+    apiPath: 'company',
   },
-  {
-    id: 'crypto',
-    name: 'Crypto Market Report',
+  crypto: {
+    name: 'Crypto Report',
     shortName: 'Crypto',
     icon: Bitcoin,
-    gradient: 'from-cyan-500/20 to-blue-500/20',
+    gradient: 'from-cyan-500 to-blue-600',
+    bgGradient: 'from-cyan-500/20 to-blue-500/10',
+    borderColor: 'border-cyan-500/30',
+    textColor: 'text-cyan-400',
     iconBg: 'bg-gradient-to-br from-cyan-500 to-blue-600',
-    schedule: '10th & 25th of each month',
-    description: 'Institutional-grade cryptocurrency analysis',
+    apiPath: 'crypto',
   },
-];
+  weekly: {
+    name: 'Weekly Report',
+    shortName: 'Weekly',
+    icon: CalendarDays,
+    gradient: 'from-emerald-500 to-teal-600',
+    bgGradient: 'from-emerald-500/20 to-teal-500/10',
+    borderColor: 'border-emerald-500/30',
+    textColor: 'text-emerald-400',
+    iconBg: 'bg-gradient-to-br from-emerald-500 to-teal-600',
+    apiPath: 'weekly',
+  },
+};
+
+const mapReportType = (dbType: string): 'macro' | 'company' | 'crypto' | 'weekly' => {
+  if (dbType === 'ism') return 'macro';
+  if (dbType === 'weekly') return 'weekly';
+  return dbType as 'company' | 'crypto';
+};
+
+const mapReportTypeToDb = (type: string): string => {
+  if (type === 'macro') return 'ism';
+  return type;
+};
 
 // ========================================
 // HELPER FUNCTIONS
 // ========================================
 
-function getNextReportDates(): { type: 'ism' | 'company' | 'crypto'; date: Date; label: string }[] {
+function formatTimeAgo(date: Date): string {
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-  const currentDay = now.getDate();
-  
-  const upcomingDates: { type: 'ism' | 'company' | 'crypto'; date: Date; label: string }[] = [];
-  
-  // ISM: ~3rd of each month (2 days after ISM release on 1st)
-  const ismThisMonth = new Date(currentYear, currentMonth, 3);
-  const ismNextMonth = new Date(currentYear, currentMonth + 1, 3);
-  if (currentDay <= 3) {
-    upcomingDates.push({ type: 'ism', date: ismThisMonth, label: 'ISM Report' });
-  } else {
-    upcomingDates.push({ type: 'ism', date: ismNextMonth, label: 'ISM Report' });
-  }
-  
-  // Company: 5th & 20th
-  const company5th = new Date(currentYear, currentMonth, 5);
-  const company20th = new Date(currentYear, currentMonth, 20);
-  const companyNext5th = new Date(currentYear, currentMonth + 1, 5);
-  
-  if (currentDay <= 5) {
-    upcomingDates.push({ type: 'company', date: company5th, label: 'Company Analysis' });
-  } else if (currentDay <= 20) {
-    upcomingDates.push({ type: 'company', date: company20th, label: 'Company Analysis' });
-  } else {
-    upcomingDates.push({ type: 'company', date: companyNext5th, label: 'Company Analysis' });
-  }
-  
-  // Crypto: 10th & 25th
-  const crypto10th = new Date(currentYear, currentMonth, 10);
-  const crypto25th = new Date(currentYear, currentMonth, 25);
-  const cryptoNext10th = new Date(currentYear, currentMonth + 1, 10);
-  
-  if (currentDay <= 10) {
-    upcomingDates.push({ type: 'crypto', date: crypto10th, label: 'Crypto Report' });
-  } else if (currentDay <= 25) {
-    upcomingDates.push({ type: 'crypto', date: crypto25th, label: 'Crypto Report' });
-  } else {
-    upcomingDates.push({ type: 'crypto', date: cryptoNext10th, label: 'Crypto Report' });
-  }
-  
-  // Sort by date
-  return upcomingDates.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return format(date, 'MMM d, yyyy');
 }
 
-function getDaysUntil(date: Date): number {
-  return differenceInDays(date, new Date());
+function getMonthKey(date: Date): string {
+  return format(date, 'yyyy-MM');
+}
+
+function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split('-');
+  const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+  return format(date, 'MMMM yyyy');
 }
 
 // ========================================
-// COMPONENTS
+// PDF DOWNLOAD HELPER - API BASED (v2.0)
+// ========================================
+// PDFs are generated ON-THE-FLY by the server API
+// No need for Storage - server creates PDF from database content
+// Endpoints:
+//   - ISM/Macro: /api/ism/report/:reportId/pdf
+//   - Company:   /api/company/report/:reportId/pdf
+//   - Crypto:    /api/crypto/report/:reportId/pdf
+//   - Weekly:    /api/weekly/report/:reportId/pdf
 // ========================================
 
-interface CountdownProps {
-  targetDate: Date;
-  label: string;
-  type: 'ism' | 'company' | 'crypto';
+async function downloadReportPdf(report: Report): Promise<boolean> {
+  try {
+    console.log('[PDF] Starting download for report:', report.id, 'type:', report.type);
+    
+    // Get the config for this report type (includes API path)
+    const config = REPORT_TYPE_CONFIG[report.type];
+    if (!config) {
+      console.error('[PDF] Unknown report type:', report.type);
+      throw new Error(`Unknown report type: ${report.type}`);
+    }
+    
+    // Determine the report ID to use
+    // Prefer originalReportId (links to source table), fallback to id
+    const reportId = report.originalReportId || report.id;
+    console.log('[PDF] Using reportId:', reportId);
+    
+    // Build the API URL for PDF generation
+    const pdfUrl = `${API_BASE_URL}/api/${config.apiPath}/report/${reportId}/pdf`;
+    console.log('[PDF] Fetching from API:', pdfUrl);
+    
+    // Fetch PDF from API (server generates it on-the-fly from database)
+    const response = await fetch(pdfUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/pdf',
+      },
+    });
+    
+    if (!response.ok) {
+      // Try to get error details from response
+      let errorMsg = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || errorMsg;
+      } catch {
+        // Response wasn't JSON, use status text
+        errorMsg = response.statusText || errorMsg;
+      }
+      console.error('[PDF] API error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+    
+    // Check content type
+    const contentType = response.headers.get('content-type');
+    if (contentType && !contentType.includes('pdf')) {
+      console.warn('[PDF] Unexpected content type:', contentType);
+    }
+    
+    // Get the blob
+    const blob = await response.blob();
+    
+    if (blob.size < 1000) {
+      console.error('[PDF] Response too small, likely not a valid PDF:', blob.size, 'bytes');
+      throw new Error('Downloaded file appears to be invalid');
+    }
+    
+    console.log('[PDF] Received blob:', blob.size, 'bytes, type:', blob.type);
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    
+    // Generate filename
+    const typeLabel = config.shortName;
+    const dateStr = format(report.date, 'yyyy-MM-dd');
+    const titleSlug = (report.ticker || report.title || 'Report')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .substring(0, 30);
+    a.download = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+    
+    // Trigger download
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    console.log('[PDF] Download initiated successfully:', a.download);
+    return true;
+    
+  } catch (error) {
+    console.error('[PDF] Download error:', error);
+    return false;
+  }
 }
 
-function Countdown({ targetDate, label, type }: CountdownProps) {
-  const [timeLeft, setTimeLeft] = useState(() => {
-    const diff = targetDate.getTime() - Date.now();
-    return Math.max(0, Math.floor(diff / 1000));
-  });
+// ========================================
+// SEARCH BAR COMPONENT
+// ========================================
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const diff = targetDate.getTime() - Date.now();
-      setTimeLeft(Math.max(0, Math.floor(diff / 1000)));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [targetDate]);
+interface SearchBarProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}
 
-  const days = Math.floor(timeLeft / 86400);
-  const hours = Math.floor((timeLeft % 86400) / 3600);
-  const minutes = Math.floor((timeLeft % 3600) / 60);
-  const seconds = timeLeft % 60;
-
-  const config = REPORT_CONFIGS.find(c => c.id === type)!;
-  const Icon = config.icon;
-
+function SearchBar({ value, onChange, placeholder = 'Search reports...' }: SearchBarProps) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br ${config.gradient} p-6`}>
-      <div className="flex items-start justify-between mb-4">
-        <div className={`w-10 h-10 rounded-xl ${config.iconBg} flex items-center justify-center`}>
-          <Icon className="w-5 h-5 text-white" />
-        </div>
-        <div className="text-xs text-gray-400">
-          {format(targetDate, 'MMM d, yyyy')}
-        </div>
-      </div>
-      
-      <h3 className="text-lg font-semibold text-white mb-3">{label}</h3>
-      
-      <div className="grid grid-cols-4 gap-2">
-        {[
-          { value: days, label: 'Days' },
-          { value: hours, label: 'Hours' },
-          { value: minutes, label: 'Min' },
-          { value: seconds, label: 'Sec' },
-        ].map((item, idx) => (
-          <div key={idx} className="text-center">
-            <div className="text-2xl font-bold text-white tabular-nums">
-              {item.value.toString().padStart(2, '0')}
-            </div>
-            <div className="text-xs text-gray-500">{item.label}</div>
-          </div>
-        ))}
-      </div>
-      
-      {days === 0 && hours < 24 && (
-        <div className="mt-4 px-3 py-1.5 rounded-full bg-green-500/20 text-green-400 text-xs font-medium text-center">
-          Coming Today!
-        </div>
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 
+          text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50
+          transition-colors"
+      />
+      {value && (
+        <button
+          onClick={() => onChange('')}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+        >
+          <X className="w-4 h-4" />
+        </button>
       )}
     </div>
   );
 }
 
-interface ReportCardProps {
-  report: Report;
-  config: ReportTypeConfig;
-  onView: (report: Report) => void;
-  onDownload: (report: Report) => void;
+// ========================================
+// FILTER TABS COMPONENT
+// ========================================
+
+interface FilterTabsProps {
+  selected: string;
+  onChange: (value: string) => void;
 }
 
-function ReportCard({ report, config, onView, onDownload }: ReportCardProps) {
+function FilterTabs({ selected, onChange }: FilterTabsProps) {
+  const tabs = ['All', 'Macro', 'Company', 'Crypto', 'Weekly'];
+
+  return (
+    <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          onClick={() => onChange(tab.toLowerCase())}
+          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+            selected === tab.toLowerCase()
+              ? 'bg-amber-500/20 text-amber-400'
+              : 'text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          {tab}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ========================================
+// COMPACT REPORT CARD COMPONENT
+// ========================================
+
+interface CompactReportCardProps {
+  report: Report;
+  onDownload: (report: Report) => void;
+  isDownloading: boolean;
+}
+
+function CompactReportCard({ report, onDownload, isDownloading }: CompactReportCardProps) {
+  const config = REPORT_TYPE_CONFIG[report.type];
   const Icon = config.icon;
-  const isPublished = report.status === 'published';
-  
+
+  const getDisplaySubtitle = () => {
+    if (report.type === 'company') {
+      return report.ticker || report.subtitle || 'Deep-Dive Analysis';
+    }
+    return report.subtitle || report.title;
+  };
+
+  // v2.0: PDF is ALWAYS available via API (generated on-the-fly)
+  // No need to check pdfStoragePath or pdfUrl anymore
+  const canDownloadPdf = true;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`relative overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 ${
-        isPublished ? 'hover:bg-white/10 transition-colors cursor-pointer' : ''
-      }`}
-      onClick={() => isPublished && onView(report)}
+      whileHover={{ scale: 1.02 }}
+      className={`relative rounded-xl border ${config.borderColor} bg-gradient-to-br ${config.bgGradient} p-5 flex flex-col min-h-[280px]`}
     >
-      <div className="flex items-start gap-4">
-        <div className={`w-12 h-12 rounded-xl ${config.iconBg} flex items-center justify-center flex-shrink-0`}>
-          <Icon className="w-6 h-6 text-white" />
+      {report.isFeatured && (
+        <div className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">
+          NEW
         </div>
-        
+      )}
+      
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className={`w-9 h-9 rounded-lg ${config.iconBg} flex items-center justify-center flex-shrink-0`}>
+          <Icon className="w-4.5 h-4.5 text-white" />
+        </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="font-medium text-white truncate">{report.title}</h3>
-            {isPublished && (
-              <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 text-xs font-medium flex-shrink-0">
-                Published
-              </span>
-            )}
-            {report.status === 'generating' && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium flex-shrink-0 flex items-center gap-1">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Generating
-              </span>
-            )}
-            {report.status === 'upcoming' && (
-              <span className="px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 text-xs font-medium flex-shrink-0">
-                Upcoming
-              </span>
-            )}
-          </div>
-          
-          <p className="text-sm text-gray-400 mb-2">{format(report.date, 'MMMM d, yyyy')}</p>
-          
-          {report.subject && (
-            <p className="text-xs text-gray-500 truncate">{report.subject}</p>
-          )}
+          <span className="text-sm font-medium text-white truncate block">{config.shortName}</span>
+          <span className="text-xs text-gray-500">{format(report.date, 'MMM d, yyyy')}</span>
         </div>
+      </div>
+
+      <div className="flex-1 mb-4">
+        <h3 className={`text-base font-semibold ${config.textColor} mb-3 line-clamp-2`}>
+          {getDisplaySubtitle()}
+        </h3>
         
-        {isPublished && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onView(report);
-              }}
-              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-              title="View Report"
-            >
-              <Eye className="w-4 h-4 text-gray-400" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownload(report);
-              }}
-              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-              title="Download PDF"
-            >
-              <Download className="w-4 h-4 text-gray-400" />
-            </button>
+        {report.type === 'company' && report.ticker && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-black/30 border border-white/10">
+            <span className="text-base font-bold text-white">{report.ticker}</span>
           </div>
         )}
+        
+        {report.qaScore && (
+          <div className="mt-2 flex items-center gap-1 text-xs text-emerald-400">
+            <Shield className="w-3 h-3" />
+            <span>QA: {report.qaScore}%</span>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!isDownloading) onDownload(report);
+        }}
+        disabled={isDownloading}
+        className={`w-full py-2.5 px-4 rounded-lg bg-gradient-to-r ${config.gradient} 
+          flex items-center justify-center gap-2 text-sm font-semibold text-white 
+          hover:opacity-90 transition-all whitespace-nowrap
+          ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
+      >
+        {isDownloading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Generating...
+          </>
+        ) : (
+          <>
+            <FileDown className="w-4 h-4" />
+            DOWNLOAD PDF
+          </>
+        )}
+      </button>
+    </motion.div>
+  );
+}
+
+// ========================================
+// ARCHIVE REPORT ROW COMPONENT
+// ========================================
+
+interface ArchiveReportRowProps {
+  report: Report;
+  onDownload: (report: Report) => void;
+  isDownloading: boolean;
+  isLiked: boolean;
+  isBookmarked: boolean;
+  onToggleLike: (reportId: string) => void;
+  onToggleBookmark: (reportId: string) => void;
+}
+
+function ArchiveReportRow({ 
+  report, 
+  onDownload,
+  isDownloading,
+  isLiked, 
+  isBookmarked,
+  onToggleLike,
+  onToggleBookmark 
+}: ArchiveReportRowProps) {
+  const config = REPORT_TYPE_CONFIG[report.type];
+  const Icon = config.icon;
+  
+  // v2.0: PDF is ALWAYS available via API
+  const canDownloadPdf = true;
+
+  const getDisplayTitle = () => {
+    if (report.type === 'company' && (report.companyName || report.ticker)) {
+      return report.companyName || report.ticker;
+    }
+    return report.title;
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      className={`flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/5 
+        hover:bg-white/10 hover:border-white/10 transition-all group`}
+    >
+      {/* Icon */}
+      <div className={`w-8 h-8 rounded-lg ${config.iconBg} flex items-center justify-center flex-shrink-0`}>
+        <Icon className="w-4 h-4 text-white" />
+      </div>
+
+      {/* Title & Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-medium ${config.textColor}`}>{config.shortName}</span>
+          <span className="text-gray-600">•</span>
+          <span className="text-sm text-white truncate">{getDisplayTitle()}</span>
+          {report.ticker && report.type === 'company' && (
+            <span className="px-1.5 py-0.5 rounded bg-white/10 text-xs text-gray-400">
+              {report.ticker}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+          <span>{format(report.date, 'MMM d, yyyy')}</span>
+          {report.qaScore && (
+            <span className="flex items-center gap-1 text-emerald-500">
+              <Shield className="w-3 h-3" />
+              {report.qaScore}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleLike(report.id);
+          }}
+          className={`p-1.5 rounded-lg transition-all ${
+            isLiked 
+              ? 'bg-amber-500/20 text-amber-400' 
+              : 'text-gray-500 hover:text-amber-400 hover:bg-white/5'
+          }`}
+        >
+          <ThumbsUp className={`w-3.5 h-3.5 ${isLiked ? 'fill-amber-400' : ''}`} />
+        </motion.button>
+        
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleBookmark(report.id);
+          }}
+          className={`p-1.5 rounded-lg transition-all ${
+            isBookmarked 
+              ? 'bg-amber-500/20 text-amber-400' 
+              : 'text-gray-500 hover:text-amber-400 hover:bg-white/5'
+          }`}
+        >
+          <Bookmark className={`w-3.5 h-3.5 ${isBookmarked ? 'fill-amber-400' : ''}`} />
+        </motion.button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!isDownloading) onDownload(report);
+          }}
+          disabled={isDownloading}
+          className={`px-3 py-1.5 rounded-lg bg-gradient-to-r ${config.gradient} 
+            flex items-center gap-1.5 text-xs font-medium text-white 
+            hover:opacity-90 transition-all
+            ${isDownloading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {isDownloading ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <FileDown className="w-3.5 h-3.5" />
+          )}
+          <span>PDF</span>
+        </button>
       </div>
     </motion.div>
   );
 }
 
 // ========================================
+// MONTH GROUP COMPONENT
+// ========================================
+
+interface MonthGroupProps {
+  monthKey: string;
+  reports: Report[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  onDownload: (report: Report) => void;
+  downloadingReportId: string | null;
+  userInteractions: UserReportInteractions;
+  onToggleLike: (reportId: string) => void;
+  onToggleBookmark: (reportId: string) => void;
+}
+
+function MonthGroup({ 
+  monthKey, 
+  reports, 
+  isExpanded, 
+  onToggle,
+  onDownload,
+  downloadingReportId,
+  userInteractions,
+  onToggleLike,
+  onToggleBookmark
+}: MonthGroupProps) {
+  const reportCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    reports.forEach(r => {
+      counts[r.type] = (counts[r.type] || 0) + 1;
+    });
+    return counts;
+  }, [reports]);
+
+  // v2.0: All reports have PDF available via API
+  const pdfCount = reports.length;
+
+  return (
+    <div className="border border-white/10 rounded-xl overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 bg-white/5 hover:bg-white/10 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/10 
+            border border-amber-500/30 flex items-center justify-center">
+            <Calendar className="w-5 h-5 text-amber-400" />
+          </div>
+          <div className="text-left">
+            <h3 className="text-base font-semibold text-white">{formatMonthLabel(monthKey)}</h3>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{reports.length} reports</span>
+              <span>•</span>
+              <span className="text-emerald-500">{pdfCount} PDFs available</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Type badges */}
+          <div className="hidden sm:flex items-center gap-1.5">
+            {Object.entries(reportCounts).map(([type, count]) => {
+              const config = REPORT_TYPE_CONFIG[type as keyof typeof REPORT_TYPE_CONFIG];
+              return (
+                <span 
+                  key={type}
+                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${config.textColor} bg-white/5`}
+                >
+                  {count} {config.shortName}
+                </span>
+              );
+            })}
+          </div>
+
+          <motion.div
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-5 h-5 text-gray-400" />
+          </motion.div>
+        </div>
+      </button>
+
+      {/* Content */}
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 space-y-2 bg-black/20">
+              {reports.map((report) => (
+                <ArchiveReportRow
+                  key={report.id}
+                  report={report}
+                  onDownload={onDownload}
+                  isDownloading={downloadingReportId === report.id}
+                  isLiked={userInteractions.likedReportIds.has(report.id)}
+                  isBookmarked={userInteractions.bookmarkedReportIds.has(report.id)}
+                  onToggleLike={onToggleLike}
+                  onToggleBookmark={onToggleBookmark}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ========================================
+// THIS MONTH'S FOCUS COMPONENT
+// ========================================
+
+interface MonthFocusProps {
+  focusText?: string;
+}
+
+function MonthFocus({ focusText }: MonthFocusProps) {
+  if (!focusText) return null;
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="relative mb-8 p-6 rounded-2xl bg-gradient-to-r from-amber-900/40 via-orange-900/30 to-amber-900/40 border border-amber-500/30 overflow-hidden"
+    >
+      <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl" />
+      
+      <div className="relative text-center">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <span className="text-amber-400">~</span>
+          <h2 className="text-lg font-semibold text-amber-300">This Month's Focus</h2>
+          <span className="text-amber-400">~</span>
+        </div>
+        <p className="text-gray-300 max-w-2xl mx-auto">
+          {focusText}
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ========================================
+// HOW TO USE SECTION COMPONENT
+// ========================================
+
+function HowToUseSection() {
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-900/30 to-transparent p-5">
+      <h3 className="text-base font-semibold text-amber-300 mb-4">
+        How Top Secret Members Use These Reports.
+      </h3>
+
+      <ol className="space-y-3 text-sm text-gray-300 mb-4">
+        <li className="flex gap-2">
+          <span className="text-amber-400 font-semibold">1.</span>
+          <span>Start with the Macro updates</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="text-amber-400 font-semibold">2.</span>
+          <span>Use Company Deep Dive to build conviction</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="text-amber-400 font-semibold">3.</span>
+          <span>Ignore daily noise — we filter it for you</span>
+        </li>
+      </ol>
+
+      <p className="text-xs text-gray-500">
+        Most members read less than 30 minutes/month — and feel more confident than ever.
+      </p>
+    </div>
+  );
+}
+
+// ========================================
+// MEMBER SECTION COMPONENT
+// ========================================
+
+function MemberSection() {
+  const DISCORD_INVITE_URL = 'https://whop.com/joined/finotaur/discord-UJWtnrAZQebLPC/app/';
+  
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <h3 className="text-base font-semibold text-white mb-4">Member Section</h3>
+
+      <a
+        href={DISCORD_INVITE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-4 rounded-lg bg-gradient-to-r from-indigo-500/20 to-purple-500/10 border border-indigo-500/20 hover:border-indigo-500/40 transition-colors"
+      >
+        <Users className="w-6 h-6 text-indigo-400" />
+        <div>
+          <span className="text-sm font-medium text-white">Join Discord Community</span>
+          <p className="text-xs text-gray-500">Connect with other members</p>
+        </div>
+      </a>
+    </div>
+  );
+}
+
+// ========================================
+// STATS CARD COMPONENT
+// ========================================
+
+interface StatsCardProps {
+  reports: Report[];
+}
+
+function StatsCard({ reports }: StatsCardProps) {
+  const stats = useMemo(() => {
+    // v2.0: All reports have PDF available via API
+    const pdfCount = reports.length;
+    const typeCount: Record<string, number> = {};
+    reports.forEach(r => {
+      typeCount[r.type] = (typeCount[r.type] || 0) + 1;
+    });
+    
+    const months = new Set(reports.map(r => getMonthKey(r.date)));
+    
+    return {
+      totalReports: reports.length,
+      pdfAvailable: pdfCount,
+      monthsCovered: months.size,
+      typeCount,
+    };
+  }, [reports]);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+        <Archive className="w-5 h-5 text-amber-400" />
+        Archive Stats
+      </h3>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3 rounded-lg bg-black/20">
+          <div className="text-2xl font-bold text-white">{stats.totalReports}</div>
+          <div className="text-xs text-gray-500">Total Reports</div>
+        </div>
+        <div className="p-3 rounded-lg bg-black/20">
+          <div className="text-2xl font-bold text-emerald-400">{stats.pdfAvailable}</div>
+          <div className="text-xs text-gray-500">PDFs Available</div>
+        </div>
+        <div className="p-3 rounded-lg bg-black/20">
+          <div className="text-2xl font-bold text-amber-400">{stats.monthsCovered}</div>
+          <div className="text-xs text-gray-500">Months</div>
+        </div>
+        <div className="p-3 rounded-lg bg-black/20">
+          <div className="text-2xl font-bold text-purple-400">{stats.typeCount.company || 0}</div>
+          <div className="text-xs text-gray-500">Company Reports</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
+// BOTTOM FEATURES BAR
+// ========================================
+
+function BottomFeaturesBar() {
+  const features = [
+    { icon: Target, label: 'CUTS THROUGH NOISE', desc: 'We read the noise, isolate the signal' },
+    { icon: Zap, label: 'BUILT FOR CONVICTION', desc: 'Clarity, not confusion' },
+    { icon: Shield, label: 'LIVE GUIDES', desc: 'Real-time market analysis' },
+  ];
+
+  return (
+    <div className="flex items-center justify-between py-6 border-t border-white/5">
+      {features.map((feature, idx) => (
+        <div key={idx} className="flex flex-col items-center text-center px-4">
+          <feature.icon className="w-6 h-6 text-amber-400 mb-2" />
+          <span className="text-xs font-semibold text-white mb-1">{feature.label}</span>
+          <span className="text-[10px] text-gray-500">{feature.desc}</span>
+        </div>
+      ))}
+
+      <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+        <Share2 className="w-4 h-4 text-gray-400" />
+        <span className="text-sm text-gray-300">Share</span>
+      </button>
+    </div>
+  );
+}
+
+// ========================================
 // MAIN COMPONENT
-// 🔥 Now receives userId as prop instead of using useAuth
 // ========================================
 
 export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<'all' | 'ism' | 'company' | 'crypto'>('all');
+  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [monthFocus, setMonthFocus] = useState<string>('');
+  const [downloadingReportId, setDownloadingReportId] = useState<string | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  
+  const [userInteractions, setUserInteractions] = useState<UserReportInteractions>({
+    likedReportIds: new Set(),
+    bookmarkedReportIds: new Set(),
+  });
+
+  const currentUserId = userId || user?.id;
 
   // Fetch subscription status
   useEffect(() => {
     async function fetchSubscription() {
-      if (!userId) return;
-      
+      if (!currentUserId) return;
+
       try {
         const { data, error } = await supabase
-          .rpc('get_top_secret_status', { p_user_id: userId });
-        
+          .from('profiles')
+          .select(`
+            top_secret_enabled,
+            top_secret_status,
+            top_secret_expires_at,
+            top_secret_is_in_trial,
+            top_secret_trial_ends_at
+          `)
+          .eq('id', currentUserId)
+          .single();
+
         if (error) throw error;
-        
-        if (data && data.length > 0) {
-          const status = data[0];
+
+        if (data) {
           setSubscription({
-            status: status.top_secret_status,
-            expiresAt: status.top_secret_expires_at ? new Date(status.top_secret_expires_at) : null,
-            interval: status.top_secret_interval,
-            cancelAtPeriodEnd: status.top_secret_cancel_at_period_end,
+            status: data.top_secret_status || 'inactive',
+            expiresAt: data.top_secret_expires_at ? new Date(data.top_secret_expires_at) : null,
+            isInTrial: data.top_secret_is_in_trial || false,
+            trialEndsAt: data.top_secret_trial_ends_at ? new Date(data.top_secret_trial_ends_at) : null,
           });
         }
       } catch (error) {
         console.error('Error fetching subscription:', error);
       }
     }
-    
-    fetchSubscription();
-  }, [userId]);
 
-  // Fetch reports (mock data for now - replace with actual API call)
+    fetchSubscription();
+  }, [currentUserId]);
+
+  // Fetch user interactions
+  useEffect(() => {
+    async function fetchUserInteractions() {
+      if (!currentUserId) return;
+
+      try {
+        const { data: likes } = await supabase
+          .from('report_likes')
+          .select('report_id')
+          .eq('user_id', currentUserId);
+
+        const { data: bookmarks } = await supabase
+          .from('report_bookmarks')
+          .select('report_id')
+          .eq('user_id', currentUserId);
+
+        setUserInteractions({
+          likedReportIds: new Set(likes?.map(l => l.report_id) || []),
+          bookmarkedReportIds: new Set(bookmarks?.map(b => b.report_id) || []),
+        });
+      } catch (error) {
+        console.error('Error fetching user interactions:', error);
+      }
+    }
+
+    fetchUserInteractions();
+  }, [currentUserId]);
+
+  // Toggle like handler
+  const handleToggleLike = useCallback(async (reportId: string) => {
+    if (!currentUserId) return;
+
+    const isCurrentlyLiked = userInteractions.likedReportIds.has(reportId);
+
+    setUserInteractions(prev => {
+      const newLikedIds = new Set(prev.likedReportIds);
+      if (isCurrentlyLiked) {
+        newLikedIds.delete(reportId);
+      } else {
+        newLikedIds.add(reportId);
+      }
+      return { ...prev, likedReportIds: newLikedIds };
+    });
+
+    try {
+      if (isCurrentlyLiked) {
+        await supabase
+          .from('report_likes')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('report_id', reportId);
+      } else {
+        await supabase
+          .from('report_likes')
+          .insert({ user_id: currentUserId, report_id: reportId });
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      setUserInteractions(prev => {
+        const newLikedIds = new Set(prev.likedReportIds);
+        if (isCurrentlyLiked) {
+          newLikedIds.add(reportId);
+        } else {
+          newLikedIds.delete(reportId);
+        }
+        return { ...prev, likedReportIds: newLikedIds };
+      });
+    }
+  }, [currentUserId, userInteractions.likedReportIds]);
+
+  // Toggle bookmark handler
+  const handleToggleBookmark = useCallback(async (reportId: string) => {
+    if (!currentUserId) return;
+
+    const isCurrentlyBookmarked = userInteractions.bookmarkedReportIds.has(reportId);
+
+    setUserInteractions(prev => {
+      const newBookmarkedIds = new Set(prev.bookmarkedReportIds);
+      if (isCurrentlyBookmarked) {
+        newBookmarkedIds.delete(reportId);
+      } else {
+        newBookmarkedIds.add(reportId);
+      }
+      return { ...prev, bookmarkedReportIds: newBookmarkedIds };
+    });
+
+    try {
+      if (isCurrentlyBookmarked) {
+        await supabase
+          .from('report_bookmarks')
+          .delete()
+          .eq('user_id', currentUserId)
+          .eq('report_id', reportId);
+      } else {
+        await supabase
+          .from('report_bookmarks')
+          .insert({ user_id: currentUserId, report_id: reportId });
+      }
+    } catch (error) {
+      console.error('Error toggling bookmark:', error);
+      setUserInteractions(prev => {
+        const newBookmarkedIds = new Set(prev.bookmarkedReportIds);
+        if (isCurrentlyBookmarked) {
+          newBookmarkedIds.add(reportId);
+        } else {
+          newBookmarkedIds.delete(reportId);
+        }
+        return { ...prev, bookmarkedReportIds: newBookmarkedIds };
+      });
+    }
+  }, [currentUserId, userInteractions.bookmarkedReportIds]);
+
+  // Download PDF handler - v2.0: Uses API
+  const handleDownloadPdf = useCallback(async (report: Report) => {
+    setDownloadingReportId(report.id);
+    setDownloadError(null);
+    
+    const success = await downloadReportPdf(report);
+    
+    if (!success) {
+      console.error('Failed to download PDF for report:', report.id);
+      setDownloadError(`Failed to download ${report.title}. Please try again.`);
+      
+      // Clear error after 5 seconds
+      setTimeout(() => setDownloadError(null), 5000);
+    }
+    
+    setDownloadingReportId(null);
+  }, []);
+
+  // Toggle month expansion
+  const toggleMonth = useCallback((monthKey: string) => {
+    setExpandedMonths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(monthKey)) {
+        newSet.delete(monthKey);
+      } else {
+        newSet.add(monthKey);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Expand all months
+  const expandAllMonths = useCallback(() => {
+    const allMonths = new Set(reports.map(r => getMonthKey(r.date)));
+    setExpandedMonths(allMonths);
+  }, [reports]);
+
+  // Collapse all months
+  const collapseAllMonths = useCallback(() => {
+    setExpandedMonths(new Set());
+  }, []);
+
+  // Fetch reports
   useEffect(() => {
     async function fetchReports() {
       setIsLoading(true);
-      
+
       try {
-        // TODO: Replace with actual API call to fetch reports
-        // For now, using mock data based on the report schedule
-        
-        const mockReports: Report[] = [
-          {
-            id: '1',
-            type: 'ism',
-            title: 'ISM Manufacturing Report - November 2025',
-            date: new Date(2025, 10, 3), // Nov 3
-            status: 'published',
-            subject: 'Manufacturing PMI at 48.4 - Contraction Continues',
-            pdfUrl: '/api/ism/report/nov-2025/pdf',
-          },
-          {
-            id: '2',
-            type: 'crypto',
-            title: 'Crypto Market Report - December 2025',
-            date: new Date(2025, 11, 25), // Dec 25
-            status: 'published',
-            subject: 'BTC Rally to $95K - Institutional Flows Accelerating',
-            pdfUrl: '/api/crypto/report/dec-2025-2/pdf',
-          },
-          {
-            id: '3',
-            type: 'company',
-            title: 'Company Analysis - Apple (AAPL)',
-            date: new Date(2025, 11, 20), // Dec 20
-            status: 'published',
-            subject: 'Services Growth Offsetting Hardware Weakness',
-            pdfUrl: '/api/company/report/aapl-dec-2025/pdf',
-          },
-        ];
-        
-        setReports(mockReports);
+        if (!currentUserId) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch ALL reports (not just limited)
+        const { data: publishedReports, error } = await supabase
+          .rpc('get_published_reports_for_user', {
+            p_user_id: currentUserId,
+            p_limit: 200 // Increased limit for archive
+          });
+
+        if (error) {
+          console.error('Error fetching reports via RPC:', error);
+          // Fallback to direct query
+          const { data: directReports, error: directError } = await supabase
+            .from('published_reports')
+            .select('*')
+            .order('published_at', { ascending: false })
+            .limit(200);
+
+          if (directError) {
+            console.error('Error fetching reports directly:', directError);
+            setIsLoading(false);
+            return;
+          }
+
+          if (directReports) {
+            processReports(directReports);
+          }
+          setIsLoading(false);
+          return;
+        }
+
+        if (!publishedReports || publishedReports.length === 0) {
+          setReports([]);
+          setIsLoading(false);
+          return;
+        }
+
+        processReports(publishedReports);
       } catch (error) {
         console.error('Error fetching reports:', error);
       } finally {
         setIsLoading(false);
       }
     }
-    
-    fetchReports();
-  }, []);
 
-  // Calculate next report dates
-  const nextReports = useMemo(() => getNextReportDates(), []);
+    function processReports(publishedReports: any[]) {
+      const transformedReports: Report[] = publishedReports.map((r: any) => ({
+        id: r.id,
+        type: mapReportType(r.report_type),
+        title: r.title,
+        subtitle: r.subtitle,
+        date: new Date(r.published_at),
+        pdfUrl: r.pdf_url,
+        status: 'published' as const,
+        highlights: r.highlights || [],
+        keyMetric: r.key_metric_label,
+        keyMetricValue: r.key_metric_value,
+        keyInsights: r.key_insights_count,
+        qaScore: r.qa_score,
+        commentsCount: r.comments_count || 0,
+        likesCount: r.likes_count || 0,
+        isFeatured: r.is_featured,
+        isPinned: r.is_pinned,
+        ticker: r.ticker,
+        companyName: r.company_name,
+        sector: r.sector,
+        reportMonth: r.report_month,
+        marketRegime: r.market_regime,
+        markdownContent: r.markdown_content,
+        htmlContent: r.html_content,
+        pdfStoragePath: r.pdf_storage_path,
+        originalReportId: r.original_report_id,
+        isLoadingContent: false,
+      }));
 
-  // Filter reports by type
-  const filteredReports = useMemo(() => {
-    if (selectedType === 'all') return reports;
-    return reports.filter(r => r.type === selectedType);
-  }, [reports, selectedType]);
+      // Sort by date (newest first)
+      transformedReports.sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return b.date.getTime() - a.date.getTime();
+      });
 
-  // Handle report view
-  const handleViewReport = (report: Report) => {
-    // Open report viewer modal or navigate to report page
-    console.log('View report:', report);
-    // TODO: Implement report viewer
-  };
+      setReports(transformedReports);
 
-  // Handle report download
-  const handleDownloadReport = async (report: Report) => {
-    if (!report.pdfUrl) return;
-    
-    try {
-      window.open(report.pdfUrl, '_blank');
-    } catch (error) {
-      console.error('Error downloading report:', error);
+      // Get month focus from latest macro report
+      const latestMacro = transformedReports.find(r => r.type === 'macro');
+      if (latestMacro?.subtitle) {
+        setMonthFocus(latestMacro.subtitle);
+      }
+
+      // Auto-expand current month
+      const currentMonthKey = getMonthKey(new Date());
+      setExpandedMonths(new Set([currentMonthKey]));
     }
-  };
 
-  // Animation variants
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 },
-    },
-  };
+    fetchReports();
+  }, [currentUserId]);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 },
-  };
+  // Filter and search reports
+  const filteredReports = useMemo(() => {
+    let result = reports;
+
+    // Filter by type
+    if (selectedFilter !== 'all') {
+      result = result.filter(r => r.type === selectedFilter);
+    }
+
+    // Search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(r => 
+        r.title.toLowerCase().includes(query) ||
+        r.subtitle?.toLowerCase().includes(query) ||
+        r.ticker?.toLowerCase().includes(query) ||
+        r.companyName?.toLowerCase().includes(query) ||
+        r.sector?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [reports, selectedFilter, searchQuery]);
+
+  // Group reports by month
+  const groupedReports = useMemo(() => {
+    const groups: GroupedReports = {};
+    
+    filteredReports.forEach(report => {
+      const monthKey = getMonthKey(report.date);
+      if (!groups[monthKey]) {
+        groups[monthKey] = [];
+      }
+      groups[monthKey].push(report);
+    });
+
+    return groups;
+  }, [filteredReports]);
+
+  // Get sorted month keys (newest first)
+  const sortedMonthKeys = useMemo(() => {
+    return Object.keys(groupedReports).sort((a, b) => b.localeCompare(a));
+  }, [groupedReports]);
+
+  // Get latest report of each type (for the top grid)
+  const latestByType = useMemo(() => {
+    const types: Array<'macro' | 'company' | 'crypto' | 'weekly'> = ['macro', 'company', 'crypto', 'weekly'];
+    const result: Report[] = [];
+    
+    for (const type of types) {
+      const latest = reports.find(r => r.type === type);
+      if (latest) {
+        result.push(latest);
+      }
+    }
+    
+    return result;
+  }, [reports]);
+
+  const currentMonth = format(new Date(), 'MMMM yyyy');
 
   return (
     <div className="min-h-screen bg-[#0a0b0f] text-white">
       {/* Background Effects */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-[128px]" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-[128px]" />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[150px]" />
+        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[150px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-cyan-500/3 rounded-full blur-[200px]" />
       </div>
 
       {/* Content */}
-      <motion.div
-        className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-      >
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <motion.div variants={itemVariants} className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Sparkles className="w-6 h-6 text-amber-400" />
-              Premium Reports
-            </h1>
-            <p className="text-gray-400 mt-1">Your institutional-grade market intelligence</p>
-          </div>
-          
-          {/* Subscription Status */}
-          {subscription && (
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${
-                    subscription.status === 'active' ? 'bg-green-500' : 'bg-red-500'
-                  }`} />
-                  <span className="text-sm text-gray-400">
-                    {subscription.status === 'active' ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                {subscription.expiresAt && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {subscription.cancelAtPeriodEnd ? 'Cancels' : 'Renews'} {format(subscription.expiresAt, 'MMM d, yyyy')}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => navigate('/app/settings/subscription')}
-                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                title="Manage Subscription"
-              >
-                <Settings className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-          )}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-6"
+        >
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent mb-2">
+            Top Secret Member Dashboard
+          </h1>
+          <p className="text-gray-400 max-w-2xl mx-auto text-sm">
+            Your institutional-grade market intelligence is ready. Download your PDF reports to stay informed.
+          </p>
         </motion.div>
 
-        {/* Cancellation Warning */}
-        {subscription?.cancelAtPeriodEnd && (
-          <motion.div
-            variants={itemVariants}
-            className="mb-8 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-4"
-          >
-            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-red-400 font-medium">Subscription Ending</p>
-              <p className="text-sm text-gray-400">
-                Your access will end on {subscription.expiresAt ? format(subscription.expiresAt, 'MMMM d, yyyy') : 'soon'}.
-                You'll lose access to all premium reports.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                // TODO: Implement reactivation
-              }}
-              className="px-4 py-2 rounded-lg bg-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/30 transition-colors"
+        {/* Error Toast */}
+        <AnimatePresence>
+          {downloadError && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed top-4 right-4 z-50 bg-red-500/90 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2"
             >
-              Reactivate
-            </button>
-          </motion.div>
-        )}
+              <AlertCircle className="w-5 h-5" />
+              <span>{downloadError}</span>
+              <button onClick={() => setDownloadError(null)}>
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Upcoming Reports - Countdown Section */}
-        <motion.div variants={itemVariants} className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-gray-400" />
-              Upcoming Reports
-            </h2>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-4">
-            {nextReports.slice(0, 3).map((next, idx) => (
-              <Countdown
-                key={idx}
-                targetDate={next.date}
-                label={next.label}
-                type={next.type}
-              />
-            ))}
-          </div>
-        </motion.div>
+        {/* This Month's Focus */}
+        <MonthFocus focusText={monthFocus} />
 
-        {/* Report Schedule Overview */}
-        <motion.div variants={itemVariants} className="mb-8">
-          <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-gray-400" />
-              Monthly Schedule
-            </h2>
-            
-            <div className="grid md:grid-cols-3 gap-4">
-              {REPORT_CONFIGS.map((config) => {
-                const Icon = config.icon;
-                return (
-                  <div
-                    key={config.id}
-                    className={`p-4 rounded-xl bg-gradient-to-br ${config.gradient} border border-white/5`}
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-8 h-8 rounded-lg ${config.iconBg} flex items-center justify-center`}>
-                        <Icon className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="font-medium text-white">{config.shortName}</h3>
-                    </div>
-                    <p className="text-sm text-gray-400 mb-1">{config.schedule}</p>
-                    <p className="text-xs text-gray-500">{config.description}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </motion.div>
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Left Column - Reports */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Premium Reports Library Section - Latest of each type */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <h2 className="text-lg font-semibold text-white">Latest Reports</h2>
+                <span className="text-xs text-gray-500 ml-2">{currentMonth}</span>
+              </div>
 
-        {/* Report History */}
-        <motion.div variants={itemVariants}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <FileText className="w-5 h-5 text-gray-400" />
-              Report Archive
-            </h2>
-            
-            {/* Type Filter */}
-            <div className="flex items-center gap-2">
-              {['all', 'ism', 'company', 'crypto'].map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setSelectedType(type as any)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectedType === type
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                  }`}
-                >
-                  {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
-            </div>
-          ) : filteredReports.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No reports available yet</p>
-              <p className="text-sm mt-1">Check back soon!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <AnimatePresence>
-                {filteredReports.map((report) => {
-                  const config = REPORT_CONFIGS.find(c => c.id === report.type)!;
-                  return (
-                    <ReportCard
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+                </div>
+              ) : latestByType.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No reports available yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {latestByType.map((report) => (
+                    <CompactReportCard
                       key={report.id}
                       report={report}
-                      config={config}
-                      onView={handleViewReport}
-                      onDownload={handleDownloadReport}
+                      onDownload={handleDownloadPdf}
+                      isDownloading={downloadingReportId === report.id}
                     />
-                  );
-                })}
-              </AnimatePresence>
-            </div>
-          )}
-        </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
 
-        {/* Quick Actions */}
-        <motion.div variants={itemVariants} className="mt-8 flex items-center justify-center gap-4">
-          <a
-            href="https://discord.gg/finotaur"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>Join Discord</span>
-          </a>
-          <button
-            onClick={() => {
-              // TODO: Open notification settings
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
-          >
-            <Bell className="w-4 h-4" />
-            <span>Notification Settings</span>
-          </button>
+            {/* Search & Filter */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col sm:flex-row gap-4"
+            >
+              <div className="flex-1">
+                <SearchBar 
+                  value={searchQuery} 
+                  onChange={setSearchQuery}
+                  placeholder="Search by ticker, company, sector..."
+                />
+              </div>
+              <FilterTabs selected={selectedFilter} onChange={setSelectedFilter} />
+            </motion.div>
+
+            {/* Archive Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Archive className="w-5 h-5 text-amber-400" />
+                  <h2 className="text-lg font-semibold text-white">Reports Archive</h2>
+                  <span className="text-xs text-gray-500 ml-2">
+                    {filteredReports.length} reports
+                  </span>
+                </div>
+
+                {/* Expand/Collapse All */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={expandAllMonths}
+                    className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    Expand All
+                  </button>
+                  <button
+                    onClick={collapseAllMonths}
+                    className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center gap-1"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    Collapse All
+                  </button>
+                </div>
+              </div>
+
+              {sortedMonthKeys.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 border border-white/10 rounded-xl">
+                  <FolderOpen className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No reports found</p>
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="mt-2 text-amber-400 text-sm hover:underline"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sortedMonthKeys.map((monthKey) => (
+                    <MonthGroup
+                      key={monthKey}
+                      monthKey={monthKey}
+                      reports={groupedReports[monthKey]}
+                      isExpanded={expandedMonths.has(monthKey)}
+                      onToggle={() => toggleMonth(monthKey)}
+                      onDownload={handleDownloadPdf}
+                      downloadingReportId={downloadingReportId}
+                      userInteractions={userInteractions}
+                      onToggleLike={handleToggleLike}
+                      onToggleBookmark={handleToggleBookmark}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </div>
+
+          {/* Right Column - Sidebar */}
+          <div className="space-y-6">
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <StatsCard reports={reports} />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <HowToUseSection />
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <MemberSection />
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Bottom Features Bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mt-12"
+        >
+          <BottomFeaturesBar />
         </motion.div>
-      </motion.div>
+      </div>
     </div>
   );
 }

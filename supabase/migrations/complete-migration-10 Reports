@@ -65,10 +65,25 @@ CREATE TABLE IF NOT EXISTS ism_reports (
   override_reason TEXT,
   created_by TEXT,
   
+  -- ★★★ NEW: Orchestrator v3.2 required columns ★★★
+  status TEXT DEFAULT 'pending',
+  structured_report JSONB,
+  admin_id TEXT,
+  agents_completed INTEGER DEFAULT 0,
+  errors JSONB DEFAULT '[]'::jsonb,
+  
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ★★★ ADD COLUMNS IF TABLE ALREADY EXISTS ★★★
+ALTER TABLE ism_reports 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+ADD COLUMN IF NOT EXISTS structured_report JSONB,
+ADD COLUMN IF NOT EXISTS admin_id TEXT,
+ADD COLUMN IF NOT EXISTS agents_completed INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS errors JSONB DEFAULT '[]'::jsonb;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_ism_reports_month ON ism_reports(report_month);
@@ -259,6 +274,35 @@ CREATE TABLE IF NOT EXISTS company_reports (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- =====================================================
+-- FIX: Add missing columns to company_reports
+-- Required for orchestrator.js v8.3+ to save reports
+-- =====================================================
+
+ALTER TABLE company_reports 
+ADD COLUMN IF NOT EXISTS admin_id TEXT,
+ADD COLUMN IF NOT EXISTS include_ism BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS report_type VARCHAR(50) DEFAULT 'auto',
+ADD COLUMN IF NOT EXISTS report_data JSONB,
+ADD COLUMN IF NOT EXISTS is_smart_fallback BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS smart_fallback_context JSONB;
+
+-- Optional: Add index for faster admin queries
+CREATE INDEX IF NOT EXISTS idx_company_reports_admin_id 
+ON company_reports(admin_id) WHERE admin_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_company_reports_report_type 
+ON company_reports(report_type);
+
+-- =====================================================
+-- Verification - Run this to confirm columns exist
+-- =====================================================
+SELECT column_name, data_type, column_default
+FROM information_schema.columns 
+WHERE table_name = 'company_reports' 
+AND column_name IN ('admin_id', 'include_ism', 'report_type', 'report_data', 'override_reason')
+ORDER BY column_name;
+
 -- Add columns if table already exists
 ALTER TABLE company_reports 
 ADD COLUMN IF NOT EXISTS company_type VARCHAR(50),
@@ -367,16 +411,18 @@ CREATE TABLE IF NOT EXISTS crypto_reports (
   -- Agent Results (for debugging/auditing)
   agent_results JSONB,
   
-  -- Metadata
-  generation_duration_seconds INTEGER,
-  openai_tokens_used INTEGER,
-  openai_cost_usd DECIMAL(10, 4),
-  
-  -- Timestamps
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- Metadata
+generation_duration_seconds INTEGER,
+openai_tokens_used INTEGER,
+openai_cost_usd DECIMAL(10, 4),
 
+-- Quality Score (ADDED - was missing and causing save errors)
+quality_score INTEGER DEFAULT NULL,
+
+-- Timestamps
+created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_crypto_reports_date ON crypto_reports(report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_crypto_reports_regime ON crypto_reports(market_regime);
@@ -452,8 +498,2024 @@ CREATE INDEX IF NOT EXISTS idx_crypto_agent_logs_report ON crypto_agent_logs(rep
 CREATE INDEX IF NOT EXISTS idx_crypto_agent_logs_agent ON crypto_agent_logs(agent_id);
 
 -- =====================================================
--- PART 4: ISM FUNCTIONS
+-- PART 3.5: PUBLISHED REPORTS TABLE - Manual Report Publishing
 -- =====================================================
+
+-- Create the published_reports table
+CREATE TABLE IF NOT EXISTS public.published_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Report identification
+    report_type TEXT NOT NULL CHECK (report_type IN ('ism', 'company', 'crypto', 'weekly')),
+    original_report_id TEXT,
+    
+    -- Report content metadata
+    title TEXT NOT NULL,
+    subtitle TEXT,
+    highlights TEXT[],
+    key_metric_label TEXT,
+    key_metric_value TEXT,
+    key_insights_count INTEGER,
+    pdf_url TEXT,
+    markdown_preview TEXT,
+    qa_score INTEGER,
+    
+    -- Report-specific fields
+    ticker TEXT,
+    company_name TEXT,
+    sector TEXT,
+    report_month TEXT,
+    pmi_value NUMERIC,
+    market_regime TEXT,
+    
+    -- ⭐ NEW: Full content storage
+    markdown_content TEXT,
+    html_content TEXT,
+    pdf_storage_path TEXT,
+    
+    -- Publishing settings
+    is_featured BOOLEAN DEFAULT false,
+    is_pinned BOOLEAN DEFAULT false,
+    target_group TEXT NOT NULL DEFAULT 'all' CHECK (target_group IN ('all', 'top_secret', 'newsletter', 'trading_journal')),
+    
+    -- Email tracking
+    email_sent BOOLEAN DEFAULT false,
+    email_sent_at TIMESTAMPTZ,
+    email_recipient_count INTEGER DEFAULT 0,
+    
+    -- Admin tracking
+    published_by UUID REFERENCES auth.users(id),
+    admin_note TEXT,
+    
+    -- Timestamps
+    published_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ⭐ ADD COLUMNS IF TABLE ALREADY EXISTS
+ALTER TABLE public.published_reports 
+ADD COLUMN IF NOT EXISTS markdown_content TEXT;
+
+ALTER TABLE public.published_reports 
+ADD COLUMN IF NOT EXISTS html_content TEXT;
+
+ALTER TABLE public.published_reports 
+ADD COLUMN IF NOT EXISTS pdf_storage_path TEXT;
+
+ALTER TABLE public.published_reports 
+ADD COLUMN IF NOT EXISTS category TEXT;
+
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_published_reports_type ON public.published_reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_published_reports_target ON public.published_reports(target_group);
+CREATE INDEX IF NOT EXISTS idx_published_reports_published_at ON public.published_reports(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_published_reports_featured ON public.published_reports(is_featured) WHERE is_featured = true;
+CREATE INDEX IF NOT EXISTS idx_published_reports_pinned ON public.published_reports(is_pinned) WHERE is_pinned = true;
+
+-- ============================================
+-- RLS for published_reports
+-- ============================================
+ALTER TABLE public.published_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "published_reports_service_all" ON public.published_reports;
+DROP POLICY IF EXISTS "published_reports_admin_manage" ON public.published_reports;
+DROP POLICY IF EXISTS "published_reports_user_read" ON public.published_reports;
+
+CREATE POLICY "published_reports_service_all" ON public.published_reports
+    FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+CREATE POLICY "published_reports_admin_manage" ON public.published_reports
+    FOR ALL TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+        )
+    );
+
+CREATE POLICY "published_reports_user_read" ON public.published_reports
+    FOR SELECT TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+        )
+        OR target_group = 'all'
+        OR (target_group = 'top_secret' AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND top_secret_enabled = true
+        ))
+        OR (target_group = 'newsletter' AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND (newsletter_enabled = true OR newsletter_paid = true)
+        ))
+        OR (target_group = 'trading_journal' AND EXISTS (
+            SELECT 1 FROM public.profiles
+            WHERE id = auth.uid() AND account_type IN ('basic', 'premium', 'pro')
+        ))
+    );
+
+-- ============================================
+-- PUBLISHED REPORTS FUNCTIONS
+-- ============================================
+
+-- Function to publish a report
+
+DROP FUNCTION IF EXISTS publish_report_to_dashboard;
+
+CREATE OR REPLACE FUNCTION publish_report_to_dashboard(
+    p_report_type TEXT,
+    p_original_report_id TEXT,
+    p_title TEXT,
+    p_subtitle TEXT DEFAULT NULL,
+    p_highlights TEXT[] DEFAULT NULL,
+    p_key_metric_label TEXT DEFAULT NULL,
+    p_key_metric_value TEXT DEFAULT NULL,
+    p_key_insights_count INTEGER DEFAULT NULL,
+    p_pdf_url TEXT DEFAULT NULL,
+    p_markdown_preview TEXT DEFAULT NULL,
+    p_qa_score INTEGER DEFAULT NULL,
+    p_ticker TEXT DEFAULT NULL,
+    p_company_name TEXT DEFAULT NULL,
+    p_sector TEXT DEFAULT NULL,
+    p_report_month TEXT DEFAULT NULL,
+    p_pmi_value NUMERIC DEFAULT NULL,
+    p_market_regime TEXT DEFAULT NULL,
+    p_is_featured BOOLEAN DEFAULT false,
+    p_is_pinned BOOLEAN DEFAULT false,
+    p_target_group TEXT DEFAULT 'all',
+    p_admin_note TEXT DEFAULT NULL,
+    p_admin_id UUID DEFAULT NULL,
+    -- NEW PARAMETERS for full content
+    p_markdown_content TEXT DEFAULT NULL,
+    p_html_content TEXT DEFAULT NULL,
+    p_pdf_storage_path TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_report_id UUID;
+    v_markdown TEXT;
+    v_html TEXT;
+BEGIN
+    -- If no content provided, try to fetch from original report
+    v_markdown := p_markdown_content;
+    v_html := p_html_content;
+    
+    IF v_markdown IS NULL THEN
+        IF p_report_type = 'ism' THEN
+            SELECT markdown_content, html_content 
+            INTO v_markdown, v_html
+            FROM ism_reports WHERE id = p_original_report_id;
+        ELSIF p_report_type = 'company' THEN
+            SELECT markdown_content, html_content 
+            INTO v_markdown, v_html
+            FROM company_reports WHERE id = p_original_report_id;
+        ELSIF p_report_type = 'crypto' THEN
+            SELECT markdown_content, html_content 
+            INTO v_markdown, v_html
+            FROM crypto_reports WHERE id::TEXT = p_original_report_id;
+        END IF;
+    END IF;
+
+    INSERT INTO public.published_reports (
+        report_type, original_report_id, title, subtitle, highlights,
+        key_metric_label, key_metric_value, key_insights_count, pdf_url,
+        markdown_preview, qa_score, ticker, company_name, sector,
+        report_month, pmi_value, market_regime, is_featured, is_pinned,
+        target_group, admin_note, published_by,
+        markdown_content, html_content, pdf_storage_path
+    ) VALUES (
+        p_report_type, p_original_report_id, p_title, p_subtitle, p_highlights,
+        p_key_metric_label, p_key_metric_value, p_key_insights_count, p_pdf_url,
+        COALESCE(p_markdown_preview, LEFT(v_markdown, 500)), p_qa_score, 
+        p_ticker, p_company_name, p_sector,
+        p_report_month, p_pmi_value, p_market_regime, p_is_featured, p_is_pinned,
+        p_target_group, p_admin_note, COALESCE(p_admin_id, auth.uid()),
+        v_markdown, v_html, p_pdf_storage_path
+    )
+    ON CONFLICT (report_type, original_report_id) 
+    WHERE original_report_id IS NOT NULL
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        subtitle = EXCLUDED.subtitle,
+        highlights = EXCLUDED.highlights,
+        markdown_preview = EXCLUDED.markdown_preview,
+        qa_score = EXCLUDED.qa_score,
+        is_featured = EXCLUDED.is_featured,
+        markdown_content = EXCLUDED.markdown_content,
+        html_content = EXCLUDED.html_content,
+        pdf_storage_path = EXCLUDED.pdf_storage_path,
+        updated_at = NOW()
+    RETURNING id INTO v_report_id;
+    
+    RETURN v_report_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION publish_report_to_dashboard TO authenticated;
+GRANT EXECUTE ON FUNCTION publish_report_to_dashboard TO service_role;
+
+-- Function to get published reports for a user
+DROP FUNCTION IF EXISTS get_published_reports_for_user(UUID, TEXT, INTEGER);
+
+CREATE OR REPLACE FUNCTION get_published_reports_for_user(
+    p_user_id UUID,
+    p_report_type TEXT DEFAULT NULL,
+    p_limit INTEGER DEFAULT 20
+)
+RETURNS TABLE (
+    id UUID,
+    report_type TEXT,
+    original_report_id TEXT,
+    title TEXT,
+    subtitle TEXT,
+    highlights TEXT[],
+    key_metric_label TEXT,
+    key_metric_value TEXT,
+    key_insights_count INTEGER,
+    pdf_url TEXT,
+    markdown_preview TEXT,
+    qa_score INTEGER,
+    ticker TEXT,
+    company_name TEXT,
+    sector TEXT,
+    report_month TEXT,
+    pmi_value NUMERIC,
+    market_regime TEXT,
+    is_featured BOOLEAN,
+    is_pinned BOOLEAN,
+    target_group TEXT,
+    published_at TIMESTAMPTZ,
+    -- NEW: Full content fields
+    markdown_content TEXT,
+    html_content TEXT,
+    pdf_storage_path TEXT,
+    -- Stats
+    likes_count BIGINT,
+    comments_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_profile RECORD;
+BEGIN
+    SELECT 
+        role, top_secret_enabled, newsletter_enabled, newsletter_paid, account_type
+    INTO v_user_profile
+    FROM public.profiles
+    WHERE profiles.id = p_user_id;
+    
+    RETURN QUERY
+    SELECT 
+        pr.id, 
+        pr.report_type, 
+        pr.original_report_id, 
+        pr.title, 
+        pr.subtitle,
+        pr.highlights, 
+        pr.key_metric_label, 
+        pr.key_metric_value, 
+        pr.key_insights_count,
+        pr.pdf_url, 
+        pr.markdown_preview, 
+        pr.qa_score, 
+        pr.ticker, 
+        pr.company_name,
+        pr.sector, 
+        pr.report_month, 
+        pr.pmi_value, 
+        pr.market_regime, 
+        pr.is_featured,
+        pr.is_pinned, 
+        pr.target_group, 
+        pr.published_at,
+        -- Full content
+        pr.markdown_content,
+        pr.html_content,
+        pr.pdf_storage_path,
+        -- Stats
+        COALESCE((SELECT COUNT(*) FROM report_likes rl WHERE rl.report_id = pr.id), 0)::BIGINT as likes_count,
+        0::BIGINT as comments_count
+    FROM public.published_reports pr
+    WHERE 
+        (p_report_type IS NULL OR pr.report_type = p_report_type)
+        AND (
+            v_user_profile.role IN ('admin', 'super_admin')
+            OR pr.target_group = 'all'
+            OR (pr.target_group = 'top_secret' AND v_user_profile.top_secret_enabled = true)
+            OR (pr.target_group = 'newsletter' AND (v_user_profile.newsletter_enabled = true OR v_user_profile.newsletter_paid = true))
+            OR (pr.target_group = 'trading_journal' AND v_user_profile.account_type IN ('basic', 'premium', 'pro'))
+        )
+    ORDER BY pr.is_pinned DESC, pr.is_featured DESC, pr.published_at DESC
+    LIMIT p_limit;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_published_reports_for_user TO authenticated;
+GRANT EXECUTE ON FUNCTION get_published_reports_for_user TO service_role;
+
+-- Function to mark email as sent
+CREATE OR REPLACE FUNCTION mark_published_report_email_sent(
+    p_report_id UUID,
+    p_recipient_count INTEGER
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    UPDATE public.published_reports
+    SET 
+        email_sent = true,
+        email_sent_at = NOW(),
+        email_recipient_count = p_recipient_count,
+        updated_at = NOW()
+    WHERE id = p_report_id;
+    
+    RETURN FOUND;
+END;
+$$;
+
+-- Grants
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.published_reports TO authenticated;
+GRANT ALL ON public.published_reports TO service_role;
+
+GRANT EXECUTE ON FUNCTION publish_report_to_dashboard TO authenticated;
+GRANT EXECUTE ON FUNCTION get_published_reports_for_user TO authenticated;
+GRANT EXECUTE ON FUNCTION mark_published_report_email_sent TO authenticated;
+
+GRANT EXECUTE ON FUNCTION publish_report_to_dashboard TO service_role;
+GRANT EXECUTE ON FUNCTION get_published_reports_for_user TO service_role;
+GRANT EXECUTE ON FUNCTION mark_published_report_email_sent TO service_role;
+
+-- =====================================================
+-- PART 3.6: PUBLISHED REPORTS MANAGEMENT FUNCTIONS
+-- =====================================================
+-- Additional functions for admin management of published reports
+-- =====================================================
+
+-- ============================================
+-- 1. UPDATE PUBLISHED REPORT
+-- ============================================
+CREATE OR REPLACE FUNCTION update_published_report(
+    p_id UUID,
+    p_is_featured BOOLEAN DEFAULT NULL,
+    p_is_pinned BOOLEAN DEFAULT NULL,
+    p_target_group TEXT DEFAULT NULL,
+    p_admin_note TEXT DEFAULT NULL,
+    p_title TEXT DEFAULT NULL,
+    p_subtitle TEXT DEFAULT NULL,
+    p_highlights TEXT[] DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_report RECORD;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+    END IF;
+
+    SELECT is_admin_user(v_user_id) INTO v_is_admin;
+    IF NOT COALESCE(v_is_admin, false) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    SELECT * INTO v_report FROM published_reports WHERE id = p_id;
+    IF v_report IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Report not found');
+    END IF;
+
+    UPDATE published_reports
+    SET
+        is_featured = COALESCE(p_is_featured, is_featured),
+        is_pinned = COALESCE(p_is_pinned, is_pinned),
+        target_group = COALESCE(p_target_group, target_group),
+        admin_note = CASE 
+            WHEN p_admin_note IS NOT NULL THEN p_admin_note 
+            ELSE admin_note 
+        END,
+        title = COALESCE(p_title, title),
+        subtitle = COALESCE(p_subtitle, subtitle),
+        highlights = COALESCE(p_highlights, highlights),
+        updated_at = NOW()
+    WHERE id = p_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', 'Report updated successfully',
+        'report_id', p_id
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_published_report TO authenticated;
+GRANT EXECUTE ON FUNCTION update_published_report TO service_role;
+
+-- ============================================
+-- 2. DELETE PUBLISHED REPORT
+-- ============================================
+CREATE OR REPLACE FUNCTION delete_published_report(p_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_report RECORD;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+    END IF;
+
+    SELECT is_admin_user(v_user_id) INTO v_is_admin;
+    IF NOT COALESCE(v_is_admin, false) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    SELECT * INTO v_report FROM published_reports WHERE id = p_id;
+    IF v_report IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Report not found');
+    END IF;
+
+    DELETE FROM published_reports WHERE id = p_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'message', 'Report removed from publication',
+        'report_id', p_id,
+        'title', v_report.title
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION delete_published_report TO authenticated;
+GRANT EXECUTE ON FUNCTION delete_published_report TO service_role;
+
+-- ============================================
+-- 3. GET PUBLISHED REPORTS STATS
+-- ============================================
+CREATE OR REPLACE FUNCTION get_published_reports_stats()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_stats JSONB;
+    v_this_month DATE;
+    v_last_month DATE;
+BEGIN
+    v_this_month := DATE_TRUNC('month', NOW());
+    v_last_month := DATE_TRUNC('month', NOW() - INTERVAL '1 month');
+
+    SELECT jsonb_build_object(
+        'total', COUNT(*),
+        'this_month', COUNT(*) FILTER (WHERE published_at >= v_this_month),
+        'last_month', COUNT(*) FILTER (WHERE published_at >= v_last_month AND published_at < v_this_month),
+        'by_type', jsonb_build_object(
+            'ism', COUNT(*) FILTER (WHERE report_type = 'ism'),
+            'company', COUNT(*) FILTER (WHERE report_type = 'company'),
+            'crypto', COUNT(*) FILTER (WHERE report_type = 'crypto'),
+            'weekly', COUNT(*) FILTER (WHERE report_type = 'weekly')
+        ),
+        'by_target', jsonb_build_object(
+            'all', COUNT(*) FILTER (WHERE target_group = 'all'),
+            'top_secret', COUNT(*) FILTER (WHERE target_group = 'top_secret'),
+            'newsletter', COUNT(*) FILTER (WHERE target_group = 'newsletter'),
+            'trading_journal', COUNT(*) FILTER (WHERE target_group = 'trading_journal')
+        ),
+        'featured_count', COUNT(*) FILTER (WHERE is_featured = true),
+        'pinned_count', COUNT(*) FILTER (WHERE is_pinned = true),
+        'email_sent_count', COUNT(*) FILTER (WHERE email_sent = true),
+        'total_emails_sent', COALESCE(SUM(email_recipient_count), 0),
+        'avg_qa_score', ROUND(AVG(qa_score)::NUMERIC, 1)
+    ) INTO v_stats
+    FROM published_reports;
+
+    RETURN v_stats;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_published_reports_stats TO authenticated;
+GRANT EXECUTE ON FUNCTION get_published_reports_stats TO service_role;
+
+-- ============================================
+-- 4. TOGGLE FEATURED STATUS (Quick Action)
+-- ============================================
+CREATE OR REPLACE FUNCTION toggle_published_report_featured(p_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_new_status BOOLEAN;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+    END IF;
+
+    SELECT is_admin_user(v_user_id) INTO v_is_admin;
+    IF NOT COALESCE(v_is_admin, false) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    UPDATE published_reports
+    SET 
+        is_featured = NOT is_featured,
+        updated_at = NOW()
+    WHERE id = p_id
+    RETURNING is_featured INTO v_new_status;
+
+    IF v_new_status IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Report not found');
+    END IF;
+
+    RETURN jsonb_build_object('success', true, 'is_featured', v_new_status);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION toggle_published_report_featured TO authenticated;
+GRANT EXECUTE ON FUNCTION toggle_published_report_featured TO service_role;
+
+-- ============================================
+-- 5. TOGGLE PINNED STATUS (Quick Action)
+-- ============================================
+CREATE OR REPLACE FUNCTION toggle_published_report_pinned(p_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_new_status BOOLEAN;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+    END IF;
+
+    SELECT is_admin_user(v_user_id) INTO v_is_admin;
+    IF NOT COALESCE(v_is_admin, false) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    UPDATE published_reports
+    SET 
+        is_pinned = NOT is_pinned,
+        updated_at = NOW()
+    WHERE id = p_id
+    RETURNING is_pinned INTO v_new_status;
+
+    IF v_new_status IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Report not found');
+    END IF;
+
+    RETURN jsonb_build_object('success', true, 'is_pinned', v_new_status);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION toggle_published_report_pinned TO authenticated;
+GRANT EXECUTE ON FUNCTION toggle_published_report_pinned TO service_role;
+
+-- ============================================
+-- 6. BULK UPDATE TARGET GROUP
+-- ============================================
+CREATE OR REPLACE FUNCTION bulk_update_published_reports_target(
+    p_ids UUID[],
+    p_target_group TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_user_id UUID;
+    v_is_admin BOOLEAN;
+    v_updated_count INTEGER;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Not authenticated');
+    END IF;
+
+    SELECT is_admin_user(v_user_id) INTO v_is_admin;
+    IF NOT COALESCE(v_is_admin, false) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    IF p_target_group NOT IN ('all', 'top_secret', 'newsletter', 'trading_journal') THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Invalid target group');
+    END IF;
+
+    UPDATE published_reports
+    SET 
+        target_group = p_target_group,
+        updated_at = NOW()
+    WHERE id = ANY(p_ids);
+
+    GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'updated_count', v_updated_count,
+        'target_group', p_target_group
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION bulk_update_published_reports_target TO authenticated;
+GRANT EXECUTE ON FUNCTION bulk_update_published_reports_target TO service_role;
+
+-- ============================================
+-- VERIFICATION FOR PART 3.6
+-- ============================================
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'update_published_report') THEN
+        RAISE NOTICE 'YES: update_published_report function created';
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'delete_published_report') THEN
+        RAISE NOTICE 'YES: delete_published_report function created';
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_published_reports_stats') THEN
+        RAISE NOTICE 'YES: get_published_reports_stats function created';
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'toggle_published_report_featured') THEN
+        RAISE NOTICE 'YES: toggle_published_report_featured function created';
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'toggle_published_report_pinned') THEN
+        RAISE NOTICE 'YES: toggle_published_report_pinned function created';
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'bulk_update_published_reports_target') THEN
+        RAISE NOTICE 'YES: bulk_update_published_reports_target function created';
+    END IF;
+END $$;
+
+-- =====================================================
+-- END OF PART 3.6
+-- =====================================================
+
+
+-- =====================================================
+-- FIX: Missing columns and table for Company Reports
+-- =====================================================
+
+-- 1. Fix published_reports - add missing columns
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS report_id TEXT,
+ADD COLUMN IF NOT EXISTS target_tier TEXT,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS category TEXT;
+
+-- Index for report_id lookup
+CREATE INDEX IF NOT EXISTS idx_published_reports_report_id 
+ON published_reports(report_id) WHERE report_id IS NOT NULL;
+
+-- 2. Create update_center_notifications table
+CREATE TABLE IF NOT EXISTS update_center_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Content
+  title TEXT NOT NULL,
+  message TEXT,
+  type TEXT DEFAULT 'info' CHECK (type IN ('info', 'success', 'warning', 'report', 'announcement')),
+  
+  -- Report link (optional)
+  report_type TEXT,
+  report_id TEXT,
+  ticker VARCHAR(10),
+  
+  -- Targeting
+  target_group TEXT DEFAULT 'all' CHECK (target_group IN ('all', 'top_secret', 'newsletter', 'trading_journal')),
+  
+  -- Status
+  is_read BOOLEAN DEFAULT false,
+  is_dismissed BOOLEAN DEFAULT false,
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_update_notifications_type ON update_center_notifications(type);
+CREATE INDEX IF NOT EXISTS idx_update_notifications_target ON update_center_notifications(target_group);
+CREATE INDEX IF NOT EXISTS idx_update_notifications_created ON update_center_notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_update_notifications_report ON update_center_notifications(report_id) WHERE report_id IS NOT NULL;
+
+-- RLS
+ALTER TABLE update_center_notifications ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first (prevent duplicates)
+DROP POLICY IF EXISTS "service_manage_notifications" ON update_center_notifications;
+DROP POLICY IF EXISTS "users_see_notifications" ON update_center_notifications;
+DROP POLICY IF EXISTS "service_ucn_all" ON update_center_notifications;
+DROP POLICY IF EXISTS "authenticated_ucn_read" ON update_center_notifications;
+
+-- Service role full access
+CREATE POLICY "service_ucn_all" ON update_center_notifications
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Users can read notifications
+CREATE POLICY "authenticated_ucn_read" ON update_center_notifications
+  FOR SELECT TO authenticated
+  USING (true);
+
+-- Grants
+GRANT ALL ON update_center_notifications TO service_role;
+GRANT SELECT ON update_center_notifications TO authenticated;
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '✅ published_reports columns added';
+  RAISE NOTICE '✅ update_center_notifications table created';
+END $$;
+-- =====================================================
+-- MIGRATION: Sync All Reports to published_reports
+-- =====================================================
+-- 
+-- 📍 הוסף את הקוד הזה בסוף קובץ ה-SQL הראשי שלך
+--    אחרי PART 3.6 (PUBLISHED REPORTS MANAGEMENT FUNCTIONS)
+--    ולפני FUNCTION: check_ism_report_status
+--
+-- =====================================================
+
+-- =====================================================
+-- PART 3.7: AUTO-SYNC REPORTS TO published_reports
+-- ⭐ FIXED VERSION - No duplicates, only from Jan 10, 2025
+-- =====================================================
+-- 
+-- REPLACE your existing PART 3.7 with this code
+-- This version:
+-- 1. Only syncs reports from Jan 10, 2025
+-- 2. Uses ON CONFLICT to prevent duplicates
+-- 3. Won't re-add deleted reports
+-- =====================================================
+
+-- ============================================
+-- STEP 1: ENSURE UNIQUE INDEX EXISTS
+-- ============================================
+CREATE UNIQUE INDEX IF NOT EXISTS idx_published_reports_original_unique 
+ON published_reports(report_type, original_report_id) 
+WHERE original_report_id IS NOT NULL;
+
+-- ============================================
+-- STEP 2: SYNC ISM REPORTS (Jan 10, 2025+, no duplicates)
+-- ============================================
+INSERT INTO published_reports (
+    report_type,
+    original_report_id,
+    title,
+    subtitle,
+    highlights,
+    key_metric_label,
+    key_metric_value,
+    key_insights_count,
+    pdf_url,
+    markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    report_month,
+    pmi_value,
+    is_featured,
+    is_pinned,
+    target_group,
+    published_at,
+    created_at
+)
+SELECT 
+    'ism' as report_type,
+    id as original_report_id,
+    'Finotaur Macro Report' as title,
+    COALESCE(
+        executive_summary->>'headline',
+        five_line_summary->>'headline',
+        'ISM Manufacturing Analysis & Market Impact'
+    ) as subtitle,
+    COALESCE(
+        ARRAY(SELECT jsonb_array_elements_text(executive_summary->'key_points')),
+        ARRAY(SELECT jsonb_array_elements_text(five_line_summary->'lines')),
+        ARRAY['Comprehensive ISM analysis']::TEXT[]
+    ) as highlights,
+    'PMI' as key_metric_label,
+    COALESCE(
+        (executive_summary->>'pmi_value')::TEXT,
+        (five_line_summary->>'pmi_value')::TEXT
+    ) as key_metric_value,
+    COALESCE(
+        jsonb_array_length(executive_summary->'key_points'),
+        jsonb_array_length(five_line_summary->'lines'),
+        12
+    ) as key_insights_count,
+    '/api/ism/report/' || id || '/pdf' as pdf_url,
+    LEFT(markdown_content, 500) as markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    report_month,
+    (executive_summary->>'pmi_value')::NUMERIC as pmi_value,
+    false as is_featured,
+    false as is_pinned,
+    'top_secret' as target_group,
+    created_at as published_at,
+    created_at
+FROM ism_reports
+WHERE created_at >= '2025-01-10T00:00:00Z'
+ON CONFLICT (report_type, original_report_id) 
+WHERE original_report_id IS NOT NULL
+DO NOTHING;  -- ⭐ Don't update existing, just skip
+
+-- ============================================
+-- STEP 3: SYNC COMPANY REPORTS (Jan 10, 2025+, no duplicates)
+-- ============================================
+INSERT INTO published_reports (
+    report_type,
+    original_report_id,
+    title,
+    subtitle,
+    highlights,
+    key_metric_label,
+    key_metric_value,
+    key_insights_count,
+    pdf_url,
+    markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    ticker,
+    company_name,
+    sector,
+    is_featured,
+    is_pinned,
+    target_group,
+    published_at,
+    created_at
+)
+SELECT 
+    'company' as report_type,
+    id as original_report_id,
+    'Company Analysis' as title,
+    COALESCE(
+        executive_summary->>'headline',
+        'Deep-Dive Analysis'
+    ) as subtitle,
+    COALESCE(
+        ARRAY(SELECT jsonb_array_elements_text(executive_summary->'key_points')),
+        ARRAY['Comprehensive company analysis']::TEXT[]
+    ) as highlights,
+    ticker as key_metric_label,
+    company_name as key_metric_value,
+    COALESCE(
+        jsonb_array_length(executive_summary->'key_points'),
+        8
+    ) as key_insights_count,
+    '/api/company/report/' || id || '/pdf' as pdf_url,
+    LEFT(markdown_content, 500) as markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    ticker,
+    company_name,
+    sector,
+    false as is_featured,
+    false as is_pinned,
+    'top_secret' as target_group,
+    created_at as published_at,
+    created_at
+FROM company_reports
+WHERE created_at >= '2025-01-10T00:00:00Z'
+ON CONFLICT (report_type, original_report_id) 
+WHERE original_report_id IS NOT NULL
+DO NOTHING;  -- ⭐ Don't update existing, just skip
+
+-- ============================================
+-- STEP 4: SYNC CRYPTO REPORTS (Jan 10, 2025+, no duplicates)
+-- ============================================
+INSERT INTO published_reports (
+    report_type,
+    original_report_id,
+    title,
+    subtitle,
+    highlights,
+    key_metric_label,
+    key_metric_value,
+    key_insights_count,
+    pdf_url,
+    markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    market_regime,
+    is_featured,
+    is_pinned,
+    target_group,
+    published_at,
+    created_at
+)
+SELECT 
+    'crypto' as report_type,
+    id::TEXT as original_report_id,
+    'Crypto Market Report' as title,
+    COALESCE(
+        executive_summary->>'headline',
+        market_regime,
+        'Crypto Market Analysis'
+    ) as subtitle,
+    COALESCE(
+        ARRAY(SELECT jsonb_array_elements_text(executive_summary->'key_points')),
+        ARRAY['Comprehensive crypto analysis']::TEXT[]
+    ) as highlights,
+    'Market Regime' as key_metric_label,
+    market_regime as key_metric_value,
+    COALESCE(
+        jsonb_array_length(executive_summary->'key_points'),
+        11
+    ) as key_insights_count,
+    '/api/crypto/report/' || id || '/pdf' as pdf_url,
+    LEFT(markdown_content, 500) as markdown_preview,
+    markdown_content,
+    html_content,
+    qa_score,
+    market_regime,
+    false as is_featured,
+    false as is_pinned,
+    'top_secret' as target_group,
+    created_at as published_at,
+    created_at
+FROM crypto_reports
+WHERE created_at >= '2025-01-10T00:00:00Z'
+ON CONFLICT (report_type, original_report_id) 
+WHERE original_report_id IS NOT NULL
+DO NOTHING;  -- ⭐ Don't update existing, just skip
+
+-- ============================================
+-- STEP 5: MARK LATEST REPORTS AS FEATURED
+-- (Only if not already featured)
+-- ============================================
+WITH latest_reports AS (
+    SELECT DISTINCT ON (report_type) id
+    FROM published_reports
+    ORDER BY report_type, published_at DESC
+)
+UPDATE published_reports
+SET is_featured = true
+WHERE id IN (SELECT id FROM latest_reports)
+AND is_featured = false;  -- Only update if not already featured
+
+-- ============================================
+-- VERIFICATION
+-- ============================================
+DO $$
+DECLARE
+    v_ism_count INTEGER;
+    v_company_count INTEGER;
+    v_crypto_count INTEGER;
+    v_total INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_ism_count FROM published_reports WHERE report_type = 'ism';
+    SELECT COUNT(*) INTO v_company_count FROM published_reports WHERE report_type = 'company';
+    SELECT COUNT(*) INTO v_crypto_count FROM published_reports WHERE report_type = 'crypto';
+    SELECT COUNT(*) INTO v_total FROM published_reports;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ PART 3.7: AUTO-SYNC COMPLETE (FIXED VERSION)';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Reports in published_reports:';
+    RAISE NOTICE '  • ISM (Macro): %', v_ism_count;
+    RAISE NOTICE '  • Company: %', v_company_count;
+    RAISE NOTICE '  • Crypto: %', v_crypto_count;
+    RAISE NOTICE '  • TOTAL: %', v_total;
+    RAISE NOTICE '';
+    RAISE NOTICE '⭐ Only reports from Jan 10, 2025 are synced';
+    RAISE NOTICE '⭐ Duplicates are prevented by ON CONFLICT DO NOTHING';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 3.8: REPORT LIKES & BOOKMARKS
+-- =====================================================
+-- Add this AFTER PART 3.7 (AUTO-SYNC REPORTS)
+-- And BEFORE "FUNCTION: check_ism_report_status"
+-- =====================================================
+
+-- ============================================
+-- 1. CREATE report_likes TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.report_likes (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    report_id UUID NOT NULL REFERENCES published_reports(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure one like per user per report
+    UNIQUE(user_id, report_id)
+);
+
+-- ============================================
+-- 2. CREATE report_bookmarks TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.report_bookmarks (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    report_id UUID NOT NULL REFERENCES published_reports(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure one bookmark per user per report
+    UNIQUE(user_id, report_id)
+);
+
+-- ============================================
+-- 3. INDEXES
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_report_likes_user_id ON public.report_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_report_likes_report_id ON public.report_likes(report_id);
+CREATE INDEX IF NOT EXISTS idx_report_bookmarks_user_id ON public.report_bookmarks(user_id);
+CREATE INDEX IF NOT EXISTS idx_report_bookmarks_report_id ON public.report_bookmarks(report_id);
+
+-- ============================================
+-- 4. ENABLE ROW LEVEL SECURITY
+-- ============================================
+ALTER TABLE public.report_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.report_bookmarks ENABLE ROW LEVEL SECURITY;
+
+-- ============================================
+-- 5. RLS POLICIES FOR report_likes
+-- ============================================
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "Users can view own likes" ON public.report_likes;
+DROP POLICY IF EXISTS "Users can insert own likes" ON public.report_likes;
+DROP POLICY IF EXISTS "Users can delete own likes" ON public.report_likes;
+DROP POLICY IF EXISTS "Service role manages likes" ON public.report_likes;
+
+-- Users can view their own likes
+CREATE POLICY "Users can view own likes"
+    ON public.report_likes
+    FOR SELECT TO authenticated
+    USING (auth.uid() = user_id);
+
+-- Users can insert their own likes
+CREATE POLICY "Users can insert own likes"
+    ON public.report_likes
+    FOR INSERT TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own likes
+CREATE POLICY "Users can delete own likes"
+    ON public.report_likes
+    FOR DELETE TO authenticated
+    USING (auth.uid() = user_id);
+
+-- Service role full access
+CREATE POLICY "Service role manages likes"
+    ON public.report_likes
+    FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+-- ============================================
+-- 6. RLS POLICIES FOR report_bookmarks
+-- ============================================
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "Users can view own bookmarks" ON public.report_bookmarks;
+DROP POLICY IF EXISTS "Users can insert own bookmarks" ON public.report_bookmarks;
+DROP POLICY IF EXISTS "Users can delete own bookmarks" ON public.report_bookmarks;
+DROP POLICY IF EXISTS "Service role manages bookmarks" ON public.report_bookmarks;
+
+-- Users can view their own bookmarks
+CREATE POLICY "Users can view own bookmarks"
+    ON public.report_bookmarks
+    FOR SELECT TO authenticated
+    USING (auth.uid() = user_id);
+
+-- Users can insert their own bookmarks
+CREATE POLICY "Users can insert own bookmarks"
+    ON public.report_bookmarks
+    FOR INSERT TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own bookmarks
+CREATE POLICY "Users can delete own bookmarks"
+    ON public.report_bookmarks
+    FOR DELETE TO authenticated
+    USING (auth.uid() = user_id);
+
+-- Service role full access
+CREATE POLICY "Service role manages bookmarks"
+    ON public.report_bookmarks
+    FOR ALL TO service_role
+    USING (true) WITH CHECK (true);
+
+-- ============================================
+-- 7. GRANTS
+-- ============================================
+GRANT SELECT, INSERT, DELETE ON public.report_likes TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.report_bookmarks TO authenticated;
+GRANT ALL ON public.report_likes TO service_role;
+GRANT ALL ON public.report_bookmarks TO service_role;
+
+-- ============================================
+-- 8. HELPER VIEW: Report interaction counts
+-- ============================================
+CREATE OR REPLACE VIEW public.v_report_interaction_counts AS
+SELECT 
+    pr.id as report_id,
+    pr.title,
+    pr.report_type,
+    COALESCE(likes.count, 0) as likes_count,
+    COALESCE(bookmarks.count, 0) as bookmarks_count
+FROM published_reports pr
+LEFT JOIN (
+    SELECT report_id, COUNT(*) as count 
+    FROM report_likes 
+    GROUP BY report_id
+) likes ON pr.id = likes.report_id
+LEFT JOIN (
+    SELECT report_id, COUNT(*) as count 
+    FROM report_bookmarks 
+    GROUP BY report_id
+) bookmarks ON pr.id = bookmarks.report_id;
+
+-- Grant access to the view
+GRANT SELECT ON public.v_report_interaction_counts TO authenticated;
+
+-- ============================================
+-- 9. FUNCTION: Get user's bookmarked reports
+-- ============================================
+CREATE OR REPLACE FUNCTION get_user_bookmarked_reports(p_user_id UUID)
+RETURNS TABLE (
+    id UUID,
+    report_type TEXT,
+    title TEXT,
+    subtitle TEXT,
+    pdf_url TEXT,
+    published_at TIMESTAMPTZ,
+    bookmarked_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        pr.id,
+        pr.report_type,
+        pr.title,
+        pr.subtitle,
+        pr.pdf_url,
+        pr.published_at,
+        rb.created_at as bookmarked_at
+    FROM report_bookmarks rb
+    JOIN published_reports pr ON pr.id = rb.report_id
+    WHERE rb.user_id = p_user_id
+    ORDER BY rb.created_at DESC;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_user_bookmarked_reports(UUID) TO authenticated;
+
+-- ============================================
+-- 10. VERIFICATION
+-- ============================================
+DO $$
+DECLARE
+    v_likes_exists BOOLEAN;
+    v_bookmarks_exists BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_name = 'report_likes'
+    ) INTO v_likes_exists;
+    
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_name = 'report_bookmarks'
+    ) INTO v_bookmarks_exists;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ PART 3.8: REPORT LIKES & BOOKMARKS COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Tables created:';
+    RAISE NOTICE '  • report_likes: %', CASE WHEN v_likes_exists THEN 'YES' ELSE 'NO' END;
+    RAISE NOTICE '  • report_bookmarks: %', CASE WHEN v_bookmarks_exists THEN 'YES' ELSE 'NO' END;
+    RAISE NOTICE '';
+    RAISE NOTICE 'Features:';
+    RAISE NOTICE '  • Users can like/unlike reports';
+    RAISE NOTICE '  • Users can bookmark/unbookmark reports';
+    RAISE NOTICE '  • Each user can only like/bookmark once per report';
+    RAISE NOTICE '  • RLS ensures users only see their own data';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- END OF PART 3.8
+-- =====================================================
+-- =====================================================
+-- PART 3.9: AUTO-PUBLISH TO published_reports (ENHANCED)
+-- =====================================================
+-- Replace the existing PART 3.9 with this version
+-- This version CREATES entries in published_reports, not just updates
+-- =====================================================
+
+-- ============================================
+-- 1. TRIGGER: Auto-publish ISM reports
+-- ============================================
+
+DROP FUNCTION IF EXISTS auto_publish_ism_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION auto_publish_ism_report()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_existing_id UUID;
+    v_month_display TEXT;
+BEGIN
+    -- Only proceed if we have content
+    IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Format month for display
+    v_month_display := TO_CHAR(TO_DATE(NEW.report_month, 'YYYY-MM'), 'Month YYYY');
+
+    -- Check if already exists
+    SELECT id INTO v_existing_id
+    FROM published_reports
+    WHERE original_report_id = NEW.id AND report_type = 'ism';
+
+    IF v_existing_id IS NOT NULL THEN
+        -- UPDATE existing
+        UPDATE published_reports
+        SET 
+            markdown_content = NEW.markdown_content,
+            html_content = NEW.html_content,
+            markdown_preview = LEFT(NEW.markdown_content, 500),
+            qa_score = NEW.qa_score,
+            updated_at = NOW()
+        WHERE id = v_existing_id;
+        
+        RAISE NOTICE '[AutoPublish] Updated ISM report % in published_reports', NEW.id;
+    ELSE
+        -- INSERT new
+        INSERT INTO published_reports (
+            report_type,
+            original_report_id,
+            title,
+            subtitle,
+            report_month,
+            markdown_content,
+            html_content,
+            markdown_preview,
+            highlights,
+            key_metric_label,
+            key_metric_value,
+            pmi_value,
+            qa_score,
+            is_featured,
+            is_pinned,
+            target_group,
+            published_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            'ism',
+            NEW.id,
+            'ISM Manufacturing Report',
+            v_month_display,
+            NEW.report_month,
+            NEW.markdown_content,
+            NEW.html_content,
+            LEFT(NEW.markdown_content, 500),
+            COALESCE(
+                ARRAY(SELECT jsonb_array_elements_text(NEW.executive_summary->'key_points')),
+                ARRAY['ISM Manufacturing Analysis']::TEXT[]
+            ),
+            'PMI',
+            (NEW.executive_summary->>'pmi_value')::TEXT,
+            (NEW.executive_summary->>'pmi_value')::NUMERIC,
+            NEW.qa_score,
+            true,  -- is_featured
+            false, -- is_pinned
+            'top_secret',
+            NOW(),
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '[AutoPublish] Created ISM report % in published_reports', NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_publish_ism ON ism_reports;
+
+CREATE TRIGGER trigger_auto_publish_ism
+    AFTER INSERT OR UPDATE OF markdown_content, html_content
+    ON ism_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_publish_ism_report();
+
+-- ============================================
+-- 2. TRIGGER: Auto-publish Company reports
+-- ============================================
+
+DROP FUNCTION IF EXISTS auto_publish_company_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION auto_publish_company_report()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    -- Only proceed if we have content
+    IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Check if already exists
+    SELECT id INTO v_existing_id
+    FROM published_reports
+    WHERE original_report_id = NEW.id AND report_type = 'company';
+
+    IF v_existing_id IS NOT NULL THEN
+        -- UPDATE existing
+        UPDATE published_reports
+        SET 
+            markdown_content = NEW.markdown_content,
+            html_content = NEW.html_content,
+            markdown_preview = LEFT(NEW.markdown_content, 500),
+            qa_score = NEW.qa_score,
+            updated_at = NOW()
+        WHERE id = v_existing_id;
+        
+        RAISE NOTICE '[AutoPublish] Updated Company report % in published_reports', NEW.id;
+    ELSE
+        -- INSERT new
+        INSERT INTO published_reports (
+            report_type,
+            original_report_id,
+            title,
+            subtitle,
+            ticker,
+            company_name,
+            sector,
+            markdown_content,
+            html_content,
+            markdown_preview,
+            highlights,
+            key_metric_label,
+            key_metric_value,
+            qa_score,
+            is_featured,
+            is_pinned,
+            target_group,
+            published_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            'company',
+            NEW.id,
+            'Company Analysis',
+            COALESCE(NEW.company_name, NEW.ticker) || ' Deep-Dive',
+            NEW.ticker,
+            NEW.company_name,
+            NEW.sector,
+            NEW.markdown_content,
+            NEW.html_content,
+            LEFT(NEW.markdown_content, 500),
+            COALESCE(
+                ARRAY(SELECT jsonb_array_elements_text(NEW.executive_summary->'key_points')),
+                ARRAY['Company Analysis']::TEXT[]
+            ),
+            NEW.ticker,
+            NEW.company_name,
+            NEW.qa_score,
+            true,  -- is_featured
+            false, -- is_pinned
+            'top_secret',
+            NOW(),
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '[AutoPublish] Created Company report % in published_reports', NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_publish_company ON company_reports;
+
+CREATE TRIGGER trigger_auto_publish_company
+    AFTER INSERT OR UPDATE OF markdown_content, html_content
+    ON company_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_publish_company_report();
+
+-- ============================================
+-- 3. TRIGGER: Auto-publish Crypto reports
+-- ============================================
+
+DROP FUNCTION IF EXISTS auto_publish_crypto_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION auto_publish_crypto_report()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    -- Only proceed if we have content
+    IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Check if already exists
+    SELECT id INTO v_existing_id
+    FROM published_reports
+    WHERE original_report_id = NEW.id::TEXT AND report_type = 'crypto';
+
+    IF v_existing_id IS NOT NULL THEN
+        -- UPDATE existing
+        UPDATE published_reports
+        SET 
+            markdown_content = NEW.markdown_content,
+            html_content = NEW.html_content,
+            markdown_preview = LEFT(NEW.markdown_content, 500),
+            qa_score = NEW.qa_score,
+            updated_at = NOW()
+        WHERE id = v_existing_id;
+        
+        RAISE NOTICE '[AutoPublish] Updated Crypto report % in published_reports', NEW.id;
+    ELSE
+        -- INSERT new
+        INSERT INTO published_reports (
+            report_type,
+            original_report_id,
+            title,
+            subtitle,
+            market_regime,
+            markdown_content,
+            html_content,
+            markdown_preview,
+            highlights,
+            key_metric_label,
+            key_metric_value,
+            qa_score,
+            is_featured,
+            is_pinned,
+            target_group,
+            published_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            'crypto',
+            NEW.id::TEXT,
+            'Crypto Market Report',
+            COALESCE(NEW.market_regime, 'Market Analysis'),
+            NEW.market_regime,
+            NEW.markdown_content,
+            NEW.html_content,
+            LEFT(NEW.markdown_content, 500),
+            COALESCE(
+                ARRAY(SELECT jsonb_array_elements_text(NEW.executive_summary->'key_points')),
+                ARRAY['Crypto Analysis']::TEXT[]
+            ),
+            'Market Regime',
+            NEW.market_regime,
+            NEW.qa_score,
+            true,  -- is_featured
+            false, -- is_pinned
+            'top_secret',
+            NOW(),
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '[AutoPublish] Created Crypto report % in published_reports', NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_publish_crypto ON crypto_reports;
+
+CREATE TRIGGER trigger_auto_publish_crypto
+    AFTER INSERT OR UPDATE OF markdown_content, html_content
+    ON crypto_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_publish_crypto_report();
+
+-- ============================================
+-- 4. FUNCTION: Manual sync all (for existing reports)
+-- ============================================
+
+DROP FUNCTION IF EXISTS sync_all_published_reports_content();
+
+CREATE OR REPLACE FUNCTION sync_all_published_reports_content()
+RETURNS TABLE (
+    report_type TEXT,
+    synced_count INTEGER,
+    created_count INTEGER
+) AS $$
+DECLARE
+    v_ism_synced INTEGER := 0;
+    v_ism_created INTEGER := 0;
+    v_company_synced INTEGER := 0;
+    v_company_created INTEGER := 0;
+    v_crypto_synced INTEGER := 0;
+    v_crypto_created INTEGER := 0;
+BEGIN
+    -- ========== ISM ==========
+    -- Update existing
+    UPDATE published_reports pr
+    SET 
+        markdown_content = ir.markdown_content,
+        html_content = ir.html_content,
+        markdown_preview = LEFT(ir.markdown_content, 500),
+        updated_at = NOW()
+    FROM ism_reports ir
+    WHERE pr.original_report_id = ir.id
+      AND pr.report_type = 'ism'
+      AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
+      AND ir.markdown_content IS NOT NULL
+      AND LENGTH(ir.markdown_content) > 100;
+    GET DIAGNOSTICS v_ism_synced = ROW_COUNT;
+    
+    -- Insert missing
+    INSERT INTO published_reports (
+        report_type, original_report_id, title, subtitle, report_month,
+        markdown_content, html_content, markdown_preview, highlights,
+        key_metric_label, key_metric_value, pmi_value, qa_score,
+        is_featured, target_group, published_at, created_at
+    )
+    SELECT 
+        'ism', ir.id, 'ISM Manufacturing Report',
+        TO_CHAR(TO_DATE(ir.report_month, 'YYYY-MM'), 'Month YYYY'),
+        ir.report_month, ir.markdown_content, ir.html_content,
+        LEFT(ir.markdown_content, 500),
+        COALESCE(ARRAY(SELECT jsonb_array_elements_text(ir.executive_summary->'key_points')), ARRAY['ISM Analysis']::TEXT[]),
+        'PMI', (ir.executive_summary->>'pmi_value')::TEXT,
+        (ir.executive_summary->>'pmi_value')::NUMERIC, ir.qa_score,
+        true, 'top_secret', ir.created_at, ir.created_at
+    FROM ism_reports ir
+    WHERE ir.markdown_content IS NOT NULL
+      AND LENGTH(ir.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM published_reports pr 
+          WHERE pr.original_report_id = ir.id AND pr.report_type = 'ism'
+      );
+    GET DIAGNOSTICS v_ism_created = ROW_COUNT;
+
+    -- ========== COMPANY ==========
+    -- Update existing
+    UPDATE published_reports pr
+    SET 
+        markdown_content = cr.markdown_content,
+        html_content = cr.html_content,
+        markdown_preview = LEFT(cr.markdown_content, 500),
+        updated_at = NOW()
+    FROM company_reports cr
+    WHERE pr.original_report_id = cr.id
+      AND pr.report_type = 'company'
+      AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
+      AND cr.markdown_content IS NOT NULL
+      AND LENGTH(cr.markdown_content) > 100;
+    GET DIAGNOSTICS v_company_synced = ROW_COUNT;
+    
+    -- Insert missing
+    INSERT INTO published_reports (
+        report_type, original_report_id, title, subtitle, ticker, company_name, sector,
+        markdown_content, html_content, markdown_preview, highlights,
+        key_metric_label, key_metric_value, qa_score,
+        is_featured, target_group, published_at, created_at
+    )
+    SELECT 
+        'company', cr.id, 'Company Analysis',
+        COALESCE(cr.company_name, cr.ticker) || ' Deep-Dive',
+        cr.ticker, cr.company_name, cr.sector,
+        cr.markdown_content, cr.html_content, LEFT(cr.markdown_content, 500),
+        COALESCE(ARRAY(SELECT jsonb_array_elements_text(cr.executive_summary->'key_points')), ARRAY['Company Analysis']::TEXT[]),
+        cr.ticker, cr.company_name, cr.qa_score,
+        true, 'top_secret', cr.created_at, cr.created_at
+    FROM company_reports cr
+    WHERE cr.markdown_content IS NOT NULL
+      AND LENGTH(cr.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM published_reports pr 
+          WHERE pr.original_report_id = cr.id AND pr.report_type = 'company'
+      );
+    GET DIAGNOSTICS v_company_created = ROW_COUNT;
+
+    -- ========== CRYPTO ==========
+    -- Update existing
+    UPDATE published_reports pr
+    SET 
+        markdown_content = crypto.markdown_content,
+        html_content = crypto.html_content,
+        markdown_preview = LEFT(crypto.markdown_content, 500),
+        updated_at = NOW()
+    FROM crypto_reports crypto
+    WHERE pr.original_report_id = crypto.id::TEXT
+      AND pr.report_type = 'crypto'
+      AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
+      AND crypto.markdown_content IS NOT NULL
+      AND LENGTH(crypto.markdown_content) > 100;
+    GET DIAGNOSTICS v_crypto_synced = ROW_COUNT;
+    
+    -- Insert missing
+    INSERT INTO published_reports (
+        report_type, original_report_id, title, subtitle, market_regime,
+        markdown_content, html_content, markdown_preview, highlights,
+        key_metric_label, key_metric_value, qa_score,
+        is_featured, target_group, published_at, created_at
+    )
+    SELECT 
+        'crypto', crypto.id::TEXT, 'Crypto Market Report',
+        COALESCE(crypto.market_regime, 'Market Analysis'), crypto.market_regime,
+        crypto.markdown_content, crypto.html_content, LEFT(crypto.markdown_content, 500),
+        COALESCE(ARRAY(SELECT jsonb_array_elements_text(crypto.executive_summary->'key_points')), ARRAY['Crypto Analysis']::TEXT[]),
+        'Market Regime', crypto.market_regime, crypto.qa_score,
+        true, 'top_secret', crypto.created_at, crypto.created_at
+    FROM crypto_reports crypto
+    WHERE crypto.markdown_content IS NOT NULL
+      AND LENGTH(crypto.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM published_reports pr 
+          WHERE pr.original_report_id = crypto.id::TEXT AND pr.report_type = 'crypto'
+      );
+    GET DIAGNOSTICS v_crypto_created = ROW_COUNT;
+    
+    -- Return results
+    RETURN QUERY
+    SELECT 'ism'::TEXT, v_ism_synced, v_ism_created
+    UNION ALL
+    SELECT 'company'::TEXT, v_company_synced, v_company_created
+    UNION ALL
+    SELECT 'crypto'::TEXT, v_crypto_synced, v_crypto_created;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION sync_all_published_reports_content() TO authenticated;
+GRANT EXECUTE ON FUNCTION sync_all_published_reports_content() TO service_role;
+
+-- ============================================
+-- 5. RUN SYNC NOW
+-- ============================================
+
+SELECT * FROM sync_all_published_reports_content();
+
+-- ============================================
+-- 6. VERIFICATION
+-- ============================================
+
+DO $$
+DECLARE
+    v_ism_count INTEGER;
+    v_company_count INTEGER;
+    v_crypto_count INTEGER;
+    v_with_content INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_ism_count FROM published_reports WHERE report_type = 'ism';
+    SELECT COUNT(*) INTO v_company_count FROM published_reports WHERE report_type = 'company';
+    SELECT COUNT(*) INTO v_crypto_count FROM published_reports WHERE report_type = 'crypto';
+    SELECT COUNT(*) INTO v_with_content FROM published_reports 
+        WHERE markdown_content IS NOT NULL AND LENGTH(markdown_content) > 100;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ PART 3.9 ENHANCED: AUTO-PUBLISH COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Triggers created (INSERT + UPDATE):';
+    RAISE NOTICE '  • trigger_auto_publish_ism';
+    RAISE NOTICE '  • trigger_auto_publish_company';
+    RAISE NOTICE '  • trigger_auto_publish_crypto';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Published Reports:';
+    RAISE NOTICE '  • ISM: %', v_ism_count;
+    RAISE NOTICE '  • Company: %', v_company_count;
+    RAISE NOTICE '  • Crypto: %', v_crypto_count;
+    RAISE NOTICE '  • With content: %', v_with_content;
+    RAISE NOTICE '';
+    RAISE NOTICE '⭐ New reports will auto-publish to dashboard!';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- Show final status
+SELECT 
+    report_type,
+    COUNT(*) as total,
+    COUNT(*) FILTER (WHERE markdown_content IS NOT NULL AND LENGTH(markdown_content) > 100) as with_content
+FROM published_reports
+GROUP BY report_type
+ORDER BY report_type;
+
+-- =====================================================
+-- END OF PART 3.9 ENHANCED
+-- =====================================================
+-- =====================================================
+-- PART 3.10: FIX PDF STORAGE PATH FOR EXISTING REPORTS
+-- =====================================================
+-- This migration populates pdf_storage_path for existing reports
+-- so the TopSecretDashboard can generate signed URLs for PDF downloads
+-- =====================================================
+
+-- ============================================
+-- STEP 1: Update ISM reports with pdf_storage_path
+-- Pattern: ism-reports/ism-report-{YYYY-MM}.pdf
+-- ============================================
+UPDATE published_reports
+SET 
+    pdf_storage_path = 'ism-reports/ism-report-' || report_month || '.pdf',
+    updated_at = NOW()
+WHERE report_type = 'ism'
+  AND report_month IS NOT NULL
+  AND pdf_url IS NOT NULL
+  AND (pdf_storage_path IS NULL OR pdf_storage_path = '');
+
+-- ============================================
+-- STEP 2: Update Company reports with pdf_storage_path
+-- Pattern: company-reports/company-report-{ticker}-{id}.pdf
+-- ============================================
+UPDATE published_reports
+SET 
+    pdf_storage_path = 'company-reports/company-report-' || LOWER(ticker) || '-' || original_report_id || '.pdf',
+    updated_at = NOW()
+WHERE report_type = 'company'
+  AND ticker IS NOT NULL
+  AND original_report_id IS NOT NULL
+  AND pdf_url IS NOT NULL
+  AND (pdf_storage_path IS NULL OR pdf_storage_path = '');
+
+-- ============================================
+-- STEP 3: Update Crypto reports with pdf_storage_path
+-- Pattern: crypto-reports/crypto-report-{YYYY-MM-DD}.pdf
+-- ============================================
+UPDATE published_reports pr
+SET 
+    pdf_storage_path = 'crypto-reports/crypto-report-' || TO_CHAR(pr.published_at, 'YYYY-MM-DD') || '.pdf',
+    updated_at = NOW()
+WHERE pr.report_type = 'crypto'
+  AND pr.pdf_url IS NOT NULL
+  AND (pr.pdf_storage_path IS NULL OR pr.pdf_storage_path = '');
+
+-- ============================================
+-- STEP 4: VERIFICATION
+-- ============================================
+DO $$
+DECLARE
+    v_total INTEGER;
+    v_with_path INTEGER;
+    v_ism_fixed INTEGER;
+    v_company_fixed INTEGER;
+    v_crypto_fixed INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_total FROM published_reports WHERE pdf_url IS NOT NULL;
+    SELECT COUNT(*) INTO v_with_path FROM published_reports WHERE pdf_storage_path IS NOT NULL;
+    SELECT COUNT(*) INTO v_ism_fixed FROM published_reports WHERE report_type = 'ism' AND pdf_storage_path IS NOT NULL;
+    SELECT COUNT(*) INTO v_company_fixed FROM published_reports WHERE report_type = 'company' AND pdf_storage_path IS NOT NULL;
+    SELECT COUNT(*) INTO v_crypto_fixed FROM published_reports WHERE report_type = 'crypto' AND pdf_storage_path IS NOT NULL;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ PART 3.10: PDF STORAGE PATH MIGRATION COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Reports with PDF URL: %', v_total;
+    RAISE NOTICE 'Reports with storage path: %', v_with_path;
+    RAISE NOTICE '';
+    RAISE NOTICE 'By type:';
+    RAISE NOTICE '  • ISM with path: %', v_ism_fixed;
+    RAISE NOTICE '  • Company with path: %', v_company_fixed;
+    RAISE NOTICE '  • Crypto with path: %', v_crypto_fixed;
+    RAISE NOTICE '';
+    RAISE NOTICE 'Storage paths:';
+    RAISE NOTICE '  • ISM: ism-reports/ism-report-{YYYY-MM}.pdf';
+    RAISE NOTICE '  • Company: company-reports/company-report-{ticker}-{id}.pdf';
+    RAISE NOTICE '  • Crypto: crypto-reports/crypto-report-{YYYY-MM-DD}.pdf';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- Show results
+SELECT 
+    report_type,
+    COUNT(*) as total,
+    COUNT(pdf_storage_path) as with_storage_path,
+    COUNT(pdf_url) as with_url
+FROM published_reports
+GROUP BY report_type
+ORDER BY report_type;
+
+-- =====================================================
+-- END OF PART 3.10
+-- =====================================================
+
+-- =====================================================
+-- COMPANY NOTIFICATION SYSTEM - COMPLETE SCHEMA
+-- =====================================================
+
+-- 1. CREATE update_center_notifications (main notifications table)
+CREATE TABLE IF NOT EXISTS update_center_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Type and category
+  type TEXT NOT NULL DEFAULT 'company_report',
+  category TEXT NOT NULL DEFAULT 'company_report',
+  priority TEXT DEFAULT 'normal' CHECK (priority IN ('high', 'normal', 'low')),
+  
+  -- Content
+  title TEXT NOT NULL,
+  subtitle TEXT,
+  description TEXT,
+  
+  -- Report reference
+  report_id TEXT,
+  ticker VARCHAR(10),
+  company_name TEXT,
+  sector TEXT,
+  
+  -- Quality indicators
+  confidence_level TEXT,
+  qa_score INTEGER,
+  
+  -- Admin tracking
+  is_admin_generated BOOLEAN DEFAULT false,
+  
+  -- Targeting
+  target_group TEXT DEFAULT 'all',
+  
+  -- Status
+  is_read BOOLEAN DEFAULT false,
+  is_dismissed BOOLEAN DEFAULT false,
+  
+  -- Timestamps
+  published_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}'
+);
+
+-- ADD COLUMNS IF TABLE ALREADY EXISTS
+ALTER TABLE update_center_notifications 
+ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'company_report',
+ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal',
+ADD COLUMN IF NOT EXISTS subtitle TEXT,
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS company_name TEXT,
+ADD COLUMN IF NOT EXISTS sector TEXT,
+ADD COLUMN IF NOT EXISTS confidence_level TEXT,
+ADD COLUMN IF NOT EXISTS qa_score INTEGER,
+ADD COLUMN IF NOT EXISTS is_admin_generated BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS target_group TEXT DEFAULT 'all';
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_ucn_type ON update_center_notifications(type);
+CREATE INDEX IF NOT EXISTS idx_ucn_category ON update_center_notifications(category);
+CREATE INDEX IF NOT EXISTS idx_ucn_ticker ON update_center_notifications(ticker);
+CREATE INDEX IF NOT EXISTS idx_ucn_report_id ON update_center_notifications(report_id);
+CREATE INDEX IF NOT EXISTS idx_ucn_published_at ON update_center_notifications(published_at DESC);
+
+-- ADD COLUMNS IF TABLE ALREADY EXISTS
+ALTER TABLE update_center_notifications 
+ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'company_report',
+ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal',
+ADD COLUMN IF NOT EXISTS subtitle TEXT,
+ADD COLUMN IF NOT EXISTS description TEXT,
+ADD COLUMN IF NOT EXISTS company_name TEXT,
+ADD COLUMN IF NOT EXISTS sector TEXT,
+ADD COLUMN IF NOT EXISTS confidence_level TEXT,
+ADD COLUMN IF NOT EXISTS qa_score INTEGER,
+ADD COLUMN IF NOT EXISTS is_admin_generated BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS target_group TEXT DEFAULT 'all';
+
+
+-- 3. CREATE user_notifications (per-user notification entries)
+CREATE TABLE IF NOT EXISTS user_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- References
+  notification_id UUID NOT NULL REFERENCES update_center_notifications(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- For direct report access (optional)
+  report_id TEXT,
+  
+  -- User subscription tier
+  subscription_tier TEXT DEFAULT 'FREE',
+  
+  -- Status
+  is_read BOOLEAN DEFAULT false,
+  is_dismissed BOOLEAN DEFAULT false,
+  
+  -- Access control
+  accessible_sections TEXT, -- 'all' or JSON array of section names
+  
+  -- Admin message (for admin-sent notifications)
+  admin_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  read_at TIMESTAMPTZ,
+  
+  -- Unique constraint
+  UNIQUE(notification_id, user_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_un_user_id ON user_notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_un_notification_id ON user_notifications(notification_id);
+CREATE INDEX IF NOT EXISTS idx_un_is_read ON user_notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_un_created_at ON user_notifications(created_at DESC);
+
+-- 4. CREATE user_subscriptions table (if not exists)
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  subscription_tier TEXT DEFAULT 'FREE' CHECK (subscription_tier IN ('FREE', 'BASIC', 'PREMIUM')),
+  is_active BOOLEAN DEFAULT true,
+  preferences JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+-- 5. RLS POLICIES
+
+-- RLS
+ALTER TABLE update_center_notifications ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first (prevent duplicates)
+DROP POLICY IF EXISTS "service_manage_notifications" ON update_center_notifications;
+DROP POLICY IF EXISTS "users_see_notifications" ON update_center_notifications;
+DROP POLICY IF EXISTS "service_ucn_all" ON update_center_notifications;
+DROP POLICY IF EXISTS "authenticated_ucn_read" ON update_center_notifications;
+
+-- Service role full access
+CREATE POLICY "service_ucn_all" ON update_center_notifications
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Users can read notifications
+CREATE POLICY "authenticated_ucn_read" ON update_center_notifications
+  FOR SELECT TO authenticated
+  USING (true);
+
+-- Grants
+GRANT ALL ON update_center_notifications TO service_role;
+GRANT SELECT ON update_center_notifications TO authenticated;
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '✅ published_reports columns added';
+  RAISE NOTICE '✅ update_center_notifications table created';
+END $$;
+
 
 -- FUNCTION: check_ism_report_status
 CREATE OR REPLACE FUNCTION check_ism_report_status(p_month TEXT)
@@ -1459,10 +3521,16 @@ CREATE TABLE IF NOT EXISTS ism_scheduler_logs (
   report_id TEXT,
   duration_ms INTEGER,
   error_message TEXT,
+  metadata JSONB,                                    -- ⭐ NEW
   executed_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add metadata column if table already exists
+ALTER TABLE ism_scheduler_logs 
+ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+COMMENT ON COLUMN ism_scheduler_logs.metadata IS 'Stores email stats: emails_sent, emails_failed';
 
 
 -- Indexes
@@ -1507,9 +3575,33 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION increment_update_views TO authenticated;
 
 -- ============================================
--- 4. VERIFY SETUP
+-- 3.5 FUNCTION TO CHECK IF USER IS ADMIN         ⭐ NEW SECTION
 -- ============================================
 
+CREATE OR REPLACE FUNCTION is_admin_user(p_user_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_role TEXT;
+  v_email TEXT;
+BEGIN
+  SELECT role, email 
+  INTO v_role, v_email
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  -- Admin if role is admin/super_admin OR email is admin email
+  RETURN v_role IN ('admin', 'super_admin') OR v_email = 'elad2550@gmail.com';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION is_admin_user(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_admin_user(UUID) TO service_role;
+
+COMMENT ON FUNCTION is_admin_user IS 'Returns true if user is admin (by role or email)';
+
+-- ============================================
+-- 4. VERIFY SETUP
+-- ============================================
 DO $$
 BEGIN
   RAISE NOTICE '';
@@ -1760,6 +3852,7 @@ ALTER TABLE system_updates ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies first
 DROP POLICY IF EXISTS "Anyone can read active system updates" ON system_updates;
+DROP POLICY IF EXISTS "Users see relevant system updates" ON system_updates;      -- ⭐ CHANGED
 DROP POLICY IF EXISTS "Service role can manage system updates" ON system_updates;
 DROP POLICY IF EXISTS "Users can manage their own update reads" ON user_update_reads;
 DROP POLICY IF EXISTS "Service role can manage admin notifications" ON admin_notifications;
@@ -1772,9 +3865,36 @@ ALTER TABLE admin_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE crypto_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY;
 
--- System Updates: Anyone can read active updates
-CREATE POLICY "Anyone can read active system updates" ON system_updates
-  FOR SELECT USING (is_active = true);
+-- System Updates: Admins see ALL, users see filtered by target_group     ⭐ NEW POLICY
+CREATE POLICY "Users see relevant system updates" ON system_updates
+  FOR SELECT TO authenticated
+  USING (
+    is_active = true
+    AND (expires_at IS NULL OR expires_at > NOW())
+    AND (
+      -- ✅ ADMINS SEE EVERYTHING (no target_group filter!)
+      is_admin_user(auth.uid())
+      OR
+      -- Regular users: filter by target_group + their subscription status
+      target_group = 'all'
+      OR
+      (target_group = 'top_secret' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND top_secret_enabled = true
+      ))
+      OR
+      (target_group = 'newsletter' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() 
+        AND (newsletter_enabled = true OR newsletter_paid = true)
+      ))
+      OR
+      (target_group = 'trading_journal' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid()
+      ))
+    )
+  );
+
+COMMENT ON POLICY "Users see relevant system updates" ON system_updates IS 
+  'Admins see all updates without filters. Regular users filtered by target_group.';
 
 -- System Updates: Only service role can insert/update
 CREATE POLICY "Service role can manage system updates" ON system_updates
@@ -2556,6 +4676,26 @@ WHERE email = 'elad2550@gmail.com'
   AND role NOT IN ('admin', 'super_admin');
 
 -- ============================================
+-- 4.5 ENABLE EMAIL NOTIFICATIONS FOR ADMIN    ⭐ NEW SECTION
+-- ============================================
+
+-- Set newsletter preferences for admin (so you get emails)
+UPDATE profiles 
+SET newsletter_preferences = COALESCE(newsletter_preferences, '{}'::jsonb) || 
+    jsonb_build_object('update_center_email', true)
+WHERE email = 'elad2550@gmail.com'
+  AND (newsletter_preferences IS NULL 
+       OR NOT newsletter_preferences ? 'update_center_email');
+
+-- Also enable for all TOP SECRET users
+UPDATE profiles 
+SET newsletter_preferences = COALESCE(newsletter_preferences, '{}'::jsonb) || 
+    jsonb_build_object('update_center_email', true)
+WHERE top_secret_enabled = true
+  AND (newsletter_preferences IS NULL 
+       OR NOT newsletter_preferences ? 'update_center_email');
+
+-- ============================================
 -- DONE!
 -- ============================================
 
@@ -2575,35 +4715,11 @@ BEGIN
   RAISE NOTICE '  • trading_journal → account_type IN (basic, premium, pro)';
   RAISE NOTICE '=====================================================';
 END $$;
-
 -- =====================================================
 -- MIGRATION 11: Top Secret 14-Day Trial & Journal Discount
 -- =====================================================
--- Added: 2024
---
--- Changes:
--- 1. Add Top Secret trial tracking columns
--- 2. Add Journal discount for newsletter/top_secret subscribers
--- 3. Update functions to handle trial period
--- =====================================================
 
-DO $$
-BEGIN
-  RAISE NOTICE '========================================';
-  RAISE NOTICE '🚀 MIGRATION 11: Top Secret Trial & Journal Discount';
-  RAISE NOTICE '========================================';
-END $$;
-
--- =====================================================
 -- PART 1: TOP SECRET TRIAL COLUMNS
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Adding Top Secret trial columns...';
-END $$;
-
--- Add trial tracking columns for Top Secret
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS top_secret_trial_used BOOLEAN DEFAULT FALSE;
 COMMENT ON COLUMN profiles.top_secret_trial_used IS 'Whether user has used their Top Secret 14-day trial';
 
@@ -2616,16 +4732,7 @@ COMMENT ON COLUMN profiles.top_secret_trial_ends_at IS 'When Top Secret trial en
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS top_secret_is_in_trial BOOLEAN DEFAULT FALSE;
 COMMENT ON COLUMN profiles.top_secret_is_in_trial IS 'Whether user is currently in Top Secret trial period';
 
--- =====================================================
 -- PART 2: JOURNAL DISCOUNT COLUMNS
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Adding Journal discount columns...';
-END $$;
-
--- Add Journal discount tracking for newsletter/top_secret subscribers
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS journal_discount_available BOOLEAN DEFAULT FALSE;
 COMMENT ON COLUMN profiles.journal_discount_available IS '25% one-time Journal discount available (for newsletter/top_secret subscribers)';
 
@@ -2641,30 +4748,14 @@ COMMENT ON COLUMN profiles.journal_discount_used_at IS 'When Journal discount wa
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS journal_discount_source TEXT;
 COMMENT ON COLUMN profiles.journal_discount_source IS 'Source of discount: top_secret, newsletter, promo';
 
--- =====================================================
 -- PART 3: INDEXES
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Creating indexes...';
-END $$;
-
 CREATE INDEX IF NOT EXISTS idx_profiles_top_secret_trial
 ON profiles(top_secret_is_in_trial) WHERE top_secret_is_in_trial = TRUE;
 
 CREATE INDEX IF NOT EXISTS idx_profiles_journal_discount_available
 ON profiles(journal_discount_available) WHERE journal_discount_available = TRUE;
 
--- =====================================================
 -- PART 4: FUNCTION - Start Top Secret Trial
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Creating trial functions...';
-END $$;
-
 DROP FUNCTION IF EXISTS start_top_secret_trial(UUID);
 
 CREATE OR REPLACE FUNCTION start_top_secret_trial(p_user_id UUID)
@@ -2676,33 +4767,23 @@ DECLARE
   v_profile RECORD;
   v_trial_end TIMESTAMPTZ;
 BEGIN
-  -- Get current profile
-  SELECT
-    top_secret_trial_used,
-    top_secret_is_in_trial,
-    top_secret_enabled
-  INTO v_profile
-  FROM profiles
-  WHERE id = p_user_id;
+  SELECT top_secret_trial_used, top_secret_is_in_trial, top_secret_enabled
+  INTO v_profile FROM profiles WHERE id = p_user_id;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'User not found');
   END IF;
 
-  -- Check if trial already used
   IF v_profile.top_secret_trial_used THEN
     RETURN jsonb_build_object('success', false, 'error', 'Trial already used');
   END IF;
 
-  -- Check if already subscribed
   IF v_profile.top_secret_enabled THEN
     RETURN jsonb_build_object('success', false, 'error', 'Already subscribed to Top Secret');
   END IF;
 
-  -- Calculate trial end (14 days from now)
   v_trial_end := NOW() + INTERVAL '14 days';
 
-  -- Update profile with trial info
   UPDATE profiles SET
     top_secret_is_in_trial = TRUE,
     top_secret_trial_used = TRUE,
@@ -2712,41 +4793,20 @@ BEGIN
     top_secret_status = 'active',
     top_secret_started_at = NOW(),
     top_secret_expires_at = v_trial_end,
-    -- Also enable Journal discount for trial users
     journal_discount_available = TRUE,
     journal_discount_source = 'top_secret',
     updated_at = NOW()
   WHERE id = p_user_id;
 
-  -- Log the event
-  INSERT INTO subscription_events (
-    user_id,
-    event_type,
-    new_plan,
-    metadata
-  ) VALUES (
-    p_user_id,
-    'trial_started',
-    'top_secret',
-    jsonb_build_object(
-      'trial_days', 14,
-      'trial_ends_at', v_trial_end,
-      'source', 'post_signup'
-    )
-  );
+  INSERT INTO subscription_events (user_id, event_type, new_plan, metadata)
+  VALUES (p_user_id, 'trial_started', 'top_secret',
+    jsonb_build_object('trial_days', 14, 'trial_ends_at', v_trial_end, 'source', 'post_signup'));
 
-  RETURN jsonb_build_object(
-    'success', true,
-    'trial_ends_at', v_trial_end,
-    'journal_discount_enabled', true
-  );
+  RETURN jsonb_build_object('success', true, 'trial_ends_at', v_trial_end, 'journal_discount_enabled', true);
 END;
 $$;
 
--- =====================================================
 -- PART 5: FUNCTION - Check and Expire Trials
--- =====================================================
-
 DROP FUNCTION IF EXISTS check_expired_top_secret_trials();
 
 CREATE OR REPLACE FUNCTION check_expired_top_secret_trials()
@@ -2758,15 +4818,13 @@ DECLARE
   v_expired_count INTEGER := 0;
   v_user RECORD;
 BEGIN
-  -- Find users whose trial has expired and no active subscription
   FOR v_user IN
     SELECT id, email, top_secret_trial_ends_at
     FROM profiles
     WHERE top_secret_is_in_trial = TRUE
       AND top_secret_trial_ends_at < NOW()
-      AND top_secret_whop_membership_id IS NULL  -- No actual subscription
+      AND top_secret_whop_membership_id IS NULL
   LOOP
-    -- Deactivate trial
     UPDATE profiles SET
       top_secret_is_in_trial = FALSE,
       top_secret_enabled = FALSE,
@@ -2774,20 +4832,9 @@ BEGIN
       updated_at = NOW()
     WHERE id = v_user.id;
 
-    -- Log the event
-    INSERT INTO subscription_events (
-      user_id,
-      event_type,
-      old_plan,
-      metadata
-    ) VALUES (
-      v_user.id,
-      'trial_expired',
-      'top_secret',
-      jsonb_build_object(
-        'trial_ended_at', v_user.top_secret_trial_ends_at
-      )
-    );
+    INSERT INTO subscription_events (user_id, event_type, old_plan, metadata)
+    VALUES (v_user.id, 'trial_expired', 'top_secret',
+      jsonb_build_object('trial_ended_at', v_user.top_secret_trial_ends_at));
 
     v_expired_count := v_expired_count + 1;
   END LOOP;
@@ -2796,10 +4843,7 @@ BEGIN
 END;
 $$;
 
--- =====================================================
 -- PART 6: FUNCTION - Grant Journal Discount
--- =====================================================
-
 DROP FUNCTION IF EXISTS grant_journal_discount(UUID, TEXT, INTEGER);
 
 CREATE OR REPLACE FUNCTION grant_journal_discount(
@@ -2814,24 +4858,17 @@ AS $$
 DECLARE
   v_profile RECORD;
 BEGIN
-  -- Get current profile
-  SELECT
-    journal_discount_available,
-    journal_discount_used
-  INTO v_profile
-  FROM profiles
-  WHERE id = p_user_id;
+  SELECT journal_discount_available, journal_discount_used
+  INTO v_profile FROM profiles WHERE id = p_user_id;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'User not found');
   END IF;
 
-  -- Check if discount already used
   IF v_profile.journal_discount_used THEN
     RETURN jsonb_build_object('success', false, 'error', 'Discount already used');
   END IF;
 
-  -- Grant discount
   UPDATE profiles SET
     journal_discount_available = TRUE,
     journal_discount_percent = p_percent,
@@ -2839,18 +4876,11 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_user_id;
 
-  RETURN jsonb_build_object(
-    'success', true,
-    'discount_percent', p_percent,
-    'source', p_source
-  );
+  RETURN jsonb_build_object('success', true, 'discount_percent', p_percent, 'source', p_source);
 END;
 $$;
 
--- =====================================================
 -- PART 7: FUNCTION - Use Journal Discount
--- =====================================================
-
 DROP FUNCTION IF EXISTS use_journal_discount(UUID);
 
 CREATE OR REPLACE FUNCTION use_journal_discount(p_user_id UUID)
@@ -2861,54 +4891,32 @@ AS $$
 DECLARE
   v_profile RECORD;
 BEGIN
-  -- Get current profile
-  SELECT
-    journal_discount_available,
-    journal_discount_used,
-    journal_discount_percent
-  INTO v_profile
-  FROM profiles
-  WHERE id = p_user_id;
+  SELECT journal_discount_available, journal_discount_used, journal_discount_percent
+  INTO v_profile FROM profiles WHERE id = p_user_id;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'User not found');
   END IF;
 
-  -- Check if discount available
   IF NOT v_profile.journal_discount_available THEN
     RETURN jsonb_build_object('success', false, 'error', 'No discount available');
   END IF;
 
-  -- Check if already used
   IF v_profile.journal_discount_used THEN
     RETURN jsonb_build_object('success', false, 'error', 'Discount already used');
   END IF;
 
-  -- Mark discount as used
   UPDATE profiles SET
     journal_discount_used = TRUE,
     journal_discount_used_at = NOW(),
     updated_at = NOW()
   WHERE id = p_user_id;
 
-  RETURN jsonb_build_object(
-    'success', true,
-    'discount_percent', v_profile.journal_discount_percent,
-    'used_at', NOW()
-  );
+  RETURN jsonb_build_object('success', true, 'discount_percent', v_profile.journal_discount_percent, 'used_at', NOW());
 END;
 $$;
 
--- =====================================================
--- PART 8: GRANT DISCOUNT TO EXISTING NEWSLETTER SUBSCRIBERS
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Granting discount to existing newsletter subscribers...';
-END $$;
-
--- Grant Journal discount to all existing newsletter subscribers who haven't used it
+-- PART 8: GRANT DISCOUNT TO EXISTING SUBSCRIBERS
 UPDATE profiles SET
   journal_discount_available = TRUE,
   journal_discount_percent = 25,
@@ -2917,7 +4925,6 @@ WHERE newsletter_enabled = TRUE
   AND (journal_discount_used IS NULL OR journal_discount_used = FALSE)
   AND (journal_discount_available IS NULL OR journal_discount_available = FALSE);
 
--- Grant Journal discount to all existing Top Secret subscribers
 UPDATE profiles SET
   journal_discount_available = TRUE,
   journal_discount_percent = 25,
@@ -2926,10 +4933,7 @@ WHERE top_secret_enabled = TRUE
   AND (journal_discount_used IS NULL OR journal_discount_used = FALSE)
   AND (journal_discount_available IS NULL OR journal_discount_available = FALSE);
 
--- =====================================================
 -- PART 9: TRIGGER - Auto-grant discount on newsletter subscribe
--- =====================================================
-
 DROP FUNCTION IF EXISTS auto_grant_journal_discount() CASCADE;
 
 CREATE OR REPLACE FUNCTION auto_grant_journal_discount()
@@ -2938,7 +4942,6 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  -- When user subscribes to newsletter, grant Journal discount
   IF NEW.newsletter_enabled = TRUE AND
      (OLD.newsletter_enabled IS NULL OR OLD.newsletter_enabled = FALSE) AND
      (NEW.journal_discount_used IS NULL OR NEW.journal_discount_used = FALSE) THEN
@@ -2947,7 +4950,6 @@ BEGIN
     NEW.journal_discount_source := 'newsletter';
   END IF;
 
-  -- When user gets Top Secret, grant Journal discount
   IF NEW.top_secret_enabled = TRUE AND
      (OLD.top_secret_enabled IS NULL OR OLD.top_secret_enabled = FALSE) AND
      (NEW.journal_discount_used IS NULL OR NEW.journal_discount_used = FALSE) THEN
@@ -2967,49 +4969,23 @@ CREATE TRIGGER trigger_auto_grant_journal_discount
   FOR EACH ROW
   EXECUTE FUNCTION auto_grant_journal_discount();
 
--- =====================================================
 -- PART 10: PERMISSIONS
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Granting permissions...';
-END $$;
-
 GRANT EXECUTE ON FUNCTION start_top_secret_trial(UUID) TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION check_expired_top_secret_trials() TO service_role;
 GRANT EXECUTE ON FUNCTION grant_journal_discount(UUID, TEXT, INTEGER) TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION use_journal_discount(UUID) TO service_role, authenticated;
 
--- =====================================================
 -- PART 11: CREATE COUPON FOR JOURNAL DISCOUNT
--- =====================================================
-
-DO $$
-BEGIN
-  RAISE NOTICE '📦 Creating Journal discount coupon...';
-END $$;
-
--- Insert coupon for 25% Journal discount (if admin_coupons table exists)
 INSERT INTO admin_coupons (
-  code,
-  name,
-  description,
-  discount_type,
-  discount_percent,
-  duration_type,
-  is_active,
-  applicable_plans,
-  first_time_only,
-  stackable_with_affiliate,
-  priority
+  code, name, description, discount_type, discount_percent, duration_type,
+  is_active, applicable_plans, first_time_only, stackable_with_affiliate, priority
 ) VALUES (
   'TOPSECRET25',
   'Top Secret Subscriber Discount',
   '25% off first month of Trading Journal for Top Secret/Newsletter subscribers',
   'percentage',
   25,
-  'one_time',
+  'first_payment_only',
   TRUE,
   ARRAY['basic_monthly', 'basic_yearly', 'premium_monthly', 'premium_yearly'],
   TRUE,
@@ -3020,40 +4996,141 @@ INSERT INTO admin_coupons (
   discount_percent = 25,
   updated_at = NOW();
 
--- =====================================================
 -- VERIFICATION
+SELECT
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_trial_used') THEN 'YES' ELSE 'NO' END as trial_used,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_is_in_trial') THEN 'YES' ELSE 'NO' END as is_in_trial,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'journal_discount_available') THEN 'YES' ELSE 'NO' END as discount_available,
+  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'journal_discount_used') THEN 'YES' ELSE 'NO' END as discount_used;
+ -- =====================================================
+-- FIX RLS FOR system_updates - COMPLETE v2.0
+-- =====================================================
+-- 1. service_role can INSERT (scheduler works)
+-- 2. Admins can manage updates from frontend
+-- 3. Users see updates based on their target_group
 -- =====================================================
 
+-- 1. DROP ALL EXISTING POLICIES
+DROP POLICY IF EXISTS "Service role can manage system updates" ON system_updates;
+DROP POLICY IF EXISTS "Users see relevant system updates" ON system_updates;
+DROP POLICY IF EXISTS "Anyone can read active system updates" ON system_updates;
+DROP POLICY IF EXISTS "service_role_full_access" ON system_updates;
+DROP POLICY IF EXISTS "authenticated_select_filtered" ON system_updates;
+DROP POLICY IF EXISTS "anon_select_public" ON system_updates;
+DROP POLICY IF EXISTS "Admins can manage updates" ON system_updates;
+DROP POLICY IF EXISTS "Users can read updates for their group" ON system_updates;
+DROP POLICY IF EXISTS "admin_manage_updates" ON system_updates;
+
+-- 2. CREATE 4 POLICIES
+
+-- Policy 1: service_role FULL access (schedulers)
+CREATE POLICY "service_role_full_access" ON system_updates
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Policy 2: Admins manage updates from frontend
+CREATE POLICY "admin_manage_updates" ON system_updates
+  FOR ALL TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+    )
+  );
+
+-- Policy 3: Users SELECT by target_group
+CREATE POLICY "authenticated_select_filtered" ON system_updates
+  FOR SELECT TO authenticated
+  USING (
+    is_active = true
+    AND (expires_at IS NULL OR expires_at > NOW())
+    AND (
+      EXISTS (
+        SELECT 1 FROM profiles 
+        WHERE id = auth.uid() 
+        AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+      )
+      OR target_group = 'all'
+      OR (target_group = 'top_secret' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND top_secret_enabled = true
+      ))
+      OR (target_group = 'newsletter' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() 
+        AND (newsletter_enabled = true OR newsletter_paid = true)
+      ))
+      OR (target_group = 'trading_journal' AND EXISTS (
+        SELECT 1 FROM profiles WHERE id = auth.uid() AND account_type IN ('basic', 'premium', 'pro')
+      ))
+    )
+  );
+
+-- Policy 4: Anon sees public only
+CREATE POLICY "anon_select_public" ON system_updates
+  FOR SELECT TO anon
+  USING (
+    is_active = true
+    AND target_group = 'all'
+    AND (expires_at IS NULL OR expires_at > NOW())
+  );
+
+-- 3. GRANTS
+GRANT SELECT, INSERT, UPDATE, DELETE ON system_updates TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON system_updates TO authenticated;
+GRANT SELECT ON system_updates TO anon;
+
+-- =====================================================
+-- FIX: Remove problematic trigger on system_updates
+-- =====================================================
+-- This trigger was causing: "unrecognized configuration parameter 'app.settings.supabase_url'"
+-- Email notifications are handled by scheduler.js instead of database triggers
+-- =====================================================
+
+-- Step 1: Drop the problematic trigger (all possible names)
+DROP TRIGGER IF EXISTS trigger_notify_update_center_email ON system_updates;
+DROP TRIGGER IF EXISTS notify_update_center_email_trigger ON system_updates;
+DROP TRIGGER IF EXISTS on_system_update_notify ON system_updates;
+DROP TRIGGER IF EXISTS on_system_update_insert ON system_updates;
+DROP TRIGGER IF EXISTS notify_system_update ON system_updates;
+DROP TRIGGER IF EXISTS send_notification_trigger ON system_updates;
+DROP TRIGGER IF EXISTS webhook_trigger ON system_updates;
+DROP TRIGGER IF EXISTS notify_update_center ON system_updates;
+
+-- Step 2: Drop the problematic function
+DROP FUNCTION IF EXISTS notify_update_center_email() CASCADE;
+
+-- Step 3: Verification
 DO $$
+DECLARE
+    v_trigger_count INTEGER;
 BEGIN
-  RAISE NOTICE '========================================';
-  RAISE NOTICE '✅ Migration 11 Complete!';
-  RAISE NOTICE '========================================';
-  RAISE NOTICE '';
-  RAISE NOTICE 'New columns added:';
-  RAISE NOTICE '  • top_secret_trial_used';
-  RAISE NOTICE '  • top_secret_trial_start_date';
-  RAISE NOTICE '  • top_secret_trial_ends_at';
-  RAISE NOTICE '  • top_secret_is_in_trial';
-  RAISE NOTICE '  • journal_discount_available';
-  RAISE NOTICE '  • journal_discount_percent';
-  RAISE NOTICE '  • journal_discount_used';
-  RAISE NOTICE '  • journal_discount_used_at';
-  RAISE NOTICE '  • journal_discount_source';
-  RAISE NOTICE '';
-  RAISE NOTICE 'New functions:';
-  RAISE NOTICE '  • start_top_secret_trial(user_id)';
-  RAISE NOTICE '  • check_expired_top_secret_trials()';
-  RAISE NOTICE '  • grant_journal_discount(user_id, source, percent)';
-  RAISE NOTICE '  • use_journal_discount(user_id)';
-  RAISE NOTICE '';
-  RAISE NOTICE 'Coupon created: TOPSECRET25 (25% off Journal)';
+    SELECT COUNT(*) INTO v_trigger_count
+    FROM pg_trigger t
+    JOIN pg_class c ON t.tgrelid = c.oid
+    WHERE c.relname = 'system_updates'
+    AND t.tgisinternal = false
+    AND t.tgname NOT LIKE '%updated_at%';
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ TRIGGER FIX APPLIED';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE 'Remaining non-system triggers on system_updates: %', v_trigger_count;
+    IF v_trigger_count = 0 THEN
+        RAISE NOTICE '✅ All problematic triggers removed!';
+    ELSE
+        RAISE NOTICE '⚠️ Some triggers remain - check manually';
+    END IF;
+    RAISE NOTICE '=====================================================';
 END $$;
 
--- Show verification
-SELECT
-  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_trial_used') THEN '✅' ELSE '❌' END as trial_used,
-  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_is_in_trial') THEN '✅' ELSE '❌' END as is_in_trial,
-  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'journal_discount_available') THEN '✅' ELSE '❌' END as discount_available,
-  CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'journal_discount_used') THEN '✅' ELSE '❌' END as discount_used;
-
+-- =====================================================
+-- END OF FINOTAUR DATABASE SCHEMA
+-- =====================================================

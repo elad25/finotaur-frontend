@@ -1,18 +1,14 @@
 // src/constants/nav.ts
 // =====================================================
-// FINOTAUR NAVIGATION CONFIG - v2.3.1
+// FINOTAUR NAVIGATION CONFIG - v3.1.0 (SITE DASHBOARD)
 // =====================================================
 // 
-// 🔥 v2.3.1 CHANGES:
-// - LOCKED: War Zone is now locked (Coming Soon)
-//
-// 🔥 v2.3.0 CHANGES:
-// - UPDATED: AI Insights sidebar to match new pages in App.tsx
-// - UNLOCKED: AI domain is now open
-//
-// 🔥 v2.1.2 CHANGES:
-// - LOCKED: Overview, Summary, Chart tabs
-// - UNLOCKED: Only War Zone and Top Secret remain open
+// 🔥 v3.1.0 CHANGES:
+// - ADDED: Site Dashboard page for admins
+// 
+// 🔥 v3.0.0 CHANGES:
+// - ADDED: beta flag for domains and nav items
+// - ADDED: Beta access system (admin-only access to beta pages)
 // =====================================================
 
 import {
@@ -21,7 +17,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -31,6 +27,7 @@ export interface NavItem {
   adminOnly?: boolean;
   affiliateOnly?: boolean;
   locked?: boolean;
+  beta?: boolean;
   hideForAdmin?: boolean;
 }
 
@@ -40,6 +37,7 @@ export interface Domain {
   subNav: NavItem[]; 
   sidebar: NavItem[]; 
   locked?: boolean;
+  beta?: boolean;
   defaultPath?: string;
 }
 
@@ -48,14 +46,16 @@ export const domains: Record<string, Domain> = {
     id: 'all-markets',
     label: 'All Markets',
     locked: false,
-    defaultPath: '/app/top-secret',  // 🔄 Changed default since War Zone is locked
+    beta: false,
+    defaultPath: '/app/top-secret',
     subNav: [
       { label: 'Overview', path: '/app/all-markets/overview', locked: true },
       { label: 'Summary', path: '/app/all-markets/summary', locked: true },
       { label: 'Chart', path: '/app/all-markets/chart', locked: true },
-      { label: 'War Zone', path: '/app/all-markets/warzone', locked: true },  // 🔒 LOCKED
+{ label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
+      { label: 'Site Dashboard', path: '/app/all-markets/admin/site-dashboard', adminOnly: true },  // 🔥 NEW
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
@@ -74,6 +74,7 @@ export const domains: Record<string, Domain> = {
     id: 'stocks',
     label: 'Stocks',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/stocks/overview' },
       { label: 'News', path: '/app/stocks/news' },
@@ -99,6 +100,7 @@ export const domains: Record<string, Domain> = {
     id: 'crypto',
     label: 'Crypto',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/crypto/overview' },
       { label: 'News', path: '/app/crypto/news' },
@@ -121,6 +123,7 @@ export const domains: Record<string, Domain> = {
     id: 'futures',
     label: 'Futures',
     locked: true,
+    beta: false,
     subNav: [{ label: 'Overview', path: '/app/futures/overview' }],
     sidebar: [
       { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
@@ -133,6 +136,7 @@ export const domains: Record<string, Domain> = {
     id: 'forex',
     label: 'Forex',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/forex/overview' },
       { label: 'News', path: '/app/forex/news' },
@@ -153,6 +157,7 @@ export const domains: Record<string, Domain> = {
     id: 'commodities',
     label: 'Commodities',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/commodities/overview' },
       { label: 'News', path: '/app/commodities/news' },
@@ -174,6 +179,7 @@ export const domains: Record<string, Domain> = {
     id: 'macro',
     label: 'Macro & News',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
     ],
@@ -191,29 +197,32 @@ export const domains: Record<string, Domain> = {
     ],
   },
 
-  // ✅ AI INSIGHTS - UNLOCKED with NEW pages matching App.tsx
-  ai: {
-    id: 'ai',
-    label: 'AI Insights',
-    locked: true,  // ✅ UNLOCKED
-    subNav: [
-      { label: 'Overview', path: '/app/ai/overview' },
-    ],
-    sidebar: [
-      { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
-      { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
-      { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
-      { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
-      { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
-      { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target },
-      { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
-    ],
-  },
+ai: {
+  id: 'ai',
+  label: 'AI Insights',
+  locked: true,
+  beta: false,
+  subNav: [
+    { label: 'Overview', path: '/app/ai/overview' },
+  ],
+  sidebar: [
+    { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
+    { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
+    { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
+    { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
+    { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
+    { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target },
+    { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
+    { label: 'Momentum Lab', path: '/app/ai/momentum-lab', icon: TrendingUp },
+    { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
+  ],
+},
 
   journal: {
     id: 'journal',
     label: 'Journal',
     locked: false,
+    beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
@@ -239,6 +248,7 @@ export const domains: Record<string, Domain> = {
     id: 'journal-backtest',
     label: 'Backtest',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
@@ -263,6 +273,7 @@ export const domains: Record<string, Domain> = {
     id: 'journal-affiliate',
     label: 'Affiliate Center',
     locked: false,
+    beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/affiliate/overview' },
       { label: 'My Referrals', path: '/app/journal/affiliate/referrals' },
@@ -287,6 +298,7 @@ export const domains: Record<string, Domain> = {
     id: 'copy-trade',
     label: 'Copy Trade',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/copy-trade/overview' },
       { label: 'Top Traders', path: '/app/copy-trade/top-traders' },
@@ -306,6 +318,7 @@ export const domains: Record<string, Domain> = {
     id: 'funding',
     label: 'Funding',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Overview', path: '/app/funding/overview' },
       { label: 'Brokers', path: '/app/funding/brokers' },
@@ -322,6 +335,7 @@ export const domains: Record<string, Domain> = {
     id: 'options',
     label: 'Options',
     locked: true,
+    beta: false,
     subNav: [
       { label: 'Chain', path: '/app/options/chain' },
       { label: 'Flow', path: '/app/options/flow' },
@@ -354,3 +368,23 @@ export const domainOrder = [
   'copy-trade',
   'funding',
 ];
+
+// =====================================================
+// HELPER FUNCTIONS
+// =====================================================
+
+export function isNavItemVisible(item: NavItem, isAdmin: boolean, hasBetaAccess: boolean): boolean {
+  if (item.adminOnly && !isAdmin) return false;
+  if (item.beta && !hasBetaAccess) return false;
+  if (item.hideForAdmin && isAdmin) return false;
+  return true;
+}
+
+export function isDomainVisible(domain: Domain, hasBetaAccess: boolean): boolean {
+  if (domain.beta && !hasBetaAccess) return false;
+  return true;
+}
+
+export function filterNavItems(items: NavItem[], isAdmin: boolean, hasBetaAccess: boolean): NavItem[] {
+  return items.filter(item => isNavItemVisible(item, isAdmin, hasBetaAccess));
+}

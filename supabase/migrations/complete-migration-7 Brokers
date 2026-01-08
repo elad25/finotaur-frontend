@@ -1560,7 +1560,133 @@ WHERE snaptrade_activity_id IS NOT NULL;
 ANALYZE snaptrade_users;
 ANALYZE snaptrade_activity;
 ANALYZE trades;
+-- ============================================================================
+-- STEP 19: INTERACTIVE BROKERS IBRIT INTEGRATION
+-- ============================================================================
 
+-- Update IB broker definition for IBRIT (Web Service integration)
+UPDATE broker_definitions 
+SET 
+    auth_method = 'credentials',
+    auth_config = '{
+        "fields": ["token", "queryId"],
+        "optional_fields": ["serviceCode"],
+        "integration_type": "ibrit",
+        "setup_instructions": "Log into IB Client Portal > Settings > Third-Party Reports > Third-Party Services > Enable Finotaur",
+        "setup_url": "https://www.interactivebrokers.com/portal",
+        "help_url": "https://www.interactivebrokers.com/campus/ibkr-reporting/reporting-integration/"
+    }'::jsonb,
+    api_config = '{
+        "base_url": "https://ndcdyn.interactivebrokers.com/Reporting/IBRITService",
+        "service_code": "Finotaur-ws",
+        "delivery_method": "web_service",
+        "file_format": "csv",
+        "delimiter": "comma",
+        "date_format": "yyyymmdd",
+        "version": "1.994"
+    }'::jsonb,
+    features = '{
+        "realtime_sync": false,
+        "historical_sync": true,
+        "positions": true,
+        "orders": false,
+        "account_balance": true,
+        "margin_info": true,
+        "trade_execution": false,
+        "file_types": ["Activity", "Position", "Account", "Security", "CashReport", "PL", "NAV"],
+        "read_only": true
+    }'::jsonb,
+    is_beta = false,
+    description = 'Global electronic brokerage firm - Connected via IBRIT (IB Reporting Integration)',
+    updated_at = NOW()
+WHERE slug = 'interactive-brokers';
+
+-- Add 'ibrit' to import_source constraint
+ALTER TABLE trades DROP CONSTRAINT IF EXISTS check_import_source;
+ALTER TABLE trades ADD CONSTRAINT check_import_source 
+  CHECK (import_source = ANY (ARRAY[
+    'manual'::text, 
+    'snaptrade'::text, 
+    'csv'::text, 
+    'api'::text,
+    'tradovate'::text,
+    'broker_sync'::text,
+    'webhook'::text,
+    'rithmic'::text,
+    'ninja_trader'::text,
+    'ibrit'::text
+  ]));
+
+-- IB-specific indexes
+CREATE INDEX IF NOT EXISTS idx_trades_ib_external 
+ON trades(external_id) 
+WHERE broker = 'interactive_brokers' AND external_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_trades_ib_dedup 
+ON trades(user_id, broker_trade_id) 
+WHERE broker = 'interactive_brokers' AND broker_trade_id IS NOT NULL;
+
+-- IB-specific columns
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'trades' AND column_name = 'ib_account_id') THEN
+        ALTER TABLE trades ADD COLUMN ib_account_id VARCHAR(20);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'trades' AND column_name = 'ib_conid') THEN
+        ALTER TABLE trades ADD COLUMN ib_conid VARCHAR(20);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'trades' AND column_name = 'ib_exec_id') THEN
+        ALTER TABLE trades ADD COLUMN ib_exec_id VARCHAR(100);
+    END IF;
+END $$;
+
+-- Helper function for IB credentials
+CREATE OR REPLACE FUNCTION get_ib_credentials(p_connection_id UUID)
+RETURNS TABLE (
+    token TEXT,
+    query_id TEXT,
+    service_code TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        (connection_data->>'token')::TEXT as token,
+        (connection_data->>'queryId')::TEXT as query_id,
+        COALESCE(connection_data->>'serviceCode', 'Finotaur-ws')::TEXT as service_code
+    FROM broker_connections
+    WHERE id = p_connection_id
+    AND is_active = true;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- Common IB instruments
+INSERT INTO instrument_definitions (
+    symbol, name, asset_class, instrument_type, exchange, 
+    tick_size, tick_value, point_value, currency
+) VALUES
+('SPY', 'SPDR S&P 500 ETF', 'stocks', 'etf', 'ARCA', 0.01, 0.01, 1.00, 'USD'),
+('QQQ', 'Invesco QQQ Trust', 'stocks', 'etf', 'NASDAQ', 0.01, 0.01, 1.00, 'USD'),
+('AAPL', 'Apple Inc.', 'stocks', 'stock', 'NASDAQ', 0.01, 0.01, 1.00, 'USD'),
+('MSFT', 'Microsoft Corporation', 'stocks', 'stock', 'NASDAQ', 0.01, 0.01, 1.00, 'USD'),
+('TSLA', 'Tesla Inc.', 'stocks', 'stock', 'NASDAQ', 0.01, 0.01, 1.00, 'USD'),
+('NVDA', 'NVIDIA Corporation', 'stocks', 'stock', 'NASDAQ', 0.01, 0.01, 1.00, 'USD'),
+('EUR.USD', 'Euro/US Dollar', 'forex', 'spot', 'IDEALPRO', 0.00005, 5.00, 100000, 'USD')
+ON CONFLICT (symbol, exchange) DO UPDATE SET
+    name = EXCLUDED.name,
+    updated_at = NOW();
+
+-- Final analyze for IB
+ANALYZE trades;
+ANALYZE broker_definitions;
+
+-- ============================================================================
+-- END STEP 19 ✅
+-- ============================================================================
 -- ============================================================================
 -- VERIFICATION QUERIES (run these after migration to verify)
 -- ============================================================================

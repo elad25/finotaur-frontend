@@ -8,6 +8,7 @@
 //        dual subscriptions (platform + journal), no payment method,
 //        simplified security
 // 🔧 v3: Added Newsletter subscription management
+// 🔧 v4: Added Top Secret subscription fields to query + display
 // =====================================================
 
 import { useState, useEffect, createContext, useContext } from "react";
@@ -100,7 +101,7 @@ interface ProfileData {
   newsletter_unsubscribed_at: string | null;
   newsletter_preferences: NewsletterPreferences | null;
   
-  // Top Secret subscription
+  // 🔥 Top Secret subscription - v4 ADDED
   top_secret_enabled: boolean;
   top_secret_status: string | null;
   top_secret_whop_membership_id: string | null;
@@ -446,12 +447,69 @@ const GeneralTab = () => {
   );
 };
 
+
 // ============================================
-// TAB: BILLING (Platform + Trading Journal + Newsletter subscriptions)
+// 🔥 API HELPER: Manage Product Subscription
+// ============================================
+
+interface ProductSubscriptionResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  subscription?: {
+    product: string;
+    status: string;
+    cancelAtPeriodEnd: boolean;
+    expiresAt: string | null;
+  };
+}
+
+async function manageProductSubscription(
+  action: "cancel" | "reactivate" | "status",
+  product: "newsletter" | "top_secret",
+  reason?: string
+): Promise<ProductSubscriptionResponse> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-product-subscription`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action, product, reason }),
+      }
+    );
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`❌ manageProductSubscription error:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+// ============================================
+// TAB: BILLING (Platform + Trading Journal + Newsletter + Top Secret subscriptions)
 // ============================================
 
 const BillingTab = () => {
-  const { profile, setProfile, saving, setSaving } = useSettings();
+  const { profile, setProfile, saving, setSaving, refreshProfile } = useSettings();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -460,6 +518,9 @@ const BillingTab = () => {
   const [showTopSecretCancelDialog, setShowTopSecretCancelDialog] = useState(false);
   const [cancellingNewsletter, setCancellingNewsletter] = useState(false);
   const [cancellingTopSecret, setCancellingTopSecret] = useState(false);
+  // 🔥 NEW: Separate loading states for reactivation
+  const [reactivatingNewsletter, setReactivatingNewsletter] = useState(false);
+  const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
 
   // Platform subscription (main website)
   const platformPlan = profile?.platform_plan || 'free';
@@ -481,103 +542,110 @@ const BillingTab = () => {
   const newsletterStatus = profile?.newsletter_status || 'inactive';
   const newsletterIsActive = newsletterStatus === 'active' || newsletterStatus === 'trial';
   
-  // Top Secret subscription
+  // 🔥 Top Secret subscription - v4 FIXED: Now reading from profile
   const topSecretEnabled = profile?.top_secret_enabled ?? false;
   const topSecretStatus = profile?.top_secret_status || 'inactive';
   const topSecretIsActive = topSecretStatus === 'active';
+  const topSecretInterval = profile?.top_secret_interval || 'monthly';
+  
+  // 🔥 Calculate intro pricing status
+  // Timeline: 14 days trial → 2 months at $35 (50% off) → $70/mo regular
+  const getTopSecretPricingInfo = () => {
+    if (!profile?.top_secret_started_at || topSecretInterval === 'yearly') {
+      return { isInIntro: false, introMonthsRemaining: 0, currentPrice: topSecretInterval === 'yearly' ? 500 : 70 };
+    }
+    
+    const startedAt = new Date(profile.top_secret_started_at);
+    const now = new Date();
+    
+    // Calculate months since started (after 14-day trial)
+    // Trial is 14 days, then intro pricing kicks in
+    const trialEndDate = new Date(startedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+    const introEndDate = new Date(trialEndDate.getTime() + 2 * 30 * 24 * 60 * 60 * 1000); // ~2 months after trial
+    
+    if (now < trialEndDate) {
+      // Still in trial
+      return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
+    } else if (now < introEndDate) {
+      // In intro period ($35/mo)
+      const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
+      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 35 };
+    } else {
+      // Regular pricing ($70/mo)
+      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 70 };
+    }
+  };
+  
+  const topSecretPricing = getTopSecretPricingInfo();
   
   const isLifetime = profile?.is_lifetime ?? false;
 
   // Handle newsletter cancellation (War Zone)
   const handleCancelNewsletter = async () => {
-    if (!user) return;
-    
     setCancellingNewsletter(true);
     try {
-      // Set cancel_at_period_end = TRUE (subscription continues until period ends)
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          newsletter_cancel_at_period_end: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const result = await manageProductSubscription("cancel", "newsletter", "User requested cancellation");
       
-      setProfile(prev => prev ? { 
-        ...prev, 
-        newsletter_cancel_at_period_end: true,
-      } : null);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to cancel newsletter");
+      }
+      
+      // Refresh profile to get updated state from DB
+      await refreshProfile();
       
       setShowNewsletterCancelDialog(false);
-      toast.success('Subscription will be cancelled at period end');
+      toast.success(result.message || 'Newsletter subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling newsletter:', error);
-      toast.error('Failed to cancel newsletter');
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel newsletter');
     } finally {
       setCancellingNewsletter(false);
     }
   };
 
+
   // Handle newsletter reactivation
   const handleReactivateNewsletter = async () => {
-    if (!user) return;
-    
-    setSaving(true);
+    setReactivatingNewsletter(true);
     try {
-      // Undo cancellation - set cancel_at_period_end = FALSE
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          newsletter_cancel_at_period_end: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const result = await manageProductSubscription("reactivate", "newsletter");
       
-      setProfile(prev => prev ? { 
-        ...prev, 
-        newsletter_cancel_at_period_end: false,
-      } : null);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to reactivate newsletter");
+      }
       
-      toast.success('Newsletter subscription reactivated');
+      // Refresh profile to get updated state from DB
+      await refreshProfile();
+      
+      toast.success(result.message || 'Newsletter subscription reactivated');
     } catch (error) {
       console.error('Error reactivating newsletter:', error);
-      toast.error('Failed to reactivate newsletter');
+      toast.error(error instanceof Error ? error.message : 'Failed to reactivate newsletter');
     } finally {
-      setSaving(false);
+      setReactivatingNewsletter(false);
     }
   };
 
+
+
   // Handle Top Secret cancellation
   const handleCancelTopSecret = async () => {
-    if (!user) return;
-    
     setCancellingTopSecret(true);
     try {
-      // Set cancel_at_period_end = TRUE (subscription continues until period ends)
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          top_secret_cancel_at_period_end: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const result = await manageProductSubscription("cancel", "top_secret", "User requested cancellation");
       
-      setProfile(prev => prev ? { 
-        ...prev, 
-        top_secret_cancel_at_period_end: true,
-      } : null);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to cancel Top Secret");
+      }
+      
+      // Refresh profile to get updated state from DB
+      await refreshProfile();
       
       setShowTopSecretCancelDialog(false);
-      toast.success('Subscription will be cancelled at period end');
+      toast.success(result.message || 'Top Secret subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling Top Secret:', error);
-      toast.error('Failed to cancel Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel Top Secret');
     } finally {
       setCancellingTopSecret(false);
     }
@@ -585,34 +653,26 @@ const BillingTab = () => {
 
   // Handle Top Secret reactivation
   const handleReactivateTopSecret = async () => {
-    if (!user) return;
-    
-    setSaving(true);
+    setReactivatingTopSecret(true);
     try {
-      // Undo cancellation - set cancel_at_period_end = FALSE
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          top_secret_cancel_at_period_end: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const result = await manageProductSubscription("reactivate", "top_secret");
       
-      setProfile(prev => prev ? { 
-        ...prev, 
-        top_secret_cancel_at_period_end: false,
-      } : null);
+      if (!result.success) {
+        throw new Error(result.error || "Failed to reactivate Top Secret");
+      }
       
-      toast.success('Top Secret subscription reactivated');
+      // Refresh profile to get updated state from DB
+      await refreshProfile();
+      
+      toast.success(result.message || 'Top Secret subscription reactivated');
     } catch (error) {
       console.error('Error reactivating Top Secret:', error);
-      toast.error('Failed to reactivate Top Secret');
+      toast.error(error instanceof Error ? error.message : 'Failed to reactivate Top Secret');
     } finally {
-      setSaving(false);
+      setReactivatingTopSecret(false);
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -882,10 +942,10 @@ const BillingTab = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleReactivateNewsletter}
-                      disabled={saving}
+                      disabled={reactivatingNewsletter}
                       className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
                     >
-                      {saving ? (
+                      {reactivatingNewsletter ? (
                         <>
                           <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                           Undoing...
@@ -894,6 +954,7 @@ const BillingTab = () => {
                         <>Undo Cancellation</>
                       )}
                     </Button>
+
                   ) : (
                     <Button
                       variant="ghost"
@@ -933,20 +994,22 @@ const BillingTab = () => {
             ) : (
               <div className="pt-4 border-t border-zinc-700/50">
                 <Button
-                  onClick={() => window.open('https://whop.com/finotaur', '_blank')}
+                  disabled
                   size="sm"
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white"
+                  className="w-full bg-zinc-700 text-zinc-400 cursor-not-allowed"
                 >
-                  Subscribe Now - 30 Day Free Trial
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  Coming Soon
                 </Button>
+                <p className="text-xs text-zinc-500 text-center mt-2">
+                  Newsletter subscriptions opening soon
+                </p>
               </div>
             )}
           </div>
         </div>
       </Card>
 
-      {/* 🔥 TOP SECRET CARD */}
+      {/* 🔥 TOP SECRET CARD - v4 FIXED: Now shows live data from DB */}
       <Card className="p-5 bg-gradient-to-br from-red-900/20 via-zinc-900/50 to-zinc-900/50 border-red-700/50 relative overflow-hidden">
         {/* Animated background effect */}
         <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-orange-500/5 to-red-500/5 animate-pulse" />
@@ -1007,9 +1070,31 @@ const BillingTab = () => {
               </div>
               <span className="text-lg font-semibold text-white">
                 {topSecretIsActive ? (
-                  profile?.top_secret_interval === 'yearly' ? '$300/yr' : '$35/mo'
+                  topSecretInterval === 'yearly' ? '$500/yr' : (
+                    topSecretPricing.isInTrial ? (
+                      <span className="flex items-center gap-2">
+                        <span>Free Trial</span>
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
+                          {topSecretPricing.trialDaysRemaining} days left
+                        </Badge>
+                      </span>
+                    ) : topSecretPricing.isInIntro ? (
+                      <span className="flex items-center gap-2">
+                        <span>$35/mo</span>
+                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                          50% OFF ({topSecretPricing.introMonthsRemaining} mo left)
+                        </Badge>
+                      </span>
+                    ) : (
+                      '$70/mo'
+                    )
+                  )
                 ) : (
-                  '$35/mo'
+                  <span className="flex items-center gap-2">
+                    <span className="text-zinc-500 line-through text-sm">$70/mo</span>
+                    <span>$35/mo</span>
+                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">50% OFF</Badge>
+                  </span>
                 )}
               </span>
             </div>
@@ -1034,16 +1119,60 @@ const BillingTab = () => {
               </div>
             </div>
 
-            {/* Billing info for active subscribers */}
-            {topSecretIsActive && profile?.top_secret_expires_at && (
+            {/* 🔥 Billing info for active subscribers - v4 FIXED */}
+            {topSecretIsActive && (
               <div className="mb-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-700/50">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-500">Next billing</span>
-                  <span className="text-zinc-300 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(profile.top_secret_expires_at)}
-                  </span>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-zinc-500">Billing cycle</p>
+                    <p className="capitalize text-zinc-300">{topSecretInterval}</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500">
+                      {topSecretPricing.isInTrial ? 'First charge' : 'Next billing'}
+                    </p>
+                    <p className="text-zinc-300 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {/* For trial users, calculate 14 days from started_at */}
+                      {topSecretPricing.isInTrial && profile?.top_secret_started_at
+                        ? formatDate(new Date(new Date(profile.top_secret_started_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString())
+                        : formatDate(profile?.top_secret_expires_at)
+                      }
+                    </p>
+                  </div>
                 </div>
+                
+                {/* Show pricing timeline for monthly subscribers */}
+                {topSecretInterval === 'monthly' && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/30">
+                    {topSecretPricing.isInTrial ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Trial</Badge>
+                        <span className="text-zinc-400">→ Then $35/mo for 2 months → $70/mo after</span>
+                      </div>
+                    ) : topSecretPricing.isInIntro ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Intro Pricing</Badge>
+                        <span className="text-zinc-400">
+                          {topSecretPricing.introMonthsRemaining === 2 
+                            ? 'Next payment: $35 → Then $35 → Then $70/mo'
+                            : 'Next payment: $35 → Then $70/mo regular price'
+                          }
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500">Regular pricing: $70/mo</p>
+                    )}
+                  </div>
+                )}
+                
+                {profile?.top_secret_started_at && (
+                  <div className="mt-2 pt-2 border-t border-zinc-700/30">
+                    <p className="text-xs text-zinc-500">
+                      Member since {formatDate(profile.top_secret_started_at)}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1063,10 +1192,10 @@ const BillingTab = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleReactivateTopSecret}
-                      disabled={saving}
+                      disabled={reactivatingTopSecret}
                       className="border-red-500/30 text-red-400 hover:bg-red-500/10"
                     >
-                      {saving ? (
+                      {reactivatingTopSecret ? (
                         <>
                           <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                           Undoing...
@@ -1092,33 +1221,35 @@ const BillingTab = () => {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-400">
                     Top Secret subscription cancelled
+                    {profile?.top_secret_unsubscribed_at && (
+                      <span className="block text-xs text-zinc-500">
+                        Cancelled on {formatDate(profile.top_secret_unsubscribed_at)}
+                      </span>
+                    )}
                   </div>
                   <Button
+                    onClick={() => window.open('https://whop.com/finotaur', '_blank')}
                     variant="outline"
                     size="sm"
-                    onClick={handleReactivateTopSecret}
-                    disabled={saving}
                     className="border-red-500/30 text-red-400 hover:bg-red-500/10"
                   >
-                    {saving ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Reactivating...
-                      </>
-                    ) : (
-                      <>Reactivate</>
-                    )}
+                    Resubscribe
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="pt-4 border-t border-zinc-700/50">
+                <div className="mb-3 p-2 rounded bg-green-500/10 border border-green-500/20">
+                  <p className="text-xs text-green-400 text-center">
+                    🔥 <strong>Limited Offer:</strong> $35/mo for first 2 months (50% OFF), then $70/mo
+                  </p>
+                </div>
                 <Button
                   onClick={() => window.open('https://whop.com/finotaur', '_blank')}
                   size="sm"
                   className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white"
                 >
-                  Subscribe to Top Secret
+                  Subscribe to Top Secret - $35/mo
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -1711,7 +1842,7 @@ export const SettingsLayout = () => {
     }
   };
 
-  // Fetch profile data
+  // 🔥 v4 FIXED: Fetch profile data WITH Top Secret fields
   const fetchProfile = async () => {
     if (!user) {
       setLoading(false);
@@ -1744,6 +1875,21 @@ export const SettingsLayout = () => {
           newsletter_preferences,
           newsletter_status,
           newsletter_paid,
+          newsletter_paid_at,
+          newsletter_whop_membership_id,
+          newsletter_started_at,
+          newsletter_expires_at,
+          newsletter_trial_ends_at,
+          newsletter_cancel_at_period_end,
+          newsletter_unsubscribed_at,
+          top_secret_enabled,
+          top_secret_status,
+          top_secret_whop_membership_id,
+          top_secret_started_at,
+          top_secret_expires_at,
+          top_secret_interval,
+          top_secret_cancel_at_period_end,
+          top_secret_unsubscribed_at,
           metadata,
           portfolio_size,
           risk_per_trade,

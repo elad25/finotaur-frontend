@@ -670,7 +670,23 @@ BEGIN
     AND wpm.is_active = TRUE;
 END;
 $$;
+-- ----------------------------------------
+-- 3.3 Get Product Trial Days (DYNAMIC)
+-- ----------------------------------------
 
+CREATE OR REPLACE FUNCTION get_product_trial_days(p_product_id TEXT)
+RETURNS INTEGER
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+  RETURN COALESCE(
+    (SELECT trial_days FROM whop_plan_mapping 
+     WHERE whop_product_id = p_product_id AND is_active = TRUE),
+    0
+  );
+END;
+$$;
 -- ----------------------------------------
 -- 4.3 Track Referral Signup
 -- (Used by useAffiliate.ts - trackReferralSignup)
@@ -1931,6 +1947,7 @@ CREATE POLICY "Service role can manage subscription events" ON subscription_even
 -- Grants
 GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_finotaur_plan_from_whop(TEXT) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION get_product_trial_days(TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION get_commission_rate(TEXT, TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION validate_affiliate_code(TEXT) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION record_affiliate_click(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated, anon;
@@ -2368,7 +2385,6 @@ ON profiles(newsletter_trial_ends_at) WHERE newsletter_trial_ends_at IS NOT NULL
 -- ----------------------------------------
 -- 13.3 WHOP PLAN MAPPING - Newsletter Entry
 -- ----------------------------------------
-
 INSERT INTO whop_plan_mapping (
   whop_product_id, 
   whop_plan_id,
@@ -2377,16 +2393,18 @@ INSERT INTO whop_plan_mapping (
   price_usd, 
   max_trades, 
   display_name, 
-  is_active
+  is_active,
+  trial_days
 ) VALUES (
   'prod_qlaV5Uu6LZlYn',
   'plan_LCBG5yJpoNtW3',
   'newsletter',
   'monthly',
-  20.00,
+  39.00,
   0,
   'War Zone Intelligence Newsletter',
-  TRUE
+  TRUE,
+  7
 )
 ON CONFLICT (whop_product_id) DO UPDATE SET
   whop_plan_id = EXCLUDED.whop_plan_id,
@@ -2396,6 +2414,7 @@ ON CONFLICT (whop_product_id) DO UPDATE SET
   max_trades = EXCLUDED.max_trades,
   display_name = EXCLUDED.display_name,
   is_active = TRUE,
+  trial_days = EXCLUDED.trial_days,
   updated_at = NOW();
 -- ============================================
 -- PART 14: NEWSLETTER FUNCTIONS - v6.0.0 SYNCED
@@ -2448,6 +2467,7 @@ DECLARE
   v_user_id UUID;
   v_is_first_time BOOLEAN;
   v_is_new_user BOOLEAN := FALSE;
+  v_trial_days INTEGER;
   v_trial_ends_at TIMESTAMPTZ;
   v_expires_at TIMESTAMPTZ;
   v_status TEXT;
@@ -2551,17 +2571,20 @@ BEGIN
   v_is_first_time := COALESCE(v_is_first_time, TRUE);
   
 -- ========================================
-  -- STEP 4: Calculate Dates
-  -- ========================================
-  v_trial_ends_at := NOW() + INTERVAL '7 days';
-  v_status := CASE WHEN v_is_first_time THEN 'trial' ELSE 'active' END;
-  
-  -- 🔥 FIX: During trial, expires_at = trial end (not +1 month)
-  v_expires_at := CASE 
-    WHEN v_is_first_time THEN v_trial_ends_at  -- Trial: expires when trial ends
-    ELSE NOW() + INTERVAL '1 month'            -- Returning user: +1 month
-  END;
-  
+-- STEP 4: DYNAMIC TRIAL CALCULATION
+-- ========================================
+
+v_trial_days := get_product_trial_days(p_whop_product_id);
+
+IF v_trial_days > 0 AND v_is_first_time THEN
+  v_trial_ends_at := NOW() + (v_trial_days || ' days')::INTERVAL;
+  v_status := 'trial';
+  v_expires_at := v_trial_ends_at;
+ELSE
+  v_trial_ends_at := NULL;
+  v_status := 'active';
+  v_expires_at := NOW() + INTERVAL '1 month';
+END IF;
   -- ========================================
   -- STEP 5: Update Newsletter Fields ONLY
   -- ========================================
@@ -3068,6 +3091,14 @@ SELECT '🎉 PART 14 v6.0.0 COMPLETE!' as status;
 
 -- Update whop_plan_mapping constraint to include top_secret
 ALTER TABLE whop_plan_mapping DROP CONSTRAINT IF EXISTS whop_plan_mapping_finotaur_plan_check;
+-- First fix any invalid values
+UPDATE whop_plan_mapping
+SET finotaur_plan = 'basic'
+WHERE finotaur_plan NOT IN ('free', 'basic', 'premium', 'trial', 'newsletter', 'top_secret')
+   OR finotaur_plan IS NULL;
+
+-- Then add the constraint
+ALTER TABLE whop_plan_mapping DROP CONSTRAINT IF EXISTS whop_plan_mapping_finotaur_plan_check;
 ALTER TABLE whop_plan_mapping ADD CONSTRAINT whop_plan_mapping_finotaur_plan_check 
   CHECK (finotaur_plan IN ('free', 'basic', 'premium', 'trial', 'newsletter', 'top_secret'));
 
@@ -3093,16 +3124,18 @@ INSERT INTO whop_plan_mapping (
   max_trades, 
   display_name, 
   is_active,
+  trial_days,
   metadata
 ) VALUES (
   'prod_nl6YXbLp4t5pz',
   'plan_9VxdBaa2Z5KQy',  -- Monthly plan ID (default)
   'top_secret',
   'monthly',
-  35.00,
+  70.00,
   0,  -- No trade limits (content product)
   'Top Secret',
   TRUE,
+  14,
   '{"yearly_plan_id": "plan_YoeD6wWBxss7Q", "yearly_price": 300.00}'::jsonb
 )
 ON CONFLICT (whop_product_id) DO UPDATE SET
@@ -3322,11 +3355,12 @@ BEGIN
   END IF;
   
   -- ========================================
-  -- STEP 4: Update Top Secret Fields ONLY
+  -- STEP 4: Update Top Secret Fields + Platform FREE
   -- (Does NOT touch newsletter or journal subscription)
   -- ========================================
   
-  UPDATE profiles SET
+ UPDATE profiles SET
+    -- Top Secret fields
     top_secret_enabled = TRUE,
     top_secret_whop_membership_id = p_whop_membership_id,
     top_secret_started_at = COALESCE(top_secret_started_at, NOW()),
@@ -3335,6 +3369,15 @@ BEGIN
     top_secret_cancel_at_period_end = FALSE,
     top_secret_status = 'active',
     top_secret_unsubscribed_at = NULL,
+    -- 🔥 Platform FREE - only if user has no platform subscription
+    platform_plan = CASE 
+      WHEN platform_plan IS NULL OR platform_plan = '' THEN 'free'
+      ELSE platform_plan  -- Keep existing plan (core/pro/enterprise)
+    END,
+    platform_subscription_status = CASE 
+      WHEN platform_subscription_status IS NULL OR platform_subscription_status = 'inactive' THEN 'active'
+      ELSE platform_subscription_status  -- Keep existing status
+    END,
     updated_at = NOW()
   WHERE id = v_user_id;
   

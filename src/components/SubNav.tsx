@@ -1,14 +1,17 @@
 // src/components/SubNav.tsx
-// v2.1.0 - Fixed Top Secret admin visibility and double highlight
-// CHANGES:
-// - Added hideForAdmin support - hides regular Top Secret for admins
-// - Fixed double highlight issue for Top Secret tabs
-// - Improved path detection for admin routes
+// =====================================================
+// 🔥 v3.0: BETA ACCESS SYSTEM
+// =====================================================
+// - Added hasBetaAccess support
+// - Admins/VIPs can access locked items
+// - Fixed Top Secret admin visibility
+// =====================================================
 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
-import { Lock, Shield, Users } from 'lucide-react';
+import { Lock, Shield, Users, Sparkles } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useCallback } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -24,19 +27,16 @@ import {
 const tableExistsCache = new Map<string, boolean>();
 
 async function tableExists(tableName: string): Promise<boolean> {
-  // Check cache first
   if (tableExistsCache.has(tableName)) {
     return tableExistsCache.get(tableName)!;
   }
 
   try {
-    // Try a minimal query to check if table exists
     const { error } = await supabase
       .from(tableName)
       .select('id')
       .limit(1);
 
-    // If error code is 42P01 (undefined_table) or PGRST116, table doesn't exist
     const exists = !error || (error.code !== '42P01' && error.code !== 'PGRST116' && !error.message?.includes('does not exist'));
     
     tableExistsCache.set(tableName, exists);
@@ -54,6 +54,7 @@ export const SubNav = () => {
   const { user } = useAuth();
   const { isImpersonating } = useImpersonation();
   const { hasAccess: hasBacktestAccess } = useBacktestAccess();
+  const { hasBetaAccess } = useAdminAuth();  // 🔥 NEW: Beta access check
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAffiliate, setIsAffiliate] = useState(false);
 
@@ -110,7 +111,7 @@ export const SubNav = () => {
     checkAdminStatus();
   }, [user?.id, isImpersonating]);
 
-  // 🤝 Check if user is an active affiliate - WITH SAFE ERROR HANDLING
+  // 🤝 Check if user is an active affiliate
   useEffect(() => {
     async function checkAffiliateStatus() {
       if (!user?.id) {
@@ -119,7 +120,6 @@ export const SubNav = () => {
       }
 
       try {
-        // 🔧 First check if affiliates table exists
         const affiliatesTableExists = await tableExists('affiliates');
         
         if (!affiliatesTableExists) {
@@ -128,7 +128,6 @@ export const SubNav = () => {
           return;
         }
 
-        // During impersonation, check if the IMPERSONATED user is an affiliate
         const { data, error } = await supabase
           .from('affiliates')
           .select('id, status')
@@ -137,7 +136,6 @@ export const SubNav = () => {
           .maybeSingle();
 
         if (error) {
-          // Handle specific error codes gracefully
           if (error.code === '42P01' || error.code === 'PGRST116' || error.code === '406') {
             console.log('🤝 Affiliates table/RLS issue - user is not affiliate');
             setIsAffiliate(false);
@@ -160,7 +158,6 @@ export const SubNav = () => {
           setIsAffiliate(false);
         }
       } catch (error) {
-        // Catch any unexpected errors - don't crash the app
         console.error('Error checking affiliate status (non-fatal):', error);
         setIsAffiliate(false);
       }
@@ -171,7 +168,6 @@ export const SubNav = () => {
 
   // 🔒 Check if a path belongs to a locked domain
   const isPathLocked = useCallback((path: string): boolean => {
-    // Check if path is in backtest section
     if (path.includes('/backtest')) {
       const backtestDomain = domains['journal-backtest'];
       return backtestDomain?.locked === true;
@@ -179,25 +175,31 @@ export const SubNav = () => {
     return false;
   }, []);
 
-  // 🔥 Enhanced active detection for better tab highlighting - FIXED FOR TOP SECRET
-  const isTabActive = useCallback((itemPath: string): boolean => {
-    // Check exact path match first
+  // 🔥 Enhanced active detection
+const isTabActive = useCallback((itemPath: string): boolean => {
     if (location.pathname === itemPath) return true;
     
-    // 🔥 TOP SECRET - Exact matching to prevent double highlight
+    // SITE DASHBOARD - Exact matching
+    if (itemPath === '/app/all-markets/admin/site-dashboard') {
+      return location.pathname === '/app/all-markets/admin/site-dashboard';
+    }
+    
+    // SUPPORT - Exact matching  
+    if (itemPath === '/app/all-markets/admin/support') {
+      return location.pathname === '/app/all-markets/admin/support';
+    }
+    
+    // TOP SECRET - Exact matching
     if (itemPath === '/app/top-secret') {
-      // Regular Top Secret - active only on exact match
       return location.pathname === '/app/top-secret';
     }
     
     if (itemPath === '/app/top-secret/admin') {
-      // Admin Top Secret - active on admin paths
       return location.pathname.startsWith('/app/top-secret/admin');
     }
     
-    // For subnav items, check if we're in their section
+    // Journal tab
     if (itemPath === '/app/journal/overview' || itemPath === '/app/journal') {
-      // Journal tab is active if we're in /app/journal but NOT in backtest, affiliate, or admin
       return location.pathname.startsWith('/app/journal') && 
              !location.pathname.startsWith('/app/journal/backtest') &&
              !location.pathname.startsWith('/app/journal/affiliate') &&
@@ -212,32 +214,30 @@ export const SubNav = () => {
       return location.pathname.includes('/affiliate');
     }
     
-    // Admin paths (excluding top-secret/admin which is handled above)
     if (itemPath.includes('/admin') && !itemPath.includes('/top-secret')) {
       return location.pathname.includes('/admin') && 
              !location.pathname.includes('/top-secret');
     }
     
-    // Fallback to standard check
     return isActive(itemPath);
   }, [location.pathname, isActive]);
 
   const handleNavigation = useCallback((path: string, itemLocked?: boolean) => {
-    // 🔒 CHECK IF INDIVIDUAL ITEM IS LOCKED
-    if (itemLocked) {
+    // 🔥 BETA ACCESS: Allow navigation if user has beta access
+    if (itemLocked && !hasBetaAccess) {
       console.log('🔒 Item is locked - Coming Soon:', path);
       return;
     }
 
-    // 🔒 BACKTEST LOCKED CHECK - Before any other logic
-    if (path.includes('/backtest') && isPathLocked(path)) {
+    // BACKTEST LOCKED CHECK
+    if (path.includes('/backtest') && isPathLocked(path) && !hasBetaAccess) {
       console.log('🔒 Backtest is locked - Coming Soon');
       return;
     }
 
-    // 🔐 BACKTEST ACCESS CONTROL (if not locked globally)
+    // BACKTEST ACCESS CONTROL
     if (path.includes('/backtest')) {
-      if (!hasBacktestAccess) {
+      if (!hasBacktestAccess && !hasBetaAccess) {
         navigate('/app/journal/backtest/landing');
         return;
       }
@@ -245,7 +245,7 @@ export const SubNav = () => {
       return;
     }
 
-    // 🤝 AFFILIATE ACCESS CONTROL
+    // AFFILIATE ACCESS CONTROL
     if (path.includes('/affiliate') && !path.includes('/admin')) {
       if (!isAffiliate && !isAdmin) {
         console.log('🚫 User is not an affiliate, cannot access affiliate pages');
@@ -255,15 +255,16 @@ export const SubNav = () => {
       return;
     }
     
-    const isLocked = (activeDomain as any).locked === true;
+    // 🔥 Domain locked check with beta access override
+    const isLocked = (activeDomain as any).locked === true && !hasBetaAccess;
     
     if (isLocked) {
       return;
     }
     navigate(path);
-  }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain]);
+  }, [navigate, isPathLocked, hasBacktestAccess, isAffiliate, isAdmin, activeDomain, hasBetaAccess]);
 
-  // 🔥 Filter function to check if item should be shown - UPDATED WITH hideForAdmin
+  // Filter function to check if item should be shown
   const shouldShowItem = useCallback((item: any): boolean => {
     // Hide admin items during impersonation
     if (isImpersonating && item.adminOnly) {
@@ -276,7 +277,7 @@ export const SubNav = () => {
       return false;
     }
 
-    // 🆕 Hide items marked hideForAdmin when user IS admin
+    // Hide items marked hideForAdmin when user IS admin
     if (item.hideForAdmin && isAdmin) {
       console.log('🔐 Hiding item for admin (has admin version):', item.label);
       return false;
@@ -287,8 +288,13 @@ export const SubNav = () => {
       return false;
     }
 
+    // 🔥 Hide beta items for non-beta users
+    if (item.beta && !hasBetaAccess) {
+      return false;
+    }
+
     return true;
-  }, [isImpersonating, isAdmin, isAffiliate]);
+  }, [isImpersonating, isAdmin, isAffiliate, hasBetaAccess]);
 
   return (
     <div 
@@ -305,7 +311,10 @@ export const SubNav = () => {
             const domainLocked = (activeDomain as any).locked === true;
             const backtestLocked = item.path.includes('/backtest') && isPathLocked(item.path);
             const itemLocked = (item as any).locked === true;
-            const locked = domainLocked || backtestLocked || itemLocked;
+            const isBetaItem = (item as any).beta === true;
+            
+            // 🔥 BETA ACCESS: Override locked status for beta users
+            const locked = (domainLocked || backtestLocked || itemLocked) && !hasBetaAccess;
             const active = isTabActive(item.path);
             
             const buttonContent = (
@@ -316,19 +325,30 @@ export const SubNav = () => {
                 className={`relative flex-shrink-0 rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
                   locked
                     ? 'cursor-not-allowed opacity-40 text-[#A0A0A0] hover:bg-[#1A1A1A]/50'
+                    : isBetaItem
+                    ? active
+                      ? 'bg-orange-500/10 text-orange-400'
+                      : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
                     : active
                     ? 'bg-[#C9A646]/5 text-[#C9A646]'
                     : 'text-[#A0A0A0] hover:bg-[#141414] hover:text-[#F4F4F4]'
                 }`}
                 style={active && !locked ? { 
-                  boxShadow: '0 0 6px rgba(201,166,70,0.08)',
-                  borderBottom: '2px solid #C9A646'
+                  boxShadow: isBetaItem ? '0 0 6px rgba(249,115,22,0.15)' : '0 0 6px rgba(201,166,70,0.08)',
+                  borderBottom: isBetaItem ? '2px solid #f97316' : '2px solid #C9A646'
                 } : {}}
               >
                 {item.label}
                 {locked && <Lock className="h-3 w-3 opacity-60" />}
                 
-                {/* 🔐 Admin badge */}
+                {/* 🔥 Beta badge */}
+                {isBetaItem && (
+                  <span className="px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                    BETA
+                  </span>
+                )}
+                
+                {/* Admin badge */}
                 {item.adminOnly && isAdmin && !isImpersonating && (
                   <Shield 
                     className="h-3 w-3 text-[#C9A646]" 
@@ -336,7 +356,7 @@ export const SubNav = () => {
                   />
                 )}
 
-                {/* 🤝 Affiliate badge */}
+                {/* Affiliate badge */}
                 {item.affiliateOnly && (isAffiliate || isAdmin) && (
                   <Users 
                     className="h-3 w-3 text-emerald-400" 
@@ -348,19 +368,22 @@ export const SubNav = () => {
                   <>
                     <span 
                       className="absolute inset-0 rounded-md opacity-10 blur-sm"
-                      style={{ background: '#C9A646' }}
+                      style={{ background: isBetaItem ? '#f97316' : '#C9A646' }}
                     />
                     <span 
-                      className="absolute top-0 left-0 right-0 h-0.5 bg-[#C9A646] opacity-80"
-                      style={{ boxShadow: '0 0 4px rgba(201,166,70,0.3)' }}
+                      className="absolute top-0 left-0 right-0 h-0.5 opacity-80"
+                      style={{ 
+                        background: isBetaItem ? '#f97316' : '#C9A646',
+                        boxShadow: isBetaItem ? '0 0 4px rgba(249,115,22,0.5)' : '0 0 4px rgba(201,166,70,0.3)' 
+                      }}
                     />
                   </>
                 )}
               </button>
             );
 
-            // 🔒 Wrap locked items with tooltip
-            if (backtestLocked || itemLocked) {
+            // Wrap locked items with tooltip (only if actually locked for this user)
+            if (locked) {
               return (
                 <Tooltip key={item.path}>
                   <TooltipTrigger asChild>

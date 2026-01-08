@@ -1,20 +1,21 @@
 // ============================================
-// FINOTAUR SUPPORT WIDGET v2.1 - FIXED
+// FINOTAUR SUPPORT WIDGET v3.0
 // ============================================
 // ✨ Support for both logged-in and guest users
 // 🔒 Guests can only send one message (no history)
 // 📧 Guests must provide name + email first
 // 📢 System updates with PDF support for ISM reports
 // 📅 30-day notification history
-// 🛡️ FIX v2.1: Admins see ALL reports (not filtered by target_group)
+// 🛡️ Admins see ALL reports (not filtered by target_group)
+// 🆕 v3.0: Category selection + improved welcome flow
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
 import { 
-  X, Send, MessageCircle, Sparkles, Shield, ArrowLeft, Plus, 
+  X, Send, MessageCircle, Shield, ArrowLeft, Plus, 
   Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
-  CheckCircle2, AlertCircle, Info, Megaphone, Download, FileText,
-  TrendingUp, TrendingDown
+  CheckCircle2, AlertCircle, Info, Megaphone, Download,
+  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,6 +37,7 @@ interface Ticket {
   user_email: string;
   user_name: string;
   subject: string;
+  category?: TicketCategory;
   messages: ChatMessage[];
   status: string;
   created_at: string;
@@ -68,6 +70,54 @@ interface SystemUpdate {
   metadata?: SystemUpdateMetadata;
 }
 
+// ==================== CATEGORY DEFINITIONS ====================
+
+type TicketCategory = 'technical' | 'payment' | 'question' | 'feedback';
+
+interface CategoryOption {
+  id: TicketCategory;
+  icon: React.ReactNode;
+  label: string;
+  labelHe: string;
+  description: string;
+  color: string;
+}
+
+const TICKET_CATEGORIES: CategoryOption[] = [
+  { 
+    id: 'technical', 
+    icon: <Wrench className="h-5 w-5" />,
+    label: 'Technical Issue', 
+    labelHe: 'בעיה טכנית', 
+    description: 'Bugs, sync issues, errors',
+    color: 'text-red-400'
+  },
+  { 
+    id: 'payment', 
+    icon: <CreditCard className="h-5 w-5" />,
+    label: 'Payment Issue', 
+    labelHe: 'בעיית תשלום', 
+    description: 'Billing, subscriptions, refunds',
+    color: 'text-blue-400'
+  },
+  { 
+    id: 'question', 
+    icon: <HelpCircle className="h-5 w-5" />,
+    label: 'Question', 
+    labelHe: 'שאלה', 
+    description: 'How to use features',
+    color: 'text-purple-400'
+  },
+  { 
+    id: 'feedback', 
+    icon: <Lightbulb className="h-5 w-5" />,
+    label: 'Feedback', 
+    labelHe: 'המלצות לשיפור', 
+    description: 'Suggestions, feature requests',
+    color: 'text-yellow-400'
+  },
+];
+
 // ==================== ADMIN EMAIL CONSTANT ====================
 const ADMIN_EMAIL = 'elad2550@gmail.com';
 
@@ -93,6 +143,11 @@ export default function SupportWidget() {
   const [systemUpdates, setSystemUpdates] = useState<SystemUpdate[]>([]);
   const [loadingUpdates, setLoadingUpdates] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // New state for category selection
+  const [selectedCategory, setSelectedCategory] = useState<TicketCategory | null>(null);
+  const [showCategorySelector, setShowCategorySelector] = useState(true);
+  const [messageSent, setMessageSent] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -124,7 +179,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedTicket?.messages, isNewConversation]);
+  }, [selectedTicket?.messages, isNewConversation, selectedCategory, messageSent]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -146,7 +201,6 @@ export default function SupportWidget() {
         )
         .subscribe();
 
-      // Also subscribe to system_updates for real-time notifications
       const updatesChannel = supabase
         .channel('updates-live')
         .on(
@@ -195,7 +249,6 @@ export default function SupportWidget() {
       if (user) {
         setIsGuest(false);
         
-        // Check if admin
         const isAdminUser = user.email === ADMIN_EMAIL;
         setIsAdmin(isAdminUser);
         
@@ -239,7 +292,6 @@ export default function SupportWidget() {
           setUserEmail(user.email || '');
         }
         
-        // Double-check admin status from profile
         if (profile?.role === 'admin' || profile?.role === 'super_admin' || user.email === ADMIN_EMAIL) {
           setIsAdmin(true);
         }
@@ -293,21 +345,18 @@ export default function SupportWidget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get user's profile to determine access level
       const { data: profile } = await supabase
         .from('profiles')
         .select('top_secret_enabled, newsletter_enabled, newsletter_paid, role, email')
         .eq('id', user.id)
         .single();
 
-      // ✅ FIX: Check if user is admin
       const userIsAdmin = 
         profile?.role === 'admin' || 
         profile?.role === 'super_admin' || 
         user.email === ADMIN_EMAIL ||
         profile?.email === ADMIN_EMAIL;
 
-      // Keep 30 days of history
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -320,9 +369,7 @@ export default function SupportWidget() {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      // ✅ FIX: Admins see ALL updates (no target_group filter)
       if (!userIsAdmin) {
-        // Determine user's target group for non-admins
         let userGroup = 'trading_journal';
         if (profile?.top_secret_enabled) {
           userGroup = 'top_secret';
@@ -330,10 +377,8 @@ export default function SupportWidget() {
           userGroup = 'newsletter';
         }
         
-        // Filter by target_group for non-admins
         query = query.or(`target_group.eq.all,target_group.eq.${userGroup}`);
       }
-      // If admin, no filter applied - they see everything
 
       const { data: updates, error } = await query;
 
@@ -342,7 +387,6 @@ export default function SupportWidget() {
         return;
       }
 
-      // Load user's read status
       const { data: readRecords } = await supabase
         .from('user_update_reads')
         .select('update_id')
@@ -350,7 +394,6 @@ export default function SupportWidget() {
 
       const readIds = new Set(readRecords?.map(r => r.update_id) || []);
 
-      // Map updates with read status and parse metadata
       const updatesWithReadStatus = (updates || []).map(update => {
         let metadata: SystemUpdateMetadata | undefined = undefined;
         
@@ -394,7 +437,6 @@ export default function SupportWidget() {
           onConflict: 'user_id,update_id'
         });
 
-      // Increment views count
       try {
         await supabase.rpc('increment_update_views', { update_id: updateId });
       } catch (e) {
@@ -497,6 +539,31 @@ export default function SupportWidget() {
     }, 100);
   }
 
+  // ==================== CATEGORY SELECTION ====================
+
+  function handleCategorySelect(categoryId: TicketCategory) {
+    setSelectedCategory(categoryId);
+    setShowCategorySelector(false);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  }
+
+  function getCategoryPrompt(category: TicketCategory): string {
+    switch (category) {
+      case 'technical':
+        return "Please describe the issue you're experiencing. Include any error messages, steps to reproduce, and what you expected to happen.";
+      case 'payment':
+        return "Please describe your billing or payment concern. Include relevant transaction details, dates, or subscription information if applicable.";
+      case 'question':
+        return "What would you like to know? Feel free to ask anything about Finotaur features, trading tools, or how to get the most out of your account!";
+      case 'feedback':
+        return "We'd love to hear your thoughts! Share your ideas, suggestions, or feature requests. Your feedback helps us improve Finotaur for everyone.";
+      default:
+        return "How can we help you today?";
+    }
+  }
+
   // ==================== MESSAGING ====================
 
   async function handleSendMessage() {
@@ -506,6 +573,12 @@ export default function SupportWidget() {
     }
 
     if (!currentMessage.trim()) return;
+
+    // For new conversations, require category selection (unless guest)
+    if (isNewConversation && !isGuest && !selectedCategory) {
+      toast.error('Please select a category first');
+      return;
+    }
 
     setSending(true);
 
@@ -526,13 +599,18 @@ export default function SupportWidget() {
       };
 
       if (isGuest || isNewConversation) {
+        const categoryLabel = selectedCategory 
+          ? TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.label 
+          : 'Support Request';
+
         const { data, error } = await supabase
           .from('support_tickets')
           .insert({
             user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
             user_email: userEmail,
             user_name: userName,
-            subject: 'Support Request',
+            subject: categoryLabel,
+            category: selectedCategory,
             message: currentMessage.trim(),
             messages: [newMessage],
             status: 'open',
@@ -545,12 +623,14 @@ export default function SupportWidget() {
         if (!isGuest) {
           setSelectedTicket(data);
           setIsNewConversation(false);
+          setMessageSent(true);
           loadUserTickets();
         }
 
         setCurrentMessage('');
         setAttachments([]);
         
+        // Send email notification
         try {
           const { data: { session } } = await supabase.auth.getSession();
           
@@ -572,15 +652,19 @@ export default function SupportWidget() {
           console.error('Email error:', e);
         }
 
-        toast.success(isGuest ? 'Message sent! We\'ll respond to your email soon.' : 'Message sent');
+        toast.success(
+          isGuest 
+            ? "Message sent! We'll respond to your email soon." 
+            : "Message sent! Our team will get back to you shortly."
+        );
         
         if (isGuest) {
+          setMessageSent(true);
           setTimeout(() => {
             handleClose();
-          }, 2000);
+          }, 3000);
         }
         
-        inputRef.current?.focus();
         return;
       }
 
@@ -608,7 +692,7 @@ export default function SupportWidget() {
       loadUserTickets();
     } catch (error: any) {
       console.error('Error:', error);
-      toast.error('Failed to send');
+      toast.error('Failed to send message');
     } finally {
       setSending(false);
       setUploadingFiles(false);
@@ -732,6 +816,16 @@ export default function SupportWidget() {
     }
   }
 
+  function getCategoryIcon(category?: TicketCategory) {
+    const cat = TICKET_CATEGORIES.find(c => c.id === category);
+    return cat?.icon || <HelpCircle className="h-4 w-4" />;
+  }
+
+  function getCategoryLabel(category?: TicketCategory) {
+    const cat = TICKET_CATEGORIES.find(c => c.id === category);
+    return cat?.label || 'Support';
+  }
+
   // ==================== NAVIGATION ====================
 
   const unreadUpdatesCount = systemUpdates.filter(u => !u.read).length;
@@ -750,6 +844,9 @@ export default function SupportWidget() {
       setShowGuestForm(false);
       setGuestFormName('');
       setGuestFormEmail('');
+      setSelectedCategory(null);
+      setShowCategorySelector(true);
+      setMessageSent(false);
     }, 300);
   };
 
@@ -759,6 +856,9 @@ export default function SupportWidget() {
     setSelectedTicket(null);
     setIsNewConversation(false);
     setAttachments([]);
+    setSelectedCategory(null);
+    setShowCategorySelector(true);
+    setMessageSent(false);
     loadUserTickets();
   };
 
@@ -768,6 +868,9 @@ export default function SupportWidget() {
     setSelectedTicket(null);
     setIsNewConversation(true);
     setAttachments([]);
+    setSelectedCategory(null);
+    setShowCategorySelector(true);
+    setMessageSent(false);
   };
 
   // ==================== RENDER ====================
@@ -784,18 +887,15 @@ export default function SupportWidget() {
         className="hidden"
       />
 
-      {/* Floating Button - Blue Chat Bubble */}
+      {/* Floating Button */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-8 right-8 z-50 group"
         >
-          {/* Glow Effect */}
           <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
           
-          {/* Main Button */}
           <div className="relative h-14 w-14 rounded-full bg-gradient-to-br from-[#2196F3] to-[#1976D2] flex items-center justify-center shadow-2xl group-hover:scale-105 transition-all duration-200 ease-out border border-[#42A5F5]/30">
-            {/* Chat Bubble Icon */}
             <svg 
               viewBox="0 0 24 24" 
               className="h-7 w-7 text-white"
@@ -971,7 +1071,6 @@ export default function SupportWidget() {
               {/* ==================== UPDATES TAB ==================== */}
               {!isGuest && activeTab === 'updates' && (
                 <div className="flex-1 flex flex-col overflow-hidden">
-                  {/* Admin Badge */}
                   {isAdmin && (
                     <div className="px-4 pt-3">
                       <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-center gap-2">
@@ -1030,7 +1129,6 @@ export default function SupportWidget() {
                                 )}
                               </div>
                               
-                              {/* ✅ Admin: Show target group badge */}
                               {isAdmin && update.target_group && (
                                 <div className="flex items-center gap-2 mb-2">
                                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
@@ -1048,7 +1146,6 @@ export default function SupportWidget() {
                                 {update.content}
                               </p>
                               
-                              {/* ISM Report specific: PDF Download Button */}
                               {update.metadata?.pdf_url && (
                                 <a
                                   href={update.metadata.pdf_url}
@@ -1062,7 +1159,6 @@ export default function SupportWidget() {
                                 </a>
                               )}
                               
-                              {/* ISM Report specific: PMI Badge */}
                               {update.metadata?.pmi_value && (
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
@@ -1085,7 +1181,6 @@ export default function SupportWidget() {
                                 </div>
                               )}
                               
-                              {/* Company Report specific: Ticker Badge */}
                               {update.metadata?.ticker && (
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">
@@ -1095,7 +1190,6 @@ export default function SupportWidget() {
                                 </div>
                               )}
                               
-                              {/* Crypto Report specific: Regime Badge */}
                               {update.metadata?.regime && (
                                 <div className="flex items-center gap-2 mt-2">
                                   <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
@@ -1156,7 +1250,11 @@ export default function SupportWidget() {
                                 <div className="flex items-start gap-3">
                                   <div className="relative flex-shrink-0">
                                     <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                      <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                                      {ticket.category ? (
+                                        <span className="text-black">{getCategoryIcon(ticket.category)}</span>
+                                      ) : (
+                                        <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                                      )}
                                     </div>
                                     {hasUnread && (
                                       <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-black"></div>
@@ -1166,7 +1264,7 @@ export default function SupportWidget() {
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between mb-1">
                                       <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
-                                        Support Team
+                                        {ticket.category ? getCategoryLabel(ticket.category) : 'Support'}
                                       </h4>
                                       <span className="text-[11px] text-[#E6C77D] opacity-40 group-hover:opacity-60 transition-opacity">
                                         {formatRelativeTime(ticket.updated_at)}
@@ -1204,36 +1302,132 @@ export default function SupportWidget() {
                   {/* Chat View */}
                   {view === 'chat' && (
                     <>
-                      <div className="flex-1 overflow-y-auto p-5 space-y-2">
+                      <div className="flex-1 overflow-y-auto p-5 space-y-4">
                         {isNewConversation ? (
-                          <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
-                            <div className="flex justify-start">
-                              <div className="max-w-[75%]">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                    <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                          <div className="space-y-4">
+                            {/* Welcome Message */}
+                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                              <div className="flex justify-start">
+                                <div className="max-w-[85%]">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                      <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                    </div>
+                                    <span className="text-xs font-medium text-[#D4AF37]">
+                                      Support Team
+                                    </span>
                                   </div>
-                                  <span className="text-xs font-medium text-[#D4AF37]">
-                                    Support Team
-                                  </span>
-                                </div>
-                                
-                                <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                                  <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
-                                    Hey 👋
-                                  </p>
-                                  <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
-                                    {isGuest && userName 
-                                      ? `Hi ${userName}! How can we help you today? We'll respond to ${userEmail}.`
-                                      : 'Welcome to Finotaur Support. How can we help you today? Our team is here to support your trading journey — whether it\'s technical help, trade syncing, or anything else you need.'
-                                    }
-                                  </p>
-                                  <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
-                                    {formatTime(new Date().toISOString())}
-                                  </span>
+                                  
+                                  <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                    <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
+                                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋
+                                    </p>
+                                    <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
+                                      {isGuest 
+                                        ? `Great to have you here! How can we help you today? We'll respond to ${userEmail || 'your email'}.`
+                                        : "Welcome to Finotaur Support! We're here to help with any questions or issues you might have."
+                                      }
+                                    </p>
+                                    <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                      {formatTime(new Date().toISOString())}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
+
+                            {/* Category Selector (for logged-in users only) */}
+                            {!isGuest && showCategorySelector && !messageSent && (
+                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200 delay-150">
+                                <div className="flex justify-start">
+                                  <div className="max-w-[90%]">
+                                    <div className="rounded-[18px] px-4 py-4 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                      <p className="text-sm text-white/90 mb-4 font-['Inter',sans-serif]">
+                                        What can we help you with today?
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {TICKET_CATEGORIES.map((cat) => (
+                                          <button
+                                            key={cat.id}
+                                            onClick={() => handleCategorySelect(cat.id)}
+                                            className={`p-3 rounded-xl border transition-all duration-200 text-left hover:scale-[1.02] active:scale-[0.98] ${
+                                              selectedCategory === cat.id
+                                                ? 'bg-[#D4AF37]/20 border-[#D4AF37]/50'
+                                                : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-[#7F6823]/40'
+                                            }`}
+                                          >
+                                            <div className={`mb-2 ${cat.color}`}>
+                                              {cat.icon}
+                                            </div>
+                                            <span className="text-xs font-medium text-white block">{cat.label}</span>
+                                            <span className="text-[10px] text-gray-500 block mt-0.5">{cat.description}</span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Category Selected - Show prompt */}
+                            {!isGuest && selectedCategory && !showCategorySelector && !messageSent && (
+                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                <div className="flex justify-start">
+                                  <div className="max-w-[85%]">
+                                    <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className={TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.color}>
+                                          {TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.icon}
+                                        </span>
+                                        <span className="text-sm font-medium text-[#D4AF37]">
+                                          {TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+                                        </span>
+                                        <button
+                                          onClick={() => setShowCategorySelector(true)}
+                                          className="ml-auto text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline"
+                                        >
+                                          Change
+                                        </button>
+                                      </div>
+                                      <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
+                                        {getCategoryPrompt(selectedCategory)}
+                                      </p>
+                                      <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                        {formatTime(new Date().toISOString())}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Message Sent Confirmation */}
+                            {messageSent && (
+                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                <div className="flex justify-start">
+                                  <div className="max-w-[85%]">
+                                    <div className="rounded-[18px] px-4 py-3 shadow-md bg-green-500/10 border border-green-500/30 backdrop-blur-sm">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <CheckCircle2 className="h-4 w-4 text-green-400" />
+                                        <span className="text-sm font-medium text-green-400">
+                                          Message Received!
+                                        </span>
+                                      </div>
+                                      <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
+                                        Thank you for reaching out! Our support team has received your message and will get back to you as soon as possible.
+                                      </p>
+                                      <p className="text-xs text-gray-400 mt-2 font-['Inter',sans-serif]">
+                                        📧 We typically respond within 24 hours.
+                                      </p>
+                                      <span className="text-[10px] text-green-400/50 mt-2 block">
+                                        {formatTime(new Date().toISOString())}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ) : !selectedTicket?.messages || !Array.isArray(selectedTicket.messages) || selectedTicket.messages.length === 0 ? (
                           <div className="flex items-center justify-center h-full">
@@ -1250,7 +1444,7 @@ export default function SupportWidget() {
                           selectedTicket.messages.map((msg, idx) => (
                             <div
                               key={msg.id || idx}
-                              className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200 mb-2`}
+                              className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200`}
                             >
                               <div className="max-w-[75%]">
                                 {msg.type === 'admin' && (
@@ -1349,76 +1543,97 @@ export default function SupportWidget() {
                         <div ref={messagesEndRef} />
                       </div>
                       
-                      {/* Input */}
-                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
-                        {attachments.length > 0 && (
-                          <div className="mb-3 flex flex-wrap gap-2">
-                            {attachments.map((file, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
-                              >
-                                <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
-                                <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
-                                  {file.name}
-                                </span>
-                                <button
-                                  onClick={() => removeAttachment(idx)}
-                                  className="ml-1 text-gray-400 hover:text-white transition-colors"
+                      {/* Input Area */}
+                      {!messageSent && (
+                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                          {attachments.length > 0 && (
+                            <div className="mb-3 flex flex-wrap gap-2">
+                              {attachments.map((file, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
                                 >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                                  <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
+                                  <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
+                                    {file.name}
+                                  </span>
+                                  <button
+                                    onClick={() => removeAttachment(idx)}
+                                    className="ml-1 text-gray-400 hover:text-white transition-colors"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
-                        <div className="flex gap-3">
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={sending || attachments.length >= 5}
+                              className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
+                              title="Upload file (max 20MB)"
+                            >
+                              <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
+                              <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
+                                Upload
+                              </span>
+                            </button>
+
+                            <Textarea
+                              ref={inputRef}
+                              value={currentMessage}
+                              onChange={(e) => setCurrentMessage(e.target.value)}
+                              placeholder={
+                                isNewConversation && !isGuest && !selectedCategory
+                                  ? "Please select a category above..."
+                                  : "Type your message..."
+                              }
+                              className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
+                              disabled={sending || (isNewConversation && !isGuest && !selectedCategory)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                  e.preventDefault();
+                                  handleSendMessage();
+                                }
+                              }}
+                            />
+                            <button
+                              onClick={handleSendMessage}
+                              disabled={!currentMessage.trim() || sending || uploadingFiles || (isNewConversation && !isGuest && !selectedCategory)}
+                              className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
+                            >
+                              {sending || uploadingFiles ? (
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                              ) : (
+                                <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
+                            {isGuest 
+                              ? "We'll respond to your email • Max 5 files, 20MB each"
+                              : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
+                            }
+                          </p>
+                        </div>
+                      )}
+
+                      {/* After message sent - show back button */}
+                      {messageSent && !isGuest && (
+                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
                           <button
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={sending || attachments.length >= 5}
-                            className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
-                            title="Upload file (max 20MB)"
+                            onClick={handleBackToList}
+                            className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out"
                           >
-                            <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
-                            <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
-                              Upload
+                            <ArrowLeft className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
+                            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
+                              Back to Conversations
                             </span>
                           </button>
-
-                          <Textarea
-                            ref={inputRef}
-                            value={currentMessage}
-                            onChange={(e) => setCurrentMessage(e.target.value)}
-                            placeholder="Type your message..."
-                            className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
-                            disabled={sending}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                                e.preventDefault();
-                                handleSendMessage();
-                              }
-                            }}
-                          />
-                          <button
-                            onClick={handleSendMessage}
-                            disabled={!currentMessage.trim() || sending || uploadingFiles}
-                            className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
-                          >
-                            {sending || uploadingFiles ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
-                            ) : (
-                              <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
-                            )}
-                          </button>
                         </div>
-                        <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
-                          {isGuest 
-                            ? 'We\'ll respond to your email • Max 5 files, 20MB each'
-                            : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
-                          }
-                        </p>
-                      </div>
+                      )}
                     </>
                   )}
                 </>

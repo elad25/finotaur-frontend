@@ -1,15 +1,14 @@
 // =====================================================
-// FINOTAUR PRODUCT SUBSCRIPTION MANAGEMENT - v1.0.0
+// FINOTAUR NEWSLETTER (WAR ZONE) CANCEL - v1.0.0
 // =====================================================
-// Edge Function for managing Newsletter & Top Secret subscriptions
+// Edge Function for managing War Zone subscriptions
 // 
-// Handles: Newsletter (War Zone) & Top Secret products
-// Actions: cancel, reactivate, status
-//
-// Deployment:
-// 1. supabase functions new manage-product-subscription
-// 2. Copy this file to supabase/functions/manage-product-subscription/index.ts
-// 3. supabase functions deploy manage-product-subscription
+// Actions:
+// - cancel: Cancel subscription at period end
+// - undo_cancel: Reactivate pending cancellation
+// - status: Get current subscription status
+// 
+// Deploy: supabase functions deploy newsletter-cancel
 // =====================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -19,13 +18,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // CONFIGURATION
 // ============================================
 
-const WHOP_API_KEY = Deno.env.get("WHOP_API_KEY") || "";
+const WHOP_API_KEY = Deno.env.get("WHOP_API_KEY") || Deno.env.get("WHOP_BEARER_TOKEN") || "";
 const WHOP_API_URL = "https://api.whop.com/api/v2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-
-// Product types
-type ProductType = "newsletter" | "top_secret";
 
 // ============================================
 // CORS HEADERS
@@ -43,21 +39,21 @@ const corsHeaders = {
 
 interface CancelRequest {
   action: "cancel";
-  product: ProductType;
   reason?: string;
+  reason_id?: string;
+  reason_label?: string;
+  feedback?: string;
 }
 
-interface ReactivateRequest {
-  action: "reactivate";
-  product: ProductType;
+interface UndoCancelRequest {
+  action: "undo_cancel";
 }
 
 interface StatusRequest {
   action: "status";
-  product: ProductType;
 }
 
-type RequestBody = CancelRequest | ReactivateRequest | StatusRequest;
+type RequestBody = CancelRequest | UndoCancelRequest | StatusRequest;
 
 interface WhopMembership {
   id: string;
@@ -73,19 +69,20 @@ interface WhopMembership {
 // ============================================
 
 async function cancelWhopMembership(
-  membershipId: string,
-  mode: "at_period_end" | "immediate" = "at_period_end"
+  membershipId: string
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
   try {
-    console.log(`🔄 Canceling membership ${membershipId} with mode: ${mode}`);
+    console.log(`🔄 Canceling newsletter membership ${membershipId} at period end`);
 
-    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}/cancel`, {
+    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ 
+        cancel_at_period_end: true 
+      }),
     });
 
     if (!response.ok) {
@@ -95,7 +92,7 @@ async function cancelWhopMembership(
     }
 
     const data = await response.json();
-    console.log(`✅ Membership canceled:`, data);
+    console.log(`✅ Newsletter membership scheduled for cancellation:`, data);
     return { success: true, data };
 
   } catch (error) {
@@ -108,7 +105,7 @@ async function reactivateWhopMembership(
   membershipId: string
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
   try {
-    console.log(`🔄 Reactivating membership ${membershipId}`);
+    console.log(`🔄 Reactivating newsletter membership ${membershipId}`);
 
     const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
       method: "POST",
@@ -116,7 +113,9 @@ async function reactivateWhopMembership(
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ cancel_at_period_end: false }),
+      body: JSON.stringify({ 
+        cancel_at_period_end: false 
+      }),
     });
 
     if (!response.ok) {
@@ -126,7 +125,7 @@ async function reactivateWhopMembership(
     }
 
     const data = await response.json();
-    console.log(`✅ Membership reactivated:`, data);
+    console.log(`✅ Newsletter membership reactivated:`, data);
     return { success: true, data };
 
   } catch (error) {
@@ -147,8 +146,6 @@ async function getWhopMembership(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
       return { success: false, error: `Whop API error: ${response.status}` };
     }
 
@@ -156,7 +153,6 @@ async function getWhopMembership(
     return { success: true, data };
 
   } catch (error) {
-    console.error(`❌ Get membership error:`, error);
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }
@@ -178,75 +174,9 @@ async function logSubscriptionEvent(
   }
 ): Promise<void> {
   try {
-    const { error } = await supabase
-      .from("subscription_events")
-      .insert(eventData);
-    
-    if (error) {
-      console.warn("Failed to log subscription event:", error.message);
-    }
+    await supabase.from("subscription_events").insert(eventData);
   } catch (err) {
     console.warn("Failed to log subscription event:", err);
-  }
-}
-
-// ============================================
-// HELPER: Get membership ID by product
-// ============================================
-
-function getMembershipId(profile: any, product: ProductType): string | null {
-  switch (product) {
-    case "newsletter":
-      return profile.newsletter_whop_membership_id;
-    case "top_secret":
-      return profile.top_secret_whop_membership_id;
-    default:
-      return null;
-  }
-}
-
-// ============================================
-// HELPER: Get product status
-// ============================================
-
-function getProductStatus(profile: any, product: ProductType): {
-  enabled: boolean;
-  status: string;
-  cancelAtPeriodEnd: boolean;
-  expiresAt: string | null;
-} {
-  switch (product) {
-    case "newsletter":
-      return {
-        enabled: profile.newsletter_enabled ?? false,
-        status: profile.newsletter_status ?? "inactive",
-        cancelAtPeriodEnd: profile.newsletter_cancel_at_period_end ?? false,
-        expiresAt: profile.newsletter_expires_at,
-      };
-    case "top_secret":
-      return {
-        enabled: profile.top_secret_enabled ?? false,
-        status: profile.top_secret_status ?? "inactive",
-        cancelAtPeriodEnd: profile.top_secret_cancel_at_period_end ?? false,
-        expiresAt: profile.top_secret_expires_at,
-      };
-    default:
-      return { enabled: false, status: "inactive", cancelAtPeriodEnd: false, expiresAt: null };
-  }
-}
-
-// ============================================
-// HELPER: Get product display name
-// ============================================
-
-function getProductDisplayName(product: ProductType): string {
-  switch (product) {
-    case "newsletter":
-      return "War Zone Newsletter";
-    case "top_secret":
-      return "Top Secret";
-    default:
-      return product;
   }
 }
 
@@ -270,7 +200,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // Create Supabase client with service role
+    // Create Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get current user from token
@@ -288,15 +218,19 @@ serve(async (req: Request) => {
 
     console.log(`👤 User authenticated: ${user.email}`);
 
-    // Get user's profile with all subscription fields
+    // Get user's newsletter subscription info
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select(`
-        id, email,
-        newsletter_enabled, newsletter_status, newsletter_whop_membership_id,
-        newsletter_expires_at, newsletter_cancel_at_period_end,
-        top_secret_enabled, top_secret_status, top_secret_whop_membership_id,
-        top_secret_expires_at, top_secret_cancel_at_period_end, top_secret_interval
+        id, 
+        email, 
+        newsletter_enabled,
+        newsletter_status,
+        newsletter_whop_membership_id,
+        newsletter_started_at,
+        newsletter_expires_at,
+        newsletter_trial_ends_at,
+        newsletter_cancel_at_period_end
       `)
       .eq("id", user.id)
       .single();
@@ -310,32 +244,26 @@ serve(async (req: Request) => {
     }
 
     // Parse request body
-    const body: RequestBody = await req.json();
-    const { product } = body;
+    const body: RequestBody = req.method === "GET" 
+      ? { action: "status" } 
+      : await req.json();
 
-    if (!product || !["newsletter", "top_secret"].includes(product)) {
-      return new Response(
-        JSON.stringify({ error: "Invalid product. Must be 'newsletter' or 'top_secret'" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`📨 Request:`, { action: body.action, product, userId: user.id });
+    console.log(`📨 Newsletter request:`, { action: body.action, userId: user.id });
 
     // Route to appropriate handler
     switch (body.action) {
       case "status":
-        return handleStatus(profile, product, corsHeaders);
+        return handleStatus(profile, corsHeaders);
 
       case "cancel":
-        return handleCancel(supabase, profile, product, (body as CancelRequest).reason, corsHeaders);
+        return handleCancel(supabase, profile, body as CancelRequest, corsHeaders);
 
-      case "reactivate":
-        return handleReactivate(supabase, profile, product, corsHeaders);
+      case "undo_cancel":
+        return handleUndoCancel(supabase, profile, corsHeaders);
 
       default:
         return new Response(
-          JSON.stringify({ error: "Invalid action. Must be 'cancel', 'reactivate', or 'status'" }),
+          JSON.stringify({ error: "Invalid action" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
@@ -356,34 +284,45 @@ serve(async (req: Request) => {
 // STATUS HANDLER
 // ============================================
 
-async function handleStatus(
+function handleStatus(
   profile: any,
-  product: ProductType,
   corsHeaders: Record<string, string>
-): Promise<Response> {
-  const status = getProductStatus(profile, product);
-  const membershipId = getMembershipId(profile, product);
+): Response {
+  const isActive = profile.newsletter_enabled && 
+    ['active', 'trial'].includes(profile.newsletter_status || '');
 
-  const response = {
-    success: true,
-    product,
-    subscription: {
-      ...status,
-      hasMembership: !!membershipId,
-    },
-  };
+  const isInTrial = profile.newsletter_status === 'trial';
+  
+  let daysRemaining: number | null = null;
+  if (profile.newsletter_expires_at) {
+    const expiresAt = new Date(profile.newsletter_expires_at);
+    const now = new Date();
+    daysRemaining = Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  }
 
-  // If has Whop membership, get live status from Whop API
-  if (membershipId && WHOP_API_KEY) {
-    const whopResult = await getWhopMembership(membershipId);
-    if (whopResult.success && whopResult.data) {
-      response.subscription.cancelAtPeriodEnd = whopResult.data.cancel_at_period_end;
-      response.subscription.status = whopResult.data.status === "active" ? "active" : whopResult.data.status;
-    }
+  let trialDaysRemaining: number | null = null;
+  if (profile.newsletter_trial_ends_at && isInTrial) {
+    const trialEndsAt = new Date(profile.newsletter_trial_ends_at);
+    const now = new Date();
+    trialDaysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
   }
 
   return new Response(
-    JSON.stringify(response),
+    JSON.stringify({
+      success: true,
+      subscription: {
+        enabled: profile.newsletter_enabled || false,
+        status: profile.newsletter_status || 'inactive',
+        isActive,
+        isInTrial,
+        expiresAt: profile.newsletter_expires_at,
+        trialEndsAt: profile.newsletter_trial_ends_at,
+        cancelAtPeriodEnd: profile.newsletter_cancel_at_period_end || false,
+        hasMembership: !!profile.newsletter_whop_membership_id,
+        daysRemaining,
+        trialDaysRemaining,
+      },
+    }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );
 }
@@ -395,76 +334,72 @@ async function handleStatus(
 async function handleCancel(
   supabase: any,
   profile: any,
-  product: ProductType,
-  reason: string | undefined,
+  request: CancelRequest,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  const membershipId = getMembershipId(profile, product);
-  const productStatus = getProductStatus(profile, product);
-  const productName = getProductDisplayName(product);
+  
+  // Check if user has active newsletter subscription
+  const isActive = profile.newsletter_enabled && 
+    ['active', 'trial'].includes(profile.newsletter_status || '');
 
-  // Validate: must have membership
-  if (!membershipId) {
+  if (!isActive) {
     return new Response(
-      JSON.stringify({ error: `No active ${productName} subscription to cancel` }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  // Validate: must be active
-  if (!productStatus.enabled && productStatus.status !== 'active' && productStatus.status !== 'trial') {
-    return new Response(
-      JSON.stringify({ error: `No active ${productName} subscription to cancel` }),
+      JSON.stringify({ error: "No active War Zone subscription to cancel" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   // Check if already pending cancellation
-  if (productStatus.cancelAtPeriodEnd) {
+  if (profile.newsletter_cancel_at_period_end) {
     return new Response(
       JSON.stringify({ 
-        error: `${productName} subscription is already scheduled for cancellation`,
-        expiresAt: productStatus.expiresAt
+        error: "Subscription is already scheduled for cancellation",
+        expiresAt: profile.newsletter_expires_at
       }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  // ============================================
-  // STEP 1: Cancel via Whop API
-  // ============================================
+  const membershipId = profile.newsletter_whop_membership_id;
+  const isInTrial = profile.newsletter_status === 'trial';
 
-  const cancelResult = await cancelWhopMembership(membershipId, "at_period_end");
+  // ============================================
+  // STEP 1: Cancel via Whop API (if has membership)
+  // ============================================
+  
+  if (membershipId && WHOP_API_KEY) {
+    console.log(`🔄 Canceling Whop membership: ${membershipId}`);
+    
+    const cancelResult = await cancelWhopMembership(membershipId);
 
-  if (!cancelResult.success) {
-    return new Response(
-      JSON.stringify({ error: cancelResult.error }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (!cancelResult.success) {
+      console.error(`❌ Whop cancellation failed: ${cancelResult.error}`);
+      // Continue anyway - we'll update DB
+    } else {
+      console.log(`✅ Whop membership scheduled for cancellation`);
+    }
+  } else {
+    console.log(`⚠️ No Whop membership ID - updating DB only`);
   }
 
   // ============================================
-  // STEP 2: Update profile in DB
+  // STEP 2: Update profile in database
   // ============================================
-
-  let updateData: Record<string, any> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (product === "newsletter") {
-    updateData.newsletter_cancel_at_period_end = true;
-  } else if (product === "top_secret") {
-    updateData.top_secret_cancel_at_period_end = true;
-  }
 
   const { error: updateError } = await supabase
     .from("profiles")
-    .update(updateData)
+    .update({
+      newsletter_cancel_at_period_end: true,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", profile.id);
 
   if (updateError) {
     console.error("❌ Profile update error:", updateError);
-    // Don't fail - Whop was already updated successfully
+    return new Response(
+      JSON.stringify({ error: "Failed to update subscription status" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   // ============================================
@@ -474,14 +409,17 @@ async function handleCancel(
   await logSubscriptionEvent(supabase, {
     user_id: profile.id,
     event_type: "cancel_scheduled",
-    old_plan: product,
+    old_plan: "newsletter",
     new_plan: "none",
-    reason: reason || "User requested cancellation",
-    scheduled_at: productStatus.expiresAt || undefined,
+    reason: request.reason_label || request.reason || "User requested cancellation",
+    scheduled_at: profile.newsletter_expires_at,
     metadata: {
       whop_membership_id: membershipId,
-      product_type: product,
       cancelled_at: new Date().toISOString(),
+      was_in_trial: isInTrial,
+      reason_id: request.reason_id,
+      feedback: request.feedback,
+      subscription_type: 'newsletter',
     },
   });
 
@@ -489,23 +427,28 @@ async function handleCancel(
   // STEP 4: Return success response
   // ============================================
 
-  const expiresDate = productStatus.expiresAt 
-    ? new Date(productStatus.expiresAt).toLocaleDateString('en-US', {
+  // Format expiration date
+  const expiresDate = profile.newsletter_expires_at 
+    ? new Date(profile.newsletter_expires_at).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long', 
         day: 'numeric'
       })
     : 'the end of your billing period';
 
+  const trialMessage = isInTrial 
+    ? "Your free trial has been cancelled. You won't be charged."
+    : `Your War Zone subscription will be cancelled at the end of your billing period. You'll continue to have access until ${expiresDate}.`;
+
   return new Response(
     JSON.stringify({
       success: true,
-      message: `Your ${productName} subscription has been cancelled. You'll continue to have access until ${expiresDate}.`,
+      message: trialMessage,
       subscription: {
-        product,
-        status: productStatus.status,
+        status: profile.newsletter_status,
         cancelAtPeriodEnd: true,
-        expiresAt: productStatus.expiresAt,
+        expiresAt: profile.newsletter_expires_at,
+        wasInTrial: isInTrial,
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -513,101 +456,86 @@ async function handleCancel(
 }
 
 // ============================================
-// REACTIVATE HANDLER
+// UNDO CANCEL HANDLER
 // ============================================
 
-async function handleReactivate(
+async function handleUndoCancel(
   supabase: any,
   profile: any,
-  product: ProductType,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
-  const membershipId = getMembershipId(profile, product);
-  const productStatus = getProductStatus(profile, product);
-  const productName = getProductDisplayName(product);
-
-  // Validate: must have pending cancellation
-  if (!productStatus.cancelAtPeriodEnd) {
+  
+  // Check if there's a pending cancellation
+  if (!profile.newsletter_cancel_at_period_end) {
     return new Response(
-      JSON.stringify({ error: `No pending cancellation to undo for ${productName}` }),
+      JSON.stringify({ error: "No pending cancellation to undo" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
-  // Validate: must have membership
-  if (!membershipId) {
-    return new Response(
-      JSON.stringify({ error: `No Whop membership found for ${productName}` }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  const membershipId = profile.newsletter_whop_membership_id;
+
+  // ============================================
+  // STEP 1: Reactivate via Whop API (if has membership)
+  // ============================================
+
+  if (membershipId && WHOP_API_KEY) {
+    console.log(`🔄 Reactivating Whop membership: ${membershipId}`);
+    
+    const reactivateResult = await reactivateWhopMembership(membershipId);
+
+    if (!reactivateResult.success) {
+      console.error(`❌ Whop reactivation failed: ${reactivateResult.error}`);
+      // Continue anyway - we'll update DB
+    } else {
+      console.log(`✅ Whop membership reactivated`);
+    }
   }
 
   // ============================================
-  // STEP 1: Reactivate via Whop API
+  // STEP 2: Update profile
   // ============================================
 
-  const reactivateResult = await reactivateWhopMembership(membershipId);
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      newsletter_cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
 
-  if (!reactivateResult.success) {
+  if (updateError) {
+    console.error("❌ Profile update error:", updateError);
     return new Response(
-      JSON.stringify({ error: reactivateResult.error }),
+      JSON.stringify({ error: "Failed to update subscription status" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   // ============================================
-  // STEP 2: Update profile in DB
-  // ============================================
-
-  let updateData: Record<string, any> = {
-    updated_at: new Date().toISOString(),
-  };
-
-  if (product === "newsletter") {
-    updateData.newsletter_cancel_at_period_end = false;
-  } else if (product === "top_secret") {
-    updateData.top_secret_cancel_at_period_end = false;
-  }
-
-  const { error: updateError } = await supabase
-    .from("profiles")
-    .update(updateData)
-    .eq("id", profile.id);
-
-  if (updateError) {
-    console.error("❌ Profile update error:", updateError);
-    // Don't fail - Whop was already updated successfully
-  }
-
-  // ============================================
-  // STEP 3: Log subscription event
+  // STEP 3: Log event
   // ============================================
 
   await logSubscriptionEvent(supabase, {
     user_id: profile.id,
     event_type: "reactivated",
     old_plan: "cancelling",
-    new_plan: product,
+    new_plan: "newsletter",
     metadata: {
       whop_membership_id: membershipId,
-      product_type: product,
       reactivated_at: new Date().toISOString(),
+      subscription_type: 'newsletter',
     },
   });
-
-  // ============================================
-  // STEP 4: Return success response
-  // ============================================
 
   return new Response(
     JSON.stringify({
       success: true,
-      message: `Your ${productName} subscription has been reactivated!`,
+      message: "Your War Zone subscription has been reactivated!",
       subscription: {
-        product,
-        status: "active",
+        status: profile.newsletter_status,
         cancelAtPeriodEnd: false,
-        expiresAt: productStatus.expiresAt,
+        expiresAt: profile.newsletter_expires_at,
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

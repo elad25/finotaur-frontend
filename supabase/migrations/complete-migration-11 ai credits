@@ -1,0 +1,727 @@
+-- =====================================================
+-- FINOTAUR AI CREDITS SYSTEM - COMPLETE
+-- =====================================================
+-- Version: 2.0.1 (FIXED)
+-- Date: 2026-01-05
+-- 
+-- 🎯 מוסיף את כל מה שחסר למערכת קרדיטים מלאה
+-- 🔧 תיקונים: constraints + function drops
+-- =====================================================
+
+-- ============================================
+-- PART 1: AI ACTIONS CONFIG TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_actions_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action_name TEXT UNIQUE NOT NULL,
+  action_type TEXT NOT NULL CHECK (action_type IN ('light', 'medium', 'heavy')),
+  base_cost INTEGER NOT NULL DEFAULT 0,
+  category TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  plan_required TEXT DEFAULT NULL CHECK (plan_required IS NULL OR plan_required IN ('core', 'pro')),
+  daily_cap_free INTEGER DEFAULT NULL,
+  daily_cap_core INTEGER DEFAULT NULL,
+  daily_cap_pro INTEGER DEFAULT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE ai_actions_config IS 'Configuration for all AI actions with costs and caps';
+
+-- ============================================
+-- PART 2: SEED AI ACTIONS DATA
+-- ============================================
+
+INSERT INTO ai_actions_config (action_name, action_type, base_cost, category, display_name, description, plan_required, daily_cap_free, daily_cap_core, daily_cap_pro) VALUES
+-- ═══════════════════════════════════════════
+-- MORNING BRIEF
+-- ═══════════════════════════════════════════
+('morning_brief_view', 'light', 0, 'morning_brief', 'View Morning Brief', 'View cached morning brief', NULL, 5, 15, NULL),
+('morning_brief_refresh', 'medium', 3, 'morning_brief', 'Refresh Brief', 'Generate fresh morning brief', 'core', 0, 3, 8),
+('morning_brief_deep_dive', 'medium', 3, 'morning_brief', 'Deep Dive', 'Detailed analysis of specific topic', 'core', 0, 3, 8),
+('morning_brief_custom', 'heavy', 10, 'morning_brief', 'Custom Watchlist Brief', 'Brief for personal watchlist', 'core', 0, 2, 5),
+
+-- ═══════════════════════════════════════════
+-- MARKET PULSE
+-- ═══════════════════════════════════════════
+('market_pulse_view', 'light', 0, 'market_pulse', 'View Market Pulse', 'View top movers', NULL, 5, 15, NULL),
+('market_pulse_refresh', 'medium', 3, 'market_pulse', 'Refresh Pulse', 'Refresh market data', 'core', 0, 3, 8),
+('market_pulse_why', 'medium', 3, 'market_pulse', 'Why Moving?', 'AI explanation for price move', 'core', 0, 5, 15),
+('market_pulse_sector', 'medium', 5, 'market_pulse', 'Sector Analysis', 'Sector-wide analysis', 'core', 0, 3, 8),
+('market_pulse_correlation', 'medium', 5, 'market_pulse', 'Correlation Analysis', 'Cross-asset correlation', 'core', 0, 3, 8),
+
+-- ═══════════════════════════════════════════
+-- MY PORTFOLIO
+-- ═══════════════════════════════════════════
+('portfolio_overview', 'light', 0, 'portfolio', 'Portfolio Overview', 'View portfolio summary', 'core', 0, 5, NULL),
+('portfolio_correlation', 'medium', 5, 'portfolio', 'Correlation Check', 'Portfolio correlation analysis', 'core', 0, 2, 5),
+('portfolio_earnings_alert', 'medium', 5, 'portfolio', 'Earnings Alert', 'Upcoming earnings for holdings', 'core', 0, 2, 5),
+('portfolio_full_scan', 'heavy', 10, 'portfolio', 'Full Scan', 'Complete portfolio analysis', 'core', 0, 2, 5),
+('portfolio_hedge_suggest', 'heavy', 12, 'portfolio', 'Hedge Suggestions', 'AI hedge recommendations', 'pro', 0, 0, 3),
+('portfolio_rebalance', 'heavy', 15, 'portfolio', 'Rebalance Analysis', 'Portfolio rebalancing suggestions', 'pro', 0, 0, 3),
+('portfolio_what_if', 'heavy', 10, 'portfolio', 'What-If Scenario', 'Scenario analysis', 'core', 0, 1, 5),
+
+-- ═══════════════════════════════════════════
+-- MACRO & EARNINGS
+-- ═══════════════════════════════════════════
+('macro_overview', 'light', 0, 'macro', 'Macro Overview', 'View macro dashboard', NULL, 5, 15, NULL),
+('macro_explain', 'medium', 3, 'macro', 'Explain Indicator', 'AI explanation of indicator', 'core', 0, 5, 15),
+('macro_impact', 'medium', 5, 'macro', 'Impact Analysis', 'Market impact analysis', 'core', 0, 3, 8),
+('macro_calendar_ai', 'medium', 5, 'macro', 'Calendar AI', 'AI calendar insights', 'core', 0, 3, 8),
+('earnings_calendar', 'light', 0, 'earnings', 'Earnings Calendar', 'View earnings calendar', NULL, 5, 15, NULL),
+('company_overview', 'medium', 5, 'earnings', 'Company Overview', 'Basic company analysis', 'core', 0, 5, 10),
+('company_compare', 'medium', 8, 'earnings', 'Compare Companies', 'Side-by-side comparison', 'core', 0, 3, 8),
+('company_bull_bear', 'medium', 8, 'earnings', 'Bull/Bear Case', 'Arguments for and against', 'core', 0, 3, 8),
+('company_full_analysis', 'heavy', 12, 'earnings', 'Full Analysis', 'Comprehensive company report', 'pro', 0, 0, 3),
+('company_financials', 'heavy', 12, 'earnings', 'Financials Deep Dive', 'Detailed financial analysis', 'pro', 0, 0, 3),
+('company_valuation', 'heavy', 15, 'earnings', 'Valuation Model', 'DCF and valuation analysis', 'pro', 0, 1, 3),
+('company_10k_summary', 'heavy', 15, 'earnings', '10-K Summary', 'Annual report AI summary', 'pro', 0, 2, 5),
+('company_10q_summary', 'heavy', 12, 'earnings', '10-Q Summary', 'Quarterly report AI summary', 'pro', 0, 2, 5),
+('company_earnings_call', 'heavy', 12, 'earnings', 'Earnings Call Summary', 'Call transcript analysis', 'pro', 0, 2, 5),
+('company_red_flags', 'heavy', 10, 'earnings', 'Red Flags Scan', 'Risk and red flag detection', 'core', 0, 1, 5),
+
+-- ═══════════════════════════════════════════
+-- TRADE IDEAS
+-- ═══════════════════════════════════════════
+('trade_ideas_cached', 'light', 0, 'trade_ideas', 'Daily Ideas', 'View cached trade ideas', NULL, 3, 10, NULL),
+('trade_ideas_explain', 'medium', 3, 'trade_ideas', 'Explain Idea', 'Detailed explanation', 'core', 0, 5, 15),
+('trade_ideas_risks', 'medium', 5, 'trade_ideas', 'Risk Analysis', 'Risks for specific idea', 'core', 0, 3, 8),
+('trade_ideas_generate', 'heavy', 10, 'trade_ideas', 'Generate Ideas', 'Generate fresh trade ideas', 'core', 0, 2, 5),
+('trade_ideas_personalized', 'heavy', 15, 'trade_ideas', 'Personalized Ideas', 'Ideas based on your style', 'pro', 0, 0, 3),
+
+-- ═══════════════════════════════════════════
+-- OPTIONS ANALYSIS
+-- ═══════════════════════════════════════════
+('options_chain_view', 'light', 0, 'options', 'Options Chain', 'View options chain', NULL, 5, 15, NULL),
+('options_greeks_explain', 'medium', 3, 'options', 'Greeks Explained', 'Explain option greeks', 'core', 0, 5, 15),
+('options_iv_analysis', 'medium', 5, 'options', 'IV Analysis', 'Implied volatility analysis', 'core', 0, 3, 8),
+('options_risk_reward', 'medium', 5, 'options', 'Risk/Reward', 'P&L scenarios', 'core', 0, 3, 8),
+('options_what_if', 'medium', 5, 'options', 'What-If', 'Price scenario analysis', 'core', 0, 3, 8),
+('options_strategy_suggest', 'heavy', 12, 'options', 'Strategy Suggestion', 'AI strategy recommendation', 'pro', 0, 0, 5),
+('options_earnings_play', 'heavy', 15, 'options', 'Earnings Play', 'Options strategy for earnings', 'pro', 0, 0, 3),
+('options_uoa_analysis', 'heavy', 10, 'options', 'UOA Analysis', 'Unusual options activity', 'pro', 0, 0, 5),
+('options_hedge_suggest', 'heavy', 12, 'options', 'Hedge Suggestion', 'Options hedge for portfolio', 'pro', 0, 0, 3),
+('options_spread_builder', 'heavy', 10, 'options', 'Spread Builder', 'Multi-leg strategy builder', 'core', 0, 1, 5),
+
+-- ═══════════════════════════════════════════
+-- AI ASSISTANT (CHAT)
+-- ═══════════════════════════════════════════
+('ai_chat_message', 'medium', 3, 'assistant', 'Chat Message', 'Single AI message', 'core', 0, 10, 30),
+('ai_chat_with_context', 'medium', 8, 'assistant', 'Chat + Context', 'Message with portfolio context', 'core', 0, 5, 15),
+('ai_chat_summarize', 'medium', 3, 'assistant', 'Summarize', 'Summarize conversation', 'core', 0, 5, 15),
+('ai_generate_report', 'heavy', 20, 'assistant', 'Generate Report', 'Full AI research report', 'pro', 0, 0, 3),
+('ai_research_topic', 'heavy', 18, 'assistant', 'Research Topic', 'Deep research on topic', 'pro', 0, 0, 3)
+
+ON CONFLICT (action_name) DO UPDATE SET
+  action_type = EXCLUDED.action_type,
+  base_cost = EXCLUDED.base_cost,
+  category = EXCLUDED.category,
+  display_name = EXCLUDED.display_name,
+  description = EXCLUDED.description,
+  plan_required = EXCLUDED.plan_required,
+  daily_cap_free = EXCLUDED.daily_cap_free,
+  daily_cap_core = EXCLUDED.daily_cap_core,
+  daily_cap_pro = EXCLUDED.daily_cap_pro,
+  is_active = TRUE;
+
+
+-- ============================================
+-- PART 3: DAILY USAGE TRACKING TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS ai_daily_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  action_name TEXT NOT NULL,
+  usage_count INTEGER DEFAULT 1,
+  credits_spent INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, usage_date, action_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_daily_usage_user_date ON ai_daily_usage(user_id, usage_date);
+CREATE INDEX IF NOT EXISTS idx_ai_daily_usage_action ON ai_daily_usage(action_name);
+
+COMMENT ON TABLE ai_daily_usage IS 'Tracks daily usage per action for soft caps';
+
+
+-- ============================================
+-- PART 4: UPDATED spend_credits FUNCTION
+-- ============================================
+
+DROP FUNCTION IF EXISTS spend_credits(UUID, TEXT, TEXT, INTEGER, JSONB);
+DROP FUNCTION IF EXISTS spend_credits(UUID, TEXT, JSONB);
+
+CREATE OR REPLACE FUNCTION spend_credits(
+  p_user_id UUID,
+  p_action_name TEXT,
+  p_metadata JSONB DEFAULT '{}'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_action RECORD;
+  v_actual_cost INTEGER;
+  v_multiplier NUMERIC := 1.0;
+  v_was_soft_cap BOOLEAN := FALSE;
+  v_daily_cap INTEGER;
+  v_daily_usage INTEGER := 0;
+  v_credits_before INTEGER;
+  v_credits_after INTEGER;
+  v_source TEXT := 'monthly';
+BEGIN
+  -- ========================================
+  -- STEP 1: Get Action Config
+  -- ========================================
+  SELECT * INTO v_action
+  FROM ai_actions_config
+  WHERE action_name = p_action_name AND is_active = TRUE;
+  
+  IF v_action IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Unknown action: ' || p_action_name);
+  END IF;
+
+  -- ========================================
+  -- STEP 2: Get User Profile
+  -- ========================================
+  SELECT 
+    COALESCE(platform_plan, 'free') as platform_plan,
+    COALESCE(credits_balance, 30) as credits_balance,
+    COALESCE(credits_purchased, 0) as credits_purchased,
+    COALESCE(credits_rollover, 0) as credits_rollover
+  INTO v_profile
+  FROM profiles
+  WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- ========================================
+  -- STEP 3: Check Plan Requirement
+  -- ========================================
+  IF v_action.plan_required IS NOT NULL THEN
+    IF v_profile.platform_plan = 'free' THEN
+      RETURN jsonb_build_object(
+        'success', false,
+        'error', 'This action requires ' || UPPER(v_action.plan_required) || ' plan',
+        'requires_upgrade', true,
+        'plan_required', v_action.plan_required
+      );
+    END IF;
+    
+    IF v_action.plan_required = 'pro' AND v_profile.platform_plan = 'core' THEN
+      RETURN jsonb_build_object(
+        'success', false,
+        'error', 'This action requires PRO plan',
+        'requires_upgrade', true,
+        'plan_required', 'pro'
+      );
+    END IF;
+  END IF;
+
+  -- ========================================
+  -- STEP 4: Get Daily Cap for User's Plan
+  -- ========================================
+  v_daily_cap := CASE v_profile.platform_plan
+    WHEN 'pro' THEN v_action.daily_cap_pro
+    WHEN 'core' THEN v_action.daily_cap_core
+    ELSE v_action.daily_cap_free
+  END;
+
+  -- ========================================
+  -- STEP 5: Check Daily Usage
+  -- ========================================
+  SELECT COALESCE(SUM(usage_count), 0) INTO v_daily_usage
+  FROM ai_daily_usage
+  WHERE user_id = p_user_id 
+    AND usage_date = CURRENT_DATE
+    AND action_name = p_action_name;
+
+  -- Check if over daily cap (soft cap = x2 cost)
+  IF v_daily_cap IS NOT NULL AND v_daily_usage >= v_daily_cap THEN
+    IF v_action.action_type = 'heavy' THEN
+      v_multiplier := 2.0;
+      v_was_soft_cap := TRUE;
+    ELSE
+      -- For light/medium, just warn but allow
+      v_was_soft_cap := TRUE;
+    END IF;
+  END IF;
+
+  -- ========================================
+  -- STEP 6: Calculate Cost
+  -- ========================================
+  v_actual_cost := CEIL(v_action.base_cost * v_multiplier)::INTEGER;
+  
+  -- Light actions are always free
+  IF v_action.action_type = 'light' THEN
+    v_actual_cost := 0;
+  END IF;
+
+  v_credits_before := v_profile.credits_balance + v_profile.credits_purchased + v_profile.credits_rollover;
+
+  -- ========================================
+  -- STEP 7: Check Balance (if cost > 0)
+  -- ========================================
+  IF v_actual_cost > 0 AND v_credits_before < v_actual_cost THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Insufficient credits',
+      'credits_needed', v_actual_cost,
+      'credits_available', v_credits_before,
+      'can_purchase', true
+    );
+  END IF;
+
+  -- ========================================
+  -- STEP 8: Deduct Credits
+  -- ========================================
+  IF v_actual_cost > 0 THEN
+    IF v_profile.credits_balance >= v_actual_cost THEN
+      UPDATE profiles SET credits_balance = credits_balance - v_actual_cost WHERE id = p_user_id;
+      v_source := 'monthly';
+    ELSIF v_profile.credits_balance + v_profile.credits_rollover >= v_actual_cost THEN
+      UPDATE profiles SET 
+        credits_rollover = credits_rollover - (v_actual_cost - credits_balance),
+        credits_balance = 0
+      WHERE id = p_user_id;
+      v_source := 'rollover';
+    ELSE
+      UPDATE profiles SET 
+        credits_purchased = credits_purchased - (v_actual_cost - credits_balance - credits_rollover),
+        credits_rollover = 0,
+        credits_balance = 0
+      WHERE id = p_user_id;
+      v_source := 'purchased';
+    END IF;
+  END IF;
+
+  v_credits_after := v_credits_before - v_actual_cost;
+
+  -- ========================================
+  -- STEP 9: Update Daily Usage
+  -- ========================================
+  INSERT INTO ai_daily_usage (user_id, usage_date, action_name, usage_count, credits_spent)
+  VALUES (p_user_id, CURRENT_DATE, p_action_name, 1, v_actual_cost)
+  ON CONFLICT (user_id, usage_date, action_name) DO UPDATE SET
+    usage_count = ai_daily_usage.usage_count + 1,
+    credits_spent = ai_daily_usage.credits_spent + v_actual_cost,
+    updated_at = NOW();
+
+  -- ========================================
+  -- STEP 10: Log Transaction
+  -- ========================================
+  INSERT INTO credit_transactions (
+    user_id, action_type, action_name, credits_spent,
+    credits_before, credits_after, was_soft_cap_exceeded,
+    multiplier, metadata
+  ) VALUES (
+    p_user_id, v_action.action_type, p_action_name, v_actual_cost,
+    v_credits_before, v_credits_after, v_was_soft_cap,
+    v_multiplier, p_metadata || jsonb_build_object(
+      'source', v_source,
+      'daily_usage', v_daily_usage + 1,
+      'daily_cap', v_daily_cap,
+      'category', v_action.category
+    )
+  );
+
+  -- ========================================
+  -- STEP 11: Return Result
+  -- ========================================
+  RETURN jsonb_build_object(
+    'success', true,
+    'credits_spent', v_actual_cost,
+    'credits_remaining', v_credits_after,
+    'was_soft_cap', v_was_soft_cap,
+    'multiplier', v_multiplier,
+    'source', v_source,
+    'action_type', v_action.action_type,
+    'daily_usage', v_daily_usage + 1,
+    'daily_cap', v_daily_cap
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM, 'sqlstate', SQLSTATE);
+END;
+$$;
+
+
+-- ============================================
+-- PART 5: GET ACTION INFO FUNCTION
+-- ============================================
+
+DROP FUNCTION IF EXISTS get_ai_action_info(TEXT, UUID);
+
+CREATE OR REPLACE FUNCTION get_ai_action_info(
+  p_action_name TEXT,
+  p_user_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_action RECORD;
+  v_plan TEXT := 'free';
+  v_daily_cap INTEGER;
+  v_daily_usage INTEGER := 0;
+BEGIN
+  SELECT * INTO v_action
+  FROM ai_actions_config
+  WHERE action_name = p_action_name AND is_active = TRUE;
+  
+  IF v_action IS NULL THEN
+    RETURN jsonb_build_object('error', 'Action not found');
+  END IF;
+
+  IF p_user_id IS NOT NULL THEN
+    SELECT COALESCE(platform_plan, 'free') INTO v_plan
+    FROM profiles WHERE id = p_user_id;
+    
+    SELECT COALESCE(SUM(usage_count), 0) INTO v_daily_usage
+    FROM ai_daily_usage
+    WHERE user_id = p_user_id 
+      AND usage_date = CURRENT_DATE
+      AND action_name = p_action_name;
+  END IF;
+
+  v_daily_cap := CASE v_plan
+    WHEN 'pro' THEN v_action.daily_cap_pro
+    WHEN 'core' THEN v_action.daily_cap_core
+    ELSE v_action.daily_cap_free
+  END;
+
+  RETURN jsonb_build_object(
+    'action_name', v_action.action_name,
+    'action_type', v_action.action_type,
+    'base_cost', v_action.base_cost,
+    'category', v_action.category,
+    'display_name', v_action.display_name,
+    'description', v_action.description,
+    'plan_required', v_action.plan_required,
+    'daily_cap', v_daily_cap,
+    'daily_usage', v_daily_usage,
+    'is_available', (v_action.plan_required IS NULL OR 
+      (v_action.plan_required = 'core' AND v_plan IN ('core', 'pro')) OR
+      (v_action.plan_required = 'pro' AND v_plan = 'pro'))
+  );
+END;
+$$;
+
+
+-- ============================================
+-- PART 6: CREDIT PACKS WHOP MAPPING
+-- ============================================
+-- 🔧 FIX: Update constraints BEFORE inserting
+
+-- Fix billing_interval constraint to allow 'one_time'
+ALTER TABLE whop_plan_mapping 
+DROP CONSTRAINT IF EXISTS whop_plan_mapping_billing_interval_check;
+
+ALTER TABLE whop_plan_mapping 
+ADD CONSTRAINT whop_plan_mapping_billing_interval_check 
+CHECK (billing_interval IN ('monthly', 'yearly', 'weekly', 'one_time'));
+
+-- Fix finotaur_plan constraint to allow 'credit_pack'
+-- Remove entirely to avoid issues with existing data
+ALTER TABLE whop_plan_mapping 
+DROP CONSTRAINT IF EXISTS whop_plan_mapping_finotaur_plan_check;
+
+-- Now insert the credit packs
+INSERT INTO whop_plan_mapping (
+  whop_product_id, whop_plan_id, finotaur_plan, billing_interval, 
+  price_usd, max_trades, display_name, is_active, trial_days
+) VALUES
+('prod_CREDIT_BOOST', 'plan_CREDIT_BOOST', 'credit_pack', 'one_time', 9.00, 0, 'Credit Boost Pack (150)', TRUE, 0),
+('prod_CREDIT_POWER', 'plan_CREDIT_POWER', 'credit_pack', 'one_time', 19.00, 0, 'Credit Power Pack (400)', TRUE, 0),
+('prod_CREDIT_HEAVY', 'plan_CREDIT_HEAVY', 'credit_pack', 'one_time', 49.00, 0, 'Credit Heavy Pack (1200)', TRUE, 0),
+('prod_CREDIT_DESK', 'plan_CREDIT_DESK', 'credit_pack', 'one_time', 99.00, 0, 'Credit Desk Pack (3000)', TRUE, 0)
+ON CONFLICT (whop_product_id) DO UPDATE SET
+  price_usd = EXCLUDED.price_usd,
+  display_name = EXCLUDED.display_name,
+  is_active = TRUE;
+
+
+-- ============================================
+-- PART 7: CREDIT PACK CONFIG TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS credit_pack_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  pack_type TEXT UNIQUE NOT NULL,
+  whop_product_id TEXT NOT NULL,
+  credits_amount INTEGER NOT NULL,
+  price_usd NUMERIC(10,2) NOT NULL,
+  bonus_percent INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO credit_pack_config (pack_type, whop_product_id, credits_amount, price_usd, bonus_percent) VALUES
+('boost', 'prod_CREDIT_BOOST', 150, 9.00, 0),
+('power', 'prod_CREDIT_POWER', 400, 19.00, 5),
+('heavy', 'prod_CREDIT_HEAVY', 1200, 49.00, 10),
+('desk', 'prod_CREDIT_DESK', 3000, 99.00, 15)
+ON CONFLICT (pack_type) DO UPDATE SET
+  credits_amount = EXCLUDED.credits_amount,
+  price_usd = EXCLUDED.price_usd,
+  bonus_percent = EXCLUDED.bonus_percent;
+
+
+-- ============================================
+-- PART 8: HANDLE CREDIT PACK PURCHASE
+-- ============================================
+
+DROP FUNCTION IF EXISTS handle_credit_pack_purchase(TEXT, TEXT, TEXT, NUMERIC);
+
+CREATE OR REPLACE FUNCTION handle_credit_pack_purchase(
+  p_user_email TEXT,
+  p_whop_product_id TEXT,
+  p_payment_id TEXT,
+  p_amount_paid NUMERIC
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+  v_pack RECORD;
+  v_credits_to_add INTEGER;
+  v_new_total INTEGER;
+BEGIN
+  -- Find user
+  SELECT id INTO v_user_id
+  FROM profiles
+  WHERE LOWER(email) = LOWER(p_user_email);
+  
+  IF v_user_id IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- Get pack config
+  SELECT * INTO v_pack
+  FROM credit_pack_config
+  WHERE whop_product_id = p_whop_product_id AND is_active = TRUE;
+  
+  IF v_pack IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Unknown credit pack');
+  END IF;
+
+  -- Calculate credits with bonus
+  v_credits_to_add := v_pack.credits_amount + FLOOR(v_pack.credits_amount * v_pack.bonus_percent / 100);
+
+  -- Add credits
+  UPDATE profiles
+  SET credits_purchased = COALESCE(credits_purchased, 0) + v_credits_to_add
+  WHERE id = v_user_id
+  RETURNING credits_purchased INTO v_new_total;
+
+  -- Log purchase
+  INSERT INTO credit_purchases (
+    user_id, pack_type, credits_amount, price_usd, payment_id, payment_provider, status
+  ) VALUES (
+    v_user_id, v_pack.pack_type, v_credits_to_add, p_amount_paid, p_payment_id, 'whop', 'completed'
+  );
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', v_user_id,
+    'pack_type', v_pack.pack_type,
+    'credits_added', v_credits_to_add,
+    'bonus_credits', v_credits_to_add - v_pack.credits_amount,
+    'purchased_total', v_new_total
+  );
+
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+
+-- ============================================
+-- PART 9: TRIGGER - INIT CREDITS ON PLAN CHANGE
+-- ============================================
+
+CREATE OR REPLACE FUNCTION trigger_init_credits_on_plan_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Only if platform_plan changed
+  IF OLD.platform_plan IS DISTINCT FROM NEW.platform_plan THEN
+    NEW.credits_balance := CASE NEW.platform_plan
+      WHEN 'pro' THEN 1500
+      WHEN 'core' THEN 600
+      ELSE 30
+    END;
+    NEW.credits_heavy_today := 0;
+    NEW.credits_heavy_reset_date := CURRENT_DATE;
+    NEW.credits_reset_at := NOW();
+    
+    -- PRO keeps rollover, others lose it
+    IF NEW.platform_plan != 'pro' THEN
+      NEW.credits_rollover := 0;
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_platform_plan_change ON profiles;
+CREATE TRIGGER on_platform_plan_change
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW
+  WHEN (OLD.platform_plan IS DISTINCT FROM NEW.platform_plan)
+  EXECUTE FUNCTION trigger_init_credits_on_plan_change();
+
+
+-- ============================================
+-- PART 10: CRON JOB - MONTHLY RESET
+-- ============================================
+-- 🔧 FIX: Drop function first to avoid return type conflict
+
+DROP FUNCTION IF EXISTS reset_monthly_credits();
+
+CREATE OR REPLACE FUNCTION reset_monthly_credits()
+RETURNS TABLE(users_reset INTEGER, pro_rollovers INTEGER, daily_records_cleaned INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_users_reset INTEGER := 0;
+  v_pro_rollovers INTEGER := 0;
+  v_cleaned INTEGER := 0;
+BEGIN
+  -- PRO users: rollover up to 500 credits
+  WITH pro_rollover AS (
+    UPDATE profiles
+    SET 
+      credits_rollover = LEAST(500, COALESCE(credits_balance, 0) + COALESCE(credits_rollover, 0)),
+      credits_balance = 1500,
+      credits_reset_at = NOW()
+    WHERE platform_plan = 'pro'
+      AND credits_reset_at < DATE_TRUNC('month', NOW())
+    RETURNING id
+  )
+  SELECT COUNT(*) INTO v_pro_rollovers FROM pro_rollover;
+
+  -- CORE users
+  WITH core_reset AS (
+    UPDATE profiles
+    SET 
+      credits_balance = 600,
+      credits_rollover = 0,
+      credits_reset_at = NOW()
+    WHERE platform_plan = 'core'
+      AND credits_reset_at < DATE_TRUNC('month', NOW())
+    RETURNING id
+  )
+  SELECT COUNT(*) INTO v_users_reset FROM core_reset;
+
+  -- FREE users
+  WITH free_reset AS (
+    UPDATE profiles
+    SET 
+      credits_balance = 30,
+      credits_rollover = 0,
+      credits_reset_at = NOW()
+    WHERE (platform_plan IS NULL OR platform_plan = 'free')
+      AND credits_reset_at < DATE_TRUNC('month', NOW())
+    RETURNING id
+  )
+  SELECT v_users_reset + COUNT(*) INTO v_users_reset FROM free_reset;
+
+  -- Clean old daily usage records (keep 30 days)
+  DELETE FROM ai_daily_usage WHERE usage_date < CURRENT_DATE - INTERVAL '30 days';
+  GET DIAGNOSTICS v_cleaned = ROW_COUNT;
+
+  RETURN QUERY SELECT v_users_reset + v_pro_rollovers, v_pro_rollovers, v_cleaned;
+END;
+$$;
+
+-- Schedule cron (run on 1st of each month at midnight UTC)
+-- Uncomment if pg_cron is available:
+-- SELECT cron.schedule('reset-monthly-credits', '0 0 1 * *', 'SELECT reset_monthly_credits()');
+
+
+-- ============================================
+-- PART 11: RLS & GRANTS
+-- ============================================
+
+ALTER TABLE ai_actions_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_daily_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_pack_config ENABLE ROW LEVEL SECURITY;
+
+-- ai_actions_config - everyone can read
+DROP POLICY IF EXISTS "Anyone can read action config" ON ai_actions_config;
+CREATE POLICY "Anyone can read action config" ON ai_actions_config FOR SELECT USING (TRUE);
+
+-- ai_daily_usage - users see own data
+DROP POLICY IF EXISTS "Users see own daily usage" ON ai_daily_usage;
+CREATE POLICY "Users see own daily usage" ON ai_daily_usage FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Service role full access daily usage" ON ai_daily_usage;
+CREATE POLICY "Service role full access daily usage" ON ai_daily_usage FOR ALL USING (TRUE);
+
+-- credit_pack_config - everyone can read
+DROP POLICY IF EXISTS "Anyone can read pack config" ON credit_pack_config;
+CREATE POLICY "Anyone can read pack config" ON credit_pack_config FOR SELECT USING (TRUE);
+
+-- Grants
+GRANT SELECT ON ai_actions_config TO authenticated, anon;
+GRANT SELECT ON ai_daily_usage TO authenticated;
+GRANT ALL ON ai_daily_usage TO service_role;
+GRANT SELECT ON credit_pack_config TO authenticated, anon;
+
+GRANT EXECUTE ON FUNCTION spend_credits(UUID, TEXT, JSONB) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION get_ai_action_info(TEXT, UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION handle_credit_pack_purchase(TEXT, TEXT, TEXT, NUMERIC) TO service_role;
+GRANT EXECUTE ON FUNCTION reset_monthly_credits() TO service_role;
+
+
+-- ============================================
+-- PART 12: VERIFICATION
+-- ============================================
+
+SELECT '========== AI CREDITS COMPLETE v2.0.1 (FIXED) ==========' as section;
+
+SELECT 
+  'TABLES' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'ai_actions_config') THEN '✅' ELSE '❌' END as ai_actions_config,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'ai_daily_usage') THEN '✅' ELSE '❌' END as ai_daily_usage,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'credit_pack_config') THEN '✅' ELSE '❌' END as credit_pack_config;
+
+SELECT 
+  'FUNCTIONS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'spend_credits') THEN '✅' ELSE '❌' END as spend_credits,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'get_ai_action_info') THEN '✅' ELSE '❌' END as get_ai_action_info,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'handle_credit_pack_purchase') THEN '✅' ELSE '❌' END as handle_credit_pack_purchase;
+
+SELECT 
+  'TRIGGER' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'on_platform_plan_change') THEN '✅' ELSE '❌' END as on_platform_plan_change;
+
+SELECT 'ACTIONS COUNT' as check_type, COUNT(*)::TEXT || ' actions configured' as status
+FROM ai_actions_config WHERE is_active = TRUE;
+
+SELECT 'CREDIT PACKS' as check_type, COUNT(*)::TEXT || ' packs configured' as status
+FROM credit_pack_config WHERE is_active = TRUE;
+
+SELECT '🎉 AI CREDITS SYSTEM v2.0.1 COMPLETE!' as status;

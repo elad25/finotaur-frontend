@@ -9,7 +9,7 @@ function must(name: string, fallback?: string) {
 export const env = {
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   PORT: must('PORT', '3000'),
-  API_URL: must('API_URL', 'http://127.0.0.1:3000'),
+  API_URL: must('API_URL', 'http://127.0.0.1:8080'),
   CLIENT_URL: must('CLIENT_URL', 'http://127.0.0.1:8080'),
   CORS_ORIGINS: must('CORS_ORIGINS', 'http://127.0.0.1:8080'),
   JWT_SECRET: must('JWT_SECRET', 'REPLACE_ME_STRONG'),

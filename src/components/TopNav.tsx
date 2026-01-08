@@ -1,7 +1,11 @@
 // src/components/TopNav.tsx
 // =====================================================
-// FINOTAUR TOP NAVIGATION - v2.3.0
+// FINOTAUR TOP NAVIGATION - v3.0.0 (BETA ACCESS)
 // =====================================================
+// 
+// 🔥 v3.0.0 CHANGES:
+// - ADDED: Beta access system - admins can access locked domains
+// - ADDED: useAdminAuth hook for hasBetaAccess check
 // 
 // 🔥 v2.3.0 CHANGES:
 // - UNLOCKED: Settings menu item (now navigates to /app/settings)
@@ -14,7 +18,7 @@
 // - FIXED: Logo now navigates to /app/top-secret
 // =====================================================
 
-import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown } from 'lucide-react';
+import { Search, User, Lock, Settings, Crown, LogOut, ChevronDown, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -22,6 +26,7 @@ import { useEffect, useState } from 'react';
 import { domains, domainOrder } from '@/constants/nav';
 import { useDomain } from '@/hooks/useDomain';
 import { useAuth } from '@/providers/AuthProvider';
+import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { supabase } from '@/lib/supabase';
 import {
   DropdownMenu,
@@ -39,6 +44,7 @@ export const TopNav = () => {
   const navigate = useNavigate();
   const { domainId } = useDomain();
   const { user } = useAuth();
+  const { hasBetaAccess, isAdmin } = useAdminAuth();  // 🔥 NEW: Beta access check
   const [userInitials, setUserInitials] = useState('U');
   const [platformPlan, setPlatformPlan] = useState<string | null>(null);
 
@@ -103,7 +109,8 @@ export const TopNav = () => {
   const handleTabClick = (id: string) => {
     const domain = domains[id];
     
-    if (domain?.locked) {
+    // 🔥 BETA ACCESS: Allow navigation to locked domains for beta users
+    if (domain?.locked && !hasBetaAccess) {
       return;
     }
     
@@ -163,7 +170,15 @@ export const TopNav = () => {
             {domainOrder.map((id) => {
               const domain = domains[id];
               const isActive = domainId === id;
-              const locked = domain?.locked;
+              const isBetaDomain = domain?.beta === true;
+              
+              // 🔥 BETA ACCESS: Override locked status for beta users
+              const locked = domain?.locked && !hasBetaAccess;
+              
+              // 🔥 Hide beta domains from non-beta users
+              if (isBetaDomain && !hasBetaAccess) {
+                return null;
+              }
 
               return (
                 <button
@@ -173,15 +188,28 @@ export const TopNav = () => {
                   className={`group relative rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ${
                     locked
                       ? 'cursor-not-allowed opacity-40 text-[#A0A0A0] hover:bg-[#1A1A1A]/50'
+                      : isBetaDomain
+                      ? isActive
+                        ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
+                        : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
                       : isActive
                       ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
                       : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
                   }`}
-                  title={locked ? 'Coming Soon' : undefined}
-                  style={isActive ? { borderBottom: '2px solid #C9A646' } : {}}
+                  title={locked ? 'Coming Soon' : isBetaDomain ? 'Beta Feature' : undefined}
+                  style={isActive && !locked ? { 
+                    borderBottom: isBetaDomain ? '2px solid #f97316' : '2px solid #C9A646' 
+                  } : {}}
                 >
                   <span className="flex flex-col items-center gap-0.5 whitespace-nowrap">
-                    <span>{domain.label}</span>
+                    <span className="flex items-center gap-1">
+                      {domain.label}
+                      {isBetaDomain && (
+                        <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                          BETA
+                        </span>
+                      )}
+                    </span>
                     {locked && <Lock className="h-2.5 w-2.5 opacity-60" />}
                   </span>
                   
@@ -206,47 +234,51 @@ export const TopNav = () => {
         {/* Right Side */}
         <div className="flex items-center gap-3">
           {/* ═══════════════════════════════════════════
-              🔒 SEARCH - LOCKED (Coming Soon)
+              🔒 SEARCH - LOCKED (Coming Soon) - Unless Beta
           ═══════════════════════════════════════════ */}
           <div className="relative hidden md:block group">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0] opacity-40" />
+            <Search className={`absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#A0A0A0] ${hasBetaAccess ? '' : 'opacity-40'}`} />
             <Input
               placeholder="Search..."
-              className="w-40 lg:w-48 pl-8 pr-12 text-xs h-9 cursor-not-allowed opacity-50"
+              className={`w-40 lg:w-48 pl-8 pr-12 text-xs h-9 ${hasBetaAccess ? '' : 'cursor-not-allowed opacity-50'}`}
               style={{
                 background: 'rgba(20,20,20,0.6)',
                 border: '1px solid rgba(255, 215, 0, 0.08)',
                 color: '#A0A0A0'
               }}
-              readOnly
-              disabled
+              readOnly={!hasBetaAccess}
+              disabled={!hasBetaAccess}
             />
-            {/* Coming Soon indicator */}
-            <span 
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#A0A0A0]/60 font-medium px-1.5 py-0.5 rounded border border-[#A0A0A0]/20 flex items-center gap-1"
-              style={{ background: 'rgba(30,30,30,0.8)' }}
-            >
-              <Lock className="w-2.5 h-2.5" />
-            </span>
+            {/* Coming Soon indicator - Only show for non-beta users */}
+            {!hasBetaAccess && (
+              <span 
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-[#A0A0A0]/60 font-medium px-1.5 py-0.5 rounded border border-[#A0A0A0]/20 flex items-center gap-1"
+                style={{ background: 'rgba(30,30,30,0.8)' }}
+              >
+                <Lock className="w-2.5 h-2.5" />
+              </span>
+            )}
             {/* Tooltip */}
-            <span 
-              className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
-              style={{ 
-                background: '#0A0A0A',
-                border: '1px solid rgba(201,166,70,0.2)',
-                color: '#A0A0A0'
-              }}
-            >
-              Coming Soon
-            </span>
+            {!hasBetaAccess && (
+              <span 
+                className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 pointer-events-none z-50"
+                style={{ 
+                  background: '#0A0A0A',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                  color: '#A0A0A0'
+                }}
+              >
+                Coming Soon
+              </span>
+            )}
           </div>
 
-          {/* Mobile Search Button - LOCKED 🔒 */}
+          {/* Mobile Search Button - LOCKED unless beta 🔒 */}
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden hover:bg-[#1A1A1A] opacity-40 cursor-not-allowed"
-            disabled
+            className={`md:hidden hover:bg-[#1A1A1A] ${hasBetaAccess ? '' : 'opacity-40 cursor-not-allowed'}`}
+            disabled={!hasBetaAccess}
           >
             <Search className="h-5 w-5 text-[#A0A0A0]" />
           </Button>
@@ -264,7 +296,9 @@ export const TopNav = () => {
                 <div 
                   className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
                   style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
+                    background: hasBetaAccess 
+                      ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' 
+                      : 'linear-gradient(135deg, #C9A646 0%, #8B7355 100%)',
                     color: '#000'
                   }}
                 >
@@ -293,7 +327,12 @@ export const TopNav = () => {
                   <p className="text-sm font-medium text-white truncate">
                     {user?.email || 'User'}
                   </p>
-                  {platformPlan && platformPlan !== 'free' ? (
+                  {hasBetaAccess ? (
+                    <p className="text-xs text-orange-400 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Beta Access
+                    </p>
+                  ) : platformPlan && platformPlan !== 'free' ? (
                     <p className="text-xs text-[#C9A646] flex items-center gap-1">
                       <Crown className="w-3 h-3" />
                       {platformPlan.charAt(0).toUpperCase() + platformPlan.slice(1)} Plan
@@ -306,18 +345,28 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* 🔒 Upgrade - LOCKED (Coming Soon) */}
-              <DropdownMenuItem 
-                className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
-                disabled
-              >
-                <Crown className="mr-2 h-4 w-4 text-[#C9A646]/50" />
-                <span className="text-white/50">Upgrade</span>
-                <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
-                  <Lock className="w-2.5 h-2.5" />
-                  Soon
-                </span>
-              </DropdownMenuItem>
+              {/* 🔒 Upgrade - LOCKED (Coming Soon) unless beta */}
+              {hasBetaAccess ? (
+                <DropdownMenuItem 
+                  onClick={() => navigate('/app/settings/billing')}
+                  className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+                >
+                  <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
+                  <span className="text-white">Upgrade</span>
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem 
+                  className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
+                  disabled
+                >
+                  <Crown className="mr-2 h-4 w-4 text-[#C9A646]/50" />
+                  <span className="text-white/50">Upgrade</span>
+                  <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" />
+                    Soon
+                  </span>
+                </DropdownMenuItem>
+              )}
 
               {/* ✅ Settings - UNLOCKED */}
               <DropdownMenuItem 
@@ -348,7 +397,15 @@ export const TopNav = () => {
         {domainOrder.map((id) => {
           const domain = domains[id];
           const isActive = domainId === id;
-          const locked = domain?.locked;
+          const isBetaDomain = domain?.beta === true;
+          
+          // 🔥 BETA ACCESS: Override locked status for beta users
+          const locked = domain?.locked && !hasBetaAccess;
+          
+          // 🔥 Hide beta domains from non-beta users
+          if (isBetaDomain && !hasBetaAccess) {
+            return null;
+          }
 
           return (
             <button
@@ -358,12 +415,21 @@ export const TopNav = () => {
               className={`flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-300 flex items-center gap-1.5 ${
                 locked
                   ? 'cursor-not-allowed opacity-40 text-[#A0A0A0]'
+                  : isBetaDomain
+                  ? isActive
+                    ? 'bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
+                    : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
                   : isActive
                   ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
                   : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
               }`}
             >
               {domain.label}
+              {isBetaDomain && (
+                <span className="px-1 py-0.5 text-[8px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                  BETA
+                </span>
+              )}
               {locked && <Lock className="h-3 w-3 opacity-60" />}
             </button>
           );

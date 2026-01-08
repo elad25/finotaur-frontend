@@ -1,1010 +1,910 @@
 import { useState, useEffect } from 'react';
 import {
-  Sun,
-  Moon,
+  Shield,
+  AlertTriangle,
   TrendingUp,
   TrendingDown,
-  Calendar,
-  AlertTriangle,
-  RefreshCw,
-  Zap,
-  Brain,
-  Flame,
-  Clock,
-  Globe,
-  ChevronRight,
-  Eye,
-  Sparkles,
-  BarChart3,
   Activity,
-  Volume2,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
-  FileText,
-  Star,
-  Bell,
+  Droplets,
+  Globe,
+  Calendar,
+  ChevronRight,
   Target,
-  Shield,
-  Newspaper,
-  Building2,
-  DollarSign,
-  TrendingUp as Upgrade,
-  ChevronDown,
-  ExternalLink
+  Ban,
+  Sparkles,
+  FileText,
+  Crosshair,
+  Info
 } from 'lucide-react';
+import {
+  AIPageContainer,
+  AIPageHeader,
+  ImpactBadge,
+  ScenarioCard,
+  Drawer,
+  COLORS,
+  UserMode,
+  ImpactLevel
+} from './AIDesignSystem';
 
 // ============================================
 // TYPES
 // ============================================
-interface MarketIndex {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  status: 'up' | 'down' | 'flat';
-}
-
-interface FuturesData {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-}
-
-interface NewsItem {
+interface RiskDashboardItem {
   id: string;
-  headline: string;
-  summary: string;
-  source: string;
-  time: string;
-  sentiment: 'bullish' | 'bearish' | 'neutral';
-  tickers: string[];
-  importance: 'high' | 'medium' | 'low';
-  aiTakeaway: string;
+  label: string;
+  status: 'rising' | 'falling' | 'stable' | 'high' | 'normal' | 'tight';
+  value: string;
+  reason: string;
+  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  color: string;
 }
 
-interface EarningsReport {
+interface MistakeToAvoid {
+  title: string;
+  description: string;
+  whyToday: string;
+}
+
+interface ScenarioData {
+  type: 'base' | 'bull' | 'bear';
+  title: string;
+  probability: number;
+  trigger: string;
+  watchItems: string[];
+  affected: { beneficiaries: string[]; losers: string[] };
+}
+
+interface EarningsCatalyst {
   symbol: string;
   name: string;
   time: 'BMO' | 'AMC';
-  epsEstimate: number;
-  revenueEstimate: string;
-  importance: 'high' | 'medium' | 'low';
-  previousEPS: number;
-  whisperNumber?: number;
-}
-
-interface AnalystAction {
-  symbol: string;
-  firm: string;
-  action: 'upgrade' | 'downgrade' | 'initiated' | 'reiterated';
-  rating: string;
-  priceTarget: number;
-  previousTarget?: number;
-  time: string;
+  expectedMove: string;
+  impact: ImpactLevel;
+  aiNote: string;
 }
 
 interface EconomicEvent {
   time: string;
   event: string;
-  actual?: string;
   forecast: string;
   previous: string;
-  importance: 'high' | 'medium' | 'low';
+  impact: ImpactLevel;
+}
+
+interface MorningRiskBriefData {
+  riskDashboard: RiskDashboardItem[];
+  mistakesToAvoid: MistakeToAvoid[];
+  oneThing: string;
+  scenarios: ScenarioData[];
+  earningsToday: EarningsCatalyst[];
+  economicEvents: EconomicEvent[];
+  riskLevel: 'low' | 'elevated' | 'high';
+  lastUpdated: Date;
 }
 
 // ============================================
-// MOCK DATA - Replace with real API calls
+// API HOOK - Replace with your actual API call
 // ============================================
-const MARKET_INDICES: MarketIndex[] = [
-  { symbol: 'SPX', name: 'S&P 500', price: 6012.45, change: 28.34, changePercent: 0.47, status: 'up' },
-  { symbol: 'NDX', name: 'Nasdaq 100', price: 21456.78, change: 156.23, changePercent: 0.73, status: 'up' },
-  { symbol: 'DJI', name: 'Dow Jones', price: 44235.67, change: -45.12, changePercent: -0.10, status: 'down' },
-  { symbol: 'RUT', name: 'Russell 2000', price: 2287.45, change: 12.67, changePercent: 0.56, status: 'up' },
-];
+const useMorningBriefData = () => {
+  const [data, setData] = useState<MorningRiskBriefData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const VIX_DATA = {
-  current: 14.23,
-  change: -0.87,
-  changePercent: -5.76,
-  level: 'Low' as const,
-  interpretation: 'Market complacency high. Historically, VIX below 15 often precedes volatility spikes.'
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        
+        // TODO: Replace with actual API call
+        // const response = await fetch('/api/ai/morning-brief');
+        // const result = await response.json();
+        // setData(result);
+        
+        // Simulated API response
+        const mockData: MorningRiskBriefData = {
+          riskLevel: 'elevated',
+          lastUpdated: new Date(),
+          riskDashboard: [
+            {
+              id: 'volatility',
+              label: 'Volatility',
+              status: 'rising',
+              value: 'Rising',
+              reason: 'VIX term structure inverted. Near-term premium elevated.',
+              icon: Activity,
+              color: COLORS.mediumImpact
+            },
+            {
+              id: 'liquidity',
+              label: 'Liquidity',
+              status: 'tight',
+              value: 'Tight',
+              reason: 'Bid-ask spreads widening. Large orders facing slippage.',
+              icon: Droplets,
+              color: COLORS.highImpact
+            },
+            {
+              id: 'macro',
+              label: 'Macro Sensitivity',
+              status: 'high',
+              value: 'High',
+              reason: 'Fed speaker on deck. Markets hyper-focused on rate path.',
+              icon: Globe,
+              color: COLORS.highImpact
+            },
+            {
+              id: 'event',
+              label: 'Event Risk',
+              status: 'high',
+              value: 'High',
+              reason: 'ISM, Fed speakers, 10Y auction today.',
+              icon: Calendar,
+              color: COLORS.highImpact
+            }
+          ],
+          mistakesToAvoid: [
+            {
+              title: 'Chasing breakouts during chop',
+              description: 'VIX elevated and term structure inverted = false breakouts more likely',
+              whyToday: 'Yesterday saw 3 failed breakouts in SPY above 600. Vol regime suggests mean reversion plays work better.'
+            },
+            {
+              title: 'Over-sizing ahead of macro event',
+              description: 'ISM at 10AM and Fed speaker at 11AM create binary risk',
+              whyToday: 'Position sizing should be 50-75% of normal until after 11AM ET.'
+            },
+            {
+              title: 'Ignoring sector rotation',
+              description: 'Growth → Value rotation accelerating. Old winners becoming losers.',
+              whyToday: 'Tech names that worked yesterday may underperform today. Defensive sectors showing strength.'
+            }
+          ],
+          oneThing: 'Wait for ISM reaction before initiating new positions. High probability of whipsaw price action between 10-11 AM.',
+          scenarios: [
+            {
+              type: 'base',
+              title: 'Base Case (55%)',
+              probability: 55,
+              trigger: 'ISM comes in near expectations (52-53). Fed speaker stays on script.',
+              watchItems: ['SPY 595-605 range', 'VIX stays 17-19', '10Y yield 4.30-4.40%'],
+              affected: {
+                beneficiaries: ['Range-bound strategies', 'Premium sellers'],
+                losers: ['Momentum plays', 'Breakout traders']
+              }
+            },
+            {
+              type: 'bull',
+              title: 'Bull Case (20%)',
+              probability: 20,
+              trigger: 'ISM misses badly (below 50). Market prices in more cuts.',
+              watchItems: ['10Y yield drops below 4.25%', 'Growth stocks rally', 'Dollar weakens'],
+              affected: {
+                beneficiaries: ['Tech', 'Growth', 'REITs'],
+                losers: ['Banks', 'Dollar bulls', 'Short duration']
+              }
+            },
+            {
+              type: 'bear',
+              title: 'Bear Case (25%)',
+              probability: 25,
+              trigger: 'ISM prices paid component spikes. Fed speaker turns hawkish.',
+              watchItems: ['10Y yield above 4.45%', 'VIX spikes above 20', 'Dollar strengthens'],
+              affected: {
+                beneficiaries: ['Energy', 'Value', 'Dollar longs'],
+                losers: ['Growth', 'High duration', 'EM']
+              }
+            }
+          ],
+          earningsToday: [
+            {
+              symbol: 'WBA',
+              name: 'Walgreens Boots',
+              time: 'BMO',
+              expectedMove: '±5.2%',
+              impact: 'medium',
+              aiNote: 'Retail pharmacy under pressure. Watch for store closure updates and guidance.'
+            },
+            {
+              symbol: 'STZ',
+              name: 'Constellation Brands',
+              time: 'BMO',
+              expectedMove: '±4.1%',
+              impact: 'medium',
+              aiNote: 'Beer sales trends key. Modelo momentum vs premium wine weakness.'
+            }
+          ],
+          economicEvents: [
+            { time: '08:30', event: 'Initial Claims', forecast: '218K', previous: '211K', impact: 'medium' },
+            { time: '10:00', event: 'ISM Services PMI', forecast: '52.5', previous: '52.1', impact: 'high' },
+            { time: '11:00', event: 'Fed Williams Speaks', forecast: '-', previous: '-', impact: 'high' },
+            { time: '13:00', event: '10Y Treasury Auction', forecast: '$42B', previous: '-', impact: 'medium' },
+            { time: '14:00', event: 'Fed Beige Book', forecast: '-', previous: '-', impact: 'medium' }
+          ]
+        };
+
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setData(mockData);
+        
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  return { data, loading, error, refetch: () => {} };
 };
 
-const FUTURES_DATA: FuturesData[] = [
-  { symbol: 'ES', name: 'S&P 500 Futures', price: 6018.25, change: 12.50, changePercent: 0.21 },
-  { symbol: 'NQ', name: 'Nasdaq Futures', price: 21512.00, change: 78.25, changePercent: 0.36 },
-  { symbol: 'YM', name: 'Dow Futures', price: 44298.00, change: -28.00, changePercent: -0.06 },
-  { symbol: 'RTY', name: 'Russell Futures', price: 2292.30, change: 8.40, changePercent: 0.37 },
-];
-
-const TOP_NEWS: NewsItem[] = [
-  {
-    id: '1',
-    headline: 'Fed Officials Signal Patience on Rate Cuts Amid Sticky Inflation',
-    summary: 'Multiple Fed governors indicated they need more evidence of cooling inflation before considering rate reductions, pushing back against market expectations for early 2026 cuts.',
-    source: 'Reuters',
-    time: '2h ago',
-    sentiment: 'bearish',
-    tickers: ['SPY', 'TLT', 'GLD'],
-    importance: 'high',
-    aiTakeaway: 'Hawkish Fed tone = headwind for rate-sensitive growth stocks. Consider defensive positioning. Bond yields likely to stay elevated near-term.'
-  },
-  {
-    id: '2',
-    headline: 'NVIDIA Announces Next-Gen Blackwell Ultra Chips at CES 2026',
-    summary: 'NVIDIA unveiled its most powerful AI chips yet, claiming 4x performance improvement over current generation. Major cloud providers already placing orders.',
-    source: 'Bloomberg',
-    time: '4h ago',
-    sentiment: 'bullish',
-    tickers: ['NVDA', 'AMD', 'SMCI', 'AVGO'],
-    importance: 'high',
-    aiTakeaway: 'NVDA continues AI dominance. Positive for entire semiconductor ecosystem. Watch for AMD response and potential margin pressure concerns.'
-  },
-  {
-    id: '3',
-    headline: 'China Manufacturing PMI Returns to Expansion Territory',
-    summary: 'Official manufacturing PMI rose to 50.3 in December, beating expectations of 49.8 and signaling stabilization in the world\'s second-largest economy.',
-    source: 'CNBC',
-    time: '6h ago',
-    sentiment: 'bullish',
-    tickers: ['FXI', 'BABA', 'PDD', 'JD'],
-    importance: 'medium',
-    aiTakeaway: 'China recovery signs could boost global growth sentiment. EM exposure may benefit. Watch copper and commodities for confirmation.'
-  },
-  {
-    id: '4',
-    headline: 'Tesla Recalls 200,000 Cybertrucks Over Accelerator Issue',
-    summary: 'NHTSA investigation prompted recall affecting all Cybertrucks delivered since launch. Tesla says software update will resolve the issue.',
-    source: 'WSJ',
-    time: '8h ago',
-    sentiment: 'bearish',
-    tickers: ['TSLA', 'RIVN', 'LCID'],
-    importance: 'medium',
-    aiTakeaway: 'Short-term negative for TSLA sentiment but software fix limits damage. Watch for any production halt news. Could benefit RIVN relatively.'
-  }
-];
-
-const EARNINGS_TODAY: EarningsReport[] = [
-  { symbol: 'WBA', name: 'Walgreens Boots', time: 'BMO', epsEstimate: 0.37, revenueEstimate: '35.8B', importance: 'medium', previousEPS: 0.21 },
-  { symbol: 'STZ', name: 'Constellation Brands', time: 'BMO', epsEstimate: 3.31, revenueEstimate: '2.53B', importance: 'medium', previousEPS: 3.25 },
-  { symbol: 'RPM', name: 'RPM International', time: 'BMO', epsEstimate: 1.28, revenueEstimate: '1.78B', importance: 'low', previousEPS: 1.18 },
-];
-
-const ANALYST_ACTIONS: AnalystAction[] = [
-  { symbol: 'AAPL', firm: 'Morgan Stanley', action: 'reiterated', rating: 'Overweight', priceTarget: 220, previousTarget: 210, time: '6:30 AM' },
-  { symbol: 'MSFT', firm: 'Goldman Sachs', action: 'upgrade', rating: 'Buy', priceTarget: 480, previousTarget: 420, time: '6:15 AM' },
-  { symbol: 'GOOGL', firm: 'JP Morgan', action: 'downgrade', rating: 'Neutral', priceTarget: 175, previousTarget: 200, time: '5:45 AM' },
-  { symbol: 'META', firm: 'Barclays', action: 'initiated', rating: 'Overweight', priceTarget: 650, time: '7:00 AM' },
-  { symbol: 'AMZN', firm: 'Citi', action: 'reiterated', rating: 'Buy', priceTarget: 235, time: '6:00 AM' },
-];
-
-const ECONOMIC_CALENDAR: EconomicEvent[] = [
-  { time: '8:30 AM', event: 'Initial Jobless Claims', forecast: '218K', previous: '211K', importance: 'medium' },
-  { time: '10:00 AM', event: 'ISM Services PMI', forecast: '52.5', previous: '52.1', importance: 'high' },
-  { time: '10:00 AM', event: 'Factory Orders m/m', forecast: '-0.3%', previous: '0.2%', importance: 'medium' },
-  { time: '10:30 AM', event: 'EIA Natural Gas Storage', forecast: '-89B', previous: '-93B', importance: 'low' },
-  { time: '2:00 PM', event: 'FOMC Minutes', forecast: '-', previous: '-', importance: 'high' },
-];
-
-const AI_MARKET_SUMMARY = {
-  overview: `Markets are set to open higher following strong Asia session and NVIDIA's CES announcements. However, Fed minutes release at 2 PM ET presents key risk event. The hawkish Fed commentary overnight has tempered rate cut expectations, with markets now pricing only 2 cuts in 2026 vs 4 previously.`,
-  keyThemes: [
-    'AI momentum continues with NVDA catalyst',
-    'Fed hawkishness weighing on rate-sensitive sectors',
-    'China stabilization supporting global sentiment',
-    'VIX complacency warrants caution'
-  ],
-  riskFactors: [
-    'FOMC Minutes could surprise hawkish',
-    'ISM Services miss would raise recession fears',
-    'Geopolitical tensions in Middle East'
-  ],
-  tradingBias: 'Cautiously Bullish',
-  biasReasoning: 'Tech leadership intact, but stay nimble ahead of Fed minutes. Consider hedges if VIX spikes above 16.'
-};
-
 // ============================================
-// HELPER COMPONENTS
+// SUB-COMPONENTS
 // ============================================
-const CreditBadge = ({ cost, type }: { cost: number; type: 'light' | 'medium' | 'heavy' }) => {
-  const config = {
-    light: { icon: Zap, color: '#22C55E', bg: 'rgba(34, 197, 94, 0.1)' },
-    medium: { icon: Brain, color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.1)' },
-    heavy: { icon: Flame, color: '#F97316', bg: 'rgba(249, 115, 22, 0.1)' }
-  };
-  
-  const { icon: Icon, color, bg } = config[type];
-  
-  if (cost === 0) {
-    return (
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 10px',
-        background: 'rgba(34, 197, 94, 0.15)',
-        color: '#22C55E',
-        fontSize: 11,
-        fontWeight: 600,
-        borderRadius: 6
+const RiskCard = ({ item }: { item: RiskDashboardItem }) => {
+  const Icon = item.icon;
+
+  return (
+    <div style={{
+      background: COLORS.bgCard,
+      border: `1px solid ${item.color}30`,
+      borderRadius: 16,
+      padding: 20,
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        background: item.color
+      }} />
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <div style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          background: `${item.color}15`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <Icon size={22} style={{ color: item.color }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 4 }}>{item.label}</div>
+          <div style={{ 
+            fontSize: 24, 
+            fontWeight: 700, 
+            color: item.color,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            {item.value}
+            {item.status === 'rising' && <TrendingUp size={18} />}
+            {item.status === 'falling' && <TrendingDown size={18} />}
+          </div>
+        </div>
+      </div>
+
+      <p style={{ 
+        fontSize: 12, 
+        color: COLORS.textMuted, 
+        margin: 0, 
+        lineHeight: 1.5,
+        paddingTop: 12,
+        borderTop: `1px solid ${COLORS.border}`
       }}>
-        <Zap size={12} />
-        FREE
-      </span>
-    );
-  }
-  
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
-      padding: '4px 10px',
-      background: bg,
-      color: color,
-      fontSize: 11,
-      fontWeight: 600,
-      borderRadius: 6
-    }}>
-      <Icon size={12} />
-      {cost} credits
-    </span>
+        {item.reason}
+      </p>
+
+      <button style={{
+        marginTop: 12,
+        padding: '6px 12px',
+        background: 'transparent',
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 6,
+        color: COLORS.textMuted,
+        fontSize: 11,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4
+      }}>
+        <Info size={12} />
+        Explain
+      </button>
+    </div>
   );
 };
 
-const SentimentBadge = ({ sentiment }: { sentiment: 'bullish' | 'bearish' | 'neutral' }) => {
-  const config = {
-    bullish: { color: '#22C55E', bg: 'rgba(34, 197, 94, 0.1)', icon: TrendingUp },
-    bearish: { color: '#EF4444', bg: 'rgba(239, 68, 68, 0.1)', icon: TrendingDown },
-    neutral: { color: '#6B7280', bg: 'rgba(107, 114, 128, 0.1)', icon: Minus }
-  };
-  
-  const { color, bg, icon: Icon } = config[sentiment];
-  
-  return (
-    <span style={{
-      display: 'inline-flex',
+const MistakeCard = ({ 
+  mistake, 
+  index, 
+  onClick 
+}: { 
+  mistake: MistakeToAvoid; 
+  index: number; 
+  onClick: () => void;
+}) => (
+  <div 
+    onClick={onClick}
+    style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 16,
+      padding: 16,
+      background: COLORS.bgInput,
+      borderRadius: 12,
+      cursor: 'pointer',
+      transition: 'all 0.2s ease',
+      border: `1px solid ${COLORS.border}`
+    }}
+  >
+    <div style={{
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      background: COLORS.highImpactBg,
+      display: 'flex',
       alignItems: 'center',
-      gap: 4,
-      padding: '3px 8px',
-      background: bg,
-      color: color,
-      fontSize: 11,
-      fontWeight: 600,
-      borderRadius: 4,
-      textTransform: 'capitalize'
+      justifyContent: 'center',
+      fontSize: 14,
+      fontWeight: 700,
+      color: COLORS.highImpact
     }}>
-      <Icon size={12} />
-      {sentiment}
-    </span>
-  );
-};
+      {index + 1}
+    </div>
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: COLORS.textPrimary }}>
+        {mistake.title}
+      </div>
+      <div style={{ fontSize: 12, color: COLORS.textMuted, lineHeight: 1.5 }}>
+        {mistake.description}
+      </div>
+    </div>
+    <ChevronRight size={18} style={{ color: COLORS.textDim }} />
+  </div>
+);
+
+const EarningsCard = ({ earning }: { earning: EarningsCatalyst }) => (
+  <div style={{
+    background: COLORS.bgInput,
+    borderRadius: 12,
+    padding: 16,
+    border: `1px solid ${COLORS.border}`
+  }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.gold }}>{earning.symbol}</span>
+        <span style={{ fontSize: 12, color: COLORS.textMuted }}>{earning.name}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          padding: '3px 8px',
+          background: earning.time === 'BMO' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(139, 92, 246, 0.15)',
+          color: earning.time === 'BMO' ? '#F59E0B' : '#8B5CF6',
+          fontSize: 10,
+          fontWeight: 600,
+          borderRadius: 4
+        }}>
+          {earning.time === 'BMO' ? '🌅 Pre-Market' : '🌙 After Hours'}
+        </span>
+        <ImpactBadge level={earning.impact} size="sm" />
+      </div>
+    </div>
+    
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+      <div>
+        <div style={{ fontSize: 10, color: COLORS.textDim }}>Expected Move</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{earning.expectedMove}</div>
+      </div>
+    </div>
+
+    <div style={{
+      padding: 10,
+      background: 'rgba(199, 169, 61, 0.05)',
+      borderRadius: 8,
+      borderLeft: `3px solid ${COLORS.gold}`
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+        <Sparkles size={10} style={{ color: COLORS.gold }} />
+        <span style={{ fontSize: 9, color: COLORS.gold, fontWeight: 600 }}>AI NOTE</span>
+      </div>
+      <p style={{ fontSize: 11, color: COLORS.textMuted, margin: 0, lineHeight: 1.4 }}>
+        {earning.aiNote}
+      </p>
+    </div>
+  </div>
+);
+
+const EconomicEventRow = ({ event }: { event: EconomicEvent }) => (
+  <div style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    background: event.impact === 'high' ? COLORS.highImpactBg : COLORS.bgInput,
+    borderRadius: 10,
+    border: `1px solid ${event.impact === 'high' ? COLORS.highImpactBorder : COLORS.border}`
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ 
+        fontSize: 12, 
+        color: COLORS.textDim, 
+        fontFamily: 'monospace',
+        minWidth: 60 
+      }}>
+        {event.time}
+      </span>
+      <div>
+        <div style={{ 
+          fontSize: 13, 
+          color: COLORS.textPrimary,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6
+        }}>
+          {event.event}
+          {event.impact === 'high' && (
+            <AlertTriangle size={12} style={{ color: COLORS.highImpact }} />
+          )}
+        </div>
+      </div>
+    </div>
+    <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
+      <div>
+        <div style={{ color: COLORS.textDim, fontSize: 10 }}>Forecast</div>
+        <div style={{ fontWeight: 600 }}>{event.forecast}</div>
+      </div>
+      <div>
+        <div style={{ color: COLORS.textDim, fontSize: 10 }}>Previous</div>
+        <div style={{ fontWeight: 600 }}>{event.previous}</div>
+      </div>
+    </div>
+  </div>
+);
+
+// ============================================
+// LOADING SKELETON
+// ============================================
+const LoadingSkeleton = () => (
+  <div style={{ padding: 24 }}>
+    <div style={{ 
+      height: 32, 
+      width: 300, 
+      background: COLORS.bgInput, 
+      borderRadius: 8, 
+      marginBottom: 24,
+      animation: 'pulse 2s infinite'
+    }} />
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      {[1,2,3,4].map(i => (
+        <div key={i} style={{ 
+          height: 180, 
+          background: COLORS.bgCard, 
+          borderRadius: 16,
+          animation: 'pulse 2s infinite'
+        }} />
+      ))}
+    </div>
+  </div>
+);
 
 // ============================================
 // MAIN COMPONENT
 // ============================================
-export default function MorningBrief() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [expandedNews, setExpandedNews] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setLastRefresh(new Date());
-    setIsLoading(false);
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
-  };
-
-  const today = new Date().toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    month: 'long', 
-    day: 'numeric',
-    year: 'numeric'
+export default function MorningRiskBrief() {
+  const { data, loading, error } = useMorningBriefData();
+  
+  const [userMode, setUserMode] = useState<UserMode>({
+    type: 'trader',
+    horizon: '1D',
+    risk: 'balanced',
+    universe: 'US'
   });
+  const [selectedMistake, setSelectedMistake] = useState<MistakeToAvoid | null>(null);
+
+  // Handlers
+  const handleExportPDF = () => {
+    // TODO: Implement PDF export
+    console.log('Export PDF');
+  };
+
+  const handleSaveToJournal = () => {
+    // TODO: Implement save to journal
+    console.log('Save to Journal');
+  };
+
+  const handleSavePreMarketPlan = () => {
+    // TODO: Implement save pre-market plan
+    console.log('Save Pre-Market Plan');
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <AIPageContainer>
+        <LoadingSkeleton />
+      </AIPageContainer>
+    );
+  }
+
+  // Error state
+  if (error || !data) {
+    return (
+      <AIPageContainer>
+        <div style={{ 
+          padding: 40, 
+          textAlign: 'center', 
+          color: COLORS.highImpact 
+        }}>
+          <AlertTriangle size={48} style={{ marginBottom: 16 }} />
+          <h3>Failed to load Morning Brief</h3>
+          <p>{error || 'Unknown error'}</p>
+        </div>
+      </AIPageContainer>
+    );
+  }
+
+  const riskLevelConfig = {
+    low: { label: 'LOW RISK DAY', bg: COLORS.bullishBg, border: COLORS.bullishBorder, color: COLORS.bullish },
+    elevated: { label: 'ELEVATED RISK DAY', bg: COLORS.highImpactBg, border: COLORS.highImpactBorder, color: COLORS.highImpact },
+    high: { label: 'HIGH RISK DAY', bg: COLORS.bearishBg, border: COLORS.bearishBorder, color: COLORS.bearish }
+  };
+
+  const riskConfig = riskLevelConfig[data.riskLevel];
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: '#080B0F',
-      color: '#fff'
-    }}>
-      {/* Ambient Background */}
-      <div style={{ 
-        position: 'fixed', 
-        inset: 0, 
-        overflow: 'hidden', 
-        pointerEvents: 'none',
-        zIndex: 0
-      }}>
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: '30%',
-          width: 500,
-          height: 500,
-          background: 'radial-gradient(circle, rgba(249, 115, 22, 0.05) 0%, transparent 70%)',
-          borderRadius: '50%',
-          filter: 'blur(60px)'
-        }} />
+    <AIPageContainer>
+      {/* Page Header */}
+      <AIPageHeader
+        title="Morning Risk Brief"
+        subtitle="Start Your Day Without Costly Mistakes"
+        icon={Shield}
+        iconColor={COLORS.mediumImpact}
+        userMode={userMode}
+        onUserModeChange={setUserMode}
+        onExportPDF={handleExportPDF}
+        onSaveToJournal={handleSaveToJournal}
+        onFeedback={() => console.log('Feedback')}
+      />
+
+      {/* RISK DASHBOARD */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          marginBottom: 20 
+        }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>Risk Dashboard</h2>
+          <span style={{ 
+            padding: '4px 10px', 
+            background: riskConfig.bg,
+            border: `1px solid ${riskConfig.border}`,
+            borderRadius: 6,
+            fontSize: 11,
+            color: riskConfig.color,
+            fontWeight: 600
+          }}>
+            {riskConfig.label}
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          {data.riskDashboard.map((item) => (
+            <RiskCard key={item.id} item={item} />
+          ))}
+        </div>
       </div>
 
-      <div style={{ 
-        position: 'relative', 
-        zIndex: 1,
-        maxWidth: 1400, 
-        margin: '0 auto', 
-        padding: '32px 24px'
-      }}>
-        
-        {/* ============================================ */}
-        {/* HEADER */}
-        {/* ============================================ */}
+      {/* MISTAKES TO AVOID + ONE THING */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 32 }}>
+        {/* 3 Mistakes */}
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          marginBottom: 32,
-          flexWrap: 'wrap',
-          gap: 16
+          background: COLORS.bgCard,
+          border: `1px solid ${COLORS.highImpactBorder}`,
+          borderRadius: 20,
+          padding: 24
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            marginBottom: 20 
+          }}>
             <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #F97316 0%, #EA580C 100%)',
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: COLORS.highImpactBg,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 0 30px rgba(249, 115, 22, 0.3)'
+              justifyContent: 'center'
             }}>
-              <Sun size={28} style={{ color: '#fff' }} />
+              <Ban size={20} style={{ color: COLORS.highImpact }} />
             </div>
             <div>
-              <h1 style={{ fontSize: 32, fontWeight: 700, margin: 0, marginBottom: 4 }}>
-                Morning Brief
-              </h1>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#6B7280', fontSize: 14 }}>
-                <span>{today}</span>
-                <span>•</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={14} />
-                  {formatTime(currentTime)} ET
-                </span>
-              </div>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                {data.mistakesToAvoid.length} Mistakes to Avoid Today
+              </h3>
+              <p style={{ fontSize: 12, color: COLORS.textMuted, margin: 0 }}>
+                Based on current market conditions
+              </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '8px 12px',
-              background: 'rgba(34, 197, 94, 0.1)',
-              border: '1px solid rgba(34, 197, 94, 0.2)',
-              borderRadius: 8,
-              fontSize: 13,
-              color: '#22C55E'
-            }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22C55E', animation: 'pulse 2s infinite' }} />
-              Live Data
-            </div>
-            
-            <button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                background: '#1A1A1A',
-                border: '1px solid #2A2A2A',
-                borderRadius: 8,
-                color: '#fff',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
-                fontSize: 14,
-                fontWeight: 500,
-                transition: 'all 0.2s ease'
-              }}
-            >
-              <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} style={{ 
-                animation: isLoading ? 'spin 1s linear infinite' : 'none' 
-              }} />
-              Refresh
-              <CreditBadge cost={3} type="medium" />
-            </button>
-          </div>
-        </div>
-
-        {/* ============================================ */}
-        {/* AI MARKET SUMMARY */}
-        {/* ============================================ */}
-        <div style={{
-          background: 'linear-gradient(135deg, #0D1117 0%, #1A1A2E 100%)',
-          border: '1px solid rgba(199, 169, 61, 0.2)',
-          borderRadius: 20,
-          padding: 32,
-          marginBottom: 24,
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: -50,
-            right: -50,
-            width: 200,
-            height: 200,
-            background: 'radial-gradient(circle, rgba(199, 169, 61, 0.1) 0%, transparent 70%)',
-            borderRadius: '50%'
-          }} />
-
-          <div style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 12,
-                  background: 'rgba(199, 169, 61, 0.15)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Sparkles size={22} style={{ color: '#C7A93D' }} />
-                </div>
-                <div>
-                  <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>AI Market Summary</h2>
-                  <p style={{ fontSize: 12, color: '#6B7280', margin: 0 }}>Generated at {formatTime(lastRefresh)} ET</p>
-                </div>
-              </div>
-              <CreditBadge cost={0} type="light" />
-            </div>
-
-            <p style={{ fontSize: 16, color: '#D1D5DB', lineHeight: 1.7, marginBottom: 24 }}>
-              {AI_MARKET_SUMMARY.overview}
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 24 }}>
-              {/* Key Themes */}
-              <div style={{
-                background: 'rgba(34, 197, 94, 0.05)',
-                border: '1px solid rgba(34, 197, 94, 0.15)',
-                borderRadius: 12,
-                padding: 16
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <TrendingUp size={16} style={{ color: '#22C55E' }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#22C55E' }}>Key Themes</span>
-                </div>
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, color: '#9CA3AF' }}>
-                  {AI_MARKET_SUMMARY.keyThemes.map((theme, idx) => (
-                    <li key={idx} style={{ marginBottom: 6 }}>{theme}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Risk Factors */}
-              <div style={{
-                background: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.15)',
-                borderRadius: 12,
-                padding: 16
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#EF4444' }}>Risk Factors</span>
-                </div>
-                <ul style={{ margin: 0, paddingLeft: 16, fontSize: 13, color: '#9CA3AF' }}>
-                  {AI_MARKET_SUMMARY.riskFactors.map((risk, idx) => (
-                    <li key={idx} style={{ marginBottom: 6 }}>{risk}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Trading Bias */}
-              <div style={{
-                background: 'rgba(59, 130, 246, 0.05)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-                borderRadius: 12,
-                padding: 16
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <Target size={16} style={{ color: '#3B82F6' }} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#3B82F6' }}>AI Trading Bias</span>
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: '#22C55E', marginBottom: 8 }}>
-                  {AI_MARKET_SUMMARY.tradingBias}
-                </div>
-                <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, lineHeight: 1.5 }}>
-                  {AI_MARKET_SUMMARY.biasReasoning}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ============================================ */}
-        {/* MARKET INDICES & VIX ROW */}
-        {/* ============================================ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 24 }}>
-          {/* Market Indices */}
-          <div style={{
-            background: '#0D1117',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 16,
-            padding: 24
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <BarChart3 size={20} style={{ color: '#3B82F6' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Market Indices</h3>
-              </div>
-              <CreditBadge cost={0} type="light" />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-              {MARKET_INDICES.map((index) => (
-                <div key={index.symbol} style={{
-                  background: '#0A0A0A',
-                  borderRadius: 12,
-                  padding: 16,
-                  border: '1px solid #1A1A1A'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>{index.symbol}</span>
-                    <span style={{ fontSize: 11, color: '#6B7280' }}>{index.name}</span>
-                  </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-                    {index.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </div>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    color: index.status === 'up' ? '#22C55E' : index.status === 'down' ? '#EF4444' : '#6B7280'
-                  }}>
-                    {index.status === 'up' ? <ArrowUpRight size={14} /> : index.status === 'down' ? <ArrowDownRight size={14} /> : <Minus size={14} />}
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>
-                      {index.change >= 0 ? '+' : ''}{index.change.toFixed(2)} ({index.changePercent >= 0 ? '+' : ''}{index.changePercent.toFixed(2)}%)
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* VIX Card */}
-          <div style={{
-            background: VIX_DATA.current < 15 
-              ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, #0D1117 100%)'
-              : VIX_DATA.current < 20 
-                ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, #0D1117 100%)'
-                : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, #0D1117 100%)',
-            border: `1px solid ${VIX_DATA.current < 15 ? 'rgba(34, 197, 94, 0.2)' : VIX_DATA.current < 20 ? 'rgba(249, 115, 22, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
-            borderRadius: 16,
-            padding: 24
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Activity size={20} style={{ color: VIX_DATA.current < 15 ? '#22C55E' : VIX_DATA.current < 20 ? '#F59E0B' : '#EF4444' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>VIX Index</h3>
-              </div>
-              <span style={{
-                padding: '4px 10px',
-                background: VIX_DATA.current < 15 ? 'rgba(34, 197, 94, 0.15)' : VIX_DATA.current < 20 ? 'rgba(249, 115, 22, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: VIX_DATA.current < 15 ? '#22C55E' : VIX_DATA.current < 20 ? '#F59E0B' : '#EF4444',
-                fontSize: 12,
-                fontWeight: 600,
-                borderRadius: 6
-              }}>
-                {VIX_DATA.level}
-              </span>
-            </div>
-
-            <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 4 }}>
-              {VIX_DATA.current.toFixed(2)}
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              color: VIX_DATA.change < 0 ? '#22C55E' : '#EF4444',
-              marginBottom: 16
-            }}>
-              {VIX_DATA.change < 0 ? <TrendingDown size={14} /> : <TrendingUp size={14} />}
-              <span style={{ fontSize: 14 }}>
-                {VIX_DATA.change >= 0 ? '+' : ''}{VIX_DATA.change.toFixed(2)} ({VIX_DATA.changePercent >= 0 ? '+' : ''}{VIX_DATA.changePercent.toFixed(2)}%)
-              </span>
-            </div>
-
-            <div style={{
-              padding: 12,
-              background: 'rgba(0,0,0,0.3)',
-              borderRadius: 8,
-              fontSize: 13,
-              color: '#9CA3AF',
-              lineHeight: 1.5
-            }}>
-              <Sparkles size={12} style={{ color: '#C7A93D', marginRight: 6, display: 'inline' }} />
-              {VIX_DATA.interpretation}
-            </div>
-          </div>
-        </div>
-
-        {/* ============================================ */}
-        {/* FUTURES PRE-MARKET */}
-        {/* ============================================ */}
-        <div style={{
-          background: '#0D1117',
-          border: '1px solid rgba(255,255,255,0.06)',
-          borderRadius: 16,
-          padding: 24,
-          marginBottom: 24
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Globe size={20} style={{ color: '#8B5CF6' }} />
-              <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Futures Pre-Market</h3>
-              <span style={{ fontSize: 12, color: '#6B7280' }}>as of {formatTime(currentTime)} ET</span>
-            </div>
-            <CreditBadge cost={0} type="light" />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-            {FUTURES_DATA.map((future) => (
-              <div key={future.symbol} style={{
-                background: '#0A0A0A',
-                borderRadius: 12,
-                padding: 16,
-                border: '1px solid #1A1A1A',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{future.symbol}</div>
-                  <div style={{ fontSize: 12, color: '#6B7280' }}>{future.name}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{future.price.toLocaleString()}</div>
-                  <div style={{
-                    fontSize: 13,
-                    color: future.change >= 0 ? '#22C55E' : '#EF4444'
-                  }}>
-                    {future.change >= 0 ? '+' : ''}{future.changePercent.toFixed(2)}%
-                  </div>
-                </div>
-              </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {data.mistakesToAvoid.map((mistake, idx) => (
+              <MistakeCard 
+                key={idx} 
+                mistake={mistake} 
+                index={idx}
+                onClick={() => setSelectedMistake(mistake)}
+              />
             ))}
           </div>
         </div>
 
-        {/* ============================================ */}
-        {/* NEWS & EARNINGS ROW */}
-        {/* ============================================ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 24 }}>
-          {/* Top News */}
-          <div style={{
-            background: '#0D1117',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 16,
-            padding: 24
+        {/* One Thing */}
+        <div style={{
+          background: `linear-gradient(135deg, ${COLORS.gold}15, ${COLORS.bgCard})`,
+          border: `1px solid ${COLORS.borderGold}`,
+          borderRadius: 20,
+          padding: 24,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            marginBottom: 20 
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Newspaper size={20} style={{ color: '#EC4899' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Top Stories</h3>
-              </div>
-              <CreditBadge cost={0} type="light" />
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'rgba(199, 169, 61, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Target size={20} style={{ color: COLORS.gold }} />
             </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {TOP_NEWS.map((news) => (
-                <div 
-                  key={news.id}
-                  style={{
-                    background: '#0A0A0A',
-                    borderRadius: 12,
-                    padding: 16,
-                    border: expandedNews === news.id ? '1px solid rgba(199, 169, 61, 0.3)' : '1px solid #1A1A1A',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onClick={() => setExpandedNews(expandedNews === news.id ? null : news.id)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        {news.importance === 'high' && (
-                          <span style={{
-                            padding: '2px 6px',
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            color: '#EF4444',
-                            fontSize: 10,
-                            fontWeight: 600,
-                            borderRadius: 4
-                          }}>
-                            HIGH IMPACT
-                          </span>
-                        )}
-                        <SentimentBadge sentiment={news.sentiment} />
-                        <span style={{ fontSize: 11, color: '#6B7280' }}>{news.source} • {news.time}</span>
-                      </div>
-                      <h4 style={{ fontSize: 15, fontWeight: 600, margin: 0, lineHeight: 1.4 }}>
-                        {news.headline}
-                      </h4>
-                    </div>
-                    <ChevronDown 
-                      size={18} 
-                      style={{ 
-                        color: '#6B7280', 
-                        transform: expandedNews === news.id ? 'rotate(180deg)' : 'rotate(0)',
-                        transition: 'transform 0.2s ease',
-                        flexShrink: 0,
-                        marginLeft: 12
-                      }} 
-                    />
-                  </div>
-
-                  {expandedNews === news.id && (
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #1A1A1A' }}>
-                      <p style={{ fontSize: 14, color: '#9CA3AF', lineHeight: 1.6, marginBottom: 16 }}>
-                        {news.summary}
-                      </p>
-                      
-                      <div style={{
-                        background: 'rgba(199, 169, 61, 0.08)',
-                        border: '1px solid rgba(199, 169, 61, 0.15)',
-                        borderRadius: 8,
-                        padding: 12,
-                        marginBottom: 12
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                          <Sparkles size={14} style={{ color: '#C7A93D' }} />
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#C7A93D' }}>AI Takeaway</span>
-                        </div>
-                        <p style={{ fontSize: 13, color: '#D1D5DB', margin: 0, lineHeight: 1.5 }}>
-                          {news.aiTakeaway}
-                        </p>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 12, color: '#6B7280' }}>Related:</span>
-                        {news.tickers.map((ticker) => (
-                          <span 
-                            key={ticker}
-                            style={{
-                              padding: '3px 8px',
-                              background: '#1A1A1A',
-                              borderRadius: 4,
-                              fontSize: 12,
-                              fontWeight: 500,
-                              color: '#C7A93D'
-                            }}
-                          >
-                            {ticker}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: COLORS.gold }}>
+              If You Do ONE Thing
+            </h3>
           </div>
 
-          {/* Earnings Today */}
           <div style={{
-            background: '#0D1117',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 16,
-            padding: 24
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Calendar size={20} style={{ color: '#F59E0B' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Earnings Today</h3>
-              </div>
-              <CreditBadge cost={0} type="light" />
-            </div>
+            <p style={{ 
+              fontSize: 18, 
+              fontWeight: 600, 
+              color: COLORS.textPrimary, 
+              margin: 0,
+              textAlign: 'center',
+              lineHeight: 1.6
+            }}>
+              "{data.oneThing}"
+            </p>
+          </div>
 
-            {EARNINGS_TODAY.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {EARNINGS_TODAY.map((earning) => (
-                  <div key={earning.symbol} style={{
-                    background: '#0A0A0A',
-                    borderRadius: 10,
-                    padding: 14,
-                    border: '1px solid #1A1A1A'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#C7A93D' }}>{earning.symbol}</span>
-                        <span style={{ fontSize: 13, color: '#9CA3AF' }}>{earning.name}</span>
-                      </div>
-                      <span style={{
-                        padding: '3px 8px',
-                        background: earning.time === 'BMO' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(139, 92, 246, 0.15)',
-                        color: earning.time === 'BMO' ? '#F59E0B' : '#8B5CF6',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        borderRadius: 4
-                      }}>
-                        {earning.time === 'BMO' ? '🌅 Before Open' : '🌙 After Close'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2 }}>EPS Est.</div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>${earning.epsEstimate.toFixed(2)}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 2 }}>Revenue Est.</div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{earning.revenueEstimate}</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          <button 
+            onClick={handleSavePreMarketPlan}
+            style={{
+              padding: '14px',
+              background: `linear-gradient(135deg, ${COLORS.gold}, ${COLORS.goldDark})`,
+              border: 'none',
+              borderRadius: 10,
+              color: '#000',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8
+            }}
+          >
+            <FileText size={16} />
+            Save as Pre-Market Plan
+          </button>
+        </div>
+      </div>
+
+      {/* SCENARIO BOX */}
+      <div style={{ marginBottom: 32 }}>
+        <h3 style={{ 
+          fontSize: 18, 
+          fontWeight: 600, 
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8
+        }}>
+          <Crosshair size={20} style={{ color: COLORS.neutral }} />
+          Scenario Box
+        </h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
+          {data.scenarios.map((scenario, idx) => (
+            <ScenarioCard
+              key={idx}
+              type={scenario.type}
+              title={scenario.title}
+              trigger={scenario.trigger}
+              watchItems={scenario.watchItems}
+              affected={scenario.affected}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* EARNINGS & ECONOMIC CALENDAR */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        {/* Earnings */}
+        <div style={{
+          background: COLORS.bgCard,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 16,
+          padding: 24
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            marginBottom: 20 
+          }}>
+            <Calendar size={20} style={{ color: COLORS.mediumImpact }} />
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Earnings / Catalysts</h3>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {data.earningsToday.length > 0 ? (
+              data.earningsToday.map((earning, idx) => (
+                <EarningsCard key={idx} earning={earning} />
+              ))
             ) : (
-              <div style={{ textAlign: 'center', padding: 40, color: '#6B7280' }}>
+              <div style={{ 
+                padding: 24, 
+                textAlign: 'center', 
+                color: COLORS.textMuted,
+                background: COLORS.bgInput,
+                borderRadius: 12
+              }}>
                 No major earnings today
               </div>
             )}
           </div>
         </div>
 
-        {/* ============================================ */}
-        {/* ANALYST ACTIONS & ECONOMIC CALENDAR ROW */}
-        {/* ============================================ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-          {/* Analyst Actions */}
-          <div style={{
-            background: '#0D1117',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 16,
-            padding: 24
+        {/* Economic Calendar */}
+        <div style={{
+          background: COLORS.bgCard,
+          border: `1px solid ${COLORS.border}`,
+          borderRadius: 16,
+          padding: 24
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 10, 
+            marginBottom: 20 
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Star size={20} style={{ color: '#22C55E' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Analyst Actions</h3>
-              </div>
-              <CreditBadge cost={0} type="light" />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {ANALYST_ACTIONS.map((action, idx) => (
-                <div key={idx} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 14px',
-                  background: '#0A0A0A',
-                  borderRadius: 8,
-                  border: '1px solid #1A1A1A'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#C7A93D', minWidth: 50 }}>{action.symbol}</span>
-                    <div>
-                      <div style={{ fontSize: 13, color: '#D1D5DB' }}>{action.firm}</div>
-                      <div style={{ fontSize: 12, color: '#6B7280' }}>{action.time}</div>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{
-                      padding: '3px 8px',
-                      background: action.action === 'upgrade' ? 'rgba(34, 197, 94, 0.15)' : 
-                                 action.action === 'downgrade' ? 'rgba(239, 68, 68, 0.15)' : 
-                                 'rgba(107, 114, 128, 0.15)',
-                      color: action.action === 'upgrade' ? '#22C55E' : 
-                             action.action === 'downgrade' ? '#EF4444' : '#9CA3AF',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      borderRadius: 4,
-                      textTransform: 'capitalize'
-                    }}>
-                      {action.action}
-                    </span>
-                    <div style={{ fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-                      PT: ${action.priceTarget}
-                      {action.previousTarget && (
-                        <span style={{ color: '#6B7280', fontWeight: 400 }}> (from ${action.previousTarget})</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Globe size={20} style={{ color: COLORS.neutral }} />
+            <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Economic Calendar</h3>
           </div>
 
-          {/* Economic Calendar */}
-          <div style={{
-            background: '#0D1117',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 16,
-            padding: 24
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Building2 size={20} style={{ color: '#3B82F6' }} />
-                <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Economic Calendar</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.economicEvents.length > 0 ? (
+              data.economicEvents.map((event, idx) => (
+                <EconomicEventRow key={idx} event={event} />
+              ))
+            ) : (
+              <div style={{ 
+                padding: 24, 
+                textAlign: 'center', 
+                color: COLORS.textMuted,
+                background: COLORS.bgInput,
+                borderRadius: 12
+              }}>
+                No economic events today
               </div>
-              <CreditBadge cost={0} type="light" />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {ECONOMIC_CALENDAR.map((event, idx) => (
-                <div key={idx} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 14px',
-                  background: event.importance === 'high' ? 'rgba(239, 68, 68, 0.05)' : '#0A0A0A',
-                  borderRadius: 8,
-                  border: event.importance === 'high' ? '1px solid rgba(239, 68, 68, 0.15)' : '1px solid #1A1A1A'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ fontSize: 12, color: '#6B7280', fontFamily: 'monospace', minWidth: 70 }}>{event.time}</span>
-                    <div>
-                      <div style={{ 
-                        fontSize: 13, 
-                        color: '#D1D5DB',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}>
-                        {event.event}
-                        {event.importance === 'high' && (
-                          <AlertTriangle size={12} style={{ color: '#EF4444' }} />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
-                    <div>
-                      <div style={{ color: '#6B7280' }}>Forecast</div>
-                      <div style={{ fontWeight: 600 }}>{event.forecast}</div>
-                    </div>
-                    <div>
-                      <div style={{ color: '#6B7280' }}>Previous</div>
-                      <div style={{ fontWeight: 600 }}>{event.previous}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            )}
           </div>
         </div>
-
       </div>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-    </div>
+      {/* MISTAKE DETAIL DRAWER */}
+      <Drawer
+        isOpen={!!selectedMistake}
+        onClose={() => setSelectedMistake(null)}
+        title={selectedMistake?.title || ''}
+        width={480}
+      >
+        {selectedMistake && (
+          <div>
+            <div style={{
+              padding: 20,
+              background: COLORS.highImpactBg,
+              border: `1px solid ${COLORS.highImpactBorder}`,
+              borderRadius: 12,
+              marginBottom: 24
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8, 
+                marginBottom: 12,
+                color: COLORS.highImpact 
+              }}>
+                <AlertTriangle size={18} />
+                <span style={{ fontWeight: 600 }}>Why This Matters Today</span>
+              </div>
+              <p style={{ fontSize: 14, color: COLORS.textSecondary, margin: 0, lineHeight: 1.6 }}>
+                {selectedMistake.whyToday}
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 8 }}>GENERAL PRINCIPLE</div>
+              <p style={{ fontSize: 14, color: COLORS.textSecondary, margin: 0, lineHeight: 1.6 }}>
+                {selectedMistake.description}
+              </p>
+            </div>
+
+            <div style={{
+              padding: 16,
+              background: 'rgba(199, 169, 61, 0.05)',
+              borderRadius: 12,
+              marginBottom: 24
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                marginBottom: 12,
+                color: COLORS.gold 
+              }}>
+                <Sparkles size={14} />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>AI RECOMMENDATION</span>
+              </div>
+              <p style={{ fontSize: 14, color: COLORS.textPrimary, margin: 0, lineHeight: 1.6 }}>
+                Consider reducing position sizes or waiting for clearer signals. 
+                Today's conditions favor patience over aggression.
+              </p>
+            </div>
+
+            <button style={{
+              width: '100%',
+              padding: '14px',
+              background: `linear-gradient(135deg, ${COLORS.gold}, ${COLORS.goldDark})`,
+              border: 'none',
+              borderRadius: 10,
+              color: '#000',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}>
+              Add to Trading Rules
+            </button>
+          </div>
+        )}
+      </Drawer>
+    </AIPageContainer>
   );
 }

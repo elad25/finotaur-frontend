@@ -66,6 +66,193 @@ DROP VIEW IF EXISTS public.user_referral_info CASCADE;
 DROP VIEW IF EXISTS public.affiliate_stats_view CASCADE;
 
 -- ===============================================
+-- 🆕 SECTION 0.7: ADD BETA ACCOUNT TYPE
+-- ===============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '[0.7/10] 🧪 Adding BETA account type...';
+END $$;
+
+-- Add 'beta' to account_type enum if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum 
+    WHERE enumlabel = 'beta' 
+    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'account_type')
+  ) THEN
+    ALTER TYPE account_type ADD VALUE IF NOT EXISTS 'beta';
+    RAISE NOTICE '✅ Added beta to account_type enum';
+  ELSE
+    RAISE NOTICE 'ℹ️  beta already exists in account_type enum';
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE '⚠️  Could not add beta to enum (may not be enum type): %', SQLERRM;
+END $$;
+
+-- Function to check beta access
+CREATE OR REPLACE FUNCTION public.has_beta_access(p_user_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_role TEXT;
+  v_account_type TEXT;
+BEGIN
+  SELECT role, account_type 
+  INTO v_role, v_account_type
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Beta access granted to: admin, super_admin, vip, beta
+  RETURN (
+    v_role IN ('admin', 'super_admin') OR
+    v_account_type IN ('admin', 'vip', 'beta')
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION public.has_beta_access(UUID) IS 
+'v1.0: Checks if user has beta access (admin/vip/beta account types)';
+
+GRANT EXECUTE ON FUNCTION public.has_beta_access(UUID) TO authenticated;
+
+-- Function to grant beta access (admin only)
+CREATE OR REPLACE FUNCTION public.grant_beta_access(
+  p_admin_id UUID,
+  p_target_user_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_admin_role TEXT;
+BEGIN
+  -- Check if caller is admin
+  SELECT role INTO v_admin_role
+  FROM profiles WHERE id = p_admin_id;
+  
+  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Only admins can grant beta access'
+    );
+  END IF;
+  
+  -- Update user to beta
+  UPDATE profiles
+  SET 
+    account_type = 'beta',
+    subscription_status = 'active',
+    max_trades = 999999,
+    updated_at = NOW()
+  WHERE id = p_target_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'User not found'
+    );
+  END IF;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Beta access granted',
+    'user_id', p_target_user_id
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.grant_beta_access(UUID, UUID) TO authenticated;
+
+-- Function to revoke beta access (admin only)
+CREATE OR REPLACE FUNCTION public.revoke_beta_access(
+  p_admin_id UUID,
+  p_target_user_id UUID,
+  p_new_account_type TEXT DEFAULT 'basic'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_admin_role TEXT;
+BEGIN
+  SELECT role INTO v_admin_role
+  FROM profiles WHERE id = p_admin_id;
+  
+  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Only admins can revoke beta access'
+    );
+  END IF;
+  
+  UPDATE profiles
+  SET 
+    account_type = p_new_account_type,
+    max_trades = CASE 
+      WHEN p_new_account_type = 'basic' THEN 25
+      WHEN p_new_account_type = 'premium' THEN 999999
+      ELSE 25 
+    END,
+    updated_at = NOW()
+  WHERE id = p_target_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'User not found'
+    );
+  END IF;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Beta access revoked',
+    'user_id', p_target_user_id,
+    'new_account_type', p_new_account_type
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.revoke_beta_access(UUID, UUID, TEXT) TO authenticated;
+
+-- View to list all beta users
+CREATE OR REPLACE VIEW public.beta_users_view AS
+SELECT 
+  p.id,
+  p.email,
+  p.display_name,
+  p.account_type,
+  p.role,
+  p.created_at,
+  p.updated_at
+FROM profiles p
+WHERE 
+  p.account_type = 'beta' OR
+  p.role IN ('admin', 'super_admin') OR
+  p.account_type IN ('admin', 'vip')
+ORDER BY p.created_at DESC;
+
+GRANT SELECT ON public.beta_users_view TO authenticated;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Beta access system created';
+END $$;
+
+-- ===============================================
 -- 🆕 v9.4.2: VERIFY ARCHIVE COLUMNS (SHOULD EXIST FROM PART 1)
 -- ===============================================
 
@@ -993,8 +1180,8 @@ BEGIN
   -- Determine which trade counter to use
   v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
   
-  -- Handle unlimited users (premium/admin/vip)
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+-- Handle unlimited users (premium/admin/vip/beta)
+  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
     RETURN QUERY SELECT
       999999::INTEGER,
       v_trades_used::INTEGER,
@@ -2559,11 +2746,12 @@ BEGIN
   RAISE NOTICE '   ├─ BASIC/TRIAL with 25 trades: %', basic_trial_users;
   RAISE NOTICE '   └─ Super Admin Setup: %', CASE WHEN super_admin_exists THEN '✅ YES' ELSE '❌ NO' END;
   RAISE NOTICE '';
-  RAISE NOTICE '🎯 TRADE LIMITS:';
+RAISE NOTICE '🎯 TRADE LIMITS:';
   RAISE NOTICE '   ├─ FREE: 10 lifetime trades';
   RAISE NOTICE '   ├─ BASIC: 25 trades/month ✅';
   RAISE NOTICE '   ├─ TRIAL: 25 trades/month ✅';
-  RAISE NOTICE '   └─ PREMIUM: Unlimited';
+  RAISE NOTICE '   ├─ PREMIUM: Unlimited';
+  RAISE NOTICE '   └─ BETA: Unlimited (admin access to all features)';
   RAISE NOTICE '';
   RAISE NOTICE '⏰ CRON JOBS (manual setup if pg_cron unavailable):';
   RAISE NOTICE '   ✅ 02:00 AM Daily - Expire old subscriptions';
@@ -2624,8 +2812,8 @@ BEGIN
     RETURN TRUE;
   END IF;
   
-  -- Premium/VIP always can
-  IF v_profile.account_type IN ('premium', 'admin', 'vip') THEN
+-- Premium/VIP/Beta always can
+  IF v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
     RETURN TRUE;
   END IF;
   
@@ -2722,7 +2910,8 @@ BEGIN
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
     WHEN 'vip' THEN 999999
-    ELSE 25  -- Default = basic (NOT 0!)
+    WHEN 'beta' THEN 999999
+    ELSE 25
   END;
 END;
 $$;
@@ -2894,7 +3083,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE account_type = 'free') THEN
       ALTER TABLE public.profiles 
       ADD CONSTRAINT profiles_account_type_check 
-      CHECK (account_type IN ('basic', 'premium', 'admin', 'vip'));
+CHECK (account_type IN ('basic', 'premium', 'admin', 'vip', 'beta'));
       RAISE NOTICE '✅ Added constraint: profiles_account_type_check';
     ELSE
       RAISE WARNING '⚠️  Skipping constraint - FREE users still exist';

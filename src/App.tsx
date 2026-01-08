@@ -114,6 +114,7 @@ const AllMarketsNews = lazy(() => import("@/pages/app/all-markets/News"));
 const AllMarketsHeatmap = lazy(() => import("@/pages/app/all-markets/Heatmap"));
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
+const AdminSiteDashboard = lazy(() => import("@/pages/app/all-markets/admin/SiteDashboard"));
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 
@@ -206,6 +207,9 @@ const AIMacroEarnings = lazy(() => import("@/pages/app/ai/MacroEarnings"));
 const AITradeIdeas = lazy(() => import("@/pages/app/ai/TradeIdeas"));
 const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
 
+const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntelligenceAI"));
+const AIMomentumLab = lazy(() => import("@/pages/app/ai/MomentumRegimeLab"));
+
 // Copy Trade
 const CopyTradeOverview = lazy(() => import("@/pages/app/copy-trade/Overview"));
 const CopyTradeTopTraders = lazy(() => import("@/pages/app/copy-trade/TopTraders"));
@@ -289,8 +293,9 @@ function AppContent() {
           <Route path="all-markets/calendar" element={<SuspenseRoute><AllMarketsCalendar /></SuspenseRoute>} />
           <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
           <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
-          <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+<Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+<Route path="all-markets/admin/site-dashboard" element={<ProtectedAdminRoute><SuspenseRoute><AdminSiteDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -386,7 +391,8 @@ function AppContent() {
           <Route path="ai/macro-earnings" element={<SuspenseRoute><AIMacroEarnings /></SuspenseRoute>} />
           <Route path="ai/trade-ideas" element={<LockedRoute domainId="ai"><AITradeIdeas /></LockedRoute>} />
           <Route path="ai/assistant" element={<LockedRoute domainId="ai"><AIAssistant /></LockedRoute>} />
-
+<Route path="ai/options-intelligence" element={<SuspenseRoute><AIOptionsIntelligence /></SuspenseRoute>} />
+<Route path="ai/momentum-lab" element={<SuspenseRoute><AIMomentumLab /></SuspenseRoute>} />
           {/* JOURNAL */}
           <Route path="journal/overview" element={<SuspenseRoute><JournalOverview /></SuspenseRoute>} />
           <Route path="journal/new" element={<SuspenseRoute><New /></SuspenseRoute>} />

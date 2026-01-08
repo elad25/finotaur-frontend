@@ -1,6 +1,14 @@
+// src/components/Sidebar.tsx
+// =====================================================
+// 🔥 v2.0: BETA ACCESS SYSTEM
+// =====================================================
+// Admins/VIPs with hasBetaAccess can see and access ALL locked items
+// =====================================================
+
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
+import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { cn } from '@/lib/utils';
 import { 
   LayoutDashboard, 
@@ -47,7 +55,8 @@ import {
   Search,
   Bell,
   Coins,
-  Flame
+  Flame,
+  Sparkles  // 🔥 For beta items
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -85,6 +94,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   icon: any;
   divider?: boolean;
   locked?: boolean;
+  beta?: boolean;  // 🔥 NEW
 }>> = {
   // ===============================================
   // 🌍 ALL MARKETS - 🔒 LOCKED
@@ -210,19 +220,20 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'News', path: '/app/macro/news', icon: Newspaper },
   ],
 
-  // ===============================================
-  // 🤖 AI INSIGHTS
-  // ===============================================
-  'ai': [
-    { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
-    { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
-    { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
-    { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
-    { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
-    { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target, locked: false },
-    { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare, locked: false },
-  ],
-
+// ===============================================
+// 🤖 AI INSIGHTS
+// ===============================================
+'ai': [
+  { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
+  { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
+  { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
+  { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
+  { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
+  { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target, locked: false },
+  { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
+  { label: 'Momentum Lab', path: '/app/ai/momentum-lab', icon: TrendingUp },
+  { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare, locked: false },
+],
   // ===============================================
   // 📓 JOURNAL
   // ===============================================
@@ -350,6 +361,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
+  const { isAdmin, hasBetaAccess } = useAdminAuth();  // 🔥 NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
@@ -418,8 +430,9 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     return null;
   }
 
+  // 🔥 UPDATED: Beta access allows navigation to locked items
   const handleNavigation = (path: string, isLocked?: boolean) => {
-    if (isLocked) return;
+    if (isLocked && !hasBetaAccess) return;
     navigate(path);
   };
 
@@ -517,27 +530,28 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           )}
         </div>
       </div>
-{/* 🏷️ Environment Header Badge - FIXED: No more jumping */}
-{envHeader && (
-  <div className={cn(
-    "px-3 py-2 border-b border-gray-700 h-10 min-h-[40px]",
-    envHeader.bgColor
-  )}>
-    <div className={cn(
-      "flex items-center gap-2 h-full overflow-hidden",
-      envHeader.textColor
-    )}>
-      {envHeader.icon && (
-        <envHeader.icon className="w-4 h-4 flex-shrink-0" />
+
+      {/* 🏷️ Environment Header Badge */}
+      {envHeader && (
+        <div className={cn(
+          "px-3 py-2 border-b border-gray-700 h-10 min-h-[40px]",
+          envHeader.bgColor
+        )}>
+          <div className={cn(
+            "flex items-center gap-2 h-full overflow-hidden",
+            envHeader.textColor
+          )}>
+            {envHeader.icon && (
+              <envHeader.icon className="w-4 h-4 flex-shrink-0" />
+            )}
+            {isExpanded && (
+              <span className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
+                {envHeader.label}
+              </span>
+            )}
+          </div>
+        </div>
       )}
-      {isExpanded && (
-        <span className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
-          {envHeader.label}
-        </span>
-      )}
-    </div>
-  </div>
-)}
 
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
         {sidebarItems.map((item, index) => {
@@ -549,12 +563,20 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           const active = isItemActive(item.path);
           const isBackButton = item.label === 'Back to Journal';
           const isWarZone = item.path === '/app/all-markets/warzone';
-          const isLocked = item.locked === true;
+          const isBetaItem = item.beta === true;
+          
+          // 🔥 BETA ACCESS: Admins can access locked items
+          const isLocked = item.locked === true && !hasBetaAccess;
+          
+          // 🔥 Hide beta items for non-beta users
+          if (isBetaItem && !hasBetaAccess) {
+            return null;
+          }
           
           return (
             <button
               key={item.path}
-              onClick={() => handleNavigation(item.path, isLocked)}
+              onClick={() => handleNavigation(item.path, item.locked)}
               onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
               disabled={isLocked}
               title={!isExpanded ? item.label : undefined}
@@ -569,9 +591,13 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                       ? active
                         ? 'border-l-2 border-red-500 bg-red-500/10 text-red-400'
                         : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
-                      : active
-                        ? 'border-l-2 border-gold bg-gold/10 text-gold'
-                        : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
+                      : isBetaItem
+                        ? active
+                          ? 'border-l-2 border-orange-500 bg-orange-500/10 text-orange-400'
+                          : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
+                        : active
+                          ? 'border-l-2 border-gold bg-gold/10 text-gold'
+                          : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
               )}
             >
               {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
@@ -580,6 +606,11 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                 <>
                   <span className="flex-1 truncate">{item.label}</span>
                   {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
+                  {isBetaItem && (
+                    <span className="px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                      BETA
+                    </span>
+                  )}
                 </>
               )}
 
@@ -588,6 +619,11 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                 <div className="absolute left-full ml-3 px-2 py-1 bg-base-900 border border-gray-600 rounded text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
+                  {isBetaItem && (
+                    <span className="ml-1 px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                      BETA
+                    </span>
+                  )}
                 </div>
               )}
             </button>

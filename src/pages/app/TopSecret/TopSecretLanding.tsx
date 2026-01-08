@@ -80,7 +80,7 @@ const REPORT_TYPES: ReportType[] = [
   {
     id: 'ism',
     name: 'ISM Manufacturing Report',
-    shortName: 'ISM Report',
+    shortName: 'Macro Report',
     description: 'Deep macro-economic analysis of PMI data with sector impacts and actionable trade setups.',
     icon: TrendingUp,
     frequency: 'Monthly (~3rd)',

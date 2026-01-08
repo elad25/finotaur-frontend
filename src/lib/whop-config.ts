@@ -1,6 +1,11 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v4.2.2
+// FINOTAUR WHOP CONFIGURATION - v4.3.0
 // =====================================================
+// 🔥 v4.3.0 CHANGES:
+// - War Zone: FIXED Plan IDs (monthly + yearly)
+// - War Zone Monthly: $49/month with 7-day trial
+// - War Zone Yearly: $397/year (NO trial) - saves $191
+// 
 // 🔥 v4.2.2 CHANGES:
 // - War Zone: UPDATED pricing - $39/mo regular, $19.50/mo intro (was $20/$10)
 // - War Zone: ADDED yearly plan - $329/year (saves $139)
@@ -45,7 +50,8 @@ export type PlanId =
   | 'platform_enterprise'
   // Other products
   | 'newsletter_monthly'
-  | 'newsletter_yearly'  // 🔥 v4.2.2: Added War Zone Yearly
+  | 'newsletter_yearly'
+  | 'newsletter_monthly_topsecret'  // 🔥 NEW: Top Secret member discounted plan
   | 'top_secret_monthly'
   | 'top_secret_yearly';
 
@@ -105,12 +111,15 @@ export const WHOP_PLAN_IDS = {
   // 🔥 Platform - Enterprise (custom)
   platform_enterprise: 'plan_PLATFORM_ENTERPRISE',
   
-  // Newsletter (War Zone)
-  newsletter_monthly: 'plan_LCBG5yJpoNtW3',
-  newsletter_yearly: 'prod_8b3VWkZdena4B',  // 🔥 v4.2.2: War Zone Yearly
+// ═══════════════════════════════════════════
+  // 🔥 v4.3.0: Newsletter (War Zone) - FIXED IDs!
+  // ═══════════════════════════════════════════
+  newsletter_monthly: 'plan_24vWi8dY3uDHM',  // Regular price $49/month
+  newsletter_yearly: 'plan_bp2QTGuwfpj0A',   // Yearly $397/year
+  newsletter_monthly_topsecret: 'plan_a7uEGsUbr92nn',  // 🔥 NEW: Top Secret member price $19.99/month
   
   // Top Secret
-  top_secret_monthly: 'plan_mAOfrSszpymjL',  // 🔥 v4.2.2: Updated to $70 plan
+  top_secret_monthly: 'plan_mAOfrSszpymjL',
   top_secret_yearly: 'plan_YoeD6wWBxss7Q',
 } as const;
 
@@ -129,9 +138,14 @@ export const WHOP_PRODUCT_IDS = {
   platform_pro_yearly: 'prod_3AyUOETP3CoK6',
   platform_enterprise: 'prod_PLATFORM_ENTERPRISE',
   
-  // Other
+// ═══════════════════════════════════════════
+  // 🔥 v4.3.0: Newsletter (War Zone) - Product IDs
+  // ═══════════════════════════════════════════
   newsletter_monthly: 'prod_qlaV5Uu6LZlYn',
-  newsletter_yearly: 'prod_8b3VWkZdena4B',  // 🔥 v4.2.2: War Zone Yearly
+  newsletter_yearly: 'prod_8b3VWkZdena4B',
+  newsletter_monthly_topsecret: 'prod_u7QrZi90xiCZA',  // 🔥 NEW: Top Secret member discount
+  
+  // Top Secret
   top_secret: 'prod_nl6YXbLp4t5pz',
 } as const;
 
@@ -152,6 +166,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   isNewsletter?: boolean; 
   isTopSecret?: boolean;
   isPlatform?: boolean;
+  isTopSecretDiscount?: boolean;  // 🔥 NEW: For Top Secret member discounted plans
 }> = {
   // Journal
   'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly', category: 'journal' },
@@ -166,9 +181,14 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   'prod_3AyUOETP3CoK6': { plan: 'platform_pro', interval: 'yearly', category: 'platform', isPlatform: true },
   'prod_PLATFORM_ENTERPRISE': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
   
-  // Other
+// ═══════════════════════════════════════════
+  // 🔥 v4.3.0: Newsletter (War Zone) - All Products
+  // ═══════════════════════════════════════════
   'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true },
-  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },  // 🔥 v4.2.2
+  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },
+  'prod_u7QrZi90xiCZA': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true, isTopSecretDiscount: true },  // 🔥 NEW
+  
+  // Top Secret
   'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
 };
 
@@ -187,10 +207,14 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'prod_3AyUOETP3CoK6': 'platform_pro_yearly',
   'plan_PLATFORM_ENTERPRISE': 'platform_enterprise',
   
-  // Other
-  'plan_LCBG5yJpoNtW3': 'newsletter_monthly',
-  'prod_8b3VWkZdena4B': 'newsletter_yearly',  // 🔥 v4.2.2
-  'plan_mAOfrSszpymjL': 'top_secret_monthly',  // 🔥 v4.2.2: Updated to $70 plan
+  // ═══════════════════════════════════════════
+  // 🔥 v4.3.0: Newsletter (War Zone) - FIXED IDs!
+  // ═══════════════════════════════════════════
+  'plan_24vWi8dY3uDHM': 'newsletter_monthly',
+  'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
+  
+  // Top Secret
+  'plan_mAOfrSszpymjL': 'top_secret_monthly',
   'plan_YoeD6wWBxss7Q': 'top_secret_yearly',
 };
 
@@ -328,7 +352,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 7,
-    trialOnceOnly: false,  // Can use trial multiple times
+    trialOnceOnly: false,
     badge: '7-Day Free Trial',
     category: 'platform',
     isPlatform: true,
@@ -355,7 +379,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     periodLabel: '/year',
     monthlyEquivalent: 29.08,
     maxTrades: 0,
-    trialDays: 0,  // NO trial for yearly!
+    trialDays: 0,
     badge: 'Save 25%',
     category: 'platform',
     isPlatform: true,
@@ -374,7 +398,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
 
   // ═══════════════════════════════════════════
   // 🔥 PLATFORM - PRO ($69/month, 14-day ONE-TIME trial)
-  // Includes: Journal Premium + Newsletter choice
   // ═══════════════════════════════════════════
   platform_pro_monthly: {
     id: 'platform_pro_monthly',
@@ -387,7 +410,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 14,
-    trialOnceOnly: true,  // 🔥 ONE-TIME ONLY!
+    trialOnceOnly: true,
     popular: true,
     badge: '14-Day Free Trial',
     category: 'platform',
@@ -422,7 +445,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     periodLabel: '/year',
     monthlyEquivalent: 51.58,
     maxTrades: 0,
-    trialDays: 0,  // NO trial for yearly!
+    trialDays: 0,
     trialOnceOnly: true,
     popular: true,
     badge: 'Best Value - Save 25%',
@@ -483,33 +506,27 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 v4.2.2: NEWSLETTER (WAR ZONE) - 7-day trial + 50% OFF first 2 months
-  // UPDATED: $39/month regular, $19.50/month intro
+  // 🔥 v4.3.0: NEWSLETTER (WAR ZONE) - UPDATED!
+  // Monthly: $49/month with 7-day trial
+  // Yearly: $397/year (NO trial) - saves $191
   // ═══════════════════════════════════════════
   newsletter_monthly: {
     id: 'newsletter_monthly',
-    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,
-    whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,
+    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,  // plan_24vWi8dY3uDHM
+    whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,  // prod_qlaV5Uu6LZlYn
     name: 'newsletter',
     displayName: 'War Zone Intelligence',
-    price: 39,  // 🔥 UPDATED: Was 20, now 39
+    price: 49,  // 🔥 v4.3.0: $49/month
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 7,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '🔥 7-Day Trial + 50% OFF First 2 Months',
+    badge: '🔥 7-Day Free Trial',
     category: 'journal',
-    // 🔥 v4.2.2: Discount info - UPDATED
-    hasIntroDiscount: true,
-    introDiscountMonths: 2,
-    introDiscountPercent: 50,
-    introPrice: 19.50,  // 🔥 UPDATED: Was 10, now 19.50
     features: [
       '🎁 7 days FREE trial',
-      '🔥 Then $19.50/month for 2 months (50% OFF)',
-      '💰 Regular price: $39/month after',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -522,26 +539,55 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // 🔥 v4.2.2: WAR ZONE YEARLY - NEW!
-  newsletter_yearly: {
-    id: 'newsletter_yearly',
-    whopPlanId: WHOP_PLAN_IDS.newsletter_yearly,
-    whopProductId: WHOP_PRODUCT_IDS.newsletter_yearly,
+  // 🔥 NEW: Top Secret member discounted plan
+  newsletter_monthly_topsecret: {
+    id: 'newsletter_monthly_topsecret',
+    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly_topsecret,  // plan_a7uEGsUbr92nn
+    whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly_topsecret,  // prod_u7QrZi90xiCZA
     name: 'newsletter',
-    displayName: 'War Zone Intelligence (Annual)',
-    price: 329,
-    period: 'yearly',
-    periodLabel: '/year',
-    monthlyEquivalent: 27.42,  // $329/12 = ~$27.42/month
+    displayName: 'War Zone Intelligence (Top Secret Member)',
+    price: 19.99,  // 🔥 Discounted price for Top Secret members
+    period: 'monthly',
+    periodLabel: '/month',
     maxTrades: 0,
     trialDays: 7,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '🔥 7-Day Trial + Save $139/year',  // ($39*12) - $329 = $139 savings
+    badge: '🔥 Top Secret Member Discount',
     category: 'journal',
     features: [
       '🎁 7 days FREE trial',
-      '💰 Save $139/year vs monthly',
+      '💰 Special Top Secret member price: $19.99/mo (save $29/mo!)',
+      'Daily institutional-grade PDF report (8-14 pages)',
+      'Macro breakdown & market structure analysis',
+      'Unusual Options Activity (UOA) tracking',
+      'Technical outlook (24-72h)',
+      'Earnings & corporate intel',
+      'Private Discord community',
+      'Finotaur Trading Room access',
+      'Real-time alerts',
+      'Chart pack blueprint',
+    ],
+  },
+
+  newsletter_yearly: {
+    id: 'newsletter_yearly',
+    whopPlanId: WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
+    whopProductId: WHOP_PRODUCT_IDS.newsletter_yearly,  // prod_8b3VWkZdena4B
+    name: 'newsletter',
+    displayName: 'War Zone Intelligence (Annual)',
+    price: 397,  // 🔥 v4.3.0: $397/year
+    period: 'yearly',
+    periodLabel: '/year',
+    monthlyEquivalent: 33.08,  // $397/12 = ~$33.08/month
+    maxTrades: 0,
+    trialDays: 0,  // 🔥 NO trial for yearly!
+    isNewsletter: true,
+    discordIncluded: true,
+    badge: '💰 Save $191/year',  // ($49*12) - $397 = $191 savings
+    category: 'journal',
+    features: [
+      '💰 Save $191/year vs monthly',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -555,8 +601,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 v4.2.1: TOP SECRET - 14-day trial + 50% OFF first 2 months
-  // FIXED: $70/month regular, $35/month intro
+  // TOP SECRET - 14-day trial + 50% OFF first 2 months
   // ═══════════════════════════════════════════
   top_secret_monthly: {
     id: 'top_secret_monthly',
@@ -564,7 +609,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
-    price: 70,  // 🔥 FIXED: Was 35, now 70
+    price: 70,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -573,11 +618,10 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     discordIncluded: true,
     badge: '🔥 14-Day Trial + 50% OFF First 2 Months',
     category: 'journal',
-    // 🔥 v4.2.1: Discount info - FIXED
     hasIntroDiscount: true,
     introDiscountMonths: 2,
     introDiscountPercent: 50,
-    introPrice: 35,  // 🔥 FIXED: Was 17.50, now 35
+    introPrice: 35,
     features: [
       '🎁 14 days FREE trial',
       '🔥 Then $35/month for 2 months (50% OFF)',
@@ -596,19 +640,19 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret (Annual)',
-    price: 500,  // 🔥 UPDATED: Was 600, now 500
+    price: 500,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 41.67,  // 🔥 UPDATED: $500/12 = ~$41.67/month
+    monthlyEquivalent: 41.67,
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + Save $340/year',  // 🔥 UPDATED: ($70*12) - $500 = $340
+    badge: '🔥 14-Day Trial + Save $340/year',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 Save $340/year vs monthly',  // 🔥 UPDATED
+      '💰 Save $340/year vs monthly',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
@@ -632,66 +676,44 @@ export function isJournalProduct(productId: string): boolean {
   ].includes(productId as any);
 }
 
+// 🔥 v4.3.0: Updated to include BOTH newsletter products
 export function isNewsletterProduct(productId: string): boolean {
-  return productId === WHOP_PRODUCT_IDS.newsletter_monthly;
+  return productId === WHOP_PRODUCT_IDS.newsletter_monthly || 
+         productId === WHOP_PRODUCT_IDS.newsletter_yearly;
 }
 
 export function isTopSecretProduct(productId: string): boolean {
   return productId === WHOP_PRODUCT_IDS.top_secret;
 }
 
-/**
- * 🔥 Check if product is a Platform subscription
- */
 export function isPlatformProduct(productId: string): boolean {
   return PLATFORM_PRODUCT_IDS.has(productId);
 }
 
-/**
- * Check if plan is a Platform plan
- */
 export function isPlatformPlan(planName: PlanName): boolean {
   return planName.startsWith('platform_');
 }
 
-/**
- * Check if plan is Core
- */
 export function isCorePlan(planName: PlanName): boolean {
   return planName === 'platform_core';
 }
 
-/**
- * Check if plan is Pro
- */
 export function isProPlan(planName: PlanName): boolean {
   return planName === 'platform_pro';
 }
 
-/**
- * Check if plan is Enterprise
- */
 export function isEnterprisePlan(planName: PlanName): boolean {
   return planName === 'platform_enterprise';
 }
 
-/**
- * Get subscription category from product ID
- */
 export function getSubscriptionCategory(productId: string): SubscriptionCategory {
   return isPlatformProduct(productId) ? 'platform' : 'journal';
 }
 
-/**
- * Get Platform plans only
- */
 export function getPlatformPlans(): PlanConfig[] {
   return Object.values(PLANS).filter(plan => plan.isPlatform);
 }
 
-/**
- * Get Journal plans only
- */
 export function getJournalPlans(): PlanConfig[] {
   return Object.values(PLANS).filter(plan => 
     plan.category === 'journal' && 
@@ -713,7 +735,6 @@ export function isTrialOnceOnly(planId: PlanId): boolean {
   return PLANS[planId]?.trialOnceOnly ?? false;
 }
 
-// 🔥 v4.2.0: New helper functions
 export function hasIntroDiscount(planId: PlanId): boolean {
   return PLANS[planId]?.hasIntroDiscount ?? false;
 }
@@ -734,13 +755,14 @@ export function isPremiumPlan(planName: PlanName): boolean {
   return planName === 'premium';
 }
 
+// 🔥 v4.3.0: Updated with correct newsletter yearly plan ID
 export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
   const yearlyPlanIds = [
     WHOP_PLAN_IDS.basic_yearly,
     WHOP_PLAN_IDS.premium_yearly,
     WHOP_PLAN_IDS.platform_core_yearly,
     WHOP_PLAN_IDS.platform_pro_yearly,
-    WHOP_PLAN_IDS.newsletter_yearly,  // 🔥 v4.2.2: Added
+    WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     WHOP_PLAN_IDS.top_secret_yearly,
   ];
   
@@ -765,7 +787,7 @@ export interface CheckoutOptions {
   affiliateCode?: string;
   clickId?: string;
   redirectUrl?: string;
-  newsletterChoice?: string;  // 🔥 For PRO users to select newsletter
+  newsletterChoice?: string;
 }
 
 export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
@@ -776,7 +798,6 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
     throw new Error(`Unknown plan ID: ${planId}`);
   }
   
-  // Don't allow checkout for coming soon plans
   if (plan.comingSoon) {
     throw new Error(`${plan.displayName} is coming soon`);
   }
@@ -790,32 +811,31 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   
   if (userId) {
     params.set('metadata[finotaur_user_id]', userId);
+    params.set('metadata[finotaur_email]', userEmail || '');
     params.set('metadata[subscription_category]', plan.category);
+    params.set('metadata[billing_interval]', plan.period);  // 🔥 v4.3.0: Track interval
     
-    // 🔥 For Platform PRO, include newsletter choice
     if (plan.includesNewsletterChoice && newsletterChoice) {
       params.set('metadata[newsletter_choice]', newsletterChoice);
     }
   }
   
-  // 🔥 v4.2.2: Auto-apply intro discount coupon for eligible plans
+  // Apply intro discount coupon for eligible plans
   if (plan.hasIntroDiscount) {
-    params.set('d', 'FINOTAUR50');  // Coupon code for 50% off first 2 payments
+    params.set('d', 'FINOTAUR50');
   }
-  // NOTE: Affiliate codes removed - intro discount takes priority
   
   if (clickId) {
     params.set('ref', clickId);
   }
   
-  // Success redirect URL based on category
+  // Success redirect URL based on product type
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
   if (plan.isNewsletter) {
     params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop`);
   } else if (plan.isTopSecret) {
     params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success&source=whop`);
   } else if (plan.isPlatform) {
-    // 🔥 Platform redirect to pricing page with success param
     params.set('redirect_url', `${baseRedirect}/platform-pricing?payment=success&source=whop&plan=${plan.name}`);
   } else {
     params.set('redirect_url', `${baseRedirect}/app/journal/pricing?payment=success&source=whop`);
@@ -845,7 +865,6 @@ export const AFFILIATE_CONFIG = {
 // ============================================
 
 export const PLAN_FEATURES = {
-  // Journal
   basic: {
     maxTrades: 25,
     autoSync: true,
@@ -864,8 +883,6 @@ export const PLAN_FEATURES = {
     newsletter: false,
     topSecret: false,
   },
-  
-  // Platform features
   platform_free: {
     dashboardAccess: true,
     marketData: true,
@@ -918,8 +935,6 @@ export const PLAN_FEATURES = {
     sla: true,
     whiteLabel: true,
   },
-  
-  // Other
   newsletter: {
     maxTrades: 0,
     autoSync: false,

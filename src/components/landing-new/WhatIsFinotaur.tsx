@@ -10,7 +10,7 @@ import { TrendingUp, Building2, Target, Compass } from "lucide-react";
 const outcomes = [
   {
     icon: TrendingUp,
-    text: "Monthly macro conclusions (ISM, CPI, NFP — decoded)",
+    text: "Monthly macro conclusions",
   },
   {
     icon: Building2,

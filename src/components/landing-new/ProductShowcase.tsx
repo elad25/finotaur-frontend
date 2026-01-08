@@ -10,9 +10,9 @@ import { TrendingUp, Building2, Globe, Eye } from "lucide-react";
 const proofExamples = [
   {
     icon: TrendingUp,
-    category: "ISM Report",
+    category: "Economic Signal",
     title: "What the data actually changed",
-    description: "Manufacturing PMI dropped to 47.4 — but new orders component showed early bottoming. Bias shifted bullish before consensus caught on.",
+    description: "Top-line data looked weak, but internal demand signals hinted at an early turn. Positioning shifted ahead of consensus.",
     accent: "#F59E0B",
   },
   {

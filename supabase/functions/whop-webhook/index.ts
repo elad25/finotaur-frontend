@@ -1,20 +1,15 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v3.5.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v3.6.0
 // =====================================================
 // 
-// 🔥 v3.5.0 - EMAIL PREFILL SUPPORT
+// 🔥 v3.6.0 - AUTO-CANCEL WAR ZONE WITH TOP SECRET
 // 
-// Changes from v3.4.0:
-// - Added extractFinotaurEmail() to get original email from metadata
-// - handlePaymentSucceeded now uses finotaurEmail over whopEmail
-// - handleMembershipActivated now uses finotaurEmail over whopEmail
-// - Even if user changes email in checkout, subscription goes to correct account
-// - Added email mismatch detection logging
-// - Updated WhopMetadata interface to include finotaur_email
-// 
-// 🔥 v3.4.0 - NEWSLETTER (WAR ZONE) SUPPORT
-// - Added NEWSLETTER_PRODUCT_IDS for War Zone product
-// - Newsletter events routed to separate RPC functions
+// Changes from v3.5.0:
+// - Added prod_u7QrZi90xiCZA to NEWSLETTER_PRODUCT_IDS (Top Secret member discount)
+// - When Top Secret is deactivated, automatically cancel War Zone subscription
+// - Cancel at period end (user keeps access until billing period ends)
+// - Added cancelWarZoneForTopSecretMember() helper function
+// - Added WHOP_API_KEY environment variable usage for Whop API calls
 // 
 // Deploy: supabase functions deploy whop-webhook
 // =====================================================
@@ -28,17 +23,27 @@ import { createHmac } from "https://deno.land/std@0.168.0/node/crypto.ts";
 // ============================================
 
 const WHOP_WEBHOOK_SECRET = Deno.env.get("WHOP_WEBHOOK_SECRET") || "";
+const WHOP_API_KEY = Deno.env.get("WHOP_API_KEY") || Deno.env.get("WHOP_BEARER_TOKEN") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-// 🔥 Newsletter Product IDs
+// 🔥 v3.6.0: Newsletter Product IDs - INCLUDING Top Secret member discount!
 const NEWSLETTER_PRODUCT_IDS = new Set([
-  'prod_qlaV5Uu6LZlYn',  // War Zone Intelligence Newsletter
+  'prod_qlaV5Uu6LZlYn',  // War Zone Intelligence - Monthly ($49/month)
+  'prod_8b3VWkZdena4B',  // War Zone Intelligence - Yearly ($397/year)
+  'prod_u7QrZi90xiCZA',  // War Zone Intelligence - Monthly for Top Secret Members ($19.99/month) 🔥 NEW!
 ]);
 
 // 🔥 Top Secret Product IDs
 const TOP_SECRET_PRODUCT_IDS = new Set([
   'prod_nl6YXbLp4t5pz',  // Top Secret
+]);
+
+// 🔥 v3.6.0: Newsletter Plan IDs for cancellation via Whop API
+const NEWSLETTER_PLAN_IDS = new Set([
+  'plan_24vWi8dY3uDHM',  // War Zone Monthly
+  'plan_bp2QTGuwfpj0A',  // War Zone Yearly
+  'plan_a7uEGsUbr92nn',  // War Zone Monthly - Top Secret Member discount
 ]);
 
 // Default commission rates (fallback if DB config not found)
@@ -303,7 +308,9 @@ async function getPlanInfo(
     "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     // Newsletter fallback
-    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 20.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 49.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 397.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    "prod_u7QrZi90xiCZA": { plan: "newsletter", interval: "monthly", price: 19.99, maxTrades: 0, isNewsletter: true, isTopSecret: false }, // 🔥 NEW!
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 35.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },
   };
@@ -334,8 +341,6 @@ function extractFinotaurUserId(data: WhopPaymentData | WhopMembershipData): stri
 
 // ============================================
 // 🔥 v3.5.0: Extract finotaur_email from metadata
-// This is the ORIGINAL email from Finotaur account,
-// even if user changed email in Whop checkout!
 // ============================================
 
 function extractFinotaurEmail(data: WhopPaymentData | WhopMembershipData): string | null {
@@ -533,6 +538,165 @@ function extractPromoCode(data: WhopPaymentData | WhopMembershipData): string | 
     }
   }
   return null;
+}
+
+// ============================================
+// 🔥 v3.6.0: CANCEL WAR ZONE FOR TOP SECRET MEMBER
+// Called when Top Secret subscription is deactivated
+// Cancels at period end so user keeps access until billing period ends
+// ============================================
+
+async function cancelWarZoneForTopSecretMember(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string
+): Promise<{ success: boolean; message: string; warZoneCancelled: boolean }> {
+  console.log("🔥 Checking if user has War Zone subscription to cancel...", { userId, userEmail });
+
+  try {
+    // Step 1: Check if user has an active War Zone subscription
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("newsletter_enabled, newsletter_status, newsletter_whop_membership_id")
+      .eq("id", userId)
+      .single();
+
+    if (!profile) {
+      console.log("⚠️ Profile not found for War Zone cancellation check");
+      return { success: true, message: "Profile not found", warZoneCancelled: false };
+    }
+
+    // Check if War Zone is active
+    const hasActiveWarZone = profile.newsletter_enabled && 
+      ['active', 'trial', 'trialing'].includes(profile.newsletter_status || '');
+
+    if (!hasActiveWarZone) {
+      console.log("ℹ️ User does not have active War Zone subscription");
+      return { success: true, message: "No active War Zone subscription", warZoneCancelled: false };
+    }
+
+    const warZoneMembershipId = profile.newsletter_whop_membership_id;
+
+    if (!warZoneMembershipId) {
+      console.log("⚠️ User has War Zone but no membership ID - updating DB only");
+      
+      // Just update DB to mark as cancelled at period end
+      await supabase
+        .from("profiles")
+        .update({
+          newsletter_cancel_at_period_end: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+
+      return { success: true, message: "War Zone marked for cancellation (no Whop ID)", warZoneCancelled: true };
+    }
+
+    // Step 2: Cancel War Zone membership via Whop API (at period end)
+    console.log("🚀 Cancelling War Zone membership via Whop API:", warZoneMembershipId);
+
+    if (!WHOP_API_KEY) {
+      console.error("❌ WHOP_API_KEY not configured");
+      
+      // Still update DB
+      await supabase
+        .from("profiles")
+        .update({
+          newsletter_cancel_at_period_end: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+
+      return { 
+        success: false, 
+        message: "WHOP_API_KEY not configured - DB updated but Whop not called", 
+        warZoneCancelled: true 
+      };
+    }
+
+    // Call Whop API to cancel at period end
+    const whopResponse = await fetch(`https://api.whop.com/api/v2/memberships/${warZoneMembershipId}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${WHOP_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        cancel_at_period_end: true,  // 🔥 Cancel at period end, not immediately
+      }),
+    });
+
+    if (!whopResponse.ok) {
+      const errorText = await whopResponse.text();
+      console.error("❌ Whop API error:", whopResponse.status, errorText);
+      
+      // Still update DB
+      await supabase
+        .from("profiles")
+        .update({
+          newsletter_cancel_at_period_end: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", userId);
+
+      return { 
+        success: false, 
+        message: `Whop API error: ${whopResponse.status} - DB updated`, 
+        warZoneCancelled: true 
+      };
+    }
+
+    const whopData = await whopResponse.json();
+    console.log("✅ Whop API response:", whopData);
+
+    // Step 3: Update database
+    await supabase
+      .from("profiles")
+      .update({
+        newsletter_cancel_at_period_end: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
+    // Step 4: Log the automatic cancellation
+    await supabase
+      .from("whop_webhook_log")
+      .insert({
+        event_id: `auto_cancel_warzone_${userId}_${Date.now()}`,
+        event_type: "auto_cancel_warzone_with_topsecret",
+        whop_user_id: null,
+        whop_membership_id: warZoneMembershipId,
+        whop_product_id: null,
+        payload: { 
+          reason: "Top Secret subscription deactivated",
+          user_id: userId,
+          user_email: userEmail,
+          war_zone_membership_id: warZoneMembershipId,
+        },
+        processed: true,
+        processing_result: "War Zone cancelled at period end due to Top Secret deactivation",
+        metadata: { 
+          triggered_by: "top_secret_deactivation",
+          cancel_type: "at_period_end",
+        },
+      });
+
+    console.log("✅ War Zone subscription cancelled at period end for Top Secret member:", userEmail);
+
+    return { 
+      success: true, 
+      message: `War Zone cancelled at period end for ${userEmail}`, 
+      warZoneCancelled: true 
+    };
+
+  } catch (error) {
+    console.error("❌ Error cancelling War Zone for Top Secret member:", error);
+    return { 
+      success: false, 
+      message: error instanceof Error ? error.message : "Unknown error", 
+      warZoneCancelled: false 
+    };
+  }
 }
 
 // ============================================
@@ -1017,9 +1181,9 @@ async function handleMembershipActivated(
   if (isNewsletterActivation) {
     return await handleNewsletterActivation(supabase, {
       userEmail,  // 🔥 v3.5.0: Uses finotaurEmail if available
-      whopUserId,
+      whopUserId: whopUserId || '',
       membershipId,
-      productId,
+      productId: productId || '',
       finotaurUserId,
     });
   }
@@ -1028,9 +1192,9 @@ async function handleMembershipActivated(
   if (isTopSecretActivation) {
     return await handleTopSecretActivation(supabase, {
       userEmail,  // 🔥 v3.5.0: Uses finotaurEmail if available
-      whopUserId,
+      whopUserId: whopUserId || '',
       membershipId,
-      productId,
+      productId: productId || '',
       finotaurUserId,
     });
   }
@@ -1171,6 +1335,7 @@ async function handleTopSecretActivation(
 
 // ============================================
 // MEMBERSHIP DEACTIVATED
+// 🔥 v3.6.0: Now also cancels War Zone when Top Secret is deactivated!
 // ============================================
 
 async function handleMembershipDeactivated(
@@ -1219,7 +1384,7 @@ async function handleMembershipDeactivated(
   }
 
   // ═══════════════════════════════════════════════
-  // 🔥 TOP SECRET DEACTIVATION - Use RPC
+  // 🔥 v3.6.0: TOP SECRET DEACTIVATION - Also cancel War Zone!
   // ═══════════════════════════════════════════════
 
   if (isTopSecretDeactivation) {
@@ -1235,9 +1400,27 @@ async function handleMembershipDeactivated(
     }
 
     console.log("✅ Top Secret deactivation RPC result:", result);
+
+    // 🔥 v3.6.0: Now cancel War Zone subscription too!
+    let warZoneMessage = '';
+    if (result?.user_id) {
+      console.log("🔥 Top Secret deactivated - checking for War Zone subscription to cancel...");
+      
+      const warZoneResult = await cancelWarZoneForTopSecretMember(
+        supabase, 
+        result.user_id, 
+        result.email || userEmail
+      );
+      
+      if (warZoneResult.warZoneCancelled) {
+        warZoneMessage = ` | War Zone also cancelled at period end`;
+        console.log("✅ War Zone subscription marked for cancellation at period end");
+      }
+    }
+
     return { 
       success: result?.success ?? true, 
-      message: `Top Secret deactivated: ${result?.email || userEmail}` 
+      message: `Top Secret deactivated: ${result?.email || userEmail}${warZoneMessage}` 
     };
   }
 
@@ -1294,12 +1477,12 @@ async function handleNewsletterDeactivation(
 
     console.log("✅ Newsletter deactivated:", result);
 
-    const userEmail = result?.email || 'unknown';
+    const userEmailResult = result?.email || 'unknown';
     const previousStatus = result?.previous_status || 'unknown';
 
     return { 
       success: true, 
-      message: `Newsletter deactivated: ${userEmail} (was: ${previousStatus})` 
+      message: `Newsletter deactivated: ${userEmailResult} (was: ${previousStatus})` 
     };
 
   } catch (error) {

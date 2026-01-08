@@ -1,13 +1,12 @@
 // =====================================================
-// FINOTAUR SUBSCRIPTION TYPES - v2.0.0
+// FINOTAUR SUBSCRIPTION TYPES - v3.0.0 (BETA SYSTEM)
 // =====================================================
 // Place in: src/types/subscription.ts
 // 
-// 🔥 v2.0.0 CHANGES:
-// - REMOVED 'free' from AccountType
-// - Added trial-related fields (is_in_trial, trial_ends_at, trial_days_remaining)
-// - Updated comments to reflect new pricing model
-// - Renamed is_free_trial → is_in_trial for consistency
+// 🔥 v3.0.0 CHANGES:
+// - ADDED: 'beta' to AccountType for beta testers
+// - ADDED: Helper functions for beta access
+// - Updated plan ordering to include beta
 // =====================================================
 
 // ============================================
@@ -16,10 +15,9 @@
 
 /**
  * Account types available in Finotaur
- * 🔥 v2.0: 'free' kept for backward compatibility with existing users
- * New users will get 'trial' instead of 'free'
+ * 🔥 v3.0: Added 'beta' for beta testers with full access
  */
-export type AccountType = 'free' | 'basic' | 'premium' | 'trial' | 'admin' | 'vip';
+export type AccountType = 'free' | 'basic' | 'premium' | 'trial' | 'admin' | 'vip' | 'beta';
 
 export type SubscriptionInterval = 'monthly' | 'yearly';
 
@@ -32,12 +30,11 @@ export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
 export interface UserLimits {
   account_type: AccountType;
   subscription_interval: SubscriptionInterval | null;
-  trade_count: number; // Current active trades (can decrease when deleted)
-  trades_created_total: number; // Lifetime trades (NEVER decreases)
-  max_trades: number; // 25 for basic, unlimited for premium
+  trade_count: number;
+  trades_created_total: number;
+  max_trades: number;
   subscription_status: SubscriptionStatus;
   subscription_expires_at: string | null;
-  // 🔥 NEW: Trial fields
   is_in_trial: boolean;
   trial_ends_at: string | null;
   trial_days_remaining: number | null;
@@ -52,13 +49,13 @@ export interface SubscriptionPlan {
   name: string;
   monthlyPrice: number;
   yearlyPrice: number;
-  yearlyMonthlyEquivalent: number; // Price per month when billed yearly
+  yearlyMonthlyEquivalent: number;
   interval: SubscriptionInterval;
   features: string[];
   max_trades: number;
   popular?: boolean;
-  savings?: string; // e.g., "Save 38%"
-  trialDays?: number; // 🔥 NEW: 14 for basic, 0 for premium
+  savings?: string;
+  trialDays?: number;
 }
 
 // ============================================
@@ -70,7 +67,8 @@ export interface UserSubscriptionDetails extends UserLimits {
   trades_remaining: number;
   is_premium: boolean;
   is_basic: boolean;
-  is_in_trial: boolean; // 🔥 RENAMED from is_free_trial
+  is_in_trial: boolean;
+  is_beta: boolean;  // 🔥 NEW
 }
 
 // ============================================
@@ -87,7 +85,6 @@ export interface GetUserLimitsResult {
   can_add_trade: boolean;
   subscription_status: SubscriptionStatus;
   subscription_expires_at: string | null;
-  // 🔥 NEW
   is_in_trial: boolean;
   trial_ends_at: string | null;
 }
@@ -118,15 +115,15 @@ export interface TradeAuditLog {
 export const SUBSCRIPTION_PRICES = {
   basic: {
     monthly: 19.99,
-    yearly: 12.42, // per month when billed yearly
-    yearlyTotal: 149, // $149/year
-    trialDays: 14, // 🔥 NEW: 14-day free trial
+    yearly: 12.42,
+    yearlyTotal: 149,
+    trialDays: 14,
   },
   premium: {
     monthly: 39.99,
-    yearly: 24.92, // per month when billed yearly
-    yearlyTotal: 299, // $299/year
-    trialDays: 0, // 🔥 NEW: No trial - payment from day 0
+    yearly: 24.92,
+    yearlyTotal: 299,
+    trialDays: 0,
   },
 } as const;
 
@@ -135,8 +132,8 @@ export const SUBSCRIPTION_PRICES = {
 // ============================================
 
 export const YEARLY_SAVINGS = {
-  basic: Math.round(((19.99 - 12.42) / 19.99) * 100), // ~38%
-  premium: Math.round(((39.99 - 24.92) / 39.99) * 100), // ~38%
+  basic: Math.round(((19.99 - 12.42) / 19.99) * 100),
+  premium: Math.round(((39.99 - 24.92) / 39.99) * 100),
 } as const;
 
 // ============================================
@@ -144,9 +141,10 @@ export const YEARLY_SAVINGS = {
 // ============================================
 
 export const TRADE_LIMITS = {
-  basic: 25, // 25 trades per month
-  premium: Infinity, // Unlimited
-  trial: 25, // Same as basic during trial
+  basic: 25,
+  premium: Infinity,
+  trial: 25,
+  beta: Infinity,  // 🔥 NEW: Beta users have unlimited trades
 } as const;
 
 // ============================================
@@ -162,9 +160,25 @@ export function isPaidPlan(accountType: AccountType): boolean {
 
 /**
  * Check if account type has unlimited trades
+ * 🔥 v3.0: Beta users now have unlimited trades
  */
 export function hasUnlimitedTrades(accountType: AccountType): boolean {
-  return accountType === 'premium' || accountType === 'admin' || accountType === 'vip';
+  return accountType === 'premium' || 
+         accountType === 'admin' || 
+         accountType === 'vip' ||
+         accountType === 'beta';  // 🔥 NEW
+}
+
+/**
+ * 🔥 NEW: Check if account type has beta access
+ * Beta access grants access to locked domains and beta features
+ */
+export function hasBetaAccess(accountType: AccountType, role?: string): boolean {
+  return accountType === 'admin' || 
+         accountType === 'vip' ||
+         accountType === 'beta' ||
+         role === 'admin' ||
+         role === 'super_admin';
 }
 
 /**
@@ -190,15 +204,17 @@ export function hasTrial(planId: 'basic' | 'premium'): boolean {
 
 /**
  * Check if upgrading from one plan to another
+ * 🔥 v3.0: Beta is ranked between premium and vip
  */
 export function isUpgrade(from: AccountType, to: AccountType): boolean {
   const planOrder: Record<AccountType, number> = {
-    free: 0,   // 🔥 v2.0: Legacy users
+    free: 0,
     trial: 0,
     basic: 1,
     premium: 2,
-    vip: 3,
-    admin: 4,
+    beta: 3,  // 🔥 NEW
+    vip: 4,
+    admin: 5,
   };
   return planOrder[to] > planOrder[from];
 }
@@ -208,12 +224,13 @@ export function isUpgrade(from: AccountType, to: AccountType): boolean {
  */
 export function isDowngrade(from: AccountType, to: AccountType): boolean {
   const planOrder: Record<AccountType, number> = {
-    free: 0,   // 🔥 v2.0: Legacy users
+    free: 0,
     trial: 0,
     basic: 1,
     premium: 2,
-    vip: 3,
-    admin: 4,
+    beta: 3,  // 🔥 NEW
+    vip: 4,
+    admin: 5,
   };
   return planOrder[to] < planOrder[from];
 }
@@ -224,15 +241,17 @@ export function isDowngrade(from: AccountType, to: AccountType): boolean {
 
 /**
  * Get display name for account type
+ * 🔥 v3.0: Added Beta display name
  */
 export function getAccountTypeDisplayName(accountType: AccountType): string {
   const names: Record<AccountType, string> = {
-    free: 'Free (Legacy)',  // 🔥 v2.0: Legacy users only
+    free: 'Free (Legacy)',
     basic: 'Basic',
     premium: 'Premium',
     trial: 'Trial',
     admin: 'Admin',
     vip: 'VIP',
+    beta: 'Beta Tester',  // 🔥 NEW
   };
   return names[accountType] || accountType;
 }
@@ -248,6 +267,22 @@ export function getStatusColor(status: SubscriptionStatus): string {
     cancelled: 'orange',
   };
   return colors[status] || 'gray';
+}
+
+/**
+ * 🔥 NEW: Get badge color for account type
+ */
+export function getAccountTypeBadgeColor(accountType: AccountType): string {
+  const colors: Record<AccountType, string> = {
+    free: 'gray',
+    trial: 'blue',
+    basic: 'green',
+    premium: 'purple',
+    beta: 'orange',  // 🔥 NEW
+    vip: 'gold',
+    admin: 'red',
+  };
+  return colors[accountType] || 'gray';
 }
 
 export default {
