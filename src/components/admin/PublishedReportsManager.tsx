@@ -313,8 +313,22 @@ const ReportRow: React.FC<ReportRowProps> = ({ report, onEdit, onDelete, onViewP
   const [expanded, setExpanded] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
+  // Validate report type - only show ism, company, crypto, weekly
+  const validTypes = ['ism', 'company', 'crypto', 'weekly'] as const;
+  if (!validTypes.includes(report.report_type as any)) {
+    console.warn(`[ReportRow] Unknown report type: ${report.report_type}`);
+    return null; // Skip rendering unknown report types
+  }
+  
   const config = REPORT_TYPE_CONFIG[report.report_type];
-  const targetConfig = TARGET_GROUP_CONFIG[report.target_group];
+  const targetConfig = TARGET_GROUP_CONFIG[report.target_group] || TARGET_GROUP_CONFIG.all;
+  
+  // Safety check - should never happen after the validation above
+  if (!config) {
+    console.error(`[ReportRow] Missing config for report type: ${report.report_type}`);
+    return null;
+  }
+  
   const Icon = config.icon;
   const TargetIcon = targetConfig.icon;
 
@@ -705,10 +719,11 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
 // Fetch reports
   const { data: reports, isLoading, error, refetch } = useQuery({
     queryKey: ['published-reports', filters],
-    queryFn: async (): Promise<PublishedReport[]> => {
+queryFn: async (): Promise<PublishedReport[]> => {
       let query = supabase
         .from('published_reports')
         .select('*')
+        .in('report_type', ['ism', 'company', 'crypto', 'weekly']) // Only valid types
         .order('is_pinned', { ascending: false })
         .order('is_featured', { ascending: false })
         .order('published_at', { ascending: false });

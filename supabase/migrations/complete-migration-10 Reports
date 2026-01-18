@@ -381,8 +381,14 @@ CREATE TABLE IF NOT EXISTS crypto_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_date DATE NOT NULL,
   
+  -- Time window for data collection
+  window_start TIMESTAMPTZ,
+  window_end TIMESTAMPTZ,
+  
   -- Market Analysis
   market_regime VARCHAR(50),
+  regime_score INTEGER,
+  regime_confidence INTEGER,
   market_regime_confidence INTEGER,
   
   -- Executive Summary (JSON)
@@ -390,6 +396,12 @@ CREATE TABLE IF NOT EXISTS crypto_reports (
   
   -- Report Sections (JSON)
   sections JSONB,
+  
+  -- Raw data storage
+  raw_data JSONB,
+  
+  -- Charts storage
+  charts JSONB,
   
   -- Individual Section Data (for quick access)
   btc_analysis JSONB,
@@ -402,6 +414,8 @@ CREATE TABLE IF NOT EXISTS crypto_reports (
   qa_score INTEGER,
   qa_grade VARCHAR(2),
   qa_passed BOOLEAN DEFAULT false,
+  quality_score INTEGER DEFAULT 0,
+  quality_metrics JSONB,
   
   -- Generated Content
   markdown_content TEXT,
@@ -411,18 +425,35 @@ CREATE TABLE IF NOT EXISTS crypto_reports (
   -- Agent Results (for debugging/auditing)
   agent_results JSONB,
   
--- Metadata
-generation_duration_seconds INTEGER,
-openai_tokens_used INTEGER,
-openai_cost_usd DECIMAL(10, 4),
-
--- Quality Score (ADDED - was missing and causing save errors)
-quality_score INTEGER DEFAULT NULL,
-
--- Timestamps
-created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  -- Metadata
+  generation_duration_seconds INTEGER,
+  openai_tokens_used INTEGER,
+  openai_cost_usd DECIMAL(10, 4),
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- =====================================================
+-- FIX: Add missing columns to crypto_reports
+-- Run this to ensure all columns exist
+-- =====================================================
+ALTER TABLE crypto_reports 
+ADD COLUMN IF NOT EXISTS window_start TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS window_end TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS regime_score INTEGER,
+ADD COLUMN IF NOT EXISTS regime_confidence INTEGER,
+ADD COLUMN IF NOT EXISTS raw_data JSONB,
+ADD COLUMN IF NOT EXISTS charts JSONB,
+ADD COLUMN IF NOT EXISTS quality_score INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS quality_metrics JSONB,
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';
+
+-- Refresh schema cache by recreating index
+DROP INDEX IF EXISTS idx_crypto_reports_quality;
+CREATE INDEX idx_crypto_reports_quality ON crypto_reports(quality_score);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_crypto_reports_date ON crypto_reports(report_date DESC);
 CREATE INDEX IF NOT EXISTS idx_crypto_reports_regime ON crypto_reports(market_regime);
@@ -2350,7 +2381,452 @@ ORDER BY report_type;
 -- =====================================================
 -- END OF PART 3.10
 -- =====================================================
+-- =====================================================
+-- PART 3.11: ISM INSIGHTS TABLES
+-- =====================================================
+-- Stores actionable insights from ISM reports:
+-- 1. Sector outlook (up/down expectations)
+-- 2. Specific stocks with tailwinds
+-- 3. Economic environment & implications
+-- =====================================================
 
+-- ============================================
+-- TABLE 1: ism_sector_outlook
+-- סקטורים שצפויים לעלות/לרדת בעקבות הדוח
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_sector_outlook (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id TEXT NOT NULL,
+    report_month TEXT NOT NULL,  -- YYYY-MM
+    
+    -- Sector identification
+    sector_name TEXT NOT NULL,
+    sector_etf TEXT,  -- XLF, XLK, etc.
+    
+    -- Direction & Conviction
+    direction TEXT NOT NULL CHECK (direction IN ('bullish', 'bearish', 'neutral')),
+    conviction TEXT DEFAULT 'medium' CHECK (conviction IN ('high', 'medium', 'low')),
+    expected_move_percent DECIMAL(5,2),  -- e.g., +5.5% or -3.2%
+    timeframe TEXT DEFAULT '1-3 months',  -- Expected timeframe
+    
+    -- Reasoning from ISM
+    primary_driver TEXT NOT NULL,  -- Main reason (e.g., "New Orders surge to 58.3")
+    supporting_quotes TEXT[],  -- Executive quotes supporting this view
+    ism_components_impact JSONB,  -- Which ISM components affect this sector
+    
+    -- Risk factors
+    key_risks TEXT[],
+    invalidation_level TEXT,  -- What would invalidate this thesis
+    
+    -- Display
+    display_order INTEGER DEFAULT 1,
+    
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(report_id, sector_name)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_sector_outlook_report ON ism_sector_outlook(report_id);
+CREATE INDEX IF NOT EXISTS idx_sector_outlook_month ON ism_sector_outlook(report_month);
+CREATE INDEX IF NOT EXISTS idx_sector_outlook_direction ON ism_sector_outlook(direction);
+
+-- ============================================
+-- TABLE 2: ism_stock_tailwinds
+-- מניות ספציפיות עם רוח גבית
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_stock_tailwinds (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id TEXT NOT NULL,
+    report_month TEXT NOT NULL,
+    
+    -- Stock identification
+    ticker TEXT NOT NULL,
+    company_name TEXT,
+    sector TEXT,
+    market_cap_category TEXT CHECK (market_cap_category IN ('mega', 'large', 'mid', 'small')),
+    
+    -- Tailwind details
+    tailwind_type TEXT NOT NULL,  -- 'ism_driven', 'sector_rotation', 'supply_chain', etc.
+    tailwind_strength TEXT DEFAULT 'moderate' CHECK (tailwind_strength IN ('strong', 'moderate', 'mild')),
+    
+    -- Why this stock benefits
+    thesis TEXT NOT NULL,  -- Main investment thesis
+    ism_connection TEXT NOT NULL,  -- How ISM data supports this
+    specific_catalyst TEXT,  -- Specific ISM component driving this
+    
+    -- Supporting data
+    supporting_quotes TEXT[],  -- Executive quotes mentioning relevant trends
+    related_ism_components JSONB,  -- e.g., {"new_orders": 58.3, "production": 54.2}
+    
+    -- Expected impact
+    expected_benefit TEXT,  -- "Revenue acceleration", "Margin expansion", etc.
+    timeframe TEXT DEFAULT '1-3 months',
+    
+    -- Risk/Reward
+    key_risks TEXT[],
+    price_target_impact TEXT,  -- "Supports $XXX price target"
+    
+    -- Display
+    display_order INTEGER DEFAULT 1,
+    is_top_pick BOOLEAN DEFAULT false,
+    
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(report_id, ticker)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_stock_tailwinds_report ON ism_stock_tailwinds(report_id);
+CREATE INDEX IF NOT EXISTS idx_stock_tailwinds_ticker ON ism_stock_tailwinds(ticker);
+CREATE INDEX IF NOT EXISTS idx_stock_tailwinds_sector ON ism_stock_tailwinds(sector);
+CREATE INDEX IF NOT EXISTS idx_stock_tailwinds_top_pick ON ism_stock_tailwinds(is_top_pick) WHERE is_top_pick = true;
+
+-- ============================================
+-- TABLE 3: ism_economic_environment
+-- הסביבה הכלכלית וההשלכות
+-- ============================================
+CREATE TABLE IF NOT EXISTS ism_economic_environment (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_id TEXT NOT NULL UNIQUE,
+    report_month TEXT NOT NULL,
+    
+    -- Overall Assessment
+    economic_regime TEXT NOT NULL,  -- 'expansion', 'contraction', 'transition', 'stagflation_risk'
+    regime_confidence TEXT DEFAULT 'medium',
+    cycle_phase TEXT,  -- 'early', 'mid', 'late', 'recession'
+    
+    -- PMI Headline
+    pmi_value DECIMAL(4,1) NOT NULL,
+    pmi_trend TEXT CHECK (pmi_trend IN ('accelerating', 'stable', 'decelerating')),
+    pmi_vs_expectations TEXT,  -- 'beat', 'miss', 'inline'
+    months_in_expansion INTEGER,  -- Consecutive months above 50
+    months_in_contraction INTEGER,  -- Consecutive months below 50
+    
+    -- All ISM Components with implications
+    components JSONB NOT NULL,  -- Full component breakdown
+    /*
+    Example structure:
+    {
+        "new_orders": {
+            "value": 58.3,
+            "change": 2.1,
+            "trend": "rising",
+            "implication": "Strong demand pipeline, bullish for industrials"
+        },
+        "production": {...},
+        "employment": {...},
+        "supplier_deliveries": {...},
+        "inventories": {...},
+        "customers_inventories": {...},
+        "prices": {...},
+        "backlog": {...},
+        "new_export_orders": {...},
+        "imports": {...}
+    }
+    */
+    
+    -- Key Implications Summary
+    growth_outlook TEXT NOT NULL,  -- Overall growth assessment
+    inflation_pressure TEXT NOT NULL,  -- 'rising', 'stable', 'falling'
+    employment_outlook TEXT NOT NULL,
+    supply_chain_status TEXT NOT NULL,  -- 'stressed', 'normalizing', 'healthy'
+    
+    -- Investment Implications
+    equity_outlook TEXT NOT NULL,  -- Overall equity market view
+    sector_rotation_signal TEXT,  -- 'risk_on', 'risk_off', 'neutral'
+    factor_preference TEXT[],  -- ['growth', 'value', 'quality', etc.]
+    
+    -- Fixed Income Implications
+    rate_expectations TEXT,  -- 'higher', 'lower', 'stable'
+    yield_curve_impact TEXT,
+    credit_outlook TEXT,
+    
+    -- Key Risks
+    primary_risks TEXT[] NOT NULL,
+    tail_risks TEXT[],
+    
+    -- Forward Guidance
+    next_month_expectations TEXT,
+    key_indicators_to_watch TEXT[],
+    
+    -- Executive Commentary Summary
+    sentiment_score INTEGER CHECK (sentiment_score BETWEEN -100 AND 100),  -- -100 to +100
+    notable_quotes JSONB,  -- Key quotes by theme
+    industry_divergence TEXT,  -- Which industries diverging from headline
+    
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_econ_env_month ON ism_economic_environment(report_month);
+CREATE INDEX IF NOT EXISTS idx_econ_env_regime ON ism_economic_environment(economic_regime);
+
+-- ============================================
+-- RLS POLICIES
+-- ============================================
+ALTER TABLE ism_sector_outlook ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ism_stock_tailwinds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ism_economic_environment ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies
+DROP POLICY IF EXISTS "Read ism_sector_outlook" ON ism_sector_outlook;
+DROP POLICY IF EXISTS "Service manage ism_sector_outlook" ON ism_sector_outlook;
+DROP POLICY IF EXISTS "Read ism_stock_tailwinds" ON ism_stock_tailwinds;
+DROP POLICY IF EXISTS "Service manage ism_stock_tailwinds" ON ism_stock_tailwinds;
+DROP POLICY IF EXISTS "Read ism_economic_environment" ON ism_economic_environment;
+DROP POLICY IF EXISTS "Service manage ism_economic_environment" ON ism_economic_environment;
+
+-- Sector Outlook policies
+CREATE POLICY "Read ism_sector_outlook" ON ism_sector_outlook
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_sector_outlook" ON ism_sector_outlook
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Stock Tailwinds policies
+CREATE POLICY "Read ism_stock_tailwinds" ON ism_stock_tailwinds
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_stock_tailwinds" ON ism_stock_tailwinds
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Economic Environment policies
+CREATE POLICY "Read ism_economic_environment" ON ism_economic_environment
+    FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Service manage ism_economic_environment" ON ism_economic_environment
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ============================================
+-- GRANTS
+-- ============================================
+GRANT SELECT ON ism_sector_outlook TO authenticated;
+GRANT SELECT ON ism_stock_tailwinds TO authenticated;
+GRANT SELECT ON ism_economic_environment TO authenticated;
+
+GRANT ALL ON ism_sector_outlook TO service_role;
+GRANT ALL ON ism_stock_tailwinds TO service_role;
+GRANT ALL ON ism_economic_environment TO service_role;
+
+-- ============================================
+-- VIEWS FOR EASY ACCESS
+-- ============================================
+
+-- Latest sector outlook
+CREATE OR REPLACE VIEW v_ism_sector_outlook_latest AS
+SELECT 
+    sector_name,
+    sector_etf,
+    direction,
+    conviction,
+    expected_move_percent,
+    primary_driver,
+    key_risks,
+    report_month
+FROM ism_sector_outlook
+WHERE report_month = (SELECT MAX(report_month) FROM ism_sector_outlook)
+ORDER BY 
+    CASE direction WHEN 'bullish' THEN 1 WHEN 'neutral' THEN 2 ELSE 3 END,
+    CASE conviction WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END;
+
+-- Latest stock tailwinds
+CREATE OR REPLACE VIEW v_ism_stock_tailwinds_latest AS
+SELECT 
+    ticker,
+    company_name,
+    sector,
+    tailwind_strength,
+    thesis,
+    ism_connection,
+    is_top_pick,
+    report_month
+FROM ism_stock_tailwinds
+WHERE report_month = (SELECT MAX(report_month) FROM ism_stock_tailwinds)
+ORDER BY is_top_pick DESC, 
+    CASE tailwind_strength WHEN 'strong' THEN 1 WHEN 'moderate' THEN 2 ELSE 3 END;
+
+-- Latest economic environment
+CREATE OR REPLACE VIEW v_ism_economic_environment_latest AS
+SELECT 
+    economic_regime,
+    pmi_value,
+    pmi_trend,
+    growth_outlook,
+    inflation_pressure,
+    equity_outlook,
+    sector_rotation_signal,
+    primary_risks,
+    report_month
+FROM ism_economic_environment
+WHERE report_month = (SELECT MAX(report_month) FROM ism_economic_environment);
+
+-- Grant access to views
+GRANT SELECT ON v_ism_sector_outlook_latest TO authenticated;
+GRANT SELECT ON v_ism_stock_tailwinds_latest TO authenticated;
+GRANT SELECT ON v_ism_economic_environment_latest TO authenticated;
+
+-- ============================================
+-- HELPER FUNCTION: Get full ISM insights
+-- ============================================
+CREATE OR REPLACE FUNCTION get_ism_insights(p_report_month TEXT DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_month TEXT;
+    v_result JSONB;
+BEGIN
+    -- Use latest month if not specified
+    v_month := COALESCE(p_report_month, (SELECT MAX(report_month) FROM ism_economic_environment));
+    
+    SELECT jsonb_build_object(
+        'report_month', v_month,
+        'economic_environment', (
+            SELECT row_to_json(e.*)
+            FROM ism_economic_environment e
+            WHERE e.report_month = v_month
+        ),
+        'sector_outlook', (
+            SELECT jsonb_agg(row_to_json(s.*) ORDER BY s.display_order)
+            FROM ism_sector_outlook s
+            WHERE s.report_month = v_month
+        ),
+        'stock_tailwinds', (
+            SELECT jsonb_agg(row_to_json(t.*) ORDER BY t.is_top_pick DESC, t.display_order)
+            FROM ism_stock_tailwinds t
+            WHERE t.report_month = v_month
+        )
+    ) INTO v_result;
+    
+    RETURN v_result;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_ism_insights(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_ism_insights(TEXT) TO service_role;
+
+-- ============================================
+-- VERIFICATION
+-- ============================================
+DO $$
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ PART 3.11: ISM INSIGHTS TABLES COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'New tables created:';
+    RAISE NOTICE '  1. ism_sector_outlook - סקטורים צפויים לעלות/לרדת';
+    RAISE NOTICE '  2. ism_stock_tailwinds - מניות עם רוח גבית';
+    RAISE NOTICE '  3. ism_economic_environment - סביבה כלכלית והשלכות';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Views created:';
+    RAISE NOTICE '  • v_ism_sector_outlook_latest';
+    RAISE NOTICE '  • v_ism_stock_tailwinds_latest';
+    RAISE NOTICE '  • v_ism_economic_environment_latest';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Function created:';
+    RAISE NOTICE '  • get_ism_insights(report_month) - Returns all insights as JSON';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- END OF PART 3.11
+-- =====================================================
+
+-- =====================================================
+-- PART 3.12: ISM ECONOMIC SNAPSHOTS TABLE
+-- =====================================================
+-- Required by orchestrator.js saveEconomicSnapshot()
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS ism_economic_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id TEXT NOT NULL,
+  report_month TEXT NOT NULL UNIQUE,
+  
+  -- Core ISM Indices
+  pmi DECIMAL(4,1),
+  pmi_prior DECIMAL(4,1),
+  pmi_change DECIMAL(4,1),
+  pmi_direction TEXT,
+  
+  new_orders DECIMAL(4,1),
+  new_orders_prior DECIMAL(4,1),
+  new_orders_change DECIMAL(4,1),
+  
+  production DECIMAL(4,1),
+  production_prior DECIMAL(4,1),
+  production_change DECIMAL(4,1),
+  
+  employment DECIMAL(4,1),
+  employment_prior DECIMAL(4,1),
+  employment_change DECIMAL(4,1),
+  
+  supplier_deliveries DECIMAL(4,1),
+  supplier_deliveries_prior DECIMAL(4,1),
+  
+  inventories DECIMAL(4,1),
+  inventories_prior DECIMAL(4,1),
+  
+  prices DECIMAL(4,1),
+  prices_prior DECIMAL(4,1),
+  prices_change DECIMAL(4,1),
+  prices_pressure TEXT,
+  
+  backlog DECIMAL(4,1),
+  backlog_prior DECIMAL(4,1),
+  
+  new_export_orders DECIMAL(4,1),
+  imports DECIMAL(4,1),
+  
+  -- Regime Analysis
+  macro_regime TEXT,
+  regime_confidence TEXT,
+  consecutive_months INTEGER,
+  
+  -- Derived Signals
+  inventory_cycle_signal TEXT,
+  demand_signal TEXT,
+  pricing_power_signal TEXT,
+  labor_market_signal TEXT,
+  supply_chain_signal TEXT,
+  
+  -- Metadata
+  data_source TEXT DEFAULT 'Perplexity',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_econ_snapshots_month ON ism_economic_snapshots(report_month);
+CREATE INDEX IF NOT EXISTS idx_econ_snapshots_report ON ism_economic_snapshots(report_id);
+
+-- RLS
+ALTER TABLE ism_economic_snapshots ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Read ism_economic_snapshots" ON ism_economic_snapshots;
+DROP POLICY IF EXISTS "Service manage ism_economic_snapshots" ON ism_economic_snapshots;
+
+CREATE POLICY "Read ism_economic_snapshots" ON ism_economic_snapshots
+  FOR SELECT TO authenticated USING (true);
+  
+CREATE POLICY "Service manage ism_economic_snapshots" ON ism_economic_snapshots
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Grants
+GRANT SELECT ON ism_economic_snapshots TO authenticated;
+GRANT ALL ON ism_economic_snapshots TO service_role;
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '✅ PART 3.12: ism_economic_snapshots table created';
+END $$;
 -- =====================================================
 -- COMPANY NOTIFICATION SYSTEM - COMPLETE SCHEMA
 -- =====================================================
@@ -4755,6 +5231,10 @@ ON profiles(top_secret_is_in_trial) WHERE top_secret_is_in_trial = TRUE;
 CREATE INDEX IF NOT EXISTS idx_profiles_journal_discount_available
 ON profiles(journal_discount_available) WHERE journal_discount_available = TRUE;
 
+
+
+
+
 -- PART 4: FUNCTION - Start Top Secret Trial
 DROP FUNCTION IF EXISTS start_top_secret_trial(UUID);
 
@@ -5134,3 +5614,366 @@ END $$;
 -- =====================================================
 -- END OF FINOTAUR DATABASE SCHEMA
 -- =====================================================
+-- =====================================================
+-- WEEKLY REPORTS TABLE - MIGRATION
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- This creates the missing weekly_reports table
+-- =====================================================
+
+-- ============================================
+-- TABLE: weekly_reports
+-- Main table for Weekly Tactical Review reports
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.weekly_reports (
+  id TEXT PRIMARY KEY,
+  report_date DATE NOT NULL,
+  report_title TEXT DEFAULT 'Weekly Tactical Review',
+  
+  -- Report Sections (JSONB)
+  sections JSONB,
+  summary JSONB,
+  
+  -- Charts (base64 or URLs)
+  charts JSONB,
+  
+  -- Generated Content
+  markdown_content TEXT,
+  html_content TEXT,
+  pdf_path TEXT,
+  pdf_url TEXT,
+  
+  -- Executive Summary
+  executive_summary JSONB,
+  central_thesis TEXT,
+  
+  -- Processing Info
+  processing_info JSONB,
+  generation_duration_seconds INTEGER,
+  
+  -- Quality Assurance
+  qa_score INTEGER DEFAULT 0,
+  qa_passed BOOLEAN DEFAULT false,
+  
+  -- Status
+  status TEXT DEFAULT 'completed',
+  error_message TEXT,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================
+-- INDEXES
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_weekly_reports_date ON weekly_reports(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_weekly_reports_created ON weekly_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_weekly_reports_status ON weekly_reports(status);
+
+-- ============================================
+-- TRIGGER: Auto-update updated_at
+-- ============================================
+DROP TRIGGER IF EXISTS update_weekly_reports_updated_at ON weekly_reports;
+CREATE TRIGGER update_weekly_reports_updated_at
+  BEFORE UPDATE ON weekly_reports
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- RLS POLICIES
+-- ============================================
+ALTER TABLE weekly_reports ENABLE ROW LEVEL SECURITY;
+
+-- Drop ALL existing policies first (prevent duplicates)
+DROP POLICY IF EXISTS "weekly_reports_service_all" ON weekly_reports;
+DROP POLICY IF EXISTS "weekly_reports_authenticated_read" ON weekly_reports;
+DROP POLICY IF EXISTS "weekly_reports_authenticated_write" ON weekly_reports;
+DROP POLICY IF EXISTS "weekly_reports_authenticated_update" ON weekly_reports;
+DROP POLICY IF EXISTS "weekly_reports_authenticated_delete" ON weekly_reports;
+
+-- Service role full access
+CREATE POLICY "weekly_reports_service_all" ON weekly_reports
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Authenticated users can read
+CREATE POLICY "weekly_reports_authenticated_read" ON weekly_reports
+  FOR SELECT TO authenticated
+  USING (true);
+
+-- Authenticated users can write (for admin panel)
+CREATE POLICY "weekly_reports_authenticated_write" ON weekly_reports
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Authenticated users can update
+CREATE POLICY "weekly_reports_authenticated_update" ON weekly_reports
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  );
+
+-- ============================================
+-- GRANTS
+-- ============================================
+GRANT SELECT, INSERT, UPDATE, DELETE ON weekly_reports TO authenticated;
+GRANT ALL ON weekly_reports TO service_role;
+
+-- ============================================
+-- TABLE: weekly_report_progress
+-- Real-time progress tracking
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.weekly_report_progress (
+  report_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL DEFAULT 'running',
+  progress INTEGER DEFAULT 0,
+  current_phase TEXT,
+  current_agent_id TEXT,
+  current_agent_name TEXT,
+  completed_agents TEXT[],
+  total_agents INTEGER,
+  elapsed_seconds INTEGER,
+  error TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS
+ALTER TABLE weekly_report_progress ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "weekly_progress_service_all" ON weekly_report_progress;
+DROP POLICY IF EXISTS "weekly_progress_authenticated_all" ON weekly_report_progress;
+
+CREATE POLICY "weekly_progress_service_all" ON weekly_report_progress
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY "weekly_progress_authenticated_all" ON weekly_report_progress
+  FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+GRANT ALL ON weekly_report_progress TO authenticated;
+GRANT ALL ON weekly_report_progress TO service_role;
+
+-- ============================================
+-- TABLE: weekly_scheduler_logs
+-- Scheduler execution logs
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.weekly_scheduler_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type TEXT NOT NULL DEFAULT 'weekly_generation',
+  status TEXT NOT NULL,
+  report_id TEXT,
+  report_date DATE,
+  duration_ms INTEGER,
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}',
+  executed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_weekly_scheduler_logs_status ON weekly_scheduler_logs(status);
+CREATE INDEX IF NOT EXISTS idx_weekly_scheduler_logs_executed ON weekly_scheduler_logs(executed_at DESC);
+
+-- RLS
+ALTER TABLE weekly_scheduler_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "weekly_scheduler_logs_service_all" ON weekly_scheduler_logs;
+DROP POLICY IF EXISTS "weekly_scheduler_logs_admin_read" ON weekly_scheduler_logs;
+
+CREATE POLICY "weekly_scheduler_logs_service_all" ON weekly_scheduler_logs
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY "weekly_scheduler_logs_admin_read" ON weekly_scheduler_logs
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  );
+
+GRANT ALL ON weekly_scheduler_logs TO service_role;
+GRANT SELECT ON weekly_scheduler_logs TO authenticated;
+
+-- ============================================
+-- AUTO-PUBLISH TRIGGER FOR WEEKLY REPORTS
+-- ============================================
+DROP FUNCTION IF EXISTS auto_publish_weekly_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION auto_publish_weekly_report()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    -- Only proceed if we have content
+    IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Check if already exists
+    SELECT id INTO v_existing_id
+    FROM published_reports
+    WHERE original_report_id = NEW.id AND report_type = 'weekly';
+
+    IF v_existing_id IS NOT NULL THEN
+        -- UPDATE existing
+        UPDATE published_reports
+        SET 
+            markdown_content = NEW.markdown_content,
+            html_content = NEW.html_content,
+            markdown_preview = LEFT(NEW.markdown_content, 500),
+            pdf_url = NEW.pdf_url,
+            pdf_storage_path = NEW.pdf_path,
+            qa_score = NEW.qa_score,
+            updated_at = NOW()
+        WHERE id = v_existing_id;
+        
+        RAISE NOTICE '[AutoPublish] Updated Weekly report % in published_reports', NEW.id;
+    ELSE
+        -- INSERT new
+        INSERT INTO published_reports (
+            report_type,
+            original_report_id,
+            title,
+            subtitle,
+            markdown_content,
+            html_content,
+            markdown_preview,
+            pdf_url,
+            pdf_storage_path,
+            highlights,
+            key_metric_label,
+            key_metric_value,
+            qa_score,
+            is_featured,
+            is_pinned,
+            target_group,
+            published_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            'weekly',
+            NEW.id,
+            'Weekly Tactical Review',
+            TO_CHAR(NEW.report_date, 'Month DD, YYYY'),
+            NEW.markdown_content,
+            NEW.html_content,
+            LEFT(NEW.markdown_content, 500),
+            NEW.pdf_url,
+            NEW.pdf_path,
+            COALESCE(
+                ARRAY(SELECT jsonb_array_elements_text(NEW.executive_summary->'key_points')),
+                ARRAY['Weekly Market Analysis']::TEXT[]
+            ),
+            'Week',
+            TO_CHAR(NEW.report_date, 'Mon DD'),
+            NEW.qa_score,
+            true,  -- is_featured
+            false, -- is_pinned
+            'top_secret',
+            NOW(),
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '[AutoPublish] Created Weekly report % in published_reports', NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_publish_weekly ON weekly_reports;
+
+CREATE TRIGGER trigger_auto_publish_weekly
+    AFTER INSERT OR UPDATE OF markdown_content, html_content
+    ON weekly_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_publish_weekly_report();
+
+-- ============================================
+-- VERIFICATION
+-- ============================================
+DO $$
+DECLARE
+    v_table_exists BOOLEAN;
+    v_progress_exists BOOLEAN;
+    v_logs_exists BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'weekly_reports'
+    ) INTO v_table_exists;
+    
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'weekly_report_progress'
+    ) INTO v_progress_exists;
+    
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'weekly_scheduler_logs'
+    ) INTO v_logs_exists;
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ WEEKLY REPORTS MIGRATION COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Tables created:';
+    RAISE NOTICE '  • weekly_reports: %', CASE WHEN v_table_exists THEN 'YES' ELSE 'NO' END;
+    RAISE NOTICE '  • weekly_report_progress: %', CASE WHEN v_progress_exists THEN 'YES' ELSE 'NO' END;
+    RAISE NOTICE '  • weekly_scheduler_logs: %', CASE WHEN v_logs_exists THEN 'YES' ELSE 'NO' END;
+    RAISE NOTICE '';
+    RAISE NOTICE 'Features:';
+    RAISE NOTICE '  • RLS policies configured';
+    RAISE NOTICE '  • Auto-publish trigger active';
+    RAISE NOTICE '  • Grants applied';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- Show table structure
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'weekly_reports'
+ORDER BY ordinal_position;
+-- =====================================================
+-- FIX: Add proper UNIQUE CONSTRAINT for weekly reports upsert
+-- =====================================================
+
+-- First, remove duplicates if any exist
+DELETE FROM published_reports a
+USING published_reports b
+WHERE a.id > b.id 
+  AND a.report_type = b.report_type 
+  AND a.original_report_id = b.original_report_id
+  AND a.original_report_id IS NOT NULL;
+
+-- Add the unique constraint (not just index)
+ALTER TABLE published_reports 
+DROP CONSTRAINT IF EXISTS published_reports_type_original_id_key;
+
+ALTER TABLE published_reports 
+ADD CONSTRAINT published_reports_type_original_id_key 
+UNIQUE (report_type, original_report_id);
+
+-- Verify
+SELECT conname, contype 
+FROM pg_constraint 
+WHERE conrelid = 'published_reports'::regclass;

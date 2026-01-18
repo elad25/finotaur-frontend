@@ -1,8 +1,117 @@
 -- ============================================
--- FINOTAUR SUPPORT SYSTEM - COMPLETE SETUP
--- מערכת עדכונים + מעקב משתמשים שעזבו
+-- FINOTAUR SUPPORT SYSTEM - COMPLETE SETUP v2.0
+-- מערכת תמיכה + עדכונים + מעקב משתמשים שעזבו
 -- Fixed for Finotaur schema (account_type, top_secret_enabled, etc.)
 -- ============================================
+
+-- ============================================
+-- PART 0: SUPPORT TICKETS TABLE + RLS
+-- טבלת טיקטים לתמיכה
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  🎫 SETTING UP SUPPORT TICKETS TABLE                    ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+-- Create support_tickets table if not exists
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_email TEXT NOT NULL,
+  user_name TEXT,
+  subject TEXT,
+  message TEXT,
+  messages JSONB DEFAULT '[]'::jsonb,
+  category TEXT CHECK (category IN ('technical', 'payment', 'question', 'feedback')),
+  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'pending', 'resolved', 'closed')),
+  priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+  assigned_to UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  message_count INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Add category column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'support_tickets' AND column_name = 'category'
+  ) THEN
+    ALTER TABLE support_tickets ADD COLUMN category TEXT CHECK (category IN ('technical', 'payment', 'question', 'feedback'));
+  END IF;
+END $$;
+
+-- Enable RLS
+ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can create tickets" ON support_tickets;
+DROP POLICY IF EXISTS "Users can view own tickets" ON support_tickets;
+DROP POLICY IF EXISTS "Users can update own tickets" ON support_tickets;
+DROP POLICY IF EXISTS "Admins can manage all tickets" ON support_tickets;
+DROP POLICY IF EXISTS "Allow anonymous ticket creation" ON support_tickets;
+
+-- Users can create their own tickets (authenticated)
+CREATE POLICY "Users can create tickets"
+  ON support_tickets
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    user_id = auth.uid() 
+    OR user_id IS NULL
+  );
+
+-- Allow anonymous/guest ticket creation
+CREATE POLICY "Allow anonymous ticket creation"
+  ON support_tickets
+  FOR INSERT
+  TO anon
+  WITH CHECK (user_id IS NULL);
+
+-- Users can view their own tickets
+CREATE POLICY "Users can view own tickets"
+  ON support_tickets
+  FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid());
+
+-- Users can update their own tickets
+CREATE POLICY "Users can update own tickets"
+  ON support_tickets
+  FOR UPDATE
+  TO authenticated
+  USING (user_id = auth.uid());
+
+-- Admins can do everything
+CREATE POLICY "Admins can manage all tickets"
+  ON support_tickets
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Indexes for support_tickets
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user_id ON support_tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_category ON support_tickets(category);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_created_at ON support_tickets(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_updated_at ON support_tickets(updated_at DESC);
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ support_tickets table configured with RLS';
+END $$;
 
 -- ============================================
 -- PART 1: CREATE SYSTEM_UPDATES TABLE
@@ -22,19 +131,51 @@ CREATE TABLE IF NOT EXISTS system_updates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   content TEXT NOT NULL,
-  type TEXT DEFAULT 'info' CHECK (type IN ('info', 'warning', 'success', 'error', 'feature', 'maintenance')),
+  type TEXT DEFAULT 'info' CHECK (type IN ('info', 'warning', 'success', 'error', 'feature', 'maintenance', 'announcement')),
   target_group TEXT DEFAULT 'all' CHECK (target_group IN ('all', 'trading_journal', 'newsletter', 'top_secret')),
   is_active BOOLEAN DEFAULT true,
-  priority INTEGER DEFAULT 0, -- Higher = more important
+  is_pinned BOOLEAN DEFAULT false,
+  priority INTEGER DEFAULT 0,
+  metadata JSONB,
   starts_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ,
+  views_count INTEGER DEFAULT 0,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add columns if they don't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'system_updates' AND column_name = 'is_pinned'
+  ) THEN
+    ALTER TABLE system_updates ADD COLUMN is_pinned BOOLEAN DEFAULT false;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'system_updates' AND column_name = 'metadata'
+  ) THEN
+    ALTER TABLE system_updates ADD COLUMN metadata JSONB;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'system_updates' AND column_name = 'views_count'
+  ) THEN
+    ALTER TABLE system_updates ADD COLUMN views_count INTEGER DEFAULT 0;
+  END IF;
+END $$;
+
 -- Enable RLS
 ALTER TABLE system_updates ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can read updates for their group" ON system_updates;
+DROP POLICY IF EXISTS "Admins can manage updates" ON system_updates;
 
 -- Helper function to get user's group
 CREATE OR REPLACE FUNCTION get_user_target_group(user_id UUID)
@@ -74,6 +215,12 @@ CREATE POLICY "Users can read updates for their group"
     AND (
       target_group = 'all'
       OR target_group = get_user_target_group(auth.uid())
+      -- Admins can see all updates
+      OR EXISTS (
+        SELECT 1 FROM profiles
+        WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('admin', 'super_admin')
+      )
     )
   );
 
@@ -95,6 +242,8 @@ CREATE INDEX IF NOT EXISTS idx_system_updates_active ON system_updates(is_active
 CREATE INDEX IF NOT EXISTS idx_system_updates_target_group ON system_updates(target_group);
 CREATE INDEX IF NOT EXISTS idx_system_updates_dates ON system_updates(starts_at, expires_at);
 CREATE INDEX IF NOT EXISTS idx_system_updates_priority ON system_updates(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_system_updates_pinned ON system_updates(is_pinned DESC);
+CREATE INDEX IF NOT EXISTS idx_system_updates_created_at ON system_updates(created_at DESC);
 
 DO $$
 BEGIN
@@ -126,6 +275,10 @@ CREATE TABLE IF NOT EXISTS user_update_reads (
 -- Enable RLS
 ALTER TABLE user_update_reads ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view own reads" ON user_update_reads;
+DROP POLICY IF EXISTS "Users can mark as read" ON user_update_reads;
+
 -- Users can see their own reads
 CREATE POLICY "Users can view own reads"
   ON user_update_reads
@@ -142,6 +295,7 @@ CREATE POLICY "Users can mark as read"
 
 -- Index
 CREATE INDEX IF NOT EXISTS idx_user_update_reads_user ON user_update_reads(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_update_reads_update ON user_update_reads(update_id);
 
 DO $$
 BEGIN
@@ -167,14 +321,13 @@ CREATE TABLE IF NOT EXISTS churned_users (
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   email TEXT NOT NULL,
   display_name TEXT,
-  account_type TEXT, -- FREE, BASIC, PREMIUM
-  user_group TEXT, -- trading_journal, newsletter, top_secret
+  account_type TEXT,
+  user_group TEXT,
   churned_at TIMESTAMPTZ DEFAULT NOW(),
-  reason TEXT, -- cancelled, expired, refunded, payment_failed, etc.
+  reason TEXT,
   last_subscription_end TIMESTAMPTZ,
   total_paid DECIMAL(10,2) DEFAULT 0,
   notes TEXT,
-  -- Extra context
   had_top_secret BOOLEAN DEFAULT false,
   had_newsletter BOOLEAN DEFAULT false,
   cancellation_reason TEXT,
@@ -183,6 +336,10 @@ CREATE TABLE IF NOT EXISTS churned_users (
 
 -- Enable RLS
 ALTER TABLE churned_users ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Admins can view churned users" ON churned_users;
+DROP POLICY IF EXISTS "Admins can manage churned users" ON churned_users;
 
 -- Only admins can view churned users
 CREATE POLICY "Admins can view churned users"
@@ -318,14 +475,12 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
   RETURN QUERY
-  -- Total (excluding admins)
   SELECT 'all'::TEXT, COUNT(*)::BIGINT 
   FROM profiles 
   WHERE role NOT IN ('admin', 'super_admin')
   
   UNION ALL
   
-  -- Trading Journal users (not top_secret, not newsletter)
   SELECT 'trading_journal'::TEXT, COUNT(*)::BIGINT 
   FROM profiles 
   WHERE COALESCE(top_secret_enabled, false) = false
@@ -335,7 +490,6 @@ BEGIN
   
   UNION ALL
   
-  -- Newsletter users
   SELECT 'newsletter'::TEXT, COUNT(*)::BIGINT 
   FROM profiles 
   WHERE (COALESCE(newsletter_enabled, false) = true OR COALESCE(newsletter_paid, false) = true)
@@ -343,7 +497,6 @@ BEGIN
   
   UNION ALL
   
-  -- Top Secret users
   SELECT 'top_secret'::TEXT, COUNT(*)::BIGINT 
   FROM profiles 
   WHERE COALESCE(top_secret_enabled, false) = true
@@ -358,10 +511,8 @@ DECLARE
   user_group TEXT;
   unread_count INTEGER;
 BEGIN
-  -- Get user's group
   user_group := get_user_target_group(auth.uid());
 
-  -- Count unread updates
   SELECT COUNT(*)::INTEGER INTO unread_count
   FROM system_updates su
   WHERE su.is_active = true
@@ -386,6 +537,16 @@ BEGIN
   ON CONFLICT (user_id, update_id) DO NOTHING;
   
   RETURN true;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function: Increment update views
+CREATE OR REPLACE FUNCTION increment_update_views(update_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE system_updates 
+  SET views_count = COALESCE(views_count, 0) + 1
+  WHERE id = update_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -439,6 +600,34 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function: Get support ticket statistics
+CREATE OR REPLACE FUNCTION get_support_stats(p_days INTEGER DEFAULT 30)
+RETURNS TABLE (
+  total_tickets BIGINT,
+  open_tickets BIGINT,
+  resolved_tickets BIGINT,
+  technical_tickets BIGINT,
+  payment_tickets BIGINT,
+  question_tickets BIGINT,
+  feedback_tickets BIGINT,
+  avg_response_time_hours NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COUNT(*)::BIGINT,
+    COUNT(*) FILTER (WHERE status = 'open')::BIGINT,
+    COUNT(*) FILTER (WHERE status = 'resolved')::BIGINT,
+    COUNT(*) FILTER (WHERE category = 'technical')::BIGINT,
+    COUNT(*) FILTER (WHERE category = 'payment')::BIGINT,
+    COUNT(*) FILTER (WHERE category = 'question')::BIGINT,
+    COUNT(*) FILTER (WHERE category = 'feedback')::BIGINT,
+    ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600)::NUMERIC, 2)
+  FROM support_tickets
+  WHERE created_at > NOW() - (p_days || ' days')::INTERVAL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 DO $$
 BEGIN
   RAISE NOTICE '✅ Helper functions created:';
@@ -446,8 +635,10 @@ BEGIN
   RAISE NOTICE '   • get_user_group_counts()';
   RAISE NOTICE '   • get_unread_updates_count()';
   RAISE NOTICE '   • mark_update_as_read(update_id)';
+  RAISE NOTICE '   • increment_update_views(update_id)';
   RAISE NOTICE '   • get_churn_stats(days)';
   RAISE NOTICE '   • get_admin_user_stats()';
+  RAISE NOTICE '   • get_support_stats(days)';
 END $$;
 
 -- ============================================
@@ -465,12 +656,20 @@ CREATE INDEX IF NOT EXISTS idx_profiles_subscription_status ON profiles(subscrip
 
 DO $$
 BEGIN
-  -- Enable realtime for system_updates so users get live notifications
   ALTER PUBLICATION supabase_realtime ADD TABLE system_updates;
   RAISE NOTICE '✅ Realtime enabled for system_updates';
 EXCEPTION
   WHEN duplicate_object THEN
     RAISE NOTICE '⏭️ Realtime already enabled for system_updates';
+END $$;
+
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE support_tickets;
+  RAISE NOTICE '✅ Realtime enabled for support_tickets';
+EXCEPTION
+  WHEN duplicate_object THEN
+    RAISE NOTICE '⏭️ Realtime already enabled for support_tickets';
 END $$;
 
 -- ============================================
@@ -484,12 +683,18 @@ BEGIN
   RAISE NOTICE '║  ✅ SETUP COMPLETE                                      ║';
   RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
   RAISE NOTICE '';
-  RAISE NOTICE '📋 Tables Created:';
+  RAISE NOTICE '📋 Tables Created/Updated:';
+  RAISE NOTICE '';
+  RAISE NOTICE '  0️⃣  support_tickets';
+  RAISE NOTICE '      • טיקטים לתמיכה';
+  RAISE NOTICE '      • קטגוריות: technical, payment, question, feedback';
+  RAISE NOTICE '      • סטטוסים: open, pending, resolved, closed';
   RAISE NOTICE '';
   RAISE NOTICE '  1️⃣  system_updates';
   RAISE NOTICE '      • הודעות מערכת ועדכונים';
   RAISE NOTICE '      • סינון לפי קבוצת יעד';
   RAISE NOTICE '      • תמיכה בתזמון (starts_at, expires_at)';
+  RAISE NOTICE '      • תמיכה ב-metadata (PDF, PMI, etc.)';
   RAISE NOTICE '';
   RAISE NOTICE '  2️⃣  user_update_reads';
   RAISE NOTICE '      • מעקב אילו עדכונים נקראו';
@@ -498,19 +703,17 @@ BEGIN
   RAISE NOTICE '      • מעקב משתמשים שעזבו';
   RAISE NOTICE '      • לוג אוטומטי דרך trigger';
   RAISE NOTICE '';
-  RAISE NOTICE '🎯 Target Groups (based on your schema):';
+  RAISE NOTICE '🎯 Target Groups:';
   RAISE NOTICE '  • all - כולם';
-  RAISE NOTICE '  • trading_journal - משתמשי יומן מסחר (FREE/BASIC/PREMIUM)';
+  RAISE NOTICE '  • trading_journal - משתמשי יומן מסחר';
   RAISE NOTICE '  • newsletter - מנויי ניוזלטר';
   RAISE NOTICE '  • top_secret - מנויי TOP SECRET';
   RAISE NOTICE '';
-  RAISE NOTICE '📝 Update Types:';
-  RAISE NOTICE '  • info - מידע כללי';
-  RAISE NOTICE '  • warning - אזהרה';
-  RAISE NOTICE '  • success - הצלחה';
-  RAISE NOTICE '  • error - שגיאה';
-  RAISE NOTICE '  • feature - פיצ׳ר חדש';
-  RAISE NOTICE '  • maintenance - תחזוקה';
+  RAISE NOTICE '📝 Ticket Categories:';
+  RAISE NOTICE '  • technical - בעיה טכנית';
+  RAISE NOTICE '  • payment - בעיית תשלום';
+  RAISE NOTICE '  • question - שאלה';
+  RAISE NOTICE '  • feedback - המלצות לשיפור';
   RAISE NOTICE '';
 END $$;
 
@@ -524,22 +727,20 @@ SELECT * FROM get_user_group_counts();
 -- Show admin stats
 SELECT * FROM get_admin_user_stats();
 
--- Show churned users (if any)
+-- Show support stats
+SELECT * FROM get_support_stats(30);
+
+-- Show recent tickets by category
 SELECT 
-  email,
-  display_name,
-  account_type,
-  user_group,
-  reason,
-  churned_at::date as churned_date,
-  had_top_secret,
-  had_newsletter
-FROM churned_users
-ORDER BY churned_at DESC
-LIMIT 10;
+  category,
+  COUNT(*) as count,
+  COUNT(*) FILTER (WHERE status = 'open') as open_count
+FROM support_tickets
+WHERE created_at > NOW() - INTERVAL '30 days'
+GROUP BY category;
 
 -- ============================================
--- EXAMPLE USAGE (Uncomment to run)
+-- EXAMPLE USAGE
 -- ============================================
 
 -- Create a general update for everyone:
@@ -553,122 +754,14 @@ VALUES (
 );
 */
 
--- Create update only for Newsletter subscribers:
+-- Create update with PDF metadata (for ISM reports):
 /*
-INSERT INTO system_updates (title, content, type, target_group)
+INSERT INTO system_updates (title, content, type, target_group, metadata)
 VALUES (
-  '📰 עדכון למנויי הניוזלטר',
-  'גיליון חדש זמין באזור האישי שלכם',
-  'info',
-  'newsletter'
+  '🏭 ISM Manufacturing Report - January 2025',
+  'The latest ISM Manufacturing PMI report is now available.',
+  'announcement',
+  'top_secret',
+  '{"report_type": "ism", "report_month": "January 2025", "pdf_url": "https://...", "pmi_value": 49.3, "pmi_change": -0.9}'::jsonb
 );
 */
-
--- Create update only for TOP SECRET users:
-/*
-INSERT INTO system_updates (title, content, type, target_group)
-VALUES (
-  '🔐 עדכון TOP SECRET',
-  'תוכן בלעדי חדש זמין - סיגנלים מיוחדים',
-  'feature',
-  'top_secret'
-);
-*/
-
--- Create scheduled maintenance notice:
-/*
-INSERT INTO system_updates (title, content, type, target_group, starts_at, expires_at)
-VALUES (
-  '🔧 תחזוקה מתוכננת',
-  'המערכת תהיה במצב תחזוקה מחר בין 02:00-04:00',
-  'maintenance',
-  'all',
-  NOW() + INTERVAL '1 day',
-  NOW() + INTERVAL '3 days'
-);
-*/
-
--- Get unread count for current user:
--- SELECT get_unread_updates_count();
-
--- Mark an update as read:
--- SELECT mark_update_as_read('update-uuid-here');
-
--- Get churn stats for last 30 days:
--- SELECT * FROM get_churn_stats(30);
--- =====================================================
--- DATABASE WEBHOOK: Trigger email when system_update is created
--- Run this in Supabase SQL Editor
--- =====================================================
-
--- Option 1: Use Supabase Dashboard to create Database Webhook
--- Go to: Database > Webhooks > Create a new webhook
--- 
--- Name: send_update_notification
--- Table: system_updates
--- Events: INSERT
--- HTTP Method: POST
--- URL: https://[YOUR_PROJECT_REF].supabase.co/functions/v1/send-update-notification
--- Headers:
---   Authorization: Bearer [YOUR_SERVICE_ROLE_KEY]
---   Content-Type: application/json
-
--- =====================================================
--- Option 2: Use pg_net extension (if preferred)
--- =====================================================
-
--- Create the trigger function
-CREATE OR REPLACE FUNCTION notify_update_center_email()
-RETURNS TRIGGER AS $$
-DECLARE
-  payload JSONB;
-  service_role_key TEXT;
-BEGIN
-  -- Build the payload
-  payload := jsonb_build_object(
-    'record', to_jsonb(NEW)
-  );
-
-  -- Get service role key from vault (you need to set this up)
-  -- Or hardcode for testing (not recommended for production)
-  service_role_key := current_setting('app.settings.service_role_key', true);
-
-  -- Call the edge function
-  PERFORM net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/send-update-notification',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || service_role_key
-    ),
-    body := payload
-  );
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Create the trigger
-DROP TRIGGER IF EXISTS on_system_update_created ON system_updates;
-CREATE TRIGGER on_system_update_created
-  AFTER INSERT ON system_updates
-  FOR EACH ROW
-  EXECUTE FUNCTION notify_update_center_email();
-
--- =====================================================
--- RECOMMENDED: Use Supabase Dashboard Database Webhooks
--- =====================================================
--- 
--- The easiest way is to use Supabase Dashboard:
--- 
--- 1. Go to Database > Webhooks
--- 2. Click "Create a new webhook"
--- 3. Fill in:
---    - Name: send_update_notification
---    - Table: system_updates
---    - Events: INSERT (check only INSERT)
---    - Type: Supabase Edge Function
---    - Edge Function: send-update-notification
---    
--- This is the recommended approach as it handles authentication
--- and retries automatically.
--- =====================================================

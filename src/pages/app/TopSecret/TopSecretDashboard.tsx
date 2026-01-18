@@ -167,10 +167,14 @@ const REPORT_TYPE_CONFIG = {
   },
 };
 
-const mapReportType = (dbType: string): 'macro' | 'company' | 'crypto' | 'weekly' => {
+const mapReportType = (dbType: string): 'macro' | 'company' | 'crypto' | 'weekly' | null => {
   if (dbType === 'ism') return 'macro';
   if (dbType === 'weekly') return 'weekly';
-  return dbType as 'company' | 'crypto';
+  if (dbType === 'company') return 'company';
+  if (dbType === 'crypto') return 'crypto';
+  // Unknown types (like 'daily') return null
+  console.warn('[mapReportType] Unknown report type:', dbType);
+  return null;
 };
 
 const mapReportTypeToDb = (type: string): string => {
@@ -651,18 +655,23 @@ function MonthGroup({
 
         <div className="flex items-center gap-4">
           {/* Type badges */}
-          <div className="hidden sm:flex items-center gap-1.5">
-            {Object.entries(reportCounts).map(([type, count]) => {
-              const config = REPORT_TYPE_CONFIG[type as keyof typeof REPORT_TYPE_CONFIG];
-              return (
-                <span 
-                  key={type}
-                  className={`px-2 py-0.5 rounded-full text-xs font-medium ${config.textColor} bg-white/5`}
-                >
-                  {count} {config.shortName}
-                </span>
-              );
-            })}
+<div className="hidden sm:flex items-center gap-1.5">
+  {Object.entries(reportCounts).map(([type, count]) => {
+    const config = REPORT_TYPE_CONFIG[type as keyof typeof REPORT_TYPE_CONFIG];
+    // Skip unknown report types
+    if (!config) {
+      console.warn('[MonthGroup] Unknown report type:', type);
+      return null;
+    }
+    return (
+      <span 
+        key={type}
+        className={`px-2 py-0.5 rounded-full text-xs font-medium ${config.textColor} bg-white/5`}
+      >
+        {count} {config.shortName}
+      </span>
+    );
+  })}
           </div>
 
           <motion.div
@@ -1152,36 +1161,44 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       }
     }
 
-    function processReports(publishedReports: any[]) {
-      const transformedReports: Report[] = publishedReports.map((r: any) => ({
-        id: r.id,
-        type: mapReportType(r.report_type),
-        title: r.title,
-        subtitle: r.subtitle,
-        date: new Date(r.published_at),
-        pdfUrl: r.pdf_url,
-        status: 'published' as const,
-        highlights: r.highlights || [],
-        keyMetric: r.key_metric_label,
-        keyMetricValue: r.key_metric_value,
-        keyInsights: r.key_insights_count,
-        qaScore: r.qa_score,
-        commentsCount: r.comments_count || 0,
-        likesCount: r.likes_count || 0,
-        isFeatured: r.is_featured,
-        isPinned: r.is_pinned,
-        ticker: r.ticker,
-        companyName: r.company_name,
-        sector: r.sector,
-        reportMonth: r.report_month,
-        marketRegime: r.market_regime,
-        markdownContent: r.markdown_content,
-        htmlContent: r.html_content,
-        pdfStoragePath: r.pdf_storage_path,
-        originalReportId: r.original_report_id,
-        isLoadingContent: false,
-      }));
-
+function processReports(publishedReports: any[]) {
+      const transformedReports: Report[] = publishedReports
+        .filter((r: any) => {
+          const mappedType = mapReportType(r.report_type);
+          if (!mappedType) {
+            console.log('[processReports] Skipping report with unknown type:', r.report_type, r.id);
+            return false;
+          }
+          return true;
+        })
+        .map((r: any) => ({
+          id: r.id,
+          type: mapReportType(r.report_type)!,
+          title: r.title,
+          subtitle: r.subtitle,
+          date: new Date(r.published_at),
+          pdfUrl: r.pdf_url,
+          status: 'published' as const,
+          highlights: r.highlights || [],
+          keyMetric: r.key_metric_label,
+          keyMetricValue: r.key_metric_value,
+          keyInsights: r.key_insights_count,
+          qaScore: r.qa_score,
+          commentsCount: r.comments_count || 0,
+          likesCount: r.likes_count || 0,
+          isFeatured: r.is_featured,
+          isPinned: r.is_pinned,
+          ticker: r.ticker,
+          companyName: r.company_name,
+          sector: r.sector,
+          reportMonth: r.report_month,
+          marketRegime: r.market_regime,
+          markdownContent: r.markdown_content,
+          htmlContent: r.html_content,
+          pdfStoragePath: r.pdf_storage_path,
+          originalReportId: r.original_report_id,
+          isLoadingContent: false,
+        }));
       // Sort by date (newest first)
       transformedReports.sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;

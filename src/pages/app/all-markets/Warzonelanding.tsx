@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { ChevronRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   CheckCircle2, Shield, Clock, ArrowRight, LineChart, FileText,
@@ -18,6 +19,9 @@ import { cn } from '@/lib/utils';
 
 // Bull image path - located in public/assets folder
 const BullWarZone = '/assets/Bull-WarZone.png';
+
+// Hero background for ActiveSubscriberView
+const WarZoneHeroBg = '/assets/WarZone-Hero-Bg.png';
 
 // ============================================
 // CONFIGURATION - v2.0.0
@@ -59,7 +63,29 @@ interface TopSecretStatus {
   is_active: boolean;
   membership_id: string | null;
 }
+interface DailyReport {
+  id: string;
+  report_date: string;
+  report_title: string;
+  markdown_content: string | null;
+  html_content: string | null;
+  pdf_url: string | null;
+  pdf_path: string | null;
+  qa_score: number;
+  created_at: string;
+}
 
+interface WeeklyReport {
+  id: string;
+  report_date: string;
+  report_title: string;
+  markdown_content: string | null;
+  html_content: string | null;
+  pdf_url: string | null;
+  pdf_path: string | null;
+  qa_score: number;
+  created_at: string;
+}
 interface NewsletterReport {
   id: string;
   date: string;
@@ -922,31 +948,714 @@ const CancelSubscriptionModal = ({ isOpen, onClose, onConfirm, isProcessing, tri
 // ============================================
 // ACTIVE SUBSCRIBER VIEW
 // ============================================
-const ActiveSubscriberView = ({ newsletterStatus, onCancelClick, onViewReport, isLoadingReport }: { newsletterStatus: NewsletterStatus; onCancelClick: () => void; onViewReport: () => void; isLoadingReport: boolean; }) => {
+// ============================================
+// ACTIVE SUBSCRIBER VIEW - PREMIUM DASHBOARD
+// ============================================
+const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterStatus: NewsletterStatus; onCancelClick: () => void; }) => {
+  // State for reports from DB
+  const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+  const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
+  // NEW: Track if new report is available
+  const [hasNewReport, setHasNewReport] = useState(false);
+  const [lastFetchedDailyId, setLastFetchedDailyId] = useState<string | null>(null);
+  const [lastFetchedWeeklyId, setLastFetchedWeeklyId] = useState<string | null>(null);
+  
+  // Auto Intel Update countdown timer
+  const [countdown, setCountdown] = useState({ hours: 0, minutes: 0, seconds: 0 });
+
+  // ============================================
+  // FETCH REPORTS FUNCTION
+  // ============================================
+  const fetchReports = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoadingReports(true);
+    
+    try {
+      // Fetch latest 2 daily reports
+      const { data: dailyData, error: dailyError } = await supabase
+        .rpc('get_latest_daily_reports', { p_count: 2 });
+      
+      if (dailyError) {
+        console.error('Error fetching daily reports:', dailyError);
+      } else if (dailyData) {
+        // Check if there's a new daily report
+        const latestDailyId = dailyData[0]?.id;
+        if (lastFetchedDailyId && latestDailyId && latestDailyId !== lastFetchedDailyId) {
+          setHasNewReport(true);
+          setTimeout(() => setHasNewReport(false), 5000);
+        }
+        setLastFetchedDailyId(latestDailyId || null);
+        setDailyReports(dailyData);
+      }
+      
+      // Fetch latest weekly report
+      const { data: weeklyData, error: weeklyError } = await supabase
+        .rpc('get_latest_weekly_report');
+      
+      if (weeklyError) {
+        console.error('Error fetching weekly report:', weeklyError);
+      } else if (weeklyData && weeklyData.length > 0) {
+        // Check if there's a new weekly report
+        const latestWeeklyId = weeklyData[0]?.id;
+        if (lastFetchedWeeklyId && latestWeeklyId && latestWeeklyId !== lastFetchedWeeklyId) {
+          setHasNewReport(true);
+          setTimeout(() => setHasNewReport(false), 5000);
+        }
+        setLastFetchedWeeklyId(latestWeeklyId || null);
+        setWeeklyReport(weeklyData[0]);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  }, [lastFetchedDailyId, lastFetchedWeeklyId]);
+
+  // ============================================
+  // INITIAL FETCH ON MOUNT
+  // ============================================
+  useEffect(() => {
+    fetchReports(true);
+  }, []);
+
+  // ============================================
+  // SMART AUTO-REFRESH LOGIC
+  // Daily: 8:55-9:05 AM NY (every 60 seconds)
+  // Weekly: 10:00-10:10 AM NY on Sundays (17:00-17:10 Israel = 10:00-10:10 NY)
+  // ============================================
+  useEffect(() => {
+    const checkIfShouldRefresh = () => {
+      const now = new Date();
+      const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const hour = nyTime.getHours();
+      const minute = nyTime.getMinutes();
+      const dayOfWeek = nyTime.getDay(); // 0 = Sunday
+      
+      // Daily report window: 8:55 AM - 9:05 AM NY (Monday-Friday)
+      const isDailyWindow = dayOfWeek >= 1 && dayOfWeek <= 5 && 
+        ((hour === 8 && minute >= 55) || (hour === 9 && minute <= 5));
+      
+      // Weekly report window: 10:00 AM - 10:10 AM NY on Sundays
+      // (17:00-17:10 Israel time = 10:00-10:10 NY time)
+      const isWeeklyWindow = dayOfWeek === 0 && hour === 10 && minute <= 10;
+      
+      return isDailyWindow || isWeeklyWindow;
+    };
+    
+    // Check every 30 seconds if we're in a refresh window
+    const windowCheckInterval = setInterval(() => {
+      if (checkIfShouldRefresh()) {
+        console.log('In refresh window - fetching reports...');
+        fetchReports(false);
+      }
+    }, 60 * 1000); // Check every 60 seconds during window
+    
+    return () => clearInterval(windowCheckInterval);
+  }, [fetchReports]);
+
+  // ============================================
+  // REAL-TIME SUBSCRIPTION FOR INSTANT UPDATES
+  // ============================================
+  useEffect(() => {
+    // Subscribe to daily_reports table for real-time updates
+    const dailySubscription = supabase
+      .channel('daily_reports_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'daily_reports'
+        },
+        (payload) => {
+          console.log('New daily report detected:', payload);
+          fetchReports(false);
+        }
+      )
+      .subscribe();
+
+    // Subscribe to weekly_reports table for real-time updates
+    const weeklySubscription = supabase
+      .channel('weekly_reports_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'weekly_reports'
+        },
+        (payload) => {
+          console.log('New weekly report detected:', payload);
+          fetchReports(false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      dailySubscription.unsubscribe();
+      weeklySubscription.unsubscribe();
+    };
+  }, [fetchReports]);
+  
+  useEffect(() => {
+    const calculateTimeUntilNextReport = () => {
+      const now = new Date();
+      const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const target = new Date(nyTime);
+      target.setHours(9, 0, 0, 0);
+      
+      if (nyTime >= target) {
+        target.setDate(target.getDate() + 1);
+      }
+      
+      while (target.getDay() === 0 || target.getDay() === 6) {
+        target.setDate(target.getDate() + 1);
+      }
+      
+      const diff = target.getTime() - nyTime.getTime();
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      return { hours, minutes, seconds };
+    };
+    
+    setCountdown(calculateTimeUntilNextReport());
+    const interval = setInterval(() => {
+      setCountdown(calculateTimeUntilNextReport());
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Format date for display
+const formatReportDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+};
+
+const formatReportTime = (createdAt: string) => {
+  const date = new Date(createdAt);
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/New_York'
+  });
+};
+
+  // Handle report click
+// Handle report click - Download PDF directly
+const handleReportClick = async (report: DailyReport | WeeklyReport, reportType: 'daily' | 'weekly') => {
+  console.log('handleReportClick called:', { reportType, report });
+  
+  // 1. FIRST: Try pdf_url if it's a full Supabase URL (Weekly reports have this)
+  if (report.pdf_url && report.pdf_url.includes('supabase.co')) {
+    console.log('Using direct pdf_url:', report.pdf_url);
+    window.open(report.pdf_url, '_blank');
+    return;
+  }
+  
+  // 2. SECOND: Try pdf_path with signed URL (if exists)
+  if (report.pdf_path) {
+    console.log('Trying pdf_path with signed URL:', report.pdf_path);
+    
+    const { data, error } = await supabase.storage
+      .from('reports')
+      .createSignedUrl(report.pdf_path, 300);
+    
+    if (data?.signedUrl) {
+      console.log('Got signed URL from pdf_path');
+      window.open(data.signedUrl, '_blank');
+      return;
+    }
+    console.warn('Failed to get signed URL from pdf_path:', error);
+  }
+  
+  // 3. THIRD: For Daily reports - try the API endpoint
+  if (reportType === 'daily') {
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    console.log('Trying API endpoint for daily report');
+    
+    try {
+      const response = await fetch(`${API_BASE}/api/newsletter/pdf`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        return;
+      }
+    } catch (err) {
+      console.error('API PDF fetch failed:', err);
+    }
+  }
+  
+  // 4. FALLBACK: Generate path and try signed URL
+  const reportDate = new Date(report.report_date).toISOString().split('T')[0];
+  const fallbackPath = reportType === 'daily' 
+    ? `daily-reports/daily-report-${reportDate}.pdf`
+    : `weekly-reports/weekly-report-${reportDate}.pdf`;
+  
+  console.log('Trying fallback path:', fallbackPath);
+  
+  const { data, error } = await supabase.storage
+    .from('reports')
+    .createSignedUrl(fallbackPath, 300);
+  
+  if (data?.signedUrl) {
+    window.open(data.signedUrl, '_blank');
+    return;
+  }
+  
+  // 5. NOTHING WORKED
+  console.error('All PDF methods failed:', { report, error });
+  alert('PDF not available. The report may still be generating.');
+};
+
+  // Get the two daily reports (current and previous trading day)
+  const currentDayReport = dailyReports[0] || null;
+  const previousDayReport = dailyReports[1] || null;
+
   return (
-    <div className="min-h-screen bg-[#0a0806]">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap'); @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } } .animate-float { animation: float 4s ease-in-out infinite; } .heading-font { font-family: 'Playfair Display', Georgia, serif; }`}</style>
-      {newsletterStatus.is_in_trial && newsletterStatus.days_until_trial_ends !== null && (
-        <div className="bg-[#C9A646]/10 border-b border-[#C9A646]/30 px-4 py-3 text-center">
-          <p className="text-[#C9A646] text-sm font-semibold flex items-center justify-center gap-2"><Clock className="w-4 h-4" />Free trial ends in {newsletterStatus.days_until_trial_ends} day{newsletterStatus.days_until_trial_ends !== 1 ? 's' : ''}</p>
+    <div className="min-h-screen bg-[#0a0806] relative overflow-hidden">
+
+      {/* NEW REPORT NOTIFICATION BANNER */}
+      {hasNewReport && (
+        <div 
+          className="fixed top-0 left-0 right-0 z-[100] animate-slideDown"
+          style={{
+            background: 'linear-gradient(90deg, rgba(34,197,94,0.9) 0%, rgba(22,163,74,0.9) 100%)',
+            boxShadow: '0 4px 20px rgba(34,197,94,0.4)'
+          }}
+        >
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-center gap-3">
+            <div className="animate-pulse">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <p className="text-white font-semibold text-sm">
+              🎉 New Report Available! The page has been updated.
+            </p>
+            <button 
+              onClick={() => setHasNewReport(false)}
+              className="p-1 rounded-full hover:bg-white/20 transition-colors"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+          </div>
         </div>
       )}
-      <div className="max-w-5xl mx-auto px-6 py-16">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full mb-8" style={{ background: 'rgba(201,166,70,0.1)', border: '1px solid rgba(201,166,70,0.3)' }}><Crown className="w-5 h-5 text-[#C9A646]" /><span className="text-sm font-bold text-[#C9A646]">{newsletterStatus.is_in_trial ? 'TRIAL ACTIVE' : 'SUBSCRIPTION ACTIVE'}</span></div>
-          <img src={BullWarZone} alt="War Zone Bull" className="w-64 h-auto mx-auto mb-8 animate-float" style={{ filter: 'drop-shadow(0 0 60px rgba(201,166,70,0.5))' }} />
-          <h1 className="text-5xl lg:text-6xl font-bold mb-6 heading-font"><span className="text-white italic">Welcome to the </span><span className="text-[#C9A646] italic">War Zone</span><span className="text-white"> ⚔️</span></h1>
+
+      {/* Trial Banner */}
+      {newsletterStatus.is_in_trial && newsletterStatus.days_until_trial_ends !== null && (
+        <div className="relative z-50 bg-gradient-to-r from-[#C9A646]/20 via-[#C9A646]/10 to-[#C9A646]/20 border-b border-[#C9A646]/30 px-4 py-3 text-center">
+          <p className="text-[#C9A646] text-sm font-semibold flex items-center justify-center gap-2">
+            <Clock className="w-4 h-4" />
+            Free trial ends in {newsletterStatus.days_until_trial_ends} day{newsletterStatus.days_until_trial_ends !== 1 ? 's' : ''}
+          </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-          <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="p-6 rounded-2xl bg-[#12100c] border border-[#C9A646]/20 hover:border-[#5865F2]/50 transition-all"><div className="w-12 h-12 rounded-full bg-[#5865F2]/10 flex items-center justify-center mb-4"><DiscordIcon className="w-6 h-6 text-[#5865F2]" /></div><h3 className="text-lg font-bold text-white mb-2">Discord Community</h3><p className="text-[#C9A646]/60 text-sm">Join 847+ traders</p></a>
-          <button onClick={onViewReport} disabled={isLoadingReport} className="p-6 rounded-2xl bg-[#12100c] border border-[#C9A646]/20 hover:border-[#C9A646]/50 transition-all text-left"><div className="w-12 h-12 rounded-full bg-[#C9A646]/10 flex items-center justify-center mb-4">{isLoadingReport ? <Loader2 className="w-6 h-6 text-[#C9A646] animate-spin" /> : <FileText className="w-6 h-6 text-[#C9A646]" />}</div><h3 className="text-lg font-bold text-white mb-2">Latest Report</h3><p className="text-[#C9A646]/60 text-sm">View today's intel</p></button>
-          <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="p-6 rounded-2xl bg-[#12100c] border border-[#C9A646]/20 hover:border-purple-500/50 transition-all"><div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4"><Headphones className="w-6 h-6 text-purple-400" /></div><h3 className="text-lg font-bold text-white mb-2">Trading Room</h3><p className="text-[#C9A646]/60 text-sm">Live analysis</p></a>
+      )}
+
+      {/* Hero Section with Bull */}
+      <div className="relative">
+        {/* Particle Background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {Array.from({ length: 60 }, (_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full"
+              style={{
+                left: `${Math.random() * 100}%`,
+                bottom: '-10px',
+                width: `${Math.random() * 3 + 1}px`,
+                height: `${Math.random() * 3 + 1}px`,
+                background: Math.random() > 0.5 
+                  ? `rgba(255, ${140 + Math.random() * 60}, ${20 + Math.random() * 40}, 1)`
+                  : `rgba(${200 + Math.random() * 55}, ${160 + Math.random() * 50}, ${50 + Math.random() * 30}, 1)`,
+                boxShadow: `0 0 ${Math.random() * 6 + 2}px currentColor`,
+                animation: `particle-rise ${Math.random() * 10 + 6}s linear infinite`,
+                animationDelay: `${Math.random() * 10}s`,
+                opacity: Math.random() * 0.5 + 0.2,
+              }}
+            />
+          ))}
         </div>
-        <div className="rounded-2xl bg-[#12100c] border border-[#C9A646]/20 overflow-hidden">
-          <div className="px-6 py-4 border-b border-[#C9A646]/10 flex items-center justify-between"><div className="flex items-center gap-3"><CreditCard className="w-5 h-5 text-[#C9A646]/60" /><h3 className="text-white font-bold">Subscription</h3></div><span className={cn("px-4 py-1.5 rounded-full text-xs font-bold", newsletterStatus.is_in_trial ? "bg-[#C9A646]/10 text-[#C9A646]" : "bg-green-500/10 text-green-400")}>{newsletterStatus.is_in_trial ? 'FREE TRIAL' : 'ACTIVE'}</span></div>
-          <div className="p-6"><div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6"><div><p className="text-[#C9A646]/50 text-sm mb-1">Plan</p><p className="text-white font-semibold">War Zone</p></div><div><p className="text-[#C9A646]/50 text-sm mb-1">Price</p><p className="text-white font-semibold">{newsletterStatus.is_in_trial ? '$0 (Trial)' : '$49/mo'}</p></div></div>{!newsletterStatus.newsletter_cancel_at_period_end && <button onClick={onCancelClick} className="text-[#C9A646]/40 hover:text-red-400 text-sm flex items-center gap-2"><XCircle className="w-4 h-4" /> Cancel</button>}</div>
+
+        {/* Content */}
+        <div className="relative z-10 max-w-6xl mx-auto px-6 pt-12 pb-8">
+          {/* Header with Bull */}
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8 mb-12">
+ {/* Left: Text Content - Institutional Research Style */}
+<div className="text-center lg:text-left">
+  {/* Welcome to the - white italic */}
+<p className="heading-bold text-3xl md:text-4xl lg:text-5xl text-white mb-2">
+    Welcome to the
+  </p>
+  
+  {/* WAR ZONE - gold, larger and bolder */}
+  <h1 className="heading-bold text-5xl md:text-6xl lg:text-7xl mb-8" style={{ color: '#C9A646' }}>
+    WAR ZONE
+  </h1>
+  
+  {/* Subtitle - smaller, muted */}
+  <p className="text-[#9A9080] text-base md:text-lg leading-relaxed max-w-md">
+    The same market intelligence that hedge funds pay
+    <span className="text-[#C9A646] font-medium"> $2,000+/month </span>
+    for — now available for serious traders who want an edge.
+  </p>
+</div>
+
+
+{/* Right: Bull Image - clean without fire effects */}
+<div className="relative flex-shrink-0 -mr-16 lg:-mr-24">
+{/* Bull container - fades into background on all edges */}
+<div
+  className="relative z-10 overflow-hidden"
+  style={{
+    maskImage: 'radial-gradient(ellipse 70% 80% at 50% 50%, black 30%, transparent 70%)',
+    WebkitMaskImage: 'radial-gradient(ellipse 70% 80% at 50% 50%, black 30%, transparent 70%)',
+  }}
+>
+  <img 
+    src={BullWarZone} 
+    alt="War Zone Bull" 
+    className="w-[500px] md:w-[600px] lg:w-[700px] h-auto"
+    style={{ 
+      filter: 'drop-shadow(0 0 80px rgba(255,130,30,0.8)) drop-shadow(0 0 40px rgba(255,100,20,0.6))',
+      mixBlendMode: 'lighten',
+      marginTop: '-22%',
+      marginBottom: '-45%',
+    }}
+  />
+</div>
+</div>
+          </div>
+
+          {/* Reports Section */}
+          <div className="mb-8">
+            {/* Section Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-8">
+                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Daily Reports</h3>
+                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Latest Weekly Report</h3>
+              </div>
+              
+              {/* Auto Intel Update Countdown */}
+              <div className="flex items-center gap-2 text-[#C9A646]/70 text-sm">
+                <RefreshCw className="w-4 h-4 glow-pulse" />
+                <span>Auto Intel Update in </span>
+                <span className="text-[#C9A646] font-mono font-semibold">
+                  {String(countdown.hours).padStart(2, '0')}:{String(countdown.minutes).padStart(2, '0')}:{String(countdown.seconds).padStart(2, '0')}
+                </span>
+              </div>
+            </div>
+
+            {/* Report Cards Grid - 3 COLUMNS */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* LEFT CARD: Previous Trading Day */}
+              <button
+  onClick={() => previousDayReport && handleReportClick(previousDayReport, 'daily')}
+                disabled={isLoadingReports || !previousDayReport}
+                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ 
+                        background: 'rgba(201,166,70,0.15)',
+                        border: '1px solid rgba(201,166,70,0.3)'
+                      }}
+                    >
+                      {isLoadingReports ? (
+                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+                      ) : (
+                        <FileText className="w-5 h-5 text-[#C9A646]" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold">
+                        {isLoadingReports 
+                          ? 'Loading...' 
+                          : previousDayReport 
+                            ? formatReportDate(previousDayReport.report_date)
+                            : 'No report available'
+                        }
+                      </p>
+                      <p className="text-[#C9A646]/50 text-xs">Previous Trading Day</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
+                </div>
+                <div 
+                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+                />
+              </button>
+
+              {/* MIDDLE CARD: Current Trading Day */}
+              <button
+  onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
+                disabled={isLoadingReports || !currentDayReport}
+                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ 
+                        background: 'rgba(201,166,70,0.15)',
+                        border: '1px solid rgba(201,166,70,0.3)'
+                      }}
+                    >
+                      {isLoadingReports ? (
+                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+                      ) : (
+                        <FileText className="w-5 h-5 text-[#C9A646]" />
+                      )}
+                    </div>
+<div>
+  <p className="text-white font-semibold">
+    {isLoadingReports 
+      ? 'Loading...' 
+      : currentDayReport 
+        ? formatReportDate(currentDayReport.report_date)
+        : 'No report available'
+    }
+  </p>
+  <p className="text-[#C9A646]/50 text-xs">
+    {currentDayReport 
+      ? `Published at ${formatReportTime(currentDayReport.created_at)} ET`
+      : "Today's Report"
+    }
+  </p>
+</div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
+                </div>
+                <div 
+                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+                />
+              </button>
+
+              {/* RIGHT CARD: Weekly Report */}
+              <button
+  onClick={() => weeklyReport && handleReportClick(weeklyReport, 'weekly')}
+                disabled={isLoadingReports || !weeklyReport}
+                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ 
+                        background: 'rgba(201,166,70,0.15)',
+                        border: '1px solid rgba(201,166,70,0.3)'
+                      }}
+                    >
+                      {isLoadingReports ? (
+                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+                      ) : (
+                        <Calendar className="w-5 h-5 text-[#C9A646]" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[#C9A646] font-semibold italic">
+                        {isLoadingReports 
+                          ? 'Loading...' 
+                          : weeklyReport 
+                            ? `Released ${new Date(weeklyReport.report_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+                            : 'No report available'
+                        }
+                      </p>
+                      <p className="text-[#C9A646]/50 text-xs">Weekly Review</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
+                </div>
+                <div 
+                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Intel Message */}
+          <p className="text-center text-[#C9A646]/60 text-lg heading-font italic mb-10">
+            Stay sharp. stay informed. Here's your intel for today.
+          </p>
+
+          {/* Bottom Cards: Discord, Subscription, Trading Room */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Discord Community */}
+            <a 
+              href={DISCORD_INVITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02]"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                border: '1px solid rgba(201,166,70,0.25)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+              }}
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ 
+                    background: 'rgba(88,101,242,0.15)',
+                    border: '1px solid rgba(88,101,242,0.3)'
+                  }}
+                >
+                  <DiscordIcon className="w-6 h-6 text-[#5865F2]" />
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-lg">Discord Community</h4>
+                  <p className="text-[#C9A646]/50 text-sm">Join 847+ active traders</p>
+                </div>
+              </div>
+              <button 
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+                style={{ 
+                  background: 'rgba(88,101,242,0.15)',
+                  border: '1px solid rgba(88,101,242,0.4)',
+                  color: '#5865F2'
+                }}
+              >
+                Join Now
+              </button>
+            </a>
+
+            {/* Subscription Status */}
+            <div
+              className="p-6 rounded-2xl"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                border: '1px solid rgba(201,166,70,0.25)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+              }}
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ 
+                    background: 'rgba(201,166,70,0.15)',
+                    border: '1px solid rgba(201,166,70,0.3)'
+                  }}
+                >
+                  <Crown className="w-6 h-6 text-[#C9A646]" />
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-lg">Subscription</h4>
+                  <p className="text-[#C9A646]/50 text-sm">
+                    {newsletterStatus.is_in_trial ? '$0 (Trial)' : '$49/mo'}
+                  </p>
+                </div>
+              </div>
+              
+              {newsletterStatus.newsletter_cancel_at_period_end ? (
+                <div className="w-full py-3 rounded-xl font-semibold text-sm text-center bg-red-500/10 border border-red-500/30 text-red-400">
+                  Cancels at period end
+                </div>
+              ) : (
+                <button 
+                  onClick={onCancelClick}
+                  className="w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
+                  style={{ 
+                    background: 'rgba(201,166,70,0.1)',
+                    border: '1px solid rgba(201,166,70,0.3)',
+                    color: '#C9A646'
+                  }}
+                >
+                  {newsletterStatus.is_in_trial ? 'FREE TRIAL' : 'ACTIVE'}
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Trading Room */}
+            <a
+              href={DISCORD_INVITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02]"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+                border: '1px solid rgba(201,166,70,0.25)',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+              }}
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div 
+                  className="w-12 h-12 rounded-xl flex items-center justify-center"
+                  style={{ 
+                    background: 'rgba(168,85,247,0.15)',
+                    border: '1px solid rgba(168,85,247,0.3)'
+                  }}
+                >
+                  <Headphones className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <h4 className="text-white font-bold text-lg">Trading Room</h4>
+                  <p className="text-[#C9A646]/50 text-sm">Live market analysis now</p>
+                </div>
+              </div>
+              <button 
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+                style={{ 
+                  background: 'rgba(168,85,247,0.15)',
+                  border: '1px solid rgba(168,85,247,0.4)',
+                  color: '#A855F7'
+                }}
+              >
+                Join Now
+              </button>
+            </a>
+          </div>
         </div>
+
+ {/* Bottom fire glow effect */}
+        <div 
+          className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none"
+          style={{ 
+            background: 'linear-gradient(180deg, transparent 0%, rgba(201,166,70,0.05) 50%, rgba(255,140,30,0.1) 100%)'
+          }}
+        />
       </div>
+
+      {/* CSS Animation for slideDown */}
+      <style>{`
+        @keyframes slideDown {
+          from {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 };
@@ -974,6 +1683,8 @@ const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showReportViewer, setShowReportViewer] = useState(false);
   const [currentReport, setCurrentReport] = useState<NewsletterReport | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
+
+  
 
 const checkSubscriptionStatus = useCallback(async () => {
     if (!user?.id) { setIsLoading(false); return; }
@@ -1077,15 +1788,14 @@ const faqs = [
   { q: "Can I cancel anytime?", a: "One click, no questions. We'd rather you cancel than stay confused." }
 ];
   if (isLoading) return <div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>;
-  if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} /><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ReportViewerModal isOpen={showReportViewer} onClose={() => setShowReportViewer(false)} report={currentReport} isLoading={isLoadingReport} error={reportError} onRefresh={fetchLatestReport} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} onViewReport={handleViewReport} isLoadingReport={isLoadingReport} /></>);
-
+if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} /><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);
   // ====================================
   // LANDING PAGE - EXACT DESIGN MATCH
   // ====================================
   return (
     <div className="min-h-screen bg-[#0a0806] overflow-hidden relative">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600;1,700;1,800&family=DM+Serif+Display:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap');
         @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
         @keyframes particle-rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 0.7; } 80% { opacity: 0.5; } 100% { transform: translateY(-85vh) scale(0.3); opacity: 0; } }
         @keyframes sparkle { 0%, 100% { opacity: 0; transform: scale(0); } 50% { opacity: 1; transform: scale(1); } }
@@ -1095,8 +1805,8 @@ const faqs = [
           50% { transform: translate(3px, -3px); opacity: 0.35; } 
         }
         .animate-float { animation: float 4s ease-in-out infinite; }
-        .heading-font { font-family: 'EB Garamond', Georgia, 'Times New Roman', serif; font-weight: 400; }
-        .heading-bold { font-family: 'DM Serif Display', Georgia, serif; font-weight: 400; }
+.heading-font { font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif; font-weight: 400; }
+.heading-bold { font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif; font-weight: 700; }
         .stats-font { font-family: 'EB Garamond', Georgia, 'Times New Roman', serif; font-weight: 400; font-style: italic; }
         .text-cream { color: #E8DCC4; }
         .text-gold { color: #E9A931; }
@@ -1328,21 +2038,31 @@ const faqs = [
       {/* ============ BEFORE/AFTER SECTION ============ */}
       <section className="relative py-20 px-6 overflow-hidden bg-[#0a0806]">
         <div className="max-w-5xl mx-auto relative z-10">
-          {/* Title Section - BIGGER AND BOLDER */}
-          <div className="text-center mb-14">
-            <h2 className="heading-font text-3xl md:text-4xl lg:text-[2.8rem] leading-tight mb-1 text-cream">
-              You're Not Losing Because You're Bad at
-            </h2>
-            <h2 className="heading-font text-3xl md:text-4xl lg:text-[2.8rem] leading-tight mb-4 text-cream">
-              Trading.
-            </h2>
-            <h2 className="heading-bold text-4xl md:text-5xl lg:text-[3.5rem] leading-tight text-white font-black tracking-tight" style={{ textShadow: '0 0 40px rgba(255,255,255,0.15)' }}>
-              You're Losing Because You're Late.
-            </h2>
-            <p className="text-[#C9A646]/70 text-base md:text-lg mt-8 max-w-2xl mx-auto leading-relaxed">
-              Fragmented information. Delayed insights. No context. It's costing you money every month — even when you "do nothing."
-            </p>
-          </div>
+       {/* Title Section - INSTITUTIONAL RESEARCH STYLE */}
+<div className="text-center mb-14">
+  <h2 
+    className="text-3xl md:text-4xl lg:text-[2.8rem] leading-[1.1] mb-2 italic"
+    style={{ fontFamily: "Georgia, 'Times New Roman', serif", color: '#E8DCC4' }}
+  >
+    Welcome to the
+  </h2>
+  <h2 
+    className="text-5xl md:text-6xl lg:text-[5rem] leading-[1.1] mb-6 italic"
+    style={{ 
+      fontFamily: "Georgia, 'Times New Roman', serif",
+      fontWeight: 700,
+      color: '#C9A646',
+      letterSpacing: '0.01em'
+    }}
+  >
+    WAR ZONE
+  </h2>
+  <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ fontFamily: "Georgia, serif", color: '#9A9080' }}>
+    The same market intelligence that hedge funds pay{' '}
+    <span style={{ color: '#C9A646', fontWeight: 600 }}>$2,000+/month</span>{' '}
+    for — now available for serious traders who want an edge.
+  </p>
+</div>
 
           {/* Before/After Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

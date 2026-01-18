@@ -1170,7 +1170,7 @@ BEGIN
   END IF;
   
   -- Determine if lifetime limit (FREE users only)
-  v_is_lifetime := (v_profile.account_type = 'free');
+ v_is_lifetime := FALSE;
   
   -- Calculate reset date (only for non-FREE users)
   IF NOT v_is_lifetime THEN

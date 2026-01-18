@@ -1,13 +1,13 @@
 // =====================================================
-// FINOTAUR NEWSLETTER ADMIN PANEL - v5.4.1
+// FINOTAUR NEWSLETTER ADMIN PANEL - v5.5.0
 // =====================================================
 // Place in: src/pages/app/journal/admin/NewsletterSub.tsx
 //
-// 🔥 v5.4.1 CHANGES:
-// - FIXED: PDF Download button now ALWAYS visible when preview exists
-// - REMOVED: hasPdf condition from PDF button display
-// - PDF button shows regardless of hasPdf state
-// - Previous: Real-time workflow progress tracking
+// 🔥 v5.5.0 CHANGES:
+// - REMOVED: Newsletter Recipients Settings Section
+// - REMOVED: Send Daily Intelligence Section
+// - REMOVED: Admin Note, Test Email, Manual Send functionality
+// - KEPT: Stats, Last Sent, Report Generation, Users Table
 // =====================================================
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -17,7 +17,6 @@ import {
   Mail,
   Users,
   Search,
-  Send,
   CheckCircle,
   RefreshCw,
   ChevronLeft,
@@ -27,16 +26,12 @@ import {
   Crown,
   Loader2,
   AlertCircle,
-  CheckSquare,
-  Square,
   Eye,
   Maximize2,
   Bot,
   Clock,
   XCircle,
   Star,
-  Lock,
-  MessageSquare,
   Calendar,
   History,
   Shield,
@@ -45,10 +40,10 @@ import {
   Copy,
   Check,
   Download,
-  Settings,
-  Info,
   Activity,
-  FileDown,
+FileDown,
+  Send,
+  Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -114,28 +109,6 @@ interface LastSentInfo {
   subject: string;
   segments: string[];
   admin_note?: string;
-}
-
-interface NewsletterConfig {
-  config_key: string;
-  config_value: {
-    enabled?: boolean;
-    days?: string[];
-    hour?: number;
-    minute?: number;
-    timezone?: string;
-  };
-  description: string;
-  updated_at: string;
-}
-
-interface InclusionStatus {
-  premium_included: boolean;
-  basic_included: boolean;
-  total_recipients: number;
-  newsletter_subscribers: number;
-  premium_recipients: number;
-  basic_recipients: number;
 }
 
 interface WorkflowProgress {
@@ -222,7 +195,7 @@ const formatTimeAgo = (dateString: string): string => {
 };
 
 // ============================================
-// v5.4.0: DOWNLOAD PDF FUNCTION
+// DOWNLOAD PDF FUNCTION
 // ============================================
 const downloadPDF = async (): Promise<boolean> => {
   try {
@@ -489,208 +462,7 @@ const GenerationTimeDisplay: React.FC<{ generatedAt: string }> = ({ generatedAt 
 };
 
 // ============================================
-// NEWSLETTER SETTINGS SECTION
-// ============================================
-const NewsletterSettingsSection: React.FC<{
-  config: NewsletterConfig[] | undefined;
-  inclusionStatus: InclusionStatus | undefined;
-  isLoading: boolean;
-  onToggle: (key: string, enabled: boolean) => void;
-  isUpdating: boolean;
-}> = ({ config, inclusionStatus, isLoading, onToggle, isUpdating }) => {
-  
-  const getConfigValue = (key: string): boolean => {
-    const item = config?.find(c => c.config_key === key);
-    return item?.config_value?.enabled ?? false;
-  };
-
-  const premiumEnabled = getConfigValue('premium_included');
-  const basicEnabled = getConfigValue('basic_included');
-
-  if (isLoading) {
-    return (
-      <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 p-6">
-        <div className="flex items-center gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-500" />
-          <span className="text-gray-500">Loading settings...</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-800/50 bg-[#080812] flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20">
-            <Settings className="w-5 h-5 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-white">Newsletter Recipients</h2>
-            <p className="text-xs text-gray-500">Control who receives the newsletter</p>
-          </div>
-        </div>
-        
-        {inclusionStatus && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#C9A646]/10 border border-[#C9A646]/20">
-            <Users className="w-4 h-4 text-[#C9A646]" />
-            <span className="text-sm font-medium text-[#C9A646]">
-              {inclusionStatus.total_recipients} Total Recipients
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="p-5 space-y-4">
-        <div className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-          <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-300">
-            <p className="font-medium mb-1">Automatic Newsletter Distribution</p>
-            <p className="text-blue-400/80">
-              Newsletter subscribers (paid + trial) always receive the newsletter. 
-              Enable the options below to also include journal plan users as a perk.
-            </p>
-          </div>
-        </div>
-
-        {inclusionStatus && (
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <span className="text-xs text-gray-500">Newsletter Subs</span>
-              </div>
-              <p className="text-2xl font-bold text-red-400">
-                {inclusionStatus.newsletter_subscribers}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">Always included</p>
-            </div>
-            
-            <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${premiumEnabled ? 'bg-[#C9A646]' : 'bg-gray-600'}`}></div>
-                <span className="text-xs text-gray-500">Premium Users</span>
-              </div>
-              <p className={`text-2xl font-bold ${premiumEnabled ? 'text-[#C9A646]' : 'text-gray-600'}`}>
-                {premiumEnabled ? inclusionStatus.premium_recipients : 0}
-                {!premiumEnabled && inclusionStatus.premium_recipients > 0 && (
-                  <span className="text-sm font-normal text-gray-600 ml-1">
-                    ({inclusionStatus.premium_recipients} available)
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                {premiumEnabled ? 'Included as perk' : 'Not included'}
-              </p>
-            </div>
-            
-            <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-2 h-2 rounded-full ${basicEnabled ? 'bg-cyan-500' : 'bg-gray-600'}`}></div>
-                <span className="text-xs text-gray-500">Basic Users</span>
-              </div>
-              <p className={`text-2xl font-bold ${basicEnabled ? 'text-cyan-400' : 'text-gray-600'}`}>
-                {basicEnabled ? inclusionStatus.basic_recipients : 0}
-                {!basicEnabled && inclusionStatus.basic_recipients > 0 && (
-                  <span className="text-sm font-normal text-gray-600 ml-1">
-                    ({inclusionStatus.basic_recipients} available)
-                  </span>
-                )}
-              </p>
-              <p className="text-xs text-gray-600 mt-1">
-                {basicEnabled ? 'Included as perk' : 'Not included'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <div className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-            premiumEnabled 
-              ? 'bg-[#C9A646]/10 border-[#C9A646]/30' 
-              : 'bg-[#080812] border-gray-800/50 hover:border-gray-700'
-          }`}>
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${premiumEnabled ? 'bg-[#C9A646]/20' : 'bg-gray-800'}`}>
-                <Crown className={`w-5 h-5 ${premiumEnabled ? 'text-[#C9A646]' : 'text-gray-500'}`} />
-              </div>
-              <div>
-                <p className={`font-medium ${premiumEnabled ? 'text-white' : 'text-gray-400'}`}>
-                  Include Premium Users
-                </p>
-                <p className="text-xs text-gray-500">
-                  Premium journal subscribers receive newsletter as a free perk
-                </p>
-              </div>
-            </div>
-            
-            <button
-              onClick={() => onToggle('premium_included', !premiumEnabled)}
-              disabled={isUpdating}
-              className={`relative w-14 h-7 rounded-full transition-all ${
-                premiumEnabled ? 'bg-[#C9A646]' : 'bg-gray-700'
-              } ${isUpdating ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
-                premiumEnabled ? 'translate-x-8' : 'translate-x-1'
-              }`} />
-            </button>
-          </div>
-
-          <div className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-            basicEnabled 
-              ? 'bg-cyan-500/10 border-cyan-500/30' 
-              : 'bg-[#080812] border-gray-800/50 hover:border-gray-700'
-          }`}>
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${basicEnabled ? 'bg-cyan-500/20' : 'bg-gray-800'}`}>
-                <Star className={`w-5 h-5 ${basicEnabled ? 'text-cyan-400' : 'text-gray-500'}`} />
-              </div>
-              <div>
-                <p className={`font-medium ${basicEnabled ? 'text-white' : 'text-gray-400'}`}>
-                  Include Basic Users
-                </p>
-                <p className="text-xs text-gray-500">
-                  Basic journal subscribers receive newsletter as a free perk
-                </p>
-              </div>
-            </div>
-            
-            <button
-              onClick={() => onToggle('basic_included', !basicEnabled)}
-              disabled={isUpdating}
-              className={`relative w-14 h-7 rounded-full transition-all ${
-                basicEnabled ? 'bg-cyan-500' : 'bg-gray-700'
-              } ${isUpdating ? 'opacity-50' : ''}`}
-            >
-              <div className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
-                basicEnabled ? 'translate-x-8' : 'translate-x-1'
-              }`} />
-            </button>
-          </div>
-        </div>
-
-        {(premiumEnabled || basicEnabled) && (
-          <div className="flex items-start gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-            <Zap className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-emerald-300">
-              {premiumEnabled && basicEnabled ? (
-                <>All Premium and Basic users will receive the newsletter!</>
-              ) : premiumEnabled ? (
-                <>All Premium users will receive the newsletter!</>
-              ) : (
-                <>All Basic users will receive the newsletter!</>
-              )}
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// FULL REPORT VIEWER MODAL (v5.4.1 - with PDF download always visible)
+// FULL REPORT VIEWER MODAL
 // ============================================
 const ReportViewerModal: React.FC<{
   report: string;
@@ -845,7 +617,6 @@ const ReportViewerModal: React.FC<{
               )}
             </button>
             
-            {/* v5.4.1: PDF Download Button - ALWAYS VISIBLE */}
             <button
               onClick={handleDownloadPdf}
               disabled={isDownloadingPdf}
@@ -1008,155 +779,6 @@ const LastSentStatus: React.FC<{ lastSent: LastSentInfo | null; isLoading: boole
               <span className="text-white font-medium">{lastSent.recipient_count}</span> recipients
             </span>
           </div>
-          
-          {lastSent.admin_note && (
-            <div className="flex items-center gap-1.5">
-              <MessageSquare className="w-3.5 h-3.5 text-orange-400" />
-              <span className="text-xs text-orange-400">Includes note</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================
-// PREVIEW MODAL COMPONENT
-// ============================================
-const PreviewModal: React.FC<{
-  preview: PreviewData;
-  onClose: () => void;
-  onSend: () => void;
-  isSending: boolean;
-  recipientCount: number;
-  processorInfo: ProcessorInfo | null;
-  adminNote: string;
-}> = ({ preview, onClose, onSend, isSending, recipientCount, processorInfo, adminNote }) => {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      
-      <div className={`relative bg-[#0d0d18] border border-gray-800 rounded-2xl shadow-2xl flex flex-col transition-all duration-300 ${
-        isFullscreen ? 'w-[95vw] h-[95vh]' : 'w-[90vw] max-w-4xl h-[85vh]'
-      }`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#080812] rounded-t-2xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-500/10">
-              <Eye className="w-5 h-5 text-red-500" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">Email Preview</h2>
-              <GenerationTimeDisplay generatedAt={preview.generatedAt} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {processorInfo && (
-              <div className="flex items-center gap-2 mr-2">
-                <div className="px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-[#C9A646]/20 text-[#C9A646] border border-[#C9A646]/30">
-                  <Bot className="w-3 h-3" />
-                  <span>{processorInfo.agentCount} Agents</span>
-                </div>
-                {processorInfo.qaScore && (
-                  <QAScoreBadge score={processorInfo.qaScore} passed={processorInfo.qaPassed} />
-                )}
-              </div>
-            )}
-            <button
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
-            >
-              <Maximize2 className="w-5 h-5 text-gray-400" />
-            </button>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-800 transition-colors">
-              <X className="w-5 h-5 text-gray-400" />
-            </button>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-b border-gray-800/50 bg-[#0a0a14]">
-          <div className="flex items-start gap-4">
-            <div className="flex-1">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Subject</p>
-              <p className="text-white font-medium text-lg">{preview.subject}</p>
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Preheader</p>
-              <p className="text-gray-400">{preview.preheader}</p>
-            </div>
-          </div>
-        </div>
-
-        {adminNote && (
-          <div className="px-6 py-3 bg-orange-500/10 border-b border-orange-500/20">
-            <div className="flex items-start gap-2">
-              <MessageSquare className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs text-orange-400 font-medium mb-0.5">Admin note will be included:</p>
-                <p className="text-sm text-orange-200">{adminNote}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-hidden p-4">
-          <div className="w-full h-full bg-gray-100 rounded-xl overflow-hidden shadow-inner">
-            <iframe
-              srcDoc={preview.html}
-              title="Newsletter Preview"
-              className="w-full h-full border-0"
-              sandbox="allow-same-origin"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800 bg-[#080812] rounded-b-2xl">
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500">
-              <span className="text-white font-medium">{preview.sections.length}</span> sections
-            </div>
-            <div className="w-px h-4 bg-gray-700" />
-            <div className="text-sm text-gray-500">
-              Recipients: <span className="text-red-400 font-medium">{recipientCount}</span>
-            </div>
-            <div className="w-px h-4 bg-gray-700" />
-            <div className="text-sm text-red-400 flex items-center gap-1">
-              <FileDown className="w-3.5 h-3.5" />
-              PDF Attached
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors"
-            >
-              Close
-            </button>
-            <button
-              onClick={onSend}
-              disabled={isSending || recipientCount === 0}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-white font-semibold flex items-center gap-2"
-            >
-              {isSending ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Sending...</>
-              ) : (
-                <><Send className="w-4 h-4" />Send to {recipientCount}</>
-              )}
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1241,20 +863,16 @@ const NewsletterSub: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'trial' | 'cancelled' | 'inactive'>('all');
   const [page, setPage] = useState(1);
-  const [useCustomSelection, setUseCustomSelection] = useState(false);
-  const [customSelectedIds, setCustomSelectedIds] = useState<Set<string>>(new Set());
-  const [isSending, setIsSending] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [preview, setPreview] = useState<PreviewData | null>(null);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showReportViewer, setShowReportViewer] = useState(false);
   const [fullReport, setFullReport] = useState<string>('');
-  const [testEmail, setTestEmail] = useState('');
   const [processorInfo, setProcessorInfo] = useState<ProcessorInfo | null>(null);
-  const [adminNote, setAdminNote] = useState('');
-  const [isUpdatingConfig, setIsUpdatingConfig] = useState(false);
   const [hasPdf, setHasPdf] = useState(false);
-  const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null>(null);
+const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [lastPublishedDate, setLastPublishedDate] = useState<string | null>(null);
   
   const pageSize = 15;
 
@@ -1337,61 +955,6 @@ const NewsletterSub: React.FC = () => {
     },
   });
 
-  // Fetch newsletter config from DB
-  const { data: newsletterConfig, isLoading: configLoading, refetch: refetchConfig } = useQuery({
-    queryKey: ['newsletter-config'],
-    queryFn: async (): Promise<NewsletterConfig[]> => {
-      const { data, error } = await supabase.rpc('get_newsletter_config');
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Fetch inclusion status from DB
-  const { data: inclusionStatus, refetch: refetchInclusion } = useQuery({
-    queryKey: ['newsletter-inclusion-status'],
-    queryFn: async (): Promise<InclusionStatus> => {
-      const { data, error } = await supabase.rpc('get_newsletter_inclusion_status');
-      if (error) throw error;
-      const row = data?.[0] || {};
-      return {
-        premium_included: row.premium_included || false,
-        basic_included: row.basic_included || false,
-        total_recipients: Number(row.total_recipients) || 0,
-        newsletter_subscribers: Number(row.newsletter_subscribers) || 0,
-        premium_recipients: Number(row.premium_recipients) || 0,
-        basic_recipients: Number(row.basic_recipients) || 0,
-      };
-    },
-  });
-
-  // Toggle config mutation
-  const handleToggleConfig = async (key: string, enabled: boolean) => {
-    setIsUpdatingConfig(true);
-    try {
-      const { error } = await supabase.rpc('toggle_newsletter_config', {
-        p_config_key: key,
-        p_enabled: enabled,
-      });
-      
-      if (error) throw error;
-      
-      toast.success(
-        enabled 
-          ? `${key === 'premium_included' ? 'Premium' : 'Basic'} users will now receive newsletters`
-          : `${key === 'premium_included' ? 'Premium' : 'Basic'} users removed from newsletter`
-      );
-      
-      await Promise.all([refetchConfig(), refetchInclusion()]);
-      
-    } catch (err) {
-      console.error('Toggle config error:', err);
-      toast.error('Failed to update setting');
-    } finally {
-      setIsUpdatingConfig(false);
-    }
-  };
-
   // Fetch users
   const { data: allUsers, isLoading: usersLoading, refetch, error: usersError } = useQuery({
     queryKey: ['newsletter-users'],
@@ -1414,49 +977,6 @@ const NewsletterSub: React.FC = () => {
   });
 
   const userList = useMemo(() => allUsers || [], [allUsers]);
-
-  // Calculate eligible recipients
-  const eligibleRecipients = useMemo(() => {
-    const premiumIncluded = inclusionStatus?.premium_included ?? false;
-    const basicIncluded = inclusionStatus?.basic_included ?? false;
-    
-    return userList.filter(user => {
-      if (user.newsletter_status === 'active' || user.newsletter_status === 'trial') {
-        return true;
-      }
-      if (user.account_type === 'premium' && premiumIncluded) {
-        return true;
-      }
-      if (user.account_type === 'basic' && basicIncluded) {
-        return true;
-      }
-      return false;
-    });
-  }, [userList, inclusionStatus]);
-
-  // Get IDs for sending
-  const recipientIds = useMemo(() => {
-    if (useCustomSelection && customSelectedIds.size > 0) {
-      return Array.from(customSelectedIds);
-    }
-    return eligibleRecipients.map(u => u.id);
-  }, [useCustomSelection, customSelectedIds, eligibleRecipients]);
-
-  const toggleUserSelection = (userId: string) => {
-    setUseCustomSelection(true);
-    const newSelection = new Set(customSelectedIds);
-    if (newSelection.has(userId)) {
-      newSelection.delete(userId);
-    } else {
-      newSelection.add(userId);
-    }
-    setCustomSelectedIds(newSelection);
-  };
-
-  const clearCustomSelection = () => {
-    setUseCustomSelection(false);
-    setCustomSelectedIds(new Set());
-  };
 
   const filteredUsers = useMemo(() => {
     let users = userList;
@@ -1490,7 +1010,6 @@ const NewsletterSub: React.FC = () => {
     onSuccess: () => {
       refetch();
       queryClient.invalidateQueries({ queryKey: ['newsletter-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['newsletter-inclusion-status'] });
       toast.success('Updated successfully');
     },
     onError: () => {
@@ -1527,7 +1046,7 @@ const NewsletterSub: React.FC = () => {
           
           if (reportData.success && reportData.data) {
             setPreview(reportData.data);
-            setHasPdf(true); // Always set to true when report is ready
+            setHasPdf(true);
             localStorage.setItem('newsletter_preview', JSON.stringify(reportData.data));
             localStorage.setItem('newsletter_has_pdf', 'true');
             
@@ -1666,7 +1185,7 @@ const NewsletterSub: React.FC = () => {
     }
   };
 
-  const clearPreview = () => {
+const clearPreview = () => {
     setPreview(null);
     setFullReport('');
     setProcessorInfo(null);
@@ -1677,75 +1196,79 @@ const NewsletterSub: React.FC = () => {
     localStorage.removeItem('newsletter_has_pdf');
   };
 
-  const sendTestEmail = async () => {
-    if (!testEmail || !testEmail.includes('@')) {
-      toast.error('Enter a valid email');
+  // ============================================
+  // PUBLISH DAILY REPORT FUNCTION
+  // ============================================
+  const publishDailyReport = async () => {
+    if (!preview || !fullReport) {
+      toast.error('No report to publish. Generate a report first.');
       return;
     }
+
+    setIsPublishing(true);
     
     try {
-      toast.info('Generating report and sending test...', { duration: 10000 });
+      // Get today's date in YYYY-MM-DD format (NY timezone)
+      const nyDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const reportId = `daily-${nyDate}`;
       
-      const res = await fetch(`${API_BASE}/api/newsletter/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email: testEmail,
-          adminNote: adminNote || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`Test sent to ${testEmail}${data.hasPdf ? ' with PDF' : ''}`);
-        setTestEmail('');
-      } else {
-        toast.error(data.error || 'Failed to send');
+      // Prepare the report data
+      const reportData = {
+        id: reportId,
+        report_date: nyDate,
+        report_title: preview.subject || 'Daily Intelligence Report',
+        markdown_content: fullReport,
+        html_content: preview.html,
+        sections: preview.sections ? JSON.stringify(preview.sections) : null,
+        qa_score: processorInfo?.qaScore || 0,
+        status: 'completed',
+        pdf_url: `/api/newsletter/pdf`,
+      };
+
+      // Upsert to daily_reports table
+      const { error } = await supabase
+        .from('daily_reports')
+        .upsert(reportData, { 
+          onConflict: 'report_date',
+          ignoreDuplicates: false 
+        });
+
+      if (error) {
+        console.error('Publish error:', error);
+        throw new Error(error.message);
       }
-    } catch {
-      toast.error('Failed to send');
-    }
-  };
 
-  const sendNewsletter = async () => {
-    if (recipientIds.length === 0) {
-      toast.error('No recipients selected');
-      return;
-    }
-
-    if (!preview) {
-      toast.error('Generate preview first');
-      return;
-    }
-
-    setIsSending(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/newsletter/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audienceType: 'custom',
-          recipientIds: recipientIds,
-          adminNote: adminNote || undefined,
-        }),
+      setLastPublishedDate(nyDate);
+      setShowPublishModal(false);
+      toast.success(`✅ Daily report published for ${nyDate}!`, {
+        description: 'War Zone subscribers can now see this report.',
+        duration: 5000,
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`Newsletter sent to ${data.data.sentCount} recipients!`);
-        queryClient.invalidateQueries({ queryKey: ['newsletter-stats'] });
-        queryClient.invalidateQueries({ queryKey: ['newsletter-last-sent'] });
-        clearPreview();
-        setAdminNote('');
-        setShowPreviewModal(false);
-        clearCustomSelection();
-      } else {
-        toast.error(data.error || 'Failed to send');
-      }
-    } catch {
-      toast.error('Failed to send');
+
+    } catch (err: any) {
+      console.error('Publish error:', err);
+      toast.error(`Failed to publish: ${err.message}`);
     } finally {
-      setIsSending(false);
+      setIsPublishing(false);
     }
   };
+
+  // Check last published date on mount
+  useEffect(() => {
+    const checkLastPublished = async () => {
+      const { data } = await supabase
+        .from('daily_reports')
+        .select('report_date')
+        .order('report_date', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (data?.report_date) {
+        setLastPublishedDate(data.report_date);
+      }
+    };
+    checkLastPublished();
+  }, []);
 
   const getDisplayName = (user: NewsletterUser) => {
     return user.display_name || user.email.split('@')[0];
@@ -1757,15 +1280,108 @@ const NewsletterSub: React.FC = () => {
     return daysLeft > 0 ? `${daysLeft} days left` : 'Ending today';
   };
 
-  const isUserEligible = (user: NewsletterUser): boolean => {
-    return eligibleRecipients.some(r => r.id === user.id);
-  };
+// ============================================
+  // PUBLISH CONFIRMATION MODAL
+  // ============================================
+  const PublishModal = () => {
+    if (!showPublishModal) return null;
+    
+    const todayNY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    const isAlreadyPublished = lastPublishedDate === todayNY;
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div 
+          className="absolute inset-0 bg-black/90 backdrop-blur-sm"
+          onClick={() => setShowPublishModal(false)}
+        />
+        
+        <div className="relative bg-[#0a0a12] border border-[#C9A646]/30 rounded-2xl shadow-2xl max-w-md w-full mx-4">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/10 border border-green-500/30">
+                <Globe className="w-5 h-5 text-green-400" />
+              </div>
+              <h2 className="text-lg font-semibold text-white">Publish to War Zone</h2>
+            </div>
+            <button
+              onClick={() => setShowPublishModal(false)}
+              className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              <X className="w-5 h-5 text-gray-400" />
+            </button>
+          </div>
 
-  const isUserSelected = (userId: string) => {
-    if (useCustomSelection) {
-      return customSelectedIds.has(userId);
-    }
-    return eligibleRecipients.some(u => u.id === userId);
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            {/* Report Info */}
+            <div className="bg-[#0d0d18] rounded-xl p-4 border border-gray-800">
+              <div className="flex items-center gap-3 mb-3">
+                <FileText className="w-5 h-5 text-[#C9A646]" />
+                <span className="text-white font-medium">{preview?.subject || 'Daily Intelligence Report'}</span>
+              </div>
+              <div className="flex items-center gap-4 text-sm text-gray-400">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4" />
+                  {todayNY}
+                </span>
+                {processorInfo?.qaScore && (
+                  <span className="flex items-center gap-1.5">
+                    <Shield className="w-4 h-4 text-emerald-400" />
+                    QA: {processorInfo.qaScore}/100
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Warning if already published today */}
+            {isAlreadyPublished && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-yellow-400 font-medium text-sm">Already published today</p>
+                    <p className="text-yellow-400/70 text-xs mt-1">
+                      Publishing again will replace the existing report for {todayNY}.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Info */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+              <p className="text-blue-300 text-sm">
+                This will make the report visible to all <strong>War Zone</strong> subscribers immediately.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 px-6 py-4 border-t border-gray-800 bg-[#080812]">
+            <button
+              onClick={() => setShowPublishModal(false)}
+              className="flex-1 py-3 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 transition-colors font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={publishDailyReport}
+              disabled={isPublishing}
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              {isPublishing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+              {isPublishing ? 'Publishing...' : isAlreadyPublished ? 'Replace & Publish' : 'Publish Now'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (usersError) {
@@ -1791,7 +1407,10 @@ const NewsletterSub: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6 min-h-screen bg-[#080812]">
+<div className="p-6 space-y-6 min-h-screen bg-[#080812]">
+      {/* Publish Modal */}
+      <PublishModal />
+
       <style>{`
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
@@ -1802,19 +1421,7 @@ const NewsletterSub: React.FC = () => {
         }
       `}</style>
 
-      {/* Modals */}
-      {showPreviewModal && preview && (
-        <PreviewModal
-          preview={preview}
-          onClose={() => setShowPreviewModal(false)}
-          onSend={sendNewsletter}
-          isSending={isSending}
-          recipientCount={recipientIds.length}
-          processorInfo={processorInfo}
-          adminNote={adminNote}
-        />
-      )}
-
+      {/* Report Viewer Modal */}
       {showReportViewer && fullReport && preview && (
         <ReportViewerModal
           report={fullReport}
@@ -1835,8 +1442,16 @@ const NewsletterSub: React.FC = () => {
             </div>
             War Zone Newsletter
           </h1>
-          <p className="text-gray-600 mt-1 ml-14">Powered by 25 AI Agents (v29 - 6 Phase System)</p>
+<p className="text-gray-600 mt-1 ml-14">Powered by 25 AI Agents (v29 - 6 Phase System)</p>
           
+          {lastPublishedDate && (
+            <div className="mt-2 ml-14 flex items-center gap-2">
+              <div className="px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-green-500/20 text-green-400 border border-green-500/30">
+                <CheckCircle className="w-3 h-3" />
+                <span>Last published: {lastPublishedDate}</span>
+              </div>
+            </div>
+          )}          
           {processorInfo && (
             <div className="mt-2 ml-14 flex items-center gap-2 flex-wrap">
               <div className="px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-[#C9A646]/20 text-[#C9A646] border border-[#C9A646]/30">
@@ -1849,7 +1464,6 @@ const NewsletterSub: React.FC = () => {
               {processorInfo.qaScore && (
                 <QAScoreBadge score={processorInfo.qaScore} passed={processorInfo.qaPassed} />
               )}
-              {/* v5.4.1: Always show PDF Ready when preview exists */}
               {preview && (
                 <div className="px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-red-500/20 text-red-400 border border-red-500/30">
                   <FileDown className="w-3 h-3" />
@@ -1860,9 +1474,20 @@ const NewsletterSub: React.FC = () => {
           )}
         </div>
 
-        {/* Action Buttons - v5.4.1 FIX: PDF button always visible when preview exists */}
+{/* Action Buttons */}
         <div className="flex items-center gap-2">
-          {/* PDF Download Button - ALWAYS visible when preview exists */}
+          {/* PUBLISH Button - NEW! */}
+          {preview && fullReport && (
+            <button
+              onClick={() => setShowPublishModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 transition-all text-green-400 hover:text-green-300 text-sm font-medium"
+            >
+              <Send className="w-4 h-4" />
+              <span>PUBLISH</span>
+            </button>
+          )}
+
+          {/* PDF Download Button */}
           {preview && (
             <button
               onClick={downloadPDF}
@@ -1953,192 +1578,52 @@ const NewsletterSub: React.FC = () => {
         </div>
       </div>
 
-      {/* Newsletter Settings Section */}
-      <NewsletterSettingsSection
-        config={newsletterConfig}
-        inclusionStatus={inclusionStatus}
-        isLoading={configLoading}
-        onToggle={handleToggleConfig}
-        isUpdating={isUpdatingConfig}
-      />
-
-      {/* Send Newsletter Section */}
-      <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 overflow-hidden">
-        <div className="p-5 border-b border-gray-800/50 bg-[#080812]">
+      {/* Report Preview Status (simplified) */}
+      {preview && (
+        <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Send className="w-5 h-5 text-red-500" />
-              <h2 className="text-lg font-semibold text-white">Send Daily Intelligence</h2>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Will receive:</span>
-              <span className="text-red-400 font-bold">{recipientIds.length}</span>
-              <span className="text-gray-600">users</span>
-              {useCustomSelection && (
-                <button 
-                  onClick={clearCustomSelection}
-                  className="ml-2 text-xs text-blue-400 hover:text-blue-300"
-                >
-                  (Reset to auto)
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-5 space-y-5">
-          {/* Recipient Summary */}
-          <div className="flex flex-wrap items-center gap-2 p-3 bg-[#080812] rounded-xl border border-gray-800/50">
-            <span className="text-sm text-gray-500">Recipients based on settings:</span>
-            <span className="px-2 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs font-medium flex items-center gap-1">
-              <Lock className="w-3 h-3" />
-              Newsletter Subscribers
-            </span>
-            {inclusionStatus?.premium_included && (
-              <span className="px-2 py-1 rounded-lg bg-[#C9A646]/20 text-[#C9A646] text-xs font-medium">
-                + Premium Users
-              </span>
-            )}
-            {inclusionStatus?.basic_included && (
-              <span className="px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-400 text-xs font-medium">
-                + Basic Users
-              </span>
-            )}
-          </div>
-
-          {/* Admin Note */}
-          <div className="bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare className="w-4 h-4 text-orange-400" />
-              <p className="text-sm font-medium text-white">Admin Note (Optional)</p>
-            </div>
-            <textarea
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              placeholder="Add a personal message..."
-              className="w-full px-4 py-3 bg-[#0d0d18] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500/30 resize-none text-sm"
-              rows={3}
-              maxLength={500}
-            />
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-gray-600">
-                Appears before the newsletter content
-              </p>
-              <p className="text-xs text-gray-500">
-                {adminNote.length}/500
-              </p>
-            </div>
-          </div>
-
-          {/* Preview Status & Test Actions */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            {/* Preview Status */}
-            <div className="flex-1 bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-              <p className="text-sm text-gray-500 mb-3">Report Status</p>
-              {!preview ? (
-                <div className="text-center py-4">
-                  <p className="text-gray-400 mb-2">No report generated yet</p>
-                  <p className="text-xs text-gray-600">Click the yellow button above to generate</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-white font-medium truncate flex-1 pr-2">{preview.subject}</p>
-                    <button onClick={clearPreview} className="p-1 hover:bg-gray-700 rounded flex-shrink-0">
-                      <X className="w-4 h-4 text-gray-500" />
-                    </button>
-                  </div>
-                  
-                  <GenerationTimeDisplay generatedAt={preview.generatedAt} />
-                  
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-emerald-400">✓ Report ready</span>
-                    {processorInfo?.qaScore && (
-                      <QAScoreBadge score={processorInfo.qaScore} passed={processorInfo.qaPassed} />
-                    )}
-                    <span className="text-xs text-red-400 flex items-center gap-1">
-                      <FileDown className="w-3 h-3" />
-                      PDF Ready
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => setShowReportViewer(true)}
-                      className="flex items-center gap-1.5 text-xs text-[#C9A646] hover:text-[#d4af4f] transition-colors font-medium"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      View Full Report
-                    </button>
-                    <span className="text-gray-700">|</span>
-                    <button
-                      onClick={() => setShowPreviewModal(true)}
-                      className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Email Preview
-                    </button>
-                    <span className="text-gray-700">|</span>
-                    <button
-                      onClick={downloadPDF}
-                      className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-                    >
-                      <FileDown className="w-3.5 h-3.5" />
-                      Download PDF
-                    </button>
-                    <span className="text-gray-700">|</span>
-                    <button
-                      onClick={generatePreview}
-                      disabled={isGeneratingPreview}
-                      className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      Regenerate
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Test Email */}
-            <div className="flex-1 bg-[#080812] rounded-xl p-4 border border-gray-800/50">
-              <p className="text-sm text-gray-500 mb-3">Send Test Email</p>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  placeholder="test@example.com"
-                  value={testEmail}
-                  onChange={(e) => setTestEmail(e.target.value)}
-                  className="flex-1 px-3 py-2.5 bg-[#0d0d18] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500/30 text-sm"
-                />
-                <button
-                  onClick={sendTestEmail}
-                  disabled={!testEmail}
-                  className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors text-white font-medium text-sm"
-                >
-                  Test
-                </button>
+              <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-white font-medium">{preview.subject}</p>
+                <GenerationTimeDisplay generatedAt={preview.generatedAt} />
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowReportViewer(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#C9A646]/20 hover:bg-[#C9A646]/30 border border-[#C9A646]/30 text-[#C9A646] text-sm font-medium transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                View Report
+              </button>
+              <button
+                onClick={downloadPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-sm font-medium transition-colors"
+              >
+                <FileDown className="w-4 h-4" />
+                PDF
+              </button>
+              <button
+                onClick={generatePreview}
+                disabled={isGeneratingPreview}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 text-sm transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Regenerate
+              </button>
+              <button
+                onClick={clearPreview}
+                className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-500 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-
-          {/* Send Button */}
-          <button
-            onClick={sendNewsletter}
-            disabled={isSending || recipientIds.length === 0 || !preview}
-            className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-white font-bold text-lg flex items-center justify-center gap-3"
-          >
-            {isSending ? (
-              <><Loader2 className="w-5 h-5 animate-spin" />Sending...</>
-            ) : (
-              <><Send className="w-5 h-5" />Send to {recipientIds.length} Recipients (with PDF)</>
-            )}
-          </button>
-
-          {!preview && recipientIds.length > 0 && (
-            <p className="text-center text-sm text-gray-500">Generate report before sending</p>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Users Table */}
       <div className="space-y-4">
@@ -2179,56 +1664,38 @@ const NewsletterSub: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-800/50 bg-[#080812]">
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase w-12">
-                  <Square className="w-4 h-4 text-gray-500" />
-                </th>
                 <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
                 <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
                 <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Newsletter</th>
                 <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Journal</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Eligible</th>
                 <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800/30">
               {usersLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center">
+                  <td colSpan={5} className="px-5 py-16 text-center">
                     <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-red-500" />
                     <p className="text-gray-500">Loading users...</p>
                   </td>
                 </tr>
               ) : paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-16 text-center">
+                  <td colSpan={5} className="px-5 py-16 text-center">
                     <Users className="w-10 h-10 text-gray-700 mx-auto mb-4" />
                     <p className="text-gray-400">No users found</p>
                   </td>
                 </tr>
               ) : (
                 paginatedUsers.map((user) => {
-                  const isSelected = isUserSelected(user.id);
-                  const isEligible = isUserEligible(user);
                   const isSubscriber = user.newsletter_status === 'active' || user.newsletter_status === 'trial';
                   const trialInfo = getTrialInfo(user);
                   
                   return (
                     <tr 
                       key={user.id} 
-                      className={`hover:bg-[#080812]/50 transition-colors ${isSelected ? 'bg-red-500/5' : ''}`}
+                      className="hover:bg-[#080812]/50 transition-colors"
                     >
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => toggleUserSelection(user.id)}
-                          className="p-1 hover:bg-gray-700 rounded"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-red-500" />
-                          ) : (
-                            <Square className="w-4 h-4 text-gray-500" />
-                          )}
-                        </button>
-                      </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -2252,19 +1719,6 @@ const NewsletterSub: React.FC = () => {
                       </td>
                       <td className="px-5 py-4">
                         <JournalPlanBadge type={user.account_type} />
-                      </td>
-                      <td className="px-5 py-4">
-                        {isEligible ? (
-                          <span className="flex items-center gap-1 text-xs text-emerald-400">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs text-gray-500">
-                            <X className="w-3.5 h-3.5" />
-                            No
-                          </span>
-                        )}
                       </td>
                       <td className="px-5 py-4">
                         <button

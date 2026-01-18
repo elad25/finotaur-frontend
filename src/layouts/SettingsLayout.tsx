@@ -434,12 +434,13 @@ const GeneralTab = () => {
                 <p className="text-sm text-zinc-400">Unlimited trades & premium features</p>
               </div>
             </div>
-            <Button 
-              onClick={() => navigate('/app/all-markets/pricing')}
-              className="bg-[#C9A646] hover:bg-[#B8963F] text-black font-semibold"
-            >
-              Upgrade <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+<Button 
+  onClick={() => navigate('/app/all-markets/pricing')}
+  size="sm" 
+  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+>
+  Upgrade <ArrowRight className="w-4 h-4 ml-1" />
+</Button>
           </div>
         </Card>
       )}
@@ -477,8 +478,7 @@ async function manageProductSubscription(
     }
 
     const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-product-subscription`,
-      {
+`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,      {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${session.access_token}`,
@@ -753,13 +753,13 @@ const BillingTab = () => {
 
         {platformIsFree && !isLifetime && (
           <div className="mt-4">
-            <Button 
-              onClick={() => window.open('https://whop.com/finotaur', '_blank')}
-              size="sm" 
-              className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
-            >
-              Upgrade <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+<Button 
+  onClick={() => navigate('/app/journal/pricing')}
+  size="sm" 
+  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+>
+  Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
+</Button>
           </div>
         )}
       </Card>
@@ -830,13 +830,13 @@ const BillingTab = () => {
 
         {journalIsFree && (
           <div className="mt-4">
-            <Button 
-              onClick={() => window.open('https://whop.com/finotaur', '_blank')}
-              size="sm" 
-              className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
-            >
-              Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+<Button 
+  onClick={() => navigate('/app/journal/pricing')}
+  size="sm" 
+  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+>
+  Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
+</Button>
           </div>
         )}
       </Card>
@@ -1227,14 +1227,14 @@ const BillingTab = () => {
                       </span>
                     )}
                   </div>
-                  <Button
-                    onClick={() => window.open('https://whop.com/finotaur', '_blank')}
-                    variant="outline"
-                    size="sm"
-                    className="border-red-500/30 text-red-400 hover:bg-red-500/10"
-                  >
-                    Resubscribe
-                  </Button>
+<Button
+  onClick={() => navigate('/app/top-secret')}
+  variant="outline"
+  size="sm"
+  className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+>
+  Resubscribe
+</Button>
                 </div>
               </div>
             ) : (
@@ -1245,7 +1245,7 @@ const BillingTab = () => {
                   </p>
                 </div>
                 <Button
-                  onClick={() => window.open('https://whop.com/finotaur', '_blank')}
+onClick={() => navigate('/app/top-secret')}
                   size="sm"
                   className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white"
                 >

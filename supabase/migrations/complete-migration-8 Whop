@@ -528,7 +528,8 @@ CREATE TABLE IF NOT EXISTS subscription_events (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
   CONSTRAINT valid_event_type CHECK (
-    event_type IN (
+    event_type = ANY (ARRAY[
+      -- Journal events
       'upgrade',
       'downgrade',
       'downgrade_scheduled',
@@ -538,12 +539,58 @@ CREATE TABLE IF NOT EXISTS subscription_events (
       'payment_failed',
       'payment_succeeded',
       'trial_started',
-      'trial_ended'
-    )
+      'trial_ended',
+      -- Newsletter events
+      'newsletter_signup_new_user',
+      'newsletter_trial_started',
+      'newsletter_reactivated',
+      'newsletter_payment_succeeded',
+      'newsletter_trial_ended',
+      'newsletter_cancelled',
+      -- Top Secret events
+      'top_secret_activated',
+      'top_secret_cancelled',
+      'top_secret_payment_succeeded'
+    ])
   )
 );
 
-
+-- 🔥 FIX: Update constraint if table already exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'valid_event_type') THEN
+    ALTER TABLE subscription_events DROP CONSTRAINT valid_event_type;
+    
+    ALTER TABLE subscription_events ADD CONSTRAINT valid_event_type CHECK (
+      event_type = ANY (ARRAY[
+        -- Journal events
+        'upgrade',
+        'downgrade',
+        'downgrade_scheduled',
+        'cancel_scheduled',
+        'cancelled',
+        'reactivated',
+        'payment_failed',
+        'payment_succeeded',
+        'trial_started',
+        'trial_ended',
+        -- Newsletter events
+        'newsletter_signup_new_user',
+        'newsletter_trial_started',
+        'newsletter_reactivated',
+        'newsletter_payment_succeeded',
+        'newsletter_trial_ended',
+        'newsletter_cancelled',
+        -- Top Secret events
+        'top_secret_activated',
+        'top_secret_cancelled',
+        'top_secret_payment_succeeded'
+      ])
+    );
+    
+    RAISE NOTICE '✅ Updated valid_event_type constraint with new event types';
+  END IF;
+END $$;
 -- ============================================
 -- PART 2: INDEXES
 -- ============================================
@@ -805,13 +852,14 @@ $$;
 -- ============================================
 -- PART 5.1: ACTIVATE WHOP SUBSCRIPTION
 -- ============================================
--- Version: 7.0.0 PRODUCTION READY
--- Date: 2025-12-19
+-- Version: 8.0.0 PRODUCTION READY + FUZZY EMAIL MATCHING
+-- Date: 2025-01-16
 -- 
 -- 🔥 FIX: Added p_finotaur_user_id parameter
--- 🔥 FIX: Multi-method user lookup (finotaur_id → email → membership)
+-- 🔥 FIX: Multi-method user lookup (finotaur_id → email → whop_customer_email → membership_id → fuzzy → retry)
 -- 🔥 FIX: Retry logic for race conditions
--- 🔥 FIX: Removed auto-create (FK constraint to auth.users)
+-- 🔥 FIX: Fuzzy email matching (same username, different domain)
+-- 🔥 FIX: Store whop_customer_email for future lookups
 -- ============================================
 
 -- Drop ALL old signatures to avoid conflicts
@@ -843,22 +891,27 @@ DECLARE
   v_retry_count INTEGER := 0;
   v_lookup_method TEXT := 'none';
   v_old_plan TEXT;
+  v_email_prefix TEXT;
+  v_found_email TEXT;
 BEGIN
+  RAISE NOTICE '🔍 activate_whop_subscription called: email=%, finotaur_id=%, membership=%', 
+    p_user_email, p_finotaur_user_id, p_whop_membership_id;
+
   -- ========================================
   -- STEP 1: Find User (MULTIPLE METHODS)
-  -- Priority: finotaur_user_id → email → whop_customer_email → membership_id → retry
+  -- Priority: finotaur_user_id → email → whop_customer_email → membership_id → fuzzy → retry
   -- ========================================
   
   -- Method 1: Try finotaur_user_id from metadata (BEST - user logged in during checkout)
   IF p_finotaur_user_id IS NOT NULL AND p_finotaur_user_id != '' THEN
     BEGIN
-      SELECT id INTO v_user_id 
+      SELECT id, email INTO v_user_id, v_found_email 
       FROM profiles 
       WHERE id = p_finotaur_user_id::UUID;
       
       IF v_user_id IS NOT NULL THEN
         v_lookup_method := 'finotaur_user_id';
-        RAISE NOTICE '✅ Found user by finotaur_user_id: %', v_user_id;
+        RAISE NOTICE '✅ Method 1: Found user by finotaur_user_id: %', v_user_id;
       END IF;
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE '⚠️ Invalid finotaur_user_id format: %', p_finotaur_user_id;
@@ -867,41 +920,63 @@ BEGIN
   
   -- Method 2: Try exact email match (user registered with same email)
   IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id 
+    SELECT id, email INTO v_user_id, v_found_email 
     FROM profiles 
     WHERE LOWER(email) = LOWER(p_user_email);
     
     IF v_user_id IS NOT NULL THEN
       v_lookup_method := 'email_exact';
-      RAISE NOTICE '✅ Found user by email: %', v_user_id;
+      RAISE NOTICE '✅ Method 2: Found user by exact email: %', v_user_id;
     END IF;
   END IF;
   
   -- Method 3: Try whop_customer_email (returning customer with different Whop email)
   IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id 
+    SELECT id, email INTO v_user_id, v_found_email 
     FROM profiles 
     WHERE LOWER(whop_customer_email) = LOWER(p_user_email);
     
     IF v_user_id IS NOT NULL THEN
       v_lookup_method := 'whop_customer_email';
-      RAISE NOTICE '✅ Found user by whop_customer_email: %', v_user_id;
+      RAISE NOTICE '✅ Method 3: Found user by whop_customer_email: %', v_user_id;
     END IF;
   END IF;
   
   -- Method 4: Try membership_id (renewal/reactivation of existing subscription)
   IF v_user_id IS NULL AND p_whop_membership_id IS NOT NULL THEN
-    SELECT id INTO v_user_id 
+    SELECT id, email INTO v_user_id, v_found_email 
     FROM profiles 
     WHERE whop_membership_id = p_whop_membership_id;
     
     IF v_user_id IS NOT NULL THEN
       v_lookup_method := 'whop_membership_id';
-      RAISE NOTICE '✅ Found user by membership_id: %', v_user_id;
+      RAISE NOTICE '✅ Method 4: Found user by membership_id: %', v_user_id;
     END IF;
   END IF;
   
-  -- Method 5: Retry with delay (race condition - user might be registering right now)
+  -- Method 5: FUZZY EMAIL MATCH (same username, different domain)
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+    
+    -- Only try fuzzy match if prefix is long enough and not generic
+    IF LENGTH(v_email_prefix) >= 5 
+       AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support') THEN
+      
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles 
+      WHERE LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix
+      ORDER BY created_at DESC  -- Get most recent if multiple
+      LIMIT 1;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'fuzzy_email';
+        RAISE NOTICE '⚠️ Method 5: FUZZY MATCH! Whop email: % -> Found user: % (%)', 
+          p_user_email, v_found_email, v_user_id;
+      END IF;
+    END IF;
+  END IF;
+  
+  -- Method 6: Retry with delay (race condition - user might be registering right now)
   IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
     LOOP
       EXIT WHEN v_retry_count >= 3;  -- Max 3 retries = 6 seconds total
@@ -910,17 +985,28 @@ BEGIN
       RAISE NOTICE '⏳ User not found, retry % of 3 in 2 seconds...', v_retry_count;
       PERFORM pg_sleep(2);
       
-      -- Try all methods again after delay
-      SELECT id INTO v_user_id 
+      -- Try all methods again after delay (including fuzzy)
+      v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+      
+      SELECT id, email INTO v_user_id, v_found_email 
       FROM profiles 
       WHERE LOWER(email) = LOWER(p_user_email)
-         OR LOWER(whop_customer_email) = LOWER(p_user_email);
+         OR LOWER(whop_customer_email) = LOWER(p_user_email)
+         OR (LENGTH(v_email_prefix) >= 5 
+             AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support')
+             AND LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix)
+      ORDER BY 
+        CASE WHEN LOWER(email) = LOWER(p_user_email) THEN 1
+             WHEN LOWER(whop_customer_email) = LOWER(p_user_email) THEN 2
+             ELSE 3 END,
+        created_at DESC
+      LIMIT 1;
       
       EXIT WHEN v_user_id IS NOT NULL;
     END LOOP;
     
     IF v_user_id IS NOT NULL THEN
-      v_lookup_method := 'email_retry_' || v_retry_count;
+      v_lookup_method := 'retry_' || v_retry_count;
       RAISE NOTICE '✅ Found user after % retries: %', v_retry_count, v_user_id;
     END IF;
   END IF;
@@ -938,7 +1024,8 @@ BEGIN
       'lookup_attempted', jsonb_build_object(
         'finotaur_user_id', p_finotaur_user_id,
         'email', p_user_email,
-        'membership_id', p_whop_membership_id
+        'membership_id', p_whop_membership_id,
+        'email_prefix_tried', LOWER(SPLIT_PART(COALESCE(p_user_email, ''), '@', 1))
       ),
       'retries', v_retry_count,
       'suggestion', 'Ensure checkout URL includes finotaur_user_id in metadata, or user registers with same email before purchase'
@@ -980,7 +1067,7 @@ BEGIN
   -- Get old plan for logging
   SELECT account_type INTO v_old_plan FROM profiles WHERE id = v_user_id;
   
-  -- ========================================
+ -- ========================================
   -- STEP 4: Update User Profile
   -- ========================================
   
@@ -998,7 +1085,8 @@ BEGIN
     whop_user_id = p_whop_user_id,
     whop_membership_id = p_whop_membership_id,
     whop_product_id = p_whop_product_id,
-    whop_customer_email = p_user_email,
+    -- 🔥 Store whop email for future lookups (only if not already set)
+    whop_customer_email = COALESCE(whop_customer_email, p_user_email),
     -- Payment info
     payment_provider = 'whop',
     -- Trade limits
@@ -1009,7 +1097,7 @@ BEGIN
     updated_at = NOW()
   WHERE id = v_user_id;
   
-  -- ========================================
+ -- ========================================
   -- STEP 5: Log Subscription Event
   -- ========================================
   
@@ -1027,7 +1115,9 @@ BEGIN
       'lookup_method', v_lookup_method,
       'retries_needed', v_retry_count,
       'finotaur_user_id_provided', p_finotaur_user_id IS NOT NULL,
-      'price_usd', v_plan_info.price_usd
+      'price_usd', v_plan_info.price_usd,
+      'whop_email', p_user_email,
+      'finotaur_email', v_found_email
     )
   );
   
@@ -2381,10 +2471,13 @@ ON profiles(newsletter_status) WHERE newsletter_status != 'inactive';
 CREATE INDEX IF NOT EXISTS idx_profiles_newsletter_trial 
 ON profiles(newsletter_trial_ends_at) WHERE newsletter_trial_ends_at IS NOT NULL;
 
+-- ----------------------------------------
+-- ----------------------------------------
+-- 13.3 WHOP PLAN MAPPING - Newsletter Entry (War Zone)
+-- v4.4.0: Monthly ($49) + Yearly ($397) + TopSecret Discount ($19.99)
+-- ----------------------------------------
 
--- ----------------------------------------
--- 13.3 WHOP PLAN MAPPING - Newsletter Entry
--- ----------------------------------------
+-- Monthly Plan - $49/month with 7-day trial
 INSERT INTO whop_plan_mapping (
   whop_product_id, 
   whop_plan_id,
@@ -2397,12 +2490,79 @@ INSERT INTO whop_plan_mapping (
   trial_days
 ) VALUES (
   'prod_qlaV5Uu6LZlYn',
-  'plan_LCBG5yJpoNtW3',
+  'plan_24vWi8dY3uDHM',
   'newsletter',
   'monthly',
-  39.00,
+  49.00,
   0,
-  'War Zone Intelligence Newsletter',
+  'War Zone Intelligence (Monthly)',
+  TRUE,
+  7
+)
+ON CONFLICT (whop_product_id) DO UPDATE SET
+  whop_plan_id = EXCLUDED.whop_plan_id,
+  finotaur_plan = EXCLUDED.finotaur_plan,
+  billing_interval = EXCLUDED.billing_interval,
+  price_usd = EXCLUDED.price_usd,
+  max_trades = EXCLUDED.max_trades,
+  display_name = EXCLUDED.display_name,
+  is_active = TRUE,
+  trial_days = EXCLUDED.trial_days,
+  updated_at = NOW();
+
+-- Yearly Plan - $397/year (NO trial, saves $191)
+INSERT INTO whop_plan_mapping (
+  whop_product_id, 
+  whop_plan_id,
+  finotaur_plan, 
+  billing_interval, 
+  price_usd, 
+  max_trades, 
+  display_name, 
+  is_active,
+  trial_days
+) VALUES (
+  'prod_8b3VWkZdena4B',
+  'plan_bp2QTGuwfpj0A',
+  'newsletter',
+  'yearly',
+  397.00,
+  0,
+  'War Zone Intelligence (Annual)',
+  TRUE,
+  0
+)
+ON CONFLICT (whop_product_id) DO UPDATE SET
+  whop_plan_id = EXCLUDED.whop_plan_id,
+  finotaur_plan = EXCLUDED.finotaur_plan,
+  billing_interval = EXCLUDED.billing_interval,
+  price_usd = EXCLUDED.price_usd,
+  max_trades = EXCLUDED.max_trades,
+  display_name = EXCLUDED.display_name,
+  is_active = TRUE,
+  trial_days = EXCLUDED.trial_days,
+  updated_at = NOW();
+
+-- 🔥 NEW: TopSecret Member Discount - $19.99/month with 7-day trial
+-- For users who have active Top Secret subscription
+INSERT INTO whop_plan_mapping (
+  whop_product_id, 
+  whop_plan_id,
+  finotaur_plan, 
+  billing_interval, 
+  price_usd, 
+  max_trades, 
+  display_name, 
+  is_active,
+  trial_days
+) VALUES (
+  'prod_u7QrZi90xiCZA',
+  'plan_a7uEGsUbr92nn',
+  'newsletter',
+  'monthly',
+  19.99,
+  0,
+  'War Zone Intelligence (Top Secret Member Discount)',
   TRUE,
   7
 )
@@ -2442,10 +2602,10 @@ BEGIN
 END;
 $$;
 
-
 -- ----------------------------------------
 -- 14.1 Activate Newsletter Subscription
 -- Called on: membership.activated, membership.went_valid
+-- Version: 8.0.0 with Fuzzy Email Matching
 -- ----------------------------------------
 
 DROP FUNCTION IF EXISTS activate_newsletter_subscription(TEXT, TEXT, TEXT, TEXT, UUID);
@@ -2474,61 +2634,94 @@ DECLARE
   v_new_user_id UUID;
   v_display_name TEXT;
   v_affiliate_code TEXT;
+  v_email_prefix TEXT;
+  v_found_email TEXT;
+  v_lookup_method TEXT := 'none';
 BEGIN
+  RAISE NOTICE '🔍 activate_newsletter_subscription: email=%, finotaur_id=%', p_user_email, p_finotaur_user_id;
+
   -- ========================================
-  -- STEP 1: Find User (multiple lookup methods)
+  -- METHOD 1: finotaur_user_id (BEST)
   -- ========================================
-  
-  -- Try finotaur_user_id first (internal signup)
   IF p_finotaur_user_id IS NOT NULL AND p_finotaur_user_id != '' THEN
     BEGIN
-      SELECT id INTO v_user_id 
-      FROM profiles 
-      WHERE id = p_finotaur_user_id::UUID;
-      
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles WHERE id = p_finotaur_user_id::UUID;
       IF v_user_id IS NOT NULL THEN
-        RAISE NOTICE '✅ Found user by finotaur_user_id: %', v_user_id;
+        v_lookup_method := 'finotaur_user_id';
+        RAISE NOTICE '✅ Method 1: Found by finotaur_user_id: %', v_user_id;
       END IF;
-    EXCEPTION WHEN OTHERS THEN
-      RAISE NOTICE '⚠️ Invalid finotaur_user_id format: %', p_finotaur_user_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
     END;
   END IF;
   
-  -- Try email (fallback)
-  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id 
-    FROM profiles 
-    WHERE LOWER(email) = LOWER(p_user_email);
-    
-    IF v_user_id IS NOT NULL THEN
-      RAISE NOTICE '✅ Found user by email: %', v_user_id;
-    END IF;
-  END IF;
-  
-  -- Try membership_id (for recurring events)
+  -- ========================================
+  -- METHOD 2: membership_id (returning customers)
+  -- ========================================
   IF v_user_id IS NULL AND p_whop_membership_id IS NOT NULL THEN
-    SELECT id INTO v_user_id 
-    FROM profiles 
-    WHERE newsletter_whop_membership_id = p_whop_membership_id;
-    
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE newsletter_whop_membership_id = p_whop_membership_id;
     IF v_user_id IS NOT NULL THEN
-      RAISE NOTICE '✅ Found user by membership_id: %', v_user_id;
+      v_lookup_method := 'membership_id';
+      RAISE NOTICE '✅ Method 2: Found by membership_id: %', v_user_id;
     END IF;
   END IF;
   
   -- ========================================
-  -- STEP 2: Create New User if Not Found
+  -- METHOD 3: whop_customer_email
+  -- ========================================
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE LOWER(whop_customer_email) = LOWER(p_user_email);
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'whop_customer_email';
+      RAISE NOTICE '✅ Method 3: Found by whop_customer_email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- ========================================
+  -- METHOD 4: Exact email match
+  -- ========================================
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'exact_email';
+      RAISE NOTICE '✅ Method 4: Found by exact email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- ========================================
+  -- 🔥 METHOD 5: FUZZY EMAIL MATCH (NEW!)
+  -- Same username, different domain (e.g., john@gmail.com -> john@outlook.com)
+  -- ========================================
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+    
+    IF LENGTH(v_email_prefix) >= 5 
+       AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support') THEN
+      
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles 
+      WHERE LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix
+      ORDER BY created_at DESC
+      LIMIT 1;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'fuzzy_email';
+        RAISE NOTICE '⚠️ Method 5: FUZZY MATCH! % -> %', p_user_email, v_found_email;
+      END IF;
+    END IF;
+  END IF;
+  
+  -- ========================================
+  -- CREATE NEW USER IF NOT FOUND
   -- ========================================
   IF v_user_id IS NULL THEN
     IF p_user_email IS NULL OR p_user_email = '' THEN
       RETURN jsonb_build_object(
         'success', false,
-        'error', 'No email provided and user not found',
-        'lookup_attempted', jsonb_build_object(
-          'finotaur_user_id', p_finotaur_user_id,
-          'email', p_user_email,
-          'membership_id', p_whop_membership_id
-        )
+        'error', 'No email provided and user not found'
       );
     END IF;
     
@@ -2544,76 +2737,66 @@ BEGIN
       id, email, display_name, affiliate_code,
       account_type, subscription_status, max_trades,
       role, is_banned, onboarding_completed,
-      newsletter_unsubscribe_token,
+      newsletter_unsubscribe_token, whop_customer_email,
       created_at, updated_at
     ) VALUES (
       v_new_user_id, LOWER(p_user_email), v_display_name, v_affiliate_code,
-      'free', NULL, 10,
-      'user', FALSE, FALSE,
-      encode(gen_random_bytes(32), 'hex'),
+      'free', NULL, 10, 'user', FALSE, FALSE,
+      encode(gen_random_bytes(32), 'hex'), LOWER(p_user_email),
       NOW(), NOW()
     );
     
     v_user_id := v_new_user_id;
+    v_found_email := LOWER(p_user_email);
     v_is_new_user := TRUE;
-    RAISE NOTICE '🆕 Created new user: % with email: %', v_user_id, p_user_email;
+    v_lookup_method := 'created_new';
   END IF;
   
   -- ========================================
-  -- STEP 3: Check if First Time Subscriber
+  -- CHECK IF FIRST TIME SUBSCRIBER
   -- ========================================
-  SELECT 
-    newsletter_started_at IS NULL OR newsletter_status = 'inactive' OR newsletter_status IS NULL
-  INTO v_is_first_time
-  FROM profiles 
-  WHERE id = v_user_id;
-  
+  SELECT newsletter_started_at IS NULL OR newsletter_status = 'inactive' OR newsletter_status IS NULL
+  INTO v_is_first_time FROM profiles WHERE id = v_user_id;
   v_is_first_time := COALESCE(v_is_first_time, TRUE);
   
--- ========================================
--- STEP 4: DYNAMIC TRIAL CALCULATION
--- ========================================
-
-v_trial_days := get_product_trial_days(p_whop_product_id);
-
-IF v_trial_days > 0 AND v_is_first_time THEN
-  v_trial_ends_at := NOW() + (v_trial_days || ' days')::INTERVAL;
-  v_status := 'trial';
-  v_expires_at := v_trial_ends_at;
-ELSE
-  v_trial_ends_at := NULL;
-  v_status := 'active';
-  v_expires_at := NOW() + INTERVAL '1 month';
-END IF;
   -- ========================================
-  -- STEP 5: Update Newsletter Fields ONLY
+  -- TRIAL CALCULATION
+  -- ========================================
+  v_trial_days := get_product_trial_days(p_whop_product_id);
+
+  IF v_trial_days > 0 AND v_is_first_time THEN
+    v_trial_ends_at := NOW() + (v_trial_days || ' days')::INTERVAL;
+    v_status := 'trial';
+    v_expires_at := v_trial_ends_at;
+  ELSE
+    v_trial_ends_at := NULL;
+    v_status := 'active';
+    v_expires_at := NOW() + INTERVAL '1 month';
+  END IF;
+  
+  -- ========================================
+  -- UPDATE PROFILE (🔥 + whop_customer_email)
   -- ========================================
   UPDATE profiles SET
     newsletter_enabled = TRUE,
     newsletter_whop_membership_id = p_whop_membership_id,
     newsletter_started_at = COALESCE(newsletter_started_at, NOW()),
     newsletter_expires_at = v_expires_at,
-    newsletter_trial_ends_at = CASE 
-      WHEN v_is_first_time THEN v_trial_ends_at 
-      ELSE newsletter_trial_ends_at 
-    END,
+    newsletter_trial_ends_at = CASE WHEN v_is_first_time THEN v_trial_ends_at ELSE newsletter_trial_ends_at END,
     newsletter_cancel_at_period_end = FALSE,
     newsletter_status = v_status,
+    whop_customer_email = COALESCE(whop_customer_email, p_user_email),
     updated_at = NOW()
   WHERE id = v_user_id;
   
   -- ========================================
-  -- STEP 6: Log Event
+  -- LOG EVENT (🔥 + lookup_method)
   -- ========================================
-  INSERT INTO subscription_events (
-    user_id, event_type, old_plan, new_plan, metadata
-  ) VALUES (
-    v_user_id,
-    CASE 
-      WHEN v_is_new_user THEN 'newsletter_signup_new_user'
-      WHEN v_is_first_time THEN 'trial_started'
-      ELSE 'payment_succeeded'
-    END,
+  INSERT INTO subscription_events (user_id, event_type, old_plan, new_plan, metadata)
+  VALUES (v_user_id,
+    CASE WHEN v_is_new_user THEN 'newsletter_signup_new_user'
+         WHEN v_is_first_time THEN 'newsletter_trial_started'
+         ELSE 'newsletter_reactivated' END,
     'none', 'newsletter',
     jsonb_build_object(
       'whop_membership_id', p_whop_membership_id,
@@ -2622,39 +2805,33 @@ END IF;
       'is_new_user', v_is_new_user,
       'is_first_time', v_is_first_time,
       'trial_ends_at', v_trial_ends_at,
-      'subscription_type', 'newsletter'
+      'subscription_type', 'newsletter',
+      'lookup_method', v_lookup_method,
+      'whop_email', p_user_email,
+      'finotaur_email', v_found_email
     )
   );
   
-  -- ========================================
-  -- STEP 7: Return Result
-  -- ========================================
   RETURN jsonb_build_object(
     'success', true,
     'user_id', v_user_id,
-    'email', p_user_email,
+    'email', v_found_email,
     'newsletter_status', v_status,
     'is_new_user', v_is_new_user,
     'is_new_trial', v_is_first_time,
     'trial_ends_at', v_trial_ends_at,
-    'expires_at', v_expires_at
+    'expires_at', v_expires_at,
+    'lookup_method', v_lookup_method
   );
   
 EXCEPTION WHEN OTHERS THEN
-  RETURN jsonb_build_object(
-    'success', false,
-    'error', SQLERRM,
-    'sqlstate', SQLSTATE,
-    'email', p_user_email,
-    'finotaur_user_id', p_finotaur_user_id
-  );
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM, 'sqlstate', SQLSTATE);
 END;
 $$;
-
-
 -- ----------------------------------------
 -- 14.2 Handle Newsletter Payment
 -- Called on: payment.succeeded (after trial)
+-- Version: 8.1.0 with Fuzzy Email Matching + Fixed event_type
 -- ----------------------------------------
 
 DROP FUNCTION IF EXISTS handle_newsletter_payment(TEXT, TEXT, TEXT, TEXT, NUMERIC, UUID);
@@ -2678,110 +2855,89 @@ DECLARE
   v_was_in_trial BOOLEAN;
   v_old_status TEXT;
   v_expires_at TIMESTAMPTZ;
-  v_trial_ends_at TIMESTAMPTZ;
+  v_email_prefix TEXT;
+  v_found_email TEXT;
+  v_lookup_method TEXT := 'none';
 BEGIN
 
-  -- Find user by multiple methods
+  -- METHOD 1: finotaur_user_id
   IF p_finotaur_user_id IS NOT NULL AND p_finotaur_user_id != '' THEN
     BEGIN
-      SELECT id INTO v_user_id FROM profiles WHERE id = p_finotaur_user_id::UUID;
+      SELECT id, email INTO v_user_id, v_found_email FROM profiles WHERE id = p_finotaur_user_id::UUID;
+      IF v_user_id IS NOT NULL THEN v_lookup_method := 'finotaur_user_id'; END IF;
     EXCEPTION WHEN OTHERS THEN NULL;
     END;
   END IF;
   
+  -- METHOD 2: membership_id
   IF v_user_id IS NULL AND p_whop_membership_id IS NOT NULL THEN
-    SELECT id INTO v_user_id FROM profiles WHERE newsletter_whop_membership_id = p_whop_membership_id;
+    SELECT id, email INTO v_user_id, v_found_email FROM profiles WHERE newsletter_whop_membership_id = p_whop_membership_id;
+    IF v_user_id IS NOT NULL THEN v_lookup_method := 'membership_id'; END IF;
   END IF;
   
+  -- METHOD 3: whop_customer_email
   IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+    SELECT id, email INTO v_user_id, v_found_email FROM profiles WHERE LOWER(whop_customer_email) = LOWER(p_user_email);
+    IF v_user_id IS NOT NULL THEN v_lookup_method := 'whop_customer_email'; END IF;
+  END IF;
+  
+  -- METHOD 4: Exact email
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+    IF v_user_id IS NOT NULL THEN v_lookup_method := 'exact_email'; END IF;
+  END IF;
+  
+  -- METHOD 5: FUZZY EMAIL MATCH
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+    IF LENGTH(v_email_prefix) >= 5 AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support') THEN
+      SELECT id, email INTO v_user_id, v_found_email FROM profiles 
+      WHERE LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix ORDER BY created_at DESC LIMIT 1;
+      IF v_user_id IS NOT NULL THEN v_lookup_method := 'fuzzy_email'; END IF;
+    END IF;
   END IF;
   
   IF v_user_id IS NULL THEN
-    RETURN jsonb_build_object(
-      'success', false,
-      'error', 'User not found for payment',
-      'lookup_attempted', jsonb_build_object(
-        'finotaur_user_id', p_finotaur_user_id,
-        'email', p_user_email,
-        'membership_id', p_whop_membership_id
-      )
-    );
+    RETURN jsonb_build_object('success', false, 'error', 'User not found for newsletter payment',
+      'lookup_attempted', jsonb_build_object('email', p_user_email, 'membership_id', p_whop_membership_id));
   END IF;
   
-  -- Get current status and trial info
-SELECT 
-  newsletter_status, 
-  newsletter_status = 'trial',
-  newsletter_trial_ends_at
-INTO v_old_status, v_was_in_trial, v_trial_ends_at
-FROM profiles WHERE id = v_user_id;
+  -- Get current status
+  SELECT newsletter_status, newsletter_status = 'trial' INTO v_old_status, v_was_in_trial FROM profiles WHERE id = v_user_id;
 
--- ========================================
--- 🔥 FIX: Check if this is a $0 trial payment
--- If payment is $0 and user is in trial, DON'T change status
--- ========================================
+  -- $0 payment = trial
+  IF COALESCE(p_payment_amount, 0) = 0 THEN
+    UPDATE profiles SET whop_customer_email = COALESCE(whop_customer_email, p_user_email), updated_at = NOW() WHERE id = v_user_id;
+    RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'newsletter_status', COALESCE(v_old_status, 'trial'),
+      'message', 'Trial signup - $0 payment', 'lookup_method', v_lookup_method);
+  END IF;
 
-IF COALESCE(p_payment_amount, 0) = 0 THEN
-  -- $0 payment = trial signup, don't change trial status
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', v_user_id,
-    'newsletter_status', COALESCE(v_old_status, 'trial'),
-    'message', 'Trial signup - $0 payment, status unchanged',
-    'payment_amount', p_payment_amount,
-    'is_trial_payment', true
-  );
-END IF;
+  -- Real payment
+  v_expires_at := NOW() + INTERVAL '1 month';
 
--- ========================================
--- Real payment (> $0) - convert trial to active
--- ========================================
-
-v_expires_at := NOW() + INTERVAL '1 month';
-
--- Update newsletter fields ONLY
-UPDATE profiles SET
-  newsletter_enabled = TRUE,
-  newsletter_status = 'active',
-  newsletter_expires_at = v_expires_at,
-  newsletter_cancel_at_period_end = FALSE,
-  newsletter_paid = TRUE,
-  newsletter_paid_at = NOW(),
-  updated_at = NOW()
-WHERE id = v_user_id;
+  UPDATE profiles SET
+    newsletter_enabled = TRUE, newsletter_status = 'active',
+    newsletter_whop_membership_id = COALESCE(newsletter_whop_membership_id, p_whop_membership_id),
+    newsletter_expires_at = v_expires_at, newsletter_cancel_at_period_end = FALSE,
+    newsletter_paid = TRUE, newsletter_paid_at = NOW(),
+    whop_customer_email = COALESCE(whop_customer_email, p_user_email), updated_at = NOW()
+  WHERE id = v_user_id;
   
-  -- Log event
-  INSERT INTO subscription_events (
-    user_id, event_type, old_plan, new_plan, metadata
-  ) VALUES (
-    v_user_id,
-    CASE WHEN v_was_in_trial THEN 'trial_ended' ELSE 'payment_succeeded' END,
+  -- 🔥 FIX: Use valid event_type values from constraint
+  INSERT INTO subscription_events (user_id, event_type, old_plan, new_plan, metadata)
+  VALUES (v_user_id, 
+    CASE WHEN v_was_in_trial THEN 'newsletter_trial_ended' ELSE 'newsletter_payment_succeeded' END,
     COALESCE(v_old_status, 'none'), 'newsletter',
-    jsonb_build_object(
-      'whop_membership_id', p_whop_membership_id,
-      'payment_amount', p_payment_amount,
-      'was_in_trial', v_was_in_trial,
-      'subscription_type', 'newsletter'
-    )
-  );
+    jsonb_build_object('whop_membership_id', p_whop_membership_id, 'payment_amount', p_payment_amount, 'lookup_method', v_lookup_method));
   
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', v_user_id,
-    'newsletter_status', 'active',
-    'was_in_trial', COALESCE(v_was_in_trial, FALSE),
-    'previous_status', v_old_status,
-    'expires_at', v_expires_at,
-    'payment_amount', p_payment_amount
-  );
+  RETURN jsonb_build_object('success', true, 'user_id', v_user_id, 'email', v_found_email,
+    'newsletter_status', 'active', 'was_in_trial', COALESCE(v_was_in_trial, FALSE),
+    'expires_at', v_expires_at, 'lookup_method', v_lookup_method);
   
 EXCEPTION WHEN OTHERS THEN
   RETURN jsonb_build_object('success', false, 'error', SQLERRM, 'sqlstate', SQLSTATE);
 END;
 $$;
-
-
 -- ----------------------------------------
 -- 14.3 Deactivate Newsletter Subscription
 -- Called on: membership.deactivated/canceled/went_invalid
@@ -3191,9 +3347,15 @@ BEGIN
     COMMENT ON COLUMN profiles.top_secret_status IS 'Top Secret subscription status: inactive, active, cancelled';
   END IF;
   
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_unsubscribed_at') THEN
+IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_unsubscribed_at') THEN
     ALTER TABLE profiles ADD COLUMN top_secret_unsubscribed_at TIMESTAMPTZ;
     COMMENT ON COLUMN profiles.top_secret_unsubscribed_at IS 'When Top Secret subscription was cancelled';
+  END IF;
+  
+  -- 🔥 NEW: Trial tracking column
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'top_secret_is_in_trial') THEN
+    ALTER TABLE profiles ADD COLUMN top_secret_is_in_trial BOOLEAN DEFAULT FALSE;
+    COMMENT ON COLUMN profiles.top_secret_is_in_trial IS 'Whether user is in Top Secret 14-day trial';
   END IF;
 END $$;
 
@@ -3271,7 +3433,13 @@ DECLARE
   v_new_user_id UUID;
   v_display_name TEXT;
   v_affiliate_code TEXT;
+  v_email_prefix TEXT;
+  v_found_email TEXT;
+  v_lookup_method TEXT := 'none';
 BEGIN
+  RAISE NOTICE '🔍 activate_top_secret_subscription called: email=%, finotaur_id=%, membership=%', 
+    p_user_email, p_finotaur_user_id, p_whop_membership_id;
+
   -- ========================================
   -- STEP 1: Determine interval from plan_id
   -- ========================================
@@ -3287,32 +3455,80 @@ BEGIN
   END IF;
 
   -- ========================================
-  -- STEP 2: Find User (multiple lookup methods)
+  -- STEP 2: Find User (MULTIPLE METHODS with FUZZY)
   -- ========================================
   
-  -- Try finotaur_user_id first
+  -- Method 1: Try finotaur_user_id first (BEST)
   IF p_finotaur_user_id IS NOT NULL AND p_finotaur_user_id != '' THEN
     BEGIN
-      SELECT id INTO v_user_id 
+      SELECT id, email INTO v_user_id, v_found_email 
       FROM profiles 
       WHERE id = p_finotaur_user_id::UUID;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'finotaur_user_id';
+        RAISE NOTICE '✅ Method 1: Found by finotaur_user_id: %', v_user_id;
+      END IF;
     EXCEPTION WHEN OTHERS THEN
-      NULL;
+      RAISE NOTICE '⚠️ Invalid finotaur_user_id format: %', p_finotaur_user_id;
     END;
   END IF;
   
-  -- Try email
-  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id 
-    FROM profiles 
-    WHERE LOWER(email) = LOWER(p_user_email);
-  END IF;
-  
-  -- Try membership_id (for recurring)
+  -- Method 2: Try top_secret_whop_membership_id (returning customers)
   IF v_user_id IS NULL AND p_whop_membership_id IS NOT NULL THEN
-    SELECT id INTO v_user_id 
+    SELECT id, email INTO v_user_id, v_found_email 
     FROM profiles 
     WHERE top_secret_whop_membership_id = p_whop_membership_id;
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'membership_id';
+      RAISE NOTICE '✅ Method 2: Found by membership_id: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- Method 3: Try whop_customer_email (stored from previous purchases)
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles 
+    WHERE LOWER(whop_customer_email) = LOWER(p_user_email);
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'whop_customer_email';
+      RAISE NOTICE '✅ Method 3: Found by whop_customer_email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- Method 4: Try exact email match
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles 
+    WHERE LOWER(email) = LOWER(p_user_email);
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'exact_email';
+      RAISE NOTICE '✅ Method 4: Found by exact email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- Method 5: FUZZY EMAIL MATCH (same username, different domain)
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+    
+    IF LENGTH(v_email_prefix) >= 5 
+       AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support') THEN
+      
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles 
+      WHERE LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix
+      ORDER BY created_at DESC
+      LIMIT 1;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'fuzzy_email';
+        RAISE NOTICE '⚠️ Method 5: FUZZY MATCH! Whop email: % -> Found user: % (%)', 
+          p_user_email, v_found_email, v_user_id;
+      END IF;
+    END IF;
   END IF;
   
   -- ========================================
@@ -3354,13 +3570,12 @@ BEGIN
     RAISE NOTICE '🆕 Created new user: % with email: %', v_user_id, p_user_email;
   END IF;
   
-  -- ========================================
+ -- ========================================
   -- STEP 4: Update Top Secret Fields + Platform FREE
   -- (Does NOT touch newsletter or journal subscription)
   -- ========================================
   
  UPDATE profiles SET
-    -- Top Secret fields
     top_secret_enabled = TRUE,
     top_secret_whop_membership_id = p_whop_membership_id,
     top_secret_started_at = COALESCE(top_secret_started_at, NOW()),
@@ -3369,14 +3584,17 @@ BEGIN
     top_secret_cancel_at_period_end = FALSE,
     top_secret_status = 'active',
     top_secret_unsubscribed_at = NULL,
+    top_secret_is_in_trial = TRUE,
+    -- 🔥 Store whop email for future lookups (only if not already set)
+    whop_customer_email = COALESCE(whop_customer_email, p_user_email),
     -- 🔥 Platform FREE - only if user has no platform subscription
     platform_plan = CASE 
       WHEN platform_plan IS NULL OR platform_plan = '' THEN 'free'
-      ELSE platform_plan  -- Keep existing plan (core/pro/enterprise)
+      ELSE platform_plan
     END,
     platform_subscription_status = CASE 
       WHEN platform_subscription_status IS NULL OR platform_subscription_status = 'inactive' THEN 'active'
-      ELSE platform_subscription_status  -- Keep existing status
+      ELSE platform_subscription_status
     END,
     updated_at = NOW()
   WHERE id = v_user_id;
@@ -3385,7 +3603,7 @@ BEGIN
   -- STEP 5: Log Event
   -- ========================================
   
-  INSERT INTO subscription_events (
+ INSERT INTO subscription_events (
     user_id, event_type, old_plan, new_plan, metadata
   ) VALUES (
     v_user_id,
@@ -3400,10 +3618,12 @@ BEGIN
       'interval', v_interval,
       'price_usd', v_price,
       'is_new_user', v_is_new_user,
-      'subscription_type', 'top_secret'
+      'subscription_type', 'top_secret',
+      'lookup_method', v_lookup_method,
+      'whop_email', p_user_email,
+      'finotaur_email', v_found_email
     )
   );
-  
   -- ========================================
   -- STEP 6: Return Result
   -- ========================================
@@ -3435,7 +3655,6 @@ $$;
 -- Handle Top Secret Payment
 -- Called on: payment.succeeded (after first payment)
 -- ----------------------------------------
-
 DROP FUNCTION IF EXISTS handle_top_secret_payment(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT);
 
 CREATE OR REPLACE FUNCTION handle_top_secret_payment(
@@ -3457,7 +3676,13 @@ DECLARE
   v_interval TEXT;
   v_expires_at TIMESTAMPTZ;
   v_old_status TEXT;
+  v_email_prefix TEXT;
+  v_found_email TEXT;
+  v_lookup_method TEXT := 'none';
 BEGIN
+  RAISE NOTICE '🔍 handle_top_secret_payment called: email=%, finotaur_id=%, membership=%', 
+    p_user_email, p_finotaur_user_id, p_whop_membership_id;
+
   -- Determine interval from plan_id
   IF p_whop_plan_id = 'plan_YoeD6wWBxss7Q' THEN
     v_interval := 'yearly';
@@ -3467,42 +3692,119 @@ BEGIN
     v_expires_at := NOW() + INTERVAL '1 month';
   END IF;
 
-  -- Find user by multiple methods
+  -- ========================================
+  -- MULTI-METHOD USER LOOKUP with FUZZY
+  -- ========================================
+  
+  -- Method 1: finotaur_user_id (BEST)
   IF p_finotaur_user_id IS NOT NULL AND p_finotaur_user_id != '' THEN
     BEGIN
-      SELECT id INTO v_user_id FROM profiles WHERE id = p_finotaur_user_id::UUID;
-    EXCEPTION WHEN OTHERS THEN NULL;
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles WHERE id = p_finotaur_user_id::UUID;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'finotaur_user_id';
+        RAISE NOTICE '✅ Method 1: Found by finotaur_user_id: %', v_user_id;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN 
+      RAISE NOTICE '⚠️ Invalid finotaur_user_id format: %', p_finotaur_user_id;
     END;
   END IF;
   
+  -- Method 2: top_secret_whop_membership_id
   IF v_user_id IS NULL AND p_whop_membership_id IS NOT NULL THEN
-    SELECT id INTO v_user_id FROM profiles WHERE top_secret_whop_membership_id = p_whop_membership_id;
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE top_secret_whop_membership_id = p_whop_membership_id;
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'membership_id';
+      RAISE NOTICE '✅ Method 2: Found by membership_id: %', v_user_id;
+    END IF;
   END IF;
   
+  -- Method 3: whop_customer_email
   IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
-    SELECT id INTO v_user_id FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE LOWER(whop_customer_email) = LOWER(p_user_email);
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'whop_customer_email';
+      RAISE NOTICE '✅ Method 3: Found by whop_customer_email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- Method 4: Exact email match
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    SELECT id, email INTO v_user_id, v_found_email 
+    FROM profiles WHERE LOWER(email) = LOWER(p_user_email);
+    
+    IF v_user_id IS NOT NULL THEN
+      v_lookup_method := 'exact_email';
+      RAISE NOTICE '✅ Method 4: Found by exact email: %', v_user_id;
+    END IF;
+  END IF;
+  
+  -- Method 5: FUZZY EMAIL MATCH
+  IF v_user_id IS NULL AND p_user_email IS NOT NULL AND p_user_email != '' THEN
+    v_email_prefix := LOWER(SPLIT_PART(p_user_email, '@', 1));
+    
+    IF LENGTH(v_email_prefix) >= 5 
+       AND v_email_prefix NOT IN ('admin', 'info', 'test', 'user', 'mail', 'contact', 'hello', 'support') THEN
+      
+      SELECT id, email INTO v_user_id, v_found_email 
+      FROM profiles 
+      WHERE LOWER(SPLIT_PART(email, '@', 1)) = v_email_prefix
+      ORDER BY created_at DESC
+      LIMIT 1;
+      
+      IF v_user_id IS NOT NULL THEN
+        v_lookup_method := 'fuzzy_email';
+        RAISE NOTICE '⚠️ Method 5: FUZZY MATCH! Whop email: % -> Found user: % (%)', 
+          p_user_email, v_found_email, v_user_id;
+      END IF;
+    END IF;
   END IF;
   
   IF v_user_id IS NULL THEN
+    RAISE NOTICE '❌ User not found with any method!';
     RETURN jsonb_build_object(
       'success', false,
-      'error', 'User not found for payment'
+      'error', 'User not found for payment',
+      'lookup_attempted', jsonb_build_object(
+        'finotaur_user_id', p_finotaur_user_id,
+        'email', p_user_email,
+        'membership_id', p_whop_membership_id,
+        'email_prefix_tried', LOWER(SPLIT_PART(COALESCE(p_user_email, ''), '@', 1))
+      )
     );
   END IF;
   
   -- Get current status
   SELECT top_secret_status INTO v_old_status FROM profiles WHERE id = v_user_id;
   
-  -- Update Top Secret fields ONLY
+-- 🔥 FIX: If $0 payment = trial signup, don't change status
+  IF COALESCE(p_payment_amount, 0) = 0 THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'user_id', v_user_id,
+      'top_secret_status', COALESCE(v_old_status, 'active'),
+      'message', 'Trial signup - $0 payment',
+      'is_trial_payment', true
+    );
+  END IF;
+
+ -- Real payment (> $0) - convert trial to paid
   UPDATE profiles SET
     top_secret_enabled = TRUE,
     top_secret_status = 'active',
     top_secret_expires_at = v_expires_at,
     top_secret_interval = v_interval,
     top_secret_cancel_at_period_end = FALSE,
+    top_secret_is_in_trial = FALSE,
+    -- 🔥 Store whop email for future lookups
+    whop_customer_email = COALESCE(whop_customer_email, p_user_email),
     updated_at = NOW()
   WHERE id = v_user_id;
-  
   -- Log event
   INSERT INTO subscription_events (
     user_id, event_type, old_plan, new_plan, metadata
@@ -3519,14 +3821,16 @@ BEGIN
     )
   );
   
-  RETURN jsonb_build_object(
+RETURN jsonb_build_object(
     'success', true,
     'user_id', v_user_id,
+    'email', v_found_email,
     'top_secret_status', 'active',
     'previous_status', v_old_status,
     'expires_at', v_expires_at,
     'interval', v_interval,
-    'payment_amount', p_payment_amount
+    'payment_amount', p_payment_amount,
+    'lookup_method', v_lookup_method
   );
   
 EXCEPTION WHEN OTHERS THEN
@@ -3824,7 +4128,274 @@ SELECT
 
 SELECT '🎉 TOP SECRET v1.0.0 COMPLETE!' as status;
 
+-- ============================================
+-- PART 14.7: PRODUCT SUBSCRIPTION RPC FUNCTIONS
+-- ============================================
+-- Called by Edge Function AFTER Whop API call
+-- Version: 1.0.0
+-- ============================================
 
+-- Cancel Newsletter (RPC version)
+DROP FUNCTION IF EXISTS cancel_newsletter_subscription_rpc(UUID, TEXT);
+
+CREATE OR REPLACE FUNCTION cancel_newsletter_subscription_rpc(
+  p_user_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    newsletter_status,
+    newsletter_whop_membership_id,
+    newsletter_expires_at,
+    newsletter_cancel_at_period_end
+  INTO v_profile
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF v_profile.newsletter_status NOT IN ('active', 'trial') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No active newsletter subscription to cancel');
+  END IF;
+  
+  IF COALESCE(v_profile.newsletter_cancel_at_period_end, FALSE) THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'Newsletter is already scheduled for cancellation',
+      'expiresAt', v_profile.newsletter_expires_at
+    );
+  END IF;
+  
+  UPDATE profiles SET
+    newsletter_cancel_at_period_end = TRUE,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, scheduled_at, reason, metadata
+  ) VALUES (
+    p_user_id, 'cancel_scheduled', 'newsletter', 'none',
+    v_profile.newsletter_expires_at, p_reason,
+    jsonb_build_object(
+      'whop_membership_id', v_profile.newsletter_whop_membership_id,
+      'cancelled_by', 'user',
+      'subscription_type', 'newsletter'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Newsletter subscription will be cancelled at period end',
+    'membership_id', v_profile.newsletter_whop_membership_id,
+    'access_until', v_profile.newsletter_expires_at
+  );
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- Reactivate Newsletter (RPC version)
+DROP FUNCTION IF EXISTS reactivate_newsletter_subscription_rpc(UUID);
+
+CREATE OR REPLACE FUNCTION reactivate_newsletter_subscription_rpc(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    newsletter_status,
+    newsletter_cancel_at_period_end,
+    newsletter_whop_membership_id
+  INTO v_profile
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF NOT COALESCE(v_profile.newsletter_cancel_at_period_end, FALSE) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No pending newsletter cancellation to undo');
+  END IF;
+  
+  UPDATE profiles SET
+    newsletter_cancel_at_period_end = FALSE,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, metadata
+  ) VALUES (
+    p_user_id, 'reactivated', 'cancelling', 'newsletter',
+    jsonb_build_object(
+      'whop_membership_id', v_profile.newsletter_whop_membership_id,
+      'subscription_type', 'newsletter'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Newsletter subscription reactivated successfully'
+  );
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- Cancel Top Secret (RPC version)
+DROP FUNCTION IF EXISTS cancel_top_secret_subscription_rpc(UUID, TEXT);
+
+CREATE OR REPLACE FUNCTION cancel_top_secret_subscription_rpc(
+  p_user_id UUID,
+  p_reason TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    top_secret_status,
+    top_secret_whop_membership_id,
+    top_secret_expires_at,
+    top_secret_cancel_at_period_end
+  INTO v_profile
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF v_profile.top_secret_status != 'active' THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No active Top Secret subscription to cancel');
+  END IF;
+  
+  IF COALESCE(v_profile.top_secret_cancel_at_period_end, FALSE) THEN
+    RETURN jsonb_build_object(
+      'success', false, 
+      'error', 'Top Secret is already scheduled for cancellation',
+      'expiresAt', v_profile.top_secret_expires_at
+    );
+  END IF;
+  
+  UPDATE profiles SET
+    top_secret_cancel_at_period_end = TRUE,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, scheduled_at, reason, metadata
+  ) VALUES (
+    p_user_id, 'cancel_scheduled', 'top_secret', 'none',
+    v_profile.top_secret_expires_at, p_reason,
+    jsonb_build_object(
+      'whop_membership_id', v_profile.top_secret_whop_membership_id,
+      'cancelled_by', 'user',
+      'subscription_type', 'top_secret'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Top Secret subscription will be cancelled at period end',
+    'membership_id', v_profile.top_secret_whop_membership_id,
+    'access_until', v_profile.top_secret_expires_at
+  );
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- Reactivate Top Secret (RPC version)
+DROP FUNCTION IF EXISTS reactivate_top_secret_subscription_rpc(UUID);
+
+CREATE OR REPLACE FUNCTION reactivate_top_secret_subscription_rpc(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+BEGIN
+  SELECT 
+    top_secret_status,
+    top_secret_cancel_at_period_end,
+    top_secret_whop_membership_id
+  INTO v_profile
+  FROM profiles 
+  WHERE id = p_user_id;
+  
+  IF v_profile IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+  
+  IF NOT COALESCE(v_profile.top_secret_cancel_at_period_end, FALSE) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'No pending Top Secret cancellation to undo');
+  END IF;
+  
+  UPDATE profiles SET
+    top_secret_cancel_at_period_end = FALSE,
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  INSERT INTO subscription_events (
+    user_id, event_type, old_plan, new_plan, metadata
+  ) VALUES (
+    p_user_id, 'reactivated', 'cancelling', 'top_secret',
+    jsonb_build_object(
+      'whop_membership_id', v_profile.top_secret_whop_membership_id,
+      'subscription_type', 'top_secret'
+    )
+  );
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'message', 'Top Secret subscription reactivated successfully'
+  );
+  
+EXCEPTION WHEN OTHERS THEN
+  RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+-- GRANTS for RPC functions
+GRANT EXECUTE ON FUNCTION cancel_newsletter_subscription_rpc(UUID, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION reactivate_newsletter_subscription_rpc(UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION cancel_top_secret_subscription_rpc(UUID, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION reactivate_top_secret_subscription_rpc(UUID) TO authenticated, service_role;
+
+-- Verification
+SELECT '========== PART 14.7 RPC FUNCTIONS ==========' as section;
+
+SELECT 
+  'RPC FUNCTIONS' as check_type,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'cancel_newsletter_subscription_rpc') THEN '✅' ELSE '❌' END as cancel_newsletter_rpc,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'reactivate_newsletter_subscription_rpc') THEN '✅' ELSE '❌' END as reactivate_newsletter_rpc,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'cancel_top_secret_subscription_rpc') THEN '✅' ELSE '❌' END as cancel_top_secret_rpc,
+  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'reactivate_top_secret_subscription_rpc') THEN '✅' ELSE '❌' END as reactivate_top_secret_rpc;
+
+SELECT '🎉 PART 14.7 COMPLETE!' as status;
 
 -- ============================================
 -- PART 15: GRANTS & PERMISSIONS
