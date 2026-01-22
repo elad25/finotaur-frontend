@@ -33,51 +33,51 @@ BEGIN
 END $$;
 
 -- ===============================================
--- SECTION 7: SUBSCRIPTION FUNCTIONS
+-- 🔥 FIX: get_user_subscription_status
+-- ===============================================
+-- Error: Column 13 returns numeric but expected boolean
+-- Problem: The SELECT order doesn't match RETURNS TABLE order
+-- ===============================================
+-- Run this in Supabase SQL Editor AFTER your main migration
 -- ===============================================
 
-DO $$
-BEGIN
-  RAISE NOTICE '[7/15] Creating subscription functions...';
-END $$;
-
--- 🔧 Drop old function first to avoid type conflicts
+-- First drop the broken function
 DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
 
 -- ===============================================
--- 🆕 UNIFIED get_user_subscription_status v6.0.0
+-- 🆕 FIXED get_user_subscription_status v6.0.1
 -- ===============================================
--- Returns ALL 31 fields required by frontend including Whop integration
+-- Column order is now EXACTLY matched between
+-- RETURNS TABLE and all RETURN QUERY SELECT statements
 -- ===============================================
 
 CREATE OR REPLACE FUNCTION public.get_user_subscription_status(user_id_param UUID)
 RETURNS TABLE (
-  -- Core trade limits
+  -- 1-5: Core trade limits
   remaining INTEGER,
   used INTEGER,
   max_trades INTEGER,
   plan TEXT,
   reset_date TEXT,
   
-  -- Account info
+  -- 6-7: Account info
   account_type TEXT,
   role TEXT,
   
-  -- Subscription details
+  -- 8-12: Subscription details
   subscription_interval TEXT,
   subscription_status TEXT,
   subscription_expires_at TIMESTAMPTZ,
   subscription_cancel_at_period_end BOOLEAN,
   subscription_started_at TIMESTAMPTZ,
   
-  -- ✅ Trial info (NEW!)
-    is_in_trial BOOLEAN,
+  -- 13-16: Trial info
+  is_in_trial BOOLEAN,
   trial_ends_at TIMESTAMPTZ,
   trial_used BOOLEAN,
   trial_days_remaining INTEGER,
-
   
-  -- Portfolio & Risk
+  -- 17-23: Portfolio & Risk
   initial_portfolio NUMERIC,
   current_portfolio NUMERIC,
   portfolio_size NUMERIC,
@@ -86,16 +86,16 @@ RETURNS TABLE (
   risk_percentage NUMERIC,
   fixed_risk_amount NUMERIC,
   
-  -- Trade counts
+  -- 24-27: Trade counts
   trade_count INTEGER,
   current_month_trades_count INTEGER,
   current_month_active_days INTEGER,
   billing_cycle_start TEXT,
   
-  -- Flags
+  -- 28: Flags
   is_lifetime BOOLEAN,
   
-  -- Whop integration (CRITICAL!)
+  -- 29-34: Whop integration
   payment_provider TEXT,
   whop_user_id TEXT,
   whop_membership_id TEXT,
@@ -103,7 +103,7 @@ RETURNS TABLE (
   whop_plan_id TEXT,
   whop_customer_email TEXT,
   
-  -- Subscription management
+  -- 35: Subscription management
   pending_downgrade_plan TEXT
 )
 LANGUAGE plpgsql
@@ -116,16 +116,16 @@ DECLARE
   v_trades_used INT;
   v_reset_date DATE;
   v_is_lifetime BOOLEAN;
+  v_trial_days INT;
 BEGIN
   -- Fetch all profile data in one query
   SELECT 
     p.account_type,
     p.max_trades,
-
     p.subscription_interval,
     p.subscription_status,
     p.subscription_expires_at,
-    p.subscription_cancel_at_period_end,
+    COALESCE(p.subscription_cancel_at_period_end, FALSE) as subscription_cancel_at_period_end,
     p.subscription_started_at,
     COALESCE(p.billing_cycle_start, CURRENT_DATE) as billing_cycle_start,
     COALESCE(p.role, 'user') as role,
@@ -145,25 +145,64 @@ BEGIN
     p.whop_product_id,
     p.whop_plan_id,
     p.whop_customer_email,
-    p.pending_downgrade_plan
+    p.pending_downgrade_plan,
+    -- Trial fields
+    COALESCE(p.is_in_trial, FALSE) as is_in_trial,
+    p.trial_ends_at,
+    COALESCE(p.trial_used, FALSE) as trial_used
   INTO v_profile
   FROM public.profiles p
   WHERE p.id = user_id_param;
   
-  -- Handle user not found
--- Handle user not found
+  -- ═══════════════════════════════════════════════════════════════
+  -- Handle user not found - return defaults in EXACT column order
+  -- ═══════════════════════════════════════════════════════════════
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      25::INTEGER, 0::INTEGER, 25::INTEGER, 'Basic Plan (Trial)'::TEXT, NULL::TEXT,
-      'basic'::TEXT, 'user'::TEXT, 
-      NULL::TEXT, 'trial'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
-      FALSE::BOOLEAN, NULL::TIMESTAMPTZ, FALSE::BOOLEAN, 14::INTEGER,
-      10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
-      'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
-      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT,
-      FALSE::BOOLEAN,
-      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT,
-      NULL::TEXT;
+      -- 1-5: Core trade limits
+      25::INTEGER,                    -- remaining
+      0::INTEGER,                     -- used
+      25::INTEGER,                    -- max_trades
+      'Basic Plan (Trial)'::TEXT,    -- plan
+      NULL::TEXT,                     -- reset_date
+      -- 6-7: Account info
+      'basic'::TEXT,                  -- account_type
+      'user'::TEXT,                   -- role
+      -- 8-12: Subscription details
+      NULL::TEXT,                     -- subscription_interval
+      'trial'::TEXT,                  -- subscription_status
+      NULL::TIMESTAMPTZ,              -- subscription_expires_at
+      FALSE::BOOLEAN,                 -- subscription_cancel_at_period_end
+      NULL::TIMESTAMPTZ,              -- subscription_started_at
+      -- 13-16: Trial info
+      FALSE::BOOLEAN,                 -- is_in_trial *** Column 13 = BOOLEAN ***
+      NULL::TIMESTAMPTZ,              -- trial_ends_at
+      FALSE::BOOLEAN,                 -- trial_used
+      14::INTEGER,                    -- trial_days_remaining
+      -- 17-23: Portfolio & Risk
+      10000::NUMERIC,                 -- initial_portfolio
+      10000::NUMERIC,                 -- current_portfolio
+      10000::NUMERIC,                 -- portfolio_size
+      0::NUMERIC,                     -- total_pnl
+      'percentage'::TEXT,             -- risk_mode
+      1::NUMERIC,                     -- risk_percentage
+      NULL::NUMERIC,                  -- fixed_risk_amount
+      -- 24-27: Trade counts
+      0::INTEGER,                     -- trade_count
+      0::INTEGER,                     -- current_month_trades_count
+      0::INTEGER,                     -- current_month_active_days
+      NULL::TEXT,                     -- billing_cycle_start
+      -- 28: Flags
+      FALSE::BOOLEAN,                 -- is_lifetime
+      -- 29-34: Whop integration
+      NULL::TEXT,                     -- payment_provider
+      NULL::TEXT,                     -- whop_user_id
+      NULL::TEXT,                     -- whop_membership_id
+      NULL::TEXT,                     -- whop_product_id
+      NULL::TEXT,                     -- whop_plan_id
+      NULL::TEXT,                     -- whop_customer_email
+      -- 35: Subscription management
+      NULL::TEXT;                     -- pending_downgrade_plan
     RETURN;
   END IF;
   
@@ -178,25 +217,43 @@ BEGIN
   -- Determine which trade counter to use
   v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
   
+  -- Calculate trial days remaining
+  IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW() THEN
+    v_trial_days := CEIL(EXTRACT(EPOCH FROM (v_profile.trial_ends_at - NOW())) / 86400)::INTEGER;
+  ELSE
+    v_trial_days := 0;
+  END IF;
+  
+  -- ═══════════════════════════════════════════════════════════════
   -- Handle unlimited users (premium/admin/vip)
+  -- ═══════════════════════════════════════════════════════════════
   IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
     RETURN QUERY SELECT
-      999999::INTEGER,
-      v_trades_used::INTEGER,
-      999999::INTEGER,
+      -- 1-5: Core trade limits
+      999999::INTEGER,                -- remaining
+      v_trades_used::INTEGER,         -- used
+      999999::INTEGER,                -- max_trades
       CASE v_profile.account_type 
         WHEN 'premium' THEN 'Premium Plan' 
         WHEN 'vip' THEN 'VIP Plan' 
         ELSE 'Admin' 
-      END::TEXT,
-      v_reset_date::TEXT,
-      v_profile.account_type::TEXT,
-      v_profile.role::TEXT,
+      END::TEXT,                      -- plan
+      v_reset_date::TEXT,             -- reset_date
+      -- 6-7: Account info
+      v_profile.account_type::TEXT,   -- account_type
+      v_profile.role::TEXT,           -- role
+      -- 8-12: Subscription details
       v_profile.subscription_interval::TEXT,
       v_profile.subscription_status::TEXT,
       v_profile.subscription_expires_at::TIMESTAMPTZ,
-      COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+      v_profile.subscription_cancel_at_period_end::BOOLEAN,
       v_profile.subscription_started_at::TIMESTAMPTZ,
+      -- 13-16: Trial info
+      v_profile.is_in_trial::BOOLEAN,  -- is_in_trial *** Column 13 = BOOLEAN ***
+      v_profile.trial_ends_at::TIMESTAMPTZ,
+      v_profile.trial_used::BOOLEAN,
+      v_trial_days::INTEGER,
+      -- 17-23: Portfolio & Risk
       v_profile.initial_portfolio::NUMERIC,
       v_profile.current_portfolio::NUMERIC,
       v_profile.portfolio_size::NUMERIC,
@@ -204,40 +261,55 @@ BEGIN
       v_profile.risk_mode::TEXT,
       v_profile.risk_percentage::NUMERIC,
       v_profile.fixed_risk_amount::NUMERIC,
+      -- 24-27: Trade counts
       v_profile.lifetime_count::INTEGER,
       v_profile.monthly_count::INTEGER,
       v_profile.active_days::INTEGER,
       v_profile.billing_cycle_start::TEXT,
-      FALSE,
+      -- 28: Flags
+      FALSE::BOOLEAN,                 -- is_lifetime
+      -- 29-34: Whop integration
       v_profile.payment_provider::TEXT,
       v_profile.whop_user_id::TEXT,
       v_profile.whop_membership_id::TEXT,
       v_profile.whop_product_id::TEXT,
       v_profile.whop_plan_id::TEXT,
       v_profile.whop_customer_email::TEXT,
+      -- 35: Subscription management
       v_profile.pending_downgrade_plan::TEXT;
     RETURN;
   END IF;
   
+  -- ═══════════════════════════════════════════════════════════════
   -- Regular users (free/basic/trial)
+  -- ═══════════════════════════════════════════════════════════════
   RETURN QUERY SELECT
-    GREATEST(0, v_profile.max_trades - v_trades_used)::INTEGER,
-    v_trades_used::INTEGER,
-    v_profile.max_trades::INTEGER,
+    -- 1-5: Core trade limits
+    GREATEST(0, COALESCE(v_profile.max_trades, 25) - v_trades_used)::INTEGER,  -- remaining
+    v_trades_used::INTEGER,           -- used
+    COALESCE(v_profile.max_trades, 25)::INTEGER,  -- max_trades
     CASE v_profile.account_type 
       WHEN 'free' THEN 'Free Plan' 
       WHEN 'basic' THEN 'Basic Plan' 
       WHEN 'trial' THEN 'Trial' 
       ELSE 'Free Plan' 
-    END::TEXT,
-    v_reset_date::TEXT,
-    v_profile.account_type::TEXT,
-    v_profile.role::TEXT,
+    END::TEXT,                        -- plan
+    v_reset_date::TEXT,               -- reset_date
+    -- 6-7: Account info
+    v_profile.account_type::TEXT,     -- account_type
+    v_profile.role::TEXT,             -- role
+    -- 8-12: Subscription details
     v_profile.subscription_interval::TEXT,
     v_profile.subscription_status::TEXT,
     v_profile.subscription_expires_at::TIMESTAMPTZ,
-    COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
+    v_profile.subscription_cancel_at_period_end::BOOLEAN,
     v_profile.subscription_started_at::TIMESTAMPTZ,
+    -- 13-16: Trial info
+    v_profile.is_in_trial::BOOLEAN,    -- is_in_trial *** Column 13 = BOOLEAN ***
+    v_profile.trial_ends_at::TIMESTAMPTZ,
+    v_profile.trial_used::BOOLEAN,
+    v_trial_days::INTEGER,
+    -- 17-23: Portfolio & Risk
     v_profile.initial_portfolio::NUMERIC,
     v_profile.current_portfolio::NUMERIC,
     v_profile.portfolio_size::NUMERIC,
@@ -245,27 +317,52 @@ BEGIN
     v_profile.risk_mode::TEXT,
     v_profile.risk_percentage::NUMERIC,
     v_profile.fixed_risk_amount::NUMERIC,
+    -- 24-27: Trade counts
     v_profile.lifetime_count::INTEGER,
     v_profile.monthly_count::INTEGER,
     v_profile.active_days::INTEGER,
     v_profile.billing_cycle_start::TEXT,
-    v_is_lifetime,
+    -- 28: Flags
+    v_is_lifetime::BOOLEAN,           -- is_lifetime
+    -- 29-34: Whop integration
     v_profile.payment_provider::TEXT,
     v_profile.whop_user_id::TEXT,
     v_profile.whop_membership_id::TEXT,
     v_profile.whop_product_id::TEXT,
     v_profile.whop_plan_id::TEXT,
     v_profile.whop_customer_email::TEXT,
+    -- 35: Subscription management
     v_profile.pending_downgrade_plan::TEXT;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v6.0.0 UNIFIED: Returns ALL 31 fields including Whop integration.
-FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset, PREMIUM = unlimited.';
+'v6.0.1-FIXED: Column order now EXACTLY matches between RETURNS TABLE and SELECT statements.
+Fixed error 42804: Column 13 (is_in_trial) is now correctly BOOLEAN.';
 
+-- Grant permissions
 GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO anon;
+
+-- ===============================================
+-- ✅ VERIFICATION
+-- ===============================================
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔════════════════════════════════════════╗';
+  RAISE NOTICE '║  ✅ FIXED: get_user_subscription_status ║';
+  RAISE NOTICE '╚════════════════════════════════════════╝';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔧 Fix applied:';
+  RAISE NOTICE '   • Column 13 (is_in_trial) is now BOOLEAN';
+  RAISE NOTICE '   • All 3 RETURN QUERY SELECT statements fixed';
+  RAISE NOTICE '   • Column order matches RETURNS TABLE';
+  RAISE NOTICE '';
+  RAISE NOTICE '📋 Test with:';
+  RAISE NOTICE '   SELECT * FROM get_user_subscription_status(''your-user-id'');';
+  RAISE NOTICE '';
+END $$;
 -- ═══════════════════════════════════════════════════════════════
 -- ✅ v9.4.2-SYNCED: check_subscription_status (FIXED!)
 -- Uses subscription_expires_at (NOT subscription_end_date)

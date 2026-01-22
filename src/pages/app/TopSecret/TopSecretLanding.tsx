@@ -303,7 +303,7 @@ export default function TopSecretLanding() {
                   <TrendingUp className="w-4 h-4 text-[#C9A646]" />
                 </div>
                 <div>
-                  <p className="text-white font-bold">5 Reports</p>
+                  <p className="text-white font-bold">10 Reports</p>
                   <p className="text-xs text-slate-500">Every Month</p>
                 </div>
               </div>

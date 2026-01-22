@@ -219,6 +219,164 @@ CREATE TABLE IF NOT EXISTS ism_report_progress (
   error TEXT,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- =====================================================
+-- PART 1.5: DELETED REPORTS TRACKING (FIXED v2.0)
+-- =====================================================
+-- Tracks deleted published reports to prevent re-sync
+-- When admin deletes a report, it will NOT come back
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS deleted_published_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_type TEXT NOT NULL,
+    original_report_id TEXT NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_by UUID,
+    reason TEXT,
+    UNIQUE(report_type, original_report_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_deleted_reports_lookup 
+ON deleted_published_reports(report_type, original_report_id);
+
+ALTER TABLE deleted_published_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "service_deleted_reports_all" ON deleted_published_reports;
+CREATE POLICY "service_deleted_reports_all" ON deleted_published_reports
+    FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "admin_deleted_reports_all" ON deleted_published_reports;
+CREATE POLICY "admin_deleted_reports_all" ON deleted_published_reports
+    FOR ALL TO authenticated
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+        )
+    );
+
+GRANT ALL ON deleted_published_reports TO service_role;
+GRANT SELECT, INSERT, DELETE ON deleted_published_reports TO authenticated;
+
+-- ⭐ FIXED: Trigger to track deletions from published_reports
+DROP TRIGGER IF EXISTS trigger_track_deleted_published_report ON published_reports;
+DROP FUNCTION IF EXISTS track_deleted_published_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION track_deleted_published_report()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only track if original_report_id exists (synced reports)
+    IF OLD.original_report_id IS NOT NULL THEN
+        INSERT INTO deleted_published_reports (
+            report_type, 
+            original_report_id, 
+            deleted_by,
+            reason
+        )
+        VALUES (
+            OLD.report_type, 
+            OLD.original_report_id, 
+            auth.uid(),
+            'Manually deleted by admin'
+        )
+        ON CONFLICT (report_type, original_report_id) 
+        DO UPDATE SET
+            deleted_at = NOW(),
+            deleted_by = auth.uid();
+            
+        RAISE NOTICE '[DeleteTracker] Tracked deletion: % - %', OLD.report_type, OLD.original_report_id;
+    END IF;
+    
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trigger_track_deleted_published_report
+    BEFORE DELETE ON published_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION track_deleted_published_report();
+
+-- ⭐ NEW: Function to restore a deleted report
+CREATE OR REPLACE FUNCTION restore_deleted_report(
+    p_report_type TEXT,
+    p_original_report_id TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_deleted BOOLEAN;
+BEGIN
+    -- Check if user is admin
+    IF NOT is_admin_user(auth.uid()) THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Admin access required');
+    END IF;
+
+    -- Check if it was deleted
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = p_report_type AND original_report_id = p_original_report_id
+    ) INTO v_deleted;
+    
+    IF NOT v_deleted THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Report was not deleted');
+    END IF;
+    
+    -- Remove from deleted list
+    DELETE FROM deleted_published_reports
+    WHERE report_type = p_report_type AND original_report_id = p_original_report_id;
+    
+    RETURN jsonb_build_object(
+        'success', true, 
+        'message', 'Report removed from deleted list - run sync to restore',
+        'report_type', p_report_type,
+        'original_report_id', p_original_report_id
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION restore_deleted_report(TEXT, TEXT) TO authenticated;
+
+-- ⭐ NEW: Function to view all deleted reports
+CREATE OR REPLACE FUNCTION get_deleted_reports()
+RETURNS TABLE (
+    id UUID,
+    report_type TEXT,
+    original_report_id TEXT,
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID,
+    reason TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    IF NOT is_admin_user(auth.uid()) THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT 
+        d.id,
+        d.report_type,
+        d.original_report_id,
+        d.deleted_at,
+        d.deleted_by,
+        d.reason
+    FROM deleted_published_reports d
+    ORDER BY d.deleted_at DESC;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_deleted_reports() TO authenticated;
+
 
 -- =====================================================
 -- PART 2: COMPANY ANALYSIS TABLES
@@ -1317,6 +1475,23 @@ END $$;
 -- 2. Uses ON CONFLICT to prevent duplicates
 -- 3. Won't re-add deleted reports
 -- =====================================================
+-- ⭐ CRITICAL: First delete any reports that came back but should stay deleted
+DELETE FROM published_reports pr
+WHERE EXISTS (
+    SELECT 1 FROM deleted_published_reports d
+    WHERE d.report_type = pr.report_type 
+    AND d.original_report_id = pr.original_report_id
+);
+
+-- ============================================
+-- STEP 0: CLEAN UP - Remove reports that should stay deleted
+-- ============================================
+DELETE FROM published_reports pr
+WHERE EXISTS (
+    SELECT 1 FROM deleted_published_reports d
+    WHERE d.report_type = pr.report_type 
+    AND d.original_report_id = pr.original_report_id
+);
 
 -- ============================================
 -- STEP 1: ENSURE UNIQUE INDEX EXISTS
@@ -1326,7 +1501,7 @@ ON published_reports(report_type, original_report_id)
 WHERE original_report_id IS NOT NULL;
 
 -- ============================================
--- STEP 2: SYNC ISM REPORTS (Jan 10, 2025+, no duplicates)
+-- STEP 2: SYNC ISM REPORTS (Jan 10, 2025+, no duplicates, respect deletions)
 -- ============================================
 INSERT INTO published_reports (
     report_type,
@@ -1388,13 +1563,50 @@ SELECT
     created_at
 FROM ism_reports
 WHERE created_at >= '2025-01-10T00:00:00Z'
+  AND NOT EXISTS (
+      SELECT 1 FROM deleted_published_reports d
+      WHERE d.report_type = 'ism' AND d.original_report_id = ism_reports.id
+  )
 ON CONFLICT (report_type, original_report_id) 
 WHERE original_report_id IS NOT NULL
-DO NOTHING;  -- ⭐ Don't update existing, just skip
+DO NOTHING;
 
 -- ============================================
--- STEP 3: SYNC COMPANY REPORTS (Jan 10, 2025+, no duplicates)
+-- STEP 3: SYNC COMPANY REPORTS (Jan 10, 2025+, no duplicates, respect deletions)
 -- ============================================
+
+-- Step 3a: First, remove existing duplicates (keep newest per ticker per day)
+DELETE FROM published_reports
+WHERE id IN (
+  SELECT id FROM (
+    SELECT 
+      id,
+      ROW_NUMBER() OVER (
+        PARTITION BY ticker, published_at::date 
+        ORDER BY published_at DESC
+      ) as rn
+    FROM published_reports
+    WHERE report_type = 'company'
+  ) ranked
+  WHERE rn > 1
+);
+
+-- Step 3b: Add published_date column for unique constraint
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS published_date DATE;
+
+-- Step 3c: Populate published_date from published_at
+UPDATE published_reports 
+SET published_date = published_at::date 
+WHERE published_date IS NULL;
+
+-- Step 3d: Create unique index to prevent future duplicates per ticker per day
+DROP INDEX IF EXISTS idx_published_reports_company_no_dups;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_published_reports_company_no_dups 
+ON published_reports (report_type, ticker, published_date) 
+WHERE report_type = 'company' AND ticker IS NOT NULL;
+
+-- Step 3e: Sync company reports (only newest per ticker)
 INSERT INTO published_reports (
     report_type,
     original_report_id,
@@ -1416,6 +1628,7 @@ INSERT INTO published_reports (
     is_pinned,
     target_group,
     published_at,
+    published_date,
     created_at
 )
 SELECT 
@@ -1448,15 +1661,30 @@ SELECT
     false as is_pinned,
     'top_secret' as target_group,
     created_at as published_at,
+    created_at::date as published_date,
     created_at
-FROM company_reports
-WHERE created_at >= '2025-01-10T00:00:00Z'
-ON CONFLICT (report_type, original_report_id) 
-WHERE original_report_id IS NOT NULL
-DO NOTHING;  -- ⭐ Don't update existing, just skip
+FROM (
+    -- Get only the NEWEST report per ticker
+    SELECT DISTINCT ON (ticker) *
+    FROM company_reports
+    WHERE created_at >= '2025-01-10T00:00:00Z'
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'company' AND d.original_report_id = company_reports.id
+      )
+    ORDER BY ticker, created_at DESC
+) as latest_company_reports
+ON CONFLICT (report_type, ticker, published_date) 
+WHERE report_type = 'company' AND ticker IS NOT NULL
+DO UPDATE SET
+    original_report_id = EXCLUDED.original_report_id,
+    markdown_content = EXCLUDED.markdown_content,
+    html_content = EXCLUDED.html_content,
+    qa_score = EXCLUDED.qa_score,
+    updated_at = NOW();
 
 -- ============================================
--- STEP 4: SYNC CRYPTO REPORTS (Jan 10, 2025+, no duplicates)
+-- STEP 4: SYNC CRYPTO REPORTS (Jan 10, 2025+, no duplicates, respect deletions)
 -- ============================================
 INSERT INTO published_reports (
     report_type,
@@ -1511,9 +1739,13 @@ SELECT
     created_at
 FROM crypto_reports
 WHERE created_at >= '2025-01-10T00:00:00Z'
+  AND NOT EXISTS (
+      SELECT 1 FROM deleted_published_reports d
+      WHERE d.report_type = 'crypto' AND d.original_report_id = crypto_reports.id::TEXT
+  )
 ON CONFLICT (report_type, original_report_id) 
 WHERE original_report_id IS NOT NULL
-DO NOTHING;  -- ⭐ Don't update existing, just skip
+DO NOTHING;
 
 -- ============================================
 -- STEP 5: MARK LATEST REPORTS AS FEATURED
@@ -1782,10 +2014,10 @@ END $$;
 -- END OF PART 3.8
 -- =====================================================
 -- =====================================================
--- PART 3.9: AUTO-PUBLISH TO published_reports (ENHANCED)
+-- PART 3.9: AUTO-PUBLISH TO published_reports (FIXED v3.0)
 -- =====================================================
--- Replace the existing PART 3.9 with this version
--- This version CREATES entries in published_reports, not just updates
+-- CRITICAL FIX: All triggers now check deleted_published_reports
+-- Deleted reports will NOT come back when running this schema
 -- =====================================================
 
 -- ============================================
@@ -1799,9 +2031,21 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_existing_id UUID;
     v_month_display TEXT;
+    v_is_deleted BOOLEAN := FALSE;
 BEGIN
     -- Only proceed if we have content
     IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- ⭐ CRITICAL: Check if this report was deleted - DON'T RE-SYNC
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = 'ism' AND original_report_id = NEW.id
+    ) INTO v_is_deleted;
+    
+    IF v_is_deleted THEN
+        RAISE NOTICE '[AutoPublish] ISM report % was deleted by admin - skipping sync', NEW.id;
         RETURN NEW;
     END IF;
 
@@ -1864,8 +2108,8 @@ BEGIN
             (NEW.executive_summary->>'pmi_value')::TEXT,
             (NEW.executive_summary->>'pmi_value')::NUMERIC,
             NEW.qa_score,
-            true,  -- is_featured
-            false, -- is_pinned
+            true,
+            false,
             'top_secret',
             NOW(),
             NOW(),
@@ -1897,9 +2141,21 @@ CREATE OR REPLACE FUNCTION auto_publish_company_report()
 RETURNS TRIGGER AS $$
 DECLARE
     v_existing_id UUID;
+    v_is_deleted BOOLEAN := FALSE;
 BEGIN
     -- Only proceed if we have content
     IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- ⭐ CRITICAL: Check if this report was deleted - DON'T RE-SYNC
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = 'company' AND original_report_id = NEW.id
+    ) INTO v_is_deleted;
+    
+    IF v_is_deleted THEN
+        RAISE NOTICE '[AutoPublish] Company report % was deleted by admin - skipping sync', NEW.id;
         RETURN NEW;
     END IF;
 
@@ -1961,8 +2217,8 @@ BEGIN
             NEW.ticker,
             NEW.company_name,
             NEW.qa_score,
-            true,  -- is_featured
-            false, -- is_pinned
+            true,
+            false,
             'top_secret',
             NOW(),
             NOW(),
@@ -1994,9 +2250,21 @@ CREATE OR REPLACE FUNCTION auto_publish_crypto_report()
 RETURNS TRIGGER AS $$
 DECLARE
     v_existing_id UUID;
+    v_is_deleted BOOLEAN := FALSE;
 BEGIN
     -- Only proceed if we have content
     IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- ⭐ CRITICAL: Check if this report was deleted - DON'T RE-SYNC
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = 'crypto' AND original_report_id = NEW.id::TEXT
+    ) INTO v_is_deleted;
+    
+    IF v_is_deleted THEN
+        RAISE NOTICE '[AutoPublish] Crypto report % was deleted by admin - skipping sync', NEW.id;
         RETURN NEW;
     END IF;
 
@@ -2054,8 +2322,8 @@ BEGIN
             'Market Regime',
             NEW.market_regime,
             NEW.qa_score,
-            true,  -- is_featured
-            false, -- is_pinned
+            true,
+            false,
             'top_secret',
             NOW(),
             NOW(),
@@ -2078,27 +2346,36 @@ CREATE TRIGGER trigger_auto_publish_crypto
     EXECUTE FUNCTION auto_publish_crypto_report();
 
 -- ============================================
--- 4. FUNCTION: Manual sync all (for existing reports)
+-- 4. FUNCTION: Manual sync all (respects deletions)
 -- ============================================
 
 DROP FUNCTION IF EXISTS sync_all_published_reports_content();
 
 CREATE OR REPLACE FUNCTION sync_all_published_reports_content()
 RETURNS TABLE (
-    report_type TEXT,
+    out_report_type TEXT,
     synced_count INTEGER,
-    created_count INTEGER
+    created_count INTEGER,
+    skipped_deleted INTEGER
 ) AS $$
 DECLARE
     v_ism_synced INTEGER := 0;
     v_ism_created INTEGER := 0;
+    v_ism_skipped INTEGER := 0;
     v_company_synced INTEGER := 0;
     v_company_created INTEGER := 0;
+    v_company_skipped INTEGER := 0;
     v_crypto_synced INTEGER := 0;
     v_crypto_created INTEGER := 0;
+    v_crypto_skipped INTEGER := 0;
 BEGIN
+    -- Count deleted reports that will be skipped
+    SELECT COUNT(*) INTO v_ism_skipped FROM deleted_published_reports d WHERE d.report_type = 'ism';
+    SELECT COUNT(*) INTO v_company_skipped FROM deleted_published_reports d WHERE d.report_type = 'company';
+    SELECT COUNT(*) INTO v_crypto_skipped FROM deleted_published_reports d WHERE d.report_type = 'crypto';
+
     -- ========== ISM ==========
-    -- Update existing
+    -- Update existing (only if not deleted)
     UPDATE published_reports pr
     SET 
         markdown_content = ir.markdown_content,
@@ -2110,10 +2387,14 @@ BEGIN
       AND pr.report_type = 'ism'
       AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
       AND ir.markdown_content IS NOT NULL
-      AND LENGTH(ir.markdown_content) > 100;
+      AND LENGTH(ir.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'ism' AND d.original_report_id = ir.id
+      );
     GET DIAGNOSTICS v_ism_synced = ROW_COUNT;
     
-    -- Insert missing
+    -- Insert missing (only if not deleted)
     INSERT INTO published_reports (
         report_type, original_report_id, title, subtitle, report_month,
         markdown_content, html_content, markdown_preview, highlights,
@@ -2135,11 +2416,14 @@ BEGIN
       AND NOT EXISTS (
           SELECT 1 FROM published_reports pr 
           WHERE pr.original_report_id = ir.id AND pr.report_type = 'ism'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'ism' AND d.original_report_id = ir.id
       );
     GET DIAGNOSTICS v_ism_created = ROW_COUNT;
 
     -- ========== COMPANY ==========
-    -- Update existing
     UPDATE published_reports pr
     SET 
         markdown_content = cr.markdown_content,
@@ -2151,10 +2435,13 @@ BEGIN
       AND pr.report_type = 'company'
       AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
       AND cr.markdown_content IS NOT NULL
-      AND LENGTH(cr.markdown_content) > 100;
+      AND LENGTH(cr.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'company' AND d.original_report_id = cr.id
+      );
     GET DIAGNOSTICS v_company_synced = ROW_COUNT;
     
-    -- Insert missing
     INSERT INTO published_reports (
         report_type, original_report_id, title, subtitle, ticker, company_name, sector,
         markdown_content, html_content, markdown_preview, highlights,
@@ -2175,11 +2462,14 @@ BEGIN
       AND NOT EXISTS (
           SELECT 1 FROM published_reports pr 
           WHERE pr.original_report_id = cr.id AND pr.report_type = 'company'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'company' AND d.original_report_id = cr.id
       );
     GET DIAGNOSTICS v_company_created = ROW_COUNT;
 
     -- ========== CRYPTO ==========
-    -- Update existing
     UPDATE published_reports pr
     SET 
         markdown_content = crypto.markdown_content,
@@ -2191,10 +2481,13 @@ BEGIN
       AND pr.report_type = 'crypto'
       AND (pr.markdown_content IS NULL OR LENGTH(pr.markdown_content) < 100)
       AND crypto.markdown_content IS NOT NULL
-      AND LENGTH(crypto.markdown_content) > 100;
+      AND LENGTH(crypto.markdown_content) > 100
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'crypto' AND d.original_report_id = crypto.id::TEXT
+      );
     GET DIAGNOSTICS v_crypto_synced = ROW_COUNT;
     
-    -- Insert missing
     INSERT INTO published_reports (
         report_type, original_report_id, title, subtitle, market_regime,
         markdown_content, html_content, markdown_preview, highlights,
@@ -2214,16 +2507,20 @@ BEGIN
       AND NOT EXISTS (
           SELECT 1 FROM published_reports pr 
           WHERE pr.original_report_id = crypto.id::TEXT AND pr.report_type = 'crypto'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM deleted_published_reports d
+          WHERE d.report_type = 'crypto' AND d.original_report_id = crypto.id::TEXT
       );
     GET DIAGNOSTICS v_crypto_created = ROW_COUNT;
     
     -- Return results
     RETURN QUERY
-    SELECT 'ism'::TEXT, v_ism_synced, v_ism_created
+    SELECT 'ism'::TEXT, v_ism_synced, v_ism_created, v_ism_skipped
     UNION ALL
-    SELECT 'company'::TEXT, v_company_synced, v_company_created
+    SELECT 'company'::TEXT, v_company_synced, v_company_created, v_company_skipped
     UNION ALL
-    SELECT 'crypto'::TEXT, v_crypto_synced, v_crypto_created;
+    SELECT 'crypto'::TEXT, v_crypto_synced, v_crypto_created, v_crypto_skipped;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -2231,7 +2528,7 @@ GRANT EXECUTE ON FUNCTION sync_all_published_reports_content() TO authenticated;
 GRANT EXECUTE ON FUNCTION sync_all_published_reports_content() TO service_role;
 
 -- ============================================
--- 5. RUN SYNC NOW
+-- 5. RUN SYNC NOW (respects deletions)
 -- ============================================
 
 SELECT * FROM sync_all_published_reports_content();
@@ -2245,17 +2542,19 @@ DECLARE
     v_ism_count INTEGER;
     v_company_count INTEGER;
     v_crypto_count INTEGER;
+    v_deleted_count INTEGER;
     v_with_content INTEGER;
 BEGIN
     SELECT COUNT(*) INTO v_ism_count FROM published_reports WHERE report_type = 'ism';
     SELECT COUNT(*) INTO v_company_count FROM published_reports WHERE report_type = 'company';
     SELECT COUNT(*) INTO v_crypto_count FROM published_reports WHERE report_type = 'crypto';
+    SELECT COUNT(*) INTO v_deleted_count FROM deleted_published_reports;
     SELECT COUNT(*) INTO v_with_content FROM published_reports 
         WHERE markdown_content IS NOT NULL AND LENGTH(markdown_content) > 100;
     
     RAISE NOTICE '';
     RAISE NOTICE '=====================================================';
-    RAISE NOTICE '✅ PART 3.9 ENHANCED: AUTO-PUBLISH COMPLETE';
+    RAISE NOTICE '✅ PART 3.9 FIXED v3.0: AUTO-PUBLISH COMPLETE';
     RAISE NOTICE '=====================================================';
     RAISE NOTICE '';
     RAISE NOTICE 'Triggers created (INSERT + UPDATE):';
@@ -2269,7 +2568,11 @@ BEGIN
     RAISE NOTICE '  • Crypto: %', v_crypto_count;
     RAISE NOTICE '  • With content: %', v_with_content;
     RAISE NOTICE '';
-    RAISE NOTICE '⭐ New reports will auto-publish to dashboard!';
+    RAISE NOTICE 'Deleted reports (will NOT come back): %', v_deleted_count;
+    RAISE NOTICE '';
+    RAISE NOTICE '⭐ CRITICAL FIX: Deleted reports are now respected!';
+    RAISE NOTICE '⭐ New reports will auto-publish to dashboard';
+    RAISE NOTICE '⭐ Admin deletions are permanent (unless restored)';
     RAISE NOTICE '=====================================================';
 END $$;
 
@@ -2282,8 +2585,13 @@ FROM published_reports
 GROUP BY report_type
 ORDER BY report_type;
 
+-- Show deleted reports count
+SELECT report_type, COUNT(*) as deleted_count 
+FROM deleted_published_reports 
+GROUP BY report_type;
+
 -- =====================================================
--- END OF PART 3.9 ENHANCED
+-- END OF PART 3.9 FIXED v3.0
 -- =====================================================
 -- =====================================================
 -- PART 3.10: FIX PDF STORAGE PATH FOR EXISTING REPORTS
@@ -5612,6 +5920,122 @@ BEGIN
 END $$;
 
 -- =====================================================
+-- FIX: Add missing 'metadata' column to published_reports
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- 
+-- Issue from logs:
+-- [Orchestrator v8.4] Publish to TOP SECRET failed: 
+-- Could not find the 'metadata' column of 'published_reports' in the schema cache
+-- =====================================================
+
+-- Add metadata column if it doesn't exist
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+
+-- Add any other potentially missing columns
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT false;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS original_report_id UUID;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS pdf_storage_path TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS pdf_url TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS markdown_content TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS html_content TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS highlights JSONB;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS key_metric_label TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS key_metric_value TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS key_insights_count INTEGER;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS qa_score INTEGER;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS comments_count INTEGER DEFAULT 0;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS likes_count INTEGER DEFAULT 0;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS ticker VARCHAR(20);
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS company_name TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS sector TEXT;
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS report_month VARCHAR(10);
+
+ALTER TABLE published_reports 
+ADD COLUMN IF NOT EXISTS market_regime TEXT;
+
+-- Create unique constraint for report_type + original_report_id (for upsert)
+-- This prevents duplicates when publishing the same report multiple times
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'published_reports_type_original_id_unique'
+  ) THEN
+    ALTER TABLE published_reports 
+    ADD CONSTRAINT published_reports_type_original_id_unique 
+    UNIQUE (report_type, original_report_id);
+  END IF;
+EXCEPTION
+  WHEN duplicate_table THEN
+    NULL;
+  WHEN duplicate_object THEN
+    NULL;
+END $$;
+
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_published_reports_type 
+ON published_reports(report_type);
+
+CREATE INDEX IF NOT EXISTS idx_published_reports_published_at 
+ON published_reports(published_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_published_reports_ticker 
+ON published_reports(ticker);
+
+CREATE INDEX IF NOT EXISTS idx_published_reports_original_id 
+ON published_reports(original_report_id);
+
+CREATE INDEX IF NOT EXISTS idx_published_reports_featured 
+ON published_reports(is_featured) WHERE is_featured = true;
+
+-- Refresh schema cache
+NOTIFY pgrst, 'reload schema';
+
+-- Verify the columns exist
+SELECT column_name, data_type, is_nullable 
+FROM information_schema.columns 
+WHERE table_name = 'published_reports'
+ORDER BY ordinal_position;
+
+-- =====================================================
 -- END OF FINOTAUR DATABASE SCHEMA
 -- =====================================================
 -- =====================================================
@@ -5734,6 +6158,33 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON weekly_reports TO authenticated;
 GRANT ALL ON weekly_reports TO service_role;
 
 -- ============================================
+-- Auto-fill pdf_path trigger for weekly_reports
+-- ============================================
+CREATE OR REPLACE FUNCTION auto_fill_weekly_pdf_path()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.pdf_path IS NULL THEN
+    NEW.pdf_path := 'weekly-reports/weekly-report-' || NEW.report_date || '.pdf';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_fill_weekly_pdf_path ON weekly_reports;
+
+CREATE TRIGGER trigger_auto_fill_weekly_pdf_path
+  BEFORE INSERT OR UPDATE ON weekly_reports
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_fill_weekly_pdf_path();
+
+-- Fix existing weekly_reports with missing pdf_path
+UPDATE weekly_reports 
+SET 
+  pdf_path = 'weekly-reports/weekly-report-' || report_date || '.pdf',
+  updated_at = NOW()
+WHERE pdf_path IS NULL OR pdf_path = '';
+
+-- ============================================
 -- TABLE: weekly_report_progress
 -- Real-time progress tracking
 -- ============================================
@@ -5820,9 +6271,20 @@ CREATE OR REPLACE FUNCTION auto_publish_weekly_report()
 RETURNS TRIGGER AS $$
 DECLARE
     v_existing_id UUID;
+    v_is_deleted BOOLEAN;
 BEGIN
     -- Only proceed if we have content
     IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- CHECK IF THIS REPORT WAS DELETED - DON'T RE-SYNC
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = 'weekly' AND original_report_id = NEW.id
+    ) INTO v_is_deleted;
+    
+    IF v_is_deleted THEN
         RETURN NEW;
     END IF;
 
@@ -5908,6 +6370,48 @@ CREATE TRIGGER trigger_auto_publish_weekly
     EXECUTE FUNCTION auto_publish_weekly_report();
 
 -- ============================================
+-- TABLE: daily_scheduler_logs
+-- Scheduler execution logs for daily reports
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.daily_scheduler_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_type TEXT NOT NULL DEFAULT 'daily_generation',
+  status TEXT NOT NULL,
+  report_id TEXT,
+  report_date DATE,
+  duration_ms INTEGER,
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}',
+  executed_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_daily_scheduler_logs_status ON daily_scheduler_logs(status);
+CREATE INDEX IF NOT EXISTS idx_daily_scheduler_logs_executed ON daily_scheduler_logs(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_scheduler_logs_date ON daily_scheduler_logs(report_date DESC);
+
+-- RLS
+ALTER TABLE daily_scheduler_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "daily_scheduler_logs_service_all" ON daily_scheduler_logs;
+CREATE POLICY "daily_scheduler_logs_service_all" ON daily_scheduler_logs
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "daily_scheduler_logs_admin_read" ON daily_scheduler_logs;
+CREATE POLICY "daily_scheduler_logs_admin_read" ON daily_scheduler_logs
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role IN ('admin', 'super_admin')
+    )
+  );
+
+GRANT ALL ON daily_scheduler_logs TO service_role;
+GRANT SELECT ON daily_scheduler_logs TO authenticated;
+
+-- ============================================
 -- VERIFICATION
 -- ============================================
 DO $$
@@ -5977,3 +6481,944 @@ UNIQUE (report_type, original_report_id);
 SELECT conname, contype 
 FROM pg_constraint 
 WHERE conrelid = 'published_reports'::regclass;
+
+-- =====================================================
+-- DAILY INTELLIGENCE REPORTS TABLE
+-- =====================================================
+
+-- 1. טבלה ראשית לדוחות יומיים
+CREATE TABLE IF NOT EXISTS public.daily_reports (
+  id TEXT PRIMARY KEY,
+  report_date DATE NOT NULL UNIQUE,
+  report_title TEXT DEFAULT 'Daily Intelligence Report',
+  
+  -- Market Snapshot
+  market_snapshot JSONB,
+  locked_prices JSONB,
+  
+  -- Report Sections (JSONB)
+  sections JSONB,
+  
+  -- Generated Content
+  markdown_content TEXT,
+  html_content TEXT,
+  pdf_path TEXT,
+  pdf_url TEXT,
+  
+  -- Quality
+  qa_score INTEGER DEFAULT 0,
+  
+  -- Status
+  status TEXT DEFAULT 'completed',
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_reports_created ON daily_reports(created_at DESC);
+
+-- Unique constraint to prevent duplicate dates
+ALTER TABLE daily_reports 
+DROP CONSTRAINT IF EXISTS daily_reports_report_date_unique;
+ALTER TABLE daily_reports 
+ADD CONSTRAINT daily_reports_report_date_unique UNIQUE (report_date);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_daily_reports_updated_at ON daily_reports;
+CREATE TRIGGER update_daily_reports_updated_at
+  BEFORE UPDATE ON daily_reports
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Enable replica identity for real-time
+ALTER TABLE daily_reports REPLICA IDENTITY FULL;
+
+-- RLS
+ALTER TABLE daily_reports ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies first
+DROP POLICY IF EXISTS "daily_reports_service_all" ON daily_reports;
+DROP POLICY IF EXISTS "daily_reports_authenticated_read" ON daily_reports;
+DROP POLICY IF EXISTS "daily_reports_admin_insert" ON daily_reports;
+DROP POLICY IF EXISTS "daily_reports_admin_update" ON daily_reports;
+
+-- Service role full access
+CREATE POLICY "daily_reports_service_all" ON daily_reports
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Authenticated users can READ
+CREATE POLICY "daily_reports_authenticated_read" ON daily_reports
+  FOR SELECT TO authenticated USING (true);
+
+-- Admins can INSERT
+CREATE POLICY "daily_reports_admin_insert" ON daily_reports
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() 
+      AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+    )
+  );
+
+-- Admins can UPDATE
+CREATE POLICY "daily_reports_admin_update" ON daily_reports
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() 
+      AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() 
+      AND (role IN ('admin', 'super_admin') OR email = 'elad2550@gmail.com')
+    )
+  );
+
+GRANT ALL ON daily_reports TO service_role;
+GRANT SELECT, INSERT, UPDATE ON daily_reports TO authenticated;
+
+-- Auto-fill pdf_path trigger
+CREATE OR REPLACE FUNCTION auto_fill_pdf_path()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- אם pdf_path ריק, מלא אותו אוטומטית
+  IF NEW.pdf_path IS NULL THEN
+    NEW.pdf_path := 'daily-reports/daily-report-' || NEW.report_date || '.pdf';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_auto_fill_pdf_path ON daily_reports;
+
+CREATE TRIGGER trigger_auto_fill_pdf_path
+  BEFORE INSERT OR UPDATE ON daily_reports
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_fill_pdf_path();
+
+-- 2. Auto-publish trigger
+DROP FUNCTION IF EXISTS auto_publish_daily_report() CASCADE;
+
+CREATE OR REPLACE FUNCTION auto_publish_daily_report()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_existing_id UUID;
+    v_is_deleted BOOLEAN := FALSE;
+BEGIN
+    -- Only proceed if we have content
+    IF NEW.markdown_content IS NULL OR LENGTH(NEW.markdown_content) < 100 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Check if this report was deleted - DON'T RE-SYNC
+    SELECT EXISTS (
+        SELECT 1 FROM deleted_published_reports
+        WHERE report_type = 'daily' AND original_report_id = NEW.id
+    ) INTO v_is_deleted;
+    
+    IF v_is_deleted THEN
+        RAISE NOTICE '[AutoPublish] Daily report % was deleted by admin - skipping sync', NEW.id;
+        RETURN NEW;
+    END IF;
+
+    -- Check if already exists in published_reports
+    SELECT id INTO v_existing_id
+    FROM published_reports
+    WHERE original_report_id = NEW.id AND report_type = 'daily';
+
+    IF v_existing_id IS NOT NULL THEN
+        -- UPDATE existing
+        UPDATE published_reports
+        SET 
+            title = COALESCE(NEW.report_title, 'Daily Intelligence Report'),
+            subtitle = TO_CHAR(NEW.report_date, 'FMMonth DD, YYYY'),
+            markdown_content = NEW.markdown_content,
+            html_content = NEW.html_content,
+            markdown_preview = LEFT(NEW.markdown_content, 500),
+            pdf_storage_path = NEW.pdf_path,
+            qa_score = NEW.qa_score,
+            updated_at = NOW()
+        WHERE id = v_existing_id;
+        
+        RAISE NOTICE '[AutoPublish] Updated Daily report % in published_reports', NEW.id;
+    ELSE
+        -- INSERT new
+        INSERT INTO published_reports (
+            report_type,
+            original_report_id,
+            title,
+            subtitle,
+            markdown_content,
+            html_content,
+            markdown_preview,
+            pdf_storage_path,
+            highlights,
+            key_metric_label,
+            key_metric_value,
+            qa_score,
+            is_featured,
+            is_pinned,
+            target_group,
+            published_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            'daily',
+            NEW.id,
+            COALESCE(NEW.report_title, 'Daily Intelligence Report'),
+            TO_CHAR(NEW.report_date, 'FMMonth DD, YYYY'),
+            NEW.markdown_content,
+            NEW.html_content,
+            LEFT(NEW.markdown_content, 500),
+            NEW.pdf_path,
+            ARRAY['Daily Market Analysis']::TEXT[],
+            'Date',
+            TO_CHAR(NEW.report_date, 'Mon DD'),
+            NEW.qa_score,
+            true,  -- is_featured
+            false, -- is_pinned
+            'top_secret',
+            NOW(),
+            NOW(),
+            NOW()
+        );
+        
+        RAISE NOTICE '[AutoPublish] Created Daily report % in published_reports', NEW.id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger
+DROP TRIGGER IF EXISTS trigger_auto_publish_daily ON daily_reports;
+
+CREATE TRIGGER trigger_auto_publish_daily
+    AFTER INSERT OR UPDATE OF markdown_content, html_content, pdf_path
+    ON daily_reports
+    FOR EACH ROW
+    EXECUTE FUNCTION auto_publish_daily_report();
+
+-- 3. Add 'daily' to report_type constraint
+ALTER TABLE published_reports 
+DROP CONSTRAINT IF EXISTS published_reports_report_type_check;
+
+-- No constraint needed - the column accepts any text
+
+-- 4. פונקציה לשליפת 2 הדוחות האחרונים
+-- CRITICAL: Sort by report_date DESC, then created_at DESC
+-- This ensures proper ordering even if multiple reports exist
+
+DROP FUNCTION IF EXISTS get_latest_daily_reports(INT);
+
+DROP FUNCTION IF EXISTS get_latest_daily_reports(INT);
+
+CREATE OR REPLACE FUNCTION get_latest_daily_reports(p_count INT DEFAULT 2)
+RETURNS TABLE (
+    id TEXT,
+    report_date DATE,
+    report_title TEXT,
+    markdown_content TEXT,
+    html_content TEXT,
+    pdf_url TEXT,
+    pdf_path TEXT,
+    qa_score INTEGER,
+    created_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        dr.id,
+        dr.report_date,
+        dr.report_title,
+        dr.markdown_content,
+        dr.html_content,
+        dr.pdf_url,
+        dr.pdf_path,
+        dr.qa_score,
+        dr.created_at,
+        dr.updated_at
+    FROM daily_reports dr
+    WHERE dr.status = 'completed'
+    ORDER BY dr.report_date DESC, dr.updated_at DESC
+    LIMIT p_count;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION get_latest_daily_reports(INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_latest_daily_reports(INT) TO service_role;
+
+-- Grant permissions
+GRANT EXECUTE ON FUNCTION get_latest_daily_reports(INT) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_latest_daily_reports(INT) TO service_role;
+-- 3. FUNCTION: Get latest weekly report
+CREATE OR REPLACE FUNCTION get_latest_weekly_report()
+RETURNS TABLE (
+    id TEXT,
+    report_date DATE,
+    report_title TEXT,
+    markdown_content TEXT,
+    html_content TEXT,
+    pdf_url TEXT,
+    qa_score INTEGER,
+    created_at TIMESTAMPTZ
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        wr.id,
+        wr.report_date,
+        wr.report_title,
+        wr.markdown_content,
+        wr.html_content,
+        wr.pdf_url,
+        wr.qa_score,
+        wr.created_at
+    FROM weekly_reports wr
+    WHERE wr.status = 'completed'
+    ORDER BY wr.report_date DESC
+    LIMIT 1;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION get_latest_weekly_report() TO authenticated;
+
+GRANT EXECUTE ON FUNCTION get_latest_daily_reports(INT) TO authenticated;
+
+-- ============================================================================
+-- FIX: Ensure daily_reports and weekly_reports have correct ID types
+-- ============================================================================
+-- Note: If tables were created with TEXT id, this ensures compatibility
+-- The get_latest functions return the correct types
+
+-- Add pdf_path column if missing (for signed URL generation)
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS pdf_path TEXT;
+ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS pdf_path TEXT;
+
+-- Add metadata column if missing
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE weekly_reports ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+-- ============================================================================
+-- STORAGE BUCKET SETUP REMINDER
+-- ============================================================================
+-- Run this in the Storage section of Supabase Dashboard:
+-- 
+-- 1. Create a bucket named 'reports' (if it doesn't exist)
+-- 2. Set it to PUBLIC if you want direct URLs, or PRIVATE for signed URLs
+-- 3. Policies should already exist from earlier in this file
+-- ============================================================================
+-- VERIFY DAILY/WEEKLY SETUP
+-- ============================================================================
+DO $$
+BEGIN
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ DAILY & WEEKLY REPORTS TABLES VERIFIED';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Tables: daily_reports, weekly_reports';
+    RAISE NOTICE 'Functions: get_latest_daily_reports(), get_latest_weekly_report()';
+    RAISE NOTICE 'Storage bucket: reports (for PDF files)';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- FIX EXISTING DAILY REPORTS - SQL MIGRATION
+-- =====================================================
+-- Run this in Supabase SQL Editor
+-- This fixes existing daily_reports records that have:
+-- - pdf_url = '/api/newsletter/pdf' (wrong value)
+-- - pdf_path = null (missing)
+-- =====================================================
+
+-- Step 1: Check current state
+SELECT 
+    id,
+    report_date,
+    report_title,
+    pdf_url,
+    pdf_path,
+    LENGTH(markdown_content) as content_length,
+    qa_score,
+    status
+FROM daily_reports
+ORDER BY report_date DESC
+LIMIT 10;
+
+-- Step 2: Fix pdf_path for existing reports (CRITICAL!)
+-- This sets pdf_path to the correct Storage path format
+UPDATE daily_reports
+SET 
+    pdf_path = 'daily-reports/daily-report-' || report_date::TEXT || '.pdf',
+    updated_at = NOW()
+WHERE 
+    pdf_path IS NULL 
+    OR pdf_path = ''
+    OR pdf_path LIKE '%/api/%';
+
+-- Step 3: Verify the fix
+SELECT 
+    id,
+    report_date,
+    pdf_path,
+    pdf_url,
+    status
+FROM daily_reports
+WHERE report_date >= '2026-01-01'
+ORDER BY report_date DESC;
+
+-- Step 4: Check if PDFs exist in Storage (run this separately)
+-- This query just shows what SHOULD be in Storage
+SELECT 
+    report_date,
+    pdf_path,
+    'Check in Storage: reports/' || pdf_path as storage_check_location
+FROM daily_reports
+WHERE pdf_path IS NOT NULL
+ORDER BY report_date DESC
+LIMIT 10;
+
+-- =====================================================
+-- IMPORTANT: After running this SQL, you need to:
+-- 1. Manually upload the PDFs to Supabase Storage
+-- 2. Or re-generate the reports using the fixed scheduler
+-- =====================================================
+
+-- Step 5: Add missing columns if they don't exist
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS pdf_path TEXT;
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'completed';
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS market_snapshot JSONB;
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS locked_prices JSONB;
+ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+-- Step 6: Verification
+DO $$
+DECLARE
+    v_total INTEGER;
+    v_with_path INTEGER;
+    v_without_path INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_total FROM daily_reports;
+    SELECT COUNT(*) INTO v_with_path FROM daily_reports WHERE pdf_path IS NOT NULL AND pdf_path != '';
+    SELECT COUNT(*) INTO v_without_path FROM daily_reports WHERE pdf_path IS NULL OR pdf_path = '';
+    
+    RAISE NOTICE '';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '✅ DAILY REPORTS FIX COMPLETE';
+    RAISE NOTICE '=====================================================';
+    RAISE NOTICE '';
+    RAISE NOTICE 'Total reports: %', v_total;
+    RAISE NOTICE 'With pdf_path: %', v_with_path;
+    RAISE NOTICE 'Without pdf_path: %', v_without_path;
+    RAISE NOTICE '';
+    RAISE NOTICE 'NEXT STEPS:';
+    RAISE NOTICE '1. Check if PDFs exist in Storage bucket "reports"';
+    RAISE NOTICE '2. If not, re-generate reports with fixed scheduler';
+    RAISE NOTICE '3. Or manually upload PDFs to: daily-reports/daily-report-YYYY-MM-DD.pdf';
+    RAISE NOTICE '=====================================================';
+END $$;
+
+
+
+-- =====================================================
+-- US MARKET HOLIDAYS - DATABASE SCHEMA v1.0
+-- =====================================================
+-- 📅 Complete holiday management for Finotaur
+-- 
+-- Features:
+--   - All US market holidays (2024-2035)
+--   - Early closing days
+--   - Helper functions for queries
+--   - Auto-update triggers
+-- =====================================================
+
+-- =====================================================
+-- TABLE: us_market_holidays
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS us_market_holidays (
+  id SERIAL PRIMARY KEY,
+  date DATE NOT NULL UNIQUE,
+  name VARCHAR(100) NOT NULL,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('full_close', 'early_close')),
+  close_time VARCHAR(20),
+  original_date DATE,
+  is_observed BOOLEAN DEFAULT false,
+  year INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add comments
+COMMENT ON TABLE us_market_holidays IS 'US stock market holidays and early closing days';
+COMMENT ON COLUMN us_market_holidays.type IS 'full_close = markets closed all day, early_close = markets close at 1:00 PM ET';
+COMMENT ON COLUMN us_market_holidays.is_observed IS 'True if holiday falls on weekend and is observed on adjacent weekday';
+
+-- =====================================================
+-- INDEXES
+-- =====================================================
+
+CREATE INDEX IF NOT EXISTS idx_holidays_date ON us_market_holidays(date);
+CREATE INDEX IF NOT EXISTS idx_holidays_year ON us_market_holidays(year);
+CREATE INDEX IF NOT EXISTS idx_holidays_type ON us_market_holidays(type);
+
+-- =====================================================
+-- TRIGGER: auto-update updated_at
+-- Using existing update_updated_at_column() function
+-- =====================================================
+
+DROP TRIGGER IF EXISTS holidays_updated_at ON us_market_holidays;
+CREATE TRIGGER holidays_updated_at
+  BEFORE UPDATE ON us_market_holidays
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- HELPER FUNCTIONS
+-- =====================================================
+
+-- Check if a date is a market holiday
+CREATE OR REPLACE FUNCTION is_market_holiday(check_date DATE)
+RETURNS TABLE(
+  is_holiday BOOLEAN, 
+  holiday_name VARCHAR, 
+  holiday_type VARCHAR, 
+  close_time VARCHAR
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    TRUE as is_holiday,
+    h.name as holiday_name,
+    h.type as holiday_type,
+    h.close_time
+  FROM us_market_holidays h
+  WHERE h.date = check_date;
+  
+  IF NOT FOUND THEN
+    RETURN QUERY SELECT FALSE, NULL::VARCHAR, NULL::VARCHAR, NULL::VARCHAR;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get next trading day after a given date
+CREATE OR REPLACE FUNCTION get_next_trading_day(from_date DATE)
+RETURNS DATE AS $$
+DECLARE
+  next_date DATE := from_date + 1;
+  max_iterations INTEGER := 14;
+  iteration INTEGER := 0;
+BEGIN
+  WHILE iteration < max_iterations LOOP
+    IF EXTRACT(DOW FROM next_date) IN (0, 6) THEN
+      next_date := next_date + 1;
+      iteration := iteration + 1;
+      CONTINUE;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM us_market_holidays WHERE date = next_date AND type = 'full_close') THEN
+      next_date := next_date + 1;
+      iteration := iteration + 1;
+      CONTINUE;
+    END IF;
+    
+    RETURN next_date;
+  END LOOP;
+  
+  RETURN from_date + 1;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Check if daily report should be generated
+CREATE OR REPLACE FUNCTION should_generate_daily_report(check_date DATE DEFAULT CURRENT_DATE)
+RETURNS TABLE(
+  should_generate BOOLEAN, 
+  reason VARCHAR, 
+  next_trading_day DATE,
+  is_early_close BOOLEAN,
+  early_close_time VARCHAR
+) AS $$
+DECLARE
+  day_of_week INTEGER;
+  holiday_rec RECORD;
+BEGIN
+  day_of_week := EXTRACT(DOW FROM check_date);
+  
+  IF day_of_week IN (0, 6) THEN
+    RETURN QUERY SELECT 
+      FALSE, 
+      'Weekend'::VARCHAR, 
+      get_next_trading_day(check_date),
+      FALSE,
+      NULL::VARCHAR;
+    RETURN;
+  END IF;
+  
+  SELECT * INTO holiday_rec 
+  FROM us_market_holidays 
+  WHERE date = check_date AND type = 'full_close';
+  
+  IF FOUND THEN
+    RETURN QUERY SELECT 
+      FALSE, 
+      holiday_rec.name::VARCHAR, 
+      get_next_trading_day(check_date),
+      FALSE,
+      NULL::VARCHAR;
+    RETURN;
+  END IF;
+  
+  SELECT * INTO holiday_rec 
+  FROM us_market_holidays 
+  WHERE date = check_date AND type = 'early_close';
+  
+  IF FOUND THEN
+    RETURN QUERY SELECT 
+      TRUE, 
+      holiday_rec.name::VARCHAR, 
+      NULL::DATE,
+      TRUE,
+      holiday_rec.close_time::VARCHAR;
+    RETURN;
+  END IF;
+  
+  RETURN QUERY SELECT 
+    TRUE, 
+    NULL::VARCHAR, 
+    NULL::DATE,
+    FALSE,
+    NULL::VARCHAR;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Get holidays for a week (for Weekly Report)
+CREATE OR REPLACE FUNCTION get_week_holidays(week_start DATE)
+RETURNS TABLE(
+  date DATE,
+  name VARCHAR,
+  type VARCHAR,
+  close_time VARCHAR,
+  day_name VARCHAR
+) AS $$
+DECLARE
+  monday DATE;
+  friday DATE;
+BEGIN
+  monday := week_start - (EXTRACT(DOW FROM week_start)::INTEGER - 1);
+  IF EXTRACT(DOW FROM week_start) = 0 THEN
+    monday := week_start + 1;
+  END IF;
+  friday := monday + 4;
+  
+  RETURN QUERY
+  SELECT 
+    h.date,
+    h.name,
+    h.type,
+    h.close_time,
+    CASE EXTRACT(DOW FROM h.date)
+      WHEN 1 THEN 'Monday'
+      WHEN 2 THEN 'Tuesday'
+      WHEN 3 THEN 'Wednesday'
+      WHEN 4 THEN 'Thursday'
+      WHEN 5 THEN 'Friday'
+    END::VARCHAR as day_name
+  FROM us_market_holidays h
+  WHERE h.date BETWEEN monday AND friday
+  ORDER BY h.date;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- VIEWS
+-- =====================================================
+
+CREATE OR REPLACE VIEW upcoming_holidays AS
+SELECT 
+  date,
+  name,
+  type,
+  close_time,
+  CASE EXTRACT(DOW FROM date)
+    WHEN 0 THEN 'Sunday'
+    WHEN 1 THEN 'Monday'
+    WHEN 2 THEN 'Tuesday'
+    WHEN 3 THEN 'Wednesday'
+    WHEN 4 THEN 'Thursday'
+    WHEN 5 THEN 'Friday'
+    WHEN 6 THEN 'Saturday'
+  END as day_name,
+  date - CURRENT_DATE as days_until,
+  year
+FROM us_market_holidays
+WHERE date >= CURRENT_DATE
+ORDER BY date
+LIMIT 30;
+
+CREATE OR REPLACE VIEW current_year_holidays AS
+SELECT 
+  date,
+  name,
+  type,
+  close_time,
+  CASE EXTRACT(DOW FROM date)
+    WHEN 0 THEN 'Sunday'
+    WHEN 1 THEN 'Monday'
+    WHEN 2 THEN 'Tuesday'
+    WHEN 3 THEN 'Wednesday'
+    WHEN 4 THEN 'Thursday'
+    WHEN 5 THEN 'Friday'
+    WHEN 6 THEN 'Saturday'
+  END as day_name,
+  is_observed
+FROM us_market_holidays
+WHERE year = EXTRACT(YEAR FROM CURRENT_DATE)
+ORDER BY date;
+
+-- =====================================================
+-- DATA: INSERT ALL HOLIDAYS (2024-2035)
+-- =====================================================
+
+DELETE FROM us_market_holidays WHERE year >= 2024 AND year <= 2035;
+
+INSERT INTO us_market_holidays (date, name, type, close_time, original_date, is_observed, year) VALUES
+-- 2024
+('2024-01-01', 'New Year''s Day', 'full_close', NULL, '2024-01-01', false, 2024),
+('2024-01-15', 'Martin Luther King Jr. Day', 'full_close', NULL, '2024-01-15', false, 2024),
+('2024-02-19', 'Presidents'' Day', 'full_close', NULL, '2024-02-19', false, 2024),
+('2024-03-29', 'Good Friday', 'full_close', NULL, '2024-03-29', false, 2024),
+('2024-05-27', 'Memorial Day', 'full_close', NULL, '2024-05-27', false, 2024),
+('2024-06-19', 'Juneteenth', 'full_close', NULL, '2024-06-19', false, 2024),
+('2024-07-04', 'Independence Day', 'full_close', NULL, '2024-07-04', false, 2024),
+('2024-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2024-07-03', false, 2024),
+('2024-09-02', 'Labor Day', 'full_close', NULL, '2024-09-02', false, 2024),
+('2024-11-28', 'Thanksgiving Day', 'full_close', NULL, '2024-11-28', false, 2024),
+('2024-11-29', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2024-11-29', false, 2024),
+('2024-12-25', 'Christmas Day', 'full_close', NULL, '2024-12-25', false, 2024),
+('2024-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2024-12-24', false, 2024),
+-- 2025
+('2025-01-01', 'New Year''s Day', 'full_close', NULL, '2025-01-01', false, 2025),
+('2025-01-20', 'Martin Luther King Jr. Day', 'full_close', NULL, '2025-01-20', false, 2025),
+('2025-02-17', 'Presidents'' Day', 'full_close', NULL, '2025-02-17', false, 2025),
+('2025-04-18', 'Good Friday', 'full_close', NULL, '2025-04-18', false, 2025),
+('2025-05-26', 'Memorial Day', 'full_close', NULL, '2025-05-26', false, 2025),
+('2025-06-19', 'Juneteenth', 'full_close', NULL, '2025-06-19', false, 2025),
+('2025-07-04', 'Independence Day', 'full_close', NULL, '2025-07-04', false, 2025),
+('2025-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2025-07-03', false, 2025),
+('2025-09-01', 'Labor Day', 'full_close', NULL, '2025-09-01', false, 2025),
+('2025-11-27', 'Thanksgiving Day', 'full_close', NULL, '2025-11-27', false, 2025),
+('2025-11-28', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2025-11-28', false, 2025),
+('2025-12-25', 'Christmas Day', 'full_close', NULL, '2025-12-25', false, 2025),
+('2025-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2025-12-24', false, 2025),
+-- 2026
+('2026-01-01', 'New Year''s Day', 'full_close', NULL, '2026-01-01', false, 2026),
+('2026-01-19', 'Martin Luther King Jr. Day', 'full_close', NULL, '2026-01-19', false, 2026),
+('2026-02-16', 'Presidents'' Day', 'full_close', NULL, '2026-02-16', false, 2026),
+('2026-04-03', 'Good Friday', 'full_close', NULL, '2026-04-03', false, 2026),
+('2026-05-25', 'Memorial Day', 'full_close', NULL, '2026-05-25', false, 2026),
+('2026-06-19', 'Juneteenth', 'full_close', NULL, '2026-06-19', false, 2026),
+('2026-07-03', 'Independence Day', 'full_close', NULL, '2026-07-04', true, 2026),
+('2026-07-02', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2026-07-02', false, 2026),
+('2026-09-07', 'Labor Day', 'full_close', NULL, '2026-09-07', false, 2026),
+('2026-11-26', 'Thanksgiving Day', 'full_close', NULL, '2026-11-26', false, 2026),
+('2026-11-27', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2026-11-27', false, 2026),
+('2026-12-25', 'Christmas Day', 'full_close', NULL, '2026-12-25', false, 2026),
+('2026-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2026-12-24', false, 2026),
+-- 2027-2035 (continuing...)
+('2027-01-01', 'New Year''s Day', 'full_close', NULL, '2027-01-01', false, 2027),
+('2027-01-18', 'Martin Luther King Jr. Day', 'full_close', NULL, '2027-01-18', false, 2027),
+('2027-02-15', 'Presidents'' Day', 'full_close', NULL, '2027-02-15', false, 2027),
+('2027-03-26', 'Good Friday', 'full_close', NULL, '2027-03-26', false, 2027),
+('2027-05-31', 'Memorial Day', 'full_close', NULL, '2027-05-31', false, 2027),
+('2027-06-18', 'Juneteenth', 'full_close', NULL, '2027-06-19', true, 2027),
+('2027-07-05', 'Independence Day', 'full_close', NULL, '2027-07-04', true, 2027),
+('2027-09-06', 'Labor Day', 'full_close', NULL, '2027-09-06', false, 2027),
+('2027-11-25', 'Thanksgiving Day', 'full_close', NULL, '2027-11-25', false, 2027),
+('2027-11-26', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2027-11-26', false, 2027),
+('2027-12-24', 'Christmas Day', 'full_close', NULL, '2027-12-25', true, 2027),
+-- 2028
+('2028-01-03', 'New Year''s Day', 'full_close', NULL, '2028-01-01', true, 2028),
+('2028-01-17', 'Martin Luther King Jr. Day', 'full_close', NULL, '2028-01-17', false, 2028),
+('2028-02-21', 'Presidents'' Day', 'full_close', NULL, '2028-02-21', false, 2028),
+('2028-04-14', 'Good Friday', 'full_close', NULL, '2028-04-14', false, 2028),
+('2028-05-29', 'Memorial Day', 'full_close', NULL, '2028-05-29', false, 2028),
+('2028-06-19', 'Juneteenth', 'full_close', NULL, '2028-06-19', false, 2028),
+('2028-07-04', 'Independence Day', 'full_close', NULL, '2028-07-04', false, 2028),
+('2028-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2028-07-03', false, 2028),
+('2028-09-04', 'Labor Day', 'full_close', NULL, '2028-09-04', false, 2028),
+('2028-11-23', 'Thanksgiving Day', 'full_close', NULL, '2028-11-23', false, 2028),
+('2028-11-24', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2028-11-24', false, 2028),
+('2028-12-25', 'Christmas Day', 'full_close', NULL, '2028-12-25', false, 2028),
+-- 2029
+('2029-01-01', 'New Year''s Day', 'full_close', NULL, '2029-01-01', false, 2029),
+('2029-01-15', 'Martin Luther King Jr. Day', 'full_close', NULL, '2029-01-15', false, 2029),
+('2029-02-19', 'Presidents'' Day', 'full_close', NULL, '2029-02-19', false, 2029),
+('2029-03-30', 'Good Friday', 'full_close', NULL, '2029-03-30', false, 2029),
+('2029-05-28', 'Memorial Day', 'full_close', NULL, '2029-05-28', false, 2029),
+('2029-06-19', 'Juneteenth', 'full_close', NULL, '2029-06-19', false, 2029),
+('2029-07-04', 'Independence Day', 'full_close', NULL, '2029-07-04', false, 2029),
+('2029-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2029-07-03', false, 2029),
+('2029-09-03', 'Labor Day', 'full_close', NULL, '2029-09-03', false, 2029),
+('2029-11-22', 'Thanksgiving Day', 'full_close', NULL, '2029-11-22', false, 2029),
+('2029-11-23', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2029-11-23', false, 2029),
+('2029-12-25', 'Christmas Day', 'full_close', NULL, '2029-12-25', false, 2029),
+('2029-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2029-12-24', false, 2029),
+-- 2030
+('2030-01-01', 'New Year''s Day', 'full_close', NULL, '2030-01-01', false, 2030),
+('2030-01-21', 'Martin Luther King Jr. Day', 'full_close', NULL, '2030-01-21', false, 2030),
+('2030-02-18', 'Presidents'' Day', 'full_close', NULL, '2030-02-18', false, 2030),
+('2030-04-19', 'Good Friday', 'full_close', NULL, '2030-04-19', false, 2030),
+('2030-05-27', 'Memorial Day', 'full_close', NULL, '2030-05-27', false, 2030),
+('2030-06-19', 'Juneteenth', 'full_close', NULL, '2030-06-19', false, 2030),
+('2030-07-04', 'Independence Day', 'full_close', NULL, '2030-07-04', false, 2030),
+('2030-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2030-07-03', false, 2030),
+('2030-09-02', 'Labor Day', 'full_close', NULL, '2030-09-02', false, 2030),
+('2030-11-28', 'Thanksgiving Day', 'full_close', NULL, '2030-11-28', false, 2030),
+('2030-11-29', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2030-11-29', false, 2030),
+('2030-12-25', 'Christmas Day', 'full_close', NULL, '2030-12-25', false, 2030),
+('2030-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2030-12-24', false, 2030),
+-- 2031-2035
+('2031-01-01', 'New Year''s Day', 'full_close', NULL, '2031-01-01', false, 2031),
+('2031-01-20', 'Martin Luther King Jr. Day', 'full_close', NULL, '2031-01-20', false, 2031),
+('2031-02-17', 'Presidents'' Day', 'full_close', NULL, '2031-02-17', false, 2031),
+('2031-04-11', 'Good Friday', 'full_close', NULL, '2031-04-11', false, 2031),
+('2031-05-26', 'Memorial Day', 'full_close', NULL, '2031-05-26', false, 2031),
+('2031-06-19', 'Juneteenth', 'full_close', NULL, '2031-06-19', false, 2031),
+('2031-07-04', 'Independence Day', 'full_close', NULL, '2031-07-04', false, 2031),
+('2031-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2031-07-03', false, 2031),
+('2031-09-01', 'Labor Day', 'full_close', NULL, '2031-09-01', false, 2031),
+('2031-11-27', 'Thanksgiving Day', 'full_close', NULL, '2031-11-27', false, 2031),
+('2031-11-28', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2031-11-28', false, 2031),
+('2031-12-25', 'Christmas Day', 'full_close', NULL, '2031-12-25', false, 2031),
+('2031-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2031-12-24', false, 2031),
+-- 2032
+('2032-01-01', 'New Year''s Day', 'full_close', NULL, '2032-01-01', false, 2032),
+('2032-01-19', 'Martin Luther King Jr. Day', 'full_close', NULL, '2032-01-19', false, 2032),
+('2032-02-16', 'Presidents'' Day', 'full_close', NULL, '2032-02-16', false, 2032),
+('2032-03-26', 'Good Friday', 'full_close', NULL, '2032-03-26', false, 2032),
+('2032-05-31', 'Memorial Day', 'full_close', NULL, '2032-05-31', false, 2032),
+('2032-06-18', 'Juneteenth', 'full_close', NULL, '2032-06-19', true, 2032),
+('2032-07-05', 'Independence Day', 'full_close', NULL, '2032-07-04', true, 2032),
+('2032-09-06', 'Labor Day', 'full_close', NULL, '2032-09-06', false, 2032),
+('2032-11-25', 'Thanksgiving Day', 'full_close', NULL, '2032-11-25', false, 2032),
+('2032-11-26', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2032-11-26', false, 2032),
+('2032-12-24', 'Christmas Day', 'full_close', NULL, '2032-12-25', true, 2032),
+-- 2033
+('2032-12-31', 'New Year''s Day', 'full_close', NULL, '2033-01-01', true, 2033),
+('2033-01-17', 'Martin Luther King Jr. Day', 'full_close', NULL, '2033-01-17', false, 2033),
+('2033-02-21', 'Presidents'' Day', 'full_close', NULL, '2033-02-21', false, 2033),
+('2033-04-15', 'Good Friday', 'full_close', NULL, '2033-04-15', false, 2033),
+('2033-05-30', 'Memorial Day', 'full_close', NULL, '2033-05-30', false, 2033),
+('2033-06-20', 'Juneteenth', 'full_close', NULL, '2033-06-19', true, 2033),
+('2033-07-04', 'Independence Day', 'full_close', NULL, '2033-07-04', false, 2033),
+('2033-09-05', 'Labor Day', 'full_close', NULL, '2033-09-05', false, 2033),
+('2033-11-24', 'Thanksgiving Day', 'full_close', NULL, '2033-11-24', false, 2033),
+('2033-11-25', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2033-11-25', false, 2033),
+('2033-12-26', 'Christmas Day', 'full_close', NULL, '2033-12-25', true, 2033),
+-- 2034
+('2034-01-02', 'New Year''s Day', 'full_close', NULL, '2034-01-01', true, 2034),
+('2034-01-16', 'Martin Luther King Jr. Day', 'full_close', NULL, '2034-01-16', false, 2034),
+('2034-02-20', 'Presidents'' Day', 'full_close', NULL, '2034-02-20', false, 2034),
+('2034-04-07', 'Good Friday', 'full_close', NULL, '2034-04-07', false, 2034),
+('2034-05-29', 'Memorial Day', 'full_close', NULL, '2034-05-29', false, 2034),
+('2034-06-19', 'Juneteenth', 'full_close', NULL, '2034-06-19', false, 2034),
+('2034-07-04', 'Independence Day', 'full_close', NULL, '2034-07-04', false, 2034),
+('2034-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2034-07-03', false, 2034),
+('2034-09-04', 'Labor Day', 'full_close', NULL, '2034-09-04', false, 2034),
+('2034-11-23', 'Thanksgiving Day', 'full_close', NULL, '2034-11-23', false, 2034),
+('2034-11-24', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2034-11-24', false, 2034),
+('2034-12-25', 'Christmas Day', 'full_close', NULL, '2034-12-25', false, 2034),
+-- 2035
+('2035-01-01', 'New Year''s Day', 'full_close', NULL, '2035-01-01', false, 2035),
+('2035-01-15', 'Martin Luther King Jr. Day', 'full_close', NULL, '2035-01-15', false, 2035),
+('2035-02-19', 'Presidents'' Day', 'full_close', NULL, '2035-02-19', false, 2035),
+('2035-03-23', 'Good Friday', 'full_close', NULL, '2035-03-23', false, 2035),
+('2035-05-28', 'Memorial Day', 'full_close', NULL, '2035-05-28', false, 2035),
+('2035-06-19', 'Juneteenth', 'full_close', NULL, '2035-06-19', false, 2035),
+('2035-07-04', 'Independence Day', 'full_close', NULL, '2035-07-04', false, 2035),
+('2035-07-03', 'Day Before Independence Day', 'early_close', '1:00 PM ET', '2035-07-03', false, 2035),
+('2035-09-03', 'Labor Day', 'full_close', NULL, '2035-09-03', false, 2035),
+('2035-11-22', 'Thanksgiving Day', 'full_close', NULL, '2035-11-22', false, 2035),
+('2035-11-23', 'Day After Thanksgiving', 'early_close', '1:00 PM ET', '2035-11-23', false, 2035),
+('2035-12-25', 'Christmas Day', 'full_close', NULL, '2035-12-25', false, 2035),
+('2035-12-24', 'Christmas Eve', 'early_close', '1:00 PM ET', '2035-12-24', false, 2035);
+
+-- =====================================================
+-- RLS POLICIES
+-- =====================================================
+
+ALTER TABLE us_market_holidays ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can read holidays" ON us_market_holidays;
+CREATE POLICY "Anyone can read holidays" ON us_market_holidays
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Service role can modify holidays" ON us_market_holidays;
+CREATE POLICY "Service role can modify holidays" ON us_market_holidays
+  FOR ALL USING (auth.role() = 'service_role');
+
+-- =====================================================
+-- GRANTS
+-- =====================================================
+
+GRANT SELECT ON us_market_holidays TO authenticated;
+GRANT SELECT ON us_market_holidays TO anon;
+GRANT ALL ON us_market_holidays TO service_role;
+
+GRANT SELECT ON upcoming_holidays TO authenticated;
+GRANT SELECT ON upcoming_holidays TO anon;
+GRANT SELECT ON current_year_holidays TO authenticated;
+GRANT SELECT ON current_year_holidays TO anon;
+
+GRANT EXECUTE ON FUNCTION is_market_holiday(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_market_holiday(DATE) TO service_role;
+GRANT EXECUTE ON FUNCTION get_next_trading_day(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_next_trading_day(DATE) TO service_role;
+GRANT EXECUTE ON FUNCTION should_generate_daily_report(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION should_generate_daily_report(DATE) TO service_role;
+GRANT EXECUTE ON FUNCTION get_week_holidays(DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_week_holidays(DATE) TO service_role;
+
+-- =====================================================
+-- VERIFICATION
+-- =====================================================
+DO $$
+DECLARE
+  v_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_count FROM us_market_holidays;
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ US MARKET HOLIDAYS MIGRATION COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Total holidays inserted: %', v_count;
+  RAISE NOTICE '';
+  RAISE NOTICE 'Functions available:';
+  RAISE NOTICE '  • is_market_holiday(date)';
+  RAISE NOTICE '  • get_next_trading_day(date)';
+  RAISE NOTICE '  • should_generate_daily_report(date)';
+  RAISE NOTICE '  • get_week_holidays(date)';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Views available:';
+  RAISE NOTICE '  • upcoming_holidays';
+  RAISE NOTICE '  • current_year_holidays';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- Quick verification
+SELECT * FROM should_generate_daily_report(CURRENT_DATE);
+SELECT * FROM upcoming_holidays LIMIT 5;
+-- =====================================================
+-- END OF FINOTAUR DATABASE SCHEMA
+-- =====================================================

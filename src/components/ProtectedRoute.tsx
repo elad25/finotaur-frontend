@@ -1,12 +1,13 @@
 // src/components/ProtectedRoute.tsx
 // =====================================================
-// 🔥 v6.0: Shows JournalLandingPage for users without journal access
+// 🔥 v7.0: FIXED - Uses centralized useSubscription hook
 // =====================================================
 // 
 // ACCESS MATRIX:
 // ┌─────────────────────┬───────────────┬─────────────────────┐
 // │ Subscription        │ All Markets   │ Journal             │
 // ├─────────────────────┼───────────────┼─────────────────────┤
+// │ Admin/VIP           │ ✅ Full       │ ✅ Full (Premium)   │
 // │ Platform FREE       │ ✅ Full       │ 📄 Landing Page     │
 // │ Platform CORE       │ ✅ Full       │ 📄 Landing Page     │
 // │ Platform PRO        │ ✅ Full       │ ✅ Premium          │
@@ -18,13 +19,17 @@
 // │ No subscription     │ ✅ Full       │ 📄 Landing Page     │
 // └─────────────────────┴───────────────┴─────────────────────┘
 // 
-// 🔥 KEY: Trial is treated as Basic - gives full journal access for 14 days
+// 🔥 v7.0 CHANGES:
+// - REMOVED: Duplicate useSubscriptionCheck hook
+// - USES: Centralized useSubscription hook from useSubscription.ts
+// - FIXED: Admin/VIP always have full access
+// - FIXED: Consistent logic with the rest of the app
 // =====================================================
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { useEffect, useState, useRef, lazy, Suspense } from 'react';
-import { supabase } from '@/lib/supabase';
+import { lazy, Suspense } from 'react';
+import { useSubscription } from '@/hooks/useSubscription';
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports
 const JournalLandingPage = lazy(() => import('@/pages/app/journal/JournalLandingPage'));
@@ -76,165 +81,6 @@ const LoadingSpinner = () => (
 );
 
 // =====================================================
-// SUBSCRIPTION CHECK HOOK - Optimized
-// =====================================================
-
-interface SubscriptionStatus {
-  hasJournalAccess: boolean;
-  hasPlatformAccess: boolean;
-  isLoading: boolean;
-  isChecked: boolean;
-}
-
-function useSubscriptionCheck(userId: string | undefined) {
-  const [status, setStatus] = useState<SubscriptionStatus>({
-    hasJournalAccess: false,
-    hasPlatformAccess: true,
-    isLoading: true,
-    isChecked: false,
-  });
-  
-  const checkedUserId = useRef<string | null>(null);
-
-  useEffect(() => {
-    // Skip if no user
-    if (!userId) {
-      setStatus({ 
-        hasJournalAccess: false, 
-        hasPlatformAccess: false, 
-        isLoading: false,
-        isChecked: true,
-      });
-      return;
-    }
-
-    // Skip if already checked for this user
-    if (checkedUserId.current === userId && status.isChecked) {
-      return;
-    }
-
-    const checkSubscription = async () => {
-      try {
-        console.log('[ProtectedRoute] Checking subscription for user:', userId);
-        
-        const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('account_type, subscription_status, subscription_expires_at, role, platform_plan, platform_subscription_status, platform_bundle_journal_granted')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (error) {
-          console.error('[ProtectedRoute] Query error:', error);
-          setStatus({ 
-            hasJournalAccess: false, 
-            hasPlatformAccess: true,
-            isLoading: false,
-            isChecked: true,
-          });
-          return;
-        }
-
-        // Default: Platform always accessible
-        let hasJournalAccess = false;
-        const hasPlatformAccess = true;
-
-        if (!profile) {
-          console.log('[ProtectedRoute] No profile found - new user');
-          setStatus({ 
-            hasJournalAccess: false, 
-            hasPlatformAccess: true,
-            isLoading: false,
-            isChecked: true,
-          });
-          checkedUserId.current = userId;
-          return;
-        }
-
-        console.log('[ProtectedRoute] Profile data:', {
-          account_type: profile.account_type,
-          subscription_status: profile.subscription_status,
-          platform_plan: profile.platform_plan,
-          role: profile.role
-        });
-
-        // 🔥 Admin check - FULL ACCESS
-        if (profile.role === 'admin' || profile.role === 'super_admin') {
-          console.log('[ProtectedRoute] ✅ Admin user - full access');
-          setStatus({ 
-            hasJournalAccess: true, 
-            hasPlatformAccess: true,
-            isLoading: false,
-            isChecked: true,
-          });
-          checkedUserId.current = userId;
-          return;
-        }
-
-        // =====================================================
-        // 🔥 Check DIRECT Journal subscription
-        // account_type: basic, premium, trial, vip, admin
-        // Trial is treated as Basic - gives 14 days access
-        // =====================================================
-        const hasDirectJournal = 
-          ['basic', 'premium', 'vip', 'trial', 'admin'].includes(profile.account_type || '') &&
-          ['active', 'trial'].includes(profile.subscription_status || '');
-        
-        // Check expiration
-        let isNotExpired = true;
-        if (profile.subscription_expires_at) {
-          isNotExpired = new Date(profile.subscription_expires_at) > new Date();
-        }
-
-        if (hasDirectJournal && isNotExpired) {
-          hasJournalAccess = true;
-          console.log('[ProtectedRoute] ✅ Has direct journal subscription');
-        }
-
-        // =====================================================
-        // 🔥 Check Platform PRO/Enterprise bundle
-        // Only PRO and Enterprise get journal access via bundle
-        // CORE and FREE do NOT get journal access
-        // =====================================================
-        const platformPlan = profile.platform_plan;
-        const platformActive = ['active', 'trial'].includes(profile.platform_subscription_status || '');
-        
-        if (!hasJournalAccess && platformActive) {
-          // Only PRO or Enterprise with bundle_journal_granted = true
-          if ((platformPlan === 'pro' || platformPlan === 'enterprise') && 
-              profile.platform_bundle_journal_granted) {
-            hasJournalAccess = true;
-            console.log('[ProtectedRoute] ✅ Has journal via platform bundle');
-          }
-        }
-
-        console.log('[ProtectedRoute] Final access:', { hasJournalAccess, hasPlatformAccess });
-
-        setStatus({ 
-          hasJournalAccess, 
-          hasPlatformAccess,
-          isLoading: false,
-          isChecked: true,
-        });
-        checkedUserId.current = userId;
-
-      } catch (error) {
-        console.error('[ProtectedRoute] Error:', error);
-        setStatus({ 
-          hasJournalAccess: false, 
-          hasPlatformAccess: true,
-          isLoading: false,
-          isChecked: true,
-        });
-      }
-    };
-
-    checkSubscription();
-  }, [userId]);
-
-  return status;
-}
-
-// =====================================================
 // HELPER: Check route category
 // =====================================================
 
@@ -255,22 +101,45 @@ function isPublicAppPath(pathname: string): boolean {
 }
 
 // =====================================================
+// 🔥 Logging control - prevent spam
+// =====================================================
+
+const _loggedOnce = new Set<string>();
+
+function logOnce(key: string, ...args: unknown[]) {
+  if (import.meta.env.DEV && !_loggedOnce.has(key)) {
+    _loggedOnce.add(key);
+    console.log(...args);
+  }
+}
+
+// =====================================================
 // MAIN COMPONENT
 // =====================================================
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading: authLoading } = useAuth();
   const location = useLocation();
-  const { hasJournalAccess, hasPlatformAccess, isLoading: subLoading } = useSubscriptionCheck(user?.id);
+  
+  // 🔥 v7.0: Use centralized useSubscription hook
+  const { 
+    hasJournalAccess, 
+    isAdmin, 
+    isLoading: subLoading,
+    limits 
+  } = useSubscription();
 
   const isLoading = authLoading || (user && subLoading);
 
-  // 🔥 DEBUG LOGS
-  console.log('[ProtectedRoute] Path:', location.pathname);
-  console.log('[ProtectedRoute] User:', user?.email);
-  console.log('[ProtectedRoute] isLoading:', isLoading);
-  console.log('[ProtectedRoute] hasJournalAccess:', hasJournalAccess);
-  console.log('[ProtectedRoute] isJournalRoute:', isJournalRoute(location.pathname));
+  // 🔥 DEBUG LOGS (only in dev, only once per path)
+  logOnce(`route-${location.pathname}`, '[ProtectedRoute] Path:', location.pathname, {
+    user: user?.email,
+    hasJournalAccess,
+    isAdmin,
+    isLoading,
+    accountType: limits?.account_type,
+    role: limits?.role,
+  });
 
   // ═══════════════════════════════════════════
   // LOADING STATE - Show spinner briefly
@@ -294,6 +163,14 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   // ═══════════════════════════════════════════
+  // 🔥 ADMIN/VIP - Full access to everything
+  // ═══════════════════════════════════════════
+  if (isAdmin) {
+    logOnce(`admin-access-${location.pathname}`, '[ProtectedRoute] ✅ Admin access granted');
+    return <>{children}</>;
+  }
+
+  // ═══════════════════════════════════════════
   // 🔥 PLATFORM ROUTES - FREE for all authenticated users
   // Just render, no redirect!
   // ═══════════════════════════════════════════
@@ -306,18 +183,20 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // Show Landing Page if NO access
   // ═══════════════════════════════════════════
   if (isJournalRoute(location.pathname)) {
-    console.log('[ProtectedRoute] 🔥 Journal route detected!');
-    console.log('[ProtectedRoute] hasJournalAccess:', hasJournalAccess);
+    logOnce(`journal-check-${location.pathname}`, '[ProtectedRoute] 🔥 Journal route check:', {
+      hasJournalAccess,
+      accountType: limits?.account_type,
+      subscriptionStatus: limits?.subscription_status,
+    });
     
     if (hasJournalAccess) {
       // ✅ Has access - render page
-      console.log('[ProtectedRoute] ✅ Has access - rendering children');
+      logOnce(`journal-granted-${location.pathname}`, '[ProtectedRoute] ✅ Journal access granted');
       return <>{children}</>;
     }
     
     // ❌ No journal access - Show JournalLandingPage
-    // 🔥 This is the key change - we show a landing page instead of redirecting
-    console.log('[ProtectedRoute] ❌ No access - showing JournalLandingPage');
+    logOnce(`journal-denied-${location.pathname}`, '[ProtectedRoute] ❌ No journal access - showing landing page');
     return (
       <Suspense fallback={<LoadingSpinner />}>
         <JournalLandingPage />
@@ -331,4 +210,4 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-export { useSubscriptionCheck };
+export default ProtectedRoute;

@@ -427,14 +427,14 @@ INSERT INTO public.profiles (
     created_at, updated_at
   ) VALUES (
     NEW.id, NEW.email, v_display_name,
-    'basic',                              -- חדש: מתחיל כ-basic
-    'trial',                              -- חדש: סטטוס trial
-    TRUE,                                 -- חדש: בתקופת trial
-    NOW() + INTERVAL '14 days',           -- חדש: 14 ימי trial
-TRUE,                                 -- ⚠️ CRITICAL: כבר השתמש ב-trial!
-    25,                                   -- חדש: 25 טריידים/חודש
+    'free',                               -- ✅ מתחיל כ-FREE
+    NULL,                                 -- ✅ אין סטטוס מנוי
+    FALSE,                                -- ✅ לא ב-trial
+    NULL,                                 -- ✅ אין תאריך trial
+    FALSE,                                -- ✅ לא השתמש ב-trial
+    0,                                    -- ✅ 0 טריידים (FREE לא יכול ליצור)
     0, 0,
-    CURRENT_DATE,                         -- חדש: billing מתחיל מהיום
+    NULL,                                 -- ✅ אין billing cycle
     10000, 0, 10000, 10000,
     'percentage', 1.0,
     'user', FALSE,
@@ -453,7 +453,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
-'v6.3.0: Creates profile with account_type=free. User must select Basic (14-day trial) or Premium.';
+'v8.5.10-FIX: Creates profile with account_type=FREE. Trial/Basic only through Whop payment!';
 
 DO $$
 BEGIN
@@ -2383,48 +2383,19 @@ DROP FUNCTION IF EXISTS public.start_trial(UUID, INTEGER) CASCADE;
 
 CREATE OR REPLACE FUNCTION public.start_trial(
   p_user_id UUID,
-  p_trial_days INTEGER DEFAULT 14  -- ✅ 14 ימים כברירת מחדל
+  p_trial_days INTEGER DEFAULT 14
 )
-RETURNS BOOLEAN
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
-DECLARE
-  v_profile RECORD;
 BEGIN
-  SELECT account_type, trial_used, subscription_status INTO v_profile
-  FROM public.profiles
-  WHERE id = p_user_id;
-  
-  IF NOT FOUND THEN
-    RETURN FALSE;
-  END IF;
-  
-  -- Check if trial already used
-  IF COALESCE(v_profile.trial_used, FALSE) THEN
-    RAISE EXCEPTION 'Trial already used';
-  END IF;
-  
--- Only users with expired subscription can restart trial
-  IF v_profile.subscription_status NOT IN ('expired', 'cancelled') THEN
-    RAISE EXCEPTION 'Trial can only be started for expired/cancelled subscriptions';
-  END IF;
-  
-  UPDATE public.profiles
-  SET 
-    account_type = 'basic',              -- ✅ נכון! Trial הוא Basic עם status='trial'
-    subscription_status = 'trial',       -- ✅ חדש! Trial הוא STATUS
-    is_in_trial = TRUE,                  -- ✅ חדש! Flag לבדיקה מהירה
-    trial_used = TRUE,
-    trial_ends_at = NOW() + (p_trial_days || ' days')::INTERVAL,  -- ✅ שם נכון
-    max_trades = 25,
-    current_month_trades_count = 0,
-    billing_cycle_start = CURRENT_DATE,
-    payment_provider = 'whop',           -- ✅ חדש! Whop הוא ה-provider
-    updated_at = NOW()
-  WHERE id = p_user_id;
-  
-  RETURN FOUND;
+  -- 🔒 BLOCKED: Trial only through Whop checkout!
+  RETURN jsonb_build_object(
+    'success', FALSE,
+    'error', 'Trial is only available through Whop checkout. Please subscribe at finotaur.com/pricing',
+    'code', 'USE_WHOP_CHECKOUT'
+  );
 END;
 $$;
 

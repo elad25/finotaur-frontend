@@ -73,6 +73,7 @@ interface DailyReport {
   pdf_path: string | null;
   qa_score: number;
   created_at: string;
+  updated_at: string;
 }
 
 interface WeeklyReport {
@@ -956,6 +957,15 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
+  
+  // NEW: Tester state for TEST reports
+  const [isTester, setIsTester] = useState(false);
+  const [testDailyReport, setTestDailyReport] = useState<DailyReport | null>(null);
+  
+  // ⭐ NEW: Separate state for date-based report assignment
+  const [currentDayReport, setCurrentDayReport] = useState<DailyReport | null>(null);
+  const [previousDayReport, setPreviousDayReport] = useState<DailyReport | null>(null);
+  
   // NEW: Track if new report is available
   const [hasNewReport, setHasNewReport] = useState(false);
   const [lastFetchedDailyId, setLastFetchedDailyId] = useState<string | null>(null);
@@ -964,38 +974,175 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
   // Auto Intel Update countdown timer
   const [countdown, setCountdown] = useState({ hours: 0, minutes: 0, seconds: 0 });
 
+// ============================================
+  // HELPER: Normalize date to YYYY-MM-DD
+  // ============================================
+  const normalizeDate = useCallback((dateStr: string | Date | null): string => {
+    if (!dateStr) return '';
+    const str = typeof dateStr === 'string' ? dateStr : dateStr.toISOString();
+    return str.split('T')[0];
+  }, []);
   // ============================================
   // FETCH REPORTS FUNCTION
   // ============================================
-  const fetchReports = useCallback(async (showLoading = true) => {
+ const fetchReports = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoadingReports(true);
     
     try {
-      // Fetch latest 2 daily reports
-      const { data: dailyData, error: dailyError } = await supabase
-        .rpc('get_latest_daily_reports', { p_count: 2 });
+      // Check tester status first (before fetching reports)
+      let currentIsTester = isTester;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_tester, role, email')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          currentIsTester = profile.is_tester || 
+                           profile.role === 'admin' || 
+                           profile.role === 'super_admin' ||
+                           profile.email === 'elad2550@gmail.com';
+          if (currentIsTester !== isTester) {
+            setIsTester(currentIsTester);
+          }
+        }
+      }
+      console.log('[WAR ZONE] 👤 Tester status:', currentIsTester);
       
-      if (dailyError) {
-        console.error('Error fetching daily reports:', dailyError);
-      } else if (dailyData) {
-        // Check if there's a new daily report
+      const timestamp = new Date().toISOString();
+      console.log(`[WAR ZONE] 🔄 Fetching reports... (${timestamp})`);
+      
+      // Get today's date in NY timezone
+      const now = new Date();
+      const nyTimeStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+      const nyTime = new Date(nyTimeStr);
+      const todayNY = nyTime.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      console.log(`[WAR ZONE] 📅 Today in NY: ${todayNY}`);
+      
+// Fetch latest 5 LIVE daily reports
+// Reports are considered LIVE if visibility='live' OR visibility is null/missing
+// EXPLICITLY EXCLUDE 'test' visibility
+// v2.1: Fetch LIVE reports only (public or null, explicitly exclude test)
+const { data: dailyData, error: dailyError } = await supabase
+  .from('daily_reports')
+  .select('*')
+  .or('visibility.eq.public,visibility.is.null')
+  .order('report_date', { ascending: false })
+  .limit(5);
+      
+    if (dailyError) {
+  console.error('[WAR ZONE] ❌ Error fetching daily reports:', dailyError);
+} else {
+  console.log('[WAR ZONE] 📊 Daily reports from DB:', {
+    count: dailyData?.length || 0,
+    reports: dailyData?.map(r => ({
+      id: r.id,
+      date: r.report_date,
+      visibility: r.visibility,
+      pdf_path: r.pdf_path
+    }))
+  });
+}
+
+if (dailyData && dailyData.length > 0) {
+  // Filter out any test reports that might have slipped through
+  const liveReports = dailyData.filter((report: DailyReport) => 
+    (report as any).visibility !== 'test'
+  );
+
+  // Log each report
+  dailyData.forEach((report: DailyReport, index: number) => {
+    console.log(`[WAR ZONE] 📄 Report ${index + 1}:`, {
+      id: report.id,
+      date: report.report_date,
+      visibility: (report as any).visibility,
+      pdf_path: report.pdf_path || '❌ MISSING',
+    });
+  });
+        
+  // Store only LIVE reports (not test)
+  setDailyReports(liveReports);
+        
+  // =====================================================
+  // ASSIGNMENT LOGIC - DATE BASED
+  // =====================================================
+  // Current (1) = דוח עם תאריך של היום (NY timezone)
+  // Previous (0) = הדוח הראשון עם תאריך שונה מהיום
+  //
+  // כשעובר חצות NY:
+  //   - todayNY משתנה → Current מתרוקן
+  //   - מה שהיה Current הופך ל-Previous
+  //
+  // כשמייצר דוח חדש באותו יום:
+  //   - מחליף את Current (כי אותו תאריך)
+  // =====================================================
+        
+        // DEBUG: Log all dates
+console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport) => ({
+  id: r.id,
+  report_date: r.report_date,
+  normalized: normalizeDate(r.report_date),
+  todayNY: todayNY,
+  isToday: normalizeDate(r.report_date) === todayNY
+})));
+
+// Current (Middle card) = Today's LIVE report (if exists)
+const latestReport = liveReports.length > 0 ? liveReports[0] : null;
+const previousReport = liveReports.length > 1 ? liveReports[1] : null;
+
+console.log('[WAR ZONE] 📌 Final assignment:', {
+  latestReport: latestReport?.id || 'NONE',
+  previousReport: previousReport?.id || 'NONE',
+  todayNY
+});
+        
+        // DEBUG: Log what we found
+        console.log('[WAR ZONE] 📊 Reports found:', {
+          totalFromDB: dailyData.length,
+          liveOnly: liveReports.length,
+          latestReport: latestReport?.id || 'none',
+          todaysDate: latestReport ? normalizeDate(latestReport.report_date) : 'N/A',
+          previousReport: previousReport?.id || 'none', 
+          previousDate: previousReport ? normalizeDate(previousReport.report_date) : 'N/A',
+          allLiveDates: liveReports.map((r: DailyReport) => normalizeDate(r.report_date))
+        });
+        
+        console.log('[WAR ZONE] 📅 Report assignment (DATE-BASED):', {
+          todayNY,
+          current: latestReport ? normalizeDate(latestReport.report_date) : 'none (no report for today yet)',
+          previous: previousReport ? normalizeDate(previousReport.report_date) : 'none',
+        });
+        
+        setCurrentDayReport(latestReport);
+        setPreviousDayReport(previousReport);
+        
+        // New report detection
         const latestDailyId = dailyData[0]?.id;
         if (lastFetchedDailyId && latestDailyId && latestDailyId !== lastFetchedDailyId) {
           setHasNewReport(true);
           setTimeout(() => setHasNewReport(false), 5000);
         }
         setLastFetchedDailyId(latestDailyId || null);
-        setDailyReports(dailyData);
+      } else {
+        console.warn('[WAR ZONE] ⚠️ No daily reports returned');
+        setCurrentDayReport(null);
+        setPreviousDayReport(null);
       }
       
-      // Fetch latest weekly report
+      // Fetch latest weekly report (LIVE/PUBLIC only)
       const { data: weeklyData, error: weeklyError } = await supabase
-        .rpc('get_latest_weekly_report');
+        .from('weekly_reports')
+        .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at')
+        .or('visibility.eq.public,visibility.eq.live,visibility.is.null')
+        .order('report_date', { ascending: false })
+        .limit(1);
       
       if (weeklyError) {
-        console.error('Error fetching weekly report:', weeklyError);
+        console.error('[WAR ZONE] ❌ Error fetching weekly report:', weeklyError);
       } else if (weeklyData && weeklyData.length > 0) {
-        // Check if there's a new weekly report
         const latestWeeklyId = weeklyData[0]?.id;
         if (lastFetchedWeeklyId && latestWeeklyId && latestWeeklyId !== lastFetchedWeeklyId) {
           setHasNewReport(true);
@@ -1004,96 +1151,163 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
         setLastFetchedWeeklyId(latestWeeklyId || null);
         setWeeklyReport(weeklyData[0]);
       }
+      
+      // ============================================
+      // FETCH TEST REPORTS (ONLY FOR TESTERS)
+      // Always show the most recently CREATED test report (regardless of report_date)
+      // ============================================
+      if (currentIsTester || isTester) {
+        console.log('[WAR ZONE] 🧪 Fetching TEST reports for tester...');
+                const { data: testData, error: testError } = await supabase
+          .from('daily_reports')
+          .select('*')
+          .eq('visibility', 'test')
+          .order('updated_at', { ascending: false })  // Always get the latest updated
+          .limit(1);
+        
+        if (testError) {
+          console.error('[WAR ZONE] ❌ Error fetching test reports:', testError);
+        } else if (testData && testData.length > 0) {
+          console.log('[WAR ZONE] 🧪 Found TEST report:', testData[0].id);
+          setTestDailyReport(prevState => {
+            // Only update if different to prevent race conditions
+            if (!prevState || prevState.id !== testData[0].id) {
+              return testData[0];
+            }
+            return prevState;
+          });
+        } else {
+          console.log('[WAR ZONE] 🧪 No TEST reports found');
+          setTestDailyReport(null);
+        }
+      }
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      console.error('[WAR ZONE] ❌ Fatal error:', error);
     } finally {
       setIsLoadingReports(false);
     }
-  }, [lastFetchedDailyId, lastFetchedWeeklyId]);
+  }, [lastFetchedDailyId, lastFetchedWeeklyId, normalizeDate]);
 
   // ============================================
+  // MIDNIGHT REFRESH
+  // ============================================
+  useEffect(() => {
+    const scheduleNextMidnightRefresh = (): NodeJS.Timeout => {
+      const now = new Date();
+      const nyTimeStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+      const nyTime = new Date(nyTimeStr);
+      
+      const nextMidnight = new Date(nyTime);
+      nextMidnight.setDate(nextMidnight.getDate() + 1);
+      nextMidnight.setHours(0, 0, 5, 0); // 12:00:05 AM
+      
+      const msUntilMidnight = nextMidnight.getTime() - nyTime.getTime();
+      
+      console.log('[WAR ZONE] ⏰ Next midnight refresh in', 
+        Math.floor(msUntilMidnight / 1000 / 60 / 60), 'h',
+        Math.floor((msUntilMidnight / 1000 / 60) % 60), 'm'
+      );
+      
+      return setTimeout(() => {
+        console.log('[WAR ZONE] 🌙 Midnight - refreshing reports...');
+        fetchReports(false);
+        scheduleNextMidnightRefresh();
+      }, msUntilMidnight);
+    };
+    
+    const timeout = scheduleNextMidnightRefresh();
+    return () => clearTimeout(timeout);
+  }, [fetchReports]);
+// ============================================
   // INITIAL FETCH ON MOUNT
   // ============================================
   useEffect(() => {
     fetchReports(true);
-  }, []);
+  }, [fetchReports]);
 
   // ============================================
-  // SMART AUTO-REFRESH LOGIC
-  // Daily: 8:55-9:05 AM NY (every 60 seconds)
-  // Weekly: 10:00-10:10 AM NY on Sundays (17:00-17:10 Israel = 10:00-10:10 NY)
+  // AUTO-REFRESH DURING GENERATION WINDOW
   // ============================================
   useEffect(() => {
-    const checkIfShouldRefresh = () => {
+    const checkIfShouldRefresh = (): boolean => {
       const now = new Date();
       const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
       const hour = nyTime.getHours();
       const minute = nyTime.getMinutes();
-      const dayOfWeek = nyTime.getDay(); // 0 = Sunday
+      const dayOfWeek = nyTime.getDay();
       
-      // Daily report window: 8:55 AM - 9:05 AM NY (Monday-Friday)
+      // Daily: 8:55-9:10 AM NY (Mon-Fri)
       const isDailyWindow = dayOfWeek >= 1 && dayOfWeek <= 5 && 
-        ((hour === 8 && minute >= 55) || (hour === 9 && minute <= 5));
+        ((hour === 8 && minute >= 55) || (hour === 9 && minute <= 10));
       
-      // Weekly report window: 10:00 AM - 10:10 AM NY on Sundays
-      // (17:00-17:10 Israel time = 10:00-10:10 NY time)
+      // Weekly: 10:00-10:10 AM NY (Sunday)
       const isWeeklyWindow = dayOfWeek === 0 && hour === 10 && minute <= 10;
       
       return isDailyWindow || isWeeklyWindow;
     };
     
-    // Check every 30 seconds if we're in a refresh window
-    const windowCheckInterval = setInterval(() => {
+    const interval = setInterval(() => {
       if (checkIfShouldRefresh()) {
-        console.log('In refresh window - fetching reports...');
+        console.log('[WAR ZONE] 🕐 In generation window - checking...');
         fetchReports(false);
       }
-    }, 60 * 1000); // Check every 60 seconds during window
+    }, 30 * 1000);
     
-    return () => clearInterval(windowCheckInterval);
+    return () => clearInterval(interval);
   }, [fetchReports]);
 
   // ============================================
   // REAL-TIME SUBSCRIPTION FOR INSTANT UPDATES
   // ============================================
+ // ============================================
+  // REAL-TIME SUBSCRIPTION
+  // ============================================
   useEffect(() => {
-    // Subscribe to daily_reports table for real-time updates
-    const dailySubscription = supabase
-      .channel('daily_reports_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'daily_reports'
-        },
-        (payload) => {
-          console.log('New daily report detected:', payload);
-          fetchReports(false);
-        }
-      )
+    console.log('[WAR ZONE] 📡 Setting up real-time subscriptions...');
+    
+    // Subscribe to daily_reports INSERT
+    const dailyInsertSub = supabase
+      .channel('daily_reports_insert')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'daily_reports'
+      }, (payload) => {
+        console.log('[WAR ZONE] 🔔 New daily report INSERT:', payload.new?.id);
+        fetchReports(false);
+      })
       .subscribe();
 
-    // Subscribe to weekly_reports table for real-time updates
-    const weeklySubscription = supabase
+    // Subscribe to daily_reports UPDATE
+    const dailyUpdateSub = supabase
+      .channel('daily_reports_update')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'daily_reports'
+      }, (payload) => {
+        console.log('[WAR ZONE] 🔄 Daily report UPDATE:', payload.new?.id);
+        fetchReports(false);
+      })
+      .subscribe();
+
+    // Subscribe to weekly_reports INSERT
+    const weeklySub = supabase
       .channel('weekly_reports_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'weekly_reports'
-        },
-        (payload) => {
-          console.log('New weekly report detected:', payload);
-          fetchReports(false);
-        }
-      )
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'weekly_reports'
+      }, (payload) => {
+        console.log('[WAR ZONE] 🔔 New weekly report:', payload.new?.id);
+        fetchReports(false);
+      })
       .subscribe();
 
     return () => {
-      dailySubscription.unsubscribe();
-      weeklySubscription.unsubscribe();
+      dailyInsertSub.unsubscribe();
+      dailyUpdateSub.unsubscribe();
+      weeklySub.unsubscribe();
     };
   }, [fetchReports]);
   
@@ -1147,103 +1361,288 @@ const formatReportTime = (createdAt: string) => {
   // Handle report click
 // Handle report click - Download PDF directly
 const handleReportClick = async (report: DailyReport | WeeklyReport, reportType: 'daily' | 'weekly') => {
-  console.log('handleReportClick called:', { reportType, report });
+  console.log('[WAR ZONE] 📥 handleReportClick called:', { 
+    reportType, 
+    id: report.id,
+    date: report.report_date,
+    pdf_path: report.pdf_path,
+    pdf_url: report.pdf_url 
+  });
   
-  // 1. FIRST: Try pdf_url if it's a full Supabase URL (Weekly reports have this)
+  // Normalize date for filename
+  const dateStr = typeof report.report_date === 'string' 
+    ? report.report_date.split('T')[0]
+    : String(report.report_date);
+  
+  const filename = reportType === 'daily' 
+    ? `daily-report-${dateStr}.pdf`
+    : `weekly-report-${dateStr}.pdf`;
+  
+  // Helper to download PDF
+  const downloadPdf = async (url: string, source: string) => {
+    console.log(`[WAR ZONE] ✅ Downloading PDF via ${source}:`, url);
+    
+    try {
+      // Fetch the PDF as blob
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Cleanup
+      window.URL.revokeObjectURL(blobUrl);
+      console.log(`[WAR ZONE] ✅ Download initiated: ${filename}`);
+    } catch (error) {
+      console.error(`[WAR ZONE] ❌ Download failed via ${source}:`, error);
+      // Don't try to open/download a failed URL
+      console.error(`[WAR ZONE] ❌ All download methods failed for ${filename}`);
+    }
+  };
+
+  // ===========================================
+  // WEEKLY REPORTS - Use API to generate PDF (same as Top Secret)
+  // ===========================================
+  if (reportType === 'weekly') {
+    console.log('[WAR ZONE] 📅 Weekly report - using API to generate PDF');
+    
+    try {
+      // Get the latest PUBLIC/LIVE weekly report ID
+      const { data: latestWeekly, error } = await supabase
+        .from('weekly_reports')
+        .select('id, report_date')
+        .or('visibility.eq.public,visibility.eq.live,visibility.is.null')
+        .order('report_date', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error || !latestWeekly) {
+        console.error('[WAR ZONE] ❌ No LIVE weekly report found:', error?.message);
+        alert('No weekly report available. Please try again later.');
+        return;
+      }
+      
+      console.log('[WAR ZONE] ✅ Found latest weekly report:', latestWeekly.id);
+      
+      // Use API to generate PDF on-the-fly (same as Top Secret)
+      const pdfApiUrl = `${API_BASE}/api/weekly/report/${latestWeekly.id}/pdf`;
+      console.log('[WAR ZONE] 📥 Fetching PDF from API:', pdfApiUrl);
+      
+      const response = await fetch(pdfApiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/pdf',
+        },
+      });
+      
+      if (!response.ok) {
+        let errorMsg = `HTTP ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || errorMsg;
+        } catch {
+          errorMsg = response.statusText || errorMsg;
+        }
+        console.error('[WAR ZONE] ❌ API error:', errorMsg);
+        alert(`Failed to download weekly report: ${errorMsg}`);
+        return;
+      }
+      
+      const blob = await response.blob();
+      
+      if (blob.size < 1000) {
+        console.error('[WAR ZONE] ❌ Response too small:', blob.size, 'bytes');
+        alert('Downloaded file appears to be invalid. Please try again.');
+        return;
+      }
+      
+      console.log('[WAR ZONE] ✅ Received PDF:', blob.size, 'bytes');
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Finotaur_Weekly_Report_${latestWeekly.report_date}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('[WAR ZONE] ✅ Weekly PDF download initiated');
+    } catch (err) {
+      console.error('[WAR ZONE] ❌ Error downloading weekly report:', err);
+      alert('Failed to download weekly report. Please try again.');
+    }
+    return;
+  }
+
+  // ===========================================
+  // METHOD 1: Direct pdf_url (full Supabase URL)
+  // ===========================================
   if (report.pdf_url && report.pdf_url.includes('supabase.co')) {
-    console.log('Using direct pdf_url:', report.pdf_url);
-    window.open(report.pdf_url, '_blank');
+    await downloadPdf(report.pdf_url, 'direct pdf_url');
     return;
   }
   
-  // 2. SECOND: Try pdf_path with signed URL (if exists)
+  // ===========================================
+  // METHOD 2: pdf_path with signed URL
+  // ===========================================
   if (report.pdf_path) {
-    console.log('Trying pdf_path with signed URL:', report.pdf_path);
+    console.log('[WAR ZONE] 🔑 Trying pdf_path:', report.pdf_path);
     
-    const { data, error } = await supabase.storage
-      .from('reports')
-      .createSignedUrl(report.pdf_path, 300);
-    
-    if (data?.signedUrl) {
-      console.log('Got signed URL from pdf_path');
-      window.open(data.signedUrl, '_blank');
-      return;
+    try {
+      const { data, error } = await supabase.storage
+        .from('reports')
+        .createSignedUrl(report.pdf_path, 300); // 5 minutes
+      
+      if (data?.signedUrl) {
+        await downloadPdf(data.signedUrl, 'pdf_path signed URL');
+        return;
+      }
+      
+      console.warn('[WAR ZONE] ⚠️ Failed to create signed URL:', error?.message);
+    } catch (err) {
+      console.error('[WAR ZONE] ❌ Error creating signed URL:', err);
     }
-    console.warn('Failed to get signed URL from pdf_path:', error);
   }
   
-  // 3. THIRD: For Daily reports - try the API endpoint
+  // ===========================================
+  // METHOD 3: Construct path from report_date
+  // ===========================================
+  const constructedPath = reportType === 'daily' 
+    ? `daily-reports/daily-report-${dateStr}.pdf`
+    : `weekly-reports/weekly-report-${dateStr}.pdf`;
+  
+  console.log('[WAR ZONE] 🔧 Trying constructed path:', constructedPath);
+  
+  try {
+    const { data, error } = await supabase.storage
+      .from('reports')
+      .createSignedUrl(constructedPath, 300);
+    
+    if (data?.signedUrl) {
+      await downloadPdf(data.signedUrl, 'constructed path signed URL');
+      return;
+    }
+    
+    console.warn('[WAR ZONE] ⚠️ Constructed path failed:', error?.message);
+  } catch (err) {
+    console.error('[WAR ZONE] ❌ Error with constructed path:', err);
+  }
+  
+  // ===========================================
+  // METHOD 4: API endpoint fallback (daily only)
+  // ===========================================
   if (reportType === 'daily') {
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    console.log('Trying API endpoint for daily report');
+    console.log('[WAR ZONE] 🌐 Trying API endpoint:', `${API_BASE}/api/newsletter/pdf`);
     
     try {
       const response = await fetch(`${API_BASE}/api/newsletter/pdf`);
+      
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        console.log('[WAR ZONE] ✅ Download via API endpoint');
         return;
       }
+      
+      console.warn('[WAR ZONE] ⚠️ API endpoint failed:', response.status, response.statusText);
     } catch (err) {
-      console.error('API PDF fetch failed:', err);
+      console.error('[WAR ZONE] ❌ API fetch failed:', err);
     }
   }
   
-  // 4. FALLBACK: Generate path and try signed URL
-  const reportDate = new Date(report.report_date).toISOString().split('T')[0];
-  const fallbackPath = reportType === 'daily' 
-    ? `daily-reports/daily-report-${reportDate}.pdf`
-    : `weekly-reports/weekly-report-${reportDate}.pdf`;
+  // ===========================================
+  // METHOD 5: List bucket and find file
+  // ===========================================
+  const folderPath = reportType === 'daily' ? 'daily-reports' : 'weekly-reports';
+  console.log('[WAR ZONE] 📂 Listing bucket folder:', folderPath);
   
-  console.log('Trying fallback path:', fallbackPath);
-  
-  const { data, error } = await supabase.storage
-    .from('reports')
-    .createSignedUrl(fallbackPath, 300);
-  
-  if (data?.signedUrl) {
-    window.open(data.signedUrl, '_blank');
-    return;
+  try {
+    const { data: files, error } = await supabase.storage
+      .from('reports')
+      .list(folderPath, {
+        limit: 10,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+    
+    if (files && files.length > 0) {
+      console.log('[WAR ZONE] 📂 Files found:', files.map(f => f.name));
+      
+      // Find file matching our date
+      const matchingFile = files.find(f => f.name.includes(dateStr));
+      
+      if (matchingFile) {
+        const fullPath = `${folderPath}/${matchingFile.name}`;
+        console.log('[WAR ZONE] 🎯 Found matching file:', fullPath);
+        
+        const { data: signedData } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(fullPath, 300);
+        
+        if (signedData?.signedUrl) {
+          await downloadPdf(signedData.signedUrl, 'bucket listing match');
+          return;
+        }
+      } else {
+        // Try the most recent file
+        const latestFile = files[0];
+        const fullPath = `${folderPath}/${latestFile.name}`;
+        console.log('[WAR ZONE] 📄 Using latest file:', fullPath);
+        
+        const { data: signedData } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(fullPath, 300);
+        
+        if (signedData?.signedUrl) {
+          await downloadPdf(signedData.signedUrl, 'latest file in bucket');
+          return;
+        }
+      }
+    } else {
+      console.warn('[WAR ZONE] ⚠️ No files in bucket folder:', error?.message);
+    }
+  } catch (err) {
+    console.error('[WAR ZONE] ❌ Bucket listing failed:', err);
   }
   
-  // 5. NOTHING WORKED
-  console.error('All PDF methods failed:', { report, error });
-  alert('PDF not available. The report may still be generating.');
+  // ===========================================
+  // ALL METHODS FAILED
+  // ===========================================
+  console.error('[WAR ZONE] ❌ ALL PDF METHODS FAILED');
+  console.error('[WAR ZONE] Debug info:', {
+    report_id: report.id,
+    report_date: report.report_date,
+    pdf_path: report.pdf_path,
+    pdf_url: report.pdf_url,
+    reportType
+  });
+  
+  alert(`PDF not available for ${dateStr}. Please try again in a few minutes or contact support.`);
 };
 
-  // Get the two daily reports (current and previous trading day)
-  const currentDayReport = dailyReports[0] || null;
-  const previousDayReport = dailyReports[1] || null;
 
   return (
     <div className="min-h-screen bg-[#0a0806] relative overflow-hidden">
-
-      {/* NEW REPORT NOTIFICATION BANNER */}
-      {hasNewReport && (
-        <div 
-          className="fixed top-0 left-0 right-0 z-[100] animate-slideDown"
-          style={{
-            background: 'linear-gradient(90deg, rgba(34,197,94,0.9) 0%, rgba(22,163,74,0.9) 100%)',
-            boxShadow: '0 4px 20px rgba(34,197,94,0.4)'
-          }}
-        >
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-center gap-3">
-            <div className="animate-pulse">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
-            <p className="text-white font-semibold text-sm">
-              🎉 New Report Available! The page has been updated.
-            </p>
-            <button 
-              onClick={() => setHasNewReport(false)}
-              className="p-1 rounded-full hover:bg-white/20 transition-colors"
-            >
-              <X className="w-4 h-4 text-white" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Trial Banner */}
       {newsletterStatus.is_in_trial && newsletterStatus.days_until_trial_ends !== null && (
@@ -1339,20 +1738,20 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
                 <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Latest Weekly Report</h3>
               </div>
               
-              {/* Auto Intel Update Countdown */}
+              {/* Daily Report Schedule */}
               <div className="flex items-center gap-2 text-[#C9A646]/70 text-sm">
-                <RefreshCw className="w-4 h-4 glow-pulse" />
-                <span>Auto Intel Update in </span>
-                <span className="text-[#C9A646] font-mono font-semibold">
-                  {String(countdown.hours).padStart(2, '0')}:{String(countdown.minutes).padStart(2, '0')}:{String(countdown.seconds).padStart(2, '0')}
-                </span>
+                <Clock className="w-4 h-4 text-[#C9A646]" />
+                <span>New report every trading day by </span>
+                <span className="text-[#C9A646] font-semibold">9:10 AM ET</span>
+                <span className="text-[#C9A646]/50">•</span>
+                <span className="text-[#C9A646]/60">Bookmark this page!</span>
               </div>
             </div>
 
             {/* Report Cards Grid - 3 COLUMNS */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
-              {/* LEFT CARD: Previous Trading Day */}
+              {/* LEFT CARD: Previous Trading Day (0) */}
               <button
   onClick={() => previousDayReport && handleReportClick(previousDayReport, 'daily')}
                 disabled={isLoadingReports || !previousDayReport}
@@ -1387,7 +1786,12 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
                             : 'No report available'
                         }
                       </p>
-                      <p className="text-[#C9A646]/50 text-xs">Previous Trading Day</p>
+<p className="text-[#C9A646]/50 text-xs">
+  {previousDayReport 
+    ? `Published at ${formatReportTime(previousDayReport.updated_at || previousDayReport.created_at)} ET`
+    : 'Previous Trading Day'
+  }
+</p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
@@ -1398,7 +1802,7 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
                 />
               </button>
 
-              {/* MIDDLE CARD: Current Trading Day */}
+              {/* MIDDLE CARD: Today's Report (1) */}
               <button
   onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
                 disabled={isLoadingReports || !currentDayReport}
@@ -1430,15 +1834,15 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
       ? 'Loading...' 
       : currentDayReport 
         ? formatReportDate(currentDayReport.report_date)
-        : 'No report available'
+        : 'No Report Available'
     }
   </p>
-  <p className="text-[#C9A646]/50 text-xs">
-    {currentDayReport 
-      ? `Published at ${formatReportTime(currentDayReport.created_at)} ET`
-      : "Today's Report"
-    }
-  </p>
+<p className="text-[#C9A646]/50 text-xs">
+  {currentDayReport 
+    ? `Published at ${formatReportTime(currentDayReport.updated_at || currentDayReport.created_at)} ET`
+    : 'Coming at 9:00 AM ET'
+  }
+</p>
 </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
@@ -1484,7 +1888,12 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
                             : 'No report available'
                         }
                       </p>
-                      <p className="text-[#C9A646]/50 text-xs">Weekly Review</p>
+                      <p className="text-[#C9A646]/50 text-xs">
+                        {weeklyReport 
+                          ? `Published at ${formatReportTime(weeklyReport.created_at)} ET`
+                          : 'Weekly Review'
+                        }
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
@@ -1497,13 +1906,67 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
             </div>
           </div>
 
+          {/* TEST REPORT ROW - ONLY FOR TESTERS */}
+          {isTester && testDailyReport && (
+            <div className="mt-4 mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                  🧪 TESTER ONLY
+                </span>
+                <span className="text-[#C9A646]/50 text-sm">This report is visible only to testers</span>
+              </div>
+              
+              <button
+                onClick={() => handleReportClick(testDailyReport, 'daily')}
+                className="group relative w-full p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(147,51,234,0.15) 0%, rgba(88,28,135,0.1) 100%)',
+                  border: '2px solid rgba(147,51,234,0.4)',
+                  boxShadow: '0 4px 20px rgba(147,51,234,0.2)'
+                }}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ 
+                        background: 'rgba(147,51,234,0.2)',
+                        border: '1px solid rgba(147,51,234,0.4)'
+                      }}
+                    >
+                      <FileText className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-white font-semibold">
+                          🧪 TEST: {formatReportDate(testDailyReport.created_at)}
+                        </p>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse">
+                          PENDING REVIEW
+                        </span>
+                      </div>
+                      <p className="text-purple-400/60 text-xs">
+                        Generated at {formatReportTime(testDailyReport.updated_at || testDailyReport.created_at)} ET • {testDailyReport.id}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-purple-400 transition-transform group-hover:translate-x-1" />
+                </div>
+                <div 
+                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(147,51,234,0.5), transparent)' }}
+                />
+              </button>
+            </div>
+          )}
+
           {/* Intel Message */}
           <p className="text-center text-[#C9A646]/60 text-lg heading-font italic mb-10">
             Stay sharp. stay informed. Here's your intel for today.
           </p>
 
-          {/* Bottom Cards: Discord, Subscription, Trading Room */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Bottom Cards: Discord, Trading Room */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Discord Community */}
             <a 
               href={DISCORD_INVITE_URL}
@@ -1542,53 +2005,6 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
                 Join Now
               </button>
             </a>
-
-            {/* Subscription Status */}
-            <div
-              className="p-6 rounded-2xl"
-              style={{ 
-                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                border: '1px solid rgba(201,166,70,0.25)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-              }}
-            >
-              <div className="flex items-center gap-4 mb-4">
-                <div 
-                  className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ 
-                    background: 'rgba(201,166,70,0.15)',
-                    border: '1px solid rgba(201,166,70,0.3)'
-                  }}
-                >
-                  <Crown className="w-6 h-6 text-[#C9A646]" />
-                </div>
-                <div>
-                  <h4 className="text-white font-bold text-lg">Subscription</h4>
-                  <p className="text-[#C9A646]/50 text-sm">
-                    {newsletterStatus.is_in_trial ? '$0 (Trial)' : '$49/mo'}
-                  </p>
-                </div>
-              </div>
-              
-              {newsletterStatus.newsletter_cancel_at_period_end ? (
-                <div className="w-full py-3 rounded-xl font-semibold text-sm text-center bg-red-500/10 border border-red-500/30 text-red-400">
-                  Cancels at period end
-                </div>
-              ) : (
-                <button 
-                  onClick={onCancelClick}
-                  className="w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2"
-                  style={{ 
-                    background: 'rgba(201,166,70,0.1)',
-                    border: '1px solid rgba(201,166,70,0.3)',
-                    color: '#C9A646'
-                  }}
-                >
-                  {newsletterStatus.is_in_trial ? 'FREE TRIAL' : 'ACTIVE'}
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-            </div>
 
             {/* Trading Room */}
             <a

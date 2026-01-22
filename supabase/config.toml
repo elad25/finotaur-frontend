@@ -1,10 +1,47 @@
 project_id = "dnnevwlzpurhbkzjocnp"
 
+# ============================================
+# FINOTAUR SUPABASE FUNCTIONS CONFIG
+# ============================================
+# 
+# verify_jwt = false → Public endpoint (webhooks, public APIs)
+# verify_jwt = true  → Requires Supabase auth token
+#
+# ============================================
+
+# ============================================
+# 🔥 WEBHOOKS - MUST BE PUBLIC (no JWT)
+# ============================================
+
+[functions.whop-webhook]
+enabled = true
+verify_jwt = false  # ← CRITICAL: Whop doesn't send JWT!
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false  # ← Webhooks don't send JWT
+
+# ============================================
+# 🔒 CHECKOUT FUNCTIONS - Require Auth
+# ============================================
+
+[functions.create-whop-checkout]
+enabled = true
+verify_jwt = true  # User must be logged in to create checkout
+
+# ============================================
+# 🔒 SNAPTRADE / BROKER FUNCTIONS
+# ============================================
+
 [functions.snaptrade-proxy]
 enabled = true
 verify_jwt = true
 import_map = "./functions/snaptrade-proxy/deno.json"
 entrypoint = "./functions/snaptrade-proxy/index.ts"
+
+# ============================================
+# 🧪 TEST FUNCTIONS
+# ============================================
 
 [functions.test-register-user]
 enabled = true
@@ -12,7 +49,25 @@ verify_jwt = true
 import_map = "./functions/test-register-user/deno.json"
 entrypoint = "./functions/test-register-user/index.ts"
 
-# ✅ NEW: Public test function (no auth required)
+# ✅ Public test function (no auth required)
 [functions.test-register-public]
 enabled = true
 verify_jwt = false  # ← This makes it public!
+
+# ============================================
+# 📧 EMAIL / NOTIFICATION FUNCTIONS
+# ============================================
+
+# Add any email functions here with verify_jwt = true
+# [functions.send-welcome-email]
+# enabled = true
+# verify_jwt = true
+
+# ============================================
+# 📊 REPORT GENERATION FUNCTIONS
+# ============================================
+
+# Add any report functions here
+# [functions.generate-report-pdf]
+# enabled = true
+# verify_jwt = true

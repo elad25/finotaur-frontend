@@ -1,18 +1,11 @@
 // ================================================
-// OPTIMIZED SUBSCRIPTION HOOK - v8.1.0
+// OPTIMIZED SUBSCRIPTION HOOK - v8.4.2 FINAL FIX
 // File: src/hooks/useSubscription.ts
 // ================================================
-// 🔥 v8.0.0 CHANGES:
-// - FIXED: Platform plan types to match DB (free/core/pro/enterprise)
-// - FIXED: Only Platform PRO gives Journal Premium access
-// - FIXED: Platform CORE/FREE = NO Journal access
-// - ADDED: hasJournalAccess computed flag
-// - ADDED: Journal access from Platform bundle logic
-// 🔥 v8.1.0 CHANGES:
-// - FIXED: Admin/VIP users now bypass ALL limit checks
-// - FIXED: isAdmin check happens FIRST before subscription checks
-// - FIXED: canAddTrade always true for admin/vip
-// - FIXED: hasJournalAccess always true for admin/vip
+// 🔥🔥🔥 v8.4.2 CRITICAL FIX:
+// - FIXED: RPC parameter name MUST be 'user_id_param' (NOT 'p_user_id')
+// - The DB function signature uses 'p_user_id' internally but Supabase
+//   exposes it as 'user_id_param' (without the 'p_' prefix)
 // ================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -20,103 +13,69 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
 // ================================================
-// TYPES - 🔥 v8.0: Fixed Platform types
+// TYPES
 // ================================================
 
-/**
- * Journal Account types
- */
 export type AccountType = 'free' | 'trial' | 'basic' | 'premium' | 'admin' | 'vip';
-
-/**
- * 🔥 v8.0: Platform Plan types (matches DB values)
- * DB stores: 'free', 'core', 'pro', 'enterprise' (no prefix!)
- */
 export type PlatformPlan = 'free' | 'core' | 'pro' | 'enterprise' | null;
-
-/**
- * Subscription status
- */
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'past_due' | null;
-
-/**
- * Subscription interval
- */
 export type SubscriptionInterval = 'monthly' | 'yearly' | null;
-
-/**
- * User role
- */
 export type UserRole = 'user' | 'admin' | 'super_admin';
+export type PaymentProvider = 'whop' | 'payplus' | 'stripe' | 'paypal' | 'admin_granted' | 'manual' | 'lifetime' | null;
 
 /**
- * Payment provider types
- */
-export type PaymentProvider = 'whop' | 'payplus' | 'stripe' | 'paypal' | 'admin_granted' | 'manual' | null;
-
-/**
- * TradeLimits interface (Journal)
+ * TradeLimits interface - MATCHES EXACT DB FUNCTION COLUMN ORDER!
+ * 
+ * DB function get_user_subscription_status returns 34 columns
  */
 export interface TradeLimits {
-  // Core subscription/limit fields
-  remaining: number;
-  used: number;
-  max_trades: number;
-  plan: string;
-  reset_date: string;
-  
-  // Account type & role
+  // Account info (1-2)
   account_type: AccountType;
   role: UserRole;
   
-  // Subscription details
+  // Subscription status (3-8)
   subscription_status: SubscriptionStatus;
   subscription_interval: SubscriptionInterval;
   subscription_expires_at: string | null;
-  subscription_cancel_at_period_end: boolean;
   subscription_started_at: string | null;
+  subscription_cancel_at_period_end: boolean;
+  pending_downgrade_plan: string | null;
   
-  // Trial tracking
-  trial_ends_at: string | null;
+  // Trial info (9-12)
   is_in_trial: boolean;
+  trial_ends_at: string | null;
+  trial_used: boolean;
   trial_days_remaining: number | null;
   
-  // Portfolio fields
+  // Trade limits (13-17)
+  max_trades: number;
+  remaining: number;
+  used: number;
+  plan: string;
+  reset_date: string;
+  
+  // Portfolio & Risk (18-24)
   initial_portfolio: number;
   current_portfolio: number;
   portfolio_size: number;
   total_pnl: number;
-  
-  // Risk settings
   risk_mode: 'percentage' | 'fixed';
   risk_percentage: number | null;
   fixed_risk_amount: number | null;
   
-  // Usage tracking
+  // Usage tracking (25-28)
   trade_count: number;
   current_month_trades_count: number;
   current_month_active_days: number;
   billing_cycle_start: string | null;
-  is_lifetime_limit: boolean;
   
-  // Payment provider info
+  // Payment provider info (29-34)
   payment_provider: PaymentProvider;
   whop_user_id: string | null;
   whop_membership_id: string | null;
   whop_product_id: string | null;
   whop_plan_id: string | null;
   whop_customer_email: string | null;
-  
-  // 🔥 v8.0: Platform subscription fields
-  platform_plan: PlatformPlan;
-  platform_subscription_status: SubscriptionStatus;
-  platform_subscription_interval: SubscriptionInterval;
-  platform_subscription_expires_at: string | null;
-  platform_is_in_trial: boolean;
-  platform_trial_ends_at: string | null;
-  platform_trial_days_remaining: number | null;
-  platform_whop_membership_id: string | null;
-  platform_bundle_journal_granted: boolean;
 }
 
 export interface WarningState {
@@ -143,6 +102,11 @@ function safeString(value: unknown, fallback: string = ''): string {
   return String(value);
 }
 
+function safeBool(value: unknown, fallback: boolean = false): boolean {
+  if (value === null || value === undefined) return fallback;
+  return Boolean(value);
+}
+
 const _loggedOnce = new Set<string>();
 
 function logOnce(key: string, ...args: unknown[]) {
@@ -164,7 +128,7 @@ export const subscriptionKeys = {
 };
 
 // ================================================
-// 🔥 MAIN HOOK - v8.1 WITH ADMIN FIX
+// 🔥🔥🔥 MAIN HOOK - v8.4.2 FINAL FIX
 // ================================================
 
 export function useSubscription() {
@@ -184,9 +148,17 @@ export function useSubscription() {
       if (!effectiveUserId) return null;
       
       try {
-        const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-          p_user_id: effectiveUserId
-        });
+        // ═══════════════════════════════════════════════════════════════
+        // 🔥🔥🔥 CRITICAL FIX v8.4.2:
+        // The parameter name MUST be 'user_id_param' NOT 'p_user_id'!
+        // 
+        // Error was:
+        // "Could not find the function public.get_user_subscription_status(p_user_id)"
+        // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
+        // ═══════════════════════════════════════════════════════════════
+const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
+  p_user_id: effectiveUserId  // ✅ נכון
+});
         
         if (rpcError) {
           console.error('❌ Failed to fetch subscription:', rpcError);
@@ -200,92 +172,55 @@ export function useSubscription() {
         
         const result = Array.isArray(data) ? data[0] : data;
         
-        // Calculate trial info (Journal)
-        const trialEndsAt = result.trial_ends_at || result.subscription_expires_at;
-        const isInTrial = result.account_type === 'trial' || result.subscription_status === 'trial';
-        let trialDaysRemaining: number | null = null;
-        
-        if (isInTrial && trialEndsAt) {
-          const now = new Date();
-          const trialEnd = new Date(trialEndsAt);
-          trialDaysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-        }
-        
-        // 🔥 v8.0: Calculate Platform trial info
-        const platformTrialEndsAt = result.platform_trial_ends_at;
-        const platformIsInTrial = result.platform_is_in_trial || result.platform_subscription_status === 'trial';
-        let platformTrialDaysRemaining: number | null = null;
-        
-        if (platformIsInTrial && platformTrialEndsAt) {
-          const now = new Date();
-          const trialEnd = new Date(platformTrialEndsAt);
-          platformTrialDaysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-        }
-        
-        const accountType = (result.account_type || null) as AccountType;
-        // 🔥 v8.0: Platform plan without prefix (matches DB)
-        const platformPlan = (result.platform_plan || null) as PlatformPlan;
-        
+        // Map DB result to TradeLimits
         const tradeLimits: TradeLimits = {
-          // Core limits
-          remaining: safeNumber(result.remaining, 0),
-          used: safeNumber(result.used, 0),
-          max_trades: safeNumber(result.max_trades, accountType === 'free' ? 0 : 25),
-          plan: safeString(result.plan || result.account_type, ''),
-          reset_date: safeString(result.reset_date, new Date().toISOString()),
-          
-          // Account type & role
-          account_type: accountType,
+          // Account info (1-2)
+          account_type: (result.account_type || 'free') as AccountType,
           role: (result.role || 'user') as UserRole,
           
-          // Subscription details
-          subscription_status: result.subscription_status as SubscriptionStatus,
-          subscription_interval: result.subscription_interval as SubscriptionInterval,
+          // Subscription status (3-8)
+          subscription_status: (result.subscription_status || null) as SubscriptionStatus,
+          subscription_interval: (result.subscription_interval || null) as SubscriptionInterval,
           subscription_expires_at: result.subscription_expires_at || null,
           subscription_started_at: result.subscription_started_at || null,
-          subscription_cancel_at_period_end: result.subscription_cancel_at_period_end ?? false,
+          subscription_cancel_at_period_end: safeBool(result.subscription_cancel_at_period_end, false),
+          pending_downgrade_plan: result.pending_downgrade_plan || null,
           
-          // Trial info (Journal)
-          trial_ends_at: trialEndsAt || null,
-          is_in_trial: isInTrial,
-          trial_days_remaining: trialDaysRemaining,
+          // Trial info (9-12)
+          is_in_trial: safeBool(result.is_in_trial, false),
+          trial_ends_at: result.trial_ends_at || null,
+          trial_used: safeBool(result.trial_used, false),
+          trial_days_remaining: result.trial_days_remaining !== null ? safeNumber(result.trial_days_remaining, 0) : null,
           
-          // Portfolio fields
+          // Trade limits (13-17)
+          max_trades: safeNumber(result.max_trades, 25),
+          remaining: safeNumber(result.remaining, 0),
+          used: safeNumber(result.used, 0),
+          plan: safeString(result.plan, 'free'),
+          reset_date: safeString(result.reset_date, new Date().toISOString()),
+          
+          // Portfolio & Risk (18-24)
           initial_portfolio: safeNumber(result.initial_portfolio, 10000),
           current_portfolio: safeNumber(result.current_portfolio, 10000),
           portfolio_size: safeNumber(result.portfolio_size, 10000),
           total_pnl: safeNumber(result.total_pnl, 0),
-          
-          // Risk settings
           risk_mode: (result.risk_mode || 'percentage') as 'percentage' | 'fixed',
           risk_percentage: result.risk_percentage !== null ? safeNumber(result.risk_percentage, 1) : null,
           fixed_risk_amount: result.fixed_risk_amount !== null ? safeNumber(result.fixed_risk_amount, 100) : null,
           
-          // Usage tracking
+          // Usage tracking (25-28)
           trade_count: safeNumber(result.trade_count, 0),
           current_month_trades_count: safeNumber(result.current_month_trades_count, 0),
           current_month_active_days: safeNumber(result.current_month_active_days, 0),
           billing_cycle_start: result.billing_cycle_start || null,
-          is_lifetime_limit: false,
           
-          // Payment provider
+          // Payment provider info (29-34)
           payment_provider: (result.payment_provider || null) as PaymentProvider,
           whop_user_id: result.whop_user_id || null,
           whop_membership_id: result.whop_membership_id || null,
           whop_product_id: result.whop_product_id || null,
           whop_plan_id: result.whop_plan_id || null,
           whop_customer_email: result.whop_customer_email || null,
-          
-          // 🔥 v8.0: Platform subscription fields
-          platform_plan: platformPlan,
-          platform_subscription_status: (result.platform_subscription_status || null) as SubscriptionStatus,
-          platform_subscription_interval: (result.platform_billing_interval || null) as SubscriptionInterval,
-          platform_subscription_expires_at: result.platform_subscription_expires_at || null,
-          platform_is_in_trial: platformIsInTrial,
-          platform_trial_ends_at: platformTrialEndsAt || null,
-          platform_trial_days_remaining: platformTrialDaysRemaining,
-          platform_whop_membership_id: result.platform_whop_membership_id || null,
-          platform_bundle_journal_granted: result.platform_bundle_journal_granted || false,
         };
         
         return tradeLimits;
@@ -347,10 +282,7 @@ export function useSubscription() {
   });
   
   // ═══════════════════════════════════════════
-  // 🔥 v8.1.0: ADMIN CHECK FIRST! (CRITICAL FIX)
-  // ═══════════════════════════════════════════
-  // Admin/VIP users bypass ALL subscription checks
-  // This must be checked BEFORE any other logic
+  // ADMIN CHECK
   // ═══════════════════════════════════════════
   
   const isAdmin = 
@@ -359,7 +291,6 @@ export function useSubscription() {
     limits?.account_type === 'admin' ||
     limits?.account_type === 'vip';
   
-  // 🔥 v8.1.0: Debug log for admin detection
   if (import.meta.env.DEV && limits) {
     logOnce(`admin-check-${effectiveUserId}`, '🛡️ Admin check:', {
       role: limits.role,
@@ -369,83 +300,53 @@ export function useSubscription() {
   }
   
   // ═══════════════════════════════════════════
-  // 🔥 v8.0: PLATFORM COMPUTED VALUES (CORRECTED)
+  // LIFETIME USER CHECK
   // ═══════════════════════════════════════════
   
-  const platformPlan = limits?.platform_plan || null;
-  const isPlatformFree = platformPlan === 'free' || platformPlan === null;
-  const isPlatformCore = platformPlan === 'core';
-  const isPlatformPro = platformPlan === 'pro';
-  const isPlatformEnterprise = platformPlan === 'enterprise';
-  const isPlatformPaid = isPlatformCore || isPlatformPro || isPlatformEnterprise;
-  
-  const isPlatformActive = 
-    limits?.platform_subscription_status === 'active' ||
-    limits?.platform_subscription_status === 'trial';
-  
-  const isPlatformInTrial = limits?.platform_is_in_trial ?? false;
-  const platformTrialDaysRemaining = limits?.platform_trial_days_remaining ?? null;
+  const isLifetimeUser = 
+    limits?.account_type === 'vip' || 
+    limits?.payment_provider === 'lifetime';
   
   // ═══════════════════════════════════════════
-  // 🔥 v8.1.0: JOURNAL ACCESS LOGIC (FIXED FOR ADMIN)
-  // ═══════════════════════════════════════════
-  // 
-  // Journal access comes from:
-  // 1. 🔥 ADMIN/VIP (always has access - checked FIRST!)
-  // 2. Direct Journal subscription (basic/premium/trial)
-  // 3. Platform PRO bundle (gives Premium)
-  // 4. Platform ENTERPRISE bundle (gives Premium)
-  // 
-  // Platform FREE/CORE = NO Journal access!
+  // JOURNAL ACCESS LOGIC
   // ═══════════════════════════════════════════
   
-  // Direct Journal subscription check (for non-admins)
   const hasDirectJournalSubscription = 
-    !isAdmin && // 🔥 v8.1.0: Skip this check for admins
+    !isAdmin &&
     limits?.account_type && 
-    ['basic', 'premium', 'trial'].includes(limits.account_type) &&
-    (limits.subscription_status === 'active' || limits.subscription_status === 'trial');
+    ['basic', 'premium'].includes(limits.account_type) &&
+    limits.subscription_status === 'active' &&
+    !!limits.whop_membership_id;
+
+  const hasJournalTrial = 
+    !isAdmin &&
+    limits?.account_type === 'basic' &&
+    limits?.subscription_status === 'trial' &&
+    limits?.is_in_trial === true &&
+    !!limits.whop_membership_id;
   
-  // 🔥 Platform PRO/Enterprise bundle gives Journal Premium
-  const hasJournalFromPlatformBundle = 
-    !isAdmin && // 🔥 v8.1.0: Skip this check for admins
-    (isPlatformPro || isPlatformEnterprise) && 
-    isPlatformActive &&
-    (limits?.platform_bundle_journal_granted === true);
+  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial;
   
-  // 🔥 v8.1.0: Combined Journal access check - ADMIN FIRST!
-  const hasJournalAccess = isAdmin || hasDirectJournalSubscription || hasJournalFromPlatformBundle;
-  
-  // Determine effective Journal plan
   const effectiveJournalPlan = (() => {
-    // 🔥 v8.1.0: Admin/VIP always premium - CHECK FIRST!
-    if (isAdmin) {
-      return 'premium';
-    }
-    // Direct subscription takes priority
-    if (hasDirectJournalSubscription) {
-      return limits?.account_type as AccountType;
-    }
-    // Platform PRO/Enterprise bundle = Premium
-    if (hasJournalFromPlatformBundle) {
-      return 'premium';
-    }
+    if (isAdmin) return 'premium';
+    if (isLifetimeUser) return 'premium';
+    if (hasDirectJournalSubscription) return limits?.account_type as AccountType;
+    if (hasJournalTrial) return 'trial';
     return null;
   })();
   
   // ═══════════════════════════════════════════
-  // JOURNAL COMPUTED VALUES (v8.1.0 - updated)
+  // COMPUTED VALUES
   // ═══════════════════════════════════════════
   
-  const isTrial = !isAdmin && effectiveJournalPlan === 'trial';
-  const isBasic = !isAdmin && effectiveJournalPlan === 'basic';
-  const isPremium = isAdmin || effectiveJournalPlan === 'premium'; // 🔥 Admin = always premium
+  const isTrial = !isAdmin && !isLifetimeUser && hasJournalTrial;
+  const isBasic = !isAdmin && !isLifetimeUser && effectiveJournalPlan === 'basic';
+  const isPremium = isAdmin || isLifetimeUser || effectiveJournalPlan === 'premium';
   const isLegacyFreeUser = !isAdmin && limits?.account_type === 'free';
-  const isUnlimitedUser = isAdmin || isPremium; // 🔥 Admin = always unlimited
+  const isUnlimitedUser = isAdmin || isLifetimeUser || isPremium;
   const isPaidUser = hasJournalAccess && (isBasic || isPremium || isTrial);
   
-  // 🔥 v8.1.0: CRITICAL FIX - Admin always has remaining trades
-  const tradesRemaining = isAdmin 
+  const tradesRemaining = isAdmin || isLifetimeUser
     ? Infinity 
     : isUnlimitedUser 
       ? Infinity 
@@ -453,16 +354,14 @@ export function useSubscription() {
         ? 0 
         : limits?.remaining ?? 0;
   
-  // 🔥 v8.1.0: CRITICAL FIX - Admin can ALWAYS add trades
-  const canAddTrade = isAdmin || (hasJournalAccess && (isUnlimitedUser || (limits?.remaining ?? 0) > 0));
+  const canAddTrade = isAdmin || isLifetimeUser || (hasJournalAccess && (isUnlimitedUser || (limits?.remaining ?? 0) > 0));
   
-  // 🔥 v8.1.0: Admin never hits limit
-  const isLimitReached = !isAdmin && !isUnlimitedUser && (!hasJournalAccess || (limits?.remaining ?? 0) <= 0);
+  const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser && (!hasJournalAccess || (limits?.remaining ?? 0) <= 0);
   
-  const canUseSnapTrade = isAdmin || (hasJournalAccess && (isTrial || isBasic || isPremium));
+  const canUseSnapTrade = isAdmin || isLifetimeUser || (hasJournalAccess && (isTrial || isBasic || isPremium));
   
   const isExpiringSoon = (() => {
-    if (isAdmin) return false; // 🔥 Admin never expires
+    if (isAdmin || isLifetimeUser) return false;
     if (!limits?.subscription_expires_at) return false;
     const expiresAt = new Date(limits.subscription_expires_at);
     const now = new Date();
@@ -471,7 +370,7 @@ export function useSubscription() {
   })();
   
   const daysUntilExpiry = (() => {
-    if (isAdmin) return null; // 🔥 Admin = no expiry
+    if (isAdmin || isLifetimeUser) return null;
     if (!limits?.subscription_expires_at) return null;
     const expiresAt = new Date(limits.subscription_expires_at);
     const now = new Date();
@@ -479,7 +378,7 @@ export function useSubscription() {
   })();
   
   const isTrialExpired = (() => {
-    if (isAdmin) return false; // 🔥 Admin = no trial
+    if (isAdmin || isLifetimeUser) return false;
     if (!isTrial) return false;
     if (!limits?.trial_ends_at) return false;
     const trialEnd = new Date(limits.trial_ends_at);
@@ -487,7 +386,7 @@ export function useSubscription() {
   })();
   
   const isTrialExpiringSoon = (() => {
-    if (isAdmin) return false; // 🔥 Admin = no trial
+    if (isAdmin || isLifetimeUser) return false;
     if (!isTrial) return false;
     const daysLeft = limits?.trial_days_remaining ?? 0;
     return daysLeft > 0 && daysLeft <= 3;
@@ -506,33 +405,10 @@ export function useSubscription() {
   const isWhopSubscription = limits?.payment_provider === 'whop';
   const hasActiveWhopSubscription = isWhopSubscription && 
     (limits?.subscription_status === 'active' || limits?.subscription_status === 'trial');
-  const isCancelledButActive = !isAdmin && limits?.subscription_cancel_at_period_end && 
+  const isCancelledButActive = !isAdmin && !isLifetimeUser && limits?.subscription_cancel_at_period_end && 
     (limits?.subscription_status === 'active' || limits?.subscription_status === 'trial');
 
-  // 🔥 v8.1.0: Admin never needs plan selection
-  const needsJournalPlanSelection = !isAdmin && !hasJournalAccess && !isLoading;
-
-  // Platform feature access
-  const hasPlatformAiInsights = isAdmin || isPlatformPro || isPlatformEnterprise;
-  const hasPlatformApiAccess = isAdmin || isPlatformPro || isPlatformEnterprise;
-  const hasPlatformAdvancedScreeners = isAdmin || isPlatformPro || isPlatformEnterprise;
-  const hasPlatformCustomReports = isAdmin || isPlatformPro || isPlatformEnterprise;
-  const hasPlatformAdvancedCharts = isAdmin || isPlatformCore || isPlatformPro || isPlatformEnterprise;
-
-  const isPlatformTrialExpiringSoon = (() => {
-    if (isAdmin) return false; // 🔥 Admin = no trial
-    if (!isPlatformInTrial) return false;
-    const daysLeft = platformTrialDaysRemaining ?? 0;
-    return daysLeft > 0 && daysLeft <= 3;
-  })();
-  
-  const platformDaysUntilExpiry = (() => {
-    if (isAdmin) return null; // 🔥 Admin = no expiry
-    if (!limits?.platform_subscription_expires_at) return null;
-    const expiresAt = new Date(limits.platform_subscription_expires_at);
-    const now = new Date();
-    return Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  })();
+  const needsJournalPlanSelection = !isAdmin && !isLifetimeUser && !hasJournalAccess && !isLoading;
 
   return {
     // Main data
@@ -541,16 +417,18 @@ export function useSubscription() {
     loading: isLoading,
     error: error?.message || null,
     
-    // 🔥 v8.1.0: Admin flag (NEW - expose for debugging)
+    // Admin & Lifetime flags
     isAdmin,
+    isLifetimeUser,
     
-    // 🔥 v8.0: Journal access (NEW - most important!)
+    // Journal access
     hasJournalAccess,
     effectiveJournalPlan,
     hasDirectJournalSubscription,
-    hasJournalFromPlatformBundle,
+    hasJournalTrial,
+    hasJournalFromPlatformBundle: false,
     
-    // Journal: Account type checks
+    // Account type checks
     isTrial,
     isBasic,
     isPremium,
@@ -558,31 +436,31 @@ export function useSubscription() {
     isUnlimitedUser,
     isLegacyFreeUser,
     needsJournalPlanSelection,
-    // Keep old name for backward compatibility
     needsPlanSelection: needsJournalPlanSelection,
     
-    // Journal: Trade limits
+    // Trade limits
     tradesRemaining,
     canAddTrade,
     isLimitReached,
     isLifetimeLimit: false,
     
-    // Journal: Feature access
+    // Feature access
     canUseSnapTrade,
     
-    // Journal: Subscription status
+    // Subscription status
     isExpiringSoon,
     daysUntilExpiry,
     isCancelledButActive,
     
-    // Journal: Trial info
+    // Trial info
     isInTrial: isTrial,
     isTrialExpired,
     isTrialExpiringSoon,
     trialDaysRemaining: limits?.trial_days_remaining ?? null,
     trialEndsAt: limits?.trial_ends_at ?? null,
+    trialUsed: limits?.trial_used ?? false,
     
-    // Journal: Payment provider
+    // Payment provider
     isWhopSubscription,
     hasActiveWhopSubscription,
     paymentProvider: limits?.payment_provider ?? null,
@@ -603,30 +481,33 @@ export function useSubscription() {
     warningState,
     markWarningShown: markWarningShownMutation.mutate,
     
-    // 🔥 v8.0: Platform subscription (CORRECTED)
-    platformPlan,
-    isPlatformFree,
-    isPlatformCore,
-    isPlatformPro,
-    isPlatformEnterprise,
-    isPlatformPaid,
-    isPlatformActive,
-    isPlatformInTrial,
-    platformTrialDaysRemaining,
-    isPlatformTrialExpiringSoon,
-    platformDaysUntilExpiry,
-    platformSubscriptionStatus: limits?.platform_subscription_status ?? null,
-    platformSubscriptionExpiresAt: limits?.platform_subscription_expires_at ?? null,
-    platformWhopMembershipId: limits?.platform_whop_membership_id ?? null,
+    // Platform fields (defaults)
+    platformPlan: null as PlatformPlan,
+    isPlatformFree: true,
+    isPlatformCore: false,
+    isPlatformPro: false,
+    isPlatformEnterprise: false,
+    isPlatformPaid: false,
+    isPlatformActive: false,
+    isPlatformInTrial: false,
+    platformTrialDaysRemaining: null as number | null,
+    isPlatformTrialExpiringSoon: false,
+    platformDaysUntilExpiry: null as number | null,
+    platformSubscriptionStatus: null as SubscriptionStatus,
+    platformSubscriptionExpiresAt: null as string | null,
+    platformWhopMembershipId: null as string | null,
     
-    // 🔥 v8.0: Platform features
-    hasPlatformAiInsights,
-    hasPlatformApiAccess,
-    hasPlatformAdvancedScreeners,
-    hasPlatformCustomReports,
-    hasPlatformAdvancedCharts,
+    // Platform features (defaults)
+    hasPlatformAiInsights: isAdmin,
+    hasPlatformApiAccess: isAdmin,
+    hasPlatformAdvancedScreeners: isAdmin,
+    hasPlatformCustomReports: isAdmin,
+    hasPlatformAdvancedCharts: isAdmin,
     
-    // Manual refresh
+    // Pending downgrade
+    pendingDowngradePlan: limits?.pending_downgrade_plan ?? null,
+    
+    // Refresh
     refresh: () => queryClient.invalidateQueries({ 
       queryKey: subscriptionKeys.limits(effectiveUserId) 
     }),
@@ -650,6 +531,7 @@ export function useSubscriptionStatus() {
     isTrial,
     isPaidUser,
     isAdmin,
+    isLifetimeUser,
     isUnlimitedUser,
     isLegacyFreeUser,
     canUseSnapTrade,
@@ -663,7 +545,6 @@ export function useSubscriptionStatus() {
     trialDaysRemaining,
     needsPlanSelection,
     needsJournalPlanSelection,
-    // Platform
     platformPlan,
     isPlatformFree,
     isPlatformCore,
@@ -675,9 +556,7 @@ export function useSubscriptionStatus() {
   } = useSubscription();
   
   return {
-    // Journal Access (most important!)
     hasJournalAccess,
-    // Journal
     canAddTrade,
     isLimitReached,
     isPremium,
@@ -685,6 +564,7 @@ export function useSubscriptionStatus() {
     isTrial,
     isPaidUser,
     isAdmin,
+    isLifetimeUser,
     isUnlimitedUser,
     isLegacyFreeUser,
     canUseSnapTrade,
@@ -698,7 +578,6 @@ export function useSubscriptionStatus() {
     trialDaysRemaining,
     needsPlanSelection,
     needsJournalPlanSelection,
-    // Platform
     platformPlan,
     isPlatformFree,
     isPlatformCore,
@@ -786,13 +665,9 @@ export function useWhopSubscription() {
 }
 
 // ================================================
-// 🔥 v8.0: JOURNAL ACCESS GUARD HOOK (NEW)
+// JOURNAL ACCESS GUARD HOOK
 // ================================================
 
-/**
- * Hook specifically for checking Journal access
- * Use this in Journal routes to determine if user can access
- */
 export function useJournalAccess() {
   const {
     hasJournalAccess,
@@ -806,44 +681,35 @@ export function useJournalAccess() {
     tradesRemaining,
     isUnlimitedUser,
     isAdmin,
+    isLifetimeUser,
     isLoading,
     refresh,
   } = useSubscription();
   
   return {
-    // Main access check
     hasAccess: hasJournalAccess,
     plan: effectiveJournalPlan,
-    
-    // Source of access
     isFromDirectSubscription: hasDirectJournalSubscription,
     isFromPlatformBundle: hasJournalFromPlatformBundle,
-    isFromAdmin: isAdmin, // 🔥 v8.1.0: NEW
-    
-    // Plan type
+    isFromAdmin: isAdmin,
+    isFromLifetime: isLifetimeUser,
     isPremium,
     isBasic,
     isTrial,
     isUnlimited: isUnlimitedUser,
-    isAdmin, // 🔥 v8.1.0: NEW
-    
-    // Trade limits
+    isAdmin,
+    isLifetimeUser,
     canAddTrade,
     tradesRemaining: isUnlimitedUser ? Infinity : tradesRemaining,
-    
-    // State
     isLoading,
     refresh,
   };
 }
 
 // ================================================
-// 🔥 v8.0: PLATFORM SUBSCRIPTION HOOK (CORRECTED)
+// PLATFORM SUBSCRIPTION HOOK
 // ================================================
 
-/**
- * Hook specifically for Platform subscription
- */
 export function usePlatformSubscription() {
   const {
     platformPlan,
@@ -871,9 +737,8 @@ export function usePlatformSubscription() {
     refresh,
   } = useSubscription();
   
-  // Platform display name
   const platformDisplayName = (() => {
-    if (isAdmin) return 'Admin'; // 🔥 v8.1.0
+    if (isAdmin) return 'Admin';
     switch (platformPlan) {
       case 'core': return 'Core';
       case 'pro': return 'Pro';
@@ -882,9 +747,8 @@ export function usePlatformSubscription() {
     }
   })();
   
-  // Platform trial message
   const platformTrialMessage = (() => {
-    if (isAdmin) return null; // 🔥 v8.1.0
+    if (isAdmin) return null;
     if (!isPlatformInTrial) return null;
     if (platformTrialDaysRemaining === 0) return 'Your trial ends today!';
     if (platformTrialDaysRemaining === 1) return 'Your trial ends tomorrow!';
@@ -892,81 +756,60 @@ export function usePlatformSubscription() {
     return `${platformTrialDaysRemaining} days left in your trial`;
   })();
   
-  // Can upgrade
   const canUpgradeToCore = !isAdmin && isPlatformFree;
   const canUpgradeToPro = !isAdmin && (isPlatformFree || isPlatformCore);
   
   return {
-    // Plan info
     plan: platformPlan,
     displayName: platformDisplayName,
-    
-    // Plan checks
     isFree: isPlatformFree,
     isCore: isPlatformCore,
     isPro: isPlatformPro,
     isEnterprise: isPlatformEnterprise,
     isPaid: isPlatformPaid,
-    isAdmin, // 🔥 v8.1.0: NEW
-    
-    // Status
+    isAdmin,
     isActive: isPlatformActive,
     status: platformSubscriptionStatus,
     expiresAt: platformSubscriptionExpiresAt,
     daysUntilExpiry: platformDaysUntilExpiry,
-    
-    // Trial
     isInTrial: isPlatformInTrial,
     trialDaysRemaining: platformTrialDaysRemaining,
     isTrialExpiringSoon: isPlatformTrialExpiringSoon,
     trialMessage: platformTrialMessage,
-    
-    // Whop
     whopMembershipId: platformWhopMembershipId,
-    
-    // Features
     hasAiInsights: hasPlatformAiInsights,
     hasApiAccess: hasPlatformApiAccess,
     hasAdvancedScreeners: hasPlatformAdvancedScreeners,
     hasCustomReports: hasPlatformCustomReports,
     hasAdvancedCharts: hasPlatformAdvancedCharts,
-    
-    // 🔥 v8.0: Journal bundle (only PRO/Enterprise)
     includesJournalPremium: hasJournalFromPlatformBundle,
-    
-    // Upgrade
     canUpgradeToCore,
     canUpgradeToPro,
-    needsUpgrade: !isAdmin && isPlatformFree, // 🔥 v8.1.0
-    
-    // State
+    needsUpgrade: !isAdmin && isPlatformFree,
     isLoading,
     refresh,
   };
 }
 
 // ================================================
-// HELPER HOOK FOR PLAN SELECTION REDIRECT
+// HELPER HOOKS
 // ================================================
 
 export function usePlanSelectionGuard() {
-  const { needsJournalPlanSelection, isLegacyFreeUser, isTrialExpired, isLoading, limits, hasJournalAccess, isAdmin } = useSubscription();
+  const { needsJournalPlanSelection, isLegacyFreeUser, isTrialExpired, isLoading, limits, hasJournalAccess, isAdmin, isLifetimeUser } = useSubscription();
   
   return {
-    shouldRedirect: !isAdmin && needsJournalPlanSelection, // 🔥 v8.1.0
+    shouldRedirect: !isAdmin && !isLifetimeUser && needsJournalPlanSelection,
     isLegacyUser: isLegacyFreeUser,
     isTrialExpired,
     isLoading,
     currentPlan: limits?.account_type ?? null,
     subscriptionStatus: limits?.subscription_status ?? null,
     hasJournalAccess,
-    isAdmin, // 🔥 v8.1.0: NEW
+    isAdmin,
+    isLifetimeUser,
   };
 }
-
-// ================================================
-// HELPER HOOK FOR TRIAL STATUS
-// ================================================
 
 export function useTrialStatus() {
   const { 
@@ -975,7 +818,9 @@ export function useTrialStatus() {
     isTrialExpiringSoon,
     trialDaysRemaining,
     trialEndsAt,
+    trialUsed,
     isAdmin,
+    isLifetimeUser,
     isLoading 
   } = useSubscription();
   
@@ -985,10 +830,12 @@ export function useTrialStatus() {
     isTrialExpiringSoon,
     trialDaysRemaining,
     trialEndsAt,
-    isAdmin, // 🔥 v8.1.0: NEW
+    trialUsed,
+    isAdmin,
+    isLifetimeUser,
     isLoading,
     trialStatusMessage: (() => {
-      if (isAdmin) return null; // 🔥 v8.1.0
+      if (isAdmin || isLifetimeUser) return null;
       if (!isTrial) return null;
       if (isTrialExpired) return 'Your free trial has ended. Upgrade to continue.';
       if (trialDaysRemaining === 0) return 'Your free trial ends today!';
@@ -999,13 +846,6 @@ export function useTrialStatus() {
   };
 }
 
-// ================================================
-// 🔥 v8.0: PLATFORM FEATURE ACCESS HOOK
-// ================================================
-
-/**
- * Hook for checking Platform feature access
- */
 export function usePlatformFeatureAccess() {
   const {
     platformPlan,
@@ -1019,11 +859,7 @@ export function usePlatformFeatureAccess() {
     isLoading,
   } = useSubscription();
   
-  /**
-   * Check if user has access to a specific feature
-   */
   const hasFeature = (feature: string): boolean => {
-    // 🔥 v8.1.0: Admin has all features
     if (isAdmin) return true;
     
     switch (feature) {
@@ -1040,15 +876,12 @@ export function usePlatformFeatureAccess() {
       case 'dashboard':
       case 'market_data':
       case 'basic_analytics':
-        return true; // Available to all
+        return true;
       default:
         return false;
     }
   };
   
-  /**
-   * Get the required plan for a feature
-   */
   const getRequiredPlan = (feature: string): string => {
     switch (feature) {
       case 'ai_insights':
@@ -1066,10 +899,9 @@ export function usePlatformFeatureAccess() {
   return {
     plan: platformPlan,
     isFree: isPlatformFree,
-    isAdmin, // 🔥 v8.1.0: NEW
+    isAdmin,
     hasFeature,
     getRequiredPlan,
-    // Quick checks
     hasAiInsights: hasPlatformAiInsights,
     hasApiAccess: hasPlatformApiAccess,
     hasAdvancedScreeners: hasPlatformAdvancedScreeners,

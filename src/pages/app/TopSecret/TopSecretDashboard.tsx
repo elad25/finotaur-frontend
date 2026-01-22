@@ -14,7 +14,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import {
+ import {
   FileText,
   TrendingUp,
   Bitcoin,
@@ -55,6 +55,7 @@ import {
   Filter,
   FolderOpen,
   ChevronUp,
+  FlaskConical,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, startOfMonth, isSameMonth, parseISO } from 'date-fns';
@@ -72,7 +73,7 @@ interface SubscriptionInfo {
   trialEndsAt: Date | null;
 }
 
-interface Report {
+ interface Report {
   id: string;
   type: 'macro' | 'company' | 'crypto' | 'weekly';
   title: string;
@@ -99,6 +100,7 @@ interface Report {
   pdfStoragePath?: string;
   originalReportId?: string;
   isLoadingContent?: boolean;
+  visibility?: 'test' | 'live';
 }
 
 interface GroupedReports {
@@ -405,6 +407,11 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
       whileHover={{ scale: 1.02 }}
       className={`relative rounded-xl border ${config.borderColor} bg-gradient-to-br ${config.bgGradient} p-5 flex flex-col min-h-[280px]`}
     >
+      {report.visibility === 'test' && (
+        <div className="absolute -top-2 -left-2 px-2 py-0.5 rounded-full bg-purple-500 text-white text-[10px] font-bold z-10">
+          TEST
+        </div>
+      )}
       {report.isFeatured && (
         <div className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-bold">
           NEW
@@ -479,6 +486,10 @@ interface ArchiveReportRowProps {
   isBookmarked: boolean;
   onToggleLike: (reportId: string) => void;
   onToggleBookmark: (reportId: string) => void;
+  // v2.3: Promote functionality
+  isTester?: boolean;
+  onPromoteToLive?: (report: Report) => void;
+  isPromoting?: boolean;
 }
 
 function ArchiveReportRow({ 
@@ -488,13 +499,20 @@ function ArchiveReportRow({
   isLiked, 
   isBookmarked,
   onToggleLike,
-  onToggleBookmark 
+  onToggleBookmark,
+  // v2.3: New props for promote functionality
+  isTester,
+  onPromoteToLive,
+  isPromoting,
 }: ArchiveReportRowProps) {
   const config = REPORT_TYPE_CONFIG[report.type];
   const Icon = config.icon;
   
   // v2.0: PDF is ALWAYS available via API
   const canDownloadPdf = true;
+  
+  // v2.3: Can promote only if tester AND report is test visibility
+  const canPromote = isTester && report.visibility === 'test';
 
   const getDisplayTitle = () => {
     if (report.type === 'company' && (report.companyName || report.ticker)) {
@@ -508,8 +526,14 @@ function ArchiveReportRow({
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       className={`flex items-center gap-3 p-3 rounded-lg bg-white/5 border border-white/5 
-        hover:bg-white/10 hover:border-white/10 transition-all group`}
+        hover:bg-white/10 hover:border-white/10 transition-all group relative`}
     >
+      {/* TEST Badge */}
+      {report.visibility === 'test' && (
+        <div className="absolute -top-1 -left-1 px-1.5 py-0.5 rounded-full bg-purple-500 text-white text-[9px] font-bold z-10">
+          TEST
+        </div>
+      )}
       {/* Icon */}
       <div className={`w-8 h-8 rounded-lg ${config.iconBg} flex items-center justify-center flex-shrink-0`}>
         <Icon className="w-4 h-4 text-white" />
@@ -540,6 +564,31 @@ function ArchiveReportRow({
 
       {/* Actions */}
       <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+        {/* v2.3: Promote to Live button - only for testers on test reports */}
+        {canPromote && onPromoteToLive && (
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPromoteToLive(report);
+            }}
+            disabled={isPromoting}
+            className={`px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-medium transition-all
+              ${isPromoting 
+                ? 'bg-emerald-500/20 text-emerald-400 cursor-not-allowed' 
+                : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30'
+              }`}
+            title="Promote to Live - Make visible to all users"
+          >
+            {isPromoting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5" />
+            )}
+            <span>{isPromoting ? 'Promoting...' : 'Go Live'}</span>
+          </motion.button>
+        )}
+        
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={(e) => {
@@ -607,6 +656,10 @@ interface MonthGroupProps {
   userInteractions: UserReportInteractions;
   onToggleLike: (reportId: string) => void;
   onToggleBookmark: (reportId: string) => void;
+  // v2.3: Promote functionality
+  isTester?: boolean;
+  onPromoteToLive?: (report: Report) => void;
+  promotingReportId?: string | null;
 }
 
 function MonthGroup({ 
@@ -618,7 +671,10 @@ function MonthGroup({
   downloadingReportId,
   userInteractions,
   onToggleLike,
-  onToggleBookmark
+  onToggleBookmark,
+  isTester,
+  onPromoteToLive,
+  promotingReportId,
 }: MonthGroupProps) {
   const reportCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -704,6 +760,9 @@ function MonthGroup({
                   isBookmarked={userInteractions.bookmarkedReportIds.has(report.id)}
                   onToggleLike={onToggleLike}
                   onToggleBookmark={onToggleBookmark}
+                  isTester={isTester}
+                  onPromoteToLive={onPromoteToLive}
+                  isPromoting={promotingReportId === report.id}
                 />
               ))}
             </div>
@@ -714,39 +773,6 @@ function MonthGroup({
   );
 }
 
-// ========================================
-// THIS MONTH'S FOCUS COMPONENT
-// ========================================
-
-interface MonthFocusProps {
-  focusText?: string;
-}
-
-function MonthFocus({ focusText }: MonthFocusProps) {
-  if (!focusText) return null;
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="relative mb-8 p-6 rounded-2xl bg-gradient-to-r from-amber-900/40 via-orange-900/30 to-amber-900/40 border border-amber-500/30 overflow-hidden"
-    >
-      <div className="absolute top-0 left-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl" />
-      
-      <div className="relative text-center">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-amber-400">~</span>
-          <h2 className="text-lg font-semibold text-amber-300">This Month's Focus</h2>
-          <span className="text-amber-400">~</span>
-        </div>
-        <p className="text-gray-300 max-w-2xl mx-auto">
-          {focusText}
-        </p>
-      </div>
-    </motion.div>
-  );
-}
 
 // ========================================
 // HOW TO USE SECTION COMPONENT
@@ -910,10 +936,24 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   const [downloadError, setDownloadError] = useState<string | null>(null);
   
+  // v2.3: Promote to live state
+  const [promotingReportId, setPromotingReportId] = useState<string | null>(null);
+  const [promoteSuccess, setPromoteSuccess] = useState<string | null>(null);
+  
   const [userInteractions, setUserInteractions] = useState<UserReportInteractions>({
     likedReportIds: new Set(),
     bookmarkedReportIds: new Set(),
   });
+  
+// v2.1: Track if user is a tester (can see test reports)
+  const [isTester, setIsTester] = useState(false);
+  const [isUserLoaded, setIsUserLoaded] = useState(false);
+  
+  // v2.2: Test Mode toggle - allows testers to view as regular user
+  const [testModeEnabled, setTestModeEnabled] = useState(true); // true = see test reports, false = view as regular user
+  
+  // Effective tester status (considers the toggle)
+  const effectiveIsTester = isTester && testModeEnabled;
 
   const currentUserId = userId || user?.id;
 
@@ -930,7 +970,10 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
             top_secret_status,
             top_secret_expires_at,
             top_secret_is_in_trial,
-            top_secret_trial_ends_at
+            top_secret_trial_ends_at,
+            is_tester,
+            role,
+            email
           `)
           .eq('id', currentUserId)
           .single();
@@ -944,9 +987,15 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
             isInTrial: data.top_secret_is_in_trial || false,
             trialEndsAt: data.top_secret_trial_ends_at ? new Date(data.top_secret_trial_ends_at) : null,
           });
+          
+          // v2.1: Check if user is tester or admin
+          const isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
+          setIsTester(data.is_tester || isAdmin);
         }
       } catch (error) {
         console.error('Error fetching subscription:', error);
+      } finally {
+        setIsUserLoaded(true);
       }
     }
 
@@ -1064,7 +1113,57 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       });
     }
   }, [currentUserId, userInteractions.bookmarkedReportIds]);
-
+// v2.3: Promote report from test to live
+  const handlePromoteToLive = useCallback(async (report: Report) => {
+    if (!report.id) return;
+    
+    setPromotingReportId(report.id);
+    
+    try {
+      console.log('[Promote] Starting promotion for report:', report.id);
+      
+      // Update published_reports visibility to 'live'
+      const { error: publishedError } = await supabase
+        .from('published_reports')
+        .update({ 
+          visibility: 'live',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', report.id);
+      
+      if (publishedError) {
+        throw new Error(publishedError.message);
+      }
+      
+      // Also update the source table if we have original_report_id
+      if (report.originalReportId) {
+        const sourceTable = `${report.type === 'macro' ? 'ism' : report.type}_reports`;
+        
+        await supabase
+          .from(sourceTable)
+          .update({ visibility: 'live' })
+          .eq('id', report.originalReportId);
+      }
+      
+      console.log('[Promote] ✅ Report promoted to live:', report.id);
+      
+      // Show success message
+      setPromoteSuccess(`${report.ticker || report.title} promoted to live!`);
+      setTimeout(() => setPromoteSuccess(null), 3000);
+      
+      // Update local state - remove from view if test mode is on (since it's no longer test)
+      setReports(prev => prev.map(r => 
+        r.id === report.id ? { ...r, visibility: 'live' } : r
+      ));
+      
+    } catch (error) {
+      console.error('[Promote] Error:', error);
+      setDownloadError(`Failed to promote: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setTimeout(() => setDownloadError(null), 5000);
+    } finally {
+      setPromotingReportId(null);
+    }
+  }, [supabase]);
   // Download PDF handler - v2.0: Uses API
   const handleDownloadPdf = useCallback(async (report: Report) => {
     setDownloadingReportId(report.id);
@@ -1110,6 +1209,10 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   // Fetch reports
   useEffect(() => {
     async function fetchReports() {
+      if (!isUserLoaded) {
+        return;
+      }
+      
       setIsLoading(true);
 
       try {
@@ -1169,6 +1272,26 @@ function processReports(publishedReports: any[]) {
             console.log('[processReports] Skipping report with unknown type:', r.report_type, r.id);
             return false;
           }
+          
+          // v2.2 FIX: Strict visibility filtering
+          // Regular users: ONLY see 'live' or 'public' (or null for legacy)
+          // Testers with test mode ON: see 'test' reports
+          // Testers with test mode OFF: see same as regular users
+          const visibility = r.visibility || 'live'; // Default to 'live' for legacy reports
+          
+          if (effectiveIsTester) {
+            // Tester with test mode ON - show ONLY test reports
+            if (visibility !== 'test') {
+              console.log('[processReports] Tester mode: skipping non-test report:', r.id, visibility);
+              return false;
+            }
+          } else {
+            // Regular user OR tester with test mode OFF - show ONLY live/public
+            if (visibility === 'test') {
+              console.log('[processReports] Skipping test report (user is not tester or test mode off):', r.id);
+              return false;
+            }
+          }
           return true;
         })
         .map((r: any) => ({
@@ -1198,18 +1321,62 @@ function processReports(publishedReports: any[]) {
           pdfStoragePath: r.pdf_storage_path,
           originalReportId: r.original_report_id,
           isLoadingContent: false,
+          visibility: r.visibility || 'live',
         }));
+
+      // ============================================
+      // 🔧 FIX: Remove duplicate reports
+      // ============================================
+      const seen = new Map<string, Report>();
+      const deduplicatedReports: Report[] = [];
+      
+      for (const report of transformedReports) {
+        // Create unique key based on type and identifying info
+        let uniqueKey: string;
+        
+        if (report.type === 'company') {
+          // For company reports: use ticker + date (same day)
+          const dateKey = report.date.toISOString().split('T')[0]; // YYYY-MM-DD
+          uniqueKey = `company-${(report.ticker || report.title).toLowerCase()}-${dateKey}`;
+        } else if (report.type === 'macro') {
+          // For ISM/Macro reports: use report_month
+          uniqueKey = `macro-${report.reportMonth || report.date.toISOString().split('T')[0]}`;
+        } else if (report.type === 'crypto') {
+          // For crypto reports: use date
+          const dateKey = report.date.toISOString().split('T')[0];
+          uniqueKey = `crypto-${dateKey}`;
+        } else if (report.type === 'weekly') {
+          // For weekly reports: use date
+          const dateKey = report.date.toISOString().split('T')[0];
+          uniqueKey = `weekly-${dateKey}`;
+        } else {
+          // Fallback: use type + title + date
+          const dateKey = report.date.toISOString().split('T')[0];
+          uniqueKey = `${report.type}-${report.title}-${dateKey}`;
+        }
+        
+        if (!seen.has(uniqueKey)) {
+          seen.set(uniqueKey, report);
+          deduplicatedReports.push(report);
+        } else {
+          console.log('[processReports] Skipping duplicate report:', uniqueKey, report.id);
+        }
+      }
+      
+      console.log(`[processReports] Deduplicated: ${transformedReports.length} -> ${deduplicatedReports.length} reports`);
+      // ============================================
+
       // Sort by date (newest first)
-      transformedReports.sort((a, b) => {
+      deduplicatedReports.sort((a, b) => {
         if (a.isPinned && !b.isPinned) return -1;
         if (!a.isPinned && b.isPinned) return 1;
         return b.date.getTime() - a.date.getTime();
       });
 
-      setReports(transformedReports);
+      setReports(deduplicatedReports);
 
       // Get month focus from latest macro report
-      const latestMacro = transformedReports.find(r => r.type === 'macro');
+      const latestMacro = deduplicatedReports.find(r => r.type === 'macro');
       if (latestMacro?.subtitle) {
         setMonthFocus(latestMacro.subtitle);
       }
@@ -1218,9 +1385,8 @@ function processReports(publishedReports: any[]) {
       const currentMonthKey = getMonthKey(new Date());
       setExpandedMonths(new Set([currentMonthKey]));
     }
-
     fetchReports();
-  }, [currentUserId]);
+  }, [currentUserId, effectiveIsTester, isUserLoaded]);
 
   // Filter and search reports
   const filteredReports = useMemo(() => {
@@ -1298,15 +1464,56 @@ function processReports(publishedReports: any[]) {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-6"
+          className="mb-6"
         >
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent mb-2">
-            Top Secret Member Dashboard
-          </h1>
-          <p className="text-gray-400 max-w-2xl mx-auto text-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent">
+              Top Secret Member Dashboard
+            </h1>
+            
+            {/* Test Mode Toggle - Only visible to testers */}
+            {isTester && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-900/50 border border-purple-500/30">
+                <FlaskConical className="w-3.5 h-3.5 text-purple-400" />
+                <span className="text-xs font-medium text-purple-300">Test Mode</span>
+                <button
+                  onClick={() => setTestModeEnabled(!testModeEnabled)}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${
+                    testModeEnabled ? 'bg-purple-500' : 'bg-gray-600'
+                  }`}
+                >
+                  <motion.div
+                    animate={{ x: testModeEnabled ? 18 : 2 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                    className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm"
+                  />
+                </button>
+                <span className={`text-xs font-medium min-w-[24px] ${testModeEnabled ? 'text-purple-300' : 'text-gray-500'}`}>
+                  {testModeEnabled ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            )}
+          </div>
+          
+          <p className="text-gray-400 max-w-2xl text-sm">
             Your institutional-grade market intelligence is ready. Download your PDF reports to stay informed.
           </p>
         </motion.div>
+
+        {/* Success Toast - for promote */}
+        <AnimatePresence>
+          {promoteSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="fixed top-4 right-4 z-50 bg-emerald-500/90 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2"
+            >
+              <Check className="w-5 h-5" />
+              <span>{promoteSuccess}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Error Toast */}
         <AnimatePresence>
@@ -1325,9 +1532,6 @@ function processReports(publishedReports: any[]) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* This Month's Focus */}
-        <MonthFocus focusText={monthFocus} />
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-8">
@@ -1443,6 +1647,9 @@ function processReports(publishedReports: any[]) {
                       userInteractions={userInteractions}
                       onToggleLike={handleToggleLike}
                       onToggleBookmark={handleToggleBookmark}
+                      isTester={isTester}
+                      onPromoteToLive={handlePromoteToLive}
+                      promotingReportId={promotingReportId}
                     />
                   ))}
                 </div>

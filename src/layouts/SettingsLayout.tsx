@@ -754,11 +754,11 @@ const BillingTab = () => {
         {platformIsFree && !isLifetime && (
           <div className="mt-4">
 <Button 
-  onClick={() => navigate('/app/journal/pricing')}
+  onClick={() => navigate('/app/journal/overview')}
   size="sm" 
   className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
 >
-  Upgrade Journal <ArrowRight className="w-4 h-4 ml-1" />
+  Go to Journal <ArrowRight className="w-4 h-4 ml-1" />
 </Button>
           </div>
         )}

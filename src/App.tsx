@@ -15,6 +15,8 @@ import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { lazy, Suspense, memo } from "react";
+import { JournalRoute } from "@/components/routes/JournalRoute";
+
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
 import { BacktestRoute } from "@/components/routes/BacktestRoute";
@@ -394,27 +396,24 @@ function AppContent() {
 <Route path="ai/options-intelligence" element={<SuspenseRoute><AIOptionsIntelligence /></SuspenseRoute>} />
 <Route path="ai/momentum-lab" element={<SuspenseRoute><AIMomentumLab /></SuspenseRoute>} />
           {/* JOURNAL */}
-          <Route path="journal/overview" element={<SuspenseRoute><JournalOverview /></SuspenseRoute>} />
-          <Route path="journal/new" element={<SuspenseRoute><New /></SuspenseRoute>} />
-          <Route path="journal/my-trades" element={<SuspenseRoute><JournalMyTrades /></SuspenseRoute>} />
-          <Route path="journal/strategies" element={<SuspenseRoute><Strategies /></SuspenseRoute>} />
-          <Route path="journal/strategies/:id" element={<SuspenseRoute><StrategyDetailView /></SuspenseRoute>} />
-          <Route path="journal/scenarios" element={<SuspenseRoute><JournalScenarios /></SuspenseRoute>} />
-          <Route path="journal/community" element={<SuspenseRoute><JournalCommunity /></SuspenseRoute>} />
-          <Route path="journal/academy" element={<SuspenseRoute><JournalAcademy /></SuspenseRoute>} />          
-          <Route path="journal/settings" element={<SuspenseRoute><JournalSettings /></SuspenseRoute>} />
-          <Route path="journal/:id" element={<SuspenseRoute><JournalTradeDetail /></SuspenseRoute>} />
-          <Route path="journal/import" element={<SuspenseRoute><JournalImport /></SuspenseRoute>} />
-          <Route path="journal/export" element={<SuspenseRoute><JournalExport /></SuspenseRoute>} />
-          <Route path="journal/notes" element={<SuspenseRoute><JournalNotes /></SuspenseRoute>} />
-          <Route path="journal/analytics" element={<SuspenseRoute><JournalAnalytics /></SuspenseRoute>} />
-          <Route path="journal/ai-review" element={<SuspenseRoute><JournalAIReview /></SuspenseRoute>} />
-          <Route path="journal/calendar" element={<SuspenseRoute><JournalCalendar /></SuspenseRoute>} />
-          <Route path="journal/performance" element={<SuspenseRoute><JournalPerformance /></SuspenseRoute>} />
-          <Route path="journal/pricing" element={<SuspenseRoute><Pricing /></SuspenseRoute>} />
-          <Route path="journal/payment/success" element={<SuspenseRoute><PaymentSuccessPage /></SuspenseRoute>} />
-          <Route path="journal/payment/failure" element={<SuspenseRoute><PaymentFailurePage /></SuspenseRoute>} />
-          <Route path="journal/prop-firms" element={<SuspenseRoute><PropFirmsPage /></SuspenseRoute>} />
+          <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
+<Route path="journal/new" element={<JournalRoute><New /></JournalRoute>} />
+<Route path="journal/my-trades" element={<JournalRoute><JournalMyTrades /></JournalRoute>} />
+<Route path="journal/strategies" element={<JournalRoute><Strategies /></JournalRoute>} />
+<Route path="journal/strategies/:id" element={<JournalRoute><StrategyDetailView /></JournalRoute>} />
+<Route path="journal/scenarios" element={<JournalRoute><JournalScenarios /></JournalRoute>} />
+<Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
+<Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
+<Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
+<Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
+<Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
+<Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
+<Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />
+<Route path="journal/analytics" element={<JournalRoute><JournalAnalytics /></JournalRoute>} />
+<Route path="journal/ai-review" element={<JournalRoute><JournalAIReview /></JournalRoute>} />
+<Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
+<Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
+<Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
