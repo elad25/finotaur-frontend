@@ -282,10 +282,22 @@ async function downloadReportPdf(report: Report): Promise<boolean> {
     };
 
     // ===========================================
-    // METHOD 1: Direct pdfUrl (full Supabase URL from published_reports)
+    // METHOD 1: API path (pdfUrl starting with /api/)
+    // This calls the server to generate/return the PDF
     // ===========================================
-    if (report.pdfUrl) {
-      console.log('[PDF] 🔗 Method 1: Using direct pdfUrl');
+    if (report.pdfUrl?.startsWith('/api/')) {
+      console.log('[PDF] 🔗 Method 1: Using API path');
+      const fullApiUrl = `${API_BASE_URL}${report.pdfUrl}`;
+      const success = await downloadFromUrl(fullApiUrl, 'API endpoint');
+      if (success) return true;
+      console.log('[PDF] ⚠️ API endpoint failed, trying other methods...');
+    }
+
+    // ===========================================
+    // METHOD 2: Direct Supabase URL (full URL from published_reports)
+    // ===========================================
+    if (report.pdfUrl && !report.pdfUrl.startsWith('/api/') && report.pdfUrl.includes('supabase.co')) {
+      console.log('[PDF] 🔗 Method 2: Using direct Supabase URL');
       const success = await downloadFromUrl(report.pdfUrl, 'direct pdfUrl');
       if (success) return true;
     }
@@ -311,92 +323,58 @@ async function downloadReportPdf(report: Report): Promise<boolean> {
         console.error('[PDF] ❌ Error creating signed URL:', err);
       }
     }
-    
     // ===========================================
-    // METHOD 3: Search in bucket by report type
+    // METHOD 3: Try constructed paths directly
+    // (without using list() which may have permission issues)
     // ===========================================
-    console.log('[PDF] 📂 Method 3: Searching in bucket...');
+    console.log('[PDF] 🔧 Method 3: Trying constructed paths...');
     
-    const folderMap: Record<string, string> = {
-      macro: 'ism-reports',
-      company: 'company_reports', // Note: underscore, not hyphen
-      crypto: 'crypto-reports',
-      weekly: 'weekly-reports',
-    };
+    const reportDate = new Date(report.date);
+    const pathsToTry: string[] = [];
     
-    const folderPath = folderMap[report.type];
-    
-    if (folderPath) {
-      try {
-        // For weekly reports, need to check subfolder structure: weekly-reports/YYYY/MM/
-        let searchPath = folderPath;
-        if (report.type === 'weekly') {
-          const year = format(report.date, 'yyyy');
-          const month = format(report.date, 'MM');
-          searchPath = `${folderPath}/${year}/${month}`;
-        }
-        
-        console.log('[PDF] 📂 Listing folder:', searchPath);
-        
-        const { data: files, error } = await supabase.storage
-          .from('reports')
-          .list(searchPath, {
-            limit: 30,
-            sortBy: { column: 'created_at', order: 'desc' }
-          });
-        
-        if (files && files.length > 0) {
-          console.log('[PDF] 📂 Files found:', files.map(f => f.name));
-          
-          // Find matching file based on report type
-          let matchingFile = null;
-          const reportDateStr = format(report.date, 'yyyy-MM-dd');
-          
-          if (report.type === 'company' && report.ticker) {
-            // Company: company_reports/WMT_uuid.pdf
-            matchingFile = files.find(f => 
-              f.name.toUpperCase().startsWith(report.ticker!.toUpperCase() + '_')
-            );
-          } else if (report.type === 'macro' && report.reportMonth) {
-            // ISM: ism-reports/ism-report-2025-12.pdf
-            matchingFile = files.find(f => f.name.includes(report.reportMonth!));
-          } else if (report.type === 'weekly') {
-            // Weekly: weekly-reports/2026/01/weekly-2026-01-22-timestamp.pdf
-            matchingFile = files.find(f => f.name.includes(reportDateStr));
-          } else if (report.type === 'crypto') {
-            // Crypto: crypto-reports/crypto-report-2026-01-22.pdf
-            matchingFile = files.find(f => f.name.includes(reportDateStr));
-          }
-          
-          // If no exact match, use the most recent file
-          if (!matchingFile && files.length > 0) {
-            matchingFile = files[0];
-            console.log('[PDF] ⚠️ No exact match, using most recent file');
-          }
-          
-          if (matchingFile) {
-            const fullPath = `${searchPath}/${matchingFile.name}`;
-            console.log('[PDF] 🎯 Found file:', fullPath);
-            
-            const { data: signedData, error: signError } = await supabase.storage
-              .from('reports')
-              .createSignedUrl(fullPath, 300);
-            
-            if (signedData?.signedUrl) {
-              const success = await downloadFromUrl(signedData.signedUrl, 'bucket search');
-              if (success) return true;
-            } else {
-              console.warn('[PDF] ⚠️ Failed to sign found file:', signError?.message);
-            }
-          }
-        } else {
-          console.warn('[PDF] ⚠️ No files in folder:', searchPath, error?.message);
-        }
-      } catch (err) {
-        console.error('[PDF] ❌ Bucket search failed:', err);
+    if (report.type === 'crypto') {
+      // Crypto: Try current date and up to 3 days back
+      for (let daysBack = 0; daysBack <= 3; daysBack++) {
+        const checkDate = new Date(reportDate);
+        checkDate.setDate(checkDate.getDate() - daysBack);
+        const checkDateStr = format(checkDate, 'yyyy-MM-dd');
+        pathsToTry.push(`crypto-reports/crypto-report-${checkDateStr}.pdf`);
       }
+    } else if (report.type === 'macro') {
+      // ISM/Macro: ism-reports/ism-report-YYYY-MM.pdf
+      const monthStr = report.reportMonth || format(reportDate, 'yyyy-MM');
+      pathsToTry.push(`ism-reports/ism-report-${monthStr}.pdf`);
+    } else if (report.type === 'company' && report.ticker) {
+      // Company: company_reports/TICKER_uuid.pdf
+      if (report.originalReportId) {
+        pathsToTry.push(`company_reports/${report.ticker.toUpperCase()}_${report.originalReportId}.pdf`);
+      }
+    } else if (report.type === 'weekly') {
+      // Weekly: weekly-reports/YYYY/MM/weekly-YYYY-MM-DD-timestamp.pdf
+      // Without knowing the timestamp, we can't construct the exact path
+      // Skip this - rely on pdfStoragePath or pdfUrl for weekly
+      console.log('[PDF] ⚠️ Weekly reports require pdfStoragePath (timestamp unknown)');
     }
     
+    // Try each constructed path
+    for (const path of pathsToTry) {
+      console.log(`[PDF] 🔧 Trying path:`, path);
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(path, 300);
+        
+        if (data?.signedUrl && !error) {
+          const success = await downloadFromUrl(data.signedUrl, `constructed path: ${path}`);
+          if (success) return true;
+        } else {
+          console.log(`[PDF] ⚠️ Path not available:`, path, error?.message);
+        }
+      } catch (err) {
+        console.log(`[PDF] ⚠️ Error trying path:`, path);
+      }
+    }
     // ===========================================
     // ALL METHODS FAILED
     // ===========================================
@@ -1497,6 +1475,140 @@ function processReports(publishedReports: any[]) {
       setExpandedMonths(new Set([currentMonthKey]));
     }
     fetchReports();
+  }, [currentUserId, effectiveIsTester, isUserLoaded]);
+
+  // ========================================
+  // REAL-TIME SUBSCRIPTION - Auto-refresh on new reports
+  // ========================================
+  useEffect(() => {
+    if (!currentUserId || !isUserLoaded) return;
+
+    console.log('[Realtime] Setting up subscription for published_reports');
+
+    const channel = supabase
+      .channel('published_reports_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'published_reports',
+        },
+        (payload) => {
+          console.log('[Realtime] New report published:', payload.new);
+          
+          const newReport = payload.new as any;
+          const mappedType = mapReportType(newReport.report_type);
+          
+          // Skip unknown types
+          if (!mappedType) {
+            console.log('[Realtime] Skipping unknown report type:', newReport.report_type);
+            return;
+          }
+          
+          // Check visibility
+          const visibility = newReport.visibility || 'live';
+          if (effectiveIsTester) {
+            if (visibility !== 'test') return;
+          } else {
+            if (visibility === 'test') return;
+          }
+          
+          // Transform and add the new report
+          const transformedReport: Report = {
+            id: newReport.id,
+            type: mappedType,
+            title: newReport.title,
+            subtitle: newReport.subtitle,
+            date: new Date(newReport.published_at),
+            pdfUrl: newReport.pdf_url,
+            status: 'published' as const,
+            highlights: newReport.highlights || [],
+            keyMetric: newReport.key_metric_label,
+            keyMetricValue: newReport.key_metric_value,
+            keyInsights: newReport.key_insights_count,
+            qaScore: newReport.qa_score,
+            commentsCount: newReport.comments_count || 0,
+            likesCount: newReport.likes_count || 0,
+            isFeatured: newReport.is_featured,
+            isPinned: newReport.is_pinned,
+            ticker: newReport.ticker,
+            companyName: newReport.company_name,
+            sector: newReport.sector,
+            reportMonth: newReport.report_month,
+            marketRegime: newReport.market_regime,
+            markdownContent: newReport.markdown_content,
+            htmlContent: newReport.html_content,
+            pdfStoragePath: newReport.pdf_storage_path,
+            originalReportId: newReport.original_report_id,
+            isLoadingContent: false,
+            visibility: newReport.visibility || 'live',
+          };
+          
+          setReports((prev) => {
+            // Check for duplicates
+            const exists = prev.some((r) => r.id === transformedReport.id);
+            if (exists) return prev;
+            
+            // Add new report at the beginning and sort
+            const updated = [transformedReport, ...prev];
+            updated.sort((a, b) => {
+              if (a.isPinned && !b.isPinned) return -1;
+              if (!a.isPinned && b.isPinned) return 1;
+              return b.date.getTime() - a.date.getTime();
+            });
+            
+            return updated;
+          });
+          
+          // Auto-expand the month of the new report
+          const monthKey = getMonthKey(transformedReport.date);
+          setExpandedMonths((prev) => new Set([...prev, monthKey]));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'published_reports',
+        },
+        (payload) => {
+          console.log('[Realtime] Report updated:', payload.new);
+          
+          const updatedReport = payload.new as any;
+          const mappedType = mapReportType(updatedReport.report_type);
+          
+          if (!mappedType) return;
+          
+          setReports((prev) =>
+            prev.map((r) =>
+              r.id === updatedReport.id
+                ? {
+                    ...r,
+                    title: updatedReport.title,
+                    subtitle: updatedReport.subtitle,
+                    pdfUrl: updatedReport.pdf_url,
+                    pdfStoragePath: updatedReport.pdf_storage_path,
+                    qaScore: updatedReport.qa_score,
+                    visibility: updatedReport.visibility || 'live',
+                    likesCount: updatedReport.likes_count || 0,
+                    commentsCount: updatedReport.comments_count || 0,
+                  }
+                : r
+            )
+          );
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Subscription status:', status);
+      });
+
+    // Cleanup on unmount
+    return () => {
+      console.log('[Realtime] Cleaning up subscription');
+      supabase.removeChannel(channel);
+    };
   }, [currentUserId, effectiveIsTester, isUserLoaded]);
 
   // Filter and search reports
