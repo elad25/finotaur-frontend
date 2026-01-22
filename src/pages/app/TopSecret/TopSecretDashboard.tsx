@@ -518,9 +518,11 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
       </div>
 
       <div className="flex-1 mb-4">
-        <h3 className={`text-base font-semibold ${config.textColor} mb-3 line-clamp-2`}>
-          {getDisplaySubtitle()}
-        </h3>
+        {getDisplaySubtitle() && getDisplaySubtitle() !== '0' && (
+          <h3 className={`text-base font-semibold ${config.textColor} mb-3 line-clamp-2`}>
+            {getDisplaySubtitle()}
+          </h3>
+        )}
         
         {report.type === 'company' && report.ticker && (
           <div className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-black/30 border border-white/10">
@@ -528,7 +530,7 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
           </div>
         )}
         
-        {report.qaScore && (
+        {report.qaScore > 0 && (
           <div className="mt-2 flex items-center gap-1 text-xs text-emerald-400">
             <Shield className="w-3 h-3" />
             <span>QA: {report.qaScore}%</span>
@@ -642,8 +644,7 @@ function ArchiveReportRow({
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
           <span>{format(report.date, 'MMM d, yyyy')}</span>
-          {report.qaScore && (
-            <span className="flex items-center gap-1 text-emerald-500">
+          {report.qaScore && report.qaScore > 0 && (            <span className="flex items-center gap-1 text-emerald-500">
               <Shield className="w-3 h-3" />
               {report.qaScore}%
             </span>
