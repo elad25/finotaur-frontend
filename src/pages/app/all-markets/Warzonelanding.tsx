@@ -1484,8 +1484,9 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
       }
     }
     
-    // METHOD 3: Construct path from report_date
-    const constructedWeeklyPath = `weekly-reports/weekly-report-${weeklyDateStr}.pdf`;
+    // METHOD 3: Construct path from report_date (with YYYY/MM subfolder structure)
+    const [yearPart, monthPart] = weeklyDateStr.split('-');
+    const constructedWeeklyPath = `weekly-reports/${yearPart}/${monthPart}/weekly-report-${weeklyDateStr}.pdf`;
     console.log('[WAR ZONE] 🔧 Trying constructed weekly path:', constructedWeeklyPath);
     
     try {
@@ -1503,13 +1504,16 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
       console.error('[WAR ZONE] ❌ Error with constructed weekly path:', err);
     }
     
-    // METHOD 4: List bucket and find file
-    console.log('[WAR ZONE] 📂 Listing weekly-reports bucket folder');
+    // METHOD 4: List bucket and find file (with YYYY/MM subfolder structure)
+    // Weekly reports are stored in: weekly-reports/YYYY/MM/weekly-YYYY-MM-DD-timestamp.pdf
+    const [year, month] = weeklyDateStr.split('-');
+    const weeklySearchPath = `weekly-reports/${year}/${month}`;
+    console.log('[WAR ZONE] 📂 Listing weekly-reports bucket folder:', weeklySearchPath);
     
     try {
       const { data: files, error } = await supabase.storage
         .from('reports')
-        .list('weekly-reports', {
+        .list(weeklySearchPath, {
           limit: 10,
           sortBy: { column: 'created_at', order: 'desc' }
         });
@@ -1521,10 +1525,10 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
         const matchingFile = files.find(f => f.name.includes(weeklyDateStr));
         
         if (matchingFile) {
-          const fullPath = `weekly-reports/${matchingFile.name}`;
+          const fullPath = `${weeklySearchPath}/${matchingFile.name}`;
           console.log('[WAR ZONE] 🎯 Found matching weekly file:', fullPath);
           
-          const { data: signedData } = await supabase.storage
+          const { data: signedData, error: signError } = await supabase.storage
             .from('reports')
             .createSignedUrl(fullPath, 300);
           
@@ -1535,7 +1539,7 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
         } else {
           // Try the most recent file
           const latestFile = files[0];
-          const fullPath = `weekly-reports/${latestFile.name}`;
+          const fullPath = `${weeklySearchPath}/${latestFile.name}`;
           console.log('[WAR ZONE] 📄 Using latest weekly file:', fullPath);
           
           const { data: signedData } = await supabase.storage
@@ -1548,7 +1552,7 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
           }
         }
       } else {
-        console.warn('[WAR ZONE] ⚠️ No weekly files in bucket folder:', error?.message);
+        console.warn('[WAR ZONE] ⚠️ No weekly files in bucket folder:', weeklySearchPath, error?.message);
       }
     } catch (err) {
       console.error('[WAR ZONE] ❌ Weekly bucket listing failed:', err);
