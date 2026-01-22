@@ -1409,78 +1409,161 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
   };
 
   // ===========================================
-  // WEEKLY REPORTS - Use API to generate PDF (same as Top Secret)
+  // WEEKLY REPORTS - Download from Supabase Storage (same as daily)
   // ===========================================
   if (reportType === 'weekly') {
-    console.log('[WAR ZONE] 📅 Weekly report - using API to generate PDF');
+    console.log('[WAR ZONE] 📅 Weekly report - downloading from storage');
+    console.log('[WAR ZONE] 📊 Weekly report details:', {
+      id: report.id,
+      date: report.report_date,
+      pdf_path: report.pdf_path,
+      pdf_url: report.pdf_url
+    });
+    
+    const weeklyDateStr = typeof report.report_date === 'string' 
+      ? report.report_date.split('T')[0]
+      : String(report.report_date);
+    
+    const weeklyFilename = `Finotaur_Weekly_Report_${weeklyDateStr}.pdf`;
+    
+    // Helper to download PDF (same as daily)
+    const downloadWeeklyPdf = async (url: string, source: string) => {
+      console.log(`[WAR ZONE] ✅ Downloading weekly PDF via ${source}:`, url);
+      
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const blob = await response.blob();
+        
+        if (blob.size < 1000) {
+          console.error('[WAR ZONE] ❌ Weekly PDF too small:', blob.size, 'bytes');
+          throw new Error('Invalid PDF file');
+        }
+        
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = weeklyFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        console.log(`[WAR ZONE] ✅ Weekly download initiated: ${weeklyFilename}`);
+        return true;
+      } catch (error) {
+        console.error(`[WAR ZONE] ❌ Weekly download failed via ${source}:`, error);
+        return false;
+      }
+    };
+
+    // METHOD 1: Direct pdf_url (full Supabase URL)
+    if (report.pdf_url && report.pdf_url.includes('supabase.co')) {
+      const success = await downloadWeeklyPdf(report.pdf_url, 'direct pdf_url');
+      if (success) return;
+    }
+    
+    // METHOD 2: pdf_path with signed URL
+    if (report.pdf_path) {
+      console.log('[WAR ZONE] 🔑 Trying weekly pdf_path:', report.pdf_path);
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(report.pdf_path, 300);
+        
+        if (data?.signedUrl) {
+          const success = await downloadWeeklyPdf(data.signedUrl, 'pdf_path signed URL');
+          if (success) return;
+        }
+        
+        console.warn('[WAR ZONE] ⚠️ Failed to create weekly signed URL:', error?.message);
+      } catch (err) {
+        console.error('[WAR ZONE] ❌ Error creating weekly signed URL:', err);
+      }
+    }
+    
+    // METHOD 3: Construct path from report_date
+    const constructedWeeklyPath = `weekly-reports/weekly-report-${weeklyDateStr}.pdf`;
+    console.log('[WAR ZONE] 🔧 Trying constructed weekly path:', constructedWeeklyPath);
     
     try {
-      // Get the latest PUBLIC/LIVE weekly report ID
-      const { data: latestWeekly, error } = await supabase
-        .from('weekly_reports')
-        .select('id, report_date')
-        .or('visibility.eq.public,visibility.eq.live,visibility.is.null')
-        .order('report_date', { ascending: false })
-        .limit(1)
-        .single();
+      const { data, error } = await supabase.storage
+        .from('reports')
+        .createSignedUrl(constructedWeeklyPath, 300);
       
-      if (error || !latestWeekly) {
-        console.error('[WAR ZONE] ❌ No LIVE weekly report found:', error?.message);
-        alert('No weekly report available. Please try again later.');
-        return;
+      if (data?.signedUrl) {
+        const success = await downloadWeeklyPdf(data.signedUrl, 'constructed path signed URL');
+        if (success) return;
       }
       
-      console.log('[WAR ZONE] ✅ Found latest weekly report:', latestWeekly.id);
-      
-      // Use API to generate PDF on-the-fly (same as Top Secret)
-      const pdfApiUrl = `${API_BASE}/api/weekly/report/${latestWeekly.id}/pdf`;
-      console.log('[WAR ZONE] 📥 Fetching PDF from API:', pdfApiUrl);
-      
-      const response = await fetch(pdfApiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/pdf',
-        },
-      });
-      
-      if (!response.ok) {
-        let errorMsg = `HTTP ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMsg = errorData.error || errorData.message || errorMsg;
-        } catch {
-          errorMsg = response.statusText || errorMsg;
-        }
-        console.error('[WAR ZONE] ❌ API error:', errorMsg);
-        alert(`Failed to download weekly report: ${errorMsg}`);
-        return;
-      }
-      
-      const blob = await response.blob();
-      
-      if (blob.size < 1000) {
-        console.error('[WAR ZONE] ❌ Response too small:', blob.size, 'bytes');
-        alert('Downloaded file appears to be invalid. Please try again.');
-        return;
-      }
-      
-      console.log('[WAR ZONE] ✅ Received PDF:', blob.size, 'bytes');
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Finotaur_Weekly_Report_${latestWeekly.report_date}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      console.log('[WAR ZONE] ✅ Weekly PDF download initiated');
+      console.warn('[WAR ZONE] ⚠️ Constructed weekly path failed:', error?.message);
     } catch (err) {
-      console.error('[WAR ZONE] ❌ Error downloading weekly report:', err);
-      alert('Failed to download weekly report. Please try again.');
+      console.error('[WAR ZONE] ❌ Error with constructed weekly path:', err);
     }
+    
+    // METHOD 4: List bucket and find file
+    console.log('[WAR ZONE] 📂 Listing weekly-reports bucket folder');
+    
+    try {
+      const { data: files, error } = await supabase.storage
+        .from('reports')
+        .list('weekly-reports', {
+          limit: 10,
+          sortBy: { column: 'created_at', order: 'desc' }
+        });
+      
+      if (files && files.length > 0) {
+        console.log('[WAR ZONE] 📂 Weekly files found:', files.map(f => f.name));
+        
+        // Find file matching our date
+        const matchingFile = files.find(f => f.name.includes(weeklyDateStr));
+        
+        if (matchingFile) {
+          const fullPath = `weekly-reports/${matchingFile.name}`;
+          console.log('[WAR ZONE] 🎯 Found matching weekly file:', fullPath);
+          
+          const { data: signedData } = await supabase.storage
+            .from('reports')
+            .createSignedUrl(fullPath, 300);
+          
+          if (signedData?.signedUrl) {
+            const success = await downloadWeeklyPdf(signedData.signedUrl, 'bucket listing match');
+            if (success) return;
+          }
+        } else {
+          // Try the most recent file
+          const latestFile = files[0];
+          const fullPath = `weekly-reports/${latestFile.name}`;
+          console.log('[WAR ZONE] 📄 Using latest weekly file:', fullPath);
+          
+          const { data: signedData } = await supabase.storage
+            .from('reports')
+            .createSignedUrl(fullPath, 300);
+          
+          if (signedData?.signedUrl) {
+            const success = await downloadWeeklyPdf(signedData.signedUrl, 'latest file in bucket');
+            if (success) return;
+          }
+        }
+      } else {
+        console.warn('[WAR ZONE] ⚠️ No weekly files in bucket folder:', error?.message);
+      }
+    } catch (err) {
+      console.error('[WAR ZONE] ❌ Weekly bucket listing failed:', err);
+    }
+    
+    // ALL METHODS FAILED
+    console.error('[WAR ZONE] ❌ ALL WEEKLY PDF METHODS FAILED');
+    console.error('[WAR ZONE] Debug info:', {
+      report_id: report.id,
+      report_date: report.report_date,
+      pdf_path: report.pdf_path,
+      pdf_url: report.pdf_url
+    });
+    
+    alert(`Weekly PDF not available for ${weeklyDateStr}. Please try again in a few minutes or contact support.`);
     return;
   }
 

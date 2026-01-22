@@ -212,96 +212,231 @@ function formatMonthLabel(monthKey: string): string {
 }
 
 // ========================================
-// PDF DOWNLOAD HELPER - API BASED (v2.0)
+// PDF DOWNLOAD HELPER - STORAGE BASED (v3.0)
 // ========================================
-// PDFs are generated ON-THE-FLY by the server API
-// No need for Storage - server creates PDF from database content
-// Endpoints:
-//   - ISM/Macro: /api/ism/report/:reportId/pdf
-//   - Company:   /api/company/report/:reportId/pdf
-//   - Crypto:    /api/crypto/report/:reportId/pdf
-//   - Weekly:    /api/weekly/report/:reportId/pdf
+// PDFs are downloaded directly from Supabase Storage
+// Falls back to multiple methods if primary fails
+// Storage paths:
+//   - ISM/Macro: ism-reports/ism-report-{YYYY-MM}.pdf
+//   - Company:   company-reports/company-report-{ticker}-{date}.pdf
+//   - Crypto:    crypto-reports/crypto-report-{date}.pdf
+//   - Weekly:    weekly-reports/weekly-report-{date}.pdf
 // ========================================
 
 async function downloadReportPdf(report: Report): Promise<boolean> {
   try {
     console.log('[PDF] Starting download for report:', report.id, 'type:', report.type);
     
-    // Get the config for this report type (includes API path)
     const config = REPORT_TYPE_CONFIG[report.type];
     if (!config) {
       console.error('[PDF] Unknown report type:', report.type);
       throw new Error(`Unknown report type: ${report.type}`);
     }
     
-    // Determine the report ID to use
-    // Prefer originalReportId (links to source table), fallback to id
-    const reportId = report.originalReportId || report.id;
-    console.log('[PDF] Using reportId:', reportId);
-    
-    // Build the API URL for PDF generation
-    const pdfUrl = `${API_BASE_URL}/api/${config.apiPath}/report/${reportId}/pdf`;
-    console.log('[PDF] Fetching from API:', pdfUrl);
-    
-    // Fetch PDF from API (server generates it on-the-fly from database)
-    const response = await fetch(pdfUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/pdf',
-      },
-    });
-    
-    if (!response.ok) {
-      // Try to get error details from response
-      let errorMsg = `HTTP ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMsg = errorData.error || errorData.message || errorMsg;
-      } catch {
-        // Response wasn't JSON, use status text
-        errorMsg = response.statusText || errorMsg;
-      }
-      console.error('[PDF] API error:', errorMsg);
-      throw new Error(errorMsg);
-    }
-    
-    // Check content type
-    const contentType = response.headers.get('content-type');
-    if (contentType && !contentType.includes('pdf')) {
-      console.warn('[PDF] Unexpected content type:', contentType);
-    }
-    
-    // Get the blob
-    const blob = await response.blob();
-    
-    if (blob.size < 1000) {
-      console.error('[PDF] Response too small, likely not a valid PDF:', blob.size, 'bytes');
-      throw new Error('Downloaded file appears to be invalid');
-    }
-    
-    console.log('[PDF] Received blob:', blob.size, 'bytes, type:', blob.type);
-    
-    // Create download link
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    
-    // Generate filename
+    // Generate filename for download
     const typeLabel = config.shortName;
     const dateStr = format(report.date, 'yyyy-MM-dd');
     const titleSlug = (report.ticker || report.title || 'Report')
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 30);
-    a.download = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+    const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
     
-    // Trigger download
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    // Helper to download PDF from URL
+    const downloadFromUrl = async (url: string, source: string): Promise<boolean> => {
+      console.log(`[PDF] Trying ${source}:`, url);
+      
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const blob = await response.blob();
+        
+        if (blob.size < 1000) {
+          console.error('[PDF] File too small:', blob.size, 'bytes');
+          throw new Error('Invalid PDF file');
+        }
+        
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        console.log(`[PDF] ✅ Download initiated via ${source}: ${filename}`);
+        return true;
+      } catch (error) {
+        console.error(`[PDF] ❌ Failed via ${source}:`, error);
+        return false;
+      }
+    };
 
-    console.log('[PDF] Download initiated successfully:', a.download);
-    return true;
+    // ===========================================
+    // METHOD 1: Direct pdfUrl (full Supabase URL)
+    // ===========================================
+    if (report.pdfUrl && report.pdfUrl.includes('supabase.co')) {
+      const success = await downloadFromUrl(report.pdfUrl, 'direct pdfUrl');
+      if (success) return true;
+    }
+    
+    // ===========================================
+    // METHOD 2: pdfStoragePath with signed URL
+    // ===========================================
+    if (report.pdfStoragePath) {
+      console.log('[PDF] 🔑 Trying pdfStoragePath:', report.pdfStoragePath);
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(report.pdfStoragePath, 300);
+        
+        if (data?.signedUrl) {
+          const success = await downloadFromUrl(data.signedUrl, 'pdfStoragePath signed URL');
+          if (success) return true;
+        }
+        
+        console.warn('[PDF] ⚠️ Failed to create signed URL:', error?.message);
+      } catch (err) {
+        console.error('[PDF] ❌ Error creating signed URL:', err);
+      }
+    }
+    
+    // ===========================================
+    // METHOD 3: Construct path based on report type
+    // ===========================================
+    let constructedPath: string | null = null;
+    const reportDateStr = format(report.date, 'yyyy-MM-dd');
+    
+    switch (report.type) {
+      case 'macro':
+        // ISM reports use YYYY-MM format (report_month)
+        const monthStr = report.reportMonth || format(report.date, 'yyyy-MM');
+        constructedPath = `ism-reports/ism-report-${monthStr}.pdf`;
+        break;
+      case 'company':
+        // Company reports use ticker and date
+        const ticker = report.ticker || 'unknown';
+        constructedPath = `company-reports/company-report-${ticker.toUpperCase()}-${reportDateStr}.pdf`;
+        break;
+      case 'crypto':
+        constructedPath = `crypto-reports/crypto-report-${reportDateStr}.pdf`;
+        break;
+      case 'weekly':
+        constructedPath = `weekly-reports/weekly-report-${reportDateStr}.pdf`;
+        break;
+    }
+    
+    if (constructedPath) {
+      console.log('[PDF] 🔧 Trying constructed path:', constructedPath);
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from('reports')
+          .createSignedUrl(constructedPath, 300);
+        
+        if (data?.signedUrl) {
+          const success = await downloadFromUrl(data.signedUrl, 'constructed path signed URL');
+          if (success) return true;
+        }
+        
+        console.warn('[PDF] ⚠️ Constructed path failed:', error?.message);
+      } catch (err) {
+        console.error('[PDF] ❌ Error with constructed path:', err);
+      }
+    }
+    
+    // ===========================================
+    // METHOD 4: List bucket and find file
+    // ===========================================
+    const folderMap: Record<string, string> = {
+      macro: 'ism-reports',
+      company: 'company-reports',
+      crypto: 'crypto-reports',
+      weekly: 'weekly-reports',
+    };
+    
+    const folderPath = folderMap[report.type];
+    
+    if (folderPath) {
+      console.log('[PDF] 📂 Listing bucket folder:', folderPath);
+      
+      try {
+        const { data: files, error } = await supabase.storage
+          .from('reports')
+          .list(folderPath, {
+            limit: 20,
+            sortBy: { column: 'created_at', order: 'desc' }
+          });
+        
+        if (files && files.length > 0) {
+          console.log('[PDF] 📂 Files found:', files.map(f => f.name));
+          
+          // Find file matching our report
+          let matchingFile = null;
+          
+          if (report.type === 'company' && report.ticker) {
+            matchingFile = files.find(f => 
+              f.name.toLowerCase().includes(report.ticker!.toLowerCase()) &&
+              f.name.includes(reportDateStr)
+            );
+          } else if (report.type === 'macro' && report.reportMonth) {
+            matchingFile = files.find(f => f.name.includes(report.reportMonth!));
+          } else {
+            matchingFile = files.find(f => f.name.includes(reportDateStr));
+          }
+          
+          if (matchingFile) {
+            const fullPath = `${folderPath}/${matchingFile.name}`;
+            console.log('[PDF] 🎯 Found matching file:', fullPath);
+            
+            const { data: signedData } = await supabase.storage
+              .from('reports')
+              .createSignedUrl(fullPath, 300);
+            
+            if (signedData?.signedUrl) {
+              const success = await downloadFromUrl(signedData.signedUrl, 'bucket listing match');
+              if (success) return true;
+            }
+          } else {
+            // Try the most recent file in the folder
+            const latestFile = files[0];
+            const fullPath = `${folderPath}/${latestFile.name}`;
+            console.log('[PDF] 📄 Using latest file:', fullPath);
+            
+            const { data: signedData } = await supabase.storage
+              .from('reports')
+              .createSignedUrl(fullPath, 300);
+            
+            if (signedData?.signedUrl) {
+              const success = await downloadFromUrl(signedData.signedUrl, 'latest file in bucket');
+              if (success) return true;
+            }
+          }
+        } else {
+          console.warn('[PDF] ⚠️ No files in bucket folder:', error?.message);
+        }
+      } catch (err) {
+        console.error('[PDF] ❌ Bucket listing failed:', err);
+      }
+    }
+    
+    // ===========================================
+    // ALL METHODS FAILED
+    // ===========================================
+    console.error('[PDF] ❌ ALL PDF DOWNLOAD METHODS FAILED');
+    console.error('[PDF] Debug info:', {
+      report_id: report.id,
+      type: report.type,
+      date: report.date,
+      pdfUrl: report.pdfUrl,
+      pdfStoragePath: report.pdfStoragePath,
+      ticker: report.ticker,
+      reportMonth: report.reportMonth,
+    });
+    
+    throw new Error(`PDF not available for this report. Please try again later.`);
     
   } catch (error) {
     console.error('[PDF] Download error:', error);
