@@ -13,7 +13,7 @@ import {
   Activity, Loader2, Globe, ExternalLink,
   Headphones, Calendar, Sparkles, ChevronDown, ChevronUp, X, AlertCircle,
   LogIn, XCircle, CreditCard, Mail, RefreshCw, Crown, Rocket,
-  TrendingUp, Maximize2, Minimize2, Eye, EyeOff, Check,
+  TrendingUp, Maximize2, Minimize2, Eye, EyeOff, Check, Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +38,8 @@ const WHOP_CHECKOUT_BASE_URL_MONTHLY = `https://whop.com/checkout/${WHOP_MONTHLY
 const WHOP_CHECKOUT_BASE_URL_YEARLY = `https://whop.com/checkout/${WHOP_YEARLY_PLAN_ID}`;
 const REDIRECT_URL = 'https://www.finotaur.com/app/all-markets/warzone';
 const DISCORD_INVITE_URL = 'https://whop.com/joined/finotaur/discord-UJWtnrAZQebLPC/app/';
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
 
 // ============================================
 // TYPES
@@ -325,6 +326,212 @@ const BillingToggle = ({ selected, onChange, className }: { selected: BillingInt
     </button>
   </div>
 );
+// ============================================
+// TEST REPORT CARD WITH PUBLISH BUTTON
+// ============================================
+const TestReportCard = ({ 
+  testDailyReport, 
+  formatReportDate, 
+  formatReportTime, 
+  handleReportClick,
+  onPublishSuccess
+}: { 
+  testDailyReport: DailyReport;
+  formatReportDate: (dateStr: string) => string;
+  formatReportTime: (createdAt: string) => string;
+  handleReportClick: (report: DailyReport, type: 'daily' | 'weekly') => void;
+  onPublishSuccess: () => void;
+}) => {
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+const handlePublishToLive = async () => {
+    setIsPublishing(true);
+    try {
+      const testReportDate = testDailyReport.report_date.split('T')[0];
+      console.log('[WAR ZONE] 📅 Publishing test report for date:', testReportDate);
+      console.log('[WAR ZONE] 📤 Calling API endpoint with service role...');
+
+      // Use API endpoint with service role (bypasses RLS)
+      const response = await fetch(`${API_BASE}/api/reports/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reportId: testDailyReport.id,
+          reportDate: testReportDate,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        console.error('[WAR ZONE] ❌ API publish failed:', data.error);
+        alert(`Failed to publish report: ${data.error || 'Unknown error'}`);
+        return;
+      }
+
+      console.log('[WAR ZONE] ✅ Report published to PUBLIC via API:', testDailyReport.id);
+      setShowConfirmModal(false);
+      onPublishSuccess();
+    } catch (err) {
+      console.error('[WAR ZONE] ❌ Error publishing report:', err);
+      alert('Error publishing report. Please try again.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+  return (
+    <>
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setShowConfirmModal(false)} />
+          <div className="relative bg-gradient-to-br from-[#1a1410] via-[#12100c] to-[#0a0806] border border-green-500/30 rounded-2xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <Send className="w-6 h-6 text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-lg">Publish to Live</h3>
+                <p className="text-[#C9A646]/60 text-sm">This action will make the report visible to all subscribers</p>
+              </div>
+            </div>
+            
+            <div className="bg-[#1a1410] rounded-xl p-4 mb-6 border border-[#C9A646]/20">
+              <p className="text-[#C9A646]/80 text-sm mb-2">Report Details:</p>
+              <p className="text-white font-semibold">{formatReportDate(testDailyReport.report_date)}</p>
+              <p className="text-[#C9A646]/50 text-xs">ID: {testDailyReport.id}</p>
+            </div>
+
+          <div className="bg-yellow-500/10 rounded-xl p-4 mb-6 border border-yellow-500/30">
+  <p className="text-yellow-400 text-sm flex items-center gap-2">
+    <AlertCircle className="w-4 h-4" />
+    This will REPLACE the current LIVE report and archive the old one
+  </p>
+</div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:bg-[#C9A646]/10"
+                style={{ 
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.3)',
+                  color: '#C9A646'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePublishToLive}
+                disabled={isPublishing}
+                className="flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+                  boxShadow: '0 4px 20px rgba(34,197,94,0.3)',
+                  color: 'white'
+                }}
+              >
+                {isPublishing ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    Publish Now
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test Report Card */}
+      <div className="mt-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+            🧪 TESTER ONLY
+          </span>
+          <span className="text-[#C9A646]/50 text-sm">This report is visible only to testers</span>
+        </div>
+        
+        <div
+          className="group relative w-full p-5 rounded-2xl transition-all duration-300"
+          style={{ 
+            background: 'linear-gradient(135deg, rgba(147,51,234,0.15) 0%, rgba(88,28,135,0.1) 100%)',
+            border: '2px solid rgba(147,51,234,0.4)',
+            boxShadow: '0 4px 20px rgba(147,51,234,0.2)'
+          }}
+        >
+          <div className="flex items-start justify-between">
+            <button
+              onClick={() => handleReportClick(testDailyReport, 'daily')}
+              className="flex items-center gap-3 text-left flex-1"
+            >
+              <div 
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ 
+                  background: 'rgba(147,51,234,0.2)',
+                  border: '1px solid rgba(147,51,234,0.4)'
+                }}
+              >
+                <FileText className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-white font-semibold">
+                    🧪 TEST: {formatReportDate(testDailyReport.created_at)}
+                  </p>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse">
+                    PENDING REVIEW
+                  </span>
+                </div>
+                <p className="text-purple-400/60 text-xs">
+                  Generated at {formatReportTime(testDailyReport.updated_at || testDailyReport.created_at)} ET • {testDailyReport.id}
+                </p>
+              </div>
+            </button>
+            
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 ml-4">
+              {/* Publish to Live Button */}
+              <button
+                onClick={() => setShowConfirmModal(true)}
+                className="px-4 py-2 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(22,163,74,0.15) 100%)',
+                  border: '1px solid rgba(34,197,94,0.5)',
+                  color: '#22c55e'
+                }}
+              >
+                <Send className="w-4 h-4" />
+                Publish to Live
+              </button>
+              
+              {/* Download Button */}
+              <button
+                onClick={() => handleReportClick(testDailyReport, 'daily')}
+                className="p-2 rounded-xl transition-all hover:bg-purple-500/20"
+                style={{ 
+                  border: '1px solid rgba(147,51,234,0.3)'
+                }}
+              >
+                <ChevronRight className="w-5 h-5 text-purple-400" />
+              </button>
+            </div>
+          </div>
+          <div 
+            className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(147,51,234,0.5), transparent)' }}
+          />
+        </div>
+      </div>
+    </>
+  );
+};
+
 // ============================================
 // MODALS
 // ============================================
@@ -1029,8 +1236,9 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
 const { data: dailyData, error: dailyError } = await supabase
   .from('daily_reports')
   .select('*')
-  .or('visibility.eq.public,visibility.is.null')
+  .in('visibility', ['public', 'live'])  // Explicitly exclude 'test' and 'archived'
   .order('report_date', { ascending: false })
+  .order('updated_at', { ascending: false })  // Secondary sort by updated_at for same date
   .limit(5);
       
     if (dailyError) {
@@ -1132,13 +1340,38 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
         setPreviousDayReport(null);
       }
       
-      // Fetch latest weekly report (LIVE/PUBLIC only)
+      // Fetch latest weekly report (LIVE/PUBLIC only - exclude test)
+      // First try without visibility filter to get most recent, then filter in code
       const { data: weeklyData, error: weeklyError } = await supabase
         .from('weekly_reports')
-        .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at')
-        .or('visibility.eq.public,visibility.eq.live,visibility.is.null')
+        .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at, updated_at, visibility')
         .order('report_date', { ascending: false })
-        .limit(1);
+        .limit(5);
+      
+      // Filter out test reports in code (more reliable than complex OR filters)
+      const liveWeeklyReports = weeklyData?.filter((r: any) => 
+        r.visibility !== 'test'
+      ) || [];
+      
+      if (weeklyError) {
+        console.error('[WAR ZONE] ❌ Error fetching weekly report:', weeklyError);
+      } else if (liveWeeklyReports.length > 0) {
+        const latestWeekly = liveWeeklyReports[0];
+        console.log('[WAR ZONE] 📅 Weekly report found:', {
+          id: latestWeekly.id,
+          date: latestWeekly.report_date,
+          visibility: latestWeekly.visibility
+        });
+        const latestWeeklyId = latestWeekly?.id;
+        if (lastFetchedWeeklyId && latestWeeklyId && latestWeeklyId !== lastFetchedWeeklyId) {
+          setHasNewReport(true);
+          setTimeout(() => setHasNewReport(false), 5000);
+        }
+        setLastFetchedWeeklyId(latestWeeklyId || null);
+        setWeeklyReport(latestWeekly);
+      } else {
+        console.log('[WAR ZONE] ⚠️ No live weekly reports found');
+      }
       
       if (weeklyError) {
         console.error('[WAR ZONE] ❌ Error fetching weekly report:', weeklyError);
@@ -1629,7 +1862,7 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
   // METHOD 4: API endpoint fallback (daily only)
   // ===========================================
   if (reportType === 'daily') {
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
     console.log('[WAR ZONE] 🌐 Trying API endpoint:', `${API_BASE}/api/newsletter/pdf`);
     
     try {
@@ -1993,59 +2226,16 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
             </div>
           </div>
 
-          {/* TEST REPORT ROW - ONLY FOR TESTERS */}
-          {isTester && testDailyReport && (
-            <div className="mt-4 mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                  🧪 TESTER ONLY
-                </span>
-                <span className="text-[#C9A646]/50 text-sm">This report is visible only to testers</span>
-              </div>
-              
-              <button
-                onClick={() => handleReportClick(testDailyReport, 'daily')}
-                className="group relative w-full p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgba(147,51,234,0.15) 0%, rgba(88,28,135,0.1) 100%)',
-                  border: '2px solid rgba(147,51,234,0.4)',
-                  boxShadow: '0 4px 20px rgba(147,51,234,0.2)'
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ 
-                        background: 'rgba(147,51,234,0.2)',
-                        border: '1px solid rgba(147,51,234,0.4)'
-                      }}
-                    >
-                      <FileText className="w-5 h-5 text-purple-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-semibold">
-                          🧪 TEST: {formatReportDate(testDailyReport.created_at)}
-                        </p>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse">
-                          PENDING REVIEW
-                        </span>
-                      </div>
-                      <p className="text-purple-400/60 text-xs">
-                        Generated at {formatReportTime(testDailyReport.updated_at || testDailyReport.created_at)} ET • {testDailyReport.id}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-purple-400 transition-transform group-hover:translate-x-1" />
-                </div>
-                <div 
-                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(147,51,234,0.5), transparent)' }}
-                />
-              </button>
-            </div>
-          )}
+{/* TEST REPORT ROW - ONLY FOR TESTERS */}
+{isTester && testDailyReport && (
+  <TestReportCard 
+    testDailyReport={testDailyReport}
+    formatReportDate={formatReportDate}
+    formatReportTime={formatReportTime}
+    handleReportClick={handleReportClick}
+    onPublishSuccess={() => fetchReports(false)}
+  />
+)}
 
           {/* Intel Message */}
           <p className="text-center text-[#C9A646]/60 text-lg heading-font italic mb-10">

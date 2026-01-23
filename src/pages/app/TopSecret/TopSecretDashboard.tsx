@@ -1,5 +1,5 @@
 // =====================================================
-// TopSecretDashboard.tsx - FULL ARCHIVE VERSION v2.0
+// TopSecretDashboard.tsx - FULL ARCHIVE VERSION v2.1
 // =====================================================
 // Features:
 // 1. All historical reports accessible with PDF download
@@ -8,7 +8,7 @@
 // 4. Filter by report type
 // 5. Load more pagination
 // 6. Archive section with expandable months
-// 7. ✅ API-based PDF generation (on-the-fly)
+// 7. ✅ FIXED: PDF download using Supabase download() method
 // =====================================================
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -185,6 +185,78 @@ const mapReportTypeToDb = (type: string): string => {
 };
 
 // ========================================
+// REPORTS CACHE - For faster loading
+// ========================================
+const REPORTS_CACHE_KEY = 'finotaur_topsecret_cache';
+const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+interface ReportsCache {
+  reports: any[];
+  timestamp: number;
+  visibilityMode: string;
+}
+
+function getCachedReports(userId: string, effectiveIsTester: boolean): Report[] | null {
+  try {
+    const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) return null;
+    
+    const data: ReportsCache = JSON.parse(cached);
+    
+    // Check if cache is expired
+    if (Date.now() - data.timestamp > CACHE_EXPIRY_MS) {
+      console.log('[Cache] Expired, will refresh');
+      return null;
+    }
+    
+    // Check if visibility mode changed (tester mode toggled)
+    const currentMode = effectiveIsTester ? 'tester' : 'regular';
+    if (data.visibilityMode !== currentMode) {
+      console.log('[Cache] Visibility mode changed, will refresh');
+      return null;
+    }
+    
+    // Convert date strings back to Date objects
+    return data.reports.map(r => ({
+      ...r,
+      date: new Date(r.date),
+    }));
+  } catch (err) {
+    console.warn('[Cache] Failed to read:', err);
+    return null;
+  }
+}
+
+function setCachedReports(userId: string, reports: Report[], effectiveIsTester: boolean): void {
+  try {
+    const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+    const data: ReportsCache = {
+      reports: reports.map(r => ({
+        ...r,
+        date: r.date.toISOString(),
+      })),
+      timestamp: Date.now(),
+      visibilityMode: effectiveIsTester ? 'tester' : 'regular',
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(data));
+    console.log('[Cache] Saved', reports.length, 'reports');
+  } catch (err) {
+    console.warn('[Cache] Failed to save:', err);
+  }
+}
+
+function invalidateCache(userId: string): void {
+  try {
+    const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+    localStorage.removeItem(cacheKey);
+    console.log('[Cache] Invalidated');
+  } catch {
+    // Ignore
+  }
+}
+
+// ========================================
 // HELPER FUNCTIONS
 // ========================================
 
@@ -212,190 +284,216 @@ function formatMonthLabel(monthKey: string): string {
 }
 
 // ========================================
-// PDF DOWNLOAD HELPER - STORAGE BASED (v3.0)
+// PDF DOWNLOAD HELPER - FIXED v2.1
 // ========================================
-// PDFs are downloaded directly from Supabase Storage
-// Data comes from published_reports which has pdf_url and pdf_storage_path
-// Storage paths (from published_reports):
-//   - ISM/Macro: ism-reports/ism-report-{YYYY-MM}.pdf
-//   - Company:   company_reports/{TICKER}_{uuid}.pdf
-//   - Crypto:    crypto-reports/crypto-report-{date}.pdf
-//   - Weekly:    weekly-reports/{YYYY}/{MM}/weekly-{date}-{timestamp}.pdf
+// Uses Supabase download() method directly for reliable downloads
+// Falls back to signed URLs and direct URLs if needed
+// ========================================
+
+// ========================================
+// PDF DOWNLOAD HELPER - OPTIMIZED v3.0
+// ========================================
+// Uses parallel downloads for much faster response
 // ========================================
 
 async function downloadReportPdf(report: Report): Promise<boolean> {
-  try {
-    console.log('[PDF] Starting download for report:', report.id, 'type:', report.type);
-    console.log('[PDF] Report details:', {
-      pdfUrl: report.pdfUrl,
-      pdfStoragePath: report.pdfStoragePath,
-      ticker: report.ticker,
-      reportMonth: report.reportMonth,
-    });
-    
-    const config = REPORT_TYPE_CONFIG[report.type];
-    if (!config) {
-      console.error('[PDF] Unknown report type:', report.type);
-      throw new Error(`Unknown report type: ${report.type}`);
-    }
-    
-    // Generate filename for download
-    const typeLabel = config.shortName;
-    const dateStr = format(report.date, 'yyyy-MM-dd');
-    const titleSlug = (report.ticker || report.title || 'Report')
-      .replace(/[^a-zA-Z0-9]/g, '_')
-      .substring(0, 30);
-    const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
-    
-    // Helper to download PDF from URL
-    const downloadFromUrl = async (url: string, source: string): Promise<boolean> => {
-      console.log(`[PDF] Trying ${source}:`, url);
-      
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const blob = await response.blob();
-        
-        if (blob.size < 1000) {
-          console.error('[PDF] File too small:', blob.size, 'bytes');
-          throw new Error('Invalid PDF file');
-        }
-        
-        console.log('[PDF] ✅ Received blob:', blob.size, 'bytes');
-        
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-        
-        console.log(`[PDF] ✅ Download initiated via ${source}: ${filename}`);
-        return true;
-      } catch (error) {
-        console.error(`[PDF] ❌ Failed via ${source}:`, error);
-        return false;
-      }
-    };
-
-    // ===========================================
-    // METHOD 1: API path (pdfUrl starting with /api/)
-    // This calls the server to generate/return the PDF
-    // ===========================================
-    if (report.pdfUrl?.startsWith('/api/')) {
-      console.log('[PDF] 🔗 Method 1: Using API path');
-      const fullApiUrl = `${API_BASE_URL}${report.pdfUrl}`;
-      const success = await downloadFromUrl(fullApiUrl, 'API endpoint');
-      if (success) return true;
-      console.log('[PDF] ⚠️ API endpoint failed, trying other methods...');
-    }
-
-    // ===========================================
-    // METHOD 2: Direct Supabase URL (full URL from published_reports)
-    // ===========================================
-    if (report.pdfUrl && !report.pdfUrl.startsWith('/api/') && report.pdfUrl.includes('supabase.co')) {
-      console.log('[PDF] 🔗 Method 2: Using direct Supabase URL');
-      const success = await downloadFromUrl(report.pdfUrl, 'direct pdfUrl');
-      if (success) return true;
-    }
-    
-    // ===========================================
-    // METHOD 2: pdfStoragePath with signed URL
-    // ===========================================
-    if (report.pdfStoragePath) {
-      console.log('[PDF] 🔑 Method 2: Using pdfStoragePath with signed URL:', report.pdfStoragePath);
-      
-      try {
-        const { data, error } = await supabase.storage
-          .from('reports')
-          .createSignedUrl(report.pdfStoragePath, 300); // 5 minutes
-        
-        if (data?.signedUrl) {
-          const success = await downloadFromUrl(data.signedUrl, 'pdfStoragePath signed URL');
-          if (success) return true;
-        }
-        
-        console.warn('[PDF] ⚠️ Failed to create signed URL:', error?.message);
-      } catch (err) {
-        console.error('[PDF] ❌ Error creating signed URL:', err);
-      }
-    }
-    // ===========================================
-    // METHOD 3: Try constructed paths directly
-    // (without using list() which may have permission issues)
-    // ===========================================
-    console.log('[PDF] 🔧 Method 3: Trying constructed paths...');
-    
-    const reportDate = new Date(report.date);
-    const pathsToTry: string[] = [];
-    
-    if (report.type === 'crypto') {
-      // Crypto: Try current date and up to 3 days back
-      for (let daysBack = 0; daysBack <= 3; daysBack++) {
-        const checkDate = new Date(reportDate);
-        checkDate.setDate(checkDate.getDate() - daysBack);
-        const checkDateStr = format(checkDate, 'yyyy-MM-dd');
-        pathsToTry.push(`crypto-reports/crypto-report-${checkDateStr}.pdf`);
-      }
-    } else if (report.type === 'macro') {
-      // ISM/Macro: ism-reports/ism-report-YYYY-MM.pdf
-      const monthStr = report.reportMonth || format(reportDate, 'yyyy-MM');
-      pathsToTry.push(`ism-reports/ism-report-${monthStr}.pdf`);
-    } else if (report.type === 'company' && report.ticker) {
-      // Company: company_reports/TICKER_uuid.pdf
-      if (report.originalReportId) {
-        pathsToTry.push(`company_reports/${report.ticker.toUpperCase()}_${report.originalReportId}.pdf`);
-      }
-    } else if (report.type === 'weekly') {
-      // Weekly: weekly-reports/YYYY/MM/weekly-YYYY-MM-DD-timestamp.pdf
-      // Without knowing the timestamp, we can't construct the exact path
-      // Skip this - rely on pdfStoragePath or pdfUrl for weekly
-      console.log('[PDF] ⚠️ Weekly reports require pdfStoragePath (timestamp unknown)');
-    }
-    
-    // Try each constructed path
-    for (const path of pathsToTry) {
-      console.log(`[PDF] 🔧 Trying path:`, path);
-      
-      try {
-        const { data, error } = await supabase.storage
-          .from('reports')
-          .createSignedUrl(path, 300);
-        
-        if (data?.signedUrl && !error) {
-          const success = await downloadFromUrl(data.signedUrl, `constructed path: ${path}`);
-          if (success) return true;
-        } else {
-          console.log(`[PDF] ⚠️ Path not available:`, path, error?.message);
-        }
-      } catch (err) {
-        console.log(`[PDF] ⚠️ Error trying path:`, path);
-      }
-    }
-    // ===========================================
-    // ALL METHODS FAILED
-    // ===========================================
-    console.error('[PDF] ❌ ALL PDF DOWNLOAD METHODS FAILED');
-    console.error('[PDF] Debug info:', {
-      report_id: report.id,
-      type: report.type,
-      date: report.date,
-      pdfUrl: report.pdfUrl,
-      pdfStoragePath: report.pdfStoragePath,
-      ticker: report.ticker,
-      reportMonth: report.reportMonth,
-      originalReportId: report.originalReportId,
-    });
-    
-    throw new Error('PDF not available. Please try again later.');
-    
-  } catch (error) {
-    console.error('[PDF] Download error:', error);
+  console.log('[PDF] ⚡ Starting FAST download for:', report.id);
+  
+  const config = REPORT_TYPE_CONFIG[report.type];
+  if (!config) {
+    console.error('[PDF] Unknown report type:', report.type);
     return false;
   }
+  
+  // Generate filename
+  const typeLabel = config.shortName;
+  const dateStr = format(report.date, 'yyyy-MM-dd');
+  const titleSlug = (report.ticker || report.title || 'Report')
+    .replace(/[^a-zA-Z0-9]/g, '_')
+    .substring(0, 30);
+  const filename = `Finotaur_${typeLabel}_${titleSlug}_${dateStr}.pdf`;
+  
+  // Helper to trigger browser download
+  const triggerDownload = (blob: Blob, name: string): void => {
+    const blobUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+    console.log('[PDF] ✅ Download triggered:', name);
+  };
+
+  // Helper to validate PDF blob
+  const isValidPdf = async (blob: Blob): Promise<boolean> => {
+    if (blob.size < 1000) return false;
+    try {
+      const firstBytes = await blob.slice(0, 5).text();
+      return firstBytes.startsWith('%PDF');
+    } catch {
+      return false;
+    }
+  };
+
+  // Helper to download from Supabase path
+  const trySupabasePath = async (path: string): Promise<Blob | null> => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('reports')
+        .download(path);
+      if (data && !error && await isValidPdf(data)) {
+        return data;
+      }
+    } catch {}
+    return null;
+  };
+
+  // Helper to download from URL
+  const tryUrl = async (url: string): Promise<Blob | null> => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      if (await isValidPdf(blob)) {
+        return blob;
+      }
+    } catch {}
+    return null;
+  };
+
+  // =============================================
+  // BUILD ALL POSSIBLE PATHS/URLS TO TRY
+  // =============================================
+  const pathsToTry: string[] = [];
+  const urlsToTry: string[] = [];
+  const reportDate = new Date(report.date);
+
+  // Priority 1: Direct paths from database
+  if (report.pdfStoragePath) {
+    pathsToTry.push(report.pdfStoragePath);
+  }
+  
+  // Priority 2: Direct URL from database
+  if (report.pdfUrl) {
+    if (report.pdfUrl.startsWith('http')) {
+      urlsToTry.push(report.pdfUrl);
+    } else if (report.pdfUrl.startsWith('/api/')) {
+      urlsToTry.push(`${API_BASE_URL}${report.pdfUrl}`);
+    }
+  }
+
+  // Priority 3: Constructed paths based on report type
+  if (report.type === 'company' && report.ticker) {
+    const ticker = report.ticker.toUpperCase();
+    if (report.originalReportId) {
+      pathsToTry.push(`company_reports/${ticker}_${report.originalReportId}.pdf`);
+      pathsToTry.push(`company-reports/${ticker}_${report.originalReportId}.pdf`);
+    }
+    const dateKey = format(reportDate, 'yyyy-MM-dd');
+    pathsToTry.push(`company_reports/${ticker}_${dateKey}.pdf`);
+    pathsToTry.push(`company-reports/${ticker}_${dateKey}.pdf`);
+  } else if (report.type === 'crypto') {
+    for (let daysBack = 0; daysBack <= 2; daysBack++) {
+      const checkDate = new Date(reportDate);
+      checkDate.setDate(checkDate.getDate() - daysBack);
+      const checkDateStr = format(checkDate, 'yyyy-MM-dd');
+      pathsToTry.push(`crypto-reports/crypto-report-${checkDateStr}.pdf`);
+    }
+  } else if (report.type === 'macro') {
+    const monthStr = report.reportMonth || format(reportDate, 'yyyy-MM');
+    pathsToTry.push(`ism-reports/ism-report-${monthStr}.pdf`);
+  } else if (report.type === 'weekly') {
+    const year = format(reportDate, 'yyyy');
+    const month = format(reportDate, 'MM');
+    const dateKey = format(reportDate, 'yyyy-MM-dd');
+    pathsToTry.push(`weekly-reports/${year}/${month}/weekly-${dateKey}.pdf`);
+    pathsToTry.push(`weekly-reports/weekly-${dateKey}.pdf`);
+  }
+
+  // API endpoints as fallback
+  if (report.type === 'macro') {
+    const monthStr = report.reportMonth || format(reportDate, 'yyyy-MM');
+    urlsToTry.push(`${API_BASE_URL}/api/reports/ism/${monthStr}/pdf`);
+  } else if (report.type === 'company' && report.ticker) {
+    urlsToTry.push(`${API_BASE_URL}/api/reports/company/${report.ticker}/pdf`);
+  } else if (report.type === 'crypto') {
+    urlsToTry.push(`${API_BASE_URL}/api/reports/crypto/${format(reportDate, 'yyyy-MM-dd')}/pdf`);
+  } else if (report.type === 'weekly') {
+    urlsToTry.push(`${API_BASE_URL}/api/reports/weekly/${format(reportDate, 'yyyy-MM-dd')}/pdf`);
+  }
+
+  // Remove duplicates
+  const uniquePaths = [...new Set(pathsToTry)];
+  const uniqueUrls = [...new Set(urlsToTry)];
+  
+  console.log('[PDF] 🚀 Trying', uniquePaths.length, 'paths +', uniqueUrls.length, 'URLs in PARALLEL');
+
+  // =============================================
+  // TRY ALL PATHS IN PARALLEL (FAST!)
+  // =============================================
+  try {
+    // Create all download promises with source tracking
+    const allPromises: Promise<{ blob: Blob; source: string } | null>[] = [
+      // Supabase paths
+      ...uniquePaths.map(path => 
+        trySupabasePath(path).then(blob => blob ? { blob, source: `path:${path}` } : null)
+      ),
+      // URLs
+      ...uniqueUrls.map(url => 
+        tryUrl(url).then(blob => blob ? { blob, source: `url:${url}` } : null)
+      ),
+    ];
+    
+    // Race all promises - first valid PDF wins!
+    const results = await Promise.allSettled(allPromises);
+    
+    // Find first successful result
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value?.blob) {
+        console.log('[PDF] 🎉 Fast download succeeded from:', result.value.source);
+        triggerDownload(result.value.blob, filename);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.log('[PDF] ⚠️ Parallel download error:', err);
+  }
+
+  // =============================================
+  // FALLBACK: Search bucket for company reports
+  // =============================================
+  if (report.type === 'company' && report.ticker) {
+    const ticker = report.ticker.toUpperCase();
+    console.log('[PDF] 🔍 Fallback: Searching bucket for', ticker);
+    
+    for (const folder of ['company_reports', 'company-reports']) {
+      try {
+        const { data: files } = await supabase.storage
+          .from('reports')
+          .list(folder, { search: ticker, limit: 5 });
+        
+        if (files && files.length > 0) {
+          const matching = files
+            .filter(f => f.name.startsWith(`${ticker}_`) && f.name.endsWith('.pdf'))
+            .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+          
+          if (matching.length > 0) {
+            const blob = await trySupabasePath(`${folder}/${matching[0].name}`);
+            if (blob) {
+              console.log('[PDF] ✅ Found via bucket search:', matching[0].name);
+              triggerDownload(blob, filename);
+              return true;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  console.error('[PDF] ❌ All download methods failed for:', report.id);
+  return false;
 }
 
 // ========================================
@@ -485,9 +583,8 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
     return report.subtitle || report.title;
   };
 
-  // v2.0: PDF is ALWAYS available via API (generated on-the-fly)
-  // No need to check pdfStoragePath or pdfUrl anymore
-  const canDownloadPdf = true;
+  // v2.1: Check if PDF is available (has storage path or URL)
+  const canDownloadPdf = !!(report.pdfStoragePath || report.pdfUrl);
 
   return (
     <motion.div
@@ -529,13 +626,6 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
             <span className="text-base font-bold text-white">{report.ticker}</span>
           </div>
         )}
-        
-        {report.qaScore > 0 && (
-          <div className="mt-2 flex items-center gap-1 text-xs text-emerald-400">
-            <Shield className="w-3 h-3" />
-            <span>QA: {report.qaScore}%</span>
-          </div>
-        )}
       </div>
 
       <button
@@ -552,7 +642,7 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
         {isDownloading ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
-            Generating...
+            Downloading...
           </>
         ) : (
           <>
@@ -599,8 +689,8 @@ function ArchiveReportRow({
   const config = REPORT_TYPE_CONFIG[report.type];
   const Icon = config.icon;
   
-  // v2.0: PDF is ALWAYS available via API
-  const canDownloadPdf = true;
+  // v2.1: Check if PDF is available
+  const canDownloadPdf = !!(report.pdfStoragePath || report.pdfUrl);
   
   // v2.3: Can promote only if tester AND report is test visibility
   const canPromote = isTester && report.visibility === 'test';
@@ -644,11 +734,6 @@ function ArchiveReportRow({
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
           <span>{format(report.date, 'MMM d, yyyy')}</span>
-          {report.qaScore && report.qaScore > 0 && (            <span className="flex items-center gap-1 text-emerald-500">
-              <Shield className="w-3 h-3" />
-              {report.qaScore}%
-            </span>
-          )}
         </div>
       </div>
 
@@ -774,8 +859,8 @@ function MonthGroup({
     return counts;
   }, [reports]);
 
-  // v2.0: All reports have PDF available via API
-  const pdfCount = reports.length;
+  // v2.1: Count reports with PDF available
+  const pdfCount = reports.filter(r => r.pdfStoragePath || r.pdfUrl).length;
 
   return (
     <div className="border border-white/10 rounded-xl overflow-hidden">
@@ -794,7 +879,7 @@ function MonthGroup({
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span>{reports.length} reports</span>
               <span>•</span>
-              <span className="text-emerald-500">{pdfCount} PDFs available</span>
+              <span className="text-emerald-500">{pdfCount} PDFs ready</span>
             </div>
           </div>
         </div>
@@ -934,8 +1019,8 @@ interface StatsCardProps {
 
 function StatsCard({ reports }: StatsCardProps) {
   const stats = useMemo(() => {
-    // v2.0: All reports have PDF available via API
-    const pdfCount = reports.length;
+    // v2.1: Count reports with PDF available
+    const pdfCount = reports.filter(r => r.pdfStoragePath || r.pdfUrl).length;
     const typeCount: Record<string, number> = {};
     reports.forEach(r => {
       typeCount[r.type] = (typeCount[r.type] || 0) + 1;
@@ -965,7 +1050,7 @@ function StatsCard({ reports }: StatsCardProps) {
         </div>
         <div className="p-3 rounded-lg bg-black/20">
           <div className="text-2xl font-bold text-emerald-400">{stats.pdfAvailable}</div>
-          <div className="text-xs text-gray-500">PDFs Available</div>
+          <div className="text-xs text-gray-500">PDFs Ready</div>
         </div>
         <div className="p-3 rounded-lg bg-black/20">
           <div className="text-2xl font-bold text-amber-400">{stats.monthsCovered}</div>
@@ -1210,7 +1295,7 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
     setPromotingReportId(report.id);
     
     try {
-      console.log('[Promote] Starting promotion for report:', report.id);
+      console.log('[Promote] Starting promotion for report:', report.id, 'type:', report.type);
       
       // Update published_reports visibility to 'live'
       const { error: publishedError } = await supabase
@@ -1227,12 +1312,31 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       
       // Also update the source table if we have original_report_id
       if (report.originalReportId) {
-        const sourceTable = `${report.type === 'macro' ? 'ism' : report.type}_reports`;
+        // Map report type to source table name
+        let sourceTable: string;
+        if (report.type === 'macro') {
+          sourceTable = 'ism_reports';
+        } else if (report.type === 'weekly') {
+          sourceTable = 'weekly_reports';
+        } else {
+          sourceTable = `${report.type}_reports`;
+        }
         
-        await supabase
+        console.log('[Promote] Updating source table:', sourceTable, 'id:', report.originalReportId);
+        
+        const { error: sourceError } = await supabase
           .from(sourceTable)
-          .update({ visibility: 'live' })
+          .update({ 
+            visibility: 'live',
+            updated_at: new Date().toISOString()
+          })
           .eq('id', report.originalReportId);
+        
+        if (sourceError) {
+          console.warn('[Promote] Warning: Failed to update source table:', sourceError.message);
+        } else {
+          console.log('[Promote] ✅ Source table updated successfully');
+        }
       }
       
       console.log('[Promote] ✅ Report promoted to live:', report.id);
@@ -1253,8 +1357,8 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
     } finally {
       setPromotingReportId(null);
     }
-  }, [supabase]);
-  // Download PDF handler - v2.0: Uses API
+  }, []); 
+  // Download PDF handler - v2.1: Uses improved download logic
   const handleDownloadPdf = useCallback(async (report: Report) => {
     setDownloadingReportId(report.id);
     setDownloadError(null);
@@ -1303,14 +1407,37 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
         return;
       }
       
-      setIsLoading(true);
+      if (!currentUserId) {
+        setIsLoading(false);
+        return;
+      }
 
-      try {
-        if (!currentUserId) {
-          setIsLoading(false);
-          return;
+      // =============================================
+      // STEP 1: Try to load from cache for instant display
+      // =============================================
+      const cachedReports = getCachedReports(currentUserId, effectiveIsTester);
+      if (cachedReports && cachedReports.length > 0) {
+        console.log('[Reports] ⚡ Loaded from cache:', cachedReports.length, 'reports');
+        setReports(cachedReports);
+        setIsLoading(false);
+        
+        // Auto-expand current month from cache
+        const currentMonthKey = getMonthKey(new Date());
+        setExpandedMonths(new Set([currentMonthKey]));
+        
+        // Get month focus from cached macro report
+        const latestMacro = cachedReports.find(r => r.type === 'macro');
+        if (latestMacro?.subtitle) {
+          setMonthFocus(latestMacro.subtitle);
         }
+      } else {
+        setIsLoading(true);
+      }
 
+      // =============================================
+      // STEP 2: Fetch fresh data from server (background if cached)
+      // =============================================
+      try {
         // Fetch ALL reports (not just limited)
         const { data: publishedReports, error } = await supabase
           .rpc('get_published_reports_for_user', {
@@ -1363,20 +1490,18 @@ function processReports(publishedReports: any[]) {
             return false;
           }
           
-          // v2.2 FIX: Strict visibility filtering
-          // Regular users: ONLY see 'live' or 'public' (or null for legacy)
-          // Testers with test mode ON: see 'test' reports
+          // v2.4 FIX: Correct visibility filtering
+          // Regular users: see 'live', 'public', or null (legacy)
+          // Testers with test mode ON: see ALL reports (test + live)
           // Testers with test mode OFF: see same as regular users
           const visibility = r.visibility || 'live'; // Default to 'live' for legacy reports
           
           if (effectiveIsTester) {
-            // Tester with test mode ON - show ONLY test reports
-            if (visibility !== 'test') {
-              console.log('[processReports] Tester mode: skipping non-test report:', r.id, visibility);
-              return false;
-            }
+            // Tester with test mode ON - show ALL reports (both test and live)
+            // No filtering needed - show everything
+            console.log('[processReports] Tester mode: including report:', r.id, visibility);
           } else {
-            // Regular user OR tester with test mode OFF - show ONLY live/public
+            // Regular user OR tester with test mode OFF - hide test reports
             if (visibility === 'test') {
               console.log('[processReports] Skipping test report (user is not tester or test mode off):', r.id);
               return false;
@@ -1464,6 +1589,13 @@ function processReports(publishedReports: any[]) {
       });
 
       setReports(deduplicatedReports);
+      
+      // =============================================
+      // Save to cache for faster next load
+      // =============================================
+      if (currentUserId) {
+        setCachedReports(currentUserId, deduplicatedReports, effectiveIsTester);
+      }
 
       // Get month focus from latest macro report
       const latestMacro = deduplicatedReports.find(r => r.type === 'macro');
@@ -1559,6 +1691,12 @@ function processReports(publishedReports: any[]) {
               return b.date.getTime() - a.date.getTime();
             });
             
+            // Update cache with new report
+            if (currentUserId) {
+              setCachedReports(currentUserId, updated, effectiveIsTester);
+              console.log('[Cache] Updated with new report:', transformedReport.id);
+            }
+            
             return updated;
           });
           
@@ -1582,8 +1720,8 @@ function processReports(publishedReports: any[]) {
           
           if (!mappedType) return;
           
-          setReports((prev) =>
-            prev.map((r) =>
+          setReports((prev) => {
+            const updated = prev.map((r) =>
               r.id === updatedReport.id
                 ? {
                     ...r,
@@ -1597,8 +1735,16 @@ function processReports(publishedReports: any[]) {
                     commentsCount: updatedReport.comments_count || 0,
                   }
                 : r
-            )
-          );
+            );
+            
+            // Update cache with updated report
+            if (currentUserId) {
+              setCachedReports(currentUserId, updated, effectiveIsTester);
+              console.log('[Cache] Updated report:', updatedReport.id);
+            }
+            
+            return updated;
+          });
         }
       )
       .subscribe((status) => {
