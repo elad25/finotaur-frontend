@@ -664,34 +664,6 @@ const ReportViewerModal = ({ isOpen, onClose, report, isLoading, error, onRefres
   );
 };
 
-const PaymentSuccessModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-gradient-to-br from-[#1a1410] via-[#12100c] to-[#0a0806] border border-[#C9A646]/30 rounded-2xl max-w-lg w-full">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-lg hover:bg-[#C9A646]/10 z-10"><X className="w-5 h-5 text-[#C9A646]/60" /></button>
-        <div className="px-6 py-10 text-center border-b border-[#C9A646]/20">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6" style={{ background: 'radial-gradient(circle, rgba(201,166,70,0.2) 0%, transparent 70%)' }}><CheckCircle2 className="w-10 h-10 text-[#C9A646]" /></div>
-          <h2 className="text-3xl font-bold text-white mb-2" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>Welcome to <span className="text-[#C9A646]">War Zone</span> ⚔️</h2>
-          <p className="text-[#C9A646]/60">Your subscription is now active</p>
-        </div>
-        <div className="p-6">
-          <div className="space-y-4 mb-6">
-            <div className="flex items-start gap-3"><div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center"><Mail className="w-5 h-5 text-blue-400" /></div><div><p className="text-white font-semibold text-sm">Check Your Email</p><p className="text-[#C9A646]/50 text-xs">First report tomorrow 9:00 AM NY</p></div></div>
-            <div className="flex items-start gap-3"><div className="w-10 h-10 rounded-full bg-[#5865F2]/10 flex items-center justify-center"><DiscordIcon className="w-5 h-5 text-[#5865F2]" /></div><div><p className="text-white font-semibold text-sm">Join Discord</p><p className="text-[#C9A646]/50 text-xs">Access granted automatically</p></div></div>
-            <div className="flex items-start gap-3"><div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center"><Calendar className="w-5 h-5 text-green-400" /></div><div><p className="text-white font-semibold text-sm">7-Day Free Trial</p><p className="text-[#C9A646]/50 text-xs">No charge during trial</p></div></div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="w-full py-4 rounded-xl bg-[#5865F2] text-white font-bold flex items-center justify-center gap-2"><DiscordIcon className="w-5 h-5" /> Join Discord <ExternalLink className="w-4 h-4" /></a>
-            <button onClick={onClose} className="w-full py-4 rounded-xl font-bold bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black">Continue to War Zone</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ============================================
 // WAR ZONE DISCLAIMER POPUP - FINAL VERSION
 // Matches the premium gold/black design reference
@@ -1309,14 +1281,15 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
         supabase
           .from('daily_reports')
           .select('*')
-          .in('visibility', ['public', 'live'])
-          .order('updated_at', { ascending: false })
-          .limit(5),
-        supabase
-          .from('weekly_reports')
-          .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at, updated_at, visibility')
+          .eq('visibility', 'live')
           .order('report_date', { ascending: false })
-          .limit(5)
+          .limit(5),
+supabase
+          .from('daily_reports')
+          .select('*')
+          .eq('visibility', 'live')
+          .order('report_date', { ascending: false })
+          .limit(5),
       ]);
 
       // Process user/tester status
@@ -1377,7 +1350,7 @@ if (dailyData && dailyData.length > 0) {
   // =====================================================
   const liveReports = dailyData.filter((report: DailyReport) => {
     const vis = (report as any).visibility;
-    return vis === 'public' || vis === 'live';
+    return vis === 'live';
   });
 
   console.log('[WAR ZONE] 📊 After filter:', {
@@ -1483,7 +1456,7 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
       
       // Filter out test reports in code (more reliable than complex OR filters)
       const liveWeeklyReports = weeklyData?.filter((r: any) => 
-        r.visibility !== 'test'
+        r.visibility === 'live'
       ) || [];
       
       if (weeklyError) {
@@ -2237,8 +2210,8 @@ return (
             {/* Section Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <div className="flex items-center gap-8">
-                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Daily Reports</h3>
-                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Latest Weekly Report</h3>
+                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Latest Daily Report</h3>
+                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Last Week's Review</h3>
               </div>
               
               {/* Daily Report Schedule */}
@@ -2251,13 +2224,13 @@ return (
               </div>
             </div>
 
-            {/* Report Cards Grid - 3 COLUMNS */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+{/* Report Cards Grid - 2 COLUMNS */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* LEFT CARD: Previous Trading Day (0) */}
-              <button
-  onClick={() => previousDayReport && handleReportClick(previousDayReport, 'daily')}
-                disabled={isLoadingReports || !previousDayReport}
+              {/* LEFT CARD: Latest Daily Report */}
+<button
+  onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
+  disabled={isLoadingReports || !currentDayReport}
                 className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
                 style={{ 
                   background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
@@ -2284,15 +2257,15 @@ return (
                       <p className="text-white font-semibold">
                         {isLoadingReports 
                           ? 'Loading...' 
-                          : previousDayReport 
-                            ? formatReportDate(previousDayReport.report_date)
+                          : currentDayReport 
+                            ? formatReportDate(currentDayReport.report_date)
                             : 'No report available'
                         }
                       </p>
 <p className="text-[#C9A646]/50 text-xs">
-  {previousDayReport 
-    ? `Published at ${formatReportTime(previousDayReport.updated_at || previousDayReport.created_at)} ET`
-    : 'Previous Trading Day'
+  {currentDayReport 
+    ? `Published at ${formatReportTime(currentDayReport.updated_at || currentDayReport.created_at)} ET`
+    : 'Latest Daily Report'
   }
 </p>
                     </div>
@@ -2305,56 +2278,6 @@ return (
                 />
               </button>
 
-              {/* MIDDLE CARD: Today's Report (1) */}
-              <button
-  onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
-                disabled={isLoadingReports || !currentDayReport}
-                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ 
-                        background: 'rgba(201,166,70,0.15)',
-                        border: '1px solid rgba(201,166,70,0.3)'
-                      }}
-                    >
-                      {isLoadingReports ? (
-                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
-                      ) : (
-                        <FileText className="w-5 h-5 text-[#C9A646]" />
-                      )}
-                    </div>
-<div>
-  <p className="text-white font-semibold">
-    {isLoadingReports 
-      ? 'Loading...' 
-      : currentDayReport 
-        ? formatReportDate(currentDayReport.report_date)
-        : 'No Report Available'
-    }
-  </p>
-<p className="text-[#C9A646]/50 text-xs">
-  {currentDayReport 
-    ? `Published at ${formatReportTime(currentDayReport.updated_at || currentDayReport.created_at)} ET`
-    : 'Coming at 9:00 AM ET'
-  }
-</p>
-</div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
-                </div>
-                <div 
-                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
-                />
-              </button>
 
               {/* RIGHT CARD: Weekly Report */}
               <button
@@ -2573,7 +2496,6 @@ const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly
 const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [showLoginRequired, setShowLoginRequired] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -2614,7 +2536,6 @@ const checkSubscriptionStatus = useCallback(async () => {
     } catch (error) { console.error('Error:', error); } finally { setIsLoading(false); }
   }, [user?.id]);
 
-  useEffect(() => { const p = searchParams.get('payment'); const c = searchParams.get('checkout_status'); if (p === 'success' || c === 'success') { setShowSuccessModal(true); window.history.replaceState({}, '', window.location.pathname); setPollCount(1); } }, [searchParams]);
   useEffect(() => { if (pollCount > 0 && pollCount <= 15) { const t = setTimeout(() => { checkSubscriptionStatus().then(() => { if (newsletterStatus?.is_active) setPollCount(0); else setPollCount(p => p + 1); }); }, 2000); return () => clearTimeout(t); } }, [pollCount, newsletterStatus?.is_active, checkSubscriptionStatus]);
   useEffect(() => { checkSubscriptionStatus(); }, [checkSubscriptionStatus]);
 
@@ -2726,7 +2647,7 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
   } else {
     // Normal flow
     if (isLoading) return <div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>;
-    if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} /><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);
+    if (newsletterStatus?.is_active) return (<><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);
   }
   // ====================================
   // LANDING PAGE - EXACT DESIGN MATCH
@@ -2753,8 +2674,7 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
         .twinkle { animation: twinkle 1.5s ease-in-out infinite; }
       `}</style>
 
-      <PaymentSuccessModal isOpen={showSuccessModal} onClose={() => { setShowSuccessModal(false); checkSubscriptionStatus(); }} />
-<DisclaimerPopup isOpen={showDisclaimer} onClose={() => setShowDisclaimer(false)} onAccept={handleAcceptDisclaimer} isProcessing={isProcessing} billingInterval={billingInterval} isTopSecretMember={topSecretStatus.is_active} />
+      <DisclaimerPopup isOpen={showDisclaimer} onClose={() => setShowDisclaimer(false)} onAccept={handleAcceptDisclaimer} isProcessing={isProcessing} billingInterval={billingInterval} isTopSecretMember={topSecretStatus.is_active} />
 
       {/* ============ HERO SECTION ============ */}
       <section className="relative min-h-screen">
