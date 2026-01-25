@@ -62,13 +62,30 @@ export default function WarZonePricingSelection() {
   // =====================================================
   useEffect(() => {
     const checkSubscription = async () => {
+      // 🔥 FIX: Don't redirect to register immediately
+      // Wait for auth state to be determined first
+      // This prevents redirect loop when user clicks "back" from Whop checkout
+      
+      setCheckingSubscription(true);
+
+      // Give auth state time to load (prevents flash redirect)
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       if (!user) {
-        console.log('No user, redirecting to register');
-        navigate('/auth/register');
+        // Check if there's a session being loaded
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          console.log('No user session, redirecting to register');
+          navigate('/auth/register');
+          return;
+        }
+        
+        // Session exists but user state not yet updated - wait
+        console.log('Session exists, waiting for user state...');
+        setCheckingSubscription(false);
         return;
       }
-
-      setCheckingSubscription(true);
 
       try {
         const paymentSuccess = searchParams.get('payment') === 'success';
