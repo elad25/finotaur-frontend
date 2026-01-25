@@ -2,10 +2,9 @@
 // OPTIMIZED SUBSCRIPTION HOOK - v8.4.2 FINAL FIX
 // File: src/hooks/useSubscription.ts
 // ================================================
-// 🔥🔥🔥 v8.4.2 CRITICAL FIX:
-// - FIXED: RPC parameter name MUST be 'user_id_param' (NOT 'p_user_id')
-// - The DB function signature uses 'p_user_id' internally but Supabase
-//   exposes it as 'user_id_param' (without the 'p_' prefix)
+// 🔥🔥🔥 v8.4.3 CRITICAL FIX:
+// - FIXED: RPC parameter name MUST be 'p_user_id'
+// - The DB function expects 'p_user_id' as the parameter name
 // ================================================
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -157,7 +156,7 @@ export function useSubscription() {
         // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
         // ═══════════════════════════════════════════════════════════════
 const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-  user_id_param: effectiveUserId  // ✅ תוקן - Supabase חושף את הפרמטר בלי ה-p_
+  p_user_id: effectiveUserId  // ✅ נכון
 });
         
         if (rpcError) {
@@ -247,7 +246,7 @@ const { data, error: rpcError } = await supabase.rpc('get_user_subscription_stat
       
       try {
 const { data, error } = await supabase.rpc('check_usage_warning', { 
-  user_id_param: effectiveUserId 
+   p_user_id: effectiveUserId  
 });
         if (error) return null;
         return data as WarningState;
@@ -268,7 +267,7 @@ const { data, error } = await supabase.rpc('check_usage_warning', {
       if (!effectiveUserId) throw new Error('Not authenticated');
       
 const { error } = await supabase.rpc('mark_warning_shown', { 
-  user_id_param: effectiveUserId 
+  p_user_id: effectiveUserId  // ✅ תוקן
 });
       
       if (error) throw error;
