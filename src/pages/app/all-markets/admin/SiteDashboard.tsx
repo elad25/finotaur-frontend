@@ -960,124 +960,101 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
   // ALL USERS TAB FUNCTIONS
   // =====================================================
 
-  const fetchAllUsers = useCallback(async () => {
+const fetchAllUsers = useCallback(async () => {
   setAllUsersLoading(true);
   try {
-      // Build the query with server-side filters
-      let query = supabase
-        .from('profiles')
-        .select(`
-          id,
-          email,
-          display_name,
-          created_at,
-          account_type,
-          subscription_status,
-          whop_membership_id,
-          newsletter_status,
-          newsletter_whop_membership_id,
-          newsletter_enabled,
-          top_secret_status,
-          top_secret_whop_membership_id,
-          top_secret_enabled,
-          platform_plan,
-          platform_subscription_status,
-          last_login_at,
-          trade_count,
-          subscription_interval,
-          subscription_expires_at,
-          role,
-          is_banned
-        `, { count: 'exact' });
-
-      // Apply search filter (server-side)
-      if (allUsersFilters.search) {
-        query = query.or(`email.ilike.%${allUsersFilters.search}%,display_name.ilike.%${allUsersFilters.search}%`);
-      }
-
-      // Apply account type filter (server-side)
-      if (allUsersFilters.accountType !== 'all') {
-        if (allUsersFilters.accountType === 'free') {
-          query = query.or('account_type.is.null,account_type.eq.free');
-        } else {
-          query = query.eq('account_type', allUsersFilters.accountType);
-        }
-      }
-
-      // Apply subscription status filter (server-side)
-      if (allUsersFilters.subscriptionStatus !== 'all') {
-        query = query.eq('subscription_status', allUsersFilters.subscriptionStatus);
-      }
-
-      // Apply has_whop filter (server-side)
-      if (allUsersFilters.hasWhop === 'yes') {
-        query = query.not('whop_membership_id', 'is', null);
-      } else if (allUsersFilters.hasWhop === 'no') {
-        query = query.is('whop_membership_id', null);
-      }
-
-      // Apply newsletter filter (server-side)
-      if (allUsersFilters.newsletterStatus && allUsersFilters.newsletterStatus !== 'all') {
-        query = query.eq('newsletter_status', allUsersFilters.newsletterStatus);
-      }
-
-      // Apply top secret filter (server-side)
-      if (allUsersFilters.topSecretStatus && allUsersFilters.topSecretStatus !== 'all') {
-        query = query.eq('top_secret_status', allUsersFilters.topSecretStatus);
-      }
-
-      // Apply platform filter (server-side)
-      if (allUsersFilters.platformPlan && allUsersFilters.platformPlan !== 'all') {
-        if (allUsersFilters.platformPlan === 'free') {
-          query = query.or('platform_plan.is.null,platform_plan.eq.free');
-        } else {
-          query = query.eq('platform_plan', allUsersFilters.platformPlan);
-        }
-      }
-
-      // Exclude test users if needed (server-side)
-      // Only filter if showTestUsers is explicitly FALSE
-      if (allUsersFilters.showTestUsers === false) {
-        query = query
-          .not('email', 'ilike', '%test%')
-          .not('email', 'ilike', '%@test.%');
-      }
-
-      // Apply sorting
-      query = query.order(allUsersFilters.sortBy, { ascending: allUsersFilters.sortOrder === 'asc' });
-
-      // Apply pagination
-      query = query.range(
-        (allUsersPagination.page - 1) * allUsersPagination.pageSize,
-        allUsersPagination.page * allUsersPagination.pageSize - 1
-      );
-
-      const { data, error, count } = await query;
-      if (error) throw error;
-
-      // Map the data with computed fields
-      const mappedData = (data || []).map(user => ({
-        ...user,
-        has_whop: !!user.whop_membership_id,
-        has_newsletter: !!user.newsletter_whop_membership_id || user.newsletter_enabled,
-        has_top_secret: !!user.top_secret_whop_membership_id || user.top_secret_enabled,
-        is_test_user: user.email?.includes('test') || user.email?.includes('+') || false,
-        trade_count: user.trade_count || 0,
-      }));
-
-      setAllUsers(mappedData);
-      setAllUsersPagination(prev => ({
-        ...prev,
-        totalCount: count || 0,
-        totalPages: Math.ceil((count || 0) / prev.pageSize),
-      }));
-
-    } catch (err) {
-      console.error('Error fetching all users:', err);
-    } finally {
-      setAllUsersLoading(false);
+    // Build filters object for the RPC function
+    const filters: Record<string, any> = {};
+    
+    if (allUsersFilters.search) {
+      filters.search = allUsersFilters.search;
     }
-  }, [allUsersFilters, allUsersPagination.page, allUsersPagination.pageSize]);
+    
+    if (allUsersFilters.accountType !== 'all') {
+      filters.account_type = allUsersFilters.accountType;
+    }
+    
+    if (allUsersFilters.subscriptionStatus !== 'all') {
+      filters.subscription_status = allUsersFilters.subscriptionStatus;
+    }
+    
+    if (allUsersFilters.newsletterStatus && allUsersFilters.newsletterStatus !== 'all') {
+      filters.newsletter_status = allUsersFilters.newsletterStatus;
+    }
+    
+    if (allUsersFilters.topSecretStatus && allUsersFilters.topSecretStatus !== 'all') {
+      filters.top_secret_status = allUsersFilters.topSecretStatus;
+    }
+    
+    if (allUsersFilters.platformPlan && allUsersFilters.platformPlan !== 'all') {
+      filters.platform_plan = allUsersFilters.platformPlan;
+    }
+    
+    // Has Whop filter - only for 'yes' (server-side)
+    if (allUsersFilters.hasWhop === 'yes') {
+      filters.has_active_subscription = true;
+    }
+
+    // First get the count
+    const { data: countData, error: countError } = await supabase.rpc('admin_count_users', {
+      p_filters: filters
+    });
+
+    if (countError) {
+      console.error('Count error:', countError);
+    }
+
+    const totalCount = countData || 0;
+
+    // Then get the users using RPC (bypasses RLS via SECURITY DEFINER)
+    const { data, error } = await supabase.rpc('admin_list_users', {
+      p_filters: filters,
+      p_limit: allUsersPagination.pageSize,
+      p_offset: (allUsersPagination.page - 1) * allUsersPagination.pageSize,
+      p_sort_by: allUsersFilters.sortBy,
+      p_sort_order: allUsersFilters.sortOrder.toUpperCase()
+    });
+
+    if (error) throw error;
+
+    // Map the data with computed fields
+    let mappedData = (data || []).map((user: any) => ({
+      ...user,
+      has_whop: !!user.whop_membership_id,
+      has_newsletter: !!user.newsletter_whop_membership_id || user.newsletter_enabled,
+      has_top_secret: !!user.top_secret_whop_membership_id || user.top_secret_enabled,
+      is_test_user: user.email?.includes('test') || user.email?.includes('+') || false,
+      trade_count: user.trade_count || 0,
+    }));
+
+    // Client-side filter for test users (if showTestUsers is explicitly FALSE)
+    if (allUsersFilters.showTestUsers === false) {
+      mappedData = mappedData.filter((user: any) => !user.is_test_user);
+    }
+
+    // Client-side filter for has_whop = 'no'
+    if (allUsersFilters.hasWhop === 'no') {
+      mappedData = mappedData.filter((user: any) => !user.has_whop);
+    }
+
+    setAllUsers(mappedData);
+    setAllUsersPagination(prev => ({
+      ...prev,
+      totalCount: totalCount,
+      totalPages: Math.ceil(totalCount / prev.pageSize),
+    }));
+
+  } catch (err) {
+    console.error('Error fetching all users:', err);
+    
+    // Show helpful error message for access denied
+    if (err instanceof Error && err.message.includes('Access denied')) {
+      alert('Access denied: You must be an admin to view all users');
+    }
+  } finally {
+    setAllUsersLoading(false);
+  }
+}, [allUsersFilters, allUsersPagination.page, allUsersPagination.pageSize]);
 
 const handleUpdateUser = async (userId: string, updates: Partial<AllUsersUser>) => {
   try {

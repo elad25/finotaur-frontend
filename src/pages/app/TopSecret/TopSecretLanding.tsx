@@ -1,13 +1,14 @@
 // ================================================
-// TOP SECRET LANDING PAGE - Luxury Premium v3.2
+// TOP SECRET LANDING PAGE - Luxury Premium v3.3
 // File: src/pages/app/TopSecret/TopSecretLanding.tsx
-// 🔥 v3.2: Updated pricing - $70/month, $500/year
+// 🔥 v3.3: Added War Zone member discount ($50/month)
 // ================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import { supabase } from '@/lib/supabase';
 import {
   TrendingUp,
   Bitcoin,
@@ -59,6 +60,11 @@ interface ReportType {
 // CONSTANTS
 // ========================================
 
+// 🔥 v3.3: Plan IDs from Whop Dashboard
+const WHOP_TOPSECRET_MONTHLY = 'plan_tUvQbCrEQ4197';        // Top Secret Monthly - $89.99/month
+const WHOP_TOPSECRET_YEARLY = 'plan_PxxbBlSdkyeo7';         // Top Secret Yearly - $899/year
+const WHOP_TOPSECRET_FOR_WARZONE = 'plan_7VQxCZ5Kpw6f0';    // Top Secret For War Zone - $50/month
+
 const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'monthly',
@@ -75,6 +81,9 @@ const PRICING_PLANS: PricingPlan[] = [
     monthlyEquivalent: 74.92,
   },
 ];
+
+// Discounted price for War Zone members
+const WARZONE_MEMBER_PRICE = 50;
 
 const REPORT_TYPES: ReportType[] = [
   {
@@ -163,6 +172,8 @@ export default function TopSecretLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
+  const [isWarZoneMember, setIsWarZoneMember] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
   
   // 🔥 Using useWhopCheckout for proper tracking
   const { initiateCheckout, isLoading } = useWhopCheckout({
@@ -174,9 +185,58 @@ export default function TopSecretLanding() {
     },
   });
 
-  // 🔥 Handle subscription using the hook
+  // 🔥 v3.3: Check if user has War Zone subscription
+  useEffect(() => {
+    const checkWarZoneStatus = async () => {
+      if (!user?.id) {
+        setIsCheckingStatus(false);
+        return;
+      }
+      
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('newsletter_enabled, newsletter_status')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          const hasWarZone = profile.newsletter_enabled && 
+                            ['active', 'trial'].includes(profile.newsletter_status ?? '');
+          setIsWarZoneMember(hasWarZone);
+          console.log('[TOP SECRET] War Zone member:', hasWarZone);
+        }
+      } catch (error) {
+        console.error('[TOP SECRET] Error checking War Zone status:', error);
+      } finally {
+        setIsCheckingStatus(false);
+      }
+    };
+    
+    checkWarZoneStatus();
+  }, [user?.id]);
+
+  // 🔥 v3.3: Handle subscription with War Zone discount
   const handleSubscribe = (billingInterval: 'monthly' | 'yearly') => {
     setSelectedPlan(billingInterval);
+    
+    // If War Zone member and monthly, use discounted plan
+    if (isWarZoneMember && billingInterval === 'monthly') {
+      // Direct redirect to Whop with discounted plan
+      const params = new URLSearchParams();
+      if (user?.email) params.set('email', user.email);
+      if (user?.id) {
+        params.set('metadata[finotaur_user_id]', user.id);
+        params.set('metadata[finotaur_email]', user.email || '');
+        params.set('metadata[is_warzone_member]', 'true');
+      }
+      params.set('redirect_url', 'https://www.finotaur.com/app/top-secret?payment=success');
+      
+      window.location.href = `https://whop.com/checkout/${WHOP_TOPSECRET_FOR_WARZONE}?${params.toString()}`;
+      return;
+    }
+    
+    // Regular checkout flow
     initiateCheckout({
       planName: 'top_secret',
       billingInterval,
@@ -595,18 +655,42 @@ export default function TopSecretLanding() {
 
             <div className="pt-6">
               {/* Price */}
-              <div className="mb-6">
-                <div className="flex items-baseline justify-start gap-2 mb-2">
-                  <span className="text-5xl font-bold text-white">$89.99</span>
-                  <span className="text-xl text-slate-400">/month</span>
-                </div>
-                <p className="text-sm font-bold text-blue-400 mb-1">
-                  FREE 14 DAY TRIAL
-                </p>
-                <p className="text-emerald-400 text-base font-semibold">
-                  Only <span className="text-2xl">$35/month</span> for the first 2 months!
-                </p>
-              </div>
+<div className="mb-6">
+  {isWarZoneMember ? (
+    <>
+      {/* War Zone Member Discount Badge */}
+      <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-3"
+           style={{
+             background: 'linear-gradient(135deg, rgba(147,51,234,0.2) 0%, rgba(147,51,234,0.1) 100%)',
+             border: '1px solid rgba(147,51,234,0.4)'
+           }}>
+        <Crown className="w-4 h-4 text-purple-400" />
+        <span className="text-purple-300 text-sm font-semibold">WAR ZONE Member Discount</span>
+      </div>
+      <div className="flex items-baseline justify-start gap-2 mb-2">
+        <span className="text-2xl text-slate-500 line-through">$89.99</span>
+        <span className="text-5xl font-bold text-white">$50</span>
+        <span className="text-xl text-slate-400">/month</span>
+      </div>
+      <p className="text-purple-400 text-base font-semibold">
+        You save $39.99/month as a War Zone member!
+      </p>
+    </>
+  ) : (
+    <>
+      <div className="flex items-baseline justify-start gap-2 mb-2">
+        <span className="text-5xl font-bold text-white">$89.99</span>
+        <span className="text-xl text-slate-400">/month</span>
+      </div>
+      <p className="text-sm font-bold text-blue-400 mb-1">
+        FREE 14 DAY TRIAL
+      </p>
+      <p className="text-emerald-400 text-base font-semibold">
+        Only <span className="text-2xl">$45/month</span> for the first 2 months!
+      </p>
+    </>
+  )}
+</div>
 
               {/* CTA Button */}
               <Button

@@ -271,23 +271,22 @@ export default function Register() {
 
   return (
     <>
-      <div className="flex min-h-screen items-center justify-center p-4 bg-black font-['Inter',sans-serif]">
-        <div className="w-full max-w-md">
+      <div className="relative flex min-h-screen items-center justify-center p-4 bg-black font-['Inter',sans-serif] overflow-hidden">
+        {/* Gold orbs background effect */}
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-yellow-500/20 rounded-full blur-[150px] -translate-x-1/2 translate-y-1/4 pointer-events-none"></div>
+        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-yellow-500/20 rounded-full blur-[150px] translate-x-1/2 translate-y-1/4 pointer-events-none"></div>
+        
+        <div className="relative w-full max-w-md">
           {/* Logo Section - Separate from card with black background */}
           <div className={`mb-6 text-center transition-all duration-700 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
           }`}>
             <div className="flex justify-center mb-5">
-              <div className="relative group">
-                {/* Dramatic gold glow */}
-                <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/30 via-yellow-600/20 to-yellow-700/10 blur-3xl group-hover:from-yellow-500/40 transition-all duration-700"></div>
-                {/* Large prominent logo */}
-                <img 
-                  src="/logo.png" 
-                  alt="Finotaur Logo" 
-                  className="relative h-36 w-auto drop-shadow-2xl transition-transform duration-700 group-hover:scale-110"
-                />
-              </div>
+              <img 
+                src="/logo.png" 
+                alt="Finotaur Logo" 
+                className="h-36 w-auto"
+              />
             </div>
             
             <p className="text-zinc-300 text-base font-medium tracking-wide">

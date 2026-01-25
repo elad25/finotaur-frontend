@@ -28,8 +28,8 @@ const WarZoneHeroBg = '/assets/WarZone-Hero-Bg.png';
 // ============================================
 // CONFIGURATION - v2.0.0
 // ============================================
-const WHOP_MONTHLY_PLAN_ID = 'plan_azurnN65a65WO';
-const WHOP_YEARLY_PLAN_ID = 'plan_odIXLAoHb0kkA';
+const WHOP_MONTHLY_PLAN_ID = 'plan_U6lF2eO5y9469';
+const WHOP_YEARLY_PLAN_ID = 'plan_bp2QTGuwfpj0A';
 const WHOP_MONTHLY_PLAN_ID_TOPSECRET = 'plan_BPJdT6Tyjmzcx';
 const MONTHLY_PRICE = 69.99;
 const YEARLY_PRICE = 699;
@@ -2780,7 +2780,7 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
         {/* ===== MOBILE LAYOUT ===== */}
         <div className="lg:hidden relative z-10 min-h-screen flex flex-col">
           {/* Mobile Content */}
-          <div className="flex-1 flex flex-col items-center px-4 pt-4">
+          <div className="flex-1 flex flex-col items-center px-6 pt-4">
             {/* Title */}
             <h1 className="text-[1.5rem] sm:text-[1.8rem] font-bold leading-[1.05] tracking-tight text-center mb-3">
               <span className="text-white block heading-serif italic">Every Morning</span>
@@ -2891,15 +2891,14 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
           {/* Two Column Layout */}
           <div className="flex min-h-screen">
             {/* Left Column - Text (with very subtle sparkles) */}
-            <div className="w-1/2 bg-[#0a0806] flex flex-col justify-center pl-16 xl:pl-24 2xl:pl-32 pr-12 relative overflow-hidden">
+            <div className="w-1/2 bg-[#0a0806] flex flex-col justify-center pl-20 xl:pl-28 2xl:pl-36 pr-12 relative overflow-hidden">
               
               {/* Very subtle sparkle effects - only here */}
               <div className="absolute inset-0 z-1 opacity-20">
                 <SparkleEffect />
               </div>
               
-              <h1 className="text-[2.8rem] xl:text-[3.2rem] 2xl:text-[3.8rem] font-bold leading-[1.05] tracking-tight mb-8 relative z-20">
-                <span className="text-white block heading-serif italic">Every Morning</span>
+<h1 className="text-[2.8rem] xl:text-[3.2rem] 2xl:text-[3.8rem] font-bold leading-[1.05] tracking-tight mb-8 relative z-20 pl-2">                <span className="text-white block heading-serif italic">Every Morning</span>
                 <span className="text-white block heading-serif italic">You Wake Up</span>
                 <span className="relative inline-block mt-2">
                   <span className="absolute inset-0 blur-3xl opacity-40 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] animate-pulse" style={{animationDuration:'4s'}}/>
