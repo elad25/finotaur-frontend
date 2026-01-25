@@ -1268,6 +1268,7 @@ const CancelSubscriptionModal = ({ isOpen, onClose, onConfirm, isProcessing, tri
 const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterStatus: NewsletterStatus; onCancelClick: () => void; }) => {
   // State for reports from DB
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   
@@ -1302,9 +1303,25 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
     if (showLoading) setIsLoadingReports(true);
     
     try {
-      // Check tester status first (before fetching reports)
+      // OPTIMIZATION: Parallel fetch - get user and reports at the same time
+      const [userResult, dailyResult, weeklyResult] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from('daily_reports')
+          .select('*')
+          .in('visibility', ['public', 'live'])
+          .order('updated_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('weekly_reports')
+          .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at, updated_at, visibility')
+          .order('report_date', { ascending: false })
+          .limit(5)
+      ]);
+
+      // Process user/tester status
       let currentIsTester = isTester;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = userResult.data?.user;
       if (user?.id) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -1335,16 +1352,9 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
       
       console.log(`[WAR ZONE] 📅 Today in NY: ${todayNY}`);
       
-// Fetch latest 5 LIVE daily reports
-// Reports are considered LIVE if visibility='live' OR visibility is null/missing
-// EXPLICITLY EXCLUDE 'test' visibility
-// v2.1: Fetch LIVE reports only (public or null, explicitly exclude test)
-const { data: dailyData, error: dailyError } = await supabase
-  .from('daily_reports')
-  .select('*')
-  .in('visibility', ['public', 'live'])  // Explicitly exclude 'test' and 'archived'
-  .order('updated_at', { ascending: false })  // Sort by UPDATED timestamp - most recently updated first
-  .limit(5);
+// Process daily reports (already fetched in parallel above)
+      const dailyData = dailyResult.data;
+      const dailyError = dailyResult.error;
       
     if (dailyError) {
   console.error('[WAR ZONE] ❌ Error fetching daily reports:', dailyError);
@@ -1467,13 +1477,9 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
         setPreviousDayReport(null);
       }
       
-      // Fetch latest weekly report (LIVE/PUBLIC only - exclude test)
-      // First try without visibility filter to get most recent, then filter in code
-      const { data: weeklyData, error: weeklyError } = await supabase
-        .from('weekly_reports')
-        .select('id, report_date, report_title, markdown_content, html_content, pdf_url, pdf_path, qa_score, created_at, updated_at, visibility')
-        .order('report_date', { ascending: false })
-        .limit(5);
+      // Process weekly reports (already fetched in parallel above)
+      const weeklyData = weeklyResult.data;
+      const weeklyError = weeklyResult.error;
       
       // Filter out test reports in code (more reliable than complex OR filters)
       const liveWeeklyReports = weeklyData?.filter((r: any) => 
@@ -1545,8 +1551,9 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
       console.error('[WAR ZONE] ❌ Fatal error:', error);
     } finally {
       setIsLoadingReports(false);
+      setInitialLoadComplete(true);
     }
-  }, [lastFetchedDailyId, lastFetchedWeeklyId, normalizeDate]);
+  }, [lastFetchedDailyId, lastFetchedWeeklyId, normalizeDate, isTester]);
 
   // ============================================
   // MIDNIGHT REFRESH
@@ -1623,51 +1630,33 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
   // REAL-TIME SUBSCRIPTION
   // ============================================
   useEffect(() => {
-    console.log('[WAR ZONE] 📡 Setting up real-time subscriptions...');
+    // OPTIMIZATION: Single channel for all report changes
+    console.log('[WAR ZONE] 📡 Setting up real-time subscription...');
     
-    // Subscribe to daily_reports INSERT
-    const dailyInsertSub = supabase
-      .channel('daily_reports_insert')
+    const reportsSub = supabase
+      .channel('reports_changes')
       .on('postgres_changes', {
-        event: 'INSERT',
+        event: '*',
         schema: 'public',
         table: 'daily_reports'
       }, (payload) => {
-        console.log('[WAR ZONE] 🔔 New daily report INSERT:', payload.new?.id);
+        const newRecord = payload.new as Record<string, any> | null;
+        console.log('[WAR ZONE] 🔔 Daily report change:', payload.eventType, newRecord?.id);
         fetchReports(false);
       })
-      .subscribe();
-
-    // Subscribe to daily_reports UPDATE
-    const dailyUpdateSub = supabase
-      .channel('daily_reports_update')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'daily_reports'
-      }, (payload) => {
-        console.log('[WAR ZONE] 🔄 Daily report UPDATE:', payload.new?.id);
-        fetchReports(false);
-      })
-      .subscribe();
-
-    // Subscribe to weekly_reports INSERT
-    const weeklySub = supabase
-      .channel('weekly_reports_changes')
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'weekly_reports'
       }, (payload) => {
-        console.log('[WAR ZONE] 🔔 New weekly report:', payload.new?.id);
+        const newRecord = payload.new as Record<string, any> | null;
+        console.log('[WAR ZONE] 🔔 New weekly report:', newRecord?.id);
         fetchReports(false);
       })
       .subscribe();
 
     return () => {
-      dailyInsertSub.unsubscribe();
-      dailyUpdateSub.unsubscribe();
-      weeklySub.unsubscribe();
+      reportsSub.unsubscribe();
     };
   }, [fetchReports]);
   
@@ -1697,7 +1686,7 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
     setCountdown(calculateTimeUntilNextReport());
     const interval = setInterval(() => {
       setCountdown(calculateTimeUntilNextReport());
-    }, 1000);
+    }, 10000); // Update every 10 seconds instead of every second
     
     return () => clearInterval(interval);
   }, []);
