@@ -146,10 +146,10 @@ export const TopNav = () => {
 
   return (
     <div 
-      className="sticky top-0 z-50 border-b backdrop-blur-md"
+      className="sticky top-0 z-50 border-b"
       style={{ 
         borderColor: 'rgba(255, 215, 0, 0.08)',
-        background: 'linear-gradient(to bottom, rgba(10,10,10,0.98), rgba(20,20,20,0.95))'
+        background: 'linear-gradient(to bottom, #0A0A0A, #141414)'
       }}
     >
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
