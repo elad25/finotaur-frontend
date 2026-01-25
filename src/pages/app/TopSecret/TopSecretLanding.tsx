@@ -63,16 +63,16 @@ const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'monthly',
     name: 'Monthly',
-    price: 70,
+    price: 89.99,
     period: '/month',
   },
   {
     id: 'yearly',
     name: 'Yearly',
-    price: 500,
+    price: 899,
     period: '/year',
-    savings: 'Save $340',
-    monthlyEquivalent: 41.67,
+    savings: 'Save $180.88',
+    monthlyEquivalent: 74.92,
   },
 ];
 
@@ -162,7 +162,7 @@ const itemVariants: Variants = {
 export default function TopSecretLanding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
   
   // 🔥 Using useWhopCheckout for proper tracking
   const { initiateCheckout, isLoading } = useWhopCheckout({
@@ -175,15 +175,13 @@ export default function TopSecretLanding() {
   });
 
   // 🔥 Handle subscription using the hook
-  const handleSubscribe = () => {
+  const handleSubscribe = (billingInterval: 'monthly' | 'yearly') => {
+    setSelectedPlan(billingInterval);
     initiateCheckout({
       planName: 'top_secret',
-      billingInterval: selectedPlan,
+      billingInterval,
     });
   };
-
-  const selectedPlanData = PRICING_PLANS.find(p => p.id === selectedPlan)!;
-
   return (
     <section className="min-h-screen py-8 px-4 relative overflow-hidden bg-[#0A0A0A]">
       {/* Background Effects - Golden Warm Glow */}
@@ -277,7 +275,7 @@ export default function TopSecretLanding() {
 
             {/* CTA Button */}
             <Button
-              onClick={handleSubscribe}
+              onClick={() => handleSubscribe('monthly')}
               disabled={isLoading}
               className="px-8 py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
               style={{
@@ -572,157 +570,219 @@ export default function TopSecretLanding() {
           </div>
         </motion.div>
 
-        {/* Pricing Card */}
-        <motion.div variants={itemVariants} className="max-w-lg mx-auto mb-20">
-          {/* Outer Glow */}
-          <div className="relative">
-            <div className="absolute -inset-4 bg-[#C9A646]/10 rounded-[2rem] blur-2xl" />
-            
-            <div className="relative rounded-3xl p-8 md:p-10"
-                 style={{
-                   background: 'linear-gradient(180deg, rgba(20,20,20,1) 0%, rgba(10,10,10,1) 100%)',
-                   border: '1px solid rgba(201,166,70,0.3)',
-                   boxShadow: '0 0 0 1px rgba(201,166,70,0.1), 0 25px 50px -12px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05)'
-                 }}>
-              
-              {/* Top Shine */}
-              <div className="absolute top-0 left-0 right-0 h-32 rounded-t-3xl overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-[#C9A646]/10 to-transparent" />
+{/* Pricing Cards - Two Column */}
+        <motion.div variants={itemVariants} className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-20">
+          {/* Monthly Card */}
+          <div
+            className="relative p-8 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
+              border: '2px solid rgba(201,166,70,0.4)',
+              boxShadow: '0 0 40px rgba(201,166,70,0.15)'
+            }}
+          >
+            {/* MONTHLY Badge */}
+            <div className="absolute -top-3 left-8">
+              <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000'
+                }}
+              >
+                MONTHLY
+              </div>
+            </div>
+
+            <div className="pt-6">
+              {/* Price */}
+              <div className="mb-6">
+                <div className="flex items-baseline justify-start gap-2 mb-2">
+                  <span className="text-5xl font-bold text-white">$89.99</span>
+                  <span className="text-xl text-slate-400">/month</span>
+                </div>
+                <p className="text-sm font-bold text-blue-400 mb-1">
+                  FREE 14 DAY TRIAL
+                </p>
+                <p className="text-emerald-400 text-base font-semibold">
+                  Only <span className="text-2xl">$35/month</span> for the first 2 months!
+                </p>
               </div>
 
-              {/* Sparkle Icon */}
-              <div className="absolute -top-5 left-1/2 -translate-x-1/2">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-                     style={{
-                       background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                       boxShadow: '0 4px 20px rgba(201,166,70,0.5)'
-                     }}>
-                  <Sparkles className="w-5 h-5 text-black" />
+              {/* CTA Button */}
+              <Button
+                onClick={() => handleSubscribe('monthly')}
+                disabled={isLoading}
+                className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000',
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+                }}
+              >
+                {isLoading && selectedPlan === 'monthly' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    Redirecting...
+                  </div>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    START FREE TRIAL
+                    <ArrowRight className="w-5 h-5" />
+                  </span>
+                )}
+              </Button>
+
+              <p className="text-xs text-center text-slate-500 mb-6">
+                Risk-free. Cancel anytime.
+              </p>
+
+              {/* Features */}
+              <div className="space-y-4 border-t border-slate-800 pt-6">
+                <div>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
+                    <span className="text-base font-bold text-white">Actionable Macro Insights</span>
+                  </div>
+                  <p className="text-sm text-slate-400 ml-7">
+                    Cut through the noise. Understand ISM, and get a clear view of which sectors to target and which to avoid.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
+                    <span className="text-base font-bold text-white">Only the Opportunities That Actually Matter This Month</span>
+                  </div>
+                  <p className="text-sm text-slate-400 ml-7">
+                    A tightly filtered set of ideas backed by macro data, ISM signals, and institutional-style reasoning — not lists, not hype.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
+                    <span className="text-base font-bold text-white">Smart Crypto Reports <span className="text-xs text-slate-500 font-normal">(Optional)</span></span>
+                  </div>
+                  <p className="text-sm text-slate-400 ml-7">
+                    Up-to-date crypto market analysis and bi-weekly reports for those interested in digital assets.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Annual Card */}
+          <div
+            className="relative p-8 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
+              border: '2px solid rgba(201,166,70,0.5)',
+              boxShadow: '0 0 50px rgba(201,166,70,0.2)'
+            }}
+          >
+            {/* BEST DEAL Badge */}
+            <div className="absolute -top-3 right-8">
+              <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000'
+                }}
+              >
+                BEST DEAL
+              </div>
+            </div>
+
+            <div className="pt-6">
+              {/* Title */}
+              <h3 className="text-2xl font-bold mb-1" style={{
+                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}>
+                Unlock Top Secret
+              </h3>
+              <h3 className="text-2xl font-bold text-white mb-2">
+                Institutional Research
+              </h3>
+              <p className="text-sm text-slate-400 mb-4 px-4 py-1.5 rounded-lg inline-block" style={{
+                background: 'rgba(201,166,70,0.1)',
+                border: '1px solid rgba(201,166,70,0.2)'
+              }}>
+                FOR SERIOUS INVESTORS ONLY
+              </p>
+
+              {/* Price */}
+              <div className="mb-6">
+                <div className="flex items-baseline justify-start gap-2 mb-2">
+                  <span className="text-5xl font-bold text-white">$899</span>
+                  <span className="text-xl text-slate-400">/year</span>
+                </div>
+                <p className="text-emerald-400 text-base font-semibold">
+                  Just $74.92/month — Save $180.88!
+                </p>
+              </div>
+
+              {/* Benefits */}
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-300 font-medium">Priority Access</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-300 font-medium">Locked price for 12 months</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-300 font-medium">Early Access to future FINOTAUR tools</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-300 font-medium">Founding Members badge</span>
                 </div>
               </div>
 
-              <div className="relative pt-4">
-                {/* Header */}
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-bold text-white mb-2">Unlock Full Access</h3>
-                  <p className="text-slate-500">Start with 14-day free trial</p>
-                </div>
-
-                {/* 🆕 Special Offer Badge */}
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl"
-                       style={{
-                         background: 'linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%)',
-                         border: '1px solid rgba(16,185,129,0.3)',
-                       }}>
-                    <Gift className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-300 text-sm font-bold">First 2 Months: 50% Off</span>
+              {/* CTA Button */}
+              <Button
+                onClick={() => handleSubscribe('yearly')}
+                disabled={isLoading}
+                className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000',
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+                }}
+              >
+                {isLoading && selectedPlan === 'yearly' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    Redirecting...
                   </div>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    GET ANNUAL PLAN
+                    <ArrowRight className="w-5 h-5" />
+                  </span>
+                )}
+              </Button>
+
+              <p className="text-xs text-center text-slate-500 mb-6">
+                Locked price. Cancel anytime.
+              </p>
+
+              {/* Additional Perks */}
+              <div className="space-y-2 border-t border-slate-800 pt-6">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-400">Cancel anytime</span>
                 </div>
-
-                {/* Plan Toggle */}
-                <div className="flex justify-center mb-8">
-                  <div className="inline-flex p-1.5 rounded-xl"
-                       style={{
-                         background: 'rgba(0,0,0,0.5)',
-                         border: '1px solid rgba(255,255,255,0.08)'
-                       }}>
-                    {PRICING_PLANS.map((plan) => (
-                      <button
-                        key={plan.id}
-                        onClick={() => setSelectedPlan(plan.id)}
-                        className={`relative px-6 py-3 rounded-lg font-semibold transition-all duration-300 ${
-                          selectedPlan === plan.id
-                            ? 'text-black'
-                            : 'text-slate-500 hover:text-white'
-                        }`}
-                        style={selectedPlan === plan.id ? {
-                          background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                          boxShadow: '0 4px 15px rgba(201,166,70,0.4)'
-                        } : {}}
-                      >
-                        {plan.name}
-                        {plan.savings && selectedPlan === plan.id && (
-                          <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-emerald-500 text-white text-xs font-bold rounded-full shadow-lg">
-                            {plan.savings}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-400">Best yearly value</span>
                 </div>
-
-                {/* Price */}
-                <div className="text-center mb-8">
-                  <div className="flex items-baseline justify-center gap-2">
-                    <span className="text-6xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
-                      ${selectedPlanData.price}
-                    </span>
-                    <span className="text-xl text-slate-500">{selectedPlanData.period}</span>
-                  </div>
-                  {selectedPlan === 'yearly' && (
-                    <p className="text-emerald-400 font-semibold mt-2">
-                      Just ${selectedPlanData.monthlyEquivalent}/month — Save $340!
-                    </p>
-                  )}
-                  {selectedPlan === 'monthly' && (
-                    <p className="text-emerald-400 font-semibold mt-2">
-                      First 2 months: Just $35/month (50% off)
-                    </p>
-                  )}
-                </div>
-
-                {/* What's Included */}
-                <ul className="space-y-4 mb-8">
-                  {[
-                    '14-day free trial',
-                    'Monthly ISM Manufacturing Report',
-                    '2x Company Deep Dive Reports',
-                    '2x Crypto Market Reports',
-                    'PDF Downloads & Archive Access',
-                    'Discord Community Access',
-                    'Email Delivery',
-                    'Cancel anytime',
-                  ].map((item, idx) => (
-                    <li key={idx} className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                           style={{
-                             background: 'rgba(201,166,70,0.15)',
-                             border: '1px solid rgba(201,166,70,0.3)'
-                           }}>
-                        <Check className="w-4 h-4 text-[#C9A646]" />
-                      </div>
-                      <span className="text-slate-300">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA Button */}
-                <Button
-                  onClick={handleSubscribe}
-                  disabled={isLoading}
-                  className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                  style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    backgroundSize: '200% auto',
-                    color: '#000',
-                    boxShadow: '0 8px 32px rgba(201,166,70,0.4), inset 0 2px 0 rgba(255,255,255,0.2)'
-                  }}
-                >
-                  {isLoading ? (
-                    <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                  ) : (
-                    <span className="flex items-center justify-center gap-2">
-                      Start Free Trial Now
-                      <ArrowRight className="w-5 h-5" />
-                    </span>
-                  )}
-                </Button>
-
-                {/* Trust Badge */}
-                <div className="flex items-center justify-center gap-2 mt-5 text-sm text-slate-500">
-                  <Shield className="w-4 h-4" />
-                  <span>Secure checkout powered by Whop</span>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                  <span className="text-sm text-slate-400">No lock-in contracts</span>
                 </div>
               </div>
             </div>

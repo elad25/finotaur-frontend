@@ -192,11 +192,11 @@ const Pricing = () => {
                 the end of your billing period.
               </p>
             </Card>
-            <Card className="p-6 bg-card border-border rounded-xl hover:border-primary/20 transition-smooth">
+<Card className="p-6 bg-card border-border rounded-xl hover:border-primary/20 transition-smooth">
               <h3 className="font-semibold mb-2">What's your refund policy?</h3>
               <p className="text-sm text-muted-foreground">
-                We offer a 7-day money-back guarantee on all plans. If you're not
-                satisfied, contact us for a full refund.
+                Plans with a free trial are non-refundable. For plans without a trial,
+                we offer a 7-day money-back guarantee from your first payment.
               </p>
             </Card>
             <Card className="p-6 bg-card border-border rounded-xl hover:border-primary/20 transition-smooth">

@@ -1,39 +1,45 @@
-// src/pages/app/journal/PricingSelection.tsx
 // =====================================================
-// FINOTAUR POST-SIGNUP - TOP SECRET CHECKOUT v10.1
-// =====================================================
-//
-// v10.1 CHANGES:
-// - ADDED: "GO TO APP" button on the left side (symmetric to EXIT)
-// - Users can skip pricing and go directly to Top Secret App
-//
-// v10.0 CHANGES:
-// - ADDED: PromoCodePopup before checkout
-// - Users see the promo code and can copy it before checkout
-// - Popup shows: 14 days free, $35 for 2 months, then $70
-//
-// v9.0 CHANGES:
-// - New hero: "Know Where The Market Is Moving — Before Everyone Else"
-// - LIMITED TIME OFFER banner
-// - New pricing: Monthly $70 (only $35 for first 2 months)
+// WAR ZONE PRICING SELECTION PAGE
+// Post-signup checkout page for WAR ZONE
+// Styled like TOP SECRET PricingSelection
 // =====================================================
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { Crown, Shield, LogOut, Check, Clock, ArrowRight, ChevronRight } from 'lucide-react';
+import { 
+  Crown, Shield, LogOut, Check, Clock, ArrowRight, ChevronRight,
+  FileText, Calendar, Headphones, Zap
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
-import PromoCodePopup from '@/components/checkout/PromoCodePopup';
+
+// =====================================================
+// CONFIGURATION
+// =====================================================
+const WHOP_MONTHLY_PLAN_ID = 'plan_24vWi8dY3uDHM'; // WAR ZONE Monthly
+const WHOP_YEARLY_PLAN_ID = 'plan_bp2QTGuwfpj0A'; // WAR ZONE Yearly
+const MONTHLY_PRICE = 69.99;
+const YEARLY_PRICE = 699;
+const YEARLY_SAVINGS = Math.round((MONTHLY_PRICE * 12) - YEARLY_PRICE);
+const YEARLY_MONTHLY_EQUIVALENT = Math.round(YEARLY_PRICE / 12);
+
+// =====================================================
+// ICONS
+// =====================================================
+const DiscordIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+  </svg>
+);
 
 // =====================================================
 // COMPONENT
 // =====================================================
-
-export default function PricingSelection() {
+export default function WarZonePricingSelection() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -41,13 +47,10 @@ export default function PricingSelection() {
   const [checkingSubscription, setCheckingSubscription] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
   
-  // 🔥 v10.0: Popup state
-  const [showPromoPopup, setShowPromoPopup] = useState(false);
-  const [pendingBillingInterval, setPendingBillingInterval] = useState<'monthly' | 'yearly' | null>(null);
 
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
-      console.log('TOP Secret checkout initiated');
+      console.log('WAR ZONE checkout initiated');
     },
     onError: (error) => {
       toast.error('Checkout failed', { description: error.message });
@@ -57,7 +60,6 @@ export default function PricingSelection() {
   // =====================================================
   // Check subscription status and handle redirects
   // =====================================================
-
   useEffect(() => {
     const checkSubscription = async () => {
       if (!user) {
@@ -75,8 +77,8 @@ export default function PricingSelection() {
         const { data, error } = await supabase
           .from('profiles')
           .select(`
-            top_secret_enabled,
-            top_secret_status,
+            newsletter_enabled,
+            newsletter_status,
             onboarding_completed
           `)
           .eq('id', user.id)
@@ -89,7 +91,7 @@ export default function PricingSelection() {
         }
 
         if (paymentSuccess || fromWhop) {
-          window.history.replaceState({}, '', '/pricing-selection');
+          window.history.replaceState({}, '', '/warzone-pricing');
 
           await supabase
             .from('profiles')
@@ -101,18 +103,18 @@ export default function PricingSelection() {
 
           await createWelcomeNotification(user.id);
 
-          toast.success('Welcome to Finotaur!', {
+          toast.success('Welcome to WAR ZONE!', {
             description: 'Your subscription is being activated...'
           });
 
-          navigate('/app/top-secret?payment=success&source=whop');
+          navigate('/app/all-markets/warzone?payment=success&source=whop');
           return;
         }
 
-        const hasTopSecret = data?.top_secret_status === 'active' && data?.top_secret_enabled === true;
+        const hasWarZone = data?.newsletter_status === 'active' && data?.newsletter_enabled === true;
 
-        if (hasTopSecret) {
-          navigate('/app/top-secret');
+        if (hasWarZone) {
+          navigate('/app/all-markets/warzone');
           return;
         }
 
@@ -130,16 +132,15 @@ export default function PricingSelection() {
   // =====================================================
   // Create welcome notification
   // =====================================================
-
   const createWelcomeNotification = async (userId: string) => {
     try {
       await supabase
         .from('system_updates')
         .insert({
-          title: 'Welcome to Top Secret Intelligence!',
-          content: 'Your 14-day free trial has started. Check your email for upcoming report alerts.',
+          title: 'Welcome to WAR ZONE!',
+          content: 'Your 7-day free trial has started. Check your email for upcoming daily briefing alerts.',
           type: 'success',
-          target_group: 'top_secret',
+          target_group: 'newsletter',
           is_active: true,
           metadata: {
             report_type: 'welcome',
@@ -152,70 +153,28 @@ export default function PricingSelection() {
   };
 
   // =====================================================
-  // 🔥 v10.0: Handle Payment - Show popup first for monthly
+  // Handle Payment - Show popup first for monthly
   // =====================================================
-
   const handlePayment = async (billingInterval: 'monthly' | 'yearly') => {
     if (!user) {
       toast.error("Please log in to continue");
       return;
     }
 
-    // For monthly plan - show promo popup first
-    if (billingInterval === 'monthly') {
-      setPendingBillingInterval(billingInterval);
-      setShowPromoPopup(true);
-      return;
-    }
-
-    // For yearly - go directly to checkout (no promo code needed)
-    proceedToCheckout(billingInterval);
-  };
-
-  // =====================================================
-  // 🔥 v10.0: Proceed to checkout after popup
-  // =====================================================
-
-  const proceedToCheckout = async (billingInterval: 'monthly' | 'yearly') => {
     setSelectedPlan(billingInterval);
-    setShowPromoPopup(false);
 
     await initiateCheckout({
-      planName: 'top_secret',
+      planName: 'newsletter',
       billingInterval,
     });
   };
 
   // =====================================================
-  // Handle Skip (Continue without TOP SECRET)
+  // Handle Go to App
   // =====================================================
-
-  const handleSkip = async () => {
-    if (!user) return;
-
-    try {
-      await supabase
-        .from('profiles')
-        .update({
-          onboarding_completed: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', user.id);
-
-      navigate('/app/top-secret');
-    } catch (error) {
-      console.error('Error skipping:', error);
-      navigate('/app/top-secret');
-    }
-  };
-
-  // =====================================================
-  // 🔥 v10.1: Handle Go to App
-  // =====================================================
-
   const handleGoToApp = async () => {
     if (!user) {
-      navigate('/app/top-secret');
+      navigate('/app/all-markets/warzone');
       return;
     }
 
@@ -228,17 +187,16 @@ export default function PricingSelection() {
         })
         .eq('id', user.id);
 
-      navigate('/app/top-secret');
+      navigate('/app/all-markets/warzone');
     } catch (error) {
       console.error('Error navigating to app:', error);
-      navigate('/app/top-secret');
+      navigate('/app/all-markets/warzone');
     }
   };
 
   // =====================================================
   // Handle exit
   // =====================================================
-
   const handleExit = async () => {
     try {
       await logout();
@@ -249,9 +207,8 @@ export default function PricingSelection() {
   };
 
   // =====================================================
-  // Loading state
+  // LOADING STATE
   // =====================================================
-
   if (checkingSubscription) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0A0A0A]">
@@ -264,24 +221,10 @@ export default function PricingSelection() {
   }
 
   // =====================================================
-  // RENDER
+  // MAIN RENDER
   // =====================================================
-
   return (
-    <section className="min-h-screen py-12 px-4 relative overflow-hidden bg-[#0A0A0A]">
-      {/* 🔥 v10.0: Promo Code Popup */}
-      <PromoCodePopup
-        isOpen={showPromoPopup}
-        onClose={() => setShowPromoPopup(false)}
-        onContinue={() => pendingBillingInterval && proceedToCheckout(pendingBillingInterval)}
-        promoCode="FINOTAUR50"
-        productName="Top Secret"
-        originalPrice={70}
-        discountedPrice={35}
-        trialDays={14}
-        discountMonths={2}
-      />
-
+    <section className="min-h-screen py-12 px-4 relative overflow-hidden bg-[#0A0A0A]"> 
       {/* Background Effects */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#12100D] to-[#0B0B0B]" />
 
@@ -294,7 +237,7 @@ export default function PricingSelection() {
         }}
       />
 
-      {/* 🔥 v10.1: Go to App Button - Top Left */}
+      {/* Go to App Button - Top Left */}
       <div className="absolute top-6 left-6 z-20">
         <Button
           variant="outline"
@@ -326,7 +269,7 @@ export default function PricingSelection() {
           transition={{ duration: 0.6 }}
           className="text-center mb-8"
         >
-          {/* Premium Intelligence Badge */}
+          {/* Daily Intelligence Badge */}
           <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full mb-6"
             style={{
               background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
@@ -334,24 +277,21 @@ export default function PricingSelection() {
               boxShadow: '0 0 40px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.1)'
             }}>
             <Crown className="w-5 h-5 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-semibold tracking-wide">Premium Intelligence</span>
+            <span className="text-[#C9A646] font-semibold tracking-wide">Daily Intelligence</span>
           </div>
 
           {/* Main Headline */}
           <h1 className="text-5xl md:text-6xl font-bold mb-3" style={{ letterSpacing: '-0.03em', lineHeight: '1.1' }}>
-            <span className="text-white">Know Where</span>
+            <span className="text-white">Get the Same Market Intel</span>
             <br />
             <span className="bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
-              The Market Is Moving —
+              Wall Street Desks Use
             </span>
-            <br />
-            <span className="text-white">Before Everyone Else</span>
           </h1>
 
           <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed mt-4">
-            Stop guessing and stay ahead with institutional-grade insights<br />
-            that show you exactly where the market is headed—<br />
-            and where it isn't.
+            Wake up every morning with clarity.<br />
+            Know exactly what matters before the market opens.
           </p>
         </motion.div>
 
@@ -371,7 +311,7 @@ export default function PricingSelection() {
             }}
           >
             <Clock className="w-5 h-5 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-bold text-lg">LIMITED TIME OFFER: 14 DAYS FREE & 50% OFF FIRST 2 MONTHS</span>
+            <span className="text-[#C9A646] font-bold text-lg">LIMITED TIME OFFER: 7 DAYS FREE TRIAL</span>
             <ChevronRight className="w-5 h-5 text-[#C9A646]" />
           </div>
         </motion.div>
@@ -419,15 +359,15 @@ export default function PricingSelection() {
             <div className="pt-6">
               {/* Price */}
               <div className="mb-6">
-                <div className="flex items-baseline justify-start gap-2 mb-2">
-                  <span className="text-5xl font-bold text-white">$70</span>
+                <div className="flex items-baseline justify-start gap-2 mb-1">
+                  <span className="text-5xl font-bold text-white">${MONTHLY_PRICE}</span>
                   <span className="text-xl text-slate-400">/month</span>
                 </div>
                 <p className="text-sm font-bold text-blue-400 mb-1">
-                  FREE 14 DAY TRIAL
+                  FREE 7 DAY TRIAL
                 </p>
                 <p className="text-emerald-400 text-base font-semibold">
-                  Only <span className="text-2xl">$35/month</span> for the first 2 months!
+                  First 7 days completely free!
                 </p>
               </div>
 
@@ -465,10 +405,10 @@ export default function PricingSelection() {
                 <div>
                   <div className="flex items-start gap-2 mb-1">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                    <span className="text-base font-bold text-white">Actionable Macro Insights</span>
+                    <span className="text-base font-bold text-white">Daily Market Briefing</span>
                   </div>
                   <p className="text-sm text-slate-400 ml-7">
-                    Cut through the noise. Understand ISM, and get a clear view of which sectors to target and which to avoid.
+                    9:00 AM NY — before market opens. Everything you need to know in one place.
                   </p>
                 </div>
 
@@ -476,10 +416,10 @@ export default function PricingSelection() {
                 <div>
                   <div className="flex items-start gap-2 mb-1">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                    <span className="text-base font-bold text-white">Only the Opportunities That Actually Matter This Month</span>
+                    <span className="text-base font-bold text-white">Weekly Deep Dive Analysis</span>
                   </div>
                   <p className="text-sm text-slate-400 ml-7">
-                    A tightly filtered set of ideas backed by macro data, ISM signals, and institutional-style reasoning — not lists, not hype.
+                    Every Sunday morning. Comprehensive market outlook and key themes for the week ahead.
                   </p>
                 </div>
 
@@ -487,10 +427,21 @@ export default function PricingSelection() {
                 <div>
                   <div className="flex items-start gap-2 mb-1">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
-                    <span className="text-base font-bold text-white">Smart Crypto Reports <span className="text-xs text-slate-500 font-normal">(Optional)</span></span>
+                    <span className="text-base font-bold text-white">Private Discord Community</span>
                   </div>
                   <p className="text-sm text-slate-400 ml-7">
-                    Up-to-date crypto market analysis and bi-weekly reports for those interested in digital assets.
+                    847+ active traders sharing insights and real-time market discussion.
+                  </p>
+                </div>
+
+                {/* Feature 4 */}
+                <div>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5" />
+                    <span className="text-base font-bold text-white">Trading Room Access</span>
+                  </div>
+                  <p className="text-sm text-slate-400 ml-7">
+                    Live analysis & alerts from professional traders.
                   </p>
                 </div>
               </div>
@@ -525,17 +476,28 @@ export default function PricingSelection() {
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>
-                Unlock Top Secret
+                Unlock WAR ZONE
               </h3>
               <h3 className="text-2xl font-bold text-white mb-2">
-                Institutional Research
+                Annual Access
               </h3>
               <p className="text-sm text-slate-400 mb-6 px-4 py-1.5 rounded-lg inline-block" style={{
                 background: 'rgba(201,166,70,0.1)',
                 border: '1px solid rgba(201,166,70,0.2)'
               }}>
-                FOR SERIOUS INVESTORS ONLY
+                FOR SERIOUS TRADERS ONLY
               </p>
+
+              {/* Price */}
+              <div className="mb-6">
+                <div className="flex items-baseline justify-start gap-2 mb-1">
+                  <span className="text-5xl font-bold text-white">${YEARLY_PRICE}</span>
+                  <span className="text-xl text-slate-400">/year</span>
+                </div>
+                <p className="text-slate-400 text-sm">
+                  ~${YEARLY_MONTHLY_EQUIVALENT}/month • <span className="text-emerald-400 font-semibold">Save ${YEARLY_SAVINGS}</span>
+                </p>
+              </div>
 
               {/* Benefits */}
               <div className="space-y-3 mb-6">
@@ -549,7 +511,7 @@ export default function PricingSelection() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                  <span className="text-sm text-slate-300 font-medium">Early Access to future FINOTAUR tools</span>
+                  <span className="text-sm text-slate-300 font-medium">Early Access to new features</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
@@ -593,7 +555,7 @@ export default function PricingSelection() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                  <span className="text-sm text-slate-400">50% off 2 months</span>
+                  <span className="text-sm text-slate-400">Save {Math.round((YEARLY_SAVINGS / (MONTHLY_PRICE * 12)) * 100)}% vs monthly</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -612,7 +574,7 @@ export default function PricingSelection() {
           className="text-center mb-8"
         >
           <p className="text-slate-400 text-base">
-            No fluff, lists or hype. Just exclusive opportunities.
+            The same institutional-grade intel Wall Street uses. Delivered to your inbox every morning.
           </p>
         </motion.div>
 
@@ -631,6 +593,11 @@ export default function PricingSelection() {
           <div className="flex items-center gap-2">
             <Check className="w-5 h-5 text-[#C9A646]" />
             <span className="text-sm">Cancel anytime</span>
+          </div>
+          <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <Zap className="w-5 h-5 text-[#C9A646]" />
+            <span className="text-sm">Instant access</span>
           </div>
         </motion.div>
 

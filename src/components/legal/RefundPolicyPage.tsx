@@ -51,11 +51,12 @@ const RefundPolicyPage = () => {
         <section>
           <h2 className="text-2xl font-semibold mb-4">4. Refund Policy</h2>
           <div className="space-y-4 text-muted-foreground leading-relaxed">
-            <div>
-              <p className="font-semibold text-foreground mb-2">4.1. 7-Day Money-Back Guarantee</p>
-              <p>We offer a 7-day money-back guarantee for first-time paying subscribers:</p>
+<div>
+              <p className="font-semibold text-foreground mb-2">4.1. Refund Eligibility by Plan Type</p>
+              <p><strong>Plans WITH a free trial:</strong> No refunds available. The free trial period serves as your evaluation period.</p>
+              <p className="mt-2"><strong>Plans WITHOUT a free trial:</strong> 7-day money-back guarantee:</p>
               <ul className="list-disc pl-6 space-y-2 mt-2">
-                <li>Applies to your first paid charge (after trial ends for Basic, or initial payment for Premium)</li>
+                <li>Applies only to plans that do not include a free trial period</li>
                 <li>Must be requested within 7 days of the first charge</li>
                 <li>Full refund will be issued to your original payment method</li>
                 <li>Processing time: 5-10 business days</li>

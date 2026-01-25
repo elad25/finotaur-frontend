@@ -51,20 +51,27 @@ const RefundPolicy = () => {
             </p>
           </div>
 
-          <h2 className="text-2xl font-semibold mt-12 mb-4">3. 7-Day Money-Back Guarantee</h2>
-          <p className="text-muted-foreground leading-relaxed mb-4">
-            We offer a <strong>7-day money-back guarantee for first-time paying subscribers</strong>:
-          </p>
-          <ul className="text-muted-foreground space-y-2">
-            <li>Applies to your first paid charge (after trial ends for Basic, or initial payment for Premium)</li>
-            <li>Valid for both monthly and annual plans</li>
-            <li>Must be requested within 7 days of the first charge</li>
-            <li>Full refund will be issued to your original payment method</li>
-            <li>Processing time: 5-10 business days depending on your payment provider</li>
-          </ul>
-          <p className="text-muted-foreground leading-relaxed mt-4">
-            To request a refund within the 7-day period, contact us at <a href="mailto:support@finotaur.com" className="text-primary hover:underline">support@finotaur.com</a> with your account email and transaction details.
-          </p>
+          <h2 className="text-2xl font-semibold mt-12 mb-4">3. Refund Policy Based on Plan Type</h2>
+<div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6 my-6">
+  <p className="text-foreground font-semibold mb-3">⚠️ Important: Refund eligibility depends on your plan type</p>
+  <p className="text-muted-foreground leading-relaxed">
+    <strong>Plans WITH a free trial (e.g., Basic):</strong> No refunds. You have 14 days to evaluate the service before being charged.<br/><br/>
+    <strong>Plans WITHOUT a free trial (e.g., Premium):</strong> 7-day money-back guarantee from your first payment.
+  </p>
+</div>
+<p className="text-muted-foreground leading-relaxed mb-4">
+  For plans <strong>without a free trial</strong>, we offer a 7-day money-back guarantee:
+</p>
+<ul className="text-muted-foreground space-y-2">
+  <li>Applies only to plans that do not include a free trial period</li>
+  <li>Valid for both monthly and annual plans</li>
+  <li>Must be requested within 7 days of the first charge</li>
+  <li>Full refund will be issued to your original payment method</li>
+  <li>Processing time: 5-10 business days depending on your payment provider</li>
+</ul>
+<p className="text-muted-foreground leading-relaxed mt-4">
+  To request a refund within the 7-day period, contact us at <a href="mailto:support@finotaur.com" className="text-primary hover:underline">support@finotaur.com</a> with your account email and transaction details.
+</p>
 
           <h2 className="text-2xl font-semibold mt-12 mb-4">4. No Refunds After 7 Days</h2>
           <p className="text-muted-foreground leading-relaxed mb-4">

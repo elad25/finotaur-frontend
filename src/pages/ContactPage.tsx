@@ -89,11 +89,11 @@ const ContactPage = () => {
               </p>
             </div>
 
-            {/* FAQ 2: Refund Policy */}
+{/* FAQ 2: Refund Policy */}
             <div className="bg-card border border-border rounded-xl p-6">
               <h3 className="font-semibold text-lg mb-2">What's your refund policy?</h3>
               <p className="text-sm text-muted-foreground">
-                We offer a 7-day money-back guarantee for first-time subscribers. If you're not satisfied, contact us within 7 days for a full refund. Learn more in our{' '}
+                Plans with a free trial are non-refundable (the trial is your evaluation period). For plans without a trial, we offer a 7-day money-back guarantee. Learn more in our{' '}
                 <Link to="/legal/refund" className="text-primary hover:underline">
                   Refund Policy
                 </Link>

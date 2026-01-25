@@ -3,7 +3,8 @@
 // Uses real Bull image from /assets/Bull-WarZone.png
 // =====================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { ChevronRight } from 'lucide-react';
@@ -13,7 +14,8 @@ import {
   Activity, Loader2, Globe, ExternalLink,
   Headphones, Calendar, Sparkles, ChevronDown, ChevronUp, X, AlertCircle,
   LogIn, XCircle, CreditCard, Mail, RefreshCw, Crown, Rocket,
-  TrendingUp, Maximize2, Minimize2, Eye, EyeOff, Check, Send,
+  TrendingUp, Maximize2, Minimize2, Eye, EyeOff, Check, Send, Target,
+  BarChart3, Star, Quote, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,14 +28,14 @@ const WarZoneHeroBg = '/assets/WarZone-Hero-Bg.png';
 // ============================================
 // CONFIGURATION - v2.0.0
 // ============================================
-const WHOP_MONTHLY_PLAN_ID = 'plan_24vWi8dY3uDHM';
-const WHOP_YEARLY_PLAN_ID = 'plan_bp2QTGuwfpj0A';
-const WHOP_MONTHLY_PLAN_ID_TOPSECRET = 'plan_a7uEGsUbr92nn';
-const MONTHLY_PRICE = 49;
-const YEARLY_PRICE = 397;
-const MONTHLY_PRICE_TOPSECRET = 19.99;
-const YEARLY_MONTHLY_EQUIVALENT = 33.08;
-const YEARLY_SAVINGS = (MONTHLY_PRICE * 12) - YEARLY_PRICE;
+const WHOP_MONTHLY_PLAN_ID = 'plan_azurnN65a65WO';
+const WHOP_YEARLY_PLAN_ID = 'plan_odIXLAoHb0kkA';
+const WHOP_MONTHLY_PLAN_ID_TOPSECRET = 'plan_BPJdT6Tyjmzcx';
+const MONTHLY_PRICE = 69.99;
+const YEARLY_PRICE = 699;
+const MONTHLY_PRICE_TOPSECRET = 30;
+const YEARLY_MONTHLY_EQUIVALENT = 58.25;
+const YEARLY_SAVINGS = Math.round((MONTHLY_PRICE * 12) - YEARLY_PRICE);
 const WHOP_CHECKOUT_BASE_URL_MONTHLY = `https://whop.com/checkout/${WHOP_MONTHLY_PLAN_ID}`;
 const WHOP_CHECKOUT_BASE_URL_YEARLY = `https://whop.com/checkout/${WHOP_YEARLY_PLAN_ID}`;
 const REDIRECT_URL = 'https://www.finotaur.com/app/all-markets/warzone';
@@ -264,7 +266,11 @@ const GoldenDivider = () => (
 // GLOWING BADGE COMPONENT
 // ============================================
 const GlowingBadge = ({ className }: { className?: string }) => (
-  <div className={cn("relative inline-flex flex-col items-center gap-1 px-10 py-5 rounded-xl overflow-hidden", className)} 
+  <motion.div 
+    initial={{ opacity: 0, y: 20 }} 
+    animate={{ opacity: 1, y: 0 }} 
+    transition={{ duration: 0.6 }}
+    className={cn("relative inline-flex flex-col items-center gap-1 px-10 py-5 rounded-xl overflow-hidden", className)} 
     style={{ 
       background: 'linear-gradient(180deg, rgba(30,25,18,0.95) 0%, rgba(20,16,12,0.95) 100%)', 
       boxShadow: '0 0 40px rgba(201,166,70,0.4), inset 0 1px 0 rgba(255,255,255,0.05)' 
@@ -286,9 +292,97 @@ const GlowingBadge = ({ className }: { className?: string }) => (
       </span>
       <span className="text-[#C9A646] text-base font-bold tracking-wide">153 of 1,000 Seats Remaining</span>
     </div>
-    <span className="text-[#C9A646]/60 text-sm">Daily Rent-exclusive • TBM: Fintech product partner</span>
-  </div>
+    <span className="text-[#C9A646]/60 text-sm">Daily Market Intelligence</span>
+  </motion.div>
 );
+// ============================================
+// SCROLLING TESTIMONIALS DATA
+// ============================================
+const scrollingTestimonials = [
+  { id: 1, name: "David Chen", role: "Hedge Fund Manager", avatar: "DC", text: "The daily briefing is something I genuinely wait for every morning. The level of analysis here is institutional-grade.", highlight: "something I genuinely wait for every morning" },
+  { id: 2, name: "Sarah Mitchell", role: "Day Trader", avatar: "SM", text: "WAR ZONE gave me the edge I was missing. After one week I realized this is the best investment I made this year.", highlight: "the best investment I made this year" },
+  { id: 3, name: "Michael Rodriguez", role: "Prop Trader", avatar: "MR", text: "I pay thousands per month for research subscriptions. WAR ZONE beats them all in value-for-money.", highlight: "beats them all in value-for-money" },
+  { id: 4, name: "Emily Watson", role: "Portfolio Manager", avatar: "EW", text: "Finally someone who understands I don't need more data, I need conclusions. These briefings save me hours every day.", highlight: "save me hours every day" },
+  { id: 5, name: "James Kim", role: "Swing Trader", avatar: "JK", text: "The writing quality and depth of analysis here is something I haven't found anywhere else.", highlight: "something I haven't found anywhere else" },
+  { id: 6, name: "Rachel Green", role: "Options Trader", avatar: "RG", text: "WAR ZONE is like someone turned on the lights in a dark room. Now I see the full picture before market open.", highlight: "turned on the lights in a dark room" },
+  { id: 7, name: "Alex Thompson", role: "Crypto Investor", avatar: "AT", text: "I tried the free trial and canceled all my other subscriptions. WAR ZONE is all I need now.", highlight: "canceled all my other subscriptions" },
+  { id: 8, name: "Lisa Anderson", role: "Forex Trader", avatar: "LA", text: "The macro analysis here is better than anything I got from Bloomberg Terminal. And I'm not joking.", highlight: "better than anything I got from Bloomberg" },
+];
+
+const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonials];
+
+// ============================================
+// SOCIAL PROOF COMPONENT
+// ============================================
+const SocialProof = () => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const scrollPositionRef = useRef(0);
+
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+    
+    const scrollSpeed = 0.5;
+    const cardWidth = 400;
+    const totalWidth = cardWidth * scrollingTestimonials.length;
+    
+    let animationId: number;
+    
+    const animate = () => {
+      if (!isPaused) {
+        scrollPositionRef.current += scrollSpeed;
+        if (scrollPositionRef.current >= totalWidth) scrollPositionRef.current = 0;
+        if (scrollContainer) scrollContainer.scrollLeft = scrollPositionRef.current;
+      }
+      animationId = requestAnimationFrame(animate);
+    };
+    
+    animationId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationId);
+  }, [isPaused]);
+
+  const highlightText = (text: string, highlight: string) => {
+    if (!highlight) return text;
+    const parts = text.split(highlight);
+    return <>{parts[0]}<span className="text-[#C9A646] font-semibold">{highlight}</span>{parts[1]}</>;
+  };
+
+  return (
+    <section className="py-20 px-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]"/>
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent"/>
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent"/>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#C9A646]/[0.12] rounded-full blur-[150px]"/>
+      <div className="max-w-7xl mx-auto relative z-10">
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 heading-serif italic">What Traders Are Saying</h2>
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto">Join hundreds of professional traders who rely on WAR ZONE for daily market intelligence</p>
+        </motion.div>
+        <div className="relative">
+          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#0a0a0a] to-transparent z-10 pointer-events-none"/>
+          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#0a0a0a] to-transparent z-10 pointer-events-none"/>
+          <div ref={scrollRef} className="flex gap-6 overflow-x-hidden" onMouseEnter={() => setIsPaused(true)} onMouseLeave={() => setIsPaused(false)} style={{ scrollBehavior: 'auto' }}>
+            {duplicatedTestimonials.map((t, index) => (
+              <div key={`${t.id}-${index}`} className="flex-shrink-0 w-[380px] p-6 rounded-2xl relative group transition-all duration-300" style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.05), rgba(20,20,20,0.8))', border: '1px solid rgba(201,166,70,0.2)', backdropFilter: 'blur(10px)' }}>
+                <svg className="absolute top-4 right-4 w-8 h-8 text-[#C9A646]/20" viewBox="0 0 24 24" fill="currentColor"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
+                <div className="flex gap-1 mb-4">{[...Array(5)].map((_, i) => <svg key={i} className="w-4 h-4 fill-[#C9A646] text-[#C9A646]" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>)}</div>
+                <p className="text-slate-300 text-sm leading-relaxed mb-6">"{highlightText(t.text, t.highlight)}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: 'linear-gradient(135deg, #C9A646, #B8963F)', color: '#0a0a0a' }}>{t.avatar}</div>
+                  <div><p className="text-white font-semibold text-sm">{t.name}</p><p className="text-slate-500 text-xs">{t.role}</p></div>
+                </div>
+                <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ boxShadow: '0 0 30px rgba(201,166,70,0.3)' }}/>
+              </div>
+            ))}
+          </div>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: isPaused ? 0 : 0.5 }} className="text-center text-slate-600 text-sm mt-6">Hover to pause</motion.p>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 // ============================================
 // BILLING TOGGLE - NEW!
 // ============================================
@@ -300,7 +394,7 @@ const BillingToggle = ({ selected, onChange, className }: { selected: BillingInt
         "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300", 
         selected === 'monthly' 
           ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
-          : "bg-[#1a1410] border border-[#C9A646]/30 text-[#C9A646]/70 hover:border-[#C9A646]/50"
+          : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
       )}
     >
       Monthly
@@ -311,7 +405,7 @@ const BillingToggle = ({ selected, onChange, className }: { selected: BillingInt
         "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 relative", 
         selected === 'yearly' 
           ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
-          : "bg-[#1a1410] border border-[#C9A646]/30 text-[#C9A646]/70 hover:border-[#C9A646]/50"
+          : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
       )}
     >
       Yearly
@@ -1249,8 +1343,7 @@ const { data: dailyData, error: dailyError } = await supabase
   .from('daily_reports')
   .select('*')
   .in('visibility', ['public', 'live'])  // Explicitly exclude 'test' and 'archived'
-  .order('report_date', { ascending: false })
-  .order('updated_at', { ascending: false })  // Secondary sort by updated_at for same date
+  .order('updated_at', { ascending: false })  // Sort by UPDATED timestamp - most recently updated first
   .limit(5);
       
     if (dailyError) {
@@ -1995,8 +2088,12 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
 };
 
 
-  return (
+return (
     <div className="min-h-screen bg-[#0a0806] relative overflow-hidden">
+<style>{`
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
+  .heading-serif{font-family:'Playfair Display',Georgia,serif}
+`}</style>
 
       {/* Trial Banner */}
       {newsletterStatus.is_in_trial && newsletterStatus.days_until_trial_ends !== null && (
@@ -2009,9 +2106,19 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
       )}
 
       {/* Hero Section with Bull */}
-      <div className="relative">
-        {/* Particle Background */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+<div className="relative">
+  {/* Gold Ambient Glow - Left Side */}
+  <div 
+    className="absolute top-1/4 left-0 w-[800px] h-[800px] rounded-full pointer-events-none"
+    style={{
+      background: 'radial-gradient(circle, rgba(201,166,70,0.35) 0%, rgba(201,166,70,0.15) 30%, rgba(201,166,70,0.05) 50%, transparent 70%)',
+      filter: 'blur(100px)',
+      transform: 'translateX(-40%)',
+    }}
+  />
+  
+  {/* Particle Background */}
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {Array.from({ length: 60 }, (_, i) => (
             <div
               key={i}
@@ -2034,32 +2141,85 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
         </div>
 
         {/* Content */}
-        <div className="relative z-10 max-w-6xl mx-auto px-6 pt-12 pb-8">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pt-12 pb-8">
           {/* Header with Bull */}
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-8 mb-12">
- {/* Left: Text Content - Institutional Research Style */}
-<div className="text-center lg:text-left">
-  {/* Welcome to the - white italic */}
-<p className="heading-bold text-3xl md:text-4xl lg:text-5xl text-white mb-2">
-    Welcome to the
-  </p>
-  
-  {/* WAR ZONE - gold, larger and bolder */}
-  <h1 className="heading-bold text-5xl md:text-6xl lg:text-7xl mb-8" style={{ color: '#C9A646' }}>
-    WAR ZONE
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-8 lg:gap-12 mb-12 min-h-[400px] lg:min-h-[500px]">
+{/* Left: Text Content - Institutional Research Style */}
+<div className="text-center lg:text-left lg:flex-1 lg:max-w-xl">
+  {/* Welcome to the - white italic serif */}
+  <h1 className="font-bold leading-[1.05] tracking-tight mb-6" style={{ letterSpacing: '-0.03em' }}>
+    <span className="text-3xl md:text-4xl lg:text-5xl text-white block heading-serif italic mb-2">
+      Welcome to the
+    </span>
+    
+    {/* WAR ZONE - large gold gradient, NOT italic */}
+    <span className="text-5xl md:text-6xl lg:text-7xl block bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent font-bold tracking-tight">
+      WAR ZONE
+    </span>
   </h1>
   
-  {/* Subtitle - smaller, muted */}
-  <p className="text-[#9A9080] text-base md:text-lg leading-relaxed max-w-md">
+  {/* Subtitle - muted gold/cream */}
+  <p className="text-[#9A9080] text-sm md:text-base leading-relaxed max-w-md mb-8">
     The same market intelligence that hedge funds pay
     <span className="text-[#C9A646] font-medium"> $2,000+/month </span>
     for — now available for serious traders who want an edge.
+  </p>
+
+  {/* Two Action Buttons */}
+  <div className="flex flex-col sm:flex-row gap-3 mb-6">
+    {/* Open Today's Report - Gold Button */}
+    <button
+      onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
+      disabled={isLoadingReports || !currentDayReport}
+      className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ 
+        background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+        color: '#000', 
+        boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+      }}
+    >
+      {isLoadingReports ? (
+        <Loader2 className="w-5 h-5 animate-spin" />
+      ) : (
+        <>
+          <FileText className="w-5 h-5" />
+          Open Today's Report
+        </>
+      )}
+    </button>
+    
+    {/* View Weekly Review - Transparent/Outline Button */}
+    <button
+      onClick={() => weeklyReport && handleReportClick(weeklyReport, 'weekly')}
+      disabled={isLoadingReports || !weeklyReport}
+      className="group px-6 py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-2 transition-all hover:bg-[#C9A646]/10 disabled:opacity-50 disabled:cursor-not-allowed"
+      style={{ 
+        background: 'transparent',
+        border: '1px solid rgba(201,166,70,0.4)',
+        color: '#C9A646'
+      }}
+    >
+      {isLoadingReports ? (
+        <Loader2 className="w-5 h-5 animate-spin" />
+      ) : (
+        <>
+          <Calendar className="w-5 h-5" />
+          View Weekly Review
+        </>
+      )}
+    </button>
+  </div>
+
+  {/* Report Schedule Info */}
+  <p className="text-[#C9A646]/60 text-sm flex items-center gap-2 justify-center lg:justify-start">
+    <Clock className="w-4 h-4 text-[#C9A646]" />
+    New report every trading day • 9:10 AM ET • Bookmark this page
   </p>
 </div>
 
 
 {/* Right: Bull Image - clean without fire effects */}
-<div className="relative flex-shrink-0 -mr-16 lg:-mr-24">
+<div className="relative flex-shrink-0 lg:flex-1 flex justify-center lg:justify-end -mr-8 lg:-mr-16">
 {/* Bull container - fades into background on all edges */}
 <div
   className="relative z-10 overflow-hidden"
@@ -2526,17 +2686,42 @@ const handleAcceptDisclaimer = async () => {
 };
 const handleViewReport = () => { setShowReportViewer(true); fetchLatestReport(); };
 
-  const stats = [{ value: '847', label: 'Active Members' }, { value: '94%', label: 'Renewal Rate' }, { value: '4.9/5', label: 'Member Rating' }, { value: '85%', label: 'Open Rate' }];
-  const beforeAfter = { before: ['You react to headlines — always late', 'You chase moves after they happen', "You don't know why today matters", 'Information overload with no clarity'], after: ['You know where money is flowing before the open', 'You understand the risk map of the day', 'You stop guessing and start positioning', "Clarity on what matters — and what doesn't"] };
-  const dailyFeatures = [{ icon: Globe, title: 'What Changed Overnight', desc: 'Global macro-shifts, yield curve movements, FX flows — decoded before you sip your coffee.' }, { icon: TrendingUp, title: 'Why It Matters Today', desc: "Market structure analysis: who's leading, who's weakening, where risk is building." }, { icon: Activity, title: 'How Pros Are Reacting', desc: 'Institutional flow tracking: call sweeps, put blocks, unusual options activity.' }, { icon: LineChart, title: 'What to Watch Next', desc: '24-72hr outlook: liquidity pockets, breakout levels, volatility triggers.' }];
+  const stats = [
+  { value: '9:00 AM', label: 'Daily Delivery' },
+  { value: '847+', label: 'Active Traders' },
+  { value: '7 Days', label: 'Free Trial' },
+  { value: '24/7', label: 'Discord Access' }
+];
+  const beforeAfter = {
+  before: ["Wake up to 50+ headlines and zero clarity", "React to moves you should have anticipated", "Miss sector rotations until it is too late", "Trade on noise instead of conviction", "Second-guess every decision"],
+  after: ["Wake up knowing exactly what matters", "Position before the crowd reacts", "Catch rotations as they begin", "Trade with institutional-grade conviction", "Execute with clarity and confidence"]
+};
+  const dailyFeatures = [
+  { icon: Globe, title: 'Global Macro Analysis', desc: 'Key market drivers from Asia to Europe before US opens.' },
+  { icon: Activity, title: 'Sector Rotation Intel', desc: 'Where money is flowing and where it is leaving.' },
+  { icon: Target, title: 'Actionable Trade Ideas', desc: 'Specific setups with clear entry, target, and risk levels.' },
+  { icon: BarChart3, title: 'Technical + Fundamental', desc: 'Charts meet catalysts for complete market context.' }
+];
 const faqs = [
   { q: "How does the 7-day free trial work?", a: "Full access for 7 days. Cancel in one click, pay nothing. Only available on monthly plan." }, 
-  { q: "What exactly do I get every morning?", a: "An 8-14 page PDF at 9:00 AM NY time. Clarity on what changed, why it matters, how pros react." }, 
-  { q: "How is this different from other newsletters?", a: "Not a newsletter. A daily briefing. Professionals consume interpretation, not information." }, 
-  { q: "How do I get Discord access?", a: "After subscribing, click Discord link. Whop grants access automatically." }, 
-  { q: "What's the difference between monthly and yearly?", a: `Monthly is $${MONTHLY_PRICE}/mo with a 7-day free trial. Yearly is $${YEARLY_PRICE}/year (saves $${YEARLY_SAVINGS}) with no trial but instant access.` }, 
-  { q: "Can I cancel anytime?", a: "One click, no questions. We'd rather you cancel than stay confused." }
+  // ... rest of faqs
 ];
+
+// ============================================
+// SCROLLING TESTIMONIALS DATA
+// ============================================
+const scrollingTestimonials = [
+  { id: 1, name: "David Chen", role: "Hedge Fund Manager", avatar: "DC", text: "The daily briefing is something I genuinely wait for every morning. The level of analysis here is institutional-grade.", highlight: "something I genuinely wait for every morning" },
+  { id: 2, name: "Sarah Mitchell", role: "Day Trader", avatar: "SM", text: "WAR ZONE gave me the edge I was missing. After one week I realized this is the best investment I made this year.", highlight: "the best investment I made this year" },
+  { id: 3, name: "Michael Rodriguez", role: "Prop Trader", avatar: "MR", text: "I pay thousands per month for research subscriptions. WAR ZONE beats them all in value-for-money.", highlight: "beats them all in value-for-money" },
+  { id: 4, name: "Emily Watson", role: "Portfolio Manager", avatar: "EW", text: "Finally someone who understands I don't need more data, I need conclusions. These briefings save me hours every day.", highlight: "save me hours every day" },
+  { id: 5, name: "James Kim", role: "Swing Trader", avatar: "JK", text: "The writing quality and depth of analysis here is something I haven't found anywhere else.", highlight: "something I haven't found anywhere else" },
+  { id: 6, name: "Rachel Green", role: "Options Trader", avatar: "RG", text: "WAR ZONE is like someone turned on the lights in a dark room. Now I see the full picture before market open.", highlight: "turned on the lights in a dark room" },
+  { id: 7, name: "Alex Thompson", role: "Crypto Investor", avatar: "AT", text: "I tried the free trial and canceled all my other subscriptions. WAR ZONE is all I need now.", highlight: "canceled all my other subscriptions" },
+  { id: 8, name: "Lisa Anderson", role: "Forex Trader", avatar: "LA", text: "The macro analysis here is better than anything I got from Bloomberg Terminal. And I'm not joking.", highlight: "better than anything I got from Bloomberg" },
+];
+
+const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonials];
   // Preview mode overrides
   if (previewMode === 'landing') {
     // Force show landing page regardless of actual status
@@ -2560,7 +2745,9 @@ const faqs = [
   return (
     <div className="min-h-screen bg-[#0a0806] overflow-hidden relative">
       <style>{`
-@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
+        .heading-serif{font-family:'Playfair Display',Georgia,serif}
+        @keyframes hero-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}.hero-orb{animation:hero-orb 8s ease-in-out infinite}
         @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-12px); } }
         @keyframes particle-rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 0.7; } 80% { opacity: 0.5; } 100% { transform: translateY(-85vh) scale(0.3); opacity: 0; } }
         @keyframes sparkle { 0%, 100% { opacity: 0; transform: scale(0); } 50% { opacity: 1; transform: scale(1); } }
@@ -2570,8 +2757,6 @@ const faqs = [
           50% { transform: translate(3px, -3px); opacity: 0.35; } 
         }
         .animate-float { animation: float 4s ease-in-out infinite; }
-.heading-font { font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif; font-weight: 400; }
-.heading-bold { font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif; font-weight: 700; }
         .stats-font { font-family: 'EB Garamond', Georgia, 'Times New Roman', serif; font-weight: 400; font-style: italic; }
         .text-cream { color: #E8DCC4; }
         .text-gold { color: #E9A931; }
@@ -2585,22 +2770,25 @@ const faqs = [
       {/* ============ HERO SECTION ============ */}
       <section className="relative min-h-screen">
         {/* Base Background */}
-        <div className="absolute inset-0 bg-[#0a0806]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#080808] via-[#0d0b08] to-[#080808]" />
+        
+        {/* Animated Orbs */}
+        <div className="absolute top-1/4 left-1/4 w-[700px] h-[700px] bg-[#C9A646]/[0.08] rounded-full blur-[150px] hero-orb"/>
+        <div className="absolute bottom-1/4 right-1/3 w-[600px] h-[600px] bg-[#D4BF8E]/[0.06] rounded-full blur-[140px] hero-orb" style={{animationDelay:'3s'}}/>
+        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-[#F4D97B]/[0.04] rounded-full blur-[130px] hero-orb" style={{animationDelay:'5s'}}/>
 
         {/* ===== MOBILE LAYOUT ===== */}
         <div className="lg:hidden relative z-10 min-h-screen flex flex-col">
-          {/* Mobile Badge - ABOVE EVERYTHING with z-50 */}
-          <div className="flex justify-center pt-4 px-4 relative z-50">
-            <GlowingBadge />
-          </div>
-
           {/* Mobile Content */}
           <div className="flex-1 flex flex-col items-center px-4 pt-4">
             {/* Title */}
-            <h1 className="heading-font text-[1.5rem] sm:text-[1.8rem] leading-[1.15] text-center mb-3">
-              <span className="text-cream block">Every Morning You Wake Up</span>
-              <span className="text-gold italic block">Blind to What Actually</span>
-              <span className="text-gold italic block">Moves the Market.</span>
+            <h1 className="text-[1.5rem] sm:text-[1.8rem] font-bold leading-[1.05] tracking-tight text-center mb-3">
+              <span className="text-white block heading-serif italic">Every Morning</span>
+              <span className="text-white block heading-serif italic">You Wake Up</span>
+              <span className="relative inline-block mt-1">
+                <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Blind to What Moves</span>
+              </span>
+              <span className="relative inline-block"><span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">the Market.</span></span>
             </h1>
 
             {/* Mobile Bull with particles - seamless blend */}
@@ -2630,19 +2818,55 @@ const faqs = [
             {/* Billing Toggle */}
 <BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-3" />
 
-{/* CTA Button */}
-<button onClick={handleSubscribeClick} className="group inline-flex items-center gap-2 px-5 py-3 rounded-full mb-3" style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)', border: '1px solid rgba(201,166,70,0.5)' }}>
-  <Clock className="w-4 h-4 text-[#C9A646]" />
-  <span className="text-cream font-medium text-sm">{billingInterval === 'monthly' ? 'Try WAR ZONE Free for 7 Days' : `Get WAR ZONE for $${YEARLY_PRICE}/year`}</span>
-  <ArrowRight className="w-4 h-4 text-[#C9A646]" />
+{/* CTA Button - GOLD - Mobile */}
+<button 
+  onClick={handleSubscribeClick} 
+  className="group px-8 py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-2 mb-6"
+  style={{ 
+    background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+    color: '#000', 
+    boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
+  }}
+>
+  {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${YEARLY_PRICE}/year`}
+  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
 </button>
 
-{/* Trust badges */}
-<div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-[#C9A646]/60 mb-4">
-  <span className="flex items-center gap-1"><Check className="w-3 h-3 text-[#C9A646]" /> Full access</span>
-  <span className="flex items-center gap-1"><Check className="w-3 h-3 text-[#C9A646]" /> No risk</span>
-  <span className="flex items-center gap-1"><Check className="w-3 h-3 text-[#C9A646]" /> Cancel anytime</span>
-  {billingInterval === 'yearly' && <span className="flex items-center gap-1"><Check className="w-3 h-3 text-green-400" /> Save ${YEARLY_SAVINGS}</span>}
+{/* Feature Icons Row - Mobile (stacked on very small screens) */}
+<div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+  <div className="flex items-center gap-2">
+    <div className="w-8 h-8 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <FileText className="w-3.5 h-3.5 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold">Daily Briefing</div>
+      <div className="text-slate-400 text-[10px]">9:00 AM NY</div>
+    </div>
+  </div>
+  
+  <div className="w-px h-8 bg-[#C9A646]/30 hidden sm:block" />
+  
+  <div className="flex items-center gap-2">
+    <div className="w-8 h-8 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <Shield className="w-3.5 h-3.5 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold">Institutional</div>
+      <div className="text-slate-400 text-[10px]">Grade Intel</div>
+    </div>
+  </div>
+  
+  <div className="w-px h-8 bg-[#C9A646]/30 hidden sm:block" />
+  
+  <div className="flex items-center gap-2">
+    <div className="w-8 h-8 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <Target className="w-3.5 h-3.5 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold">Actionable</div>
+      <div className="text-slate-400 text-[10px]">Trade Ideas</div>
+    </div>
+  </div>
 </div>
           </div>
 
@@ -2653,8 +2877,8 @@ const faqs = [
               <div className="grid grid-cols-4 gap-2">
                 {stats.map((stat, i) => (
                   <div key={i} className="text-center">
-                    <div className="stats-font text-xl sm:text-2xl text-[#E9A931]">{stat.value}</div>
-                    <div className="text-[#C9A646]/50 text-[8px] sm:text-[9px]">{stat.label}</div>
+                    <div className="text-lg sm:text-xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">{stat.value}</div>
+                    <div className="text-slate-400 text-[8px] sm:text-[9px] mt-1 tracking-wide uppercase">{stat.label}</div>
                   </div>
                 ))}
               </div>
@@ -2664,11 +2888,6 @@ const faqs = [
 
         {/* ===== DESKTOP LAYOUT ===== */}
         <div className="hidden lg:block relative z-10 min-h-screen">
-          {/* Badge - Centered at top - ABOVE EVERYTHING with z-50 */}
-          <div className="absolute top-6 left-0 right-0 flex justify-center z-50">
-            <GlowingBadge />
-          </div>
-
           {/* Two Column Layout */}
           <div className="flex min-h-screen">
             {/* Left Column - Text (with very subtle sparkles) */}
@@ -2679,10 +2898,14 @@ const faqs = [
                 <SparkleEffect />
               </div>
               
-              <h1 className="heading-font text-[2.8rem] xl:text-[3.2rem] 2xl:text-[3.8rem] leading-[1.1] mb-8 relative z-20">
-                <span className="text-cream block">Every Morning You Wake Up</span>
-                <span className="heading-bold italic block text-[2.6rem] xl:text-[3rem] 2xl:text-[3.5rem] leading-[1.15]" style={{ color: '#E9A931' }}>Blind to What Actually</span>
-                <span className="heading-bold italic block text-[2.6rem] xl:text-[3rem] 2xl:text-[3.5rem] leading-[1.15]" style={{ color: '#E9A931' }}>Moves the Market.</span>
+              <h1 className="text-[2.8rem] xl:text-[3.2rem] 2xl:text-[3.8rem] font-bold leading-[1.05] tracking-tight mb-8 relative z-20">
+                <span className="text-white block heading-serif italic">Every Morning</span>
+                <span className="text-white block heading-serif italic">You Wake Up</span>
+                <span className="relative inline-block mt-2">
+                  <span className="absolute inset-0 blur-3xl opacity-40 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] animate-pulse" style={{animationDuration:'4s'}}/>
+                  <span className="relative heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Blind to What Moves</span>
+                </span>
+                <span className="relative inline-block"><span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">the Market.</span></span>
               </h1>
 
               <p className="text-[#C9A646]/80 text-lg leading-relaxed mb-8 max-w-xl relative z-20">
@@ -2691,17 +2914,56 @@ const faqs = [
 
               <BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-6 justify-start relative z-20" />
 
-<button onClick={handleSubscribeClick} className="group inline-flex items-center gap-3 px-8 py-4 rounded-full transition-all duration-300 hover:scale-[1.02] mb-6 w-fit relative z-20" style={{ background: 'linear-gradient(135deg, rgba(233,169,49,0.15) 0%, rgba(233,169,49,0.05) 100%)', border: '1px solid rgba(233,169,49,0.5)' }}>
-  <Clock className="w-5 h-5" style={{ color: '#E9A931' }} />
-  <span className="text-cream font-medium text-lg">{billingInterval === 'monthly' ? 'Try WAR ZONE Free for 7 Days' : `Get WAR ZONE for $${YEARLY_PRICE}/year`}</span>
-  <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" style={{ color: '#E9A931' }} />
-</button>
-
-<div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[#C9A646]/60 relative z-20">
-  <span className="flex items-center gap-1.5"><Check className="w-4 h-4" style={{ color: '#E9A931' }} /> Full access</span>
-  <span className="flex items-center gap-1.5"><Check className="w-4 h-4" style={{ color: '#E9A931' }} /> No risk</span>
-  <span className="flex items-center gap-1.5"><Check className="w-4 h-4" style={{ color: '#E9A931' }} /> Cancel anytime</span>
-  {billingInterval === 'yearly' && <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-green-400" /> Save ${YEARLY_SAVINGS}/year</span>}
+{/* CTA Button - GOLD */}
+<div className="flex flex-wrap items-center gap-4 mb-8 relative z-20">
+  <button 
+    onClick={handleSubscribeClick} 
+    className="group px-8 py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-2"
+    style={{ 
+      background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+      color: '#000', 
+      boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
+    }}
+  >
+    {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${YEARLY_PRICE}/year`}
+    <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+  </button>
+</div>
+{/* Feature Icons Row */}
+<div className="flex flex-wrap items-center gap-6 relative z-20">
+  <div className="flex items-center gap-2.5">
+    <div className="w-9 h-9 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <FileText className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold text-sm">Daily Briefing</div>
+      <div className="text-slate-400 text-xs">9:00 AM NY</div>
+    </div>
+  </div>
+  
+  <div className="w-px h-10 bg-[#C9A646]/30" />
+  
+  <div className="flex items-center gap-2.5">
+    <div className="w-9 h-9 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <Shield className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold text-sm">Institutional</div>
+      <div className="text-slate-400 text-xs">Grade Intel</div>
+    </div>
+  </div>
+  
+  <div className="w-px h-10 bg-[#C9A646]/30" />
+  
+  <div className="flex items-center gap-2.5">
+    <div className="w-9 h-9 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+      <Target className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
+    </div>
+    <div>
+      <div className="text-white font-bold text-sm">Actionable</div>
+      <div className="text-slate-400 text-xs">Trade Ideas</div>
+    </div>
+  </div>
 </div>
             </div>
 
@@ -2762,30 +3024,13 @@ const faqs = [
                 <div className="grid grid-cols-4">
                   {stats.map((stat, i) => (
                     <div key={i} className="text-center relative px-6">
-                      {/* Stat value with glow */}
-                      <div 
-                        className="heading-bold text-4xl xl:text-5xl mb-2"
-                        style={{ 
-                          background: 'linear-gradient(180deg, #F4D97B 0%, #E9A931 50%, #C9A646 100%)',
-                          WebkitBackgroundClip: 'text',
-                          WebkitTextFillColor: 'transparent',
-                          backgroundClip: 'text',
-                          filter: 'drop-shadow(0 0 15px rgba(233,169,49,0.4))'
-                        }}
-                      >
+                      {/* Stat value */}
+                      <div className="text-3xl md:text-4xl lg:text-5xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">
                         {stat.value}
                       </div>
                       {/* Label */}
-                      <div className="text-[#C9A646]/50 text-[11px] uppercase tracking-[0.15em] font-medium">{stat.label}</div>
-                      
-                      {/* Elegant divider between stats */}
-                      {i < 3 && (
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1">
-                          <div className="w-1 h-1 rounded-full bg-[#C9A646]/40" />
-                          <div className="w-px h-8 bg-gradient-to-b from-transparent via-[#C9A646]/25 to-transparent" />
-                          <div className="w-1 h-1 rounded-full bg-[#C9A646]/40" />
-                        </div>
-                      )}
+                      <div className="text-slate-400 text-xs mt-2 tracking-wide uppercase">{stat.label}</div>
+
                     </div>
                   ))}
                 </div>
@@ -2800,61 +3045,89 @@ const faqs = [
         </div>
       </section>
 
-      {/* ============ BEFORE/AFTER SECTION ============ */}
-      <section className="relative py-20 px-6 overflow-hidden bg-[#0a0806]">
-        <div className="max-w-5xl mx-auto relative z-10">
-       {/* Title Section - MATCHING HERO STYLE */}
-<div className="text-center mb-14">
-<h2 className="heading-font text-3xl md:text-4xl lg:text-[2.8rem] leading-[1.1] mb-2 not-italic">
-  <span className="text-cream block">Welcome to the</span>
-</h2>
-<h2 className="heading-bold italic text-5xl md:text-6xl lg:text-[5rem] leading-[1.1] mb-6" style={{ color: '#E9A931' }}>
-  WAR ZONE
-</h2>
-  <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ color: '#9A9080' }}>
-    The same market intelligence that hedge funds pay{' '}
-    <span style={{ color: '#C9A646', fontWeight: 600 }}>$2,000+/month</span>{' '}
-    for — now available for serious traders who want an edge.
-  </p>
-</div>
+      {/* ============ SOCIAL PROOF SECTION ============ */}
+      <SocialProof />
 
-          {/* Before/After Cards */}
+      {/* ============ BEFORE/AFTER SECTION ============ */}
+      <section className="py-24 px-6 relative overflow-hidden">
+        {/* Luxury Dark Background with Rich Gold Undertone */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]" />
+        
+        {/* Gold Border Line at Top */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+        
+        {/* Enhanced Gold Ambient Glows */}
+        <div className="absolute top-1/4 right-1/4 w-[600px] h-[500px] bg-[#C9A646]/[0.08] rounded-full blur-[150px]" />
+        <div className="absolute bottom-1/4 left-1/5 w-[500px] h-[450px] bg-[#D4AF37]/[0.07] rounded-full blur-[130px]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#C9A646]/[0.05] rounded-full blur-[160px]" />
+        <div className="absolute top-1/3 left-1/4 w-[400px] h-[350px] bg-[#F4D97B]/[0.04] rounded-full blur-[120px]" />
+        
+        <div className="max-w-5xl mx-auto relative z-10">
+          {/* Title Section - Luxury Style */}
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              <span className="text-white heading-serif">The Difference Between </span>
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">
+                Reacting and Anticipating
+              </span>
+            </h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              Most traders start their day overwhelmed. WAR ZONE traders start with clarity.
+            </p>
+          </div>
+          
+          {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Before WAR ZONE Card */}
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(20,15,12,0.95) 0%, rgba(30,20,15,0.9) 100%)', border: '1px solid rgba(201,166,70,0.25)' }}>
+            
+            {/* BEFORE Card - Red Accent Style */}
+            <div
+              className="rounded-2xl overflow-hidden transition-all duration-300"
+              style={{
+                background: 'linear-gradient(135deg, rgba(239,68,68,0.05) 0%, rgba(0,0,0,0.3) 100%)',
+                border: '1px solid rgba(239,68,68,0.15)',
+              }}
+            >
               {/* Card Header */}
-              <div className="flex items-center gap-4 px-7 py-5 border-b border-[#C9A646]/15">
-                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
-                  <X className="w-5 h-5 text-red-500" />
+              <div className="flex items-center gap-4 px-6 py-5 border-b border-red-500/10">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                  <XCircle className="w-5 h-5 text-red-400" />
                 </div>
-                <h3 className="text-white font-bold text-xl">Before WAR ZONE</h3>
+                <h3 className="text-white font-bold text-lg">Without WAR ZONE</h3>
               </div>
+              
               {/* Card Content */}
-              <div className="px-7 py-6 space-y-5">
+              <div className="px-6 py-6 space-y-4">
                 {beforeAfter.before.map((item, i) => (
                   <div key={i} className="flex items-center gap-4">
-                    <X className="w-5 h-5 text-red-500 flex-shrink-0" />
-                    <span className="text-[#C9A646]/80 text-base">{item}</span>
+                    <XCircle className="w-5 h-5 text-red-400/50 flex-shrink-0" />
+                    <span className="text-slate-400 text-sm">{item}</span>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* With WAR ZONE Card */}
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(20,15,12,0.95) 0%, rgba(30,20,15,0.9) 100%)', border: '1px solid rgba(201,166,70,0.25)' }}>
+            
+            {/* AFTER Card - Gold Accent Style */}
+            <div
+              className="rounded-2xl overflow-hidden transition-all duration-300"
+              style={{
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(0,0,0,0.3) 100%)',
+                border: '1px solid rgba(201,166,70,0.2)',
+              }}
+            >
               {/* Card Header */}
-              <div className="flex items-center gap-4 px-7 py-5 border-b border-[#C9A646]/15">
-                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-green-500" />
+              <div className="flex items-center gap-4 px-6 py-5 border-b border-[#C9A646]/15">
+                <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                  <Check className="w-5 h-5 text-green-400" />
                 </div>
-                <h3 className="text-white font-bold text-xl">With WAR ZONE</h3>
+                <h3 className="text-white font-bold text-lg">With WAR ZONE</h3>
               </div>
+              
               {/* Card Content */}
-              <div className="px-7 py-6 space-y-5">
+              <div className="px-6 py-6 space-y-4">
                 {beforeAfter.after.map((item, i) => (
                   <div key={i} className="flex items-center gap-4">
-                    <Check className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    <span className="text-[#C9A646]/90 text-base">{item}</span>
+                    <Check className="w-5 h-5 text-green-400 flex-shrink-0" />
+                    <span className="text-slate-300 text-sm">{item}</span>
                   </div>
                 ))}
               </div>
@@ -2864,7 +3137,13 @@ const faqs = [
       </section>
 
       {/* ============ NOT A NEWSLETTER SECTION ============ */}
-      <section className="relative py-24 px-6 bg-[#0a0806]">
+      <section className="relative py-24 px-6 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100c08] to-[#0a0a0a]"/>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent"/>
+        <div className="absolute top-1/4 left-1/6 w-[500px] h-[400px] bg-[#C9A646]/[0.08] rounded-full blur-[140px]"/>
+        <div className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] bg-[#D4AF37]/[0.07] rounded-full blur-[120px]"/>
+        <div className="absolute top-1/2 right-1/6 w-[400px] h-[350px] bg-[#F4D97B]/[0.05] rounded-full blur-[130px]"/>
+        <div className="absolute bottom-1/3 left-1/3 w-[500px] h-[400px] bg-[#C9A646]/[0.04] rounded-full blur-[150px]"/>
         <div className="max-w-5xl mx-auto relative z-10">
           {/* Compass Icon */}
           <div className="flex justify-center mb-8">
@@ -2874,45 +3153,44 @@ const faqs = [
           </div>
           
           {/* Title Section */}
-          <div className="text-center mb-14">
-            <h2 className="heading-bold text-2xl md:text-3xl lg:text-[2.2rem] mb-2 text-cream">
-              This Is Not a Newsletter.
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-2">
+              <span className="text-white heading-serif">This Is Not a Newsletter.</span>
             </h2>
-            <h3 className="heading-bold text-2xl md:text-3xl lg:text-[2.2rem] mb-6" style={{ color: '#E9A931' }}>
-              It's a Daily Market Briefing.
+            <h3 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">It is a Daily Market Briefing.</span>
             </h3>
-            <p className="text-[#C9A646]/70 text-base md:text-lg">
-              Most traders consume <span className="text-[#C9A646]">information</span>.
+            <p className="text-slate-400 text-lg">
+              Most traders consume <span className="text-slate-300">information</span>.
               <br />
-              Professionals consume <span className="text-cream font-medium italic">interpretation</span>.
+              Professionals consume <span className="text-white font-medium italic">interpretation</span>.
             </p>
           </div>
           
           {/* Feature Cards - 2x2 Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
             {dailyFeatures.map((f, i) => (
               <div 
                 key={i} 
-                className="p-5 rounded-xl transition-all duration-300"
+                className="p-6 rounded-2xl transition-all hover:border-[#C9A646]/40"
                 style={{ 
-                  background: 'linear-gradient(135deg, rgba(25,20,15,0.85) 0%, rgba(35,28,20,0.75) 100%)',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))',
+                  border: '1px solid rgba(201,166,70,0.15)',
                 }}
               >
                 <div className="flex items-start gap-4">
                   <div 
-                    className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
                     style={{ 
-                      background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                      border: '1px solid rgba(201,166,70,0.3)'
+                      background: 'rgba(201,166,70,0.1)',
+                      border: '1px solid rgba(201,166,70,0.2)'
                     }}
                   >
                     <f.icon className="w-5 h-5 text-[#C9A646]" />
                   </div>
                   <div>
                     <h4 className="text-white font-semibold text-base mb-1">{f.title}</h4>
-                    <p className="text-[#C9A646]/60 text-sm leading-relaxed">{f.desc}</p>
+                    <p className="text-slate-400 text-sm leading-relaxed">{f.desc}</p>
                   </div>
                 </div>
               </div>
@@ -2924,15 +3202,14 @@ const faqs = [
             <div 
               className="inline-flex items-center gap-4 px-6 py-4 rounded-xl"
               style={{ 
-                background: 'linear-gradient(135deg, rgba(25,20,15,0.85) 0%, rgba(35,28,20,0.75) 100%)',
-                border: '1px solid rgba(201,166,70,0.25)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.1), rgba(201,166,70,0.02))',
+                border: '1px solid rgba(201,166,70,0.2)',
               }}
             >
               <div 
                 className="w-10 h-10 rounded-full flex items-center justify-center"
                 style={{ 
-                  background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                  background: 'rgba(201,166,70,0.1)',
                   border: '1px solid rgba(201,166,70,0.3)'
                 }}
               >
@@ -2940,7 +3217,7 @@ const faqs = [
               </div>
               <div className="text-left">
                 <p className="text-white font-semibold text-sm">Delivered Every Trading Day</p>
-                <p className="text-[#C9A646]/50 text-xs">9:00 AM New York Time — before the market opens</p>
+                <p className="text-slate-500 text-xs">9:00 AM New York Time — before the market opens</p>
               </div>
             </div>
           </div>
@@ -2948,34 +3225,36 @@ const faqs = [
       </section>
 
       {/* ============ MORE THAN A BRIEFING ============ */}
-      <section className="py-20 px-6 bg-[#0a0806]">
+      <section className="py-24 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent"/>
+        <div className="absolute top-1/2 right-1/3 w-[400px] h-[400px] bg-[#C9A646]/[0.05] rounded-full blur-[130px]"/>
         <div className="max-w-5xl mx-auto relative z-10">
           <div className="text-center mb-12">
-            <h2 className="heading-bold text-3xl md:text-4xl lg:text-[2.8rem] mb-4">
-              <span className="italic" style={{ color: '#E9A931' }}>More</span>
-              <span className="italic text-cream"> Than Just a Briefing</span>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">More</span>
+              <span className="heading-serif italic text-white"> Than Just a Briefing</span>
             </h2>
-            <p className="text-[#C9A646]/70 text-lg">Join a community of serious traders and get exclusive trading room access.</p>
+            <p className="text-slate-400 text-lg">Join a community of serious traders and get exclusive trading room access.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Discord Card */}
             <div 
-              className="p-6 rounded-xl"
+              className="p-6 rounded-2xl"
               style={{ 
-                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                border: '1px solid rgba(201,166,70,0.25)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))',
+                border: '1px solid rgba(201,166,70,0.15)',
               }}
             >
               <div className="flex items-start gap-4">
                 <div 
                   className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ 
-                    background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                    border: '1px solid rgba(201,166,70,0.3)'
+                    background: 'rgba(88,101,242,0.1)',
+                    border: '1px solid rgba(88,101,242,0.3)'
                   }}
                 >
-                  <DiscordIcon className="w-7 h-7 text-[#C9A646]" />
+                  <DiscordIcon className="w-7 h-7 text-[#5865F2]" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -2983,7 +3262,7 @@ const faqs = [
                     <span 
                       className="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider"
                       style={{ 
-                        background: 'rgba(201,166,70,0.15)',
+                        background: 'rgba(201,166,70,0.1)',
                         border: '1px solid rgba(201,166,70,0.3)',
                         color: '#C9A646'
                       }}
@@ -2991,25 +3270,24 @@ const faqs = [
                       EXCLUSIVE
                     </span>
                   </div>
-                  <p className="text-[#C9A646]/60 text-sm leading-relaxed">Not beginners. Real traders who were already paying for research — now sharing in real-time.</p>
+                  <p className="text-slate-400 text-sm leading-relaxed">Not beginners. Real traders who were already paying for research — now sharing in real-time.</p>
                 </div>
               </div>
             </div>
             
             {/* Trading Room Card */}
             <div 
-              className="p-6 rounded-xl"
+              className="p-6 rounded-2xl"
               style={{ 
-                background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                border: '1px solid rgba(201,166,70,0.25)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))',
+                border: '1px solid rgba(201,166,70,0.15)',
               }}
             >
               <div className="flex items-start gap-4">
                 <div 
                   className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ 
-                    background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                    background: 'rgba(201,166,70,0.1)',
                     border: '1px solid rgba(201,166,70,0.3)'
                   }}
                 >
@@ -3021,7 +3299,7 @@ const faqs = [
                     <span 
                       className="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider"
                       style={{ 
-                        background: 'rgba(201,166,70,0.15)',
+                        background: 'rgba(201,166,70,0.1)',
                         border: '1px solid rgba(201,166,70,0.3)',
                         color: '#C9A646'
                       }}
@@ -3029,7 +3307,7 @@ const faqs = [
                       EXCLUSIVE
                     </span>
                   </div>
-                  <p className="text-[#C9A646]/60 text-sm leading-relaxed">Live analysis, real-time alerts, and the context behind every move.</p>
+                  <p className="text-slate-400 text-sm leading-relaxed">Live analysis, real-time alerts, and the context behind every move.</p>
                 </div>
               </div>
             </div>
@@ -3038,15 +3316,18 @@ const faqs = [
       </section>
 
       {/* ============ FAQ ============ */}
-      <section className="py-24 px-6 bg-[#0a0806] relative z-10">
-        <div className="max-w-4xl mx-auto">
+      <section className="py-24 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100c08] to-[#0a0a0a]"/>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent"/>
+        <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-[#C9A646]/[0.04] rounded-full blur-[120px]"/>
+        <div className="max-w-4xl mx-auto relative z-10">
           {/* Title */}
           <div className="text-center mb-16">
-            <h2 className="heading-bold text-3xl md:text-4xl lg:text-[2.5rem] mb-4">
-              <span className="text-cream">Frequently Asked </span>
-              <span style={{ color: '#E9A931' }}>Questions</span>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
+              <span className="text-white heading-serif">Frequently Asked </span>
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Questions</span>
             </h2>
-            <p className="text-[#C9A646]/60 text-base">Everything you need to know before joining the War Zone.</p>
+            <p className="text-slate-400 text-base">Everything you need to know before joining the War Zone.</p>
           </div>
           
           {/* FAQ Items */}
@@ -3059,8 +3340,8 @@ const faqs = [
                   openFaq === i ? "ring-1 ring-[#C9A646]/30" : ""
                 )}
                 style={{ 
-                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                  border: '1px solid rgba(201,166,70,0.2)',
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))',
+                  border: '1px solid rgba(201,166,70,0.15)',
                 }}
               >
                 <button 
@@ -3127,23 +3408,153 @@ const faqs = [
         </div>
       </section>
 
-      {/* ============ FINAL CTA ============ */}
-      <section className="py-24 px-6 bg-[#0a0806] relative z-10">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl lg:text-[2.8rem] mb-4 leading-tight">
-            <span className="heading-bold text-cream block">You're Already in the Market.</span>
-          </h2>
-          <h2 className="text-3xl md:text-4xl lg:text-[2.8rem] mb-8 leading-tight">
-  <span className="heading-bold block" style={{ color: '#E9A931' }}>Why Do It Without WAR ZONE?</span>
-</h2>
-<BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-8" />
-<button onClick={handleSubscribeClick} className="inline-flex items-center gap-3 px-10 py-5 rounded-full font-semibold text-lg transition-all duration-300 hover:scale-[1.02] mb-6" style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', boxShadow: '0 0 50px rgba(201,166,70,0.4), 0 10px 30px rgba(0,0,0,0.3)' }}>
-  <Rocket className="w-6 h-6 text-black" />
-  <span className="text-black font-bold">{billingInterval === 'monthly' ? 'Start Your Free Trial' : `Subscribe for $${YEARLY_PRICE}/year`}</span>
-  <ArrowRight className="w-6 h-6 text-black" />
-</button>
-<p className="text-[#C9A646]/50 text-sm">{billingInterval === 'monthly' ? (user ? '✓ 7 Days Free   ✓ Cancel Anytime   ✓ Instant Access' : '✓ Login Required   ✓ 7 Days Free   ✓ Cancel Anytime') : (user ? `✓ Save $${YEARLY_SAVINGS}/year   ✓ Cancel Anytime   ✓ Instant Access` : `✓ Login Required   ✓ Save $${YEARLY_SAVINGS}/year   ✓ Instant Access`)}</p>
-</div>
+      {/* ============ PRICING SECTION ============ */}
+      <section className="py-24 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent"/>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#C9A646]/[0.06] rounded-full blur-[180px]"/>
+        <div className="absolute top-1/4 right-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.04] rounded-full blur-[120px]"/>
+        
+        <div className="max-w-6xl mx-auto relative z-10">
+          {/* Header */}
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
+              <span className="heading-serif italic text-white block">You are Already in the Market.</span>
+            </h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+              <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Why Do It Without WAR ZONE?</span>
+            </h2>
+          </div>
+
+          {/* Pricing Cards */}
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            
+            {/* Monthly Card */}
+            <div
+              className="rounded-2xl relative overflow-hidden"
+              style={{ background: 'linear-gradient(180deg, rgba(30,28,24,0.95) 0%, rgba(20,18,14,0.98) 100%)', border: '1px solid rgba(201,166,70,0.3)', boxShadow: '0 8px 40px rgba(0,0,0,0.5)' }}>
+              
+              {/* Badge */}
+              <div className="absolute top-5 left-5">
+                <span className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider" style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}>MONTHLY</span>
+              </div>
+              
+              <div className="p-6 pt-16">
+                {/* Price */}
+                <div className="mb-5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-6xl font-bold text-white">${MONTHLY_PRICE}</span>
+                    <span className="text-slate-400 text-lg">/month</span>
+                  </div>
+                  <p className="text-green-400 font-bold text-sm mt-2 tracking-wide">FREE 7 DAY TRIAL</p>
+                </div>
+                
+                {/* CTA Button */}
+                <button onClick={handleSubscribeClick} className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 20px rgba(201,166,70,0.4)' }}>
+                  START FREE TRIAL <ArrowRight className="w-5 h-5"/>
+                </button>
+                <p className="text-slate-500 text-sm text-center mb-8">Risk-free. Cancel anytime.</p>
+                
+                {/* Features */}
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-start gap-3 mb-2">
+                      <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Daily Market Briefing</h4>
+                    </div>
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">Every trading day at 9:00 AM NY. Know exactly what matters before the market opens.</p>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-start gap-3 mb-2">
+                      <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Sector Rotation Intel</h4>
+                    </div>
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">Where institutional money is flowing — and where it is leaving. Position before the crowd.</p>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-start gap-3 mb-2">
+                      <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Private Discord + Trading Room</h4>
+                    </div>
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">24/7 access to serious traders and real-time market discussion.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Yearly Card */}
+            <div
+              className="rounded-2xl relative overflow-hidden"
+              style={{ background: 'linear-gradient(180deg, rgba(40,35,25,0.95) 0%, rgba(25,22,16,0.98) 100%)', border: '2px solid rgba(201,166,70,0.5)', boxShadow: '0 12px 50px rgba(201,166,70,0.2), 0 8px 40px rgba(0,0,0,0.5)' }}>
+              
+              {/* Badge */}
+              <div className="absolute top-5 right-5">
+                <span className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider" style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}>BEST DEAL</span>
+              </div>
+              
+              <div className="p-6 pt-16">
+                {/* Title */}
+                <div className="mb-2">
+                  <h3 className="text-2xl text-white"><span className="italic">Unlock</span> WAR ZONE</h3>
+                  <p className="text-white font-bold text-xl">Institutional Research</p>
+                </div>
+                
+                {/* Subtitle Badge */}
+                <div className="mb-5">
+                  <span className="px-3 py-1.5 rounded text-[10px] font-bold tracking-widest bg-white/10 text-slate-300 border border-white/20">FOR SERIOUS TRADERS ONLY</span>
+                </div>
+                
+                {/* Price */}
+                <div className="mb-5">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-6xl font-bold text-[#C9A646]">${YEARLY_PRICE}</span>
+                    <span className="text-slate-400 text-lg">/year</span>
+                  </div>
+                  <p className="text-green-400 font-semibold text-base mt-2">Just ${Math.round(YEARLY_PRICE / 12)}/month — Save ${YEARLY_SAVINGS}!</p>
+                </div>
+                
+                {/* Features */}
+                <div className="space-y-3 mb-6">
+                  {['Priority Access', 'Locked price for 12 months', 'Early Access to future FINOTAUR tools', 'Founding Members badge'].map((f, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0"/>
+                      <span className="text-white">{f}</span>
+                    </div>
+                  ))}
+                </div>
+                
+                {/* CTA Button */}
+                <button onClick={handleSubscribeClick} className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 20px rgba(201,166,70,0.4)' }}>
+                  GET ANNUAL PLAN <ArrowRight className="w-5 h-5"/>
+                </button>
+                <p className="text-slate-500 text-sm text-center mb-5">Locked price. Cancel anytime.</p>
+                
+                {/* Bottom Features */}
+                <div className="space-y-2 pt-4 border-t border-white/10">
+                  {['Cancel anytime', '2 months FREE vs monthly', 'No lock-in contracts'].map((f, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-green-400 flex-shrink-0"/>
+                      <span className="text-slate-400 text-sm">{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-8 text-slate-400">
+            <div className="flex items-center gap-2"><Shield className="w-5 h-5 text-[#C9A646]"/><span className="text-sm">Secure payment</span></div>
+            <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block"/>
+            <div className="flex items-center gap-2"><Clock className="w-5 h-5 text-green-400"/><span className="text-sm">7-Day Free Trial</span></div>
+            <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block"/>
+            <div className="flex items-center gap-2"><Zap className="w-5 h-5 text-[#C9A646]"/><span className="text-sm">Cancel anytime</span></div>
+          </div>
+        </div>
       </section>
 
       {/* Footer */}

@@ -81,19 +81,17 @@ export interface PlanConfig {
   introPrice?: number;          // Intro price per month (e.g., $10 instead of $20)
   
   // EXAMPLE:
-  // Newsletter:
+  // Newsletter (War Zone):
   //   trialDays: 7 (free)
-  //   hasIntroDiscount: true
-  //   introDiscountMonths: 2
-  //   introPrice: 10 ($10/mo for 2 months)
-  //   price: 20 (regular price after intro)
+  //   hasIntroDiscount: false
+  //   price: 69.99 (regular price)
   //
   // Top Secret:
   //   trialDays: 14 (free)
   //   hasIntroDiscount: true
   //   introDiscountMonths: 2
-  //   introPrice: 17.50 ($17.50/mo for 2 months)
-  //   price: 35 (regular price after intro)
+  //   introPrice: 35 ($35/mo for 2 months)
+  //   price: 89.99 (regular price after intro)
 }
 
 export interface PlanPricing {

@@ -456,13 +456,16 @@ const TermsAndConditionsModal = ({
                     </p>
                   </div>
 
-                  <div>
-                    <h3 className="text-base font-semibold text-white mb-2">2. 7-Day Money-Back Guarantee</h3>
+<div>
+                    <h3 className="text-base font-semibold text-white mb-2">2. Refund Policy by Plan Type</h3>
                     <p className="text-zinc-400 mb-2">
-                      We offer a <strong className="text-white">7-day money-back guarantee for first-time subscribers only</strong>:
+                      <strong className="text-white">Plans WITH a free trial (e.g., Basic):</strong> No refunds. The 14-day trial is your evaluation period.
+                    </p>
+                    <p className="text-zinc-400 mb-2">
+                      <strong className="text-white">Plans WITHOUT a free trial (e.g., Premium):</strong> 7-day money-back guarantee:
                     </p>
                     <ul className="text-zinc-400 space-y-1.5 list-disc pl-5">
-                      <li>Applies only to your first paid subscription with Finotaur</li>
+                      <li>Applies only to plans without a free trial period</li>
                       <li>Valid for both monthly and annual plans</li>
                       <li>Must be requested within 7 days of initial purchase</li>
                       <li>Full refund will be issued to your original payment method</li>

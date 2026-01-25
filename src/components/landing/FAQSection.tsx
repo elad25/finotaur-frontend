@@ -11,14 +11,14 @@ const faqs = [
     question: 'What data sources does Finotaur use?',
     answer: 'We aggregate data from multiple institutional-grade providers including major exchanges, financial data APIs, and verified news sources. Our AI layer processes and enriches this data to provide actionable insights.',
   },
-  {
-    question: 'Is there a free trial?',
-    answer: 'Yes! Our Basic plan includes a 14-day free trial with full access to all Basic features. Premium subscribers get immediate access with no trial period.',
-  },
-  {
-    question: 'Can I get a refund if I\'m not satisfied?',
-    answer: 'Yes! We offer a 7-day money-back guarantee for all paid plans. If you\'re not satisfied for any reason, contact our support team within 7 days of your purchase for a full refund.',
-  },
+{
+  question: 'Is there a free trial?',
+  answer: 'Yes! Our Basic plan includes a 14-day free trial with full access to all Basic features. Premium subscribers get immediate access with no trial period.',
+},
+{
+  question: 'Can I get a refund if I\'m not satisfied?',
+  answer: 'Plans with a free trial are non-refundable since you have the opportunity to test before paying. For plans without a trial period (like Premium), we offer a 7-day money-back guarantee. Contact our support team within 7 days of your first charge for a full refund.',
+},
   {
     question: 'How secure is my data and API connections?',
     answer: 'Security is our top priority. We use bank-level encryption (AES-256) for data at rest and TLS 1.3 for data in transit. API keys are encrypted and never stored in plain text. We never have withdrawal permissions on connected accounts.',

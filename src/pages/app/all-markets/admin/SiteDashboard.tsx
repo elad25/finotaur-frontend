@@ -509,16 +509,149 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
       setRefreshing(true);
       setError(null);
 
-      const { data, error: rpcError } = await supabase
+      // Try the RPC function first
+      const { data: rpcData, error: rpcError } = await supabase
         .rpc('get_comprehensive_subscription_stats');
 
-      if (rpcError) {
-        console.error('Error fetching stats:', rpcError);
-        setError(rpcError.message);
+      if (!rpcError && rpcData) {
+        setStats(rpcData as ComprehensiveStats);
+        setLastUpdated(new Date());
         return;
       }
 
-      setStats(data as ComprehensiveStats);
+      // Fallback: Calculate stats directly from profiles table
+      console.log('RPC not available, calculating stats directly...');
+      
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select(`
+          id, email, account_type, subscription_status, subscription_interval,
+          whop_membership_id, is_in_trial, last_login_at, created_at,
+          newsletter_status, newsletter_whop_membership_id, newsletter_enabled,
+          top_secret_status, top_secret_whop_membership_id, top_secret_enabled,
+          platform_plan, platform_subscription_status, platform_is_in_trial
+        `)
+        .is('deleted_at', null);
+
+      if (profilesError) throw profilesError;
+
+      const users = profiles || [];
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Calculate all stats
+      const calculatedStats: ComprehensiveStats = {
+        generated_at: now.toISOString(),
+        overall: {
+          total_users: users.length,
+          active_today: users.filter(u => u.last_login_at && new Date(u.last_login_at) >= today).length,
+          active_this_week: users.filter(u => u.last_login_at && new Date(u.last_login_at) >= weekAgo).length,
+          active_this_month: users.filter(u => u.last_login_at && new Date(u.last_login_at) >= monthAgo).length,
+          new_users_today: users.filter(u => new Date(u.created_at) >= today).length,
+          new_users_this_week: users.filter(u => new Date(u.created_at) >= weekAgo).length,
+          new_users_this_month: users.filter(u => new Date(u.created_at) >= monthAgo).length,
+        },
+        journal: {
+          basic: {
+            total: users.filter(u => u.account_type === 'basic').length,
+            monthly: {
+              total: users.filter(u => u.account_type === 'basic' && u.subscription_interval === 'monthly').length,
+              in_trial: users.filter(u => u.account_type === 'basic' && u.subscription_interval === 'monthly' && u.is_in_trial).length,
+              paid: users.filter(u => u.account_type === 'basic' && u.subscription_interval === 'monthly' && !u.is_in_trial && u.whop_membership_id).length,
+            },
+            yearly: {
+              total: users.filter(u => u.account_type === 'basic' && u.subscription_interval === 'yearly').length,
+              in_trial: 0,
+              paid: users.filter(u => u.account_type === 'basic' && u.subscription_interval === 'yearly' && u.whop_membership_id).length,
+            },
+            pending_cancellation: users.filter(u => u.account_type === 'basic' && u.subscription_status === 'cancelled').length,
+          },
+          premium: {
+            total: users.filter(u => u.account_type === 'premium').length,
+            monthly: {
+              total: users.filter(u => u.account_type === 'premium' && u.subscription_interval === 'monthly').length,
+              in_trial: users.filter(u => u.account_type === 'premium' && u.subscription_interval === 'monthly' && u.is_in_trial).length,
+              paid: users.filter(u => u.account_type === 'premium' && u.subscription_interval === 'monthly' && !u.is_in_trial && u.whop_membership_id).length,
+            },
+            yearly: {
+              total: users.filter(u => u.account_type === 'premium' && u.subscription_interval === 'yearly').length,
+              in_trial: 0,
+              paid: users.filter(u => u.account_type === 'premium' && u.subscription_interval === 'yearly' && u.whop_membership_id).length,
+            },
+            pending_cancellation: users.filter(u => u.account_type === 'premium' && u.subscription_status === 'cancelled').length,
+          },
+          free: users.filter(u => !u.account_type || u.account_type === 'free').length,
+          legacy_no_whop: users.filter(u => u.account_type && u.account_type !== 'free' && !u.whop_membership_id).length,
+          total_subscribers: users.filter(u => u.account_type && u.account_type !== 'free' && u.whop_membership_id).length,
+          total_in_trial: users.filter(u => u.subscription_status === 'trial' || u.is_in_trial).length,
+          total_paid: users.filter(u => u.whop_membership_id && !u.is_in_trial && u.subscription_status === 'active').length,
+        },
+        newsletter: {
+          total_subscribers: users.filter(u => u.newsletter_status === 'active' || u.newsletter_whop_membership_id).length,
+          monthly: {
+            total: users.filter(u => u.newsletter_status === 'active').length,
+            in_trial: users.filter(u => u.newsletter_status === 'trial').length,
+            paid: users.filter(u => u.newsletter_whop_membership_id && u.newsletter_status === 'active').length,
+            top_secret_discount: users.filter(u => u.newsletter_enabled && u.top_secret_enabled).length,
+          },
+          yearly: { total: 0, paid: 0 },
+          cancelled: users.filter(u => u.newsletter_status === 'cancelled').length,
+          pending_cancellation: 0,
+        },
+        top_secret: {
+          total_subscribers: users.filter(u => u.top_secret_status === 'active' || u.top_secret_whop_membership_id).length,
+          monthly: {
+            total: users.filter(u => u.top_secret_status === 'active').length,
+            in_trial: users.filter(u => u.top_secret_status === 'trial').length,
+            paid: users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active').length,
+          },
+          yearly: { total: 0, in_trial: 0, paid: 0 },
+          journey: {
+            in_trial: users.filter(u => u.top_secret_status === 'trial').length,
+            month_1: 0,
+            month_2: 0,
+            month_3_plus: 0,
+          },
+          cancelled: users.filter(u => u.top_secret_status === 'cancelled').length,
+          pending_cancellation: 0,
+        },
+        platform: {
+          total_subscribers: users.filter(u => u.platform_plan && u.platform_plan !== 'free').length,
+          free: users.filter(u => !u.platform_plan || u.platform_plan === 'free').length,
+          core: {
+            total: users.filter(u => u.platform_plan === 'core').length,
+            monthly: { total: users.filter(u => u.platform_plan === 'core').length, in_trial: 0, paid: users.filter(u => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length },
+            yearly: { total: 0, paid: 0 },
+          },
+          pro: {
+            total: users.filter(u => u.platform_plan === 'pro').length,
+            monthly: { total: users.filter(u => u.platform_plan === 'pro').length, in_trial: users.filter(u => u.platform_plan === 'pro' && u.platform_is_in_trial).length, paid: users.filter(u => u.platform_plan === 'pro' && u.platform_subscription_status === 'active').length },
+            yearly: { total: 0, paid: 0 },
+            trial_eligible: 0,
+          },
+          enterprise: { total: users.filter(u => u.platform_plan === 'enterprise').length },
+          pending_cancellation: 0,
+        },
+        revenue: {
+          journal_mrr: users.filter(u => u.account_type === 'basic' && u.whop_membership_id && !u.is_in_trial).length * 19.99 +
+                       users.filter(u => u.account_type === 'premium' && u.whop_membership_id && !u.is_in_trial).length * 39.99,
+          newsletter_mrr: users.filter(u => u.newsletter_whop_membership_id && u.newsletter_status === 'active').length * 49,
+          top_secret_mrr: users.filter(u => u.top_secret_whop_membership_id && u.top_secret_status === 'active').length * 70,
+          platform_mrr: users.filter(u => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length * 39 +
+                        users.filter(u => u.platform_plan === 'pro' && u.platform_subscription_status === 'active').length * 69,
+        },
+        trials: {
+          total_in_trial: users.filter(u => u.is_in_trial || u.subscription_status === 'trial' || u.newsletter_status === 'trial' || u.platform_is_in_trial).length,
+          journal_trial: users.filter(u => u.subscription_status === 'trial' || u.is_in_trial).length,
+          newsletter_trial: users.filter(u => u.newsletter_status === 'trial').length,
+          top_secret_trial: users.filter(u => u.top_secret_status === 'trial').length,
+          platform_trial: users.filter(u => u.platform_is_in_trial).length,
+        },
+      };
+
+      setStats(calculatedStats);
       setLastUpdated(new Date());
       
     } catch (err) {

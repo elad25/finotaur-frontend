@@ -308,11 +308,11 @@ async function getPlanInfo(
     "prod_Kq2pmLT1JyGsU": { plan: "premium", interval: "monthly", price: 39.99, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     "prod_vON7zlda6iuII": { plan: "premium", interval: "yearly", price: 299.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false },
     // Newsletter fallback
-    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 49.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
-    "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 397.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 69.99, maxTrades: 0, isNewsletter: true, isTopSecret: false },
+    "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 699.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     "prod_u7QrZi90xiCZA": { plan: "newsletter", interval: "monthly", price: 19.99, maxTrades: 0, isNewsletter: true, isTopSecret: false }, // 🔥 NEW!
     // Top Secret fallback
-    "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 35.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },
+    "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
   };
 
   return fallbackMapping[productId] || null;

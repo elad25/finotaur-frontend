@@ -1,10 +1,11 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v4.3.0
+// FINOTAUR WHOP CONFIGURATION - v4.4.0
 // =====================================================
-// 🔥 v4.3.0 CHANGES:
-// - War Zone: FIXED Plan IDs (monthly + yearly)
-// - War Zone Monthly: $49/month with 7-day trial
-// - War Zone Yearly: $397/year (NO trial) - saves $191
+// 🔥 v4.4.0 CHANGES (SYNCED WITH DB):
+// - War Zone Monthly: $69.99/month with 7-day trial
+// - War Zone Yearly: $699/year (NO trial) - saves $140.88
+// - Top Secret Monthly: $89.99/month (intro $35 for 2 months)
+// - Top Secret Yearly: $899/year - saves $180.88
 // 
 // 🔥 v4.2.2 CHANGES:
 // - War Zone: UPDATED pricing - $39/mo regular, $19.50/mo intro (was $20/$10)
@@ -516,7 +517,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,  // prod_qlaV5Uu6LZlYn
     name: 'newsletter',
     displayName: 'War Zone Intelligence',
-    price: 49,  // 🔥 v4.3.0: $49/month
+    price: 69.99,  // 🔥 v4.4.0: $69.99/month (synced with DB)
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -576,18 +577,18 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.newsletter_yearly,  // prod_8b3VWkZdena4B
     name: 'newsletter',
     displayName: 'War Zone Intelligence (Annual)',
-    price: 397,  // 🔥 v4.3.0: $397/year
+    price: 699,  // 🔥 v4.4.0: $699/year (synced with DB)
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 33.08,  // $397/12 = ~$33.08/month
+    monthlyEquivalent: 58.25,  // $699/12 = ~$58.25/month
     maxTrades: 0,
     trialDays: 0,  // 🔥 NO trial for yearly!
     isNewsletter: true,
     discordIncluded: true,
-    badge: '💰 Save $191/year',  // ($49*12) - $397 = $191 savings
+    badge: '💰 Save $140.88/year',  // ($69.99*12) - $699 = $140.88 savings
     category: 'journal',
     features: [
-      '💰 Save $191/year vs monthly',
+      '💰 Save $140.88/year vs monthly',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -609,7 +610,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret',
-    price: 70,
+    price: 89.99,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -625,7 +626,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: [
       '🎁 14 days FREE trial',
       '🔥 Then $35/month for 2 months (50% OFF)',
-      '💰 Regular price: $70/month after',
+      '💰 Regular price: $89.99/month after',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',
@@ -640,19 +641,19 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.top_secret,
     name: 'top_secret',
     displayName: 'Top Secret (Annual)',
-    price: 500,
+    price: 899,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 41.67,
+    monthlyEquivalent: 74.92,
     maxTrades: 0,
     trialDays: 14,
     isTopSecret: true,
     discordIncluded: true,
-    badge: '🔥 14-Day Trial + Save $340/year',
+    badge: '🔥 14-Day Trial + Save $180.88/year',
     category: 'journal',
     features: [
       '🎁 14 days FREE trial',
-      '💰 Save $340/year vs monthly',
+      '💰 Save $180.88/year vs monthly',
       'Monthly ISM Manufacturing Report',
       '2x Company Deep Dive Reports',
       '2x Crypto Market Reports',

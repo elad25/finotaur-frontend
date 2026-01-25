@@ -29,7 +29,6 @@ import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTrack
 
 // PUBLIC PAGES
 import LandingPage from "@/pages/landing/LandingPage";
-import NewsletterSignup from "@/pages/landing/NewsletterSignup";
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import ForgotPassword from '@/pages/auth/ForgotPassword';
@@ -270,7 +269,6 @@ function AppContent() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/affiliate" element={<AffiliatePage />} />
-        <Route path="/warzone-signup" element={<NewsletterSignup />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
         <Route path="/legal/privacy" element={<PrivacyPolicy />} />
