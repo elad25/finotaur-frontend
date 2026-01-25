@@ -1,4 +1,4 @@
-// src/components/landing/Navbar.tsx - WITH AFFILIATE LINK + MOBILE MENU
+// src/components/landing-new/Navbar.tsx - CLEANED UP VERSION
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -21,7 +21,6 @@ const Navbar = () => {
     { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
     { href: "#about", label: "About" },
-    { to: "/affiliate", label: "Become An Affiliate", isRoute: true },
   ];
 
   return (
@@ -49,25 +48,14 @@ const Navbar = () => {
             {/* Desktop Navigation Links */}
             <div className="hidden md:flex items-center space-x-8">
               {navLinks.map((link, index) => (
-                link.isRoute ? (
-                  <Link 
-                    key={index}
-                    to={link.to!}
-                    className="text-slate-300 hover:text-white transition-colors text-sm font-medium relative group"
-                  >
-                    {link.label}
-                    <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#C9A646] group-hover:w-full transition-all duration-300" />
-                  </Link>
-                ) : (
-                  <a 
-                    key={index}
-                    href={link.href}
-                    className="text-slate-300 hover:text-white transition-colors text-sm font-medium relative group"
-                  >
-                    {link.label}
-                    <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#C9A646] group-hover:w-full transition-all duration-300" />
-                  </a>
-                )
+                <a 
+                  key={index}
+                  href={link.href}
+                  className="text-slate-300 hover:text-white transition-colors text-sm font-medium relative group"
+                >
+                  {link.label}
+                  <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#C9A646] group-hover:w-full transition-all duration-300" />
+                </a>
               ))}
             </div>
 
@@ -112,25 +100,14 @@ const Navbar = () => {
             >
               <div className="px-4 py-6 space-y-4">
                 {navLinks.map((link, index) => (
-                  link.isRoute ? (
-                    <Link 
-                      key={index}
-                      to={link.to!}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="block text-slate-300 hover:text-white transition-colors text-base font-medium py-2"
-                    >
-                      {link.label}
-                    </Link>
-                  ) : (
-                    <a 
-                      key={index}
-                      href={link.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="block text-slate-300 hover:text-white transition-colors text-base font-medium py-2"
-                    >
-                      {link.label}
-                    </a>
-                  )
+                  <a 
+                    key={index}
+                    href={link.href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="block text-slate-300 hover:text-white transition-colors text-base font-medium py-2"
+                  >
+                    {link.label}
+                  </a>
                 ))}
                 
                 <div className="pt-4 border-t border-white/10 space-y-3">

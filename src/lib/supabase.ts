@@ -13,6 +13,11 @@ const supabaseAnonKey =
   import.meta.env?.VITE_SUPABASE_ANON_KEY || 
   'your-anon-key';
 
+// 🔥 DEBUG - Check if env vars are loaded
+console.log('🔑 [Supabase Init] URL:', supabaseUrl);
+console.log('🔑 [Supabase Init] Anon Key loaded:', !!supabaseAnonKey && supabaseAnonKey !== 'your-anon-key');
+console.log('🔑 [Supabase Init] Key starts with:', supabaseAnonKey?.substring(0, 20) + '...');
+
 // 🔥 SINGLETON - instance יחיד לכל האפליקציה
 let supabaseInstance: SupabaseClient | null = null;
 

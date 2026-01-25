@@ -1440,19 +1440,21 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       try {
         // Fetch ALL reports (not just limited)
         const { data: publishedReports, error } = await supabase
-          .rpc('get_published_reports_for_user', {
-            p_user_id: currentUserId,
-            p_limit: 200 // Increased limit for archive
-          });
+  .rpc('get_published_reports_for_user', {
+    p_user_id: currentUserId,
+    p_limit: 200,
+    p_is_tester: effectiveIsTester  // 👈 חדש!
+  });
 
         if (error) {
           console.error('Error fetching reports via RPC:', error);
-          // Fallback to direct query
-          const { data: directReports, error: directError } = await supabase
-            .from('published_reports')
-            .select('*')
-            .order('published_at', { ascending: false })
-            .limit(200);
+          // Fallback to direct query - v2.5 FIX: Filter by visibility
+const { data: directReports, error: directError } = await supabase
+  .from('published_reports')
+  .select('*')
+  .or('visibility.eq.live,visibility.eq.public,visibility.is.null')
+  .order('published_at', { ascending: false })
+  .limit(200);
 
           if (directError) {
             console.error('Error fetching reports directly:', directError);

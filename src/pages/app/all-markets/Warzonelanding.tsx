@@ -334,13 +334,15 @@ const TestReportCard = ({
   formatReportDate, 
   formatReportTime, 
   handleReportClick,
-  onPublishSuccess
+  onPublishSuccess,
+  clearTestReport
 }: { 
   testDailyReport: DailyReport;
   formatReportDate: (dateStr: string) => string;
   formatReportTime: (createdAt: string) => string;
   handleReportClick: (report: DailyReport, type: 'daily' | 'weekly') => void;
   onPublishSuccess: () => void;
+  clearTestReport: () => void;
 }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -352,7 +354,6 @@ const handlePublishToLive = async () => {
       console.log('[WAR ZONE] 📅 Publishing test report for date:', testReportDate);
       console.log('[WAR ZONE] 📤 Calling API endpoint with service role...');
 
-      // Use API endpoint with service role (bypasses RLS)
       const response = await fetch(`${API_BASE}/api/reports/publish`, {
         method: 'POST',
         headers: {
@@ -373,7 +374,18 @@ const handlePublishToLive = async () => {
       }
 
       console.log('[WAR ZONE] ✅ Report published to PUBLIC via API:', testDailyReport.id);
+      
+      // FIX v3.0: Wait for database transaction to complete
+      console.log('[WAR ZONE] ⏳ Waiting for DB transaction...');
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
       setShowConfirmModal(false);
+      
+      // Clear the test report from state immediately
+      clearTestReport();
+      
+      // Refetch reports
+      console.log('[WAR ZONE] 🔄 Refetching reports...');
       onPublishSuccess();
     } catch (err) {
       console.error('[WAR ZONE] ❌ Error publishing report:', err);
@@ -1256,19 +1268,23 @@ const { data: dailyData, error: dailyError } = await supabase
 }
 
 if (dailyData && dailyData.length > 0) {
-  // Filter out any test reports that might have slipped through
-  const liveReports = dailyData.filter((report: DailyReport) => 
-    (report as any).visibility !== 'test'
-  );
+  // =====================================================
+  // FIX v3.0: Double-filter to ensure no test/archived
+  // This catches any that might slip through RLS
+  // =====================================================
+  const liveReports = dailyData.filter((report: DailyReport) => {
+    const vis = (report as any).visibility;
+    return vis === 'public' || vis === 'live';
+  });
 
-  // Log each report
-  dailyData.forEach((report: DailyReport, index: number) => {
-    console.log(`[WAR ZONE] 📄 Report ${index + 1}:`, {
-      id: report.id,
-      date: report.report_date,
-      visibility: (report as any).visibility,
-      pdf_path: report.pdf_path || '❌ MISSING',
-    });
+  console.log('[WAR ZONE] 📊 After filter:', {
+    originalCount: dailyData.length,
+    filteredCount: liveReports.length,
+    reports: liveReports.map((r: DailyReport) => ({
+      id: r.id,
+      date: r.report_date,
+      visibility: (r as any).visibility
+    }))
   });
         
   // Store only LIVE reports (not test)
@@ -1288,7 +1304,17 @@ if (dailyData && dailyData.length > 0) {
   //   - מחליף את Current (כי אותו תאריך)
   // =====================================================
         
-        // DEBUG: Log all dates
+        // =====================================================
+// FIX v3.0: SIMPLE ASSIGNMENT
+// Report 0 = Most recent (CURRENT - Middle card)
+// Report 1 = Second most recent (PREVIOUS - Left card)
+//
+// The key insight: We DON'T care about specific dates!
+// We just want the two most recent LIVE reports.
+// When a new report is published, it becomes [0],
+// and the old [0] becomes [1].
+// =====================================================
+
 console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport) => ({
   id: r.id,
   report_date: r.report_date,
@@ -1297,14 +1323,22 @@ console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport
   isToday: normalizeDate(r.report_date) === todayNY
 })));
 
-// Current (Middle card) = Today's LIVE report (if exists)
+// Current (Middle card) = Most recent LIVE report
 const latestReport = liveReports.length > 0 ? liveReports[0] : null;
+// Previous (Left card) = Second most recent LIVE report
 const previousReport = liveReports.length > 1 ? liveReports[1] : null;
 
 console.log('[WAR ZONE] 📌 Final assignment:', {
-  latestReport: latestReport?.id || 'NONE',
-  previousReport: previousReport?.id || 'NONE',
-  todayNY
+  current: latestReport ? {
+    id: latestReport.id,
+    date: latestReport.report_date,
+    visibility: (latestReport as any).visibility
+  } : 'NONE',
+  previous: previousReport ? {
+    id: previousReport.id,
+    date: previousReport.report_date,
+    visibility: (previousReport as any).visibility
+  } : 'NONE'
 });
         
         // DEBUG: Log what we found
@@ -2234,6 +2268,7 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
     formatReportTime={formatReportTime}
     handleReportClick={handleReportClick}
     onPublishSuccess={() => fetchReports(false)}
+    clearTestReport={() => setTestDailyReport(null)}
   />
 )}
 
@@ -2356,12 +2391,34 @@ const handleReportClick = async (report: DailyReport | WeeklyReport, reportType:
 // ============================================
 // MAIN COMPONENT
 // ============================================
-export default function WarZoneLandingSimple() {
+interface WarZoneLandingProps {
+  previewMode?: 'landing' | 'subscriber' | null;
+}
+
+export default function WarZoneLandingSimple({ previewMode = null }: WarZoneLandingProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [isLoading, setIsLoading] = useState(true);
-  const [newsletterStatus, setNewsletterStatus] = useState<NewsletterStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(previewMode ? false : true);
+  
+  // Mock status for preview modes
+  const mockActiveStatus: NewsletterStatus = {
+    newsletter_enabled: true,
+    newsletter_status: 'active',
+    newsletter_whop_membership_id: 'preview_mock',
+    newsletter_started_at: new Date().toISOString(),
+    newsletter_expires_at: null,
+    newsletter_trial_ends_at: null,
+    newsletter_cancel_at_period_end: false,
+    days_until_expiry: null,
+    days_until_trial_ends: null,
+    is_in_trial: false,
+    is_active: true,
+  };
+  
+  const [newsletterStatus, setNewsletterStatus] = useState<NewsletterStatus | null>(
+    previewMode === 'subscriber' ? mockActiveStatus : null
+  );
   const [topSecretStatus, setTopSecretStatus] = useState<TopSecretStatus>({ is_active: false, membership_id: null });
 const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
 const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -2480,8 +2537,23 @@ const faqs = [
   { q: "What's the difference between monthly and yearly?", a: `Monthly is $${MONTHLY_PRICE}/mo with a 7-day free trial. Yearly is $${YEARLY_PRICE}/year (saves $${YEARLY_SAVINGS}) with no trial but instant access.` }, 
   { q: "Can I cancel anytime?", a: "One click, no questions. We'd rather you cancel than stay confused." }
 ];
-  if (isLoading) return <div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>;
-if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} /><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);
+  // Preview mode overrides
+  if (previewMode === 'landing') {
+    // Force show landing page regardless of actual status
+    // Continue to render landing page below
+  } else if (previewMode === 'subscriber') {
+    // Force show subscriber view
+    return (
+      <ActiveSubscriberView 
+        newsletterStatus={mockActiveStatus} 
+        onCancelClick={() => alert('Cancel disabled in preview mode')} 
+      />
+    );
+  } else {
+    // Normal flow
+    if (isLoading) return <div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>;
+    if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSuccessModal} onClose={() => setShowSuccessModal(false)} /><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);
+  }
   // ====================================
   // LANDING PAGE - EXACT DESIGN MATCH
   // ====================================
@@ -2731,26 +2803,15 @@ if (newsletterStatus?.is_active) return (<><PaymentSuccessModal isOpen={showSucc
       {/* ============ BEFORE/AFTER SECTION ============ */}
       <section className="relative py-20 px-6 overflow-hidden bg-[#0a0806]">
         <div className="max-w-5xl mx-auto relative z-10">
-       {/* Title Section - INSTITUTIONAL RESEARCH STYLE */}
+       {/* Title Section - MATCHING HERO STYLE */}
 <div className="text-center mb-14">
-  <h2 
-    className="text-3xl md:text-4xl lg:text-[2.8rem] leading-[1.1] mb-2 italic"
-    style={{ fontFamily: "Georgia, 'Times New Roman', serif", color: '#E8DCC4' }}
-  >
-    Welcome to the
-  </h2>
-  <h2 
-    className="text-5xl md:text-6xl lg:text-[5rem] leading-[1.1] mb-6 italic"
-    style={{ 
-      fontFamily: "Georgia, 'Times New Roman', serif",
-      fontWeight: 700,
-      color: '#C9A646',
-      letterSpacing: '0.01em'
-    }}
-  >
-    WAR ZONE
-  </h2>
-  <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ fontFamily: "Georgia, serif", color: '#9A9080' }}>
+<h2 className="heading-font text-3xl md:text-4xl lg:text-[2.8rem] leading-[1.1] mb-2 not-italic">
+  <span className="text-cream block">Welcome to the</span>
+</h2>
+<h2 className="heading-bold italic text-5xl md:text-6xl lg:text-[5rem] leading-[1.1] mb-6" style={{ color: '#E9A931' }}>
+  WAR ZONE
+</h2>
+  <p className="text-base md:text-lg max-w-xl mx-auto leading-relaxed" style={{ color: '#9A9080' }}>
     The same market intelligence that hedge funds pay{' '}
     <span style={{ color: '#C9A646', fontWeight: 600 }}>$2,000+/month</span>{' '}
     for — now available for serious traders who want an edge.

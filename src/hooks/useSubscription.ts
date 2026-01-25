@@ -157,7 +157,7 @@ export function useSubscription() {
         // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
         // ═══════════════════════════════════════════════════════════════
 const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-  p_user_id: effectiveUserId  // ✅ נכון
+  user_id_param: effectiveUserId  // ✅ תוקן - Supabase חושף את הפרמטר בלי ה-p_
 });
         
         if (rpcError) {
@@ -246,10 +246,9 @@ const { data, error: rpcError } = await supabase.rpc('get_user_subscription_stat
       if (!effectiveUserId) return null;
       
       try {
-        const { data, error } = await supabase.rpc('check_usage_warning', { 
-          p_user_id: effectiveUserId 
-        });
-        
+const { data, error } = await supabase.rpc('check_usage_warning', { 
+  user_id_param: effectiveUserId 
+});
         if (error) return null;
         return data as WarningState;
       } catch {
@@ -268,9 +267,9 @@ const { data, error: rpcError } = await supabase.rpc('get_user_subscription_stat
     mutationFn: async () => {
       if (!effectiveUserId) throw new Error('Not authenticated');
       
-      const { error } = await supabase.rpc('mark_warning_shown', { 
-        p_user_id: effectiveUserId 
-      });
+const { error } = await supabase.rpc('mark_warning_shown', { 
+  user_id_param: effectiveUserId 
+});
       
       if (error) throw error;
     },

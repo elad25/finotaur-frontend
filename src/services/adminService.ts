@@ -2,22 +2,15 @@
 // ============================================
 // OPTIMIZED FOR 5000+ CONCURRENT USERS
 // ============================================
-// Version: v8.7.0-WITH-IMPERSONATION-SYSTEM
-// Performance improvements:
-// ✅ React Query integration via query keys
-// ✅ Request deduplication via cachedQuery wrapper
-// ✅ Aggressive caching with stale-while-revalidate
-// ✅ Batch operations to reduce DB roundtrips
-// ✅ Optimistic updates for instant UI
-// ✅ Memory leak prevention
-// ✅ Type-safe query key factory
-// ✅ Grant free access function
-// ✅ FIXED: Admin audit log via RPC (v8.4.5)
-// ✅ FIXED: Admin subscription update via RPC (v8.4.7)
-// ✅ NEW v8.4.10: UNBAN user function using RPC
-// ✅ NEW v8.5.0: SOFT DELETE with 30-day archive system
-// ✅ NEW v8.6.0: SUBSCRIBERS management functions
-// ✅ NEW v8.7.0: IMPERSONATION system with session management
+// Version: v9.0.0-WHOP-VERIFIED-ONLY
+// 
+// 🔥 v9.0.0 CHANGES:
+// - getAllUsers now returns ONLY Whop-verified subscribers
+// - Added filter: whop_membership_id IS NOT NULL
+// - Only shows users who actually paid via Whop
+// - Free/legacy users excluded from main list
+// - Added "Free (Legacy)" filter to see users without Whop
+// ============================================
 
 import { supabase, cachedQuery, supabaseCache } from '@/lib/supabase';
 import {
@@ -36,6 +29,7 @@ import {
   TradeVolumeData,
   AccountType,
   SubscriptionInterval,
+  SubscriptionStatus,
   SubscriberStats,
   Subscriber,
 } from '@/types/admin';
@@ -94,6 +88,14 @@ const PRICING = {
   premium: {
     monthly: 39.99,
     yearly: 24.92,
+  },
+  newsletter: {
+    monthly: 49,
+    yearly: 33.08,
+  },
+  top_secret: {
+    monthly: 70,
+    yearly: 41.67,
   },
 } as const;
 
@@ -175,11 +177,88 @@ export function invalidateImpersonationCaches() {
 }
 
 // ============================================
+// 🔥 HELPER: Map DB row to UserWithStats
+// ============================================
+
+function mapDbRowToUserWithStats(user: any): UserWithStats {
+  // Safely cast subscription_interval
+  const rawInterval = user.subscription_interval;
+  const subscriptionInterval: SubscriptionInterval | null = 
+    rawInterval === 'monthly' || rawInterval === 'yearly' ? rawInterval : null;
+
+  // Safely cast subscription_status
+  const rawStatus = user.subscription_status;
+  const subscriptionStatus: SubscriptionStatus = 
+    ['trial', 'active', 'expired', 'cancelled', 'past_due'].includes(rawStatus) 
+      ? rawStatus 
+      : 'active';
+
+  // Safely cast account_type
+  const rawAccountType = user.account_type;
+  const accountType: AccountType = 
+    ['free', 'basic', 'premium', 'trial', 'newsletter', 'top_secret', 
+     'platform_free', 'platform_core', 'platform_pro', 'platform_enterprise'].includes(rawAccountType)
+      ? rawAccountType
+      : 'free';
+
+  return {
+    // Core fields from AdminUser
+    id: user.id,
+    email: user.email || '',
+    display_name: user.display_name || null,
+    avatar_url: user.avatar_url || null,
+    role: user.role || 'user',
+    account_type: accountType,
+    subscription_interval: subscriptionInterval,
+    trade_count: Number(user.trade_count) || 0,
+    max_trades: Number(user.max_trades) || 0,
+    subscription_status: subscriptionStatus,
+    subscription_started_at: user.subscription_started_at || null,
+    subscription_expires_at: user.subscription_expires_at || null,
+    subscription_cancel_at_period_end: Boolean(user.subscription_cancel_at_period_end),
+    trial_ends_at: user.trial_ends_at || null,
+    is_in_trial: Boolean(user.is_in_trial),
+    is_banned: Boolean(user.is_banned),
+    ban_reason: user.ban_reason || null,
+    banned_at: user.banned_at || null,
+    last_login_at: user.last_login_at || null,
+    login_count: Number(user.login_count) || 0,
+    created_at: user.created_at,
+    updated_at: user.updated_at,
+    
+    // Optional affiliate fields
+    affiliate_code: user.affiliate_code || null,
+    referred_by: user.referred_by || null,
+    free_months_available: user.free_months_available || 0,
+    subscription_paused_until: user.subscription_paused_until || null,
+    
+    // Stats fields from UserWithStats
+    total_pnl: Number(user.total_pnl) || 0,
+    win_rate: Number(user.win_rate) || 0,
+    total_trades: Number(user.trade_count) || Number(user.total_trades) || 0,
+    active_trades: Number(user.active_trades) || 0,
+    strategies_count: Number(user.strategies_count) || 0,
+    last_trade_date: user.last_trade_date || null,
+    
+    // 🔥 v9.0.0: Whop identifiers
+    whop_membership_id: user.whop_membership_id || null,
+    whop_user_id: user.whop_user_id || null,
+    whop_product_id: user.whop_product_id || null,
+  };
+}
+
+// ============================================
 // USER MANAGEMENT - OPTIMIZED
 // ============================================
 
 /**
- * ⚡ OPTIMIZED: Uses admin_users_list_view + cachedQuery wrapper
+ * ⚡ v9.0.0: Returns ONLY Whop-verified Journal subscribers
+ * 
+ * 🔥 CRITICAL CHANGES:
+ * - Default: Only users with whop_membership_id (paid via Whop)
+ * - Filter 'free': Shows legacy users WITHOUT Whop membership
+ * - Filter 'trial': Users in trial period (still need whop_membership_id)
+ * - Filter 'basic'/'premium': Specific plan type (with whop_membership_id)
  */
 export async function getAllUsers(
   filters?: UserFilters,
@@ -190,64 +269,94 @@ export async function getAllUsers(
   return cachedQuery(
     cacheKey,
     async () => {
-      console.time('⚡ getAllUsers');
+      console.time('⚡ getAllUsers (Whop-verified only)');
       
-      let query = supabase
-        .from('admin_users_list_view')
-        .select('*', { count: 'exact' });
-
-      // Apply filters
-      if (filters?.search) {
-        query = query.or(`email.ilike.%${filters.search}%,display_name.ilike.%${filters.search}%`);
-      }
-      if (filters?.role) {
-        query = query.eq('role', filters.role);
-      }
-      if (filters?.account_type) {
-        query = query.eq('account_type', filters.account_type);
-      }
-      if (filters?.subscription_interval) {
-        query = query.eq('subscription_interval', filters.subscription_interval);
-      }
-      if (filters?.subscription_status) {
-        query = query.eq('subscription_status', filters.subscription_status);
-      }
-      if (filters?.is_banned !== undefined) {
-        query = query.eq('is_banned', filters.is_banned);
-      }
-      if (filters?.dateFrom) {
-        query = query.gte('created_at', filters.dateFrom);
-      }
-      if (filters?.dateTo) {
-        query = query.lte('created_at', filters.dateTo);
-      }
-
-      // Apply sorting
-      const sortBy = pagination?.sortBy || 'created_at';
-      const sortOrder = pagination?.sortOrder || 'desc';
-      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-
-      // Apply pagination
       const page = pagination?.page || 1;
       const pageSize = pagination?.pageSize || 50;
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
+
+      // ============================================
+      // 🔥 v9.0.0: WHOP-VERIFIED SUBSCRIBERS ONLY
+      // ============================================
+      
+      let query = supabase
+        .from('profiles')
+        .select('*', { count: 'exact' })
+        .is('deleted_at', null);
+
+      // ============================================
+      // FILTER LOGIC
+      // ============================================
+      
+      if (filters?.account_type === 'free') {
+        // 🔥 SPECIAL CASE: "Free (Legacy)" - users WITHOUT Whop membership
+        // These are users who registered but never paid via Whop
+        query = query
+          .is('whop_membership_id', null)
+          .or('account_type.eq.free,account_type.is.null');
+          
+      } else if (filters?.account_type === 'trial') {
+        // 🔥 TRIAL: Users in trial period WITH Whop membership
+        query = query
+          .not('whop_membership_id', 'is', null)
+          .eq('account_type', 'basic')
+          .eq('is_in_trial', true);
+          
+      } else if (filters?.account_type === 'basic') {
+        // 🔥 BASIC: Basic plan users WITH Whop membership
+        query = query
+          .not('whop_membership_id', 'is', null)
+          .eq('account_type', 'basic');
+          
+      } else if (filters?.account_type === 'premium') {
+        // 🔥 PREMIUM: Premium plan users WITH Whop membership
+        query = query
+          .not('whop_membership_id', 'is', null)
+          .eq('account_type', 'premium');
+          
+      } else {
+        // 🔥 DEFAULT (All Subscribers): Only Whop-verified users
+        // Shows all basic + premium users who paid via Whop
+        query = query
+          .not('whop_membership_id', 'is', null)
+          .in('account_type', ['basic', 'premium']);
+      }
+
+      // ============================================
+      // ADDITIONAL FILTERS
+      // ============================================
+
+      // Search filter (email or display_name)
+      if (filters?.search) {
+        const searchTerm = filters.search.toLowerCase();
+        query = query.or(`email.ilike.%${searchTerm}%,display_name.ilike.%${searchTerm}%`);
+      }
+
+      // Sorting
+      const sortBy = pagination?.sortBy || 'created_at';
+      const sortOrder = pagination?.sortOrder || 'desc';
+      query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+
+      // Pagination
       query = query.range(from, to);
 
+      // ============================================
+      // EXECUTE QUERY
+      // ============================================
+      
       const { data, error, count } = await query;
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching users:', error);
+        throw error;
+      }
 
-      console.timeEnd('⚡ getAllUsers');
+      console.timeEnd('⚡ getAllUsers (Whop-verified only)');
+      console.log(`📊 Found ${count} Whop-verified subscribers`);
 
-      const usersWithStats: UserWithStats[] = (data || []).map(user => ({
-        ...user,
-        total_pnl: Number(user.total_pnl) || 0,
-        win_rate: Number(user.win_rate) || 0,
-        total_trades: Number(user.total_trades) || 0,
-        active_trades: Number(user.active_trades) || 0,
-        strategies_count: Number(user.strategies_count) || 0,
-      })) as UserWithStats[];
+      // 🔥 v9.0.0: Map to UserWithStats with proper type safety
+      const usersWithStats: UserWithStats[] = (data || []).map(mapDbRowToUserWithStats);
 
       return {
         data: usersWithStats,
@@ -262,7 +371,7 @@ export async function getAllUsers(
 }
 
 /**
- * ⚡ OPTIMIZED: Uses admin_users_list_view + cachedQuery
+ * ⚡ Get single user by ID (includes all users, not just subscribers)
  */
 export async function getUserById(userId: string): Promise<UserWithStats | null> {
   const cacheKey = `admin-user-${userId}`;
@@ -271,7 +380,7 @@ export async function getUserById(userId: string): Promise<UserWithStats | null>
     cacheKey,
     async () => {
       const { data: user, error } = await supabase
-        .from('admin_users_list_view')
+        .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
@@ -281,14 +390,7 @@ export async function getUserById(userId: string): Promise<UserWithStats | null>
         throw error;
       }
 
-      return {
-        ...user,
-        total_pnl: Number(user.total_pnl) || 0,
-        win_rate: Number(user.win_rate) || 0,
-        total_trades: Number(user.total_trades) || 0,
-        active_trades: Number(user.active_trades) || 0,
-        strategies_count: Number(user.strategies_count) || 0,
-      } as UserWithStats;
+      return mapDbRowToUserWithStats(user);
     },
     CACHE_TTL.USER_DETAIL
   );
@@ -566,7 +668,6 @@ export async function permanentDeleteFromArchive(
 
 /**
  * 🎭 Start impersonation session
- * Creates a temporary session for admin to access user's account
  */
 export async function startImpersonation(
   userId: string,
@@ -575,7 +676,6 @@ export async function startImpersonation(
   console.time('⚡ startImpersonation');
 
   try {
-    // 🔥 CRITICAL: Call the RPC function
     const { data, error } = await supabase.rpc('start_impersonation_session_v1', {
       p_user_id: userId,
       p_admin_email: adminEmail
@@ -596,16 +696,8 @@ export async function startImpersonation(
       throw new Error('Invalid session tokens returned');
     }
 
-    console.log('✅ Impersonation session created:', {
-      userId,
-      adminEmail,
-      hasToken: !!session.access_token,
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
-    });
-
-    // Invalidate impersonation caches
+    console.log('✅ Impersonation session created');
     invalidateImpersonationCaches();
-
     console.timeEnd('⚡ startImpersonation');
 
     return session;
@@ -617,7 +709,6 @@ export async function startImpersonation(
 
 /**
  * 🛑 End impersonation session
- * Terminates the admin's impersonation session
  */
 export async function endImpersonation(sessionToken: string): Promise<void> {
   console.time('⚡ endImpersonation');
@@ -633,10 +724,7 @@ export async function endImpersonation(sessionToken: string): Promise<void> {
     }
 
     console.log('✅ Impersonation session ended');
-
-    // Invalidate impersonation caches
     invalidateImpersonationCaches();
-
     console.timeEnd('⚡ endImpersonation');
   } catch (error) {
     console.error('❌ endImpersonation failed:', error);
@@ -645,8 +733,7 @@ export async function endImpersonation(sessionToken: string): Promise<void> {
 }
 
 /**
- * 📋 Get active impersonation sessions (admin only)
- * Returns list of all currently active impersonation sessions
+ * 📋 Get active impersonation sessions
  */
 export async function getActiveImpersonationSessions(): Promise<ActiveImpersonationSession[]> {
   return cachedQuery(
@@ -672,7 +759,6 @@ export async function getActiveImpersonationSessions(): Promise<ActiveImpersonat
 
 /**
  * ✅ Validate impersonation session
- * Checks if a session token is valid and not expired
  */
 export async function validateImpersonationSession(
   sessionToken: string
@@ -694,7 +780,6 @@ export async function validateImpersonationSession(
 
     const session = data[0];
 
-    // Check if expired
     if (new Date(session.expires_at) < new Date()) {
       console.warn('⚠️ Impersonation session expired:', sessionToken);
       return null;
@@ -709,7 +794,6 @@ export async function validateImpersonationSession(
 
 /**
  * 🔄 Update impersonation session activity
- * Updates the last_activity timestamp to keep session alive
  */
 export async function updateImpersonationActivity(sessionToken: string): Promise<void> {
   try {
@@ -727,7 +811,6 @@ export async function updateImpersonationActivity(sessionToken: string): Promise
 
 /**
  * 🧹 Cleanup expired impersonation sessions
- * Removes sessions that have expired (called by cron or manually)
  */
 export async function cleanupExpiredSessions(): Promise<number> {
   console.time('⚡ cleanupExpiredSessions');
@@ -766,43 +849,48 @@ export async function getAdminStats(): Promise<AdminStats> {
     async () => {
       console.time('⚡ getAdminStats');
       
-      const { data, error } = await supabase
-        .from('admin_stats_view')
-        .select('*')
-        .single();
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_get_stats');
 
-      if (error) {
-        console.error('❌ Error fetching from admin_stats_view:', error);
-        throw error;
+      if (rpcError) {
+        console.error('❌ Error fetching admin stats:', rpcError);
+        throw rpcError;
+      }
+
+      const stats = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+
+      if (!stats) {
+        throw new Error('No stats returned - check admin permissions');
       }
 
       console.timeEnd('⚡ getAdminStats');
 
       return {
-        totalUsers: data.total_users || 0,
-        activeUsers: data.active_users || 0,
-        newUsersToday: data.new_users_today || 0,
-        newUsersThisWeek: data.new_users_this_week || 0,
-        newUsersThisMonth: data.new_users_this_month || 0,
-        freeUsers: data.free_users || 0,
-        basicUsers: data.basic_users || 0,
-        premiumUsers: data.premium_users || 0,
-        trialUsers: data.trial_users || 0,
-        basicMonthlyUsers: data.basic_monthly_users || 0,
-        basicYearlyUsers: data.basic_yearly_users || 0,
-        premiumMonthlyUsers: data.premium_monthly_users || 0,
-        premiumYearlyUsers: data.premium_yearly_users || 0,
-        estimatedMonthlyRevenue: data.estimated_monthly_revenue || 0,
-        estimatedYearlyRevenue: data.estimated_yearly_revenue || 0,
-        totalTrades: data.total_trades || 0,
-        tradesThisWeek: data.trades_this_week || 0,
-        tradesThisMonth: data.trades_this_month || 0,
-        averageTradesPerUser: data.average_trades_per_user || 0,
-        dailyActiveUsers: data.daily_active_users || 0,
-        weeklyActiveUsers: data.weekly_active_users || 0,
-        monthlyActiveUsers: data.monthly_active_users || 0,
-        freeToPayingConversionRate: data.free_to_paying_conversion_rate || 0,
-        trialToPayingConversionRate: data.trial_to_paying_conversion_rate || 0,
+        totalUsers: stats.total_users || 0,
+        activeUsers: stats.active_users || 0,
+        newUsersToday: stats.new_users_today || 0,
+        newUsersThisWeek: stats.new_users_this_week || 0,
+        newUsersThisMonth: stats.new_users_this_month || 0,
+        freeUsers: stats.free_users || 0,
+        basicUsers: stats.basic_users || 0,
+        premiumUsers: stats.premium_users || 0,
+        trialUsers: stats.trial_users || 0,
+        newsletterUsers: stats.newsletter_users || 0,
+        topSecretUsers: stats.top_secret_users || 0,
+        basicMonthlyUsers: stats.basic_monthly_users || 0,
+        basicYearlyUsers: stats.basic_yearly_users || 0,
+        premiumMonthlyUsers: stats.premium_monthly_users || 0,
+        premiumYearlyUsers: stats.premium_yearly_users || 0,
+        estimatedMonthlyRevenue: stats.estimated_monthly_revenue || 0,
+        estimatedYearlyRevenue: stats.estimated_yearly_revenue || 0,
+        totalTrades: stats.total_trades || 0,
+        tradesThisWeek: stats.trades_this_week || 0,
+        tradesThisMonth: stats.trades_this_month || 0,
+        averageTradesPerUser: stats.average_trades_per_user || 0,
+        dailyActiveUsers: stats.daily_active_users || 0,
+        weeklyActiveUsers: stats.weekly_active_users || 0,
+        monthlyActiveUsers: stats.monthly_active_users || 0,
+        freeToPayingConversionRate: stats.free_to_paying_conversion_rate || 0,
+        trialToPayingConversionRate: stats.trial_to_paying_conversion_rate || 0,
       };
     },
     CACHE_TTL.STATS
@@ -822,7 +910,7 @@ export async function getSubscriptionBreakdown(): Promise<SubscriptionBreakdown[
       return (data || []).map(item => {
         let revenue = 0;
         const accountType = item.account_type as AccountType;
-        const interval = item.subscription_interval as SubscriptionInterval;
+        const interval = item.subscription_interval as SubscriptionInterval | null;
 
         if (accountType === 'basic' && interval === 'monthly') {
           revenue = PRICING.basic.monthly;
@@ -832,6 +920,14 @@ export async function getSubscriptionBreakdown(): Promise<SubscriptionBreakdown[
           revenue = PRICING.premium.monthly;
         } else if (accountType === 'premium' && interval === 'yearly') {
           revenue = PRICING.premium.yearly;
+        } else if (accountType === 'newsletter' && interval === 'monthly') {
+          revenue = PRICING.newsletter.monthly;
+        } else if (accountType === 'newsletter' && interval === 'yearly') {
+          revenue = PRICING.newsletter.yearly;
+        } else if (accountType === 'top_secret' && interval === 'monthly') {
+          revenue = PRICING.top_secret.monthly;
+        } else if (accountType === 'top_secret' && interval === 'yearly') {
+          revenue = PRICING.top_secret.yearly;
         }
 
         return {
@@ -901,31 +997,29 @@ export async function getTradeVolumeData(days: number = 30): Promise<TradeVolume
 }
 
 // ============================================
-// 🆕 v8.6.0: SUBSCRIBERS MANAGEMENT
+// 🆕 v9.0.0: SUBSCRIBERS MANAGEMENT (WHOP-VERIFIED)
 // ============================================
 
 /**
- * Get subscriber statistics
+ * Get subscriber statistics - 🔥 NOW COUNTS ONLY WHOP-VERIFIED
  */
 export async function getSubscriberStats(): Promise<SubscriberStats> {
   return cachedQuery(
     'subscriber-stats',
     async () => {
-      console.time('⚡ getSubscriberStats');
+      console.time('⚡ getSubscriberStats (Whop-verified only)');
 
-      // Get all subscribers (users with active subscriptions)
-      // ✅ Exclude admins from subscribers list
+      // 🔥 v9.0.0: Only count subscribers with whop_membership_id
       const { data: subscribers, error } = await supabase
         .from('profiles')
-        .select('account_type, subscription_interval, subscription_status, subscription_started_at, updated_at, role')
-        .in('account_type', ['basic', 'premium'])
-        .not('account_type', 'is', null)
+        .select('account_type, subscription_interval, subscription_status, subscription_started_at, updated_at, role, whop_membership_id')
+        .not('whop_membership_id', 'is', null)  // 🔥 CRITICAL: Only Whop-verified
+        .in('account_type', ['basic', 'premium', 'newsletter', 'top_secret'])
         .neq('role', 'admin')
         .neq('role', 'super_admin');
 
       if (error) throw error;
 
-      // Calculate stats
       const now = new Date();
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -937,21 +1031,24 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
         s => new Date(s.subscription_started_at || s.updated_at) >= firstOfMonth
       ) || [];
 
-      // Plan breakdown
       const basicSubs = subscribers?.filter(s => s.account_type === 'basic') || [];
       const premiumSubs = subscribers?.filter(s => s.account_type === 'premium') || [];
+      const newsletterSubs = subscribers?.filter(s => s.account_type === 'newsletter') || [];
+      const topSecretSubs = subscribers?.filter(s => s.account_type === 'top_secret') || [];
 
-      // Billing cycle breakdown
       const basicMonthly = basicSubs.filter(s => s.subscription_interval === 'monthly').length;
       const basicYearly = basicSubs.filter(s => s.subscription_interval === 'yearly').length;
       const premiumMonthly = premiumSubs.filter(s => s.subscription_interval === 'monthly').length;
       const premiumYearly = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
 
-      // Revenue calculation (based on your pricing)
       const BASIC_MONTHLY_PRICE = 19.99;
       const BASIC_YEARLY_PRICE = 149;
       const PREMIUM_MONTHLY_PRICE = 39.99;
       const PREMIUM_YEARLY_PRICE = 299;
+      const NEWSLETTER_MONTHLY_PRICE = 49;
+      const NEWSLETTER_YEARLY_PRICE = 397;
+      const TOP_SECRET_MONTHLY_PRICE = 70;
+      const TOP_SECRET_YEARLY_PRICE = 500;
 
       const basicMRR = 
         (basicMonthly * BASIC_MONTHLY_PRICE) + 
@@ -961,16 +1058,25 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
         (premiumMonthly * PREMIUM_MONTHLY_PRICE) + 
         (premiumYearly * (PREMIUM_YEARLY_PRICE / 12));
 
-      const totalMRR = basicMRR + premiumMRR;
+      const newsletterMRR = 
+        (newsletterSubs.filter(s => s.subscription_interval === 'monthly').length * NEWSLETTER_MONTHLY_PRICE) +
+        (newsletterSubs.filter(s => s.subscription_interval === 'yearly').length * (NEWSLETTER_YEARLY_PRICE / 12));
+
+      const topSecretMRR = 
+        (topSecretSubs.filter(s => s.subscription_interval === 'monthly').length * TOP_SECRET_MONTHLY_PRICE) +
+        (topSecretSubs.filter(s => s.subscription_interval === 'yearly').length * (TOP_SECRET_YEARLY_PRICE / 12));
+
+      const totalMRR = basicMRR + premiumMRR + newsletterMRR + topSecretMRR;
       const totalARR = totalMRR * 12;
 
-      // Calculate churn (simplified - last 30 days)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
+      // 🔥 v9.0.0: Only count Whop-verified cancelled users
       const { data: cancelledSubs } = await supabase
         .from('profiles')
         .select('id')
+        .not('whop_membership_id', 'is', null)
         .eq('subscription_status', 'cancelled')
         .gte('updated_at', thirtyDaysAgo.toISOString());
 
@@ -978,7 +1084,7 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
         ? (cancelledSubs.length / subscribers.length) * 100 
         : 0;
 
-      console.timeEnd('⚡ getSubscriberStats');
+      console.timeEnd('⚡ getSubscriberStats (Whop-verified only)');
 
       return {
         totalSubscribers: subscribers?.length || 0,
@@ -987,6 +1093,8 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
         
         basicSubscribers: basicSubs.length,
         premiumSubscribers: premiumSubs.length,
+        newsletterSubscribers: newsletterSubs.length,
+        topSecretSubscribers: topSecretSubs.length,
         
         basicMonthly,
         basicYearly,
@@ -1006,27 +1114,32 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
 }
 
 /**
- * Get list of all subscribers
+ * Get list of all subscribers - 🔥 NOW RETURNS ONLY WHOP-VERIFIED
  */
 export async function getSubscribersList(): Promise<Subscriber[]> {
   return cachedQuery(
     'subscribers-list',
     async () => {
-      console.time('⚡ getSubscribersList');
+      console.time('⚡ getSubscribersList (Whop-verified only)');
 
+      // 🔥 v9.0.0: Only return subscribers with whop_membership_id
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, display_name, account_type, subscription_status, subscription_interval, subscription_started_at, subscription_expires_at')
-        .in('account_type', ['basic', 'premium'])
+        .select('id, email, display_name, account_type, subscription_status, subscription_interval, subscription_started_at, subscription_expires_at, whop_membership_id')
+        .not('whop_membership_id', 'is', null)  // 🔥 CRITICAL: Only Whop-verified
+        .in('account_type', ['basic', 'premium', 'newsletter', 'top_secret'])
         .order('subscription_started_at', { ascending: false });
 
       if (error) throw error;
 
-      // Calculate monthly revenue for each subscriber
       const BASIC_MONTHLY = 19.99;
       const BASIC_YEARLY = 149;
       const PREMIUM_MONTHLY = 39.99;
       const PREMIUM_YEARLY = 299;
+      const NEWSLETTER_MONTHLY = 49;
+      const NEWSLETTER_YEARLY = 397;
+      const TOP_SECRET_MONTHLY = 70;
+      const TOP_SECRET_YEARLY = 500;
 
       const subscribers = (data || []).map(profile => {
         let monthlyRevenue = 0;
@@ -1039,24 +1152,33 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
           monthlyRevenue = profile.subscription_interval === 'monthly' 
             ? PREMIUM_MONTHLY 
             : PREMIUM_YEARLY / 12;
+        } else if (profile.account_type === 'newsletter') {
+          monthlyRevenue = profile.subscription_interval === 'monthly' 
+            ? NEWSLETTER_MONTHLY 
+            : NEWSLETTER_YEARLY / 12;
+        } else if (profile.account_type === 'top_secret') {
+          monthlyRevenue = profile.subscription_interval === 'monthly' 
+            ? TOP_SECRET_MONTHLY 
+            : TOP_SECRET_YEARLY / 12;
         }
 
         return {
           user_id: profile.id,
           email: profile.email || '',
           full_name: profile.display_name,
-          subscription_plan: profile.account_type as 'basic' | 'premium',
+          subscription_plan: profile.account_type as 'basic' | 'premium' | 'newsletter' | 'top_secret',
           subscription_status: (profile.subscription_status || 'active') as 'active' | 'cancelled' | 'past_due' | 'trial',
           billing_cycle: (profile.subscription_interval || 'monthly') as 'monthly' | 'yearly',
-          subscription_start_date: profile.subscription_started_at || profile.subscription_started_at || new Date().toISOString(),
+          subscription_start_date: profile.subscription_started_at || new Date().toISOString(),
           subscription_end_date: profile.subscription_expires_at,
           monthly_revenue: Math.round(monthlyRevenue),
-          total_paid: 0, // TODO: Calculate from payment history
-          payment_method: null, // TODO: Get from payment provider
+          total_paid: 0,
+          payment_method: null,
         };
       });
 
-      console.timeEnd('⚡ getSubscribersList');
+      console.timeEnd('⚡ getSubscribersList (Whop-verified only)');
+      console.log(`📊 Found ${subscribers.length} Whop-verified subscribers`);
       
       return subscribers;
     },
@@ -1065,7 +1187,7 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
 }
 
 /**
- * Export subscribers to CSV
+ * Export subscribers to CSV - 🔥 ONLY WHOP-VERIFIED
  */
 export async function exportSubscribers(): Promise<string> {
   const subscribers = await getSubscribersList();

@@ -42,7 +42,6 @@ const RefundPolicy = () => {
               Our <strong>Basic plan</strong> includes a <strong>14-day free trial</strong>:
             </p>
             <ul className="text-muted-foreground space-y-2">
-              <li>No credit card required to start the trial</li>
               <li>Full access to all Basic plan features during the trial</li>
               <li>Cancel anytime during the trial with no charges</li>
               <li>After 14 days, you'll be charged unless you cancel</li>

@@ -547,7 +547,7 @@ const UpgradePlanModal = ({
                   </h4>
                   <p className="text-slate-300 text-base leading-relaxed">
                     {needsPlanSelection 
-                      ? 'No credit card required for Basic trial. Premium requires payment upfront but gives you unlimited access immediately.'
+                      ? ' Premium requires payment upfront but gives you unlimited access immediately.'
                       : 'Upgrades take effect immediately. Downgrades will apply at the end of your current billing cycle.'
                     }
                   </p>

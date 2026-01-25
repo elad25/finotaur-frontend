@@ -125,7 +125,6 @@ export default function BacktestLanding() {
             <div className="w-1 h-1 rounded-full bg-zinc-700" />
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-green-500" />
-              <span>No Credit Card for Trial</span>
             </div>
             <div className="w-1 h-1 rounded-full bg-zinc-700" />
             <div className="flex items-center gap-2">

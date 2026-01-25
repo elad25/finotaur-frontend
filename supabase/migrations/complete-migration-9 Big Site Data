@@ -1,38 +1,30 @@
+-- ============================================================
+-- COMPLETE MIGRATION FILE
+-- Handles cleanup and creation in one file
+-- ============================================================
 
 
+-- ============================================================
+-- PART 1: DROP EXISTING TABLES (CASCADE removes policies too)
+-- ============================================================
+
+DROP TABLE IF EXISTS macro_cache CASCADE;
+DROP TABLE IF EXISTS rates_cache CASCADE;
+DROP TABLE IF EXISTS rate_decisions CASCADE;
+DROP TABLE IF EXISTS yield_snapshots CASCADE;
 
 
--- Macro cache table
-CREATE TABLE IF NOT EXISTS macro_cache (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  symbol TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL,
-  category TEXT NOT NULL,
-  price DECIMAL,
-  daily_change DECIMAL,
-  daily_change_percent DECIMAL,
-  weekly_change DECIMAL,
-  weekly_change_percent DECIMAL,
-  volume TEXT,
-  risk_sentiment TEXT DEFAULT 'Neutral',
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- ============================================================
+-- PART 2: CREATE TABLES
+-- ============================================================
 
--- Index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_macro_cache_symbol ON macro_cache(symbol);
 
--- Allow public read, service role write
-ALTER TABLE macro_cache ENABLE ROW LEVEL SECURITY;
+-- ------------------------------------------------------------
+-- 1. MACRO CACHE TABLE
+-- Cache for macro market data during market closures
+-- ------------------------------------------------------------
 
-CREATE POLICY "Public read access" ON macro_cache
-  FOR SELECT USING (true);
-
-CREATE POLICY "Service role write access" ON macro_cache
-  FOR ALL USING (auth.role() = 'service_role');
-  -- Migration: Create macro_cache table for storing market data during market closures
--- This table is used by the /api/macro/snapshot endpoint
-
-CREATE TABLE IF NOT EXISTS macro_cache (
+CREATE TABLE macro_cache (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
@@ -48,14 +40,13 @@ CREATE TABLE IF NOT EXISTS macro_cache (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_macro_cache_symbol ON macro_cache(symbol);
-CREATE INDEX IF NOT EXISTS idx_macro_cache_category ON macro_cache(category);
-CREATE INDEX IF NOT EXISTS idx_macro_cache_updated ON macro_cache(updated_at DESC);
+CREATE INDEX idx_macro_cache_symbol ON macro_cache(symbol);
+CREATE INDEX idx_macro_cache_category ON macro_cache(category);
+CREATE INDEX idx_macro_cache_updated ON macro_cache(updated_at DESC);
 
--- Insert initial data if empty
-INSERT INTO macro_cache (symbol, name, category, risk_sentiment)
-SELECT * FROM (VALUES
+COMMENT ON TABLE macro_cache IS 'Cache for macro market data during market closures';
+
+INSERT INTO macro_cache (symbol, name, category, risk_sentiment) VALUES
   ('SPX', 'S&P 500', 'index', 'Neutral'),
   ('NDX', 'Nasdaq 100', 'index', 'Neutral'),
   ('DJI', 'Dow Jones', 'index', 'Neutral'),
@@ -65,40 +56,53 @@ SELECT * FROM (VALUES
   ('DXY', 'US Dollar Index', 'currency', 'Neutral'),
   ('CL', 'Crude Oil (WTI)', 'commodity', 'Neutral'),
   ('GC', 'Gold', 'commodity', 'Neutral'),
-  ('BTC', 'Bitcoin', 'crypto', 'Neutral')
-) AS t(symbol, name, category, risk_sentiment)
-WHERE NOT EXISTS (SELECT 1 FROM macro_cache LIMIT 1);
+  ('BTC', 'Bitcoin', 'crypto', 'Neutral');
 
--- RLS Policies (optional - enable if needed)
--- ALTER TABLE macro_cache ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Allow public read" ON macro_cache FOR SELECT USING (true);
--- CREATE POLICY "Allow service write" ON macro_cache FOR ALL USING (auth.role() = 'service_role');
+ALTER TABLE macro_cache ENABLE ROW LEVEL SECURITY;
 
-COMMENT ON TABLE macro_cache IS 'Cache for macro market data during market closures';
--- ============================================================
--- RATES CACHE TABLE
--- For storing interest rate data when APIs are unavailable
--- ============================================================
+CREATE POLICY "macro_cache_select_all" ON macro_cache
+  FOR SELECT USING (true);
 
--- Create rates_cache table
-CREATE TABLE IF NOT EXISTS rates_cache (
+CREATE POLICY "macro_cache_insert_service" ON macro_cache
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "macro_cache_update_service" ON macro_cache
+  FOR UPDATE USING (auth.role() = 'service_role');
+
+
+-- ------------------------------------------------------------
+-- 2. RATES CACHE TABLE
+-- Cache for central bank interest rate data
+-- ------------------------------------------------------------
+
+CREATE TABLE rates_cache (
   id TEXT PRIMARY KEY,
   data JSONB NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_rates_cache_updated_at ON rates_cache(updated_at DESC);
+CREATE INDEX idx_rates_cache_updated_at ON rates_cache(updated_at DESC);
 
--- Add comment
 COMMENT ON TABLE rates_cache IS 'Cache for central bank interest rate data';
 
--- ============================================================
--- OPTIONAL: Historical rate decisions table
--- For storing historical rate decision data
--- ============================================================
+ALTER TABLE rates_cache ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE IF NOT EXISTS rate_decisions (
+CREATE POLICY "rates_cache_select_all" ON rates_cache
+  FOR SELECT USING (true);
+
+CREATE POLICY "rates_cache_insert_service" ON rates_cache
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "rates_cache_update_service" ON rates_cache
+  FOR UPDATE USING (auth.role() = 'service_role');
+
+
+-- ------------------------------------------------------------
+-- 3. RATE DECISIONS TABLE
+-- Historical central bank rate decision records
+-- ------------------------------------------------------------
+
+CREATE TABLE rate_decisions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   bank_id TEXT NOT NULL,
   decision_date DATE NOT NULL,
@@ -107,24 +111,32 @@ CREATE TABLE IF NOT EXISTS rate_decisions (
   change_amount DECIMAL(5,2) NOT NULL,
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent duplicate entries for same bank on same date
   UNIQUE(bank_id, decision_date)
 );
 
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_rate_decisions_bank_id ON rate_decisions(bank_id);
-CREATE INDEX IF NOT EXISTS idx_rate_decisions_date ON rate_decisions(decision_date DESC);
+CREATE INDEX idx_rate_decisions_bank_id ON rate_decisions(bank_id);
+CREATE INDEX idx_rate_decisions_date ON rate_decisions(decision_date DESC);
 
--- Add comment
 COMMENT ON TABLE rate_decisions IS 'Historical central bank rate decision records';
 
--- ============================================================
--- OPTIONAL: Yield history table
--- For storing treasury yield snapshots
--- ============================================================
+ALTER TABLE rate_decisions ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE IF NOT EXISTS yield_snapshots (
+CREATE POLICY "rate_decisions_select_all" ON rate_decisions
+  FOR SELECT USING (true);
+
+CREATE POLICY "rate_decisions_insert_service" ON rate_decisions
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
+
+CREATE POLICY "rate_decisions_update_service" ON rate_decisions
+  FOR UPDATE USING (auth.role() = 'service_role');
+
+
+-- ------------------------------------------------------------
+-- 4. YIELD SNAPSHOTS TABLE
+-- Daily treasury yield snapshots
+-- ------------------------------------------------------------
+
+CREATE TABLE yield_snapshots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   symbol TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -133,147 +145,26 @@ CREATE TABLE IF NOT EXISTS yield_snapshots (
   change_value DECIMAL(6,3),
   snapshot_date DATE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent duplicate entries
   UNIQUE(symbol, snapshot_date)
 );
 
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_yield_snapshots_symbol ON yield_snapshots(symbol);
-CREATE INDEX IF NOT EXISTS idx_yield_snapshots_date ON yield_snapshots(snapshot_date DESC);
+CREATE INDEX idx_yield_snapshots_symbol ON yield_snapshots(symbol);
+CREATE INDEX idx_yield_snapshots_date ON yield_snapshots(snapshot_date DESC);
 
--- Add comment
 COMMENT ON TABLE yield_snapshots IS 'Daily treasury yield snapshots';
 
--- ============================================================
--- RLS POLICIES (Optional - if you want public read access)
--- ============================================================
-
--- Enable RLS
-ALTER TABLE rates_cache ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rate_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE yield_snapshots ENABLE ROW LEVEL SECURITY;
-
--- Public read access for all authenticated users
-CREATE POLICY "rates_cache_select_all" ON rates_cache
-  FOR SELECT USING (true);
-
-CREATE POLICY "rate_decisions_select_all" ON rate_decisions
-  FOR SELECT USING (true);
 
 CREATE POLICY "yield_snapshots_select_all" ON yield_snapshots
   FOR SELECT USING (true);
 
--- Only service role can insert/update
-CREATE POLICY "rates_cache_insert_service" ON rates_cache
-  FOR INSERT WITH CHECK (auth.role() = 'service_role');
-
-CREATE POLICY "rates_cache_update_service" ON rates_cache
-  FOR UPDATE USING (auth.role() = 'service_role');
-
-CREATE POLICY "rate_decisions_insert_service" ON rate_decisions
-  FOR INSERT WITH CHECK (auth.role() = 'service_role');
-
 CREATE POLICY "yield_snapshots_insert_service" ON yield_snapshots
   FOR INSERT WITH CHECK (auth.role() = 'service_role');
-  -- ============================================================
--- RATES CACHE TABLE
--- For storing interest rate data when APIs are unavailable
--- ============================================================
 
--- Create rates_cache table
-CREATE TABLE IF NOT EXISTS rates_cache (
-  id TEXT PRIMARY KEY,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Create index for faster lookups
-CREATE INDEX IF NOT EXISTS idx_rates_cache_updated_at ON rates_cache(updated_at DESC);
-
--- Add comment
-COMMENT ON TABLE rates_cache IS 'Cache for central bank interest rate data';
-
--- ============================================================
--- OPTIONAL: Historical rate decisions table
--- For storing historical rate decision data
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS rate_decisions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bank_id TEXT NOT NULL,
-  decision_date DATE NOT NULL,
-  previous_rate DECIMAL(5,2),
-  new_rate DECIMAL(5,2) NOT NULL,
-  change_amount DECIMAL(5,2) NOT NULL,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent duplicate entries for same bank on same date
-  UNIQUE(bank_id, decision_date)
-);
-
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_rate_decisions_bank_id ON rate_decisions(bank_id);
-CREATE INDEX IF NOT EXISTS idx_rate_decisions_date ON rate_decisions(decision_date DESC);
-
--- Add comment
-COMMENT ON TABLE rate_decisions IS 'Historical central bank rate decision records';
-
--- ============================================================
--- OPTIONAL: Yield history table
--- For storing treasury yield snapshots
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS yield_snapshots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  symbol TEXT NOT NULL,
-  name TEXT NOT NULL,
-  maturity TEXT NOT NULL,
-  yield_value DECIMAL(6,3) NOT NULL,
-  change_value DECIMAL(6,3),
-  snapshot_date DATE NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  -- Prevent duplicate entries
-  UNIQUE(symbol, snapshot_date)
-);
-
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_yield_snapshots_symbol ON yield_snapshots(symbol);
-CREATE INDEX IF NOT EXISTS idx_yield_snapshots_date ON yield_snapshots(snapshot_date DESC);
-
--- Add comment
-COMMENT ON TABLE yield_snapshots IS 'Daily treasury yield snapshots';
-
--- ============================================================
--- RLS POLICIES (Optional - if you want public read access)
--- ============================================================
-
--- Enable RLS
-ALTER TABLE rates_cache ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rate_decisions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE yield_snapshots ENABLE ROW LEVEL SECURITY;
-
--- Public read access for all authenticated users
-CREATE POLICY "rates_cache_select_all" ON rates_cache
-  FOR SELECT USING (true);
-
-CREATE POLICY "rate_decisions_select_all" ON rate_decisions
-  FOR SELECT USING (true);
-
-CREATE POLICY "yield_snapshots_select_all" ON yield_snapshots
-  FOR SELECT USING (true);
-
--- Only service role can insert/update
-CREATE POLICY "rates_cache_insert_service" ON rates_cache
-  FOR INSERT WITH CHECK (auth.role() = 'service_role');
-
-CREATE POLICY "rates_cache_update_service" ON rates_cache
+CREATE POLICY "yield_snapshots_update_service" ON yield_snapshots
   FOR UPDATE USING (auth.role() = 'service_role');
 
-CREATE POLICY "rate_decisions_insert_service" ON rate_decisions
-  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 
-CREATE POLICY "yield_snapshots_insert_service" ON yield_snapshots
-  FOR INSERT WITH CHECK (auth.role() = 'service_role');
+-- ============================================================
+-- MIGRATION COMPLETE
+-- ============================================================

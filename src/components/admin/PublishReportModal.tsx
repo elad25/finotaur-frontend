@@ -121,37 +121,45 @@ async function publishReportToDashboard(params: {
       htmlLength: params.htmlContent?.length || 0,
     });
 
-    const { data, error } = await supabase.rpc('publish_report_to_dashboard', {
-      p_report_type: params.reportType,
-      p_original_report_id: params.originalReportId,
-      p_title: params.title,
-      p_subtitle: params.subtitle || null,
-      p_highlights: params.highlights || null,
-      p_key_metric_label: params.keyMetricLabel || null,
-      p_key_metric_value: params.keyMetricValue || null,
-      p_key_insights_count: params.keyInsightsCount || 0,
-      p_pdf_url: params.pdfUrl || null,
-      p_markdown_preview: params.markdownPreview?.slice(0, 500) || null,
-      p_qa_score: params.qaScore || null,
-      p_ticker: params.ticker || null,
-      p_company_name: params.companyName || null,
-      p_sector: params.sector || null,
-      p_report_month: params.reportMonth || null,
-      p_pmi_value: params.pmiValue || null,
-      p_market_regime: params.marketRegime || null,
-      p_is_featured: params.isFeatured,
-      p_target_group: params.targetGroup,
-      p_admin_id: user.id,
-      p_admin_note: params.adminNote || null,
-      // ⭐ NEW: Pass full content to database
-      p_markdown_content: params.markdownContent || null,
-      p_html_content: params.htmlContent || null,
-    });
+    // Insert directly into published_reports table
+    const { data, error } = await supabase
+      .from('published_reports')
+      .insert({
+        report_type: params.reportType,
+        original_report_id: params.originalReportId,
+        title: params.title,
+        subtitle: params.subtitle || null,
+        highlights: params.highlights || null,
+        key_metric_label: params.keyMetricLabel || null,
+        key_metric_value: params.keyMetricValue || null,
+        key_insights_count: params.keyInsightsCount || 0,
+        pdf_url: params.pdfUrl || null,
+        markdown_preview: params.markdownPreview?.slice(0, 500) || null,
+        qa_score: params.qaScore || null,
+        ticker: params.ticker || null,
+        company_name: params.companyName || null,
+        sector: params.sector || null,
+        report_month: params.reportMonth || null,
+        pmi_value: params.pmiValue || null,
+        market_regime: params.marketRegime || null,
+        is_featured: params.isFeatured,
+        is_pinned: false,
+        target_group: params.targetGroup,
+        visibility: 'live',
+        published_by: user.id,
+        admin_note: params.adminNote || null,
+        markdown_content: params.markdownContent || null,
+        html_content: params.htmlContent || null,
+        published_at: new Date().toISOString(),
+        email_sent: false,
+      })
+      .select('id')
+      .single();
 
     if (error) throw error;
     
-    console.log('[Publish] Success! Report ID:', data);
-    return { success: true, reportId: data };
+    console.log('[Publish] Success! Report ID:', data?.id);
+    return { success: true, reportId: data?.id };
   } catch (err: any) {
     console.error('[Publish] Error:', err);
     return { success: false, error: err.message };

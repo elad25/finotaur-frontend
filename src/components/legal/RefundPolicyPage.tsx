@@ -19,7 +19,7 @@ const RefundPolicyPage = () => {
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-5 mb-4">
             <p className="text-foreground font-semibold mb-2">📅 14-Day Free Trial</p>
             <p className="text-muted-foreground leading-relaxed">
-              Our Basic plan ($19.99/month) includes a 14-day free trial. No credit card required to start. 
+              Our Basic plan ($19.99/month) includes a 14-day free trial. 
               Cancel anytime during the trial with no charges. The Premium plan ($39.99/month) does not 
               include a free trial - payment is required upfront.
             </p>

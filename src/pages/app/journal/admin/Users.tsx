@@ -1,11 +1,12 @@
 // src/pages/app/journal/admin/Users.tsx
 // ============================================
-// OPTIMIZED FOR 5000+ USERS + REALTIME - v2.1.0
+// JOURNAL SUBSCRIBERS ONLY - v2.3.0 (TYPE-SAFE)
 // ============================================
-// 🔥 v2.1.0 CHANGES:
-// - Added 'Trial' filter button for new pricing model
-// - Kept 'Free' filter for legacy users (backward compat)
-// - Updated filter button order: All → Trial → Basic → Premium → Free (Legacy)
+// 🔥 v2.3.0 CHANGES:
+// - Removed ExtendedUser - now using proper UserWithStats type
+// - Fixed all TypeScript errors
+// - All subscription properties now properly typed in admin.ts
+// - Shows ONLY Journal subscribers (Basic, Premium, Trial)
 // ============================================
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -18,9 +19,10 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
+  Users as UsersIcon,
 } from 'lucide-react';
 import { getAllUsers } from '@/services/adminService';
-import { UserWithStats, UserFilters, PaginationParams } from '@/types/admin';
+import { UserWithStats, UserFilters, PaginationParams, AccountType } from '@/types/admin';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import AdminLayout from '@/components/admin/AdminLayout';
 import UserActionsMenu from '@/components/admin/UserActionsMenu';
@@ -69,13 +71,7 @@ export default function AdminUsers() {
   // 🔥 REALTIME SUBSCRIPTION
   // ============================================
 
-  const { isSubscribed, refresh } = useAdminRealtimeUpdates(true);
-
-  // Listen for specific changes and highlight rows
-  useEffect(() => {
-    // This effect will re-run when realtime updates happen
-    // The actual subscription is handled by useAdminRealtimeUpdates
-  }, []);
+  const { isSubscribed } = useAdminRealtimeUpdates(true);
 
   // ============================================
   // REACT QUERY - DATA FETCHING
@@ -94,7 +90,7 @@ export default function AdminUsers() {
       pagination
     ),
     ...CACHE_CONFIG,
-    placeholderData: (previousData) => previousData, // ⚡ Keep old data while fetching
+    placeholderData: (previousData) => previousData,
   });
 
   const users = response?.data || [];
@@ -116,16 +112,15 @@ export default function AdminUsers() {
   }, []);
 
   const handleUserActionComplete = useCallback(() => {
-    // ⚡ Invalidate the current query + stats
     queryClient.invalidateQueries({ queryKey });
     queryClient.invalidateQueries({ queryKey: ['admin', 'subscriber-stats'] });
     queryClient.invalidateQueries({ queryKey: ['admin', 'subscribers-list'] });
   }, [queryClient, queryKey]);
 
   const handleManualRefresh = useCallback(async () => {
-    toast.info('Refreshing users...');
+    toast.info('Refreshing subscribers...');
     await refetch();
-    toast.success('Users refreshed!');
+    toast.success('Subscribers refreshed!');
   }, [refetch]);
 
   // ⚡ Prefetch next page for instant navigation
@@ -154,14 +149,14 @@ export default function AdminUsers() {
   if (isError) {
     return (
       <AdminLayout
-        title="User Management"
-        description="Manage users, subscriptions, and permissions"
+        title="Journal Subscribers"
+        description="Manage Journal subscription users"
       >
         <div className="min-h-[400px] flex items-center justify-center">
           <div className="text-center">
             <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">
-              Failed to Load Users
+              Failed to Load Subscribers
             </h3>
             <p className="text-gray-400 mb-6">
               {error instanceof Error ? error.message : 'Unknown error occurred'}
@@ -185,8 +180,8 @@ export default function AdminUsers() {
   if (isLoading) {
     return (
       <AdminLayout
-        title="User Management"
-        description="Manage users, subscriptions, and permissions"
+        title="Journal Subscribers"
+        description="Manage Journal subscription users"
       >
         <LoadingSkeleton lines={10} />
       </AdminLayout>
@@ -198,8 +193,8 @@ export default function AdminUsers() {
   // ============================================
   return (
     <AdminLayout
-      title="User Management"
-      description="Manage users, subscriptions, and permissions"
+      title="Journal Subscribers"
+      description="Manage Journal subscription users (Basic, Premium, Trial)"
     >
       {/* 🔥 Realtime Status Bar */}
       <div className="flex items-center justify-between mb-4">
@@ -229,6 +224,20 @@ export default function AdminUsers() {
         </button>
       </div>
 
+      {/* 🔥 Info Banner - Journal Subscribers Only */}
+      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-6">
+        <div className="flex items-center gap-3">
+          <UsersIcon className="w-5 h-5 text-blue-400" />
+          <div>
+            <p className="text-blue-400 font-medium">Showing Journal Subscribers Only</p>
+            <p className="text-blue-400/70 text-sm">
+              This page displays users with active Journal subscriptions (Basic, Premium, or Trial). 
+              Free/legacy users are not shown here.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Search & Filters */}
       <div className="bg-[#111111] border border-gray-800 rounded-lg p-6 mb-6">
         <div className="flex flex-col lg:flex-row gap-4">
@@ -249,35 +258,35 @@ export default function AdminUsers() {
             )}
           </div>
 
-          {/* 🔥 v2.1.0: Updated Filter Buttons - Added Trial, reordered */}
+          {/* 🔥 v2.3.0: Updated Filter Buttons - Journal Subscribers Focus */}
           <div className="flex gap-2 flex-wrap">
             <FilterButton
-              label="All"
+              label="All Subscribers"
               isActive={!filters.account_type}
               onClick={() => handleFilterChange({ account_type: undefined })}
             />
             <FilterButton
               label="Trial"
               isActive={filters.account_type === 'trial'}
-              onClick={() => handleFilterChange({ account_type: 'trial' })}
+              onClick={() => handleFilterChange({ account_type: 'trial' as AccountType })}
               color="blue"
             />
             <FilterButton
               label="Basic"
               isActive={filters.account_type === 'basic'}
-              onClick={() => handleFilterChange({ account_type: 'basic' })}
+              onClick={() => handleFilterChange({ account_type: 'basic' as AccountType })}
+              color="emerald"
             />
             <FilterButton
               label="Premium"
               isActive={filters.account_type === 'premium'}
-              onClick={() => handleFilterChange({ account_type: 'premium' })}
+              onClick={() => handleFilterChange({ account_type: 'premium' as AccountType })}
               color="gold"
             />
-            {/* 🔥 v2.1.0: Kept Free filter for legacy users, marked as "Legacy" */}
             <FilterButton
               label="Free (Legacy)"
               isActive={filters.account_type === 'free'}
-              onClick={() => handleFilterChange({ account_type: 'free' })}
+              onClick={() => handleFilterChange({ account_type: 'free' as AccountType })}
               color="gray"
             />
           </div>
@@ -292,7 +301,7 @@ export default function AdminUsers() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <StatsCard label="Total Users" value={total} />
+        <StatsCard label="Total Subscribers" value={total} />
         <StatsCard label="Showing" value={users.length} />
         <StatsCard label="Page" value={`${pagination.page} / ${totalPages}`} />
         <StatsCard label="Per Page" value={pagination.pageSize} />
@@ -305,8 +314,9 @@ export default function AdminUsers() {
             <thead className="bg-[#0A0A0A] border-b border-gray-800">
               <tr>
                 <TableHeader>User</TableHeader>
-                <TableHeader>Account</TableHeader>
-                <TableHeader>Role</TableHeader>
+                <TableHeader>Plan</TableHeader>
+                <TableHeader>Status</TableHeader>
+                <TableHeader>Interval</TableHeader>
                 <TableHeader>Trades</TableHeader>
                 <TableHeader>Win Rate</TableHeader>
                 <TableHeader>P&L</TableHeader>
@@ -317,10 +327,15 @@ export default function AdminUsers() {
             <tbody className="divide-y divide-gray-800">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="text-gray-400">
-                      <p className="text-lg mb-2">No users found</p>
-                      <p className="text-sm">Try adjusting your filters</p>
+                      <UsersIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg mb-2">No subscribers found</p>
+                      <p className="text-sm">
+                        {filters.account_type 
+                          ? `No ${filters.account_type} subscribers match your search` 
+                          : 'No Journal subscribers yet'}
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -367,12 +382,11 @@ export default function AdminUsers() {
 // SUB-COMPONENTS - All memoized
 // ============================================
 
-// 🔥 v2.1.0: Added color prop for different button styles
 const FilterButton = React.memo<{ 
   label: string; 
   isActive: boolean; 
   onClick: () => void;
-  color?: 'default' | 'blue' | 'gold' | 'gray';
+  color?: 'default' | 'blue' | 'emerald' | 'gold' | 'gray';
 }>(({ label, isActive, onClick, color = 'default' }) => {
   const getActiveStyle = () => {
     if (!isActive) return 'bg-[#0A0A0A] text-gray-400 border border-gray-700 hover:border-gray-600';
@@ -380,12 +394,14 @@ const FilterButton = React.memo<{
     switch (color) {
       case 'blue':
         return 'bg-blue-500/20 text-blue-400 border border-blue-500/40';
+      case 'emerald':
+        return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
       case 'gold':
-        return 'bg-[#D4AF37] text-black';
+        return 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40';
       case 'gray':
-        return 'bg-gray-700 text-gray-300';
+        return 'bg-gray-700/50 text-gray-300 border border-gray-600';
       default:
-        return 'bg-[#D4AF37] text-black';
+        return 'bg-[#D4AF37] text-black border border-[#D4AF37]';
     }
   };
 
@@ -418,48 +434,65 @@ const TableHeader = React.memo<{ children: React.ReactNode }>(({ children }) => 
 ));
 TableHeader.displayName = 'TableHeader';
 
-// 🔥 v2.1.0: Updated badge styles for trial
+// 🔥 v2.3.0: Now uses proper UserWithStats type - no more casting needed
 const UserRow = React.memo<{ 
   user: UserWithStats;
   onActionComplete: () => void;
   isRecentlyChanged?: boolean;
 }>(({ user, onActionComplete, isRecentlyChanged = false }) => {
-  // ⚡ Memoize badge styles - 🔥 v2.1.0: Added trial style
-  const accountTypeBadgeStyle = useMemo(() => {
+  
+  // Determine if user is in trial
+  const isInTrial = user.is_in_trial && user.account_type === 'basic';
+  
+  // Plan badge style
+  const planBadgeStyle = useMemo(() => {
+    if (isInTrial) {
+      return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+    }
+    
     const styles: Record<string, string> = {
       free: 'bg-gray-800 text-gray-300',
-      trial: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
       basic: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
       premium: 'bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20',
+      newsletter: 'bg-purple-500/10 text-purple-400 border border-purple-500/20',
+      top_secret: 'bg-red-500/10 text-red-400 border border-red-500/20',
     };
     return styles[user.account_type] || styles.free;
-  }, [user.account_type]);
+  }, [user.account_type, isInTrial]);
 
-  // 🔥 v2.1.0: Display name mapping
-  const accountTypeDisplay = useMemo(() => {
+  // Plan display name
+  const planDisplay = useMemo(() => {
+    if (isInTrial) return 'Trial';
     const names: Record<string, string> = {
-      free: 'Free (Legacy)',
-      trial: 'Trial',
+      free: 'Free',
       basic: 'Basic',
       premium: 'Premium',
-      admin: 'Admin',
-      vip: 'VIP',
+      newsletter: 'Newsletter',
+      top_secret: 'Top Secret',
     };
     return names[user.account_type] || user.account_type;
-  }, [user.account_type]);
+  }, [user.account_type, isInTrial]);
 
-  const roleBadgeStyle = useMemo(() => {
+  // Subscription info - now properly typed
+  const subscriptionStatus = user.subscription_status || 'active';
+  const subscriptionInterval = user.subscription_interval || 'monthly';
+  const cancelAtPeriodEnd = user.subscription_cancel_at_period_end;
+
+  // Status badge style
+  const statusBadgeStyle = useMemo(() => {
     const styles: Record<string, string> = {
-      user: 'bg-gray-700 text-gray-300',
-      admin: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
-      super_admin: 'bg-red-500/10 text-red-400 border border-red-500/20',
+      active: 'bg-green-500/10 text-green-400 border border-green-500/20',
+      cancelled: 'bg-red-500/10 text-red-400 border border-red-500/20',
+      past_due: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20',
+      trial: 'bg-blue-500/10 text-blue-400 border border-blue-500/20',
+      expired: 'bg-gray-500/10 text-gray-400 border border-gray-500/20',
     };
-    return styles[user.role] || styles.user;
-  }, [user.role]);
+    return styles[subscriptionStatus] || styles.active;
+  }, [subscriptionStatus]);
 
   const isAdmin = user.role === 'admin' || user.role === 'super_admin';
 
-  // 🔥 Highlight row if recently changed
+  // Highlight row if recently changed
   const rowClassName = useMemo(() => {
     const base = 'transition-colors';
     if (isRecentlyChanged) {
@@ -470,6 +503,7 @@ const UserRow = React.memo<{
 
   return (
     <tr className={rowClassName}>
+      {/* User Info */}
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center">
           <div className="flex-shrink-0 h-10 w-10">
@@ -485,38 +519,62 @@ const UserRow = React.memo<{
               {isRecentlyChanged && (
                 <span className="text-xs text-[#D4AF37] animate-pulse">● Updated</span>
               )}
+              {isAdmin && (
+                <Shield className="w-3 h-3 text-blue-400" />
+              )}
             </div>
             <div className="text-sm text-gray-400">{user.email}</div>
           </div>
         </div>
       </td>
+
+      {/* Plan */}
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${accountTypeBadgeStyle}`}>
-          {accountTypeDisplay}
+        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${planBadgeStyle}`}>
+          {planDisplay}
         </span>
       </td>
+
+      {/* Status */}
       <td className="px-6 py-4 whitespace-nowrap">
-        <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-full ${roleBadgeStyle}`}>
-          {isAdmin && <Shield className="w-3 h-3" />}
-          {user.role}
+        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeStyle}`}>
+          {subscriptionStatus}
+          {cancelAtPeriodEnd && (
+            <span className="ml-1 text-yellow-400" title="Cancelling at period end">⚠️</span>
+          )}
         </span>
       </td>
+
+      {/* Interval */}
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 capitalize">
+        {subscriptionInterval}
+      </td>
+
+      {/* Trades */}
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         {user.total_trades || 0}
       </td>
+
+      {/* Win Rate */}
       <td className="px-6 py-4 whitespace-nowrap text-sm">
-        <span className={`font-medium ${user.win_rate >= 50 ? 'text-green-500' : 'text-red-500'}`}>
+        <span className={`font-medium ${(user.win_rate || 0) >= 50 ? 'text-green-500' : 'text-red-500'}`}>
           {(user.win_rate || 0).toFixed(1)}%
         </span>
       </td>
+
+      {/* P&L */}
       <td className="px-6 py-4 whitespace-nowrap text-sm">
-        <span className={`font-medium ${user.total_pnl >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+        <span className={`font-medium ${(user.total_pnl || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
           ${(user.total_pnl || 0).toFixed(2)}
         </span>
       </td>
+
+      {/* Joined */}
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
         {new Date(user.created_at).toLocaleDateString()}
       </td>
+
+      {/* Actions */}
       <td className="px-6 py-4 whitespace-nowrap text-sm">
         <UserActionsMenu user={user} onActionComplete={onActionComplete} />
       </td>

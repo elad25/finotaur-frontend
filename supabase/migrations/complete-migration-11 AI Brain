@@ -1,0 +1,262 @@
+-- =====================================================
+-- 1. ENABLE PGVECTOR EXTENSION
+-- =====================================================
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- =====================================================
+-- 2. REPORT EMBEDDINGS TABLE
+-- =====================================================
+CREATE TABLE report_embeddings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  -- Report Reference
+  report_id TEXT NOT NULL,
+  report_type TEXT NOT NULL,  -- 'ism', 'company', 'crypto', 'weekly', 'daily'
+  report_date DATE NOT NULL,
+  
+  -- Chunk Data
+  chunk_index INTEGER NOT NULL,
+  chunk_text TEXT NOT NULL,
+  chunk_tokens INTEGER,
+  
+  -- Vector Embedding (1536 for text-embedding-3-small)
+  embedding vector(1536) NOT NULL,
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  -- Examples:
+  -- { "section": "trade_ideas", "ticker": "AAPL", "page": 5 }
+  -- { "section": "executive_summary", "sentiment": "bullish" }
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Constraints
+  CONSTRAINT unique_chunk UNIQUE (report_id, chunk_index)
+);
+
+-- Indexes for fast search
+CREATE INDEX idx_embeddings_report_type ON report_embeddings(report_type);
+CREATE INDEX idx_embeddings_report_date ON report_embeddings(report_date DESC);
+CREATE INDEX idx_embeddings_metadata ON report_embeddings USING GIN(metadata);
+
+-- Vector similarity index (IVFFlat for better performance)
+CREATE INDEX idx_embeddings_vector ON report_embeddings 
+  USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
+-- =====================================================
+-- 3. CHAT CONVERSATIONS TABLE
+-- =====================================================
+CREATE TABLE ai_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  title TEXT,  -- Auto-generated from first message
+  
+  -- Metadata
+  messages_count INTEGER DEFAULT 0,
+  last_message_at TIMESTAMPTZ,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_conversations_user ON ai_conversations(user_id);
+CREATE INDEX idx_conversations_updated ON ai_conversations(updated_at DESC);
+
+-- =====================================================
+-- 4. CHAT MESSAGES TABLE
+-- =====================================================
+CREATE TABLE ai_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  
+  role TEXT NOT NULL,  -- 'user' | 'assistant'
+  content TEXT NOT NULL,
+  
+  -- For assistant messages
+  sources JSONB,  -- Array of { report_id, report_type, chunk_text }
+  tokens_used INTEGER,
+  model TEXT,  -- 'gpt-4', 'gpt-4-turbo'
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_messages_conversation ON ai_messages(conversation_id);
+
+-- =====================================================
+-- 5. USAGE TRACKING TABLE (for tier limits)
+-- =====================================================
+CREATE TABLE ai_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- Daily tracking
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  questions_count INTEGER DEFAULT 0,
+  tokens_used INTEGER DEFAULT 0,
+  
+  -- Constraints
+  CONSTRAINT unique_user_date UNIQUE (user_id, date)
+);
+
+CREATE INDEX idx_usage_user_date ON ai_usage(user_id, date DESC);
+
+-- =====================================================
+-- 6. EMBEDDING PROCESSING STATUS
+-- =====================================================
+CREATE TABLE embedding_jobs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  report_id TEXT NOT NULL,
+  report_type TEXT NOT NULL,
+  pdf_path TEXT NOT NULL,
+  
+  status TEXT DEFAULT 'pending',  -- 'pending', 'processing', 'completed', 'failed'
+  chunks_count INTEGER,
+  error_message TEXT,
+  
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_embedding_jobs_status ON embedding_jobs(status);
+
+-- =====================================================
+-- 7. RLS POLICIES
+-- =====================================================
+
+-- Enable RLS
+ALTER TABLE report_embeddings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
+
+-- Embeddings: Everyone can read (public reports)
+CREATE POLICY "Embeddings are public" ON report_embeddings
+  FOR SELECT TO authenticated USING (true);
+
+-- Service role can manage embeddings
+CREATE POLICY "Service role manages embeddings" ON report_embeddings
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Conversations: Users see only their own
+CREATE POLICY "Users see own conversations" ON ai_conversations
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Messages: Users see own conversation messages
+CREATE POLICY "Users see own messages" ON ai_messages
+  FOR ALL TO authenticated
+  USING (
+    conversation_id IN (
+      SELECT id FROM ai_conversations WHERE user_id = auth.uid()
+    )
+  );
+
+-- Usage: Users see own usage
+CREATE POLICY "Users see own usage" ON ai_usage
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+-- Service role can update usage
+CREATE POLICY "Service manages usage" ON ai_usage
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- =====================================================
+-- 8. HELPER FUNCTIONS
+-- =====================================================
+
+-- Function to search similar embeddings
+CREATE OR REPLACE FUNCTION search_embeddings(
+  query_embedding vector(1536),
+  match_count INT DEFAULT 5,
+  filter_report_type TEXT DEFAULT NULL,
+  filter_min_date DATE DEFAULT NULL
+)
+RETURNS TABLE (
+  id UUID,
+  report_id TEXT,
+  report_type TEXT,
+  report_date DATE,
+  chunk_text TEXT,
+  metadata JSONB,
+  similarity FLOAT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id,
+    e.report_id,
+    e.report_type,
+    e.report_date,
+    e.chunk_text,
+    e.metadata,
+    1 - (e.embedding <=> query_embedding) as similarity
+  FROM report_embeddings e
+  WHERE 
+    (filter_report_type IS NULL OR e.report_type = filter_report_type)
+    AND (filter_min_date IS NULL OR e.report_date >= filter_min_date)
+  ORDER BY e.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Function to check user's daily usage
+CREATE OR REPLACE FUNCTION check_ai_usage(p_user_id UUID)
+RETURNS TABLE (
+  questions_today INT,
+  limit_reached BOOLEAN,
+  tier TEXT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_tier TEXT;
+  v_limit INT;
+  v_count INT;
+BEGIN
+  -- Get user's tier
+  SELECT COALESCE(tier, 'FREE') INTO v_tier
+  FROM profiles WHERE id = p_user_id;
+  
+  -- Set limit based on tier
+  v_limit := CASE v_tier
+    WHEN 'PREMIUM' THEN 999999  -- Unlimited
+    WHEN 'BASIC' THEN 20
+    ELSE 5  -- FREE
+  END;
+  
+  -- Get today's count
+  SELECT COALESCE(questions_count, 0) INTO v_count
+  FROM ai_usage
+  WHERE user_id = p_user_id AND date = CURRENT_DATE;
+  
+  RETURN QUERY SELECT v_count, v_count >= v_limit, v_tier;
+END;
+$$;
+
+-- Function to increment usage
+CREATE OR REPLACE FUNCTION increment_ai_usage(
+  p_user_id UUID,
+  p_tokens INT DEFAULT 0
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO ai_usage (user_id, date, questions_count, tokens_used)
+  VALUES (p_user_id, CURRENT_DATE, 1, p_tokens)
+  ON CONFLICT (user_id, date)
+  DO UPDATE SET 
+    questions_count = ai_usage.questions_count + 1,
+    tokens_used = ai_usage.tokens_used + p_tokens;
+END;
+$$;

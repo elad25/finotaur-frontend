@@ -794,7 +794,7 @@ export default function WarZoneLandingSimple() {
             {/* Free Trial Badge */}
             <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-green-500/10 border border-green-500/40 mb-8">
               <Shield className="w-5 h-5 text-green-500" />
-              <span className="text-green-400 font-semibold">Start Your 7-Day Free Trial — No Credit Card Charge</span>
+              <span className="text-green-400 font-semibold">Start Your 7-Day Free Trial</span>
             </div>
 
             {/* CTA Section */}

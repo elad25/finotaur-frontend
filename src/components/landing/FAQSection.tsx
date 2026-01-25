@@ -13,7 +13,7 @@ const faqs = [
   },
   {
     question: 'Is there a free trial?',
-    answer: 'Yes! Our Basic plan includes a 14-day free trial with full access to all Basic features. No credit card required to start. Premium subscribers get immediate access with no trial period.',
+    answer: 'Yes! Our Basic plan includes a 14-day free trial with full access to all Basic features. Premium subscribers get immediate access with no trial period.',
   },
   {
     question: 'Can I get a refund if I\'m not satisfied?',

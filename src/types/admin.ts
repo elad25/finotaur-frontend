@@ -1,16 +1,30 @@
 // src/types/admin.ts
 // ============================================
-// COMPLETE & FIXED VERSION v8.6.0
-// 🔥 v8.6.0: Added 'trial' to AccountType
+// COMPLETE & FIXED VERSION v9.0.0
+// 🔥 v9.0.0 CHANGES:
+// - Added Whop identifiers to UserWithStats
+// - whop_membership_id, whop_user_id, whop_product_id
+// - Required for filtering Whop-verified subscribers
 // ============================================
 
 export type UserRole = 'user' | 'admin' | 'super_admin';
 
-// 🔥 v8.6.0: Added 'trial' for new pricing model
-export type AccountType = 'free' | 'basic' | 'premium' | 'trial';
+// 🔥 v8.7.0: Extended AccountType to match Whop config
+// Includes: free, basic, premium, trial, newsletter, top_secret, platform_*
+export type AccountType = 
+  | 'free' 
+  | 'basic' 
+  | 'premium' 
+  | 'trial'
+  | 'newsletter'
+  | 'top_secret'
+  | 'platform_free'
+  | 'platform_core'
+  | 'platform_pro'
+  | 'platform_enterprise';
 
 export type SubscriptionInterval = 'monthly' | 'yearly';
-export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled';
+export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'past_due';
 
 // ============================================
 // User Management Types
@@ -29,7 +43,9 @@ export interface AdminUser {
   subscription_status: SubscriptionStatus;
   subscription_started_at: string | null;
   subscription_expires_at: string | null;
+  subscription_cancel_at_period_end: boolean;
   trial_ends_at: string | null;
+  is_in_trial: boolean;
   is_banned: boolean;
   ban_reason: string | null;
   banned_at: string | null;
@@ -46,12 +62,19 @@ export interface AdminUser {
 }
 
 export interface UserWithStats extends AdminUser {
+  // Stats fields
   total_pnl: number;
   win_rate: number;
   total_trades: number;
   active_trades: number;
   strategies_count: number;
   last_trade_date: string | null;
+  
+  // 🔥 v9.0.0: Whop identifiers (NEW)
+  // Required for filtering Whop-verified subscribers
+  whop_membership_id?: string | null;
+  whop_user_id?: string | null;
+  whop_product_id?: string | null;
 }
 
 // ============================================
@@ -80,6 +103,10 @@ export interface AdminStats {
   premiumUsers: number;
   proUsers?: number;
   trialUsers: number;
+  
+  // 🔥 v8.7.0: Added newsletter/top secret stats
+  newsletterUsers?: number;
+  topSecretUsers?: number;
   
   basicMonthlyUsers: number;
   basicYearlyUsers: number;
@@ -206,9 +233,9 @@ export type AdminActionType =
   | 'MANUAL_REWARD'
   | 'DELETE_TRADE'
   | 'DELETE_USER'
-  | 'SOFT_DELETE_USER'              // 🆕 v8.5.0
-  | 'RESTORE_USER_FROM_ARCHIVE'     // 🆕 v8.5.0
-  | 'PERMANENT_DELETE_FROM_ARCHIVE'; // 🆕 v8.5.0
+  | 'SOFT_DELETE_USER'
+  | 'RESTORE_USER_FROM_ARCHIVE'
+  | 'PERMANENT_DELETE_FROM_ARCHIVE';
 
 export interface AdminAuditLog {
   id: string;
@@ -267,6 +294,10 @@ export interface SubscriberStats {
   basicSubscribers: number;
   premiumSubscribers: number;
   
+  // 🔥 v8.7.0: Added newsletter/top secret breakdown
+  newsletterSubscribers?: number;
+  topSecretSubscribers?: number;
+  
   // Billing cycle breakdown
   basicMonthly: number;
   basicYearly: number;
@@ -287,7 +318,7 @@ export interface Subscriber {
   user_id: string;
   email: string;
   full_name: string | null;
-  subscription_plan: 'basic' | 'premium';
+  subscription_plan: 'basic' | 'premium' | 'newsletter' | 'top_secret';
   subscription_status: 'active' | 'cancelled' | 'past_due' | 'trial';
   billing_cycle: 'monthly' | 'yearly';
   subscription_start_date: string;

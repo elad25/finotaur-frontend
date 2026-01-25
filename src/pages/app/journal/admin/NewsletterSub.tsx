@@ -44,9 +44,12 @@ import {
 FileDown,
   Send,
   Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { lazy, Suspense } from 'react';
 
+const WarZoneLandingSimple = lazy(() => import('@/pages/app/all-markets/Warzonelanding'));
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // ============================================
@@ -110,6 +113,8 @@ interface LastSentInfo {
   segments: string[];
   admin_note?: string;
 }
+
+type AdminViewMode = 'landing' | 'subscriber' | 'admin';
 
 interface WorkflowProgress {
   isRunning: boolean;
@@ -873,6 +878,22 @@ const [workflowProgress, setWorkflowProgress] = useState<WorkflowProgress | null
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [lastPublishedDate, setLastPublishedDate] = useState<string | null>(null);
+  const [adminViewMode, setAdminViewMode] = useState<AdminViewMode>('admin');
+  
+  // Mock newsletter status for preview modes
+  const mockActiveNewsletterStatus = {
+    newsletter_enabled: true,
+    newsletter_status: 'active',
+    newsletter_whop_membership_id: 'mock_id',
+    newsletter_started_at: new Date().toISOString(),
+    newsletter_expires_at: null,
+    newsletter_trial_ends_at: null,
+    newsletter_cancel_at_period_end: false,
+    days_until_expiry: null,
+    days_until_trial_ends: null,
+    is_in_trial: false,
+    is_active: true,
+  };
   
   const pageSize = 15;
 
@@ -1384,6 +1405,44 @@ const clearPreview = () => {
     );
   };
 
+  // ============================================
+  // ADMIN VIEW TOGGLE COMPONENT
+  // ============================================
+  const AdminViewToggle = () => (
+    <div className="fixed top-28 right-4 z-50 flex items-center gap-1 p-1 rounded-xl bg-black/90 backdrop-blur-sm border border-purple-500/40 shadow-xl">
+      <button
+        onClick={() => setAdminViewMode('landing')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'landing'
+            ? "bg-orange-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        🚫 Landing
+      </button>
+      <button
+        onClick={() => setAdminViewMode('subscriber')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'subscriber'
+            ? "bg-green-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        ✅ Subscriber
+      </button>
+      <button
+        onClick={() => setAdminViewMode('admin')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'admin'
+            ? "bg-purple-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        ⚙️ Admin
+      </button>
+    </div>
+  );
+
   if (usersError) {
     return (
       <div className="p-6 min-h-screen bg-[#080812]">
@@ -1406,8 +1465,39 @@ const clearPreview = () => {
     );
   }
 
+  // ============================================
+  // RENDER BASED ON VIEW MODE
+  // ============================================
+ // Landing Preview - Show WarZone landing page
+  if (adminViewMode === 'landing') {
+    return (
+      <>
+        <AdminViewToggle />
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>}>
+          <WarZoneLandingSimple previewMode="landing" />
+        </Suspense>
+      </>
+    );
+  }
+  
+  // Subscriber Preview - Show WarZone with active subscription
+  if (adminViewMode === 'subscriber') {
+    return (
+      <>
+        <AdminViewToggle />
+        <Suspense fallback={<div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>}>
+          <WarZoneLandingSimple previewMode="subscriber" />
+        </Suspense>
+      </>
+    );
+  }
+
+  // Admin View - Original admin panel
   return (
-<div className="p-6 space-y-6 min-h-screen bg-[#080812]">
+  <div className="p-6 space-y-6 min-h-screen bg-[#080812]">
+      {/* Admin View Toggle - Fixed position */}
+      <AdminViewToggle />
+      
       {/* Publish Modal */}
       <PublishModal />
 
@@ -1476,6 +1566,9 @@ const clearPreview = () => {
 
 {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Admin View Toggle */}
+          <AdminViewToggle />
+          
           {/* PUBLISH Button - NEW! */}
           {preview && fullReport && (
             <button
@@ -1625,151 +1718,7 @@ const clearPreview = () => {
         </div>
       )}
 
-      {/* Users Table */}
-      <div className="space-y-4">
-        <div className="bg-[#0d0d18] rounded-xl p-4 border border-gray-800/50">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
-              <input
-                type="text"
-                placeholder="Search by name or email..."
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2.5 bg-[#080812] border border-gray-800 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500/30"
-              />
-            </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => { setFilterStatus(e.target.value as any); setPage(1); }}
-              className="px-4 py-2.5 bg-[#080812] border border-gray-800 rounded-xl text-white focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active (Paid)</option>
-              <option value="trial">In Trial</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="inactive">Not Subscribed</option>
-            </select>
-            <button
-              onClick={() => refetch()}
-              className="p-2.5 rounded-xl border border-gray-800 bg-[#080812] hover:bg-[#151520]"
-            >
-              <RefreshCw className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="bg-[#0d0d18] rounded-xl border border-gray-800/50 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-800/50 bg-[#080812]">
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Newsletter</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Journal</th>
-                <th className="px-5 py-4 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800/30">
-              {usersLoading ? (
-                <tr>
-                  <td colSpan={5} className="px-5 py-16 text-center">
-                    <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-red-500" />
-                    <p className="text-gray-500">Loading users...</p>
-                  </td>
-                </tr>
-              ) : paginatedUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-5 py-16 text-center">
-                    <Users className="w-10 h-10 text-gray-700 mx-auto mb-4" />
-                    <p className="text-gray-400">No users found</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedUsers.map((user) => {
-                  const isSubscriber = user.newsletter_status === 'active' || user.newsletter_status === 'trial';
-                  const trialInfo = getTrialInfo(user);
-                  
-                  return (
-                    <tr 
-                      key={user.id} 
-                      className="hover:bg-[#080812]/50 transition-colors"
-                    >
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            isSubscriber ? 'bg-gradient-to-br from-red-500/20 to-orange-500/10' : 'bg-gray-800'
-                          }`}>
-                            <span className={`font-medium ${isSubscriber ? 'text-red-400' : 'text-gray-400'}`}>
-                              {(user.display_name?.[0] || user.email[0]).toUpperCase()}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-white">{getDisplayName(user)}</p>
-                            {trialInfo && (
-                              <p className="text-xs text-blue-400">{trialInfo}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4 text-gray-400">{user.email}</td>
-                      <td className="px-5 py-4">
-                        <NewsletterStatusBadge status={user.newsletter_status} />
-                      </td>
-                      <td className="px-5 py-4">
-                        <JournalPlanBadge type={user.account_type} />
-                      </td>
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => toggleMutation.mutate({ 
-                            userId: user.id, 
-                            enabled: !user.newsletter_enabled 
-                          })}
-                          disabled={toggleMutation.isPending}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm ${
-                            user.newsletter_enabled
-                              ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                          }`}
-                        >
-                          {user.newsletter_enabled ? 'Disable' : 'Enable'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-gray-800/50 bg-[#080812]">
-              <p className="text-sm text-gray-500">
-                Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="p-2 rounded-lg border border-gray-800 bg-[#0d0d18] hover:bg-[#151520] disabled:opacity-40"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-500" />
-                </button>
-                <span className="px-3 text-gray-400">{page} / {totalPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="p-2 rounded-lg border border-gray-800 bg-[#0d0d18] hover:bg-[#151520] disabled:opacity-40"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
-    </div>
   );
 };
 

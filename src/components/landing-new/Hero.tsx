@@ -141,7 +141,7 @@ const Hero = () => {
                   <TrendingUp className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-white font-bold text-base">5 Reports</div>
+                  <div className="text-white font-bold text-base">10 Reports</div>
                   <div className="text-slate-400 text-xs">Every Month</div>
                 </div>
               </div>

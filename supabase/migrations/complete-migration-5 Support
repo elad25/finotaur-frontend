@@ -379,6 +379,58 @@ BEGIN
 END $$;
 
 -- ============================================
+-- PART 3.5: CREATE ANNOUNCEMENT_LOGS TABLE
+-- לוג הודעות שנשלחו למשתמשים
+-- ============================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '╔══════════════════════════════════════════════════════════╗';
+  RAISE NOTICE '║  📧 CREATING ANNOUNCEMENT LOGS TABLE                    ║';
+  RAISE NOTICE '╚══════════════════════════════════════════════════════════╝';
+  RAISE NOTICE '';
+END $$;
+
+CREATE TABLE IF NOT EXISTS announcement_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sent_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  recipients_count INTEGER DEFAULT 0,
+  failed_count INTEGER DEFAULT 0,
+  recipient_filters JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE announcement_logs ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policy if exists
+DROP POLICY IF EXISTS "Admins can manage announcement_logs" ON announcement_logs;
+
+-- Only admins can view/insert
+CREATE POLICY "Admins can manage announcement_logs" ON announcement_logs
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND role IN ('admin', 'super_admin')
+    )
+  );
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_announcement_logs_sent_by ON announcement_logs(sent_by);
+CREATE INDEX IF NOT EXISTS idx_announcement_logs_created_at ON announcement_logs(created_at DESC);
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ announcement_logs table created with RLS';
+END $$;
+
+-- ============================================
 -- PART 4: TRIGGER TO AUTO-LOG CHURNED USERS
 -- כשסטטוס מנוי משתנה לביטול/פג תוקף
 -- ============================================
@@ -599,7 +651,6 @@ BEGIN
   WHERE role NOT IN ('admin', 'super_admin');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Function: Get support ticket statistics
 CREATE OR REPLACE FUNCTION get_support_stats(p_days INTEGER DEFAULT 30)
 RETURNS TABLE (
@@ -628,6 +679,100 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function: Get announcement recipients based on filters
+CREATE OR REPLACE FUNCTION get_announcement_recipients(p_filters JSONB)
+RETURNS TABLE (
+  email TEXT,
+  display_name TEXT,
+  account_type TEXT
+) AS $$
+DECLARE
+  v_conditions TEXT[] := ARRAY[]::TEXT[];
+BEGIN
+  -- Journal conditions
+  IF (p_filters->>'journal_all')::boolean THEN
+    v_conditions := array_append(v_conditions, 
+      '(account_type IS NOT NULL AND account_type != ''FREE'')');
+  ELSE
+    IF (p_filters->>'journal_premium')::boolean THEN
+      v_conditions := array_append(v_conditions, 'account_type = ''PREMIUM''');
+    END IF;
+    IF (p_filters->>'journal_basic')::boolean THEN
+      v_conditions := array_append(v_conditions, 'account_type = ''BASIC''');
+    END IF;
+    IF (p_filters->>'journal_free')::boolean THEN
+      v_conditions := array_append(v_conditions, '(account_type IS NULL OR account_type = ''FREE'')');
+    END IF;
+    IF (p_filters->>'journal_trial')::boolean THEN
+      v_conditions := array_append(v_conditions, 'subscription_status = ''trialing''');
+    END IF;
+  END IF;
+
+  -- Newsletter conditions
+  IF (p_filters->>'newsletter_all')::boolean THEN
+    v_conditions := array_append(v_conditions, '(newsletter_enabled = true OR newsletter_paid = true)');
+  ELSE
+    IF (p_filters->>'newsletter_paid')::boolean THEN
+      v_conditions := array_append(v_conditions, 'newsletter_paid = true');
+    END IF;
+    IF (p_filters->>'newsletter_trial')::boolean THEN
+      v_conditions := array_append(v_conditions, '(newsletter_enabled = true AND newsletter_paid = false)');
+    END IF;
+  END IF;
+
+  -- Top Secret conditions
+  IF (p_filters->>'topsecret_all')::boolean THEN
+    v_conditions := array_append(v_conditions, 'top_secret_enabled = true');
+  ELSE
+    IF (p_filters->>'topsecret_paid')::boolean THEN
+      v_conditions := array_append(v_conditions, '(top_secret_enabled = true AND subscription_status = ''active'')');
+    END IF;
+    IF (p_filters->>'topsecret_trial')::boolean THEN
+      v_conditions := array_append(v_conditions, '(top_secret_enabled = true AND subscription_status = ''trialing'')');
+    END IF;
+  END IF;
+
+  -- Special groups
+  IF (p_filters->>'all_users')::boolean THEN
+    v_conditions := array_append(v_conditions, '1=1');
+  END IF;
+  IF (p_filters->>'all_paying')::boolean THEN
+    v_conditions := array_append(v_conditions, 
+      '(subscription_status = ''active'' OR newsletter_paid = true OR top_secret_enabled = true)');
+  END IF;
+  IF (p_filters->>'all_trials')::boolean THEN
+    v_conditions := array_append(v_conditions, 
+      '(subscription_status = ''trialing'' OR is_in_trial = true)');
+  END IF;
+  IF (p_filters->>'cancelled_winback')::boolean THEN
+    v_conditions := array_append(v_conditions, 
+      'subscription_status IN (''canceled'', ''cancelled'', ''expired'')');
+  END IF;
+  IF (p_filters->>'active_this_week')::boolean THEN
+    v_conditions := array_append(v_conditions, 'last_login_at > NOW() - INTERVAL ''7 days''');
+  END IF;
+  IF (p_filters->>'inactive_30_days')::boolean THEN
+    v_conditions := array_append(v_conditions, '(last_login_at < NOW() - INTERVAL ''30 days'' OR last_login_at IS NULL)');
+  END IF;
+
+  -- If no conditions, return empty
+  IF array_length(v_conditions, 1) IS NULL THEN
+    RETURN;
+  END IF;
+
+  -- Execute dynamic query
+  RETURN QUERY EXECUTE format(
+    'SELECT email, display_name, account_type 
+     FROM profiles 
+     WHERE (is_banned IS NULL OR is_banned = false) 
+       AND email IS NOT NULL 
+       AND role NOT IN (''admin'', ''super_admin'')
+       AND (%s)',
+    array_to_string(v_conditions, ' OR ')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 DO $$
 BEGIN
   RAISE NOTICE '✅ Helper functions created:';
@@ -639,6 +784,7 @@ BEGIN
   RAISE NOTICE '   • get_churn_stats(days)';
   RAISE NOTICE '   • get_admin_user_stats()';
   RAISE NOTICE '   • get_support_stats(days)';
+  RAISE NOTICE '   • get_announcement_recipients(filters)';
 END $$;
 
 -- ============================================
@@ -671,7 +817,15 @@ EXCEPTION
   WHEN duplicate_object THEN
     RAISE NOTICE '⏭️ Realtime already enabled for support_tickets';
 END $$;
-
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'support_tickets' AND column_name = 'last_read_at'
+  ) THEN
+    ALTER TABLE support_tickets ADD COLUMN last_read_at TIMESTAMPTZ;
+  END IF;
+END $$;
 -- ============================================
 -- VERIFICATION & SUMMARY
 -- ============================================
@@ -702,6 +856,10 @@ BEGIN
   RAISE NOTICE '  3️⃣  churned_users';
   RAISE NOTICE '      • מעקב משתמשים שעזבו';
   RAISE NOTICE '      • לוג אוטומטי דרך trigger';
+  RAISE NOTICE '';
+  RAISE NOTICE '  4️⃣  announcement_logs';
+  RAISE NOTICE '      • לוג הודעות שנשלחו';
+  RAISE NOTICE '      • מעקב נמענים ושגיאות';
   RAISE NOTICE '';
   RAISE NOTICE '🎯 Target Groups:';
   RAISE NOTICE '  • all - כולם';
@@ -739,29 +897,3 @@ FROM support_tickets
 WHERE created_at > NOW() - INTERVAL '30 days'
 GROUP BY category;
 
--- ============================================
--- EXAMPLE USAGE
--- ============================================
-
--- Create a general update for everyone:
-/*
-INSERT INTO system_updates (title, content, type, target_group)
-VALUES (
-  '🚀 פיצ׳ר חדש!',
-  'הוספנו אפשרות חדשה למעקב עסקאות. כנסו לראות!',
-  'feature',
-  'all'
-);
-*/
-
--- Create update with PDF metadata (for ISM reports):
-/*
-INSERT INTO system_updates (title, content, type, target_group, metadata)
-VALUES (
-  '🏭 ISM Manufacturing Report - January 2025',
-  'The latest ISM Manufacturing PMI report is now available.',
-  'announcement',
-  'top_secret',
-  '{"report_type": "ism", "report_month": "January 2025", "pdf_url": "https://...", "pmi_value": 49.3, "pmi_change": -0.9}'::jsonb
-);
-*/

@@ -72,6 +72,11 @@ import {
 import { toast } from 'sonner';
 import PublishReportModal from '@/components/admin/PublishReportModal';
 import PublishedReportsManager from '@/components/admin/PublishedReportsManager';
+import { lazy, Suspense } from 'react';
+
+// Lazy load Landing and Dashboard for preview modes
+const TopSecretLanding = lazy(() => import('@/pages/app/TopSecret/TopSecretLanding'));
+const TopSecretDashboard = lazy(() => import('@/pages/app/TopSecret/TopSecretDashboard'));
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -158,6 +163,8 @@ interface LastSentInfo {
   report_type: string;
   admin_note?: string;
 }
+
+type AdminViewMode = 'landing' | 'subscriber' | 'admin';
 
 interface InclusionStatus {
   premium_included: boolean;
@@ -2182,6 +2189,9 @@ const JournalPlanBadge: React.FC<{ type: string }> = ({ type }) => {
 const TopSecretAdmin: React.FC = () => {
   const queryClient = useQueryClient();
   
+  // Admin View Mode State
+  const [adminViewMode, setAdminViewMode] = useState<AdminViewMode>('admin');
+  
   // Tab Navigation State
   const [activeTab, setActiveTab] = useState<'generator' | 'published'>('generator');
   
@@ -3781,6 +3791,44 @@ const getDownloadHandler = (reportId: string) => {
     }).length;
   }, [previews, fullReports]);
 
+  // ============================================
+  // ADMIN VIEW TOGGLE COMPONENT
+  // ============================================
+  const AdminViewToggle = () => (
+    <div className="fixed top-28 right-4 z-50 flex items-center gap-1 p-1 rounded-xl bg-black/90 backdrop-blur-sm border border-purple-500/40 shadow-xl">
+      <button
+        onClick={() => setAdminViewMode('landing')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'landing'
+            ? "bg-orange-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        🚫 Landing
+      </button>
+      <button
+        onClick={() => setAdminViewMode('subscriber')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'subscriber'
+            ? "bg-green-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        ✅ Subscriber
+      </button>
+      <button
+        onClick={() => setAdminViewMode('admin')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          adminViewMode === 'admin'
+            ? "bg-purple-500 text-white shadow-md"
+            : "text-gray-400 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        ⚙️ Admin
+      </button>
+    </div>
+  );
+
   if (usersError) {
     return (
       <div className="p-6 min-h-screen bg-[#080812]">
@@ -3805,8 +3853,47 @@ const getDownloadHandler = (reportId: string) => {
 
   const viewingReport = viewingReportId ? REPORT_TYPES.find(r => r.id === viewingReportId) : null;
 
+  // ============================================
+  // RENDER BASED ON VIEW MODE
+  // ============================================
+  
+  // Landing Preview - Show Top Secret landing page (non-subscriber view)
+  if (adminViewMode === 'landing') {
+    return (
+      <>
+        <AdminViewToggle />
+        <Suspense fallback={
+          <div className="min-h-screen bg-[#080812] flex items-center justify-center">
+            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
+          </div>
+        }>
+          <TopSecretLanding />
+        </Suspense>
+      </>
+    );
+  }
+  
+  // Subscriber Preview - Show Top Secret Dashboard (active subscriber view)
+  if (adminViewMode === 'subscriber') {
+    return (
+      <>
+        <AdminViewToggle />
+        <Suspense fallback={
+          <div className="min-h-screen bg-[#080812] flex items-center justify-center">
+            <Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" />
+          </div>
+        }>
+          <TopSecretDashboard />
+        </Suspense>
+      </>
+    );
+  }
+
+  // Admin View - Original admin panel
   return (
     <div className="p-6 space-y-6 min-h-screen bg-[#080812]">
+      {/* Admin View Toggle - Fixed position */}
+      <AdminViewToggle />
       {/* CSS for shimmer animation */}
       <style>{`
         @keyframes shimmer {

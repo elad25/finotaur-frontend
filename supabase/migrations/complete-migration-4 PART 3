@@ -1728,54 +1728,332 @@ COMMENT ON FUNCTION public.get_my_strategy_stats IS
 -- 3.9: ADMIN RPC FUNCTIONS (BACKUP - views now have built-in security)
 -- ═══════════════════════════════════════════════════════════════
 
--- Admin stats RPC (backup method)
+-- =====================================================
+-- ADMIN STATS - WHOP VERIFIED ONLY v9.0.0
+-- =====================================================
+-- 🔥 שינוי מרכזי: כל המונים סופרים רק משתמשים עם whop_membership_id
+-- כלומר רק מי ששילם דרך Whop
+-- =====================================================
+
+DROP FUNCTION IF EXISTS public.admin_get_stats() CASCADE;
+
 CREATE OR REPLACE FUNCTION public.admin_get_stats()
 RETURNS TABLE (
+  -- User counts
   total_users BIGINT,
   active_users BIGINT,
   new_users_today BIGINT,
   new_users_this_week BIGINT,
   new_users_this_month BIGINT,
+  
+  -- 🔥 Subscription counts (WHOP VERIFIED ONLY)
   free_users BIGINT,
   basic_users BIGINT,
   premium_users BIGINT,
   trial_users BIGINT,
+  newsletter_users BIGINT,
+  top_secret_users BIGINT,
+  
+  -- Billing breakdown (WHOP VERIFIED ONLY)
   basic_monthly_users BIGINT,
   basic_yearly_users BIGINT,
   premium_monthly_users BIGINT,
   premium_yearly_users BIGINT,
+  
+  -- Revenue estimates (WHOP VERIFIED ONLY)
   estimated_monthly_revenue NUMERIC,
   estimated_yearly_revenue NUMERIC,
+  
+  -- Trade stats
   total_trades BIGINT,
   trades_this_week BIGINT,
   trades_this_month BIGINT,
   average_trades_per_user NUMERIC,
+  
+  -- Activity stats
   daily_active_users BIGINT,
   weekly_active_users BIGINT,
   monthly_active_users BIGINT,
+  
+  -- Conversion rates
   free_to_paying_conversion_rate NUMERIC,
   trial_to_paying_conversion_rate NUMERIC
 )
 LANGUAGE plpgsql
-SECURITY DEFINER
 STABLE
+SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_now TIMESTAMPTZ := NOW();
+  v_today DATE := CURRENT_DATE;
+  v_week_ago DATE := CURRENT_DATE - INTERVAL '7 days';
+  v_month_ago DATE := CURRENT_DATE - INTERVAL '30 days';
+  
+  -- Counts
+  v_total_users BIGINT;
+  v_total_registered BIGINT;  -- All registered users (for conversion rate)
+  v_whop_verified BIGINT;     -- Users who paid via Whop
+  v_free_users BIGINT;
+  v_basic_users BIGINT;
+  v_premium_users BIGINT;
+  v_trial_users BIGINT;
 BEGIN
   -- Check if user is admin
   IF NOT EXISTS (
-    SELECT 1 FROM public.profiles 
-    WHERE id = auth.uid() 
-    AND role IN ('admin', 'super_admin')
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid() 
+    AND pf.role IN ('admin', 'super_admin')
   ) THEN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
-  
-  RETURN QUERY SELECT * FROM public.admin_stats_view WHERE _is_authorized = true;
+
+  -- ============================================
+  -- 🔥 TOTAL USERS = All registered users
+  -- ============================================
+  SELECT COUNT(*) INTO v_total_registered
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND (is_banned = FALSE OR is_banned IS NULL);
+
+  -- ============================================
+  -- 🔥 WHOP VERIFIED = Users who paid via Whop
+  -- ============================================
+  SELECT COUNT(*) INTO v_whop_verified
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND (is_banned = FALSE OR is_banned IS NULL)
+    AND whop_membership_id IS NOT NULL;
+
+  -- ============================================
+  -- 🔥 FREE USERS = Registered but no Whop payment
+  -- ============================================
+  SELECT COUNT(*) INTO v_free_users
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND (is_banned = FALSE OR is_banned IS NULL)
+    AND (whop_membership_id IS NULL);
+
+  -- ============================================
+  -- 🔥 BASIC USERS = Whop verified + basic plan
+  -- ============================================
+  SELECT COUNT(*) INTO v_basic_users
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND whop_membership_id IS NOT NULL
+    AND account_type = 'basic'
+    AND (is_in_trial = FALSE OR is_in_trial IS NULL OR subscription_started_at <= v_now - INTERVAL '14 days');
+
+  -- ============================================
+  -- 🔥 PREMIUM USERS = Whop verified + premium plan
+  -- ============================================
+  SELECT COUNT(*) INTO v_premium_users
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND whop_membership_id IS NOT NULL
+    AND account_type = 'premium';
+
+  -- ============================================
+  -- 🔥 TRIAL USERS = Whop verified + in trial period
+  -- ============================================
+  SELECT COUNT(*) INTO v_trial_users
+  FROM profiles 
+  WHERE deleted_at IS NULL 
+    AND whop_membership_id IS NOT NULL
+    AND account_type = 'basic'
+    AND is_in_trial = TRUE
+    AND subscription_started_at > v_now - INTERVAL '14 days';
+
+  -- ============================================
+  -- RETURN ALL STATS
+  -- ============================================
+  RETURN QUERY
+  SELECT
+    -- Total users (all registered)
+    v_total_registered,
+    
+    -- Active users (logged in within 30 days)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND last_login_at >= v_month_ago::timestamptz)::BIGINT,
+    
+    -- New users today
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND created_at >= v_today::timestamptz)::BIGINT,
+    
+    -- New users this week
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND created_at >= v_week_ago::timestamptz)::BIGINT,
+    
+    -- New users this month
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND created_at >= v_month_ago::timestamptz)::BIGINT,
+    
+    -- 🔥 FREE USERS (no Whop payment)
+    v_free_users,
+    
+    -- 🔥 BASIC USERS (Whop verified, paid)
+    v_basic_users,
+    
+    -- 🔥 PREMIUM USERS (Whop verified)
+    v_premium_users,
+    
+    -- 🔥 TRIAL USERS (Whop verified, in trial)
+    v_trial_users,
+    
+    -- 🔥 NEWSLETTER USERS (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND newsletter_whop_membership_id IS NOT NULL
+     AND newsletter_status IN ('active', 'trial'))::BIGINT,
+    
+    -- 🔥 TOP SECRET USERS (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND top_secret_whop_membership_id IS NOT NULL
+     AND top_secret_status = 'active')::BIGINT,
+    
+    -- 🔥 BASIC MONTHLY (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND whop_membership_id IS NOT NULL
+     AND account_type = 'basic'
+     AND (subscription_interval = 'monthly' OR subscription_interval IS NULL)
+     AND (is_in_trial = FALSE OR is_in_trial IS NULL OR subscription_started_at <= v_now - INTERVAL '14 days'))::BIGINT,
+    
+    -- 🔥 BASIC YEARLY (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND whop_membership_id IS NOT NULL
+     AND account_type = 'basic'
+     AND subscription_interval = 'yearly')::BIGINT,
+    
+    -- 🔥 PREMIUM MONTHLY (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND whop_membership_id IS NOT NULL
+     AND account_type = 'premium'
+     AND (subscription_interval = 'monthly' OR subscription_interval IS NULL))::BIGINT,
+    
+    -- 🔥 PREMIUM YEARLY (Whop verified)
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND whop_membership_id IS NOT NULL
+     AND account_type = 'premium'
+     AND subscription_interval = 'yearly')::BIGINT,
+    
+    -- 🔥 ESTIMATED MONTHLY REVENUE (Whop verified only)
+    (SELECT COALESCE(SUM(
+      CASE 
+        -- Basic Monthly (paid, not trial)
+        WHEN account_type = 'basic' 
+          AND whop_membership_id IS NOT NULL
+          AND (subscription_interval = 'monthly' OR subscription_interval IS NULL)
+          AND (is_in_trial = FALSE OR is_in_trial IS NULL OR subscription_started_at <= v_now - INTERVAL '14 days')
+          THEN 19.99
+        -- Basic Yearly (monthly equivalent)
+        WHEN account_type = 'basic' 
+          AND whop_membership_id IS NOT NULL
+          AND subscription_interval = 'yearly' 
+          THEN 149.00 / 12
+        -- Premium Monthly
+        WHEN account_type = 'premium' 
+          AND whop_membership_id IS NOT NULL
+          AND (subscription_interval = 'monthly' OR subscription_interval IS NULL)
+          THEN 39.99
+        -- Premium Yearly (monthly equivalent)
+        WHEN account_type = 'premium' 
+          AND whop_membership_id IS NOT NULL
+          AND subscription_interval = 'yearly' 
+          THEN 299.00 / 12
+        ELSE 0
+      END
+    ), 0)
+    FROM profiles 
+    WHERE deleted_at IS NULL)::NUMERIC,
+    
+    -- 🔥 ESTIMATED YEARLY REVENUE
+    (SELECT COALESCE(SUM(
+      CASE 
+        WHEN account_type = 'basic' 
+          AND whop_membership_id IS NOT NULL
+          AND (subscription_interval = 'monthly' OR subscription_interval IS NULL)
+          AND (is_in_trial = FALSE OR is_in_trial IS NULL OR subscription_started_at <= v_now - INTERVAL '14 days')
+          THEN 19.99 * 12
+        WHEN account_type = 'basic' 
+          AND whop_membership_id IS NOT NULL
+          AND subscription_interval = 'yearly' 
+          THEN 149.00
+        WHEN account_type = 'premium' 
+          AND whop_membership_id IS NOT NULL
+          AND (subscription_interval = 'monthly' OR subscription_interval IS NULL)
+          THEN 39.99 * 12
+        WHEN account_type = 'premium' 
+          AND whop_membership_id IS NOT NULL
+          AND subscription_interval = 'yearly' 
+          THEN 299.00
+        ELSE 0
+      END
+    ), 0)
+    FROM profiles 
+    WHERE deleted_at IS NULL)::NUMERIC,
+    
+    -- Total trades
+    (SELECT COALESCE(SUM(trade_count), 0) FROM profiles WHERE deleted_at IS NULL)::BIGINT,
+    
+    -- Trades this week (from trades table if exists, otherwise estimate)
+    (SELECT COUNT(*) FROM trades WHERE created_at >= v_week_ago::timestamptz)::BIGINT,
+    
+    -- Trades this month
+    (SELECT COUNT(*) FROM trades WHERE created_at >= v_month_ago::timestamptz)::BIGINT,
+    
+    -- Average trades per user
+    CASE WHEN v_total_registered > 0 
+      THEN (SELECT COALESCE(AVG(trade_count), 0) FROM profiles WHERE deleted_at IS NULL)::NUMERIC
+      ELSE 0 
+    END,
+    
+    -- Daily active users
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND last_login_at >= v_today::timestamptz)::BIGINT,
+    
+    -- Weekly active users
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND last_login_at >= v_week_ago::timestamptz)::BIGINT,
+    
+    -- Monthly active users
+    (SELECT COUNT(*) FROM profiles 
+     WHERE deleted_at IS NULL 
+     AND last_login_at >= v_month_ago::timestamptz)::BIGINT,
+    
+    -- 🔥 FREE TO PAYING CONVERSION RATE
+    -- (Whop verified users / Total registered users) * 100
+    CASE WHEN v_total_registered > 0 
+      THEN ROUND((v_whop_verified::NUMERIC / v_total_registered::NUMERIC) * 100, 2)
+      ELSE 0 
+    END,
+    
+    -- 🔥 TRIAL TO PAYING CONVERSION RATE
+    -- Calculate from users who completed trial
+    CASE WHEN v_trial_users + v_basic_users + v_premium_users > 0 
+      THEN ROUND(((v_basic_users + v_premium_users)::NUMERIC / 
+                  (v_trial_users + v_basic_users + v_premium_users)::NUMERIC) * 100, 2)
+      ELSE 0 
+    END;
+
 END;
 $$;
 
+COMMENT ON FUNCTION public.admin_get_stats() IS 
+'v9.0.0: Admin stats with WHOP VERIFIED counting only. Free users = no whop_membership_id.';
+
 GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO service_role;
 
 -- Admin users list RPC (backup method)
 CREATE OR REPLACE FUNCTION public.admin_get_users_list(
@@ -1830,26 +2108,53 @@ AS $$
 BEGIN
   -- Check if user is admin
   IF NOT EXISTS (
-    SELECT 1 FROM public.profiles 
-    WHERE id = auth.uid() 
-    AND role IN ('admin', 'super_admin')
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid() 
+    AND pf.role IN ('admin', 'super_admin')
   ) THEN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
   
   RETURN QUERY
   SELECT 
-    u.id, u.email, u.display_name, u.account_type, u.role,
-    u.subscription_status, u.subscription_interval, u.subscription_expires_at,
-    u.subscription_cancel_at_period_end, u.is_banned, u.last_login_at,
-    u.login_count, u.created_at, u.updated_at, u.current_portfolio,
-    u.initial_portfolio, u.total_pnl, u.trade_count, u.risk_settings,
-    u.current_month_trades_count, u.max_trades, u.portfolio_size,
-    u.risk_mode, u.risk_percentage, u.fixed_risk_amount, u.calculated_one_r,
-    u.total_closed_trades, u.win_rate, u.wins, u.losses, u.break_even,
-    u.open_trades, u.last_trade_date, u.avg_r, u.best_r, u.worst_r
+    u.id::UUID,
+    u.email::TEXT,
+    u.display_name::TEXT,
+    u.account_type::TEXT,
+    u.role::TEXT,
+    u.subscription_status::TEXT,
+    u.subscription_interval::TEXT,
+    u.subscription_expires_at::TIMESTAMPTZ,
+    u.subscription_cancel_at_period_end::BOOLEAN,
+    u.is_banned::BOOLEAN,
+    u.last_login_at::TIMESTAMPTZ,
+    u.login_count::INTEGER,
+    u.created_at::TIMESTAMPTZ,
+    u.updated_at::TIMESTAMPTZ,
+    u.current_portfolio::NUMERIC,
+    u.initial_portfolio::NUMERIC,
+    u.total_pnl::NUMERIC,
+    u.trade_count::INTEGER,
+    u.risk_settings::JSONB,
+    u.current_month_trades_count::INTEGER,
+    u.max_trades::INTEGER,
+    u.portfolio_size::NUMERIC,
+    u.risk_mode::TEXT,
+    u.risk_percentage::NUMERIC,
+    u.fixed_risk_amount::NUMERIC,
+    u.calculated_one_r::NUMERIC,
+    u.total_closed_trades::BIGINT,
+    u.win_rate::NUMERIC,
+    u.wins::BIGINT,
+    u.losses::BIGINT,
+    u.break_even::BIGINT,
+    u.open_trades::BIGINT,
+    u.last_trade_date::TIMESTAMPTZ,
+    u.avg_r::NUMERIC,
+    u.best_r::NUMERIC,
+    u.worst_r::NUMERIC
   FROM public.admin_users_list_view u
-  WHERE u.id IS NOT NULL  -- Filter out NULL rows (non-admin access)
+  WHERE u.id IS NOT NULL
     AND (p_search IS NULL OR 
          u.email ILIKE '%' || p_search || '%' OR 
          u.display_name ILIKE '%' || p_search || '%')
@@ -1880,9 +2185,9 @@ AS $$
 BEGIN
   -- Check if user is admin
   IF NOT EXISTS (
-    SELECT 1 FROM public.profiles 
-    WHERE id = auth.uid() 
-    AND role IN ('admin', 'super_admin')
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid() 
+    AND pf.role IN ('admin', 'super_admin')
   ) THEN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
@@ -1923,9 +2228,9 @@ AS $$
 BEGIN
   -- Check if user is admin
   IF NOT EXISTS (
-    SELECT 1 FROM public.profiles 
-    WHERE id = auth.uid() 
-    AND role IN ('admin', 'super_admin')
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid() 
+    AND pf.role IN ('admin', 'super_admin')
   ) THEN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;

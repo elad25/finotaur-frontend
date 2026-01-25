@@ -1404,12 +1404,12 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
       const { data, error } = await supabase
         .from('published_reports')
         .select('*')
-        .in('report_type', ['ism', 'company', 'crypto', 'weekly'])
         .order('is_pinned', { ascending: false })
         .order('is_featured', { ascending: false })
         .order('published_at', { ascending: false });
 
       if (error) throw error;
+      console.log('[PublishedReportsManager] Fetched reports:', data?.length, data);
       return data || [];
     },
   });
@@ -1443,8 +1443,9 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
     // Visibility filter
     result = result.filter(r => {
       const isTest = r.visibility === 'test';
+      const isLive = r.visibility === 'live' || !r.visibility; // null/undefined treated as live
       if (isTest && !showTest) return false;
-      if (!isTest && !showLive) return false;
+      if (isLive && !showLive) return false;
       return true;
     });
 

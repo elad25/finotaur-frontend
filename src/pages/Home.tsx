@@ -155,7 +155,6 @@ const Home = () => {
               <div className="flex items-center gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary" />
-                  <span>No credit card required</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-primary" />
@@ -422,7 +421,7 @@ const Home = () => {
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground mt-6">
-                14-day free trial • No credit card required • Cancel anytime
+                14-day free trial • Cancel anytime
               </p>
             </div>
           </Card>

@@ -43,6 +43,7 @@ interface Ticket {
   created_at: string;
   updated_at: string;
   message_count: number;
+  last_read_at?: string;
 }
 
 interface SystemUpdateMetadata {
@@ -167,15 +168,22 @@ export default function SupportWidget() {
     }
   }, [isGuest, isOpen, userName, userEmail]);
 
+  // Track if initial load happened
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
   useEffect(() => {
-    if (!isGuest && tickets.length > 0) {
-      setView('list');
-      setIsNewConversation(false);
-    } else {
-      setView('chat');
-      setIsNewConversation(true);
+    // Only set view on initial load, not on every tickets update
+    if (!initialLoadDone && !isGuest) {
+      if (tickets.length > 0) {
+        setView('list');
+        setIsNewConversation(false);
+      } else {
+        setView('chat');
+        setIsNewConversation(true);
+      }
+      setInitialLoadDone(true);
     }
-  }, [tickets, isGuest]);
+  }, [tickets, isGuest, initialLoadDone]);
 
   useEffect(() => {
     scrollToBottom();
@@ -321,22 +329,35 @@ export default function SupportWidget() {
     }
   }
 
-  async function loadTicketById(ticketId: string) {
-    try {
-      const { data } = await supabase
+async function loadTicketById(ticketId: string) {
+  try {
+    const { data } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .single();
+
+    if (data) {
+      const now = new Date().toISOString();
+      
+      // Mark as read in DB
+      await supabase
         .from('support_tickets')
-        .select('*')
-        .eq('id', ticketId)
-        .single();
-
-      if (data) {
-        setSelectedTicket(data);
-      }
-    } catch (error) {
-      console.error('Error loading ticket:', error);
+        .update({ last_read_at: now })
+        .eq('id', ticketId);
+      
+      // Set with updated last_read_at
+      setSelectedTicket({ ...data, last_read_at: now });
+      
+      // Also update in tickets list
+      setTickets(prev => prev.map(t => 
+        t.id === ticketId ? { ...t, last_read_at: now } : t
+      ));
     }
+  } catch (error) {
+    console.error('Error loading ticket:', error);
   }
-
+}
   // ==================== SYSTEM UPDATES ====================
 
   async function loadSystemUpdates() {
@@ -448,6 +469,39 @@ export default function SupportWidget() {
       );
     } catch (error) {
       console.error('Error marking update as read:', error);
+    }
+  }
+
+  async function clearAllUpdates() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const unreadUpdates = systemUpdates.filter(u => !u.read);
+      if (unreadUpdates.length === 0) {
+        toast.info('All updates are already read');
+        return;
+      }
+
+      // Mark all unread updates as read
+      const upsertData = unreadUpdates.map(update => ({
+        user_id: user.id,
+        update_id: update.id,
+        read_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase
+        .from('user_update_reads')
+        .upsert(upsertData, { onConflict: 'user_id,update_id' });
+
+      if (error) throw error;
+
+      // Update local state
+      setSystemUpdates(prev => prev.map(u => ({ ...u, read: true })));
+      toast.success(`Marked ${unreadUpdates.length} updates as read`);
+    } catch (error) {
+      console.error('Error clearing all updates:', error);
+      toast.error('Failed to clear updates');
     }
   }
 
@@ -741,14 +795,16 @@ export default function SupportWidget() {
     return lastMsg.content.substring(0, 60) + (lastMsg.content.length > 60 ? '...' : '');
   }
 
-  function hasUnreadMessages(ticket: Ticket): boolean {
-    if (!ticket.messages || !Array.isArray(ticket.messages) || ticket.messages.length === 0) {
-      return false;
-    }
-    const lastMsg = ticket.messages[ticket.messages.length - 1];
-    return lastMsg.type === 'admin';
+function hasUnreadMessages(ticket: Ticket): boolean {
+  if (!ticket.messages || !Array.isArray(ticket.messages) || ticket.messages.length === 0) {
+    return false;
   }
-
+  const lastMsg = ticket.messages[ticket.messages.length - 1];
+  // Only unread if last message is from admin AND was sent after last_read_at
+  if (lastMsg.type !== 'admin') return false;
+  if (!ticket.last_read_at) return true;
+  return new Date(lastMsg.timestamp) > new Date(ticket.last_read_at);
+}
   function getUpdateIcon(type: SystemUpdate['type']) {
     switch (type) {
       case 'success':
@@ -847,6 +903,7 @@ export default function SupportWidget() {
       setSelectedCategory(null);
       setShowCategorySelector(true);
       setMessageSent(false);
+      setInitialLoadDone(false); // Reset for next open
     }, 300);
   };
 
@@ -1082,6 +1139,21 @@ export default function SupportWidget() {
                     </div>
                   )}
                   
+                  {/* Clear All Button */}
+                  {systemUpdates.length > 0 && unreadUpdatesCount > 0 && (
+                    <div className="px-4 pt-3">
+                      <button
+                        onClick={clearAllUpdates}
+                        className="w-full h-9 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#7F6823]/40 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 group"
+                      >
+                        <CheckCircle2 className="h-4 w-4 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
+                        <span className="text-xs font-medium text-gray-400 group-hover:text-[#D4AF37] transition-colors">
+                          Clear All ({unreadUpdatesCount})
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                  
                   <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {loadingUpdates ? (
                       <div className="flex items-center justify-center h-full">
@@ -1240,11 +1312,22 @@ export default function SupportWidget() {
                             return (
                               <button
                                 key={ticket.id}
-                                onClick={() => {
-                                  setSelectedTicket(ticket);
-                                  setView('chat');
-                                  setIsNewConversation(false);
-                                }}
+                               onClick={async () => {
+  setSelectedTicket(ticket);
+  setView('chat');
+  setIsNewConversation(false);
+  
+  // Mark as read
+  await supabase
+    .from('support_tickets')
+    .update({ last_read_at: new Date().toISOString() })
+    .eq('id', ticket.id);
+  
+  // Update local state to remove notification immediately
+  setTickets(prev => prev.map(t => 
+    t.id === ticket.id ? { ...t, last_read_at: new Date().toISOString() } : t
+  ));
+}}
                                 className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
                               >
                                 <div className="flex items-start gap-3">
