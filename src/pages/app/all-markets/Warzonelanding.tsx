@@ -1487,25 +1487,30 @@ console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport
 })));
 
 // =====================================================
-// DAILY REPORT ASSIGNMENT LOGIC v7.0
-// Top button: Today's report (null if before 9 AM NY or no report yet)
-// Bottom card: Yesterday's report (always available for download)
+// DAILY REPORT ASSIGNMENT LOGIC v8.0
+// Top button: Most recent live report (null only if before 9 AM NY AND no report for today)
+// Bottom card: Second most recent report (always available for download)
 // =====================================================
 const nyHour = nyTime.getHours();
 const isBeforeReportTime = nyHour < 9; // Before 9:00 AM NY
-setIsBeforeDailyReportTime(isBeforeReportTime);
 
-// Today's report - only show if after 9 AM AND report exists for today
-const todaysReport = isBeforeReportTime 
+// Check if there's a report for today
+const hasTodayReport = liveReports.some((r: DailyReport) => 
+  normalizeDate(r.report_date) === todayNY
+);
+
+// Only show "Coming Soon" if before 9 AM AND no report exists for today
+// After 9 AM or if a report exists, always show the most recent report
+setIsBeforeDailyReportTime(isBeforeReportTime && !hasTodayReport);
+
+// Today's report - show most recent live report
+// Only null if before 9 AM AND no report for today yet
+const todaysReport = (isBeforeReportTime && !hasTodayReport)
   ? null
-  : liveReports.find((r: DailyReport) => 
-      normalizeDate(r.report_date) === todayNY
-    ) || null;
+  : (liveReports.length > 0 ? liveReports[0] : null);
 
-// Previous report - find the most recent report that is NOT today's
-const previousReport = liveReports.find((r: DailyReport) => 
-  normalizeDate(r.report_date) !== todayNY
-) || null;
+// Previous report - second most recent live report
+const previousReport = liveReports.length > 1 ? liveReports[1] : null;
 
 console.log('[WAR ZONE] 📌 Daily Report Assignment (v7.0):', {
   todayNY,

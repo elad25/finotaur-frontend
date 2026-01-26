@@ -978,9 +978,21 @@ async function handleReactivate(
   // CASE 3: PAID subscription with pending cancellation - Reactivate via Whop
   // ============================================
 
-  if (!membershipId) {
+  // 🔥 v2.5.0: Get the effective membership ID for this product
+  // membershipId is already set correctly by getMembershipId() at the start of this function
+  const effectiveMembershipId = membershipId;
+  
+  console.log(`📋 Reactivate PAID - Debug info:`, {
+    product,
+    effectiveMembershipId,
+    profile_top_secret_whop_membership_id: profile.top_secret_whop_membership_id,
+    profile_newsletter_whop_membership_id: profile.newsletter_whop_membership_id,
+    WHOP_API_KEY_EXISTS: !!WHOP_API_KEY,
+  });
+
+  if (!effectiveMembershipId) {
     // No Whop membership but has pending cancellation - just update DB
-    console.log(`📝 No Whop membership, reactivating in DB only`);
+    console.log(`📝 No Whop membership ID found, reactivating in DB only`);
     
     let updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -1035,9 +1047,9 @@ async function handleReactivate(
   // STEP 1: Reactivate via Whop API
   // ============================================
 
-  console.log(`🔄 Reactivating via Whop API (membership: ${membershipId})`);
+  console.log(`🔄 Reactivating via Whop API (membership: ${effectiveMembershipId})`);
 
-  const reactivateResult = await reactivateWhopMembership(membershipId);
+  const reactivateResult = await reactivateWhopMembership(effectiveMembershipId!);
 
   // 🔥 v2.6.0: If Whop was skipped (API key issue or auth error), just update DB
   if (reactivateResult.skipWhop) {

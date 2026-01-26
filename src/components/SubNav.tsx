@@ -298,10 +298,10 @@ const isTabActive = useCallback((itemPath: string): boolean => {
 
   return (
     <div 
-      className="sticky top-16 z-40 border-b"
+      className="sticky top-16 z-[99] border-b"
       style={{ 
         borderColor: 'rgba(255, 215, 0, 0.08)',
-        background: '#0F0F0F'
+        backgroundColor: '#0F0F0F'
       }}
     >
       <div className="flex h-12 items-center gap-1 overflow-x-auto px-4 lg:px-6 scrollbar-hide">
