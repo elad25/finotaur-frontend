@@ -1009,7 +1009,7 @@ const BillingTab = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowNewsletterCancelDialog(true)}
-                      className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
                     >
                       Unsubscribe
                     </Button>
