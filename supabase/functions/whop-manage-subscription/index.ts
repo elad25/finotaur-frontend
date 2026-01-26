@@ -119,8 +119,9 @@ async function reactivateWhopMembership(
   try {
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
+    // 🔥 v2.5.0 FIX: Use PATCH method to update membership (not POST!)
     const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
-      method: "POST",
+      method: "PATCH",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",

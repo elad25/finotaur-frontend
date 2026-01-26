@@ -2776,7 +2776,19 @@ const checkSubscriptionStatus = useCallback(async () => {
   }, [user?.id]);
 
   useEffect(() => { if (pollCount > 0 && pollCount <= 15) { const t = setTimeout(() => { checkSubscriptionStatus().then(() => { if (newsletterStatus?.is_active) setPollCount(0); else setPollCount(p => p + 1); }); }, 2000); return () => clearTimeout(t); } }, [pollCount, newsletterStatus?.is_active, checkSubscriptionStatus]);
-  useEffect(() => { checkSubscriptionStatus(); }, [checkSubscriptionStatus]);
+  
+  // 🔥 FIX: Start polling immediately if returning from payment
+  useEffect(() => { 
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    const fromWhop = searchParams.get('source') === 'whop';
+    
+    if (paymentSuccess || fromWhop) {
+      console.log('[WAR ZONE] 🎉 Returning from successful payment, starting subscription poll...');
+      setPollCount(1); // Start polling for subscription activation
+    }
+    
+    checkSubscriptionStatus(); 
+  }, [checkSubscriptionStatus, searchParams]);
 
   const fetchLatestReport = useCallback(async () => { setIsLoadingReport(true); setReportError(null); try { const { data: { session } } = await supabase.auth.getSession(); if (!session?.access_token) { setReportError('Please login'); setIsLoadingReport(false); return; } const r = await fetch(`${API_BASE}/api/newsletter/latest`, { headers: { 'Authorization': `Bearer ${session.access_token}` } }); const d = await r.json(); if (!r.ok) { setReportError(d.error || 'Failed'); return; } if (d.success && d.data) setCurrentReport(d.data); else setCurrentReport(null); } catch (e) { setReportError('Failed to load'); } finally { setIsLoadingReport(false); } }, []);
 

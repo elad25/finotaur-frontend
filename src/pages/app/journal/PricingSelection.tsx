@@ -124,7 +124,7 @@ export default function WarZonePricingSelection() {
             description: 'Your subscription is being activated...'
           });
 
-          navigate('/app/all-markets/warzone?payment=success&source=whop');
+          navigate('/app/all-markets/warzone?payment=success&source=whop&new_subscriber=true');
           return;
         }
 

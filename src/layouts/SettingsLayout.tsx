@@ -774,18 +774,6 @@ const BillingTab = () => {
             </div>
           </div>
         </div>
-
-        {platformIsFree && !isLifetime && (
-          <div className="mt-4">
-<Button 
-  onClick={() => navigate('/app/journal/overview')}
-  size="sm" 
-  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
->
-  Go to Journal <ArrowRight className="w-4 h-4 ml-1" />
-</Button>
-          </div>
-        )}
       </Card>
 
       {/* Trading Journal Subscription Card */}

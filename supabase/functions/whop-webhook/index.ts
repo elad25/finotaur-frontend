@@ -36,7 +36,8 @@ const NEWSLETTER_PRODUCT_IDS = new Set([
 
 // 🔥 Top Secret Product IDs
 const TOP_SECRET_PRODUCT_IDS = new Set([
-  'prod_nl6YXbLp4t5pz',  // Top Secret
+  'prod_nl6YXbLp4t5pz',  // Top Secret (Regular)
+  'prod_e8Er36RubeFXU',  // Top Secret - For War Zone Members (discounted bundle)
 ]);
 
 // 🔥 v3.6.0: Newsletter Plan IDs for cancellation via Whop API
@@ -313,6 +314,7 @@ async function getPlanInfo(
     "prod_u7QrZi90xiCZA": { plan: "newsletter", interval: "monthly", price: 19.99, maxTrades: 0, isNewsletter: true, isTopSecret: false }, // 🔥 NEW!
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
+    "prod_e8Er36RubeFXU": { plan: "top_secret_bundle", interval: "monthly", price: 50.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },
   };
 
   return fallbackMapping[productId] || null;
