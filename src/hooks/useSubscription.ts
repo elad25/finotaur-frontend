@@ -156,7 +156,7 @@ export function useSubscription() {
         // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
         // ═══════════════════════════════════════════════════════════════
 const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-  user_id_param: effectiveUserId  // ✅ נכון
+  p_user_id: effectiveUserId
 });
         
         if (rpcError) {
