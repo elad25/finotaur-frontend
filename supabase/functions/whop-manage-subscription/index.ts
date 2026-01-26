@@ -873,12 +873,24 @@ async function handleReactivate(
   }
 
   // ============================================
-  // 🔥 v2.3.0: Handle trial/free reactivation (undo pending cancellation)
+  // 🔥 v2.4.0: Handle trial/free reactivation (undo pending cancellation)
+  // Also calls Whop API if membership exists!
   // ============================================
 
   if (productStatus.isTrial || !productStatus.isPaid) {
-    console.log(`📝 Undoing trial/free cancellation in DB only`);
+    console.log(`📝 Undoing trial/free cancellation (isTrial: ${productStatus.isTrial}, isPaid: ${productStatus.isPaid})`);
     
+    // 🔥 v2.4.0: Even trial users have Whop memberships - reactivate them too!
+    if (membershipId && WHOP_API_KEY) {
+      console.log(`🔄 Also reactivating trial via Whop API (membership: ${membershipId})`);
+      const reactivateResult = await reactivateWhopMembership(membershipId);
+      if (reactivateResult.success) {
+        console.log(`✅ Whop membership reactivated (cancel_at_period_end = false)`);
+      } else {
+        console.warn(`⚠️ Whop reactivate failed: ${reactivateResult.error} - continuing with DB update`);
+      }
+    }
+
     let updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
     };
@@ -911,6 +923,7 @@ async function handleReactivate(
         product_type: product,
         reactivated_at: new Date().toISOString(),
         was_trial: true,
+        whop_membership_id: membershipId || null,
       },
     });
 

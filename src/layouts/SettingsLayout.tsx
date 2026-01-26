@@ -435,9 +435,9 @@ const GeneralTab = () => {
               </div>
             </div>
 <Button 
-  onClick={() => navigate('/app/all-markets/pricing')}
+  disabled
   size="sm" 
-  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+  className="bg-zinc-600 text-zinc-400 cursor-not-allowed opacity-50"
 >
   Upgrade <ArrowRight className="w-4 h-4 ml-1" />
 </Button>
