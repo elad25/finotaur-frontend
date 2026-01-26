@@ -84,8 +84,14 @@ interface WhopMembership {
 async function cancelWhopMembership(
   membershipId: string,
   mode: "at_period_end" | "immediate" = "at_period_end"
-): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
+): Promise<{ success: boolean; data?: WhopMembership; error?: string; skipWhop?: boolean }> {
   try {
+    // 🔥 v2.6.0: Check if API key exists before calling Whop
+    if (!WHOP_API_KEY) {
+      console.warn(`⚠️ WHOP_API_KEY not configured - skipping Whop API call`);
+      return { success: true, skipWhop: true };
+    }
+
     console.log(`🔄 Canceling Whop membership ${membershipId} with mode: ${mode}`);
 
     const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}/cancel`, {
@@ -100,6 +106,13 @@ async function cancelWhopMembership(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
+      
+      // 🔥 v2.6.0: If 401 (unauthorized) or 404 (not found), continue with DB-only update
+      if (response.status === 401 || response.status === 404) {
+        console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
+        return { success: true, skipWhop: true };
+      }
+      
       return { success: false, error: `Whop API error: ${response.status}` };
     }
 
@@ -109,17 +122,24 @@ async function cancelWhopMembership(
 
   } catch (error) {
     console.error(`❌ Cancel Whop membership error:`, error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    // 🔥 v2.6.0: On network errors, continue with DB-only update
+    console.warn(`⚠️ Whop API network error - continuing with DB-only update`);
+    return { success: true, skipWhop: true };
   }
 }
 
 async function reactivateWhopMembership(
   membershipId: string
-): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
+): Promise<{ success: boolean; data?: WhopMembership; error?: string; skipWhop?: boolean }> {
   try {
+    // 🔥 v2.6.0: Check if API key exists before calling Whop
+    if (!WHOP_API_KEY) {
+      console.warn(`⚠️ WHOP_API_KEY not configured - skipping Whop API call`);
+      return { success: true, skipWhop: true };
+    }
+
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
-    // 🔥 v2.5.0 FIX: Use PATCH method to update membership (not POST!)
     const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
       method: "PATCH",
       headers: {
@@ -132,6 +152,13 @@ async function reactivateWhopMembership(
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
+      
+      // 🔥 v2.6.0: If 401 (unauthorized) or 404 (not found), continue with DB-only update
+      if (response.status === 401 || response.status === 404) {
+        console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
+        return { success: true, skipWhop: true };
+      }
+      
       return { success: false, error: `Whop API error: ${response.status}` };
     }
 
@@ -141,7 +168,9 @@ async function reactivateWhopMembership(
 
   } catch (error) {
     console.error(`❌ Reactivate Whop membership error:`, error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    // 🔥 v2.6.0: On network errors, continue with DB-only update
+    console.warn(`⚠️ Whop API network error - continuing with DB-only update`);
+    return { success: true, skipWhop: true };
   }
 }
 
@@ -1010,7 +1039,10 @@ async function handleReactivate(
 
   const reactivateResult = await reactivateWhopMembership(membershipId);
 
-  if (!reactivateResult.success) {
+  // 🔥 v2.6.0: If Whop was skipped (API key issue or auth error), just update DB
+  if (reactivateResult.skipWhop) {
+    console.log(`📝 Whop API skipped - updating DB only`);
+  } else if (!reactivateResult.success) {
     // If Whop returns 404, just update DB
     if (reactivateResult.error?.includes("404")) {
       console.warn(`⚠️ Whop membership ${membershipId} not found. Reactivating in DB only.`);

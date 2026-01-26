@@ -854,19 +854,21 @@ const BillingTab = () => {
       </Card>
 
       {/* 🔥 WAR ZONE NEWSLETTER CARD */}
-      <Card className="p-5 bg-gradient-to-br from-purple-900/20 via-zinc-900/50 to-zinc-900/50 border-purple-700/50 relative overflow-hidden">
-        {/* Animated background effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-purple-500/5 animate-pulse" />
+      <Card className="p-6 bg-gradient-to-br from-purple-950/40 via-zinc-900/80 to-zinc-900/90 border-purple-600/30 relative overflow-hidden shadow-xl shadow-purple-900/10">
+        {/* Subtle animated glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-600/5 via-transparent to-purple-600/5" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
         
         <div className="relative">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-purple-500/30">
-                <Mail className="w-4 h-4 text-purple-400" />
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/30 to-pink-500/20 flex items-center justify-center border border-purple-500/40 shadow-lg shadow-purple-500/20">
+                <Mail className="w-5 h-5 text-purple-300" />
               </div>
               <div>
-                <h2 className="font-medium text-white">War Zone Intelligence</h2>
-                <p className="text-xs text-zinc-500">Daily Market Newsletter</p>
+                <h2 className="font-semibold text-white text-lg">War Zone Intelligence</h2>
+                <p className="text-xs text-zinc-400">Daily Market Newsletter</p>
               </div>
             </div>
             {newsletterIsActive && (
@@ -874,28 +876,31 @@ const BillingTab = () => {
                 href="https://whop.com/finotaur" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
+                className="text-xs text-zinc-500 hover:text-purple-300 flex items-center gap-1.5 transition-colors"
               >
                 Manage on Whop <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
           
-          <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-4">
+          {/* Main Content Box */}
+          <div className="p-5 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
+            {/* Plan & Price Row */}
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
-                <span className="text-lg font-semibold text-white">
-                  {newsletterStatus === 'trial' ? 'Free Trial' : newsletterPaid ? 'Premium' : 'Free'}
+                <span className="text-xl font-bold text-white">
+                  {newsletterStatus === 'trial' ? 'Free Trial' : newsletterIsActive ? 'Premium' : 'Free'}
                 </span>
-                <Badge variant="outline" className={
+                <Badge variant="outline" className={cn(
+                  "px-2.5 py-1",
                   profile?.newsletter_cancel_at_period_end
                     ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                     : newsletterIsActive 
-                    ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                     : newsletterStatus === 'cancelled'
                     ? 'bg-red-500/20 text-red-400 border-red-500/30'
                     : 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
-                }>
+                )}>
                   {profile?.newsletter_cancel_at_period_end ? (
                     <><Clock className="w-3 h-3 mr-1" />Cancelling</>
                   ) : newsletterIsActive ? (
@@ -907,46 +912,49 @@ const BillingTab = () => {
                   )}
                 </Badge>
               </div>
-              <span className="text-lg font-semibold text-white">
-                {newsletterStatus === 'trial' ? 'Free' : newsletterPaid ? '$20/mo' : 'Free'}
+              <span className="text-xl font-bold text-white">
+                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? '$69.99/mo' : 'Free'}
               </span>
             </div>
             
-            {/* Features list */}
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <CheckCircle2 className="w-4 h-4 text-purple-400" />
-                <span>Daily market intelligence reports</span>
+            {/* Features Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Daily market intelligence</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <CheckCircle2 className="w-4 h-4 text-purple-400" />
-                <span>AI-powered market analysis</span>
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>AI-powered analysis</span>
               </div>
-              {newsletterPaid && (
+              {newsletterIsActive && (
                 <>
-                  <div className="flex items-center gap-2 text-sm text-zinc-300">
-                    <Crown className="w-4 h-4 text-[#C9A646]" />
-                    <span>Premium institutional insights</span>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
+                    <span>Institutional insights</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-zinc-300">
-                    <Crown className="w-4 h-4 text-[#C9A646]" />
-                    <span>Exclusive war zone alerts</span>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
+                    <span>Exclusive alerts</span>
                   </div>
                 </>
               )}
             </div>
 
-            {/* Status and actions */}
+            {/* Status Footer */}
             {newsletterIsActive ? (
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-400">
                     {profile?.newsletter_cancel_at_period_end ? (
-                      <span>Cancels {formatDate(profile?.newsletter_expires_at)}</span>
+                      <span>Access until {formatDate(profile?.newsletter_expires_at)}</span>
                     ) : newsletterStatus === 'trial' ? (
-                      <span>Trial active - Expires {formatDate(profile?.newsletter_trial_ends_at)}</span>
+                      <span className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-purple-400" />
+                        Trial expires {formatDate(profile?.newsletter_trial_ends_at)}
+                      </span>
                     ) : (
-                      <span>Receiving premium newsletters</span>
+                      <span>Full access active</span>
                     )}
                   </div>
                   {profile?.newsletter_cancel_at_period_end ? (
@@ -955,24 +963,20 @@ const BillingTab = () => {
                       size="sm"
                       onClick={handleReactivateNewsletter}
                       disabled={reactivatingNewsletter}
-                      className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                      className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
                     >
                       {reactivatingNewsletter ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Undoing...
-                        </>
+                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
                       ) : (
                         <>Undo Cancellation</>
                       )}
                     </Button>
-
                   ) : (
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowNewsletterCancelDialog(true)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
                     >
                       Unsubscribe
                     </Button>
@@ -982,64 +986,50 @@ const BillingTab = () => {
             ) : newsletterStatus === 'cancelled' ? (
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-zinc-400">
-                    Newsletter subscription cancelled
-                  </div>
+                  <span className="text-sm text-zinc-400">Subscription cancelled</span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleReactivateNewsletter}
                     disabled={saving}
-                    className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                    className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10"
                   >
-                    {saving ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Reactivating...
-                      </>
-                    ) : (
-                      <>Reactivate</>
-                    )}
+                    {saving ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Reactivating...</> : <>Reactivate</>}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="pt-4 border-t border-zinc-700/50">
-                <Button
-                  disabled
-                  size="sm"
-                  className="w-full bg-zinc-700 text-zinc-400 cursor-not-allowed"
-                >
+                <Button disabled size="sm" className="w-full bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700">
                   Coming Soon
                 </Button>
-                <p className="text-xs text-zinc-500 text-center mt-2">
-                  Newsletter subscriptions opening soon
-                </p>
               </div>
             )}
           </div>
         </div>
       </Card>
 
-      {/* 🔥 TOP SECRET CARD - v4 FIXED: Now shows live data from DB */}
-      <Card className="p-5 bg-gradient-to-br from-red-900/20 via-zinc-900/50 to-zinc-900/50 border-red-700/50 relative overflow-hidden">
-        {/* Animated background effect */}
-        <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 via-orange-500/5 to-red-500/5 animate-pulse" />
+      {/* 🔥 TOP SECRET CARD */}
+      <Card className="p-6 bg-gradient-to-br from-red-950/40 via-zinc-900/80 to-zinc-900/90 border-red-600/30 relative overflow-hidden shadow-xl shadow-red-900/10">
+        {/* Subtle animated glow */}
+        <div className="absolute inset-0 bg-gradient-to-r from-red-600/5 via-transparent to-orange-600/5" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />
         
         <div className="relative">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center border border-red-500/30">
-                <Flame className="w-4 h-4 text-red-400" />
+          {/* Header */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/30 to-orange-500/20 flex items-center justify-center border border-red-500/40 shadow-lg shadow-red-500/20">
+                <Flame className="w-5 h-5 text-red-300" />
               </div>
               <div>
-                <h2 className="font-medium text-white flex items-center gap-2">
+                <h2 className="font-semibold text-white text-lg flex items-center gap-2">
                   Top Secret
-                  <Badge className="bg-red-500/20 text-red-300 border-red-500/30 text-xs px-2 py-0.5">
-                    CLASSIFIED
+                  <Badge className="bg-red-500/20 text-red-300 border-red-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
+                    Classified
                   </Badge>
                 </h2>
-                <p className="text-xs text-zinc-500">Exclusive Insider Access</p>
+                <p className="text-xs text-zinc-400">Exclusive Insider Access</p>
               </div>
             </div>
             {topSecretIsActive && (
@@ -1047,28 +1037,31 @@ const BillingTab = () => {
                 href="https://whop.com/finotaur" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
+                className="text-xs text-zinc-500 hover:text-red-300 flex items-center gap-1.5 transition-colors"
               >
                 Manage on Whop <ExternalLink className="w-3 h-3" />
               </a>
             )}
           </div>
           
-          <div className="p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/50 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-4">
+          {/* Main Content Box */}
+          <div className="p-5 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
+            {/* Plan & Price Row */}
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
-                <span className="text-lg font-semibold text-white">
+                <span className="text-xl font-bold text-white">
                   {topSecretIsActive ? 'Premium Access' : 'Not Subscribed'}
                 </span>
-                <Badge variant="outline" className={
+                <Badge variant="outline" className={cn(
+                  "px-2.5 py-1",
                   profile?.top_secret_cancel_at_period_end
                     ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                     : topSecretIsActive 
-                    ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                     : topSecretStatus === 'cancelled'
                     ? 'bg-red-500/20 text-red-400 border-red-500/30'
                     : 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
-                }>
+                )}>
                   {profile?.top_secret_cancel_at_period_end ? (
                     <><Clock className="w-3 h-3 mr-1" />Cancelling</>
                   ) : topSecretIsActive ? (
@@ -1080,72 +1073,70 @@ const BillingTab = () => {
                   )}
                 </Badge>
               </div>
-              <span className="text-lg font-semibold text-white">
+              <div className="text-right">
                 {topSecretIsActive ? (
-                  topSecretInterval === 'yearly' ? '$500/yr' : (
-                    topSecretPricing.isInTrial ? (
-                      <span className="flex items-center gap-2">
-                        <span>Free Trial</span>
-                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs">
-                          {topSecretPricing.trialDaysRemaining} days left
-                        </Badge>
-                      </span>
-                    ) : topSecretPricing.isInIntro ? (
-                      <span className="flex items-center gap-2">
-                        <span>$45/mo</span>
-                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
-                          50% OFF ({topSecretPricing.introMonthsRemaining} mo left)
-                        </Badge>
-                      </span>
-                    ) : (
-                      '$89.99/mo'
-                    )
+                  topSecretInterval === 'yearly' ? (
+                    <span className="text-xl font-bold text-white">$500/yr</span>
+                  ) : topSecretPricing.isInTrial ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white">Free Trial</span>
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs px-2 py-0.5">
+                        {topSecretPricing.trialDaysRemaining} days left
+                      </Badge>
+                    </div>
+                  ) : topSecretPricing.isInIntro ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white">$45/mo</span>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs px-2 py-0.5">
+                        50% OFF
+                      </Badge>
+                    </div>
+                  ) : (
+                    <span className="text-xl font-bold text-white">$89.99/mo</span>
                   )
                 ) : (
-                  <span className="flex items-center gap-2">
-                    <span className="text-zinc-500 line-through text-sm">$89.99/mo</span>
-                    <span>$45/mo</span>
-                    <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">50% OFF</Badge>
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 line-through text-sm">$89.99</span>
+                    <span className="text-xl font-bold text-white">$45/mo</span>
+                  </div>
                 )}
-              </span>
+              </div>
             </div>
             
-            {/* Features list */}
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-[#C9A646]" />
-                <span>Exclusive market intelligence</span>
+            {/* Features Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
+                <span>Market intelligence</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-[#C9A646]" />
-                <span>Private Discord community access</span>
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
+                <span>Private Discord access</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-[#C9A646]" />
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
                 <span>Premium insider alerts</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-zinc-300">
-                <Crown className="w-4 h-4 text-[#C9A646]" />
-                <span>Early access to new features</span>
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
+                <span>Early feature access</span>
               </div>
             </div>
 
-            {/* 🔥 Billing info for active subscribers - v4 FIXED */}
+            {/* Billing Info for Active Subscribers */}
             {topSecretIsActive && (
-              <div className="mb-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-700/50">
+              <div className="mb-5 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/40">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-zinc-500">Billing cycle</p>
-                    <p className="capitalize text-zinc-300">{topSecretInterval}</p>
+                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
+                    <p className="capitalize text-zinc-200 font-medium">{topSecretInterval}</p>
                   </div>
                   <div>
-                    <p className="text-zinc-500">
+                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
                       {topSecretPricing.isInTrial ? 'First charge' : 'Next billing'}
                     </p>
-                    <p className="text-zinc-300 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {/* For trial users, calculate 14 days from started_at */}
+                    <p className="text-zinc-200 font-medium flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       {topSecretPricing.isInTrial && profile?.top_secret_started_at
                         ? formatDate(new Date(new Date(profile.top_secret_started_at).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString())
                         : formatDate(profile?.top_secret_expires_at)
@@ -1154,49 +1145,49 @@ const BillingTab = () => {
                   </div>
                 </div>
                 
-                {/* Show pricing timeline for monthly subscribers */}
                 {topSecretInterval === 'monthly' && (
                   <div className="mt-3 pt-3 border-t border-zinc-700/30">
                     {topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
-                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">14-Day Trial</Badge>
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">14-Day Trial</Badge>
                         <span className="text-zinc-400">→ Then $45/mo for 2 months → $89.99/mo after</span>
                       </div>
                     ) : topSecretPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
-                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Intro Pricing</Badge>
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
                         <span className="text-zinc-400">
                           {topSecretPricing.introMonthsRemaining === 2 
-                            ? 'Next payment: $45 → Then $45 → Then $89.99/mo'
-                            : 'Next payment: $45 → Then $89.99/mo regular price'
+                            ? '$45 → $45 → Then $89.99/mo'
+                            : '$45 → Then $89.99/mo'
                           }
                         </span>
                       </div>
                     ) : (
-                      <p className="text-xs text-zinc-500">Regular pricing: $89.99/mo</p>
+                      <p className="text-xs text-zinc-500">Regular pricing active</p>
                     )}
                   </div>
                 )}
                 
                 {profile?.top_secret_started_at && (
                   <div className="mt-2 pt-2 border-t border-zinc-700/30">
-                    <p className="text-xs text-zinc-500">
-                      Member since {formatDate(profile.top_secret_started_at)}
-                    </p>
+                    <p className="text-xs text-zinc-500">Member since {formatDate(profile.top_secret_started_at)}</p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Status and actions */}
+            {/* Status Footer */}
             {topSecretIsActive ? (
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-400">
                     {profile?.top_secret_cancel_at_period_end ? (
-                      <span>Cancels {formatDate(profile?.top_secret_expires_at)}</span>
+                      <span className="flex items-center gap-2">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        Access until {formatDate(profile?.top_secret_expires_at)}
+                      </span>
                     ) : (
-                      <span>Full access to Top Secret content</span>
+                      <span>Full classified access</span>
                     )}
                   </div>
                   {profile?.top_secret_cancel_at_period_end ? (
@@ -1205,13 +1196,10 @@ const BillingTab = () => {
                       size="sm"
                       onClick={handleReactivateTopSecret}
                       disabled={reactivatingTopSecret}
-                      className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                      className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/50"
                     >
                       {reactivatingTopSecret ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Undoing...
-                        </>
+                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
                       ) : (
                         <>Undo Cancellation</>
                       )}
@@ -1221,7 +1209,7 @@ const BillingTab = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowTopSecretCancelDialog(true)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
                     >
                       Cancel
                     </Button>
@@ -1231,52 +1219,35 @@ const BillingTab = () => {
             ) : topSecretStatus === 'cancelled' ? (
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-zinc-400">
-                    Top Secret subscription cancelled
-                    {profile?.top_secret_unsubscribed_at && (
-                      <span className="block text-xs text-zinc-500">
-                        Cancelled on {formatDate(profile.top_secret_unsubscribed_at)}
-                      </span>
-                    )}
-                  </div>
-<Button
-  onClick={() => navigate('/app/top-secret')}
-  variant="outline"
-  size="sm"
-  className="border-red-500/30 text-red-400 hover:bg-red-500/10"
->
-  Resubscribe
-</Button>
+                  <span className="text-sm text-zinc-400">Subscription cancelled</span>
+                  <Button
+                    onClick={() => navigate('/app/top-secret')}
+                    variant="outline"
+                    size="sm"
+                    className="border-red-500/40 text-red-300 hover:bg-red-500/10"
+                  >
+                    Resubscribe
+                  </Button>
                 </div>
               </div>
             ) : (
               <div className="pt-4 border-t border-zinc-700/50">
-                <div className="mb-3 p-2 rounded bg-green-500/10 border border-green-500/20">
-                  <p className="text-xs text-green-400 text-center">
-                    🔥 <strong>Limited Offer:</strong> 14-day FREE trial, then $45/mo for first 2 months (50% OFF), then $89.99/mo
+                <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-xs text-emerald-400 text-center font-medium">
+                    🔥 Limited: 14-day FREE trial → $45/mo for 2 months → $89.99/mo
                   </p>
                 </div>
                 <Button
-onClick={() => navigate('/app/top-secret')}
+                  onClick={() => navigate('/app/top-secret')}
                   size="sm"
-                  className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white"
+                  className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-medium shadow-lg shadow-red-900/20"
                 >
-                  Start Free Trial - Then $45/mo
+                  Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             )}
           </div>
-
-          {/* Info banner for inactive users */}
-          {!topSecretIsActive && topSecretStatus !== 'cancelled' && (
-            <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <p className="text-sm text-red-300">
-                <strong>Classified Intelligence:</strong> Get exclusive insider access, 
-                private community, and premium market intelligence.
-              </p>
-            </div>
-          )}
         </div>
       </Card>
 

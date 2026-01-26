@@ -135,7 +135,7 @@ const getContent = () => {
   const IconComponent = content.icon;
 
   return (
-    <div className={`relative border-b ${content.bgColor}`}>
+    <div className={`relative border-b ${content.bgColor}`} style={{ backgroundColor: '#0A0A0A' }}>
       <div className="mx-auto max-w-7xl px-6 py-3">
         <div className="flex items-center justify-between gap-4">
           {/* Left: Icon + Message */}
