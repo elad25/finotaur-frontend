@@ -11,7 +11,7 @@
 // 7. ✅ FIXED: PDF download using Supabase download() method
 // =====================================================
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
  import {
@@ -185,24 +185,48 @@ const mapReportTypeToDb = (type: string): string => {
 };
 
 // ========================================
-// REPORTS CACHE - For faster loading
+// REPORTS CACHE - Optimized v3.0
 // ========================================
 const REPORTS_CACHE_KEY = 'finotaur_topsecret_cache';
-const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const CACHE_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes (longer since we use real-time)
+const CACHE_VERSION = '3.0';
 
 interface ReportsCache {
   reports: any[];
   timestamp: number;
   visibilityMode: string;
+  version: string;
+  lastReportId?: string; // Track last report for quick comparison
 }
 
+// In-memory cache for instant access (survives component re-renders)
+let memoryCache: Map<string, { reports: Report[]; timestamp: number }> = new Map();
+
 function getCachedReports(userId: string, effectiveIsTester: boolean): Report[] | null {
+  const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+  const currentMode = effectiveIsTester ? 'tester' : 'regular';
+  
+  // Try memory cache first (fastest)
+  const memKey = `${cacheKey}_${currentMode}`;
+  const memCached = memoryCache.get(memKey);
+  if (memCached && (Date.now() - memCached.timestamp < CACHE_EXPIRY_MS)) {
+    console.log('[Cache] ⚡ Memory cache hit:', memCached.reports.length, 'reports');
+    return memCached.reports;
+  }
+  
+  // Fall back to localStorage
   try {
-    const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
     const cached = localStorage.getItem(cacheKey);
     if (!cached) return null;
     
     const data: ReportsCache = JSON.parse(cached);
+    
+    // Check version
+    if (data.version !== CACHE_VERSION) {
+      console.log('[Cache] Version mismatch, invalidating');
+      localStorage.removeItem(cacheKey);
+      return null;
+    }
     
     // Check if cache is expired
     if (Date.now() - data.timestamp > CACHE_EXPIRY_MS) {
@@ -210,18 +234,22 @@ function getCachedReports(userId: string, effectiveIsTester: boolean): Report[] 
       return null;
     }
     
-    // Check if visibility mode changed (tester mode toggled)
-    const currentMode = effectiveIsTester ? 'tester' : 'regular';
+    // Check if visibility mode changed
     if (data.visibilityMode !== currentMode) {
       console.log('[Cache] Visibility mode changed, will refresh');
       return null;
     }
     
     // Convert date strings back to Date objects
-    return data.reports.map(r => ({
+    const reports = data.reports.map(r => ({
       ...r,
       date: new Date(r.date),
     }));
+    
+    // Populate memory cache
+    memoryCache.set(memKey, { reports, timestamp: data.timestamp });
+    
+    return reports;
   } catch (err) {
     console.warn('[Cache] Failed to read:', err);
     return null;
@@ -229,18 +257,27 @@ function getCachedReports(userId: string, effectiveIsTester: boolean): Report[] 
 }
 
 function setCachedReports(userId: string, reports: Report[], effectiveIsTester: boolean): void {
+  const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+  const currentMode = effectiveIsTester ? 'tester' : 'regular';
+  const memKey = `${cacheKey}_${currentMode}`;
+  
+  // Update memory cache immediately
+  memoryCache.set(memKey, { reports, timestamp: Date.now() });
+  
+  // Persist to localStorage (async-ish)
   try {
-    const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
     const data: ReportsCache = {
       reports: reports.map(r => ({
         ...r,
         date: r.date.toISOString(),
       })),
       timestamp: Date.now(),
-      visibilityMode: effectiveIsTester ? 'tester' : 'regular',
+      visibilityMode: currentMode,
+      version: CACHE_VERSION,
+      lastReportId: reports[0]?.id,
     };
     localStorage.setItem(cacheKey, JSON.stringify(data));
-    console.log('[Cache] Saved', reports.length, 'reports');
+    console.log('[Cache] 💾 Saved', reports.length, 'reports');
   } catch (err) {
     console.warn('[Cache] Failed to save:', err);
   }
@@ -250,9 +287,98 @@ function invalidateCache(userId: string): void {
   try {
     const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
     localStorage.removeItem(cacheKey);
-    console.log('[Cache] Invalidated');
+    
+    // Clear memory cache for this user
+    for (const key of memoryCache.keys()) {
+      if (key.startsWith(cacheKey)) {
+        memoryCache.delete(key);
+      }
+    }
+    
+    console.log('[Cache] 🗑️ Invalidated all caches for user');
   } catch {
     // Ignore
+  }
+}
+
+// New: Update single report in cache (for promote action)
+function updateReportInCache(userId: string, reportId: string, updates: Partial<Report>): void {
+  const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+  
+  // Update memory cache
+  for (const [key, value] of memoryCache.entries()) {
+    if (key.startsWith(cacheKey)) {
+      const updatedReports = value.reports.map(r => 
+        r.id === reportId ? { ...r, ...updates } : r
+      );
+      memoryCache.set(key, { ...value, reports: updatedReports });
+    }
+  }
+  
+  // Update localStorage cache
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const data: ReportsCache = JSON.parse(cached);
+      data.reports = data.reports.map(r => 
+        r.id === reportId ? { ...r, ...updates, date: updates.date ? updates.date.toISOString() : r.date } : r
+      );
+      data.timestamp = Date.now();
+      localStorage.setItem(cacheKey, JSON.stringify(data));
+      console.log('[Cache] 📝 Updated report in cache:', reportId);
+    }
+  } catch (err) {
+    console.warn('[Cache] Failed to update:', err);
+  }
+}
+
+// New: Add single report to cache (for real-time inserts)
+function addReportToCache(userId: string, report: Report, effectiveIsTester: boolean): void {
+  const cacheKey = `${REPORTS_CACHE_KEY}_${userId}`;
+  const currentMode = effectiveIsTester ? 'tester' : 'regular';
+  const memKey = `${cacheKey}_${currentMode}`;
+  
+  // Update memory cache
+  const memCached = memoryCache.get(memKey);
+  if (memCached) {
+    // Check if report already exists
+    const exists = memCached.reports.some(r => r.id === report.id);
+    if (!exists) {
+      const updatedReports = [report, ...memCached.reports].sort((a, b) => {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        return b.date.getTime() - a.date.getTime();
+      });
+      memoryCache.set(memKey, { reports: updatedReports, timestamp: Date.now() });
+      console.log('[Cache] ➕ Added report to memory cache:', report.id);
+    }
+  }
+  
+  // Update localStorage
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      const data: ReportsCache = JSON.parse(cached);
+      if (data.visibilityMode === currentMode) {
+        const exists = data.reports.some(r => r.id === report.id);
+        if (!exists) {
+          data.reports.unshift({
+            ...report,
+            date: report.date.toISOString(),
+          });
+          data.reports.sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.date).getTime() - new Date(a.date).getTime();
+          });
+          data.timestamp = Date.now();
+          data.lastReportId = data.reports[0]?.id;
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[Cache] Failed to add report:', err);
   }
 }
 
@@ -506,22 +632,59 @@ interface SearchBarProps {
   placeholder?: string;
 }
 
+// Debounce hook for search
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 function SearchBar({ value, onChange, placeholder = 'Search reports...' }: SearchBarProps) {
+  const [localValue, setLocalValue] = useState(value);
+  const debouncedValue = useDebounce(localValue, 300);
+  
+  // Sync debounced value to parent
+  useEffect(() => {
+    if (debouncedValue !== value) {
+      onChange(debouncedValue);
+    }
+  }, [debouncedValue, onChange, value]);
+  
+  // Sync parent value to local (for clear button)
+  useEffect(() => {
+    if (value !== localValue && value === '') {
+      setLocalValue('');
+    }
+  }, [value]);
+  
   return (
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
       <input
         type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
         placeholder={placeholder}
         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/5 border border-white/10 
           text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50
           transition-colors"
       />
-      {value && (
+      {localValue && (
         <button
-          onClick={() => onChange('')}
+          onClick={() => {
+            setLocalValue('');
+            onChange('');
+          }}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
         >
           <X className="w-4 h-4" />
@@ -572,7 +735,7 @@ interface CompactReportCardProps {
   isDownloading: boolean;
 }
 
-function CompactReportCard({ report, onDownload, isDownloading }: CompactReportCardProps) {
+const CompactReportCard = memo(function CompactReportCard({ report, onDownload, isDownloading }: CompactReportCardProps) {
   const config = REPORT_TYPE_CONFIG[report.type];
   const Icon = config.icon;
 
@@ -653,7 +816,7 @@ function CompactReportCard({ report, onDownload, isDownloading }: CompactReportC
       </button>
     </motion.div>
   );
-}
+});
 
 // ========================================
 // ARCHIVE REPORT ROW COMPONENT
@@ -673,7 +836,7 @@ interface ArchiveReportRowProps {
   isPromoting?: boolean;
 }
 
-function ArchiveReportRow({ 
+const ArchiveReportRow = memo(function ArchiveReportRow({ 
   report, 
   onDownload,
   isDownloading,
@@ -815,7 +978,7 @@ function ArchiveReportRow({
       </div>
     </motion.div>
   );
-}
+});
 
 // ========================================
 // MONTH GROUP COMPONENT
@@ -837,7 +1000,7 @@ interface MonthGroupProps {
   promotingReportId?: string | null;
 }
 
-function MonthGroup({ 
+const MonthGroup = memo(function MonthGroup({ 
   monthKey, 
   reports, 
   isExpanded, 
@@ -946,7 +1109,7 @@ function MonthGroup({
       </AnimatePresence>
     </div>
   );
-}
+});
 
 
 // ========================================
@@ -1288,14 +1451,29 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       });
     }
   }, [currentUserId, userInteractions.bookmarkedReportIds]);
-// v2.3: Promote report from test to live
+// v3.0: Promote report from test to live - with optimistic update and cache sync
   const handlePromoteToLive = useCallback(async (report: Report) => {
-    if (!report.id) return;
+    if (!report.id || !currentUserId) return;
     
     setPromotingReportId(report.id);
     
+    // OPTIMISTIC UPDATE - Update UI immediately
+    const previousReports = [...reports];
+    const previousVisibility = report.visibility;
+    
+    // Update local state immediately
+    setReports(prev => prev.map(r => 
+      r.id === report.id ? { ...r, visibility: 'live' } : r
+    ));
+    
+    // Update cache immediately (optimistic)
+    updateReportInCache(currentUserId, report.id, { visibility: 'live' });
+    
+    // Show success message immediately (optimistic)
+    setPromoteSuccess(`${report.ticker || report.title} promoted to live!`);
+    
     try {
-      console.log('[Promote] Starting promotion for report:', report.id, 'type:', report.type);
+      console.log('[Promote] 🚀 Starting promotion:', report.id, report.type);
       
       // Update published_reports visibility to 'live'
       const { error: publishedError } = await supabase
@@ -1312,7 +1490,6 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
       
       // Also update the source table if we have original_report_id
       if (report.originalReportId) {
-        // Map report type to source table name
         let sourceTable: string;
         if (report.type === 'macro') {
           sourceTable = 'ism_reports';
@@ -1322,42 +1499,57 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
           sourceTable = `${report.type}_reports`;
         }
         
-        console.log('[Promote] Updating source table:', sourceTable, 'id:', report.originalReportId);
+        console.log('[Promote] Updating source table:', sourceTable);
         
-        const { error: sourceError } = await supabase
+        // Fire and forget - don't wait for source table
+        supabase
           .from(sourceTable)
           .update({ 
             visibility: 'live',
             updated_at: new Date().toISOString()
           })
-          .eq('id', report.originalReportId);
-        
-        if (sourceError) {
-          console.warn('[Promote] Warning: Failed to update source table:', sourceError.message);
-        } else {
-          console.log('[Promote] ✅ Source table updated successfully');
-        }
+          .eq('id', report.originalReportId)
+          .then(({ error }) => {
+            if (error) {
+              console.warn('[Promote] Source table update failed (non-critical):', error.message);
+            } else {
+              console.log('[Promote] ✅ Source table updated');
+            }
+          });
       }
       
-      console.log('[Promote] ✅ Report promoted to live:', report.id);
+      console.log('[Promote] ✅ Successfully promoted:', report.id);
       
-      // Show success message
-      setPromoteSuccess(`${report.ticker || report.title} promoted to live!`);
-      setTimeout(() => setPromoteSuccess(null), 3000);
-      
-      // Update local state - remove from view if test mode is on (since it's no longer test)
-      setReports(prev => prev.map(r => 
-        r.id === report.id ? { ...r, visibility: 'live' } : r
-      ));
+      // Invalidate cache for non-testers so they see the new report
+      // This will trigger a refresh when they next load the page
+      try {
+        // Broadcast to other tabs/windows
+        const broadcastChannel = new BroadcastChannel('finotaur_reports');
+        broadcastChannel.postMessage({ 
+          type: 'REPORT_PROMOTED', 
+          reportId: report.id,
+          timestamp: Date.now()
+        });
+        broadcastChannel.close();
+      } catch {
+        // BroadcastChannel not supported, ignore
+      }
       
     } catch (error) {
-      console.error('[Promote] Error:', error);
+      console.error('[Promote] ❌ Error:', error);
+      
+      // ROLLBACK - Revert optimistic update
+      setReports(previousReports);
+      updateReportInCache(currentUserId, report.id, { visibility: previousVisibility });
+      
+      setPromoteSuccess(null);
       setDownloadError(`Failed to promote: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setTimeout(() => setDownloadError(null), 5000);
     } finally {
       setPromotingReportId(null);
+      setTimeout(() => setPromoteSuccess(null), 3000);
     }
-  }, []); 
+  }, [currentUserId, reports]); 
   // Download PDF handler - v2.1: Uses improved download logic
   const handleDownloadPdf = useCallback(async (report: Report) => {
     setDownloadingReportId(report.id);
@@ -1400,8 +1592,20 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
     setExpandedMonths(new Set());
   }, []);
 
-  // Fetch reports
+  // Track if initial fetch was done to prevent duplicate calls
+  const initialFetchDone = useRef(false);
+  const lastFetchParams = useRef<string>('');
+  
+  // Fetch reports - optimized to prevent duplicate calls
   useEffect(() => {
+    const fetchParams = `${currentUserId}_${effectiveIsTester}_${isUserLoaded}`;
+    
+    // Skip if params haven't changed (prevents duplicate fetches)
+    if (fetchParams === lastFetchParams.current && initialFetchDone.current) {
+      console.log('[Reports] ⏭️ Skipping duplicate fetch');
+      return;
+    }
+    
     async function fetchReports() {
       if (!isUserLoaded) {
         return;
@@ -1411,6 +1615,8 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
         setIsLoading(false);
         return;
       }
+      
+      lastFetchParams.current = fetchParams;
 
       // =============================================
       // STEP 1: Try to load from cache for instant display
@@ -1610,18 +1816,119 @@ function processReports(publishedReports: any[]) {
       setExpandedMonths(new Set([currentMonthKey]));
     }
     fetchReports();
-  }, [currentUserId, effectiveIsTester, isUserLoaded]);
+
+}, [currentUserId, effectiveIsTester, isUserLoaded]);
 
   // ========================================
-  // REAL-TIME SUBSCRIPTION - Auto-refresh on new reports
+  // BROADCAST CHANNEL - Sync across tabs
+  // ========================================
+  useEffect(() => {
+    if (!currentUserId) return;
+    
+    let broadcastChannel: BroadcastChannel | null = null;
+    
+    try {
+      broadcastChannel = new BroadcastChannel('finotaur_reports');
+      
+      broadcastChannel.onmessage = (event) => {
+        const { type, reportId } = event.data;
+        
+        if (type === 'REPORT_PROMOTED') {
+          console.log('[Broadcast] 📢 Report promoted in another tab:', reportId);
+          
+          // Update local state
+          setReports(prev => prev.map(r => 
+            r.id === reportId ? { ...r, visibility: 'live' } : r
+          ));
+          
+          // Update cache
+          updateReportInCache(currentUserId, reportId, { visibility: 'live' });
+        } else if (type === 'CACHE_INVALIDATED') {
+          console.log('[Broadcast] 📢 Cache invalidated in another tab');
+          invalidateCache(currentUserId);
+        }
+      };
+      
+      console.log('[Broadcast] 📡 Listening for cross-tab updates');
+    } catch {
+      // BroadcastChannel not supported
+      console.log('[Broadcast] ⚠️ BroadcastChannel not supported');
+    }
+    
+    return () => {
+      if (broadcastChannel) {
+        broadcastChannel.close();
+      }
+    };
+  }, [currentUserId]);
+
+  // ========================================
+  // REAL-TIME SUBSCRIPTION - Optimized v3.0
+  // Only updates on actual publish events, no polling
   // ========================================
   useEffect(() => {
     if (!currentUserId || !isUserLoaded) return;
 
-    console.log('[Realtime] Setting up subscription for published_reports');
+    console.log('[Realtime] 🔌 Setting up optimized subscription');
+    
+    // Debounce helper to prevent rapid updates
+    let updateTimeout: NodeJS.Timeout | null = null;
+    const pendingUpdates: Map<string, any> = new Map();
+    
+    const flushUpdates = () => {
+      if (pendingUpdates.size === 0) return;
+      
+      console.log('[Realtime] 📦 Flushing', pendingUpdates.size, 'batched updates');
+      
+      setReports((prev) => {
+        let updated = [...prev];
+        
+        for (const [id, data] of pendingUpdates) {
+          if (data._action === 'insert') {
+            const exists = updated.some(r => r.id === id);
+            if (!exists) {
+              updated.unshift(data.report);
+            }
+          } else if (data._action === 'update') {
+            updated = updated.map(r => r.id === id ? { ...r, ...data.changes } : r);
+          }
+        }
+        
+        // Sort once at the end
+        updated.sort((a, b) => {
+          if (a.isPinned && !b.isPinned) return -1;
+          if (!a.isPinned && b.isPinned) return 1;
+          return b.date.getTime() - a.date.getTime();
+        });
+        
+        // Update cache with all changes
+        if (currentUserId) {
+          setCachedReports(currentUserId, updated, effectiveIsTester);
+        }
+        
+        return updated;
+      });
+      
+      // Auto-expand months for new reports
+      for (const [, data] of pendingUpdates) {
+        if (data._action === 'insert' && data.report) {
+          const monthKey = getMonthKey(data.report.date);
+          setExpandedMonths((prev) => new Set([...prev, monthKey]));
+        }
+      }
+      
+      pendingUpdates.clear();
+    };
+    
+    const scheduleUpdate = (id: string, data: any) => {
+      pendingUpdates.set(id, data);
+      
+      if (updateTimeout) clearTimeout(updateTimeout);
+      updateTimeout = setTimeout(flushUpdates, 100); // Batch updates within 100ms
+    };
 
     const channel = supabase
-      .channel('published_reports_changes')
+      .channel('published_reports_realtime_v3')
       .on(
         'postgres_changes',
         {
@@ -1630,26 +1937,27 @@ function processReports(publishedReports: any[]) {
           table: 'published_reports',
         },
         (payload) => {
-          console.log('[Realtime] New report published:', payload.new);
-          
           const newReport = payload.new as any;
           const mappedType = mapReportType(newReport.report_type);
           
-          // Skip unknown types
           if (!mappedType) {
-            console.log('[Realtime] Skipping unknown report type:', newReport.report_type);
+            console.log('[Realtime] ⏭️ Skipping unknown type:', newReport.report_type);
             return;
           }
           
-          // Check visibility
+          // Smart visibility filtering
           const visibility = newReport.visibility || 'live';
-          if (effectiveIsTester) {
-            if (visibility !== 'test') return;
-          } else {
-            if (visibility === 'test') return;
+          const shouldShow = effectiveIsTester 
+            ? true // Testers see everything
+            : visibility !== 'test'; // Regular users don't see test
+          
+          if (!shouldShow) {
+            console.log('[Realtime] ⏭️ Skipping (visibility mismatch):', newReport.id);
+            return;
           }
           
-          // Transform and add the new report
+          console.log('[Realtime] 📥 New report:', newReport.id, mappedType);
+          
           const transformedReport: Report = {
             id: newReport.id,
             type: mappedType,
@@ -1677,34 +1985,13 @@ function processReports(publishedReports: any[]) {
             pdfStoragePath: newReport.pdf_storage_path,
             originalReportId: newReport.original_report_id,
             isLoadingContent: false,
-            visibility: newReport.visibility || 'live',
+            visibility: visibility,
           };
           
-          setReports((prev) => {
-            // Check for duplicates
-            const exists = prev.some((r) => r.id === transformedReport.id);
-            if (exists) return prev;
-            
-            // Add new report at the beginning and sort
-            const updated = [transformedReport, ...prev];
-            updated.sort((a, b) => {
-              if (a.isPinned && !b.isPinned) return -1;
-              if (!a.isPinned && b.isPinned) return 1;
-              return b.date.getTime() - a.date.getTime();
-            });
-            
-            // Update cache with new report
-            if (currentUserId) {
-              setCachedReports(currentUserId, updated, effectiveIsTester);
-              console.log('[Cache] Updated with new report:', transformedReport.id);
-            }
-            
-            return updated;
-          });
+          // Also update memory cache immediately
+          addReportToCache(currentUserId, transformedReport, effectiveIsTester);
           
-          // Auto-expand the month of the new report
-          const monthKey = getMonthKey(transformedReport.date);
-          setExpandedMonths((prev) => new Set([...prev, monthKey]));
+          scheduleUpdate(newReport.id, { _action: 'insert', report: transformedReport });
         }
       )
       .on(
@@ -1715,47 +2002,89 @@ function processReports(publishedReports: any[]) {
           table: 'published_reports',
         },
         (payload) => {
-          console.log('[Realtime] Report updated:', payload.new);
-          
           const updatedReport = payload.new as any;
-          const mappedType = mapReportType(updatedReport.report_type);
+          const oldReport = payload.old as any;
           
-          if (!mappedType) return;
+          // Check if visibility changed (important for promote action!)
+          const oldVisibility = oldReport?.visibility || 'test';
+          const newVisibility = updatedReport.visibility || 'live';
+          const visibilityChanged = oldVisibility !== newVisibility;
           
-          setReports((prev) => {
-            const updated = prev.map((r) =>
-              r.id === updatedReport.id
-                ? {
-                    ...r,
-                    title: updatedReport.title,
-                    subtitle: updatedReport.subtitle,
-                    pdfUrl: updatedReport.pdf_url,
-                    pdfStoragePath: updatedReport.pdf_storage_path,
-                    qaScore: updatedReport.qa_score,
-                    visibility: updatedReport.visibility || 'live',
-                    likesCount: updatedReport.likes_count || 0,
-                    commentsCount: updatedReport.comments_count || 0,
-                  }
-                : r
-            );
-            
-            // Update cache with updated report
-            if (currentUserId) {
-              setCachedReports(currentUserId, updated, effectiveIsTester);
-              console.log('[Cache] Updated report:', updatedReport.id);
+          if (visibilityChanged) {
+            console.log('[Realtime] 🔄 Visibility changed:', updatedReport.id, oldVisibility, '→', newVisibility);
+          }
+          
+          // If promoted from test to live, non-testers should now see it
+          if (visibilityChanged && newVisibility === 'live' && !effectiveIsTester) {
+            // This is a promoted report - add it for non-testers
+            const mappedType = mapReportType(updatedReport.report_type);
+            if (mappedType) {
+              const transformedReport: Report = {
+                id: updatedReport.id,
+                type: mappedType,
+                title: updatedReport.title,
+                subtitle: updatedReport.subtitle,
+                date: new Date(updatedReport.published_at),
+                pdfUrl: updatedReport.pdf_url,
+                status: 'published' as const,
+                highlights: updatedReport.highlights || [],
+                keyMetric: updatedReport.key_metric_label,
+                keyMetricValue: updatedReport.key_metric_value,
+                keyInsights: updatedReport.key_insights_count,
+                qaScore: updatedReport.qa_score,
+                commentsCount: updatedReport.comments_count || 0,
+                likesCount: updatedReport.likes_count || 0,
+                isFeatured: updatedReport.is_featured,
+                isPinned: updatedReport.is_pinned,
+                ticker: updatedReport.ticker,
+                companyName: updatedReport.company_name,
+                sector: updatedReport.sector,
+                reportMonth: updatedReport.report_month,
+                marketRegime: updatedReport.market_regime,
+                markdownContent: updatedReport.markdown_content,
+                htmlContent: updatedReport.html_content,
+                pdfStoragePath: updatedReport.pdf_storage_path,
+                originalReportId: updatedReport.original_report_id,
+                isLoadingContent: false,
+                visibility: 'live',
+              };
+              
+              scheduleUpdate(updatedReport.id, { _action: 'insert', report: transformedReport });
             }
-            
-            return updated;
-          });
+            return;
+          }
+          
+          // Regular update
+          const changes = {
+            title: updatedReport.title,
+            subtitle: updatedReport.subtitle,
+            pdfUrl: updatedReport.pdf_url,
+            pdfStoragePath: updatedReport.pdf_storage_path,
+            qaScore: updatedReport.qa_score,
+            visibility: newVisibility,
+            likesCount: updatedReport.likes_count || 0,
+            commentsCount: updatedReport.comments_count || 0,
+          };
+          
+          // Update cache immediately
+          updateReportInCache(currentUserId, updatedReport.id, changes);
+          
+          scheduleUpdate(updatedReport.id, { _action: 'update', changes });
         }
       )
       .subscribe((status) => {
-        console.log('[Realtime] Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] ✅ Connected and listening');
+        } else if (status === 'CLOSED') {
+          console.log('[Realtime] ❌ Connection closed');
+        } else {
+          console.log('[Realtime] 📡 Status:', status);
+        }
       });
 
-    // Cleanup on unmount
     return () => {
-      console.log('[Realtime] Cleaning up subscription');
+      console.log('[Realtime] 🔌 Cleaning up subscription');
+      if (updateTimeout) clearTimeout(updateTimeout);
       supabase.removeChannel(channel);
     };
   }, [currentUserId, effectiveIsTester, isUserLoaded]);

@@ -1,21 +1,21 @@
 // =====================================================
-// FINOTAUR PRODUCT SUBSCRIPTION MANAGEMENT - v2.2.0
+// FINOTAUR PRODUCT SUBSCRIPTION MANAGEMENT - v2.3.0
 // =====================================================
 // Edge Function for managing Newsletter & Top Secret subscriptions
 // 
 // Handles: Newsletter (War Zone) & Top Secret products
 // Actions: cancel, reactivate, status
 //
+// 🔥 v2.3.0 CHANGES:
+// - FIXED: Trial/Free cancellation now sets cancel_at_period_end = true
+// - User keeps access until trial_ends_at or expires_at
+// - Immediate cancellation only happens when Whop webhook fires at period end
+// - Better UX: user sees "Cancelling" status, not immediate loss of access
+//
 // 🔥 v2.2.0 CHANGES:
 // - NEW: Reactivate cancelled FREE/TRIAL subscriptions directly in DB
 // - Trial users can now reactivate without going through checkout again
 // - Better handling of all subscription states
-//
-// 🔥 v2.1.0 CHANGES:
-// - FIXED: Trial cancellation now ALWAYS uses DB-only approach
-// - Trial users don't have valid Whop memberships, so we skip Whop API
-// - Better validation and error messages
-// - Added isPaid check before attempting Whop API calls
 //
 // Deployment:
 // supabase functions deploy whop-manage-subscription
@@ -428,7 +428,7 @@ async function handleStatus(
 }
 
 // ============================================
-// CANCEL HANDLER - v2.1.0 with Improved Trial Support
+// CANCEL HANDLER - v2.3.0 with Period-End Cancellation for Trials
 // ============================================
 
 async function handleCancel(
@@ -449,6 +449,8 @@ async function handleCancel(
     isTrial: productStatus.isTrial,
     isPaid: productStatus.isPaid,
     cancelAtPeriodEnd: productStatus.cancelAtPeriodEnd,
+    trialEndsAt: productStatus.trialEndsAt,
+    expiresAt: productStatus.expiresAt,
   });
 
   // Validate: must be active or trial
@@ -464,19 +466,33 @@ async function handleCancel(
     return new Response(
       JSON.stringify({ 
         error: `${productName} subscription is already scheduled for cancellation`,
-        expiresAt: productStatus.expiresAt
+        expiresAt: productStatus.expiresAt || productStatus.trialEndsAt
       }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 
   // ============================================
-  // CASE 1: TRIAL OR FREE = Always cancel directly in DB
-  // Trial users don't have valid Whop memberships to cancel
+  // 🔥 v2.4.0 FIX: TRIAL OR FREE = Schedule cancellation at period end
+  // AND also cancel via Whop API if membership exists!
   // ============================================
   
   if (productStatus.isTrial || !productStatus.isPaid) {
-    console.log(`📝 Canceling FREE/TRIAL subscription directly in DB (isTrial: ${productStatus.isTrial}, isPaid: ${productStatus.isPaid})`);
+    console.log(`📝 Scheduling FREE/TRIAL cancellation at period end (isTrial: ${productStatus.isTrial}, isPaid: ${productStatus.isPaid})`);
+
+    // 🔥 v2.4.0: Even trial users have Whop memberships - cancel them too!
+    if (membershipId && WHOP_API_KEY) {
+      console.log(`🔄 Also canceling trial via Whop API (membership: ${membershipId})`);
+      const cancelResult = await cancelWhopMembership(membershipId, "at_period_end");
+      if (cancelResult.success) {
+        console.log(`✅ Whop membership cancelled at period end`);
+      } else {
+        console.warn(`⚠️ Whop cancel failed: ${cancelResult.error} - continuing with DB update`);
+      }
+    }
+
+    // Determine when access ends
+    const accessEndsAt = productStatus.trialEndsAt || productStatus.expiresAt || null;
 
     let updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -485,21 +501,19 @@ async function handleCancel(
     if (product === "newsletter") {
       updateData = {
         ...updateData,
-        newsletter_enabled: false,
-        newsletter_status: "cancelled",
-        newsletter_cancel_at_period_end: false,
-        newsletter_unsubscribed_at: new Date().toISOString(),
-        // Keep the membership ID for potential reactivation tracking
-        // newsletter_whop_membership_id: null,
+        // 🔥 KEY CHANGE: Keep enabled=true, status=trial/active, just mark for cancellation
+        newsletter_cancel_at_period_end: true,
+        // DO NOT set newsletter_enabled = false
+        // DO NOT set newsletter_status = 'cancelled'
+        // Keep the membership ID for tracking
       };
     } else if (product === "top_secret") {
       updateData = {
         ...updateData,
-        top_secret_enabled: false,
-        top_secret_status: "cancelled",
-        top_secret_cancel_at_period_end: false,
-        top_secret_unsubscribed_at: new Date().toISOString(),
-        // top_secret_whop_membership_id: null,
+        // 🔥 KEY CHANGE: Keep enabled=true, status stays as-is, just mark for cancellation
+        top_secret_cancel_at_period_end: true,
+        // DO NOT set top_secret_enabled = false
+        // DO NOT set top_secret_status = 'cancelled'
       };
     }
 
@@ -519,29 +533,41 @@ async function handleCancel(
     // Log the event
     await logSubscriptionEvent(supabase, {
       user_id: profile.id,
-      event_type: productStatus.isTrial ? "trial_cancelled" : "free_cancelled",
+      event_type: "cancel_scheduled",
       old_plan: `${product}_${productStatus.isTrial ? 'trial' : 'free'}`,
       new_plan: "none",
-      reason: reason || "User cancelled subscription",
+      reason: reason || "User requested cancellation",
+      scheduled_at: accessEndsAt || undefined,
       metadata: {
         product_type: product,
         cancelled_at: new Date().toISOString(),
         was_trial: productStatus.isTrial,
         was_paid: productStatus.isPaid,
+        access_until: accessEndsAt,
+        cancellation_type: "at_period_end",
       },
     });
 
-    console.log(`✅ Free/Trial subscription cancelled successfully`);
+    // Format the access end date for user message
+    const accessEndsFormatted = accessEndsAt 
+      ? new Date(accessEndsAt).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long', 
+          day: 'numeric'
+        })
+      : 'the end of your trial period';
+
+    console.log(`✅ Trial/Free subscription scheduled for cancellation, access until: ${accessEndsFormatted}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Your ${productName} ${productStatus.isTrial ? 'free trial' : 'subscription'} has been cancelled.`,
+        message: `Your ${productName} ${productStatus.isTrial ? 'free trial' : 'subscription'} has been scheduled for cancellation. You'll continue to have access until ${accessEndsFormatted}.`,
         subscription: {
           product,
-          status: "cancelled",
-          cancelAtPeriodEnd: false,
-          expiresAt: null,
+          status: productStatus.status, // Keep current status (trial/active)
+          cancelAtPeriodEnd: true,
+          expiresAt: accessEndsAt,
         },
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -566,9 +592,9 @@ async function handleCancel(
 
   if (!cancelResult.success) {
     // If Whop returns 404, it means the membership doesn't exist
-    // In this case, just cancel in DB
+    // In this case, just mark for cancellation in DB
     if (cancelResult.error?.includes("404")) {
-      console.warn(`⚠️ Whop membership ${membershipId} not found (404). Canceling in DB only.`);
+      console.warn(`⚠️ Whop membership ${membershipId} not found (404). Marking for cancellation in DB only.`);
       
       let updateData: Record<string, any> = {
         updated_at: new Date().toISOString(),
@@ -577,20 +603,12 @@ async function handleCancel(
       if (product === "newsletter") {
         updateData = {
           ...updateData,
-          newsletter_enabled: false,
-          newsletter_status: "cancelled",
-          newsletter_cancel_at_period_end: false,
-          newsletter_unsubscribed_at: new Date().toISOString(),
-          newsletter_whop_membership_id: null,
+          newsletter_cancel_at_period_end: true,
         };
       } else if (product === "top_secret") {
         updateData = {
           ...updateData,
-          top_secret_enabled: false,
-          top_secret_status: "cancelled",
-          top_secret_cancel_at_period_end: false,
-          top_secret_unsubscribed_at: new Date().toISOString(),
-          top_secret_whop_membership_id: null,
+          top_secret_cancel_at_period_end: true,
         };
       }
 
@@ -609,10 +627,11 @@ async function handleCancel(
 
       await logSubscriptionEvent(supabase, {
         user_id: profile.id,
-        event_type: "cancelled_orphan_membership",
+        event_type: "cancel_scheduled_orphan",
         old_plan: product,
         new_plan: "none",
         reason: reason || "User cancelled - Whop membership not found",
+        scheduled_at: productStatus.expiresAt || undefined,
         metadata: {
           product_type: product,
           cancelled_at: new Date().toISOString(),
@@ -620,17 +639,25 @@ async function handleCancel(
         },
       });
 
-      console.log(`✅ Orphan subscription cancelled successfully`);
+      const expiresDate = productStatus.expiresAt 
+        ? new Date(productStatus.expiresAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long', 
+            day: 'numeric'
+          })
+        : 'the end of your billing period';
+
+      console.log(`✅ Orphan subscription scheduled for cancellation`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Your ${productName} subscription has been cancelled.`,
+          message: `Your ${productName} subscription has been scheduled for cancellation. You'll continue to have access until ${expiresDate}.`,
           subscription: {
             product,
-            status: "cancelled",
-            cancelAtPeriodEnd: false,
-            expiresAt: null,
+            status: productStatus.status,
+            cancelAtPeriodEnd: true,
+            expiresAt: productStatus.expiresAt,
           },
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -842,6 +869,65 @@ async function handleReactivate(
     return new Response(
       JSON.stringify({ error: `No pending cancellation to undo for ${productName}` }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // ============================================
+  // 🔥 v2.3.0: Handle trial/free reactivation (undo pending cancellation)
+  // ============================================
+
+  if (productStatus.isTrial || !productStatus.isPaid) {
+    console.log(`📝 Undoing trial/free cancellation in DB only`);
+    
+    let updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (product === "newsletter") {
+      updateData.newsletter_cancel_at_period_end = false;
+    } else if (product === "top_secret") {
+      updateData.top_secret_cancel_at_period_end = false;
+    }
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", profile.id);
+
+    if (updateError) {
+      console.error("❌ Profile update error:", updateError);
+      return new Response(
+        JSON.stringify({ error: "Failed to reactivate subscription" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    await logSubscriptionEvent(supabase, {
+      user_id: profile.id,
+      event_type: "reactivated",
+      old_plan: "cancelling",
+      new_plan: `${product}_trial`,
+      metadata: {
+        product_type: product,
+        reactivated_at: new Date().toISOString(),
+        was_trial: true,
+      },
+    });
+
+    console.log(`✅ Trial/Free subscription reactivated successfully`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `Your ${productName} subscription has been reactivated!`,
+        subscription: {
+          product,
+          status: productStatus.status,
+          cancelAtPeriodEnd: false,
+          expiresAt: productStatus.expiresAt || productStatus.trialEndsAt,
+        },
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 

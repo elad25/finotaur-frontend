@@ -549,10 +549,10 @@ const BillingTab = () => {
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
   
   // 🔥 Calculate intro pricing status
-  // Timeline: 14 days trial → 2 months at $35 (50% off) → $70/mo regular
+  // Timeline: 14 days trial → 2 months at $45 (50% off) → $89.99/mo regular
   const getTopSecretPricingInfo = () => {
     if (!profile?.top_secret_started_at || topSecretInterval === 'yearly') {
-      return { isInIntro: false, introMonthsRemaining: 0, currentPrice: topSecretInterval === 'yearly' ? 500 : 70 };
+      return { isInIntro: false, introMonthsRemaining: 0, currentPrice: topSecretInterval === 'yearly' ? 500 : 89.99 };
     }
     
     const startedAt = new Date(profile.top_secret_started_at);
@@ -567,12 +567,12 @@ const BillingTab = () => {
       // Still in trial
       return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
     } else if (now < introEndDate) {
-      // In intro period ($35/mo)
+      // In intro period ($45/mo - 50% off)
       const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
-      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 35 };
+      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 45 };
     } else {
-      // Regular pricing ($70/mo)
-      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 70 };
+      // Regular pricing ($89.99/mo)
+      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 89.99 };
     }
   };
   
@@ -1080,19 +1080,19 @@ const BillingTab = () => {
                       </span>
                     ) : topSecretPricing.isInIntro ? (
                       <span className="flex items-center gap-2">
-                        <span>$35/mo</span>
+                        <span>$45/mo</span>
                         <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">
                           50% OFF ({topSecretPricing.introMonthsRemaining} mo left)
                         </Badge>
                       </span>
                     ) : (
-                      '$70/mo'
+                      '$89.99/mo'
                     )
                   )
                 ) : (
                   <span className="flex items-center gap-2">
-                    <span className="text-zinc-500 line-through text-sm">$70/mo</span>
-                    <span>$35/mo</span>
+                    <span className="text-zinc-500 line-through text-sm">$89.99/mo</span>
+                    <span>$45/mo</span>
                     <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">50% OFF</Badge>
                   </span>
                 )}
@@ -1147,21 +1147,21 @@ const BillingTab = () => {
                   <div className="mt-3 pt-3 border-t border-zinc-700/30">
                     {topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
-                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">Trial</Badge>
-                        <span className="text-zinc-400">→ Then $35/mo for 2 months → $70/mo after</span>
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">14-Day Trial</Badge>
+                        <span className="text-zinc-400">→ Then $45/mo for 2 months → $89.99/mo after</span>
                       </div>
                     ) : topSecretPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Intro Pricing</Badge>
                         <span className="text-zinc-400">
                           {topSecretPricing.introMonthsRemaining === 2 
-                            ? 'Next payment: $35 → Then $35 → Then $70/mo'
-                            : 'Next payment: $35 → Then $70/mo regular price'
+                            ? 'Next payment: $45 → Then $45 → Then $89.99/mo'
+                            : 'Next payment: $45 → Then $89.99/mo regular price'
                           }
                         </span>
                       </div>
                     ) : (
-                      <p className="text-xs text-zinc-500">Regular pricing: $70/mo</p>
+                      <p className="text-xs text-zinc-500">Regular pricing: $89.99/mo</p>
                     )}
                   </div>
                 )}
@@ -1241,7 +1241,7 @@ const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2 rounded bg-green-500/10 border border-green-500/20">
                   <p className="text-xs text-green-400 text-center">
-                    🔥 <strong>Limited Offer:</strong> $35/mo for first 2 months (50% OFF), then $70/mo
+                    🔥 <strong>Limited Offer:</strong> 14-day FREE trial, then $45/mo for first 2 months (50% OFF), then $89.99/mo
                   </p>
                 </div>
                 <Button
@@ -1249,7 +1249,7 @@ onClick={() => navigate('/app/top-secret')}
                   size="sm"
                   className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white"
                 >
-                  Subscribe to Top Secret - $35/mo
+                  Start Free Trial - Then $45/mo
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>

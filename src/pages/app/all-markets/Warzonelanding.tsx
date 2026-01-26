@@ -19,6 +19,67 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// ============================================
+// PERFORMANCE OPTIMIZATION - Caching & Throttling
+// ============================================
+import { useMemo } from 'react';
+
+// Cache System
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
+
+class ReportCache {
+  private cache: Map<string, CacheEntry<any>> = new Map();
+  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly MAX_ENTRIES = 50;
+
+  get<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+    if (this.cache.size >= this.MAX_ENTRIES) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) this.cache.delete(oldestKey);
+    }
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      expiresAt: Date.now() + ttl
+    });
+  }
+
+  invalidate(key: string): void {
+    this.cache.delete(key);
+  }
+
+  invalidateAll(): void {
+    this.cache.clear();
+  }
+}
+
+const reportCache = new ReportCache();
+
+// Fetch Configuration
+const FETCH_CONFIG = {
+  REPORTS_CACHE_TTL: 5 * 60 * 1000,
+  PROFILE_CACHE_TTL: 2 * 60 * 1000,
+  MIN_FETCH_INTERVAL: 10 * 1000,
+  MAX_RETRIES: 3,
+  RETRY_DELAY: 1000,
+  REALTIME_DEBOUNCE: 2000,
+  AUTO_REFRESH_INTERVAL: 60 * 1000,
+};
+
 // Bull image path - located in public/assets folder
 const BullWarZone = '/assets/Bull-WarZone.png';
 
@@ -136,14 +197,16 @@ const CompassIcon = ({ className }: { className?: string }) => (
 // SPARKLE EFFECTS
 // ============================================
 const SparkleEffect = () => {
-  const sparkles = Array.from({ length: 15 }, (_, i) => ({
-    id: i,
-    left: `${10 + Math.random() * 80}%`,
-    top: `${10 + Math.random() * 80}%`,
-    size: Math.random() * 3 + 1,
-    delay: Math.random() * 4,
-    duration: Math.random() * 3 + 2,
-  }));
+  const sparkles = useMemo(() => 
+    Array.from({ length: 8 }, (_, i) => ({
+      id: i,
+      left: `${10 + Math.random() * 80}%`,
+      top: `${10 + Math.random() * 80}%`,
+      size: Math.random() * 3 + 1,
+      delay: Math.random() * 4,
+      duration: Math.random() * 3 + 2,
+    })), []
+  );
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -177,17 +240,19 @@ const SparkleEffect = () => {
 // PARTICLE BACKGROUND - Orange/Gold colors matching the bull
 // ============================================
 const ParticleBackground = () => {
-  const particles = Array.from({ length: 100 }, (_, i) => ({
-    id: i,
-    left: `${Math.random() * 100}%`,
-    size: Math.random() * 3 + 1,
-    duration: Math.random() * 12 + 8,
-    delay: Math.random() * 15,
-    opacity: Math.random() * 0.6 + 0.2,
-    color: Math.random() > 0.5 
-      ? `rgba(255, ${140 + Math.random() * 60}, ${20 + Math.random() * 40}, 1)` // Orange
-      : `rgba(${200 + Math.random() * 55}, ${160 + Math.random() * 50}, ${50 + Math.random() * 30}, 1)`, // Gold
-  }));
+  const particles = useMemo(() => 
+    Array.from({ length: 40 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      size: Math.random() * 3 + 1,
+      duration: Math.random() * 12 + 8,
+      delay: Math.random() * 15,
+      opacity: Math.random() * 0.6 + 0.2,
+      color: Math.random() > 0.5 
+        ? `rgba(255, ${140 + Math.random() * 60}, ${20 + Math.random() * 40}, 1)`
+        : `rgba(${200 + Math.random() * 55}, ${160 + Math.random() * 50}, ${50 + Math.random() * 30}, 1)`,
+    })), []
+  );
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -468,6 +533,9 @@ const handlePublishToLive = async () => {
       }
 
       console.log('[WAR ZONE] ✅ Report published to PUBLIC via API:', testDailyReport.id);
+      
+      // Invalidate cache after publish
+      reportCache.invalidateAll();
       
       // FIX v3.0: Wait for database transaction to complete
       console.log('[WAR ZONE] ⏳ Waiting for DB transaction...');
@@ -1241,24 +1309,32 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
   // State for reports from DB
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   
   // NEW: Tester state for TEST reports
   const [isTester, setIsTester] = useState(false);
   const [testDailyReport, setTestDailyReport] = useState<DailyReport | null>(null);
   
-  // ⭐ NEW: Separate state for date-based report assignment
+  // ⭐ State for current reports (top row)
   const [currentDayReport, setCurrentDayReport] = useState<DailyReport | null>(null);
+  const [currentWeeklyReport, setCurrentWeeklyReport] = useState<WeeklyReport | null>(null);
+  
+  // ⭐ State for previous reports (bottom row - always available)
   const [previousDayReport, setPreviousDayReport] = useState<DailyReport | null>(null);
+  const [previousWeeklyReport, setPreviousWeeklyReport] = useState<WeeklyReport | null>(null);
   
   // NEW: Track if new report is available
   const [hasNewReport, setHasNewReport] = useState(false);
   const [lastFetchedDailyId, setLastFetchedDailyId] = useState<string | null>(null);
   const [lastFetchedWeeklyId, setLastFetchedWeeklyId] = useState<string | null>(null);
   
-  // Auto Intel Update countdown timer
-  const [countdown, setCountdown] = useState({ hours: 0, minutes: 0, seconds: 0 });
+  // Track if we're in "waiting" period for reports
+  const [isBeforeDailyReportTime, setIsBeforeDailyReportTime] = useState(false);
+  const [isBeforeWeeklyReportTime, setIsBeforeWeeklyReportTime] = useState(false);
+  
+  // Countdown timers for both reports
+  const [dailyCountdown, setDailyCountdown] = useState({ hours: 0, minutes: 0, seconds: 0 });
+  const [weeklyCountdown, setWeeklyCountdown] = useState({ hours: 0, minutes: 0, seconds: 0 });
 
 // ============================================
   // HELPER: Normalize date to YYYY-MM-DD
@@ -1271,26 +1347,38 @@ const ActiveSubscriberView = ({ newsletterStatus, onCancelClick }: { newsletterS
   // ============================================
   // FETCH REPORTS FUNCTION
   // ============================================
- const fetchReports = useCallback(async (showLoading = true) => {
+ const lastFetchTimeRef = useRef<number>(0);
+
+const fetchReports = useCallback(async (showLoading = true) => {
+    // Throttle: Don't fetch more than once every 10 seconds
+    const now = Date.now();
+    if (now - lastFetchTimeRef.current < FETCH_CONFIG.MIN_FETCH_INTERVAL) {
+      console.log('[WAR ZONE] ⏱️ Fetch throttled, skipping...');
+      return;
+    }
+    lastFetchTimeRef.current = now;
+    
     if (showLoading) setIsLoadingReports(true);
     
     try {
       // OPTIMIZATION: Parallel fetch - get user and reports at the same time
       const [userResult, dailyResult, weeklyResult] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase
-          .from('daily_reports')
-          .select('*')
-          .eq('visibility', 'live')
-          .order('report_date', { ascending: false })
-          .limit(5),
-supabase
-          .from('daily_reports')
-          .select('*')
-          .eq('visibility', 'live')
-          .order('report_date', { ascending: false })
-          .limit(5),
-      ]);
+  supabase.auth.getUser(),
+  supabase
+    .from('daily_reports')
+    .select('*')
+    .eq('visibility', 'live')
+    .order('report_date', { ascending: false })
+    .limit(5),
+  supabase
+    .from('weekly_reports')
+    .select('*')
+    .eq('visibility', 'live')
+    .order('report_date', { ascending: false })
+    .limit(2),
+]);
+
+      console.log('[WAR ZONE] 📅 Weekly query result:', weeklyResult);
 
       // Process user/tester status
       let currentIsTester = isTester;
@@ -1381,14 +1469,13 @@ if (dailyData && dailyData.length > 0) {
   // =====================================================
         
         // =====================================================
-// FIX v3.0: SIMPLE ASSIGNMENT
-// Report 0 = Most recent (CURRENT - Middle card)
-// Report 1 = Second most recent (PREVIOUS - Left card)
+// FIX v5.0: CORRECT ASSIGNMENT
+// currentDayReport = Report for TODAY only (for top button)
+// previousDayReport = Most recent LIVE report (for bottom card - always shows something)
 //
-// The key insight: We DON'T care about specific dates!
-// We just want the two most recent LIVE reports.
-// When a new report is published, it becomes [0],
-// and the old [0] becomes [1].
+// When midnight passes in NY:
+//   - todayNY changes → currentDayReport becomes null → top button shows "Coming at 9:00 AM"
+//   - previousDayReport still shows the most recent report (which was yesterday's)
 // =====================================================
 
 console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport) => ({
@@ -1399,30 +1486,44 @@ console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport
   isToday: normalizeDate(r.report_date) === todayNY
 })));
 
-// Current (Middle card) = Most recent LIVE report
-const latestReport = liveReports.length > 0 ? liveReports[0] : null;
-// Previous (Left card) = Second most recent LIVE report
-const previousReport = liveReports.length > 1 ? liveReports[1] : null;
+// =====================================================
+// DAILY REPORT ASSIGNMENT LOGIC v7.0
+// Top button: Today's report (null if before 9 AM NY or no report yet)
+// Bottom card: Yesterday's report (always available for download)
+// =====================================================
+const nyHour = nyTime.getHours();
+const isBeforeReportTime = nyHour < 9; // Before 9:00 AM NY
+setIsBeforeDailyReportTime(isBeforeReportTime);
 
-console.log('[WAR ZONE] 📌 Final assignment:', {
-  current: latestReport ? {
-    id: latestReport.id,
-    date: latestReport.report_date,
-    visibility: (latestReport as any).visibility
-  } : 'NONE',
-  previous: previousReport ? {
-    id: previousReport.id,
-    date: previousReport.report_date,
-    visibility: (previousReport as any).visibility
-  } : 'NONE'
+// Today's report - only show if after 9 AM AND report exists for today
+const todaysReport = isBeforeReportTime 
+  ? null
+  : liveReports.find((r: DailyReport) => 
+      normalizeDate(r.report_date) === todayNY
+    ) || null;
+
+// Previous report - find the most recent report that is NOT today's
+const previousReport = liveReports.find((r: DailyReport) => 
+  normalizeDate(r.report_date) !== todayNY
+) || null;
+
+console.log('[WAR ZONE] 📌 Daily Report Assignment (v7.0):', {
+  todayNY,
+  nyHour,
+  isBeforeReportTime,
+  currentDaily: todaysReport ? normalizeDate(todaysReport.report_date) : 'WAITING',
+  previousDaily: previousReport ? normalizeDate(previousReport.report_date) : 'NONE'
 });
+
+setCurrentDayReport(todaysReport);
+setPreviousDayReport(previousReport);
         
         // DEBUG: Log what we found
         console.log('[WAR ZONE] 📊 Reports found:', {
           totalFromDB: dailyData.length,
           liveOnly: liveReports.length,
-          latestReport: latestReport?.id || 'none',
-          todaysDate: latestReport ? normalizeDate(latestReport.report_date) : 'N/A',
+          todaysReport: todaysReport?.id || 'none',
+          todaysDate: todaysReport ? normalizeDate(todaysReport.report_date) : 'N/A',
           previousReport: previousReport?.id || 'none', 
           previousDate: previousReport ? normalizeDate(previousReport.report_date) : 'N/A',
           allLiveDates: liveReports.map((r: DailyReport) => normalizeDate(r.report_date))
@@ -1430,12 +1531,9 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
         
         console.log('[WAR ZONE] 📅 Report assignment (DATE-BASED):', {
           todayNY,
-          current: latestReport ? normalizeDate(latestReport.report_date) : 'none (no report for today yet)',
+          current: todaysReport ? normalizeDate(todaysReport.report_date) : 'none (no report for today yet)',
           previous: previousReport ? normalizeDate(previousReport.report_date) : 'none',
         });
-        
-        setCurrentDayReport(latestReport);
-        setPreviousDayReport(previousReport);
         
         // New report detection
         const latestDailyId = dailyData[0]?.id;
@@ -1450,45 +1548,76 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
         setPreviousDayReport(null);
       }
       
-      // Process weekly reports (already fetched in parallel above)
+      // =====================================================
+      // PROCESS WEEKLY REPORTS - v6.2 FIX
+      // =====================================================
       const weeklyData = weeklyResult.data;
       const weeklyError = weeklyResult.error;
       
-      // Filter out test reports in code (more reliable than complex OR filters)
-      const liveWeeklyReports = weeklyData?.filter((r: any) => 
-        r.visibility === 'live'
-      ) || [];
+      console.log('[WAR ZONE] 📅 Weekly query raw result:', {
+        data: weeklyData,
+        error: weeklyError,
+        count: weeklyData?.length || 0
+      });
       
-      if (weeklyError) {
+            if (weeklyError) {
         console.error('[WAR ZONE] ❌ Error fetching weekly report:', weeklyError);
-      } else if (liveWeeklyReports.length > 0) {
-        const latestWeekly = liveWeeklyReports[0];
-        console.log('[WAR ZONE] 📅 Weekly report found:', {
-          id: latestWeekly.id,
-          date: latestWeekly.report_date,
-          visibility: latestWeekly.visibility
-        });
-        const latestWeeklyId = latestWeekly?.id;
-        if (lastFetchedWeeklyId && latestWeeklyId && latestWeeklyId !== lastFetchedWeeklyId) {
-          setHasNewReport(true);
-          setTimeout(() => setHasNewReport(false), 5000);
-        }
-        setLastFetchedWeeklyId(latestWeeklyId || null);
-        setWeeklyReport(latestWeekly);
-      } else {
-        console.log('[WAR ZONE] ⚠️ No live weekly reports found');
-      }
-      
-      if (weeklyError) {
-        console.error('[WAR ZONE] ❌ Error fetching weekly report:', weeklyError);
+        setCurrentWeeklyReport(null);
+        setPreviousWeeklyReport(null);
       } else if (weeklyData && weeklyData.length > 0) {
+        console.log('[WAR ZONE] ✅ Weekly reports found:', weeklyData.length);
+        
+        // =====================================================
+        // WEEKLY REPORT ASSIGNMENT LOGIC v8.0 - SIMPLIFIED
+        // Top button: Most recent LIVE report (null only if waiting period)
+        // Bottom card: Second most recent report
+        // =====================================================
+        const dayOfWeekNY = nyTime.getDay(); // 0 = Sunday, 6 = Saturday
+        const hourNY = nyTime.getHours();
+        
+        // Waiting period: Saturday 6PM to Sunday 10 AM NY (when new report is being generated)
+        const isWeeklyWaiting = (dayOfWeekNY === 6 && hourNY >= 18) || (dayOfWeekNY === 0 && hourNY < 10);
+        setIsBeforeWeeklyReportTime(isWeeklyWaiting);
+        
+        console.log('[WAR ZONE] 📅 Weekly report time check v8.0:', {
+          dayOfWeekNY,
+          hourNY,
+          isWeeklyWaiting,
+          weeklyDataCount: weeklyData?.length || 0,
+          firstReport: weeklyData?.[0]?.id || 'NONE'
+        });
+        
+        // Current weekly: Simply take the FIRST (most recent) live report
+        // Only null during waiting period
+        const thisWeeksReport = isWeeklyWaiting 
+          ? null 
+          : (weeklyData && weeklyData.length > 0 ? weeklyData[0] : null);
+        
+        // Previous weekly: Second report in list, OR first if we're waiting
+        const prevWeeklyReport = weeklyData && weeklyData.length > 1 
+          ? weeklyData[1] 
+          : (isWeeklyWaiting && weeklyData && weeklyData.length > 0 ? weeklyData[0] : null);
+        
+        console.log('[WAR ZONE] 📌 Weekly Report Assignment (v8.0):', {
+          currentWeekly: thisWeeksReport?.id || 'WAITING/NONE',
+          currentWeeklyDate: thisWeeksReport ? normalizeDate(thisWeeksReport.report_date) : 'N/A',
+          previousWeekly: prevWeeklyReport?.id || 'NONE'
+        });
+        
+        setCurrentWeeklyReport(thisWeeksReport);
+        setPreviousWeeklyReport(prevWeeklyReport);
+        
+        // Track new report notification
         const latestWeeklyId = weeklyData[0]?.id;
         if (lastFetchedWeeklyId && latestWeeklyId && latestWeeklyId !== lastFetchedWeeklyId) {
           setHasNewReport(true);
           setTimeout(() => setHasNewReport(false), 5000);
         }
         setLastFetchedWeeklyId(latestWeeklyId || null);
-        setWeeklyReport(weeklyData[0]);
+      } else {
+        console.log('[WAR ZONE] ⚠️ No live weekly reports found');
+        setCurrentWeeklyReport(null);
+        setPreviousWeeklyReport(null);
       }
       
       // ============================================
@@ -1549,7 +1678,8 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
       );
       
       return setTimeout(() => {
-        console.log('[WAR ZONE] 🌙 Midnight - refreshing reports...');
+        console.log('[WAR ZONE] 🌙 Midnight - invalidating cache and refreshing...');
+        reportCache.invalidateAll();
         fetchReports(false);
         scheduleNextMidnightRefresh();
       }, msUntilMidnight);
@@ -1589,9 +1719,10 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
     const interval = setInterval(() => {
       if (checkIfShouldRefresh()) {
         console.log('[WAR ZONE] 🕐 In generation window - checking...');
+        reportCache.invalidate(`daily_reports_${new Date().toISOString().split('T')[0]}`);
         fetchReports(false);
       }
-    }, 30 * 1000);
+    }, 60 * 1000); // Changed from 30s to 60s
     
     return () => clearInterval(interval);
   }, [fetchReports]);
@@ -1634,32 +1765,66 @@ console.log('[WAR ZONE] 📌 Final assignment:', {
   }, [fetchReports]);
   
   useEffect(() => {
-    const calculateTimeUntilNextReport = () => {
+    const calculateCountdowns = () => {
       const now = new Date();
       const nyTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      const target = new Date(nyTime);
-      target.setHours(9, 0, 0, 0);
       
-      if (nyTime >= target) {
-        target.setDate(target.getDate() + 1);
+      // =====================================================
+      // DAILY COUNTDOWN - Next 9:00 AM NY (Mon-Fri)
+      // =====================================================
+      const dailyTarget = new Date(nyTime);
+      dailyTarget.setHours(9, 0, 0, 0);
+      
+      if (nyTime >= dailyTarget) {
+        dailyTarget.setDate(dailyTarget.getDate() + 1);
       }
       
-      while (target.getDay() === 0 || target.getDay() === 6) {
-        target.setDate(target.getDate() + 1);
+      // Skip weekends for daily
+      while (dailyTarget.getDay() === 0 || dailyTarget.getDay() === 6) {
+        dailyTarget.setDate(dailyTarget.getDate() + 1);
       }
       
-      const diff = target.getTime() - nyTime.getTime();
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      const dailyDiff = dailyTarget.getTime() - nyTime.getTime();
+      const dailyHours = Math.floor(dailyDiff / (1000 * 60 * 60));
+      const dailyMinutes = Math.floor((dailyDiff % (1000 * 60 * 60)) / (1000 * 60));
+      const dailySeconds = Math.floor((dailyDiff % (1000 * 60)) / 1000);
       
-      return { hours, minutes, seconds };
+      // =====================================================
+      // WEEKLY COUNTDOWN - Next Sunday 10:00 AM NY
+      // =====================================================
+      const weeklyTarget = new Date(nyTime);
+      const dayOfWeek = nyTime.getDay();
+      
+      // Calculate days until next Sunday
+      const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+      weeklyTarget.setDate(nyTime.getDate() + daysUntilSunday);
+      weeklyTarget.setHours(10, 0, 0, 0);
+      
+      // If we're past Sunday 10 AM, go to next Sunday
+      if (nyTime >= weeklyTarget) {
+        weeklyTarget.setDate(weeklyTarget.getDate() + 7);
+      }
+      
+      const weeklyDiff = weeklyTarget.getTime() - nyTime.getTime();
+      const weeklyHours = Math.floor(weeklyDiff / (1000 * 60 * 60));
+      const weeklyMinutes = Math.floor((weeklyDiff % (1000 * 60 * 60)) / (1000 * 60));
+      const weeklySeconds = Math.floor((weeklyDiff % (1000 * 60)) / 1000);
+      
+      return {
+        daily: { hours: dailyHours, minutes: dailyMinutes, seconds: dailySeconds },
+        weekly: { hours: weeklyHours, minutes: weeklyMinutes, seconds: weeklySeconds }
+      };
     };
     
-    setCountdown(calculateTimeUntilNextReport());
+    const countdowns = calculateCountdowns();
+    setDailyCountdown(countdowns.daily);
+    setWeeklyCountdown(countdowns.weekly);
+    
     const interval = setInterval(() => {
-      setCountdown(calculateTimeUntilNextReport());
-    }, 10000); // Update every 10 seconds instead of every second
+      const countdowns = calculateCountdowns();
+      setDailyCountdown(countdowns.daily);
+      setWeeklyCountdown(countdowns.weekly);
+    }, 10000); // Update every 10 seconds
     
     return () => clearInterval(interval);
   }, []);
@@ -2127,49 +2292,103 @@ return (
     for — now available for serious traders who want an edge.
   </p>
 
-  {/* Two Action Buttons */}
+  {/* Two Action Buttons - Current Reports */}
   <div className="flex flex-col sm:flex-row gap-3 mb-6">
-    {/* Open Today's Report - Gold Button */}
-    <button
-      onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
-      disabled={isLoadingReports || !currentDayReport}
-      className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ 
-        background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
-        color: '#000', 
-        boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
-      }}
-    >
-      {isLoadingReports ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
-      ) : (
-        <>
-          <FileText className="w-5 h-5" />
-          Open Today's Report
-        </>
-      )}
-    </button>
+    {/* Open Today's Report - Gold Button OR Waiting State */}
+    {currentDayReport ? (
+      <button
+        onClick={() => handleReportClick(currentDayReport, 'daily')}
+        disabled={isLoadingReports}
+        className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ 
+          background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+          color: '#000', 
+          boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+        }}
+      >
+        {isLoadingReports ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <>
+            <FileText className="w-5 h-5" />
+            Open Today's Report
+          </>
+        )}
+      </button>
+    ) : (
+      <div 
+        className="px-8 py-4 rounded-xl font-semibold text-base flex items-center gap-4"
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.05) 100%)',
+          border: '1px solid rgba(201,166,70,0.25)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+        }}
+      >
+        <div 
+          className="w-12 h-12 rounded-xl flex items-center justify-center"
+          style={{ 
+            background: 'rgba(201,166,70,0.15)',
+            border: '1px solid rgba(201,166,70,0.3)'
+          }}
+        >
+          <Clock className="w-6 h-6 text-[#C9A646] animate-pulse" />
+        </div>
+        <div className="text-left">
+          <span className="block text-[#C9A646] font-bold text-base">Today's Report Coming Soon</span>
+          <span className="block text-[#C9A646]/60 text-sm">
+            Available at 9:00 AM ET • {dailyCountdown.hours}h {dailyCountdown.minutes}m remaining
+          </span>
+        </div>
+      </div>
+    )}
     
-    {/* View Weekly Review - Transparent/Outline Button */}
-    <button
-      onClick={() => weeklyReport && handleReportClick(weeklyReport, 'weekly')}
-      disabled={isLoadingReports || !weeklyReport}
-      className="group px-6 py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-2 transition-all hover:bg-[#C9A646]/10 disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ 
-        background: 'transparent',
-        border: '1px solid rgba(201,166,70,0.4)',
-        color: '#C9A646'
-      }}
-    >
-      {isLoadingReports ? (
-        <Loader2 className="w-5 h-5 animate-spin" />
-      ) : (
-        <>
-          <Calendar className="w-5 h-5" />
-          View Weekly Review
-        </>
-      )}
-    </button>
+    {/* View Weekly Review - Gold Button OR Waiting State */}
+    {currentWeeklyReport ? (
+      <button
+        onClick={() => handleReportClick(currentWeeklyReport, 'weekly')}
+        disabled={isLoadingReports}
+        className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+        style={{ 
+          background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+          color: '#000', 
+          boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+        }}
+      >
+        {isLoadingReports ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <>
+            <Calendar className="w-5 h-5" />
+            View Weekly Review
+          </>
+        )}
+      </button>
+    ) : (
+      <div 
+        className="px-8 py-4 rounded-xl font-semibold text-base flex items-center gap-4"
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.05) 100%)',
+          border: '1px solid rgba(201,166,70,0.25)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+        }}
+      >
+        <div 
+          className="w-12 h-12 rounded-xl flex items-center justify-center"
+          style={{ 
+            background: 'rgba(201,166,70,0.15)',
+            border: '1px solid rgba(201,166,70,0.3)'
+          }}
+        >
+          <Clock className="w-6 h-6 text-[#C9A646] animate-pulse" />
+        </div>
+        <div className="text-left">
+          <span className="block text-[#C9A646] font-bold text-base">Weekly Review Coming Soon</span>
+          <span className="block text-[#C9A646]/60 text-sm">
+            Available Sunday 10:00 AM ET • {weeklyCountdown.hours}h {weeklyCountdown.minutes}m remaining
+          </span>
+        </div>
+      </div>
+    )}
   </div>
 
   {/* Report Schedule Info */}
@@ -2209,127 +2428,147 @@ return (
           <div className="mb-8">
             {/* Section Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-8">
-                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Latest Daily Report</h3>
-                <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Last Week's Review</h3>
-              </div>
+              <h3 className="heading-font text-2xl text-[#E8DCC4] italic">Your Reports</h3>
               
-              {/* Daily Report Schedule */}
+              {/* Report Schedule */}
               <div className="flex items-center gap-2 text-[#C9A646]/70 text-sm">
                 <Clock className="w-4 h-4 text-[#C9A646]" />
-                <span>New report every trading day by </span>
-                <span className="text-[#C9A646] font-semibold">9:10 AM ET</span>
+                <span>Daily: 9:00 AM ET</span>
                 <span className="text-[#C9A646]/50">•</span>
-                <span className="text-[#C9A646]/60">Bookmark this page!</span>
+                <span>Weekly: Sunday 10:00 AM ET</span>
               </div>
             </div>
 
-{/* Report Cards Grid - 2 COLUMNS */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* LEFT CARD: Latest Daily Report */}
-<button
-  onClick={() => currentDayReport && handleReportClick(currentDayReport, 'daily')}
-  disabled={isLoadingReports || !currentDayReport}
-                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ 
-                        background: 'rgba(201,166,70,0.15)',
-                        border: '1px solid rgba(201,166,70,0.3)'
-                      }}
-                    >
-                      {isLoadingReports ? (
-                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
-                      ) : (
-                        <FileText className="w-5 h-5 text-[#C9A646]" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold">
-                        {isLoadingReports 
-                          ? 'Loading...' 
-                          : currentDayReport 
-                            ? formatReportDate(currentDayReport.report_date)
-                            : 'No report available'
-                        }
-                      </p>
-<p className="text-[#C9A646]/50 text-xs">
-  {currentDayReport 
-    ? `Published at ${formatReportTime(currentDayReport.updated_at || currentDayReport.created_at)} ET`
-    : 'Latest Daily Report'
-  }
-</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
-                </div>
-                <div 
-                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
-                />
-              </button>
+{/* Previous Reports Section - Always Available */}
+<div className="mb-8">
+  {/* Section Header */}
+  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <h3 className="heading-font text-xl text-[#E8DCC4]/80 italic">Previous Reports</h3>
+    <p className="text-[#C9A646]/50 text-sm">Always available for download</p>
+  </div>
 
+  {/* Previous Report Cards Grid - 2 COLUMNS */}
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    
+    {/* LEFT CARD: Previous Daily Report */}
+    <div
+      className={cn(
+        "group relative p-5 rounded-2xl text-left transition-all duration-300",
+        previousDayReport && "hover:scale-[1.02] cursor-pointer"
+      )}
+      style={{ 
+        background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+        border: '1px solid rgba(201,166,70,0.25)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+      }}
+      onClick={() => previousDayReport && handleReportClick(previousDayReport, 'daily')}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div 
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ 
+              background: 'rgba(201,166,70,0.15)',
+              border: '1px solid rgba(201,166,70,0.3)'
+            }}
+          >
+            {isLoadingReports ? (
+              <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+            ) : (
+              <FileText className="w-5 h-5 text-[#C9A646]" />
+            )}
+          </div>
+          <div>
+            <p className="text-white font-semibold">
+              {isLoadingReports 
+                ? 'Loading...' 
+                : previousDayReport 
+                  ? formatReportDate(previousDayReport.report_date)
+                  : 'No previous report'
+              }
+            </p>
+            <p className="text-[#C9A646]/50 text-xs">
+              {isLoadingReports 
+                ? 'Please wait...'
+                : previousDayReport 
+                  ? `Published at ${formatReportTime(previousDayReport.updated_at || previousDayReport.created_at)} ET`
+                  : 'Check back later'
+              }
+            </p>
+          </div>
+        </div>
+        {previousDayReport && (
+          <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
+        )}
+      </div>
+      {previousDayReport && (
+        <div 
+          className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+        />
+      )}
+    </div>
 
-              {/* RIGHT CARD: Weekly Report */}
-              <button
-  onClick={() => weeklyReport && handleReportClick(weeklyReport, 'weekly')}
-                disabled={isLoadingReports || !weeklyReport}
-                className="group relative p-5 rounded-2xl text-left transition-all duration-300 hover:scale-[1.02]"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                }}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div 
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
-                      style={{ 
-                        background: 'rgba(201,166,70,0.15)',
-                        border: '1px solid rgba(201,166,70,0.3)'
-                      }}
-                    >
-                      {isLoadingReports ? (
-                        <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
-                      ) : (
-                        <Calendar className="w-5 h-5 text-[#C9A646]" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[#C9A646] font-semibold italic">
-                        {isLoadingReports 
-                          ? 'Loading...' 
-                          : weeklyReport 
-                            ? `Released ${new Date(weeklyReport.report_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
-                            : 'No report available'
-                        }
-                      </p>
-                      <p className="text-[#C9A646]/50 text-xs">
-                        {weeklyReport 
-                          ? `Published at ${formatReportTime(weeklyReport.created_at)} ET`
-                          : 'Weekly Review'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
-                </div>
-                <div 
-                  className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
-                />
-              </button>
-            </div>
+    {/* RIGHT CARD: Previous Weekly Report */}
+    <div
+      className={cn(
+        "group relative p-5 rounded-2xl text-left transition-all duration-300",
+        previousWeeklyReport && "hover:scale-[1.02] cursor-pointer"
+      )}
+      style={{ 
+        background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+        border: '1px solid rgba(201,166,70,0.25)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+      }}
+      onClick={() => previousWeeklyReport && handleReportClick(previousWeeklyReport, 'weekly')}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div 
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ 
+              background: 'rgba(201,166,70,0.15)',
+              border: '1px solid rgba(201,166,70,0.3)'
+            }}
+          >
+            {isLoadingReports ? (
+              <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
+            ) : (
+              <Calendar className="w-5 h-5 text-[#C9A646]" />
+            )}
+          </div>
+          <div>
+            <p className="text-[#C9A646] font-semibold italic">
+              {isLoadingReports 
+                ? 'Loading...' 
+                : previousWeeklyReport 
+                  ? `Week of ${new Date(previousWeeklyReport.report_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
+                  : 'No previous report'
+              }
+            </p>
+            <p className="text-[#C9A646]/50 text-xs">
+              {isLoadingReports 
+                ? 'Please wait...'
+                : previousWeeklyReport 
+                  ? `Published at ${formatReportTime(previousWeeklyReport.created_at)} ET`
+                  : 'Check back later'
+              }
+            </p>
+          </div>
+        </div>
+        {previousWeeklyReport && (
+          <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
+        )}
+      </div>
+      {previousWeeklyReport && (
+        <div 
+          className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+        />
+      )}
+    </div>
+  </div>
+</div>
           </div>
 
 {/* TEST REPORT ROW - ONLY FOR TESTERS */}
@@ -2613,8 +2852,11 @@ const handleViewReport = () => { setShowReportViewer(true); fetchLatestReport();
   { icon: BarChart3, title: 'Technical + Fundamental', desc: 'Charts meet catalysts for complete market context.' }
 ];
 const faqs = [
-  { q: "How does the 7-day free trial work?", a: "Full access for 7 days. Cancel in one click, pay nothing. Only available on monthly plan." }, 
-  // ... rest of faqs
+  { q: "How does the 7-day free trial work?", a: "Full access for 7 days. Cancel in one click, pay nothing. Only available on monthly plan." },
+  { q: "When do I receive the daily briefing?", a: "Every trading day at 9:00 AM New York time — before the market opens. You'll have everything you need to start your day with clarity." },
+  { q: "What do I get with my subscription?", a: "Daily market briefing, weekly tactical review, access to our private Discord community with 847+ traders, and the Finotaur Trading Room with live analysis." },
+  { q: "Is this just another stock newsletter?", a: "No. WAR ZONE is a professional-grade market briefing — the same style institutional trading desks use. Not stock picks. Not hype. Pure market intelligence." },
+  { q: "Can I cancel anytime?", a: "Absolutely. No contracts, no commitments, no questions asked. Cancel with one click from your account settings." }
 ];
 
 // ============================================
@@ -3435,10 +3677,10 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
                 </div>
                 
                 {/* CTA Button */}
-                <button onClick={handleSubscribeClick} className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
-                  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 20px rgba(201,166,70,0.4)' }}>
-                  GET ANNUAL PLAN <ArrowRight className="w-5 h-5"/>
-                </button>
+<button onClick={() => { setBillingInterval('yearly'); handleSubscribeClick(); }} className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 20px rgba(201,166,70,0.4)' }}>
+  GET ANNUAL PLAN <ArrowRight className="w-5 h-5"/>
+</button>
                 <p className="text-slate-500 text-sm text-center mb-5">Locked price. Cancel anytime.</p>
                 
                 {/* Bottom Features */}
