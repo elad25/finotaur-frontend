@@ -84,15 +84,20 @@ interface WhopCheckoutResponse {
 // PLAN CONFIGURATION
 // ============================================
 
-const PLAN_REDIRECT_PATHS: Record<string, string> = {
+ const PLAN_REDIRECT_PATHS: Record<string, string> = {
   // Journal plans
   'plan_2hIXaJbGP1tYN': '/app/journal/pricing?payment=success&source=whop',
   'plan_x0jTFLe9qNv8i': '/app/journal/pricing?payment=success&source=whop',
   'plan_v7QKxkvKIZooe': '/app/journal/pricing?payment=success&source=whop',
   'plan_gBG436aeJxaHU': '/app/journal/pricing?payment=success&source=whop',
-  // Newsletter (War Zone)
+  // Newsletter (War Zone) - ALL PLAN IDS
   'plan_LCBG5yJpoNtW3': '/app/all-markets/warzone?payment=success&source=whop',
   'prod_8b3VWkZdena4B': '/app/all-markets/warzone?payment=success&source=whop',
+  'plan_24vWi8dY3uDHM': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from PricingSelection)
+  'plan_bp2QTGuwfpj0A': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Yearly
+  'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from Landing)
+  'plan_a7uEGsUbr92nn': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret discount
+  'plan_BPJdT6Tyjmzcx': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret Members
   // Top Secret - All Plan IDs
   'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',
   'plan_YoeD6wWBxss7Q': '/app/top-secret?payment=success&source=whop',
