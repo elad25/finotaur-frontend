@@ -3562,8 +3562,15 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
       <section className="py-24 px-6 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent"/>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-[#C9A646]/[0.06] rounded-full blur-[180px]"/>
-        <div className="absolute top-1/4 right-1/4 w-[400px] h-[400px] bg-[#D4AF37]/[0.04] rounded-full blur-[120px]"/>
+        
+        {/* Enhanced Gold Orbs - More visible */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-[#C9A646]/[0.12] rounded-full blur-[150px]"/>
+        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.10] rounded-full blur-[100px]"/>
+        <div className="absolute bottom-1/4 left-1/5 w-[450px] h-[450px] bg-[#F4D97B]/[0.08] rounded-full blur-[120px]"/>
+        <div className="absolute top-1/3 left-1/4 w-[350px] h-[350px] bg-[#C9A646]/[0.15] rounded-full blur-[80px]"/>
+        <div className="absolute bottom-1/3 right-1/5 w-[400px] h-[400px] bg-[#D4AF37]/[0.12] rounded-full blur-[90px]"/>
+        <div className="absolute top-[20%] right-[15%] w-[300px] h-[300px] bg-[#F4D97B]/[0.10] rounded-full blur-[70px]"/>
+        <div className="absolute bottom-[20%] left-[10%] w-[350px] h-[350px] bg-[#C9A646]/[0.14] rounded-full blur-[85px]"/>
         
         <div className="max-w-6xl mx-auto relative z-10">
           {/* Header */}
@@ -3635,62 +3642,80 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
               </div>
             </div>
 
-            {/* Yearly Card */}
+            {/* Yearly Card - BEST VALUE - Premium Design */}
             <div
               className="rounded-2xl relative overflow-hidden"
-              style={{ background: 'linear-gradient(180deg, rgba(40,35,25,0.95) 0%, rgba(25,22,16,0.98) 100%)', border: '2px solid rgba(201,166,70,0.5)', boxShadow: '0 12px 50px rgba(201,166,70,0.2), 0 8px 40px rgba(0,0,0,0.5)' }}>
+              style={{ background: 'linear-gradient(180deg, rgba(35,30,22,0.98) 0%, rgba(22,18,12,0.99) 100%)', border: '2px solid rgba(201,166,70,0.5)', boxShadow: '0 0 40px rgba(201,166,70,0.15), 0 8px 40px rgba(0,0,0,0.5)' }}>
+              
+              {/* Glow effect at top */}
+              <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'linear-gradient(90deg, transparent, #C9A646, transparent)' }}/>
               
               {/* Badge */}
+              <div className="absolute top-5 left-5">
+                <span className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider" style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}>YEARLY</span>
+              </div>
+              
+              {/* Best Deal Badge - Top Right - More prominent */}
               <div className="absolute top-5 right-5">
-                <span className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider" style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}>BEST DEAL</span>
+                <span className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider bg-green-500 text-white shadow-lg shadow-green-500/30">🔥 BEST DEAL</span>
               </div>
               
               <div className="p-6 pt-16">
-                {/* Title */}
-                <div className="mb-2">
-                  <h3 className="text-2xl text-white"><span className="italic">Unlock</span> WAR ZONE</h3>
-                  <p className="text-white font-bold text-xl">Institutional Research</p>
-                </div>
-                
-                {/* Subtitle Badge */}
+                {/* Price with crossed out monthly equivalent */}
                 <div className="mb-5">
-                  <span className="px-3 py-1.5 rounded text-[10px] font-bold tracking-widest bg-white/10 text-slate-300 border border-white/20">FOR SERIOUS TRADERS ONLY</span>
-                </div>
-                
-                {/* Price */}
-                <div className="mb-5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-6xl font-bold text-[#C9A646]">${YEARLY_PRICE}</span>
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-6xl font-bold text-white">${YEARLY_PRICE}</span>
                     <span className="text-slate-400 text-lg">/year</span>
                   </div>
-                  <p className="text-green-400 font-semibold text-base mt-2">Just ${Math.round(YEARLY_PRICE / 12)}/month — Save ${YEARLY_SAVINGS}!</p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-slate-500 line-through text-sm">${Math.round(MONTHLY_PRICE * 12)}/year</span>
+                    <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 text-xs font-bold">SAVE ${YEARLY_SAVINGS}</span>
+                  </div>
+                  <p className="text-[#C9A646] font-semibold text-sm mt-2">→ That's only ${Math.round(YEARLY_PRICE / 12)}/month</p>
                 </div>
                 
-                {/* Features */}
-                <div className="space-y-3 mb-6">
-                  {['Priority Access', 'Locked price for 12 months', 'Early Access to future FINOTAUR tools', 'Founding Members badge'].map((f, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0"/>
-                      <span className="text-white">{f}</span>
-                    </div>
-                  ))}
+                {/* Urgency/Value callout */}
+                <div className="bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-xl p-3 mb-5">
+                  <p className="text-[#C9A646] text-sm font-medium text-center">⚡ Lock in this price before it increases</p>
                 </div>
                 
-                {/* CTA Button */}
-<button onClick={() => { setBillingInterval('yearly'); handleSubscribeClick(); }} className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
-  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 20px rgba(201,166,70,0.4)' }}>
-  GET ANNUAL PLAN <ArrowRight className="w-5 h-5"/>
-</button>
-                <p className="text-slate-500 text-sm text-center mb-5">Locked price. Cancel anytime.</p>
+                {/* CTA Button - Bigger and more prominent */}
+                <button onClick={() => { setBillingInterval('yearly'); handleSubscribeClick(); }} className="w-full py-5 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #F4D97B, #D4AF37, #C9A646)', color: '#000', boxShadow: '0 4px 25px rgba(201,166,70,0.5)' }}>
+                  GET 2 MONTHS FREE <ArrowRight className="w-5 h-5"/>
+                </button>
+                <p className="text-slate-500 text-sm text-center mb-6">Locked price forever. Cancel anytime.</p>
                 
-                {/* Bottom Features */}
-                <div className="space-y-2 pt-4 border-t border-white/10">
-                  {['Cancel anytime', '2 months FREE vs monthly', 'No lock-in contracts'].map((f, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <Check className="w-4 h-4 text-green-400 flex-shrink-0"/>
-                      <span className="text-slate-400 text-sm">{f}</span>
+                {/* Features with better copy */}
+                <div className="space-y-5">
+                  <div>
+                    <div className="flex items-start gap-3 mb-1">
+                      <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Everything in Monthly</h4>
                     </div>
-                  ))}
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">Daily briefing, sector intel, Discord & Trading Room — all included.</p>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-start gap-3 mb-1">
+                      <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Price Locked Forever</h4>
+                    </div>
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">Your rate never increases — even when prices go up for new members.</p>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-start gap-3 mb-1">
+                      <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
+                      <h4 className="text-white font-bold">Founding Member Status</h4>
+                    </div>
+                    <p className="text-slate-400 text-sm pl-8 leading-relaxed">Early access to new features & priority support.</p>
+                  </div>
+                </div>
+                
+                {/* Social proof */}
+                <div className="mt-6 pt-5 border-t border-white/10 text-center">
+                  <p className="text-slate-500 text-xs">Trusted by <span className="text-[#C9A646] font-semibold">847+ traders</span> worldwide</p>
                 </div>
               </div>
             </div>
