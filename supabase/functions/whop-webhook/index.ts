@@ -936,15 +936,19 @@ async function handlePaymentSucceeded(
     if (isNewsletterPayment) {
       console.log("📰 Calling handle_newsletter_payment RPC...");
       
+// 🔥 v3.7.0: Get billing interval from plan ID
+      const planId = data.plan?.id || '';
+      const billingInterval = getBillingInterval(planId);
+      
       const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
-        p_user_email: userEmail,  // 🔥 v3.5.0: Uses finotaurEmail if available
+        p_user_email: userEmail,
         p_whop_user_id: whopUserId,
         p_whop_membership_id: membershipId,
         p_whop_product_id: productId,
         p_payment_amount: paymentAmount,
         p_finotaur_user_id: finotaurUserId || null,
+        p_billing_interval: billingInterval,
       });
-
       if (error) {
         console.error("❌ handle_newsletter_payment RPC error:", error);
         return { success: false, message: `Newsletter payment failed: ${error.message}` };
@@ -1251,12 +1255,17 @@ async function handleNewsletterActivation(
 
   try {
     // Call the newsletter-specific RPC function
+    // 🔥 v3.7.0: Get billing interval from plan ID in membership data
+    const planId = (payload.data as WhopMembershipData).plan?.id || '';
+    const billingInterval = getBillingInterval(planId);
+    
     const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
       p_user_email: userEmail || '',
       p_whop_user_id: whopUserId || '',
       p_whop_membership_id: membershipId || '',
       p_whop_product_id: productId || '',
       p_finotaur_user_id: finotaurUserId || null,
+      p_billing_interval: billingInterval,
     });
 
     if (error) {
