@@ -99,6 +99,7 @@ interface ProfileData {
   newsletter_trial_ends_at: string | null;
   newsletter_cancel_at_period_end: boolean;
   newsletter_unsubscribed_at: string | null;
+  newsletter_interval: string | null;
   newsletter_preferences: NewsletterPreferences | null;
   
   // 🔥 Top Secret subscription - v5 FIXED: matches actual DB columns
@@ -544,6 +545,7 @@ const BillingTab = () => {
   const newsletterPaid = profile?.newsletter_paid ?? false;
   const newsletterStatus = profile?.newsletter_status || 'inactive';
   const newsletterIsActive = newsletterStatus === 'active' || newsletterStatus === 'trial';
+  const newsletterInterval = profile?.newsletter_interval || 'monthly';
   
   // 🔥 v5 FIXED: Top Secret subscription - proper active detection
   const topSecretEnabled = profile?.top_secret_enabled ?? false;
@@ -891,6 +893,11 @@ const BillingTab = () => {
                 <span className="text-xl font-bold text-white">
                   {newsletterStatus === 'trial' ? 'Free Trial' : newsletterIsActive ? 'Premium' : 'Free'}
                 </span>
+                {newsletterIsActive && newsletterInterval === 'yearly' && (
+                  <Badge className="bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/40 text-xs px-2 py-0.5">
+                    <Crown className="w-3 h-3 mr-1" />Annual
+                  </Badge>
+                )}
                 <Badge variant="outline" className={cn(
                   "px-2.5 py-1",
                   profile?.newsletter_cancel_at_period_end
@@ -913,7 +920,7 @@ const BillingTab = () => {
                 </Badge>
               </div>
               <span className="text-xl font-bold text-white">
-                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? '$69.99/mo' : 'Free'}
+                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? (newsletterInterval === 'yearly' ? '$699/yr' : '$69.99/mo') : 'Free'}
               </span>
             </div>
             
@@ -940,6 +947,32 @@ const BillingTab = () => {
                 </>
               )}
             </div>
+
+            {/* Billing Info for Active Subscribers */}
+            {newsletterIsActive && (
+              <div className="mb-5 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/40">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
+                    <p className="capitalize text-zinc-200 font-medium">{newsletterInterval}</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
+                      {newsletterStatus === 'trial' ? 'First charge' : 'Next billing'}
+                    </p>
+                    <p className="text-zinc-200 font-medium flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                      {formatDate(profile?.newsletter_expires_at)}
+                    </p>
+                  </div>
+                </div>
+                {profile?.newsletter_started_at && (
+                  <div className="mt-2 pt-2 border-t border-zinc-700/30">
+                    <p className="text-xs text-zinc-500">Member since {formatDate(profile.newsletter_started_at)}</p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Status Footer */}
             {newsletterIsActive ? (
@@ -1865,6 +1898,7 @@ export const SettingsLayout = () => {
           newsletter_trial_ends_at,
           newsletter_cancel_at_period_end,
           newsletter_unsubscribed_at,
+          newsletter_interval,
           top_secret_enabled,
           top_secret_status,
           top_secret_whop_membership_id,
