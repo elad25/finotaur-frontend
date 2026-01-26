@@ -1,8 +1,14 @@
 import React from "react";
 
 export default function TopNav() {
-  return (
-    <div className="flex items-center justify-between gap-3">
+return (
+    <div 
+      className="flex items-center justify-between gap-3 px-4 py-3 border-b sticky top-0 z-50"
+      style={{
+        background: 'linear-gradient(to bottom, #0A0A0A, #141414)',
+        borderColor: 'rgba(255, 215, 0, 0.08)'
+      }}
+    >
       {/* Left: brand */}
       <div className="flex items-center gap-2">
         <span className="text-base font-semibold tracking-wide">Finotaur</span>

@@ -93,9 +93,12 @@ const PLAN_REDIRECT_PATHS: Record<string, string> = {
   // Newsletter (War Zone)
   'plan_LCBG5yJpoNtW3': '/app/all-markets/warzone?payment=success&source=whop',
   'prod_8b3VWkZdena4B': '/app/all-markets/warzone?payment=success&source=whop',
-  // Top Secret
-  'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',  // 🔥 UPDATED
+  // Top Secret - All Plan IDs
+  'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',
   'plan_YoeD6wWBxss7Q': '/app/top-secret?payment=success&source=whop',
+  'plan_tUvQbCrEQ4197': '/app/top-secret?payment=success&source=whop',
+  'plan_PxxbBlSdkyeo7': '/app/top-secret?payment=success&source=whop',
+  'plan_7VQxCZ5Kpw6f0': '/app/top-secret?payment=success&source=whop',
 };
 
 // ============================================

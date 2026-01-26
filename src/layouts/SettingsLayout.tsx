@@ -101,7 +101,7 @@ interface ProfileData {
   newsletter_unsubscribed_at: string | null;
   newsletter_preferences: NewsletterPreferences | null;
   
-  // 🔥 Top Secret subscription - v4 ADDED
+  // 🔥 Top Secret subscription - v5 FIXED: matches actual DB columns
   top_secret_enabled: boolean;
   top_secret_status: string | null;
   top_secret_whop_membership_id: string | null;
@@ -110,6 +110,9 @@ interface ProfileData {
   top_secret_interval: string | null;
   top_secret_cancel_at_period_end: boolean;
   top_secret_unsubscribed_at: string | null;
+  top_secret_is_in_trial: boolean;
+  top_secret_trial_ends_at: string | null;
+  top_secret_trial_used: boolean;
   
   // UI preferences (stored in metadata JSONB)
   metadata: {
@@ -542,17 +545,38 @@ const BillingTab = () => {
   const newsletterStatus = profile?.newsletter_status || 'inactive';
   const newsletterIsActive = newsletterStatus === 'active' || newsletterStatus === 'trial';
   
-  // 🔥 Top Secret subscription - v4 FIXED: Now reading from profile
+  // 🔥 v5 FIXED: Top Secret subscription - proper active detection
   const topSecretEnabled = profile?.top_secret_enabled ?? false;
   const topSecretStatus = profile?.top_secret_status || 'inactive';
-  const topSecretIsActive = topSecretStatus === 'active';
+  const topSecretIsInTrial = profile?.top_secret_is_in_trial ?? false;
+  // 🔥 FIX: Check BOTH enabled flag AND status for active state
+  const topSecretIsActive = topSecretEnabled && (topSecretStatus === 'active' || topSecretStatus === 'trial');
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
   
-  // 🔥 Calculate intro pricing status
-  // Timeline: 14 days trial → 2 months at $45 (50% off) → $89.99/mo regular
+  // 🔥 v5 FIXED: Calculate intro pricing status using actual DB fields
   const getTopSecretPricingInfo = () => {
+    // Use DB trial flag instead of calculating
+    if (topSecretIsInTrial && profile?.top_secret_trial_ends_at) {
+      const trialEndsAt = new Date(profile.top_secret_trial_ends_at);
+      const now = new Date();
+      const trialDaysRemaining = Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
+      return { 
+        isInTrial: true, 
+        isInIntro: false, 
+        introMonthsRemaining: 2, 
+        currentPrice: 0,
+        trialDaysRemaining,
+      };
+    }
+    
     if (!profile?.top_secret_started_at || topSecretInterval === 'yearly') {
-      return { isInIntro: false, introMonthsRemaining: 0, currentPrice: topSecretInterval === 'yearly' ? 500 : 89.99 };
+      return { 
+        isInTrial: false,
+        isInIntro: false, 
+        introMonthsRemaining: 0, 
+        currentPrice: topSecretInterval === 'yearly' ? 500 : 89.99,
+        trialDaysRemaining: 0,
+      };
     }
     
     const startedAt = new Date(profile.top_secret_started_at);
@@ -1890,6 +1914,9 @@ export const SettingsLayout = () => {
           top_secret_interval,
           top_secret_cancel_at_period_end,
           top_secret_unsubscribed_at,
+          top_secret_is_in_trial,
+          top_secret_trial_ends_at,
+          top_secret_trial_used,
           metadata,
           portfolio_size,
           risk_per_trade,
