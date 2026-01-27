@@ -223,7 +223,7 @@ interface UserLookupResult {
   id: string;
   email: string;
   emailMismatch: boolean;
-  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email' | 'pending_checkout_email' | 'pending_checkout_single' | 'pending_checkout_partial';
+  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email' | 'pending_checkout_email' | 'pending_checkout_single' | 'pending_checkout_partial' | 'pending_checkout_single_recent';
 }
 
 // ============================================
@@ -1213,21 +1213,44 @@ async function handlePaymentSucceeded(
       // Regular newsletter payment (not an upgrade)
       console.log("📰 Calling handle_newsletter_payment RPC...");
       
+      // 🔥 v3.13.0: Try to find user from pending_checkouts if finotaurUserId is null
+      let resolvedUserId = finotaurUserId;
+      let resolvedEmail = userEmail;
+      
+      if (!resolvedUserId) {
+        console.log("🔍 finotaurUserId is null, searching pending_checkouts...");
+        const pendingUser = await findUserFromPendingCheckout(supabase, whopEmail, 'newsletter');
+        
+        if (pendingUser) {
+          console.log("✅ Found user from pending_checkouts:", pendingUser.id);
+          resolvedUserId = pendingUser.id;
+          resolvedEmail = pendingUser.email;
+        } else {
+          // Also try findUser which includes other lookup methods
+          const foundUser = await findUser(supabase, null, whopEmail, 'newsletter');
+          if (foundUser) {
+            console.log("✅ Found user via findUser:", foundUser.id);
+            resolvedUserId = foundUser.id;
+            resolvedEmail = foundUser.email;
+          }
+        }
+      }
+      
       console.log("📰 RPC params:", {
-        p_user_email: userEmail,
+        p_user_email: resolvedEmail,
         p_whop_customer_email: whopEmail,
-        p_finotaur_user_id: finotaurUserId,
+        p_finotaur_user_id: resolvedUserId,
       });
       
       const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
-        p_user_email: userEmail,
+        p_user_email: resolvedEmail,
         p_whop_user_id: whopUserId,
         p_whop_membership_id: membershipId,
         p_whop_product_id: productId,
         p_payment_amount: paymentAmount,
-        p_finotaur_user_id: finotaurUserId || null,
+        p_finotaur_user_id: resolvedUserId || null,
         p_billing_interval: billingInterval,
-        p_whop_customer_email: whopEmail,  // 🔥 Whop checkout email (may differ from userEmail)
+        p_whop_customer_email: whopEmail,
       });
       
       if (error) {
