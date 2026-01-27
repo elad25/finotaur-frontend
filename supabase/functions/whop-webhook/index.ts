@@ -223,7 +223,7 @@ interface UserLookupResult {
   id: string;
   email: string;
   emailMismatch: boolean;
-  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email';
+  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email' | 'pending_checkout_email' | 'pending_checkout_single' | 'pending_checkout_partial';
 }
 
 // ============================================
@@ -548,15 +548,133 @@ async function tryFindUser(
   return null;
 }
 
-// Main findUser function WITH RETRY LOGIC
+// 🔥 NEW: Find user from pending_checkouts table
+async function findUserFromPendingCheckout(
+  supabase: SupabaseClient,
+  whopEmail: string | undefined,
+  productType: 'newsletter' | 'top_secret' | 'journal'
+): Promise<UserLookupResult | null> {
+  if (!whopEmail) return null;
+  
+  console.log("🔍 Looking up user in pending_checkouts for:", whopEmail);
+  
+  // Check if the Whop email matches a pending checkout's user_email
+  const { data: pendingByEmail } = await supabase
+    .from("pending_checkouts")
+    .select("user_id, user_email")
+    .eq("user_email", whopEmail)
+    .eq("product_type", productType)
+    .is("completed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (pendingByEmail) {
+    console.log("✅ Found user in pending_checkouts by email match:", pendingByEmail.user_id);
+    return {
+      id: pendingByEmail.user_id,
+      email: pendingByEmail.user_email,
+      emailMismatch: false,
+      lookupMethod: 'pending_checkout_email',
+    };
+  }
+
+  // If only ONE pending checkout exists for this product type in the last hour,
+  // it's very likely this user (they just changed email at Whop)
+  const { data: recentPending } = await supabase
+    .from("pending_checkouts")
+    .select("user_id, user_email")
+    .eq("product_type", productType)
+    .is("completed_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (recentPending && recentPending.length === 1) {
+    console.log("✅ Found SINGLE pending checkout, assuming match:", recentPending[0].user_email);
+    return {
+      id: recentPending[0].user_id,
+      email: recentPending[0].user_email,
+      emailMismatch: true,
+      lookupMethod: 'pending_checkout_single',
+    };
+  }
+
+  // Check by partial email match in pending checkouts
+  if (whopEmail) {
+    const emailUsername = whopEmail.split('@')[0].toLowerCase();
+    
+    if (emailUsername.length >= 4) {
+      const { data: pendingByPartial } = await supabase
+        .from("pending_checkouts")
+        .select("user_id, user_email")
+        .eq("product_type", productType)
+        .is("completed_at", null)
+        .gt("expires_at", new Date().toISOString())
+        .ilike("user_email", `${emailUsername}@%`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingByPartial) {
+        console.log("✅ Found pending checkout by PARTIAL email match:", {
+          pendingEmail: pendingByPartial.user_email,
+          whopEmail: whopEmail,
+          userId: pendingByPartial.user_id
+        });
+        return {
+          id: pendingByPartial.user_id,
+          email: pendingByPartial.user_email,
+          emailMismatch: true,
+          lookupMethod: 'pending_checkout_partial',
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+// 🔥 NEW: Mark pending checkout as completed
+async function completePendingCheckout(
+  supabase: SupabaseClient,
+  userId: string,
+  productType: 'newsletter' | 'top_secret' | 'journal',
+  whopMembershipId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("pending_checkouts")
+    .update({ 
+      completed_at: new Date().toISOString(),
+      whop_membership_id: whopMembershipId
+    })
+    .eq("user_id", userId)
+    .eq("product_type", productType)
+    .is("completed_at", null);
+
+  if (error) {
+    console.warn("⚠️ Failed to mark pending checkout as completed:", error);
+  } else {
+    console.log("✅ Marked pending checkout as completed for user:", userId);
+  }
+}
+
+// Main findUser function WITH RETRY LOGIC AND PENDING CHECKOUT SUPPORT
 async function findUser(
   supabase: SupabaseClient,
   finotaurUserId: string | null,
-  whopEmail: string | undefined
+  whopEmail: string | undefined,
+  productType?: 'newsletter' | 'top_secret' | 'journal'
 ): Promise<UserLookupResult | null> {
   
-  // First attempt
+  // First attempt - standard lookup
   let user = await tryFindUser(supabase, finotaurUserId, whopEmail);
+  
+  // 🔥 NEW: If not found, try pending_checkouts table
+  if (!user && productType) {
+    user = await findUserFromPendingCheckout(supabase, whopEmail, productType);
+  }
   
   // 🔥 RETRY LOGIC: If not found and we have identifiers, wait and retry
   if (!user && (finotaurUserId || whopEmail)) {
@@ -564,11 +682,20 @@ async function findUser(
     await new Promise(resolve => setTimeout(resolve, 2000));
     user = await tryFindUser(supabase, finotaurUserId, whopEmail);
     
+    // Try pending checkouts again after retry
+    if (!user && productType) {
+      user = await findUserFromPendingCheckout(supabase, whopEmail, productType);
+    }
+    
     // Second retry after 3 more seconds
     if (!user) {
       console.log('⏳ Still not found, final retry in 3 seconds...');
       await new Promise(resolve => setTimeout(resolve, 3000));
       user = await tryFindUser(supabase, finotaurUserId, whopEmail);
+      
+      if (!user && productType) {
+        user = await findUserFromPendingCheckout(supabase, whopEmail, productType);
+      }
     }
   }
   
@@ -994,7 +1121,7 @@ async function handlePaymentSucceeded(
       // 🔥 v3.9.1: Check if this is an upgrade from monthly to yearly
       // Only check for upgrade if NOT first payment (existing subscriber upgrading)
       if (billingInterval === 'yearly' && !isFirstPayment) {
-        const userResult = await findUser(supabase, finotaurUserId, userEmail);
+        const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
         
         if (userResult) {
           const { data: currentProfile } = await supabase
@@ -1075,6 +1202,7 @@ async function handlePaymentSucceeded(
         p_payment_amount: paymentAmount,
         p_finotaur_user_id: finotaurUserId || null,
         p_billing_interval: billingInterval,
+        p_whop_customer_email: whopEmail || null,  // 🔥 NEW: Save Whop checkout email
       });
       
       if (error) {
@@ -1083,6 +1211,12 @@ async function handlePaymentSucceeded(
       }
 
       console.log("✅ Newsletter payment RPC result:", result);
+      
+      // 🔥 Mark pending checkout as completed
+      if (result?.success && result?.user_id) {
+        await completePendingCheckout(supabase, result.user_id, 'newsletter', membershipId);
+      }
+      
       return { 
         success: result?.success ?? true, 
         message: `Newsletter payment: ${userEmail} → ${result?.newsletter_status || 'active'}${emailMismatch ? ' [email mismatch resolved]' : ''}` 
@@ -1106,7 +1240,7 @@ if (isTopSecretPayment) {
       
       // 🔥 Check if this is an upgrade from monthly to yearly
       if (billingInterval === 'yearly' && !isFirstPayment) {
-        const userResult = await findUser(supabase, finotaurUserId, userEmail);
+        const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
         
         if (userResult) {
           const { data: currentProfile } = await supabase
@@ -1426,7 +1560,7 @@ async function handleMembershipActivated(
 
   // Try to find user by finotaur_user_id if not found by membership
   if (!existingProfile && finotaurUserId) {
-    const user = await findUser(supabase, finotaurUserId, userEmail);
+    const user = await findUser(supabase, finotaurUserId, userEmail, 'journal');
     if (user) {
       console.log(`📝 Membership activated for user found by finotaur_user_id: ${user.email}`);
     }
