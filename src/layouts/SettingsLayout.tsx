@@ -527,6 +527,7 @@ const BillingTab = () => {
   const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
   // 🔥 NEW: Upgrade states
   const [upgradingNewsletter, setUpgradingNewsletter] = useState(false);
+  const [upgradingTopSecret, setUpgradingTopSecret] = useState(false);
 
   // Platform subscription (main website)
   const platformPlan = profile?.platform_plan || 'free';
@@ -745,6 +746,53 @@ const BillingTab = () => {
       console.error('Error upgrading newsletter:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to start upgrade');
       setUpgradingNewsletter(false);
+    }
+  };
+
+  // 🔥 NEW: Handle Top Secret upgrade from Monthly to Yearly
+  const handleUpgradeTopSecretToYearly = async () => {
+    if (!user) return;
+    
+    setUpgradingTopSecret(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      // Call create-whop-checkout edge function with yearly plan
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-whop-checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan_id: 'plan_PxxbBlSdkyeo7', // Top Secret Yearly plan
+            subscription_category: 'journal',
+            email: user.email,
+            user_id: user.id,
+            redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=top_secret_yearly_success`,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok || !data.checkout_url) {
+        throw new Error(data.error || "Failed to create checkout session");
+      }
+
+      // Redirect to Whop checkout
+      window.location.href = data.checkout_url;
+      
+    } catch (error) {
+      console.error('Error upgrading Top Secret:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to start upgrade');
+      setUpgradingTopSecret(false);
     }
   };
 
@@ -1323,30 +1371,48 @@ const BillingTab = () => {
                       <span>Full classified access</span>
                     )}
                   </div>
-                  {profile?.top_secret_cancel_at_period_end ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleReactivateTopSecret}
-                      disabled={reactivatingTopSecret}
-                      className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/50"
-                    >
-                      {reactivatingTopSecret ? (
-                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
-                      ) : (
-                        <>Undo Cancellation</>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowTopSecretCancelDialog(true)}
-                      className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      Cancel
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
+                    {topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && !topSecretPricing.isInTrial && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUpgradeTopSecretToYearly}
+                        disabled={upgradingTopSecret}
+                        className="border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 hover:border-yellow-400/50"
+                      >
+                        {upgradingTopSecret ? (
+                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Upgrading...</>
+                        ) : (
+                          <><Crown className="w-3 h-3 mr-1.5" />Upgrade to Yearly (Save $180)</>
+                        )}
+                      </Button>
+                    )}
+                    {profile?.top_secret_cancel_at_period_end ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleReactivateTopSecret}
+                        disabled={reactivatingTopSecret}
+                        className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/50"
+                      >
+                        {reactivatingTopSecret ? (
+                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                        ) : (
+                          <>Undo Cancellation</>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowTopSecretCancelDialog(true)}
+                        className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : topSecretStatus === 'cancelled' ? (

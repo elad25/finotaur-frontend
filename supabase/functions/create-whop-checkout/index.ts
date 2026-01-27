@@ -94,15 +94,15 @@ interface WhopCheckoutResponse {
   'plan_LCBG5yJpoNtW3': '/app/all-markets/warzone?payment=success&source=whop',
   'prod_8b3VWkZdena4B': '/app/all-markets/warzone?payment=success&source=whop',
   'plan_24vWi8dY3uDHM': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from PricingSelection)
-  'plan_bp2QTGuwfpj0A': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Yearly
+  'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // 🔥 War Zone Yearly (redirect to settings on upgrade)
   'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from Landing)
   'plan_a7uEGsUbr92nn': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret discount
   'plan_BPJdT6Tyjmzcx': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret Members
-  // Top Secret - All Plan IDs
+// Top Secret - All Plan IDs
   'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',
   'plan_YoeD6wWBxss7Q': '/app/top-secret?payment=success&source=whop',
   'plan_tUvQbCrEQ4197': '/app/top-secret?payment=success&source=whop',
-  'plan_PxxbBlSdkyeo7': '/app/top-secret?payment=success&source=whop',
+  'plan_PxxbBlSdkyeo7': '/app/settings?tab=billing&upgrade=top_secret_yearly_success',  // 🔥 Top Secret Yearly (redirect to settings on upgrade)
   'plan_7VQxCZ5Kpw6f0': '/app/top-secret?payment=success&source=whop',
 };
 

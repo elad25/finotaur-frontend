@@ -995,6 +995,47 @@ async function handlePaymentSucceeded(
     
     if (isTopSecretPayment) {
       const planId = data.plan?.id || '';
+      const billingInterval = getBillingInterval(planId);
+      
+      // 🔥 Check if this is an upgrade from monthly to yearly
+      if (billingInterval === 'yearly' && !isFirstPayment) {
+        // This might be an upgrade - check if user was on monthly
+        const userResult = await findUser(supabase, finotaurUserId, userEmail);
+        
+        if (userResult) {
+          const { data: currentProfile } = await supabase
+            .from('profiles')
+            .select('top_secret_interval, top_secret_status')
+            .eq('id', userResult.id)
+            .single();
+          
+          if (currentProfile?.top_secret_interval === 'monthly' && 
+              ['active', 'trial', 'trialing'].includes(currentProfile?.top_secret_status || '')) {
+            // This IS an upgrade! Use the upgrade function
+            console.log("🔥 Detected Top Secret UPGRADE from monthly to yearly");
+            
+            const expiresAt = new Date();
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+            
+            const { data: upgradeResult, error: upgradeError } = await supabase.rpc('handle_top_secret_upgrade_to_yearly', {
+              p_user_id: userResult.id,
+              p_new_whop_membership_id: membershipId,
+              p_new_expires_at: expiresAt.toISOString(),
+            });
+            
+            if (upgradeError) {
+              console.error("❌ handle_top_secret_upgrade_to_yearly RPC error:", upgradeError);
+              return { success: false, message: `Top Secret upgrade failed: ${upgradeError.message}` };
+            }
+            
+            console.log("✅ Top Secret upgrade RPC result:", upgradeResult);
+            return { 
+              success: upgradeResult?.success ?? true, 
+              message: `Top Secret UPGRADED to yearly: ${userEmail} (saved $180.88!)` 
+            };
+          }
+        }
+      }
       
       if (isFirstPayment) {
         console.log("🔐 Calling activate_top_secret_subscription RPC (first payment)...");
