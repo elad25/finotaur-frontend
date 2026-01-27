@@ -29,7 +29,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ============================================
 
 const WHOP_API_KEY = Deno.env.get("WHOP_API_KEY") || "";
-const WHOP_API_URL = "https://api.whop.com/api/v2";
+const WHOP_API_URL = "https://api.whop.com/api/v5";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
@@ -94,13 +94,15 @@ async function cancelWhopMembership(
 
     console.log(`🔄 Canceling Whop membership ${membershipId} with mode: ${mode}`);
 
-    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}/cancel`, {
+    // 🔥 v2.8.0 FIX: Use correct API endpoint and parameter name
+    // New API: POST /memberships/{id}/cancel with { cancellation_mode: "at_period_end" | "immediate" }
+    const response = await fetch(`https://api.whop.com/api/v5/memberships/${membershipId}/cancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ cancellation_mode: mode }),
     });
 
     if (!response.ok) {
@@ -140,14 +142,16 @@ async function reactivateWhopMembership(
 
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
-    // 🔥 v2.7.0 FIX: Use POST to /cancel endpoint with mode=off to reactivate
-    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}/cancel`, {
-      method: "POST",
+    // 🔥 v2.8.0 FIX: Use PATCH to update membership with cancel_at_period_end = false
+    // Whop API doesn't have a dedicated "reactivate" endpoint
+    // Instead, we update the membership to set cancel_at_period_end to false
+    const response = await fetch(`https://api.whop.com/api/v5/memberships/${membershipId}`, {
+      method: "PATCH",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ mode: "off" }),
+      body: JSON.stringify({ cancel_at_period_end: false }),
     });
 
     if (!response.ok) {

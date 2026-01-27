@@ -1521,11 +1521,12 @@ const todayReport = liveReports.find((r: DailyReport) =>
   normalizeDate(r.report_date) === todayNY
 );
 
-// Previous report = MOST RECENT live report that is NOT today
-// Since liveReports is sorted by report_date DESC, the first non-today report is the most recent previous
-const previousReport = liveReports.find((r: DailyReport) => 
-  normalizeDate(r.report_date) !== todayNY
-) || null;
+// Previous report = MOST RECENT live report that is BEFORE today (not future)
+// This ensures we show past reports, not future ones
+const previousReport = liveReports.find((r: DailyReport) => {
+  const reportDate = normalizeDate(r.report_date);
+  return reportDate !== todayNY && reportDate < todayNY;
+}) || null;
 
 console.log('[WAR ZONE] 🎯 ASSIGNMENT RESULT:', {
   todayNY,
@@ -1535,21 +1536,21 @@ console.log('[WAR ZONE] 🎯 ASSIGNMENT RESULT:', {
   previousReport_date: previousReport ? normalizeDate(previousReport.report_date) : 'N/A'
 });
 
-// Only show "Coming Soon" if before 9 AM AND no report exists for today
-const hasTodayReport = !!todayReport;
-setIsBeforeDailyReportTime(isBeforeReportTime && !hasTodayReport);
+// ALWAYS show "Coming Soon" if before 9 AM - regardless of whether report exists
+setIsBeforeDailyReportTime(isBeforeReportTime);
 
-// Today's report - show only if it exists AND (after 9 AM OR report already published)
-const currentReport = (isBeforeReportTime && !hasTodayReport)
-  ? null
-  : todayReport || null;
+// Today's report - show only if AFTER 9 AM AND report exists for today
+// Before 9 AM: ALWAYS show "Coming Soon", even if report was published early
+const currentReport = isBeforeReportTime
+  ? null  // Before 9 AM = always null (show "Coming Soon")
+  : todayReport || null;  // After 9 AM = show today's report if exists
 
-console.log('[WAR ZONE] 📌 Daily Report Assignment (v10.0):', {
+console.log('[WAR ZONE] 📌 Daily Report Assignment (v11.0):', {
   todayNY,
   nyHour,
   isBeforeReportTime,
-  hasTodayReport,
-  currentDaily: currentReport ? `${normalizeDate(currentReport.report_date)} (${currentReport.id})` : 'WAITING',
+  hasTodayReport: !!todayReport,
+  currentDaily: currentReport ? `${normalizeDate(currentReport.report_date)} (${currentReport.id})` : 'WAITING (before 9 AM or no report)',
   previousDaily: previousReport ? `${normalizeDate(previousReport.report_date)} (${previousReport.id})` : 'NONE',
   allReportDates: liveReports.map((r: DailyReport) => normalizeDate(r.report_date))
 });
