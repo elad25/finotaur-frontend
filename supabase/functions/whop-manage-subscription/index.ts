@@ -140,13 +140,14 @@ async function reactivateWhopMembership(
 
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
-    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
-      method: "PATCH",
+    // 🔥 v2.7.0 FIX: Use POST to /cancel endpoint with mode=off to reactivate
+    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}/cancel`, {
+      method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ cancel_at_period_end: false }),
+      body: JSON.stringify({ mode: "off" }),
     });
 
     if (!response.ok) {

@@ -54,6 +54,7 @@ const NEWSLETTER_PLAN_IDS = new Set([
 const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly
+  'plan_CtPSuWqt3YfmL',  // War Zone Yearly (if different plan ID)
 ]);
 
 function getBillingInterval(planId: string): 'monthly' | 'yearly' {
@@ -1132,14 +1133,19 @@ async function handleNewsletterPayment(
   });
 
   try {
+// 🔥 v3.7.0: Get billing interval from plan ID
+    const planId = data.plan?.id || '';
+    const billingInterval = getBillingInterval(planId);
+    
     // Call the newsletter-specific RPC function
     const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
-      p_user_email: userEmail || '',
-      p_whop_user_id: whopUserId || '',
-      p_whop_membership_id: membershipId || '',
-      p_whop_product_id: productId || '',
+      p_user_email: userEmail,
+      p_whop_user_id: whopUserId,
+      p_whop_membership_id: membershipId,
+      p_whop_product_id: productId,
       p_payment_amount: paymentAmount,
       p_finotaur_user_id: finotaurUserId || null,
+      p_billing_interval: billingInterval,
     });
 
     if (error) {
