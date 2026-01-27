@@ -52,10 +52,22 @@ const NEWSLETTER_PLAN_IDS = new Set([
 // ============================================
 
 const YEARLY_PLAN_IDS = new Set([
-  'plan_bp2QTGuwfpj0A',  // War Zone Yearly
-  'plan_PxxbBlSdkyeo7',  // Top Secret Yearly
-  'plan_CtPSuWqt3YfmL',  // War Zone Yearly (if different plan ID)
+  'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
+  'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year - was $500)
 ]);
+
+// 🔥 v3.7.0: All Plan IDs for reference
+const NEWSLETTER_PLAN_IDS_MAP = {
+  monthly: 'plan_24vWi8dY3uDHM',      // War Zone Monthly $69.99
+  yearly: 'plan_bp2QTGuwfpj0A',        // War Zone Yearly $699
+  top_secret_discount: 'plan_a7uEGsUbr92nn',  // War Zone for Top Secret members $19.99
+};
+
+const TOP_SECRET_PLAN_IDS_MAP = {
+  monthly: 'plan_tUvQbCrEQ4197',       // Top Secret Monthly $89.99
+  yearly: 'plan_PxxbBlSdkyeo7',         // Top Secret Yearly $500
+  warzone_discount: 'plan_7VQxCZ5Kpw6f0',  // Top Secret for War Zone members $50
+};
 
 function getBillingInterval(planId: string): 'monthly' | 'yearly' {
   return YEARLY_PLAN_IDS.has(planId) ? 'yearly' : 'monthly';
@@ -630,15 +642,15 @@ async function cancelWarZoneForTopSecretMember(
       };
     }
 
-    // Call Whop API to cancel at period end
-    const whopResponse = await fetch(`https://api.whop.com/api/v2/memberships/${warZoneMembershipId}`, {
+// 🔥 v3.8.0: Call Whop API to cancel at period end (correct endpoint)
+    const whopResponse = await fetch(`https://api.whop.com/api/v5/memberships/${warZoneMembershipId}/cancel`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WHOP_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        cancel_at_period_end: true,  // 🔥 Cancel at period end, not immediately
+        cancellation_mode: "at_period_end",  // 🔥 Cancel at period end, not immediately
       }),
     });
 
@@ -1121,9 +1133,9 @@ interface NewsletterPaymentParams {
 
 async function handleNewsletterPayment(
   supabase: SupabaseClient,
-  params: NewsletterPaymentParams
+  params: NewsletterPaymentParams & { planId?: string }  // 🔥 Add planId to params
 ): Promise<{ success: boolean; message: string }> {
-  const { userEmail, whopUserId, membershipId, productId, paymentAmount, finotaurUserId } = params;
+  const { userEmail, whopUserId, membershipId, productId, paymentAmount, finotaurUserId, planId } = params;
 
   console.log("📰 Processing NEWSLETTER payment:", {
     userEmail,
@@ -1134,8 +1146,8 @@ async function handleNewsletterPayment(
 
   try {
 // 🔥 v3.7.0: Get billing interval from plan ID
-    const planId = data.plan?.id || '';
-    const billingInterval = getBillingInterval(planId);
+    const billingInterval = getBillingInterval(planId || '');
+
     
     // Call the newsletter-specific RPC function
     const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {

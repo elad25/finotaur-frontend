@@ -94,15 +94,17 @@ async function cancelWhopMembership(
 
     console.log(`🔄 Canceling Whop membership ${membershipId} with mode: ${mode}`);
 
-    // 🔥 v2.8.0 FIX: Use correct API endpoint and parameter name
-    // New API: POST /memberships/{id}/cancel with { cancellation_mode: "at_period_end" | "immediate" }
+    // 🔥 v3.0.0 FIX: Use correct Whop API endpoint from docs.whop.com
+    // Whop API: POST /memberships/{id}/cancel
     const response = await fetch(`https://api.whop.com/api/v5/memberships/${membershipId}/cancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ cancellation_mode: mode }),
+      body: JSON.stringify({ 
+        cancellation_mode: mode === "immediate" ? "immediate" : "at_period_end"
+      }),
     });
 
     if (!response.ok) {
@@ -142,16 +144,14 @@ async function reactivateWhopMembership(
 
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
-    // 🔥 v2.8.0 FIX: Use PATCH to update membership with cancel_at_period_end = false
-    // Whop API doesn't have a dedicated "reactivate" endpoint
-    // Instead, we update the membership to set cancel_at_period_end to false
-    const response = await fetch(`https://api.whop.com/api/v5/memberships/${membershipId}`, {
-      method: "PATCH",
+    // 🔥 v3.0.0 FIX: Use correct Whop API endpoint from docs.whop.com
+    // Whop API: POST /memberships/{id}/resume
+    const response = await fetch(`https://api.whop.com/api/v5/memberships/${membershipId}/resume`, {
+      method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ cancel_at_period_end: false }),
     });
 
     if (!response.ok) {

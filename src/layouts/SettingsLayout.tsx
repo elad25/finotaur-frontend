@@ -547,12 +547,12 @@ const BillingTab = () => {
   const newsletterIsActive = newsletterStatus === 'active' || newsletterStatus === 'trial';
   const newsletterInterval = profile?.newsletter_interval || 'monthly';
   
-  // 🔥 v5 FIXED: Top Secret subscription - proper active detection
+  // 🔥 v6 FIXED: Top Secret subscription - proper active detection
   const topSecretEnabled = profile?.top_secret_enabled ?? false;
   const topSecretStatus = profile?.top_secret_status || 'inactive';
   const topSecretIsInTrial = profile?.top_secret_is_in_trial ?? false;
-  // 🔥 FIX: Check BOTH enabled flag AND status for active state
-  const topSecretIsActive = topSecretEnabled && (topSecretStatus === 'active' || topSecretStatus === 'trial');
+  // 🔥 v6.1 FIX: Check enabled flag AND valid status for active state (including 'canceling')
+  const topSecretIsActive = topSecretEnabled && ['active', 'trial', 'trialing', 'canceling'].includes(topSecretStatus);
   const topSecretInterval = profile?.top_secret_interval || 'monthly';
   
   // 🔥 v5 FIXED: Calculate intro pricing status using actual DB fields
