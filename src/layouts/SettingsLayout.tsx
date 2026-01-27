@@ -525,6 +525,8 @@ const BillingTab = () => {
   // 🔥 NEW: Separate loading states for reactivation
   const [reactivatingNewsletter, setReactivatingNewsletter] = useState(false);
   const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
+  // 🔥 NEW: Upgrade states
+  const [upgradingNewsletter, setUpgradingNewsletter] = useState(false);
 
   // Platform subscription (main website)
   const platformPlan = profile?.platform_plan || 'free';
@@ -696,6 +698,53 @@ const BillingTab = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to reactivate Top Secret');
     } finally {
       setReactivatingTopSecret(false);
+    }
+  };
+
+  // 🔥 NEW: Handle Newsletter upgrade from Monthly to Yearly
+  const handleUpgradeNewsletterToYearly = async () => {
+    if (!user) return;
+    
+    setUpgradingNewsletter(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      // Call create-whop-checkout edge function with yearly plan
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-whop-checkout`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan_id: 'plan_bp2QTGuwfpj0A', // War Zone Yearly plan
+            subscription_category: 'journal',
+            email: user.email,
+            user_id: user.id,
+            redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=newsletter_yearly_success`,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok || !data.checkout_url) {
+        throw new Error(data.error || "Failed to create checkout session");
+      }
+
+      // Redirect to Whop checkout
+      window.location.href = data.checkout_url;
+      
+    } catch (error) {
+      console.error('Error upgrading newsletter:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to start upgrade');
+      setUpgradingNewsletter(false);
     }
   };
 
@@ -1023,30 +1072,48 @@ const BillingTab = () => {
                       <span>Full access active</span>
                     )}
                   </div>
-                  {profile?.newsletter_cancel_at_period_end ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleReactivateNewsletter}
-                      disabled={reactivatingNewsletter}
-                      className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
-                    >
-                      {reactivatingNewsletter ? (
-                        <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
-                      ) : (
-                        <>Undo Cancellation</>
-                      )}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowNewsletterCancelDialog(true)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-                    >
-                      Unsubscribe
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
+                    {newsletterInterval === 'monthly' && !profile?.newsletter_cancel_at_period_end && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUpgradeNewsletterToYearly}
+                        disabled={upgradingNewsletter}
+                        className="border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 hover:border-yellow-400/50"
+                      >
+                        {upgradingNewsletter ? (
+                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Upgrading...</>
+                        ) : (
+                          <><Crown className="w-3 h-3 mr-1.5" />Upgrade to Yearly (Save $140)</>
+                        )}
+                      </Button>
+                    )}
+                    {profile?.newsletter_cancel_at_period_end ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleReactivateNewsletter}
+                        disabled={reactivatingNewsletter}
+                        className="border-purple-500/40 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50"
+                      >
+                        {reactivatingNewsletter ? (
+                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                        ) : (
+                          <>Undo Cancellation</>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowNewsletterCancelDialog(true)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+                      >
+                        Unsubscribe
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : newsletterStatus === 'cancelled' ? (
