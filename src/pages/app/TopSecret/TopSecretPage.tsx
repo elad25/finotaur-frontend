@@ -199,13 +199,48 @@ export default function TopSecretPage() {
         return;
       }
 
-      // If returning from payment and not yet active, start polling
-      if (isPaymentReturn && !currentStatus?.isActive) {
-        console.log('🔄 Payment return detected, starting subscription check...');
-        setStatus(currentStatus);
-        setPageState('checking_payment');
-        return;
-      }
+      // If returning from payment and not yet active, activate directly
+if (isPaymentReturn && !currentStatus?.isActive) {
+  console.log('🔄 Payment return detected, activating subscription...');
+  setPageState('checking_payment');
+  
+  // Call activation API directly instead of waiting for webhook
+  try {
+    const { data: activationResult, error } = await supabase.rpc('activate_top_secret_from_checkout', {
+      p_user_id: user.id,
+    });
+    
+    if (!error && activationResult?.success) {
+      console.log('✅ Subscription activated directly!');
+      setStatus({
+        isActive: true,
+        isAdmin: false,
+        status: 'active',
+        expiresAt: activationResult.expires_at ? new Date(activationResult.expires_at) : null,
+      });
+      setPageState('payment_success');
+      setSearchParams({});
+      
+      // Show Journal discount after celebration
+      const hasDismissedDiscount = localStorage.getItem('journal_discount_dismissed') === 'true';
+      setTimeout(() => {
+        if (!hasDismissedDiscount && !hasShownDiscount) {
+          setShowJournalDiscount(true);
+          setHasShownDiscount(true);
+        } else {
+          setPageState('show_dashboard');
+        }
+      }, 2500);
+      return;
+    }
+  } catch (err) {
+    console.log('⚠️ Direct activation failed, falling back to polling');
+  }
+  
+  // Fallback to polling if direct activation failed
+  setStatus(currentStatus);
+  return;
+}
 
       // Otherwise, set status and show appropriate page
       setStatus(currentStatus);
