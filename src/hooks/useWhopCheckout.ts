@@ -231,6 +231,45 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
         duration: 3000,
       });
 
+      // 🔥 NEW: Save pending checkout BEFORE redirecting
+      if (user?.id) {
+        const checkoutToken = crypto.randomUUID();
+        
+        await supabase.from('pending_checkouts').insert({
+          user_id: user.id,
+          user_email: user.email || '',
+          checkout_token: checkoutToken,
+          product_type: plan.isNewsletter ? 'newsletter' : 
+                        plan.isTopSecret ? 'top_secret' : 'journal',
+          billing_interval: billingInterval,
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        });
+        
+        console.log('✅ Pending checkout saved:', checkoutToken);
+      }
+
+      // 🔥 NEW: Save pending checkout BEFORE redirecting to Whop
+      if (user?.id) {
+        const checkoutToken = crypto.randomUUID();
+        
+        try {
+          await supabase.from('pending_checkouts').insert({
+            user_id: user.id,
+            user_email: user.email || '',
+            checkout_token: checkoutToken,
+            product_type: plan.isNewsletter ? 'newsletter' : 
+                          plan.isTopSecret ? 'top_secret' : 'journal',
+            billing_interval: billingInterval,
+            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          });
+          
+          console.log('✅ Pending checkout saved:', checkoutToken);
+        } catch (err) {
+          console.warn('⚠️ Failed to save pending checkout:', err);
+          // Continue anyway - this is a fallback mechanism
+        }
+      }
+
       // 🔥 v4.1: TRY EDGE FUNCTION FIRST (now with email!)
       const checkoutSession = await createCheckoutSession({
         planId: whopPlanId,

@@ -633,6 +633,25 @@ async function findUserFromPendingCheckout(
     }
   }
 
+// 🔥 PRIORITY 7: If only ONE pending checkout in last hour, use it
+  const { data: recentCheckouts } = await supabase
+    .from("pending_checkouts")
+    .select("user_id, user_email")
+    .eq("product_type", productType)
+    .is("completed_at", null)
+    .gt("created_at", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false });
+
+  if (recentCheckouts?.length === 1) {
+    console.log("✅ Found SINGLE recent checkout, assuming match");
+    return {
+      id: recentCheckouts[0].user_id,
+      email: recentCheckouts[0].user_email,
+      emailMismatch: true,
+      lookupMethod: 'pending_checkout_single_recent',
+    };
+  }
+
   return null;
 }
 
@@ -1194,6 +1213,12 @@ async function handlePaymentSucceeded(
       // Regular newsletter payment (not an upgrade)
       console.log("📰 Calling handle_newsletter_payment RPC...");
       
+      console.log("📰 RPC params:", {
+        p_user_email: userEmail,
+        p_whop_customer_email: whopEmail,
+        p_finotaur_user_id: finotaurUserId,
+      });
+      
       const { data: result, error } = await supabase.rpc('handle_newsletter_payment', {
         p_user_email: userEmail,
         p_whop_user_id: whopUserId,
@@ -1202,7 +1227,7 @@ async function handlePaymentSucceeded(
         p_payment_amount: paymentAmount,
         p_finotaur_user_id: finotaurUserId || null,
         p_billing_interval: billingInterval,
-        p_whop_customer_email: whopEmail || null,  // 🔥 NEW: Save Whop checkout email
+        p_whop_customer_email: whopEmail,  // 🔥 Whop checkout email (may differ from userEmail)
       });
       
       if (error) {
