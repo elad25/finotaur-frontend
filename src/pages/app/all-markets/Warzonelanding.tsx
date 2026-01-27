@@ -1006,8 +1006,8 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
         onClick={onClose} 
       />
       
-      {/* Popup Card */}
-      <div className="relative w-full max-w-md">
+      {/* Popup Card - More compact */}
+      <div className="relative w-full max-w-sm">
         {/* Outer glow */}
         <div className="absolute -inset-1 rounded-2xl opacity-50" style={{
           background: 'linear-gradient(135deg, rgba(201,166,70,0.3) 0%, transparent 50%, rgba(201,166,70,0.2) 100%)',
@@ -1026,177 +1026,177 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
             background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.6), transparent)'
           }} />
 
-          {/* Content */}
-          <div className="px-6 pt-5 pb-6">
+          {/* Content - Reduced padding */}
+          <div className="px-5 pt-4 pb-5">
             
-            {/* Header Row */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ 
+            {/* Header Row - Smaller */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ 
                   background: 'linear-gradient(135deg, rgba(201,166,70,0.25) 0%, rgba(201,166,70,0.1) 100%)',
                   border: '1px solid rgba(201,166,70,0.4)'
                 }}>
-                  <Crown className="w-6 h-6 text-[#C9A646]" />
+                  <Crown className="w-5 h-5 text-[#C9A646]" />
                 </div>
-                <h2 className="text-xl font-semibold text-white tracking-wide">WAR ZONE {isMonthly ? 'Monthly' : 'Annual'}</h2>
+                <h2 className="text-lg font-semibold text-white tracking-wide">WAR ZONE {isMonthly ? 'Monthly' : 'Annual'}</h2>
               </div>
-              <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
                 <X className="w-5 h-5 text-[#C9A646]/60" />
               </button>
             </div>
 
-{/* Price Section */}
-            <div className="text-center mb-6">
+            {/* Price Section - More compact */}
+            <div className="text-center mb-4">
               {isMonthly && isTopSecretMember && (
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-3" style={{ 
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-2" style={{ 
                   background: 'linear-gradient(135deg, rgba(147,51,234,0.2) 0%, rgba(147,51,234,0.1) 100%)',
                   border: '1px solid rgba(147,51,234,0.4)'
                 }}>
-                  <Crown className="w-4 h-4 text-purple-400" />
-                  <span className="text-purple-300 text-sm font-semibold">TOP SECRET Member Discount</span>
+                  <Crown className="w-3 h-3 text-purple-400" />
+                  <span className="text-purple-300 text-xs font-semibold">TOP SECRET Discount</span>
                 </div>
               )}
-              <div className="flex items-baseline justify-center gap-2 mb-1">
+              <div className="flex items-baseline justify-center gap-1.5 mb-0.5">
                 {isMonthly && isTopSecretMember && originalPrice && (
-                  <span className="text-2xl text-[#C9A646]/40 line-through">${originalPrice}</span>
+                  <span className="text-xl text-[#C9A646]/40 line-through">${originalPrice}</span>
                 )}
-                <span className="text-5xl font-bold" style={{ 
+                <span className="text-4xl font-bold" style={{ 
                   background: 'linear-gradient(180deg, #F4D97B 0%, #C9A646 50%, #A68A3A 100%)', 
                   WebkitBackgroundClip: 'text', 
                   WebkitTextFillColor: 'transparent',
                 }}>${displayPrice}</span>
-                <span className="text-[#C9A646]/60 text-lg font-medium">/{isMonthly ? 'month' : 'year'}</span>
+                <span className="text-[#C9A646]/60 text-base font-medium">/{isMonthly ? 'month' : 'year'}</span>
               </div>
               {!isMonthly && (
-                <p className="text-[#C9A646]/80 text-sm">~${Math.round(YEARLY_MONTHLY_EQUIVALENT)}/month • Save ${YEARLY_SAVINGS}/year</p>
+                <p className="text-[#C9A646]/80 text-xs">~${Math.round(YEARLY_MONTHLY_EQUIVALENT)}/month • Save ${YEARLY_SAVINGS}/year</p>
               )}
               {isMonthly && isTopSecretMember && (
-                <p className="text-green-400 text-sm font-semibold">You save ${(MONTHLY_PRICE - MONTHLY_PRICE_TOPSECRET).toFixed(2)}/month as a TOP SECRET member!</p>
+                <p className="text-green-400 text-xs font-semibold">Save ${(MONTHLY_PRICE - MONTHLY_PRICE_TOPSECRET).toFixed(2)}/month!</p>
               )}
               {isMonthly && !isTopSecretMember && (
-                <p className="text-[#C9A646]/60 text-sm">Billed monthly</p>
+                <p className="text-[#C9A646]/60 text-xs">Billed monthly</p>
               )}
-              <p className="text-[#8B8175] text-sm mt-2">Everything you need to trade with confidence</p>
+              <p className="text-[#8B8175] text-xs mt-1">Everything you need to trade with confidence</p>
             </div>
 
-            {/* What's Included Box */}
-            <div className="rounded-xl p-4 mb-4" style={{ 
+            {/* What's Included Box - Compact grid */}
+            <div className="rounded-lg p-3 mb-3" style={{ 
               background: 'linear-gradient(180deg, rgba(26,21,16,0.8) 0%, rgba(20,16,12,0.9) 100%)',
               border: '1px solid rgba(201,166,70,0.25)'
             }}>
-              <h4 className="text-white font-medium text-sm mb-4 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#C9A646]" />
+              <h4 className="text-white font-medium text-xs mb-2.5 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#C9A646]" />
                 What's Included:
               </h4>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
                 {/* Daily Report */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ 
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
                     background: 'rgba(201,166,70,0.1)', 
                     border: '1px solid rgba(201,166,70,0.25)' 
                   }}>
-                    <FileText className="w-5 h-5 text-[#C9A646]" />
+                    <FileText className="w-3.5 h-3.5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">Daily Market Report</p>
-                    <p className="text-[#8B8175] text-xs">9:00 AM NY time</p>
+                    <p className="text-white text-xs font-medium leading-tight">Daily Report</p>
+                    <p className="text-[#8B8175] text-[10px]">9:00 AM NY</p>
                   </div>
                 </div>
                 
                 {/* Weekly Review */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ 
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
                     background: 'rgba(201,166,70,0.1)', 
                     border: '1px solid rgba(201,166,70,0.25)' 
                   }}>
-                    <Calendar className="w-5 h-5 text-[#C9A646]" />
+                    <Calendar className="w-3.5 h-3.5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">Weekly Review</p>
-                    <p className="text-[#8B8175] text-xs">Every Sunday</p>
+                    <p className="text-white text-xs font-medium leading-tight">Weekly Review</p>
+                    <p className="text-[#8B8175] text-[10px]">Every Sunday</p>
                   </div>
                 </div>
                 
                 {/* Discord */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ 
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
                     background: 'rgba(201,166,70,0.1)', 
                     border: '1px solid rgba(201,166,70,0.25)' 
                   }}>
-                    <DiscordIcon className="w-5 h-5 text-[#C9A646]" />
+                    <DiscordIcon className="w-3.5 h-3.5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">Discord Community</p>
-                    <p className="text-[#8B8175] text-xs">847+ traders</p>
+                    <p className="text-white text-xs font-medium leading-tight">Discord</p>
+                    <p className="text-[#8B8175] text-[10px]">847+ traders</p>
                   </div>
                 </div>
                 
                 {/* Trading Room */}
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ 
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
                     background: 'rgba(201,166,70,0.1)', 
                     border: '1px solid rgba(201,166,70,0.25)' 
                   }}>
-                    <Activity className="w-5 h-5 text-[#C9A646]" />
+                    <Activity className="w-3.5 h-3.5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-sm font-medium">Trading Room</p>
-                    <p className="text-[#8B8175] text-xs">Live analysis</p>
+                    <p className="text-white text-xs font-medium leading-tight">Trading Room</p>
+                    <p className="text-[#8B8175] text-[10px]">Live analysis</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Value/Trial Badge */}
+            {/* Value/Trial Badge - Compact */}
             {isMonthly ? (
-              <div className="relative flex items-center gap-4 px-4 py-3.5 rounded-xl mb-4" style={{ 
+              <div className="relative flex items-center gap-3 px-3 py-2.5 rounded-lg mb-3" style={{ 
                 background: 'linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(34,197,94,0.05) 100%)', 
                 border: '1px solid rgba(34,197,94,0.35)'
               }}>
-                <div className="relative w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{
+                <div className="relative w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{
                   background: 'rgba(34,197,94,0.15)',
                   border: '1px solid rgba(34,197,94,0.3)'
                 }}>
-                  <Shield className="w-6 h-6 text-green-400" />
+                  <Shield className="w-4 h-4 text-green-400" />
                 </div>
                 <div>
-                  <p className="text-green-400 font-bold text-sm">7-Day Free Trial</p>
-                  <p className="text-[#8B8175] text-xs">Full access • Cancel anytime • No charge during trial</p>
+                  <p className="text-green-400 font-bold text-xs">7-Day Free Trial</p>
+                  <p className="text-[#8B8175] text-[10px]">Full access • Cancel anytime • No charge during trial</p>
                 </div>
               </div>
             ) : (
-              <div className="relative flex items-center gap-4 px-4 py-3.5 rounded-xl mb-4" style={{ 
+              <div className="relative flex items-center gap-3 px-3 py-2.5 rounded-lg mb-3" style={{ 
                 background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.05) 100%)', 
                 border: '1px solid rgba(201,166,70,0.35)'
               }}>
-                <div className="relative w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{
+                <div className="relative w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{
                   background: 'rgba(201,166,70,0.15)',
                   border: '1px solid rgba(201,166,70,0.3)'
                 }}>
-                  <TrendingUp className="w-6 h-6 text-[#C9A646]" />
+                  <TrendingUp className="w-4 h-4 text-[#C9A646]" />
                 </div>
                 <div>
-                  <p className="text-[#C9A646] font-bold text-sm">Best Value - Save ${YEARLY_SAVINGS}!</p>
-                  <p className="text-[#8B8175] text-xs">Lock in your price • Full year access • Instant activation</p>
+                  <p className="text-[#C9A646] font-bold text-xs">Best Value - Save ${YEARLY_SAVINGS}!</p>
+                  <p className="text-[#8B8175] text-[10px]">Lock in your price • Full year access • Instant activation</p>
                 </div>
               </div>
             )}
 
-            {/* Legal Checkbox */}
-            <label className="flex items-start gap-3 cursor-pointer mb-5 group">
+            {/* Legal Checkbox - Compact */}
+            <label className="flex items-start gap-2.5 cursor-pointer mb-4 group">
               <div className="relative flex-shrink-0 mt-0.5">
                 <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="sr-only" />
                 <div 
-                  className={cn("w-6 h-6 rounded-md flex items-center justify-center transition-all", !agreed && "group-hover:border-[#C9A646]/60")}
+                  className={cn("w-5 h-5 rounded flex items-center justify-center transition-all", !agreed && "group-hover:border-[#C9A646]/60")}
                   style={{ 
                     background: agreed ? 'linear-gradient(135deg, #C9A646, #F4D97B)' : 'transparent',
                     border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)'
                   }}
                 >
-                  {agreed && <Check className="w-4 h-4 text-black" />}
+                  {agreed && <Check className="w-3 h-3 text-black" />}
                 </div>
               </div>
-              <span className="text-[#B8B0A0] text-sm leading-relaxed">
+              <span className="text-[#B8B0A0] text-xs leading-relaxed">
                 I acknowledge that FINOTAUR does not provide investment advice and that all content is for informational purposes only. I agree to the{' '}
                 <button 
                   type="button"
@@ -1212,11 +1212,11 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
               </span>
             </label>
 
-            {/* Buttons */}
-            <div className="flex gap-3">
+            {/* Buttons - Compact */}
+            <div className="flex gap-2.5">
               <button 
                 onClick={onClose}
-                className="flex-1 py-3.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#C9A646]/10"
+                className="flex-1 py-3 rounded-lg font-semibold text-sm transition-all hover:bg-[#C9A646]/10"
                 style={{ 
                   background: 'rgba(201,166,70,0.08)',
                   border: '1px solid rgba(201,166,70,0.3)',
@@ -1229,7 +1229,7 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
                 onClick={onAccept}
                 disabled={!agreed || isProcessing}
                 className={cn(
-                  "flex-[1.3] py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all",
+                  "flex-[1.3] py-3 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-all",
                   agreed ? "hover:scale-[1.02] active:scale-[0.98]" : "cursor-not-allowed opacity-50"
                 )}
                 style={agreed ? { 
@@ -1241,7 +1241,7 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
                   color: 'rgba(201,166,70,0.4)'
                 }}
               >
-                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
+                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
                 {isProcessing ? 'Processing...' : isMonthly ? 'Start 7-Day Free Trial' : 'Subscribe Now'}
               </button>
             </div>

@@ -68,7 +68,12 @@ interface StatusRequest {
   product: ProductType;
 }
 
-type RequestBody = CancelRequest | ReactivateRequest | StatusRequest;
+interface CheckBundleRequest {
+  action: "check_bundle";
+  product: ProductType;
+}
+
+type RequestBody = CancelRequest | ReactivateRequest | StatusRequest | CheckBundleRequest;
 
 interface WhopMembership {
   id: string;
