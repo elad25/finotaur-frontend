@@ -1,200 +1,160 @@
 // =====================================================
-// USER STATUS HOOK - v1.0.0
-// Single source of truth for ALL subscription statuses
-// Newsletter (War Zone) + Top Secret + Platform
+// FINOTAUR: User Status Hook v2.0
+// Uses EXISTING get_user_subscription_status() RPC
 // =====================================================
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
-// ============================================
-// TYPES
-// ============================================
-
-export interface NewsletterStatus {
-  is_active: boolean;
-  enabled: boolean;
-  status: string;
-  membership_id: string | null;
-  started_at: string | null;
-  expires_at: string | null;
-  trial_ends_at: string | null;
-  cancel_at_period_end: boolean;
-  interval: string | null;
-  is_in_trial: boolean;
-  days_until_expiry: number | null;
-  days_until_trial_ends: number | null;
-}
-
-export interface TopSecretStatus {
-  is_active: boolean;
-  enabled: boolean;
-  status: string;
-  membership_id: string | null;
-  started_at: string | null;
-  expires_at: string | null;
-  interval: string | null;
-  cancel_at_period_end: boolean;
-}
-
-export interface PlatformStatus {
-  account_type: string;
-  subscription_status: string | null;
-  subscription_interval: string | null;
-  expires_at: string | null;
-  membership_id: string | null;
-}
-
-export interface UserMeta {
+interface SubscriptionStatus {
+  // Newsletter (War Zone)
+  newsletter_paid: boolean;
+  newsletter_status: string;
+  newsletter_expires_at: string | null;
+  newsletter_interval: string | null;
+  // Top Secret
+  top_secret_enabled: boolean;
+  top_secret_status: string;
+  top_secret_expires_at: string | null;
+  // User meta
   role: string;
-  is_admin: boolean;
-  is_tester: boolean;
+  is_tester?: boolean;
 }
-
-export interface UserFullStatus {
-  success: boolean;
-  error?: string;
-  newsletter: NewsletterStatus;
-  top_secret: TopSecretStatus;
-  platform: PlatformStatus;
-  user: UserMeta;
-}
-
-// ============================================
-// QUERY KEY
-// ============================================
-
-export const userStatusKeys = {
-  all: ['user-status'] as const,
-  user: (userId: string) => [...userStatusKeys.all, userId] as const,
-};
-
-// ============================================
-// HOOK
-// ============================================
-
-export function useUserStatus() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const userId = user?.id || '';
-
-  const {
-    data,
-    isLoading,
-    error,
-    refetch,
-  } = useQuery({
-    queryKey: userStatusKeys.user(userId),
-    queryFn: async (): Promise<UserFullStatus | null> => {
-      if (!userId) return null;
-
-      const { data, error } = await supabase.rpc('get_user_subscription_status', {
-  p_user_id: user.id
-});
-
-
-      if (error) {
-        console.error('[useUserStatus] RPC error:', error);
-        throw error;
-      }
-
-      return data as UserFullStatus;
-    },
-    enabled: !!userId,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 10 * 60 * 1000,   // 10 minutes
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    retry: 2,
-  });
-
-  // Derived values
-  const newsletter = data?.newsletter || null;
-  const topSecret = data?.top_secret || null;
-  const platform = data?.platform || null;
-  const userMeta = data?.user || null;
-
-  return {
-    // Raw data
-    data,
-    
-    // Loading/Error
-    isLoading,
-    error: error?.message || data?.error || null,
-    
-    // Newsletter (War Zone)
-    newsletter,
-    isWarZoneActive: newsletter?.is_active ?? false,
-    isWarZoneInTrial: newsletter?.is_in_trial ?? false,
-    warZoneDaysRemaining: newsletter?.days_until_expiry ?? null,
-    warZoneTrialDaysRemaining: newsletter?.days_until_trial_ends ?? null,
-    
-    // Top Secret
-    topSecret,
-    isTopSecretActive: topSecret?.is_active ?? false,
-    
-    // Platform
-    platform,
-    
-    // User meta
-    isAdmin: userMeta?.is_admin ?? false,
-    isTester: userMeta?.is_tester ?? false,
-    userRole: userMeta?.role ?? 'user',
-    
-    // Actions
-    refresh: () => refetch(),
-    invalidate: () => queryClient.invalidateQueries({ 
-      queryKey: userStatusKeys.user(userId) 
-    }),
-  };
-}
-
-// ============================================
-// LIGHTWEIGHT HOOKS FOR SPECIFIC USE CASES
-// ============================================
 
 export function useWarZoneStatus() {
-  const { newsletter, isWarZoneActive, isWarZoneInTrial, warZoneDaysRemaining, warZoneTrialDaysRemaining, isLoading, refresh } = useUserStatus();
-  
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<SubscriptionStatus | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      // 🔥 Use EXISTING function that returns TABLE
+      const { data: result, error } = await supabase.rpc('get_user_subscription_status', {
+        p_user_id: user.id
+      });
+      
+      if (error) {
+        console.error('[useWarZoneStatus] RPC error:', error);
+        throw error;
+      }
+      
+      // Result is array, take first row
+      if (result && result.length > 0) {
+        setData(result[0]);
+      }
+    } catch (err) {
+      console.error('[useWarZoneStatus] Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // 🔥 Map DB fields to hook interface
+  const isActive = data?.newsletter_paid === true && 
+                   (data?.newsletter_status === 'active' || data?.newsletter_status === 'trial');
+  const isInTrial = data?.newsletter_status === 'trial';
+
   return {
-    isActive: isWarZoneActive,
-    isInTrial: isWarZoneInTrial,
-    status: newsletter?.status ?? 'inactive',
-    membershipId: newsletter?.membership_id ?? null,
-    expiresAt: newsletter?.expires_at ?? null,
-    trialEndsAt: newsletter?.trial_ends_at ?? null,
-    cancelAtPeriodEnd: newsletter?.cancel_at_period_end ?? false,
-    interval: newsletter?.interval ?? null,
-    daysRemaining: warZoneDaysRemaining,
-    trialDaysRemaining: warZoneTrialDaysRemaining,
+    isActive,
+    isInTrial,
+    status: data?.newsletter_status ?? '',
+    membershipId: null,
+    expiresAt: data?.newsletter_expires_at ?? null,
+    trialEndsAt: null,
+    cancelAtPeriodEnd: false,
+    daysRemaining: null,
+    trialDaysRemaining: null,
     isLoading,
     refresh,
   };
 }
 
 export function useTopSecretStatus() {
-  const { topSecret, isTopSecretActive, isLoading, refresh } = useUserStatus();
-  
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<SubscriptionStatus | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      const { data: result, error } = await supabase.rpc('get_user_subscription_status', {
+        p_user_id: user.id
+      });
+      
+      if (error) throw error;
+      if (result && result.length > 0) {
+        setData(result[0]);
+      }
+    } catch (err) {
+      console.error('[useTopSecretStatus] Error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
   return {
-    isActive: isTopSecretActive,
-    status: topSecret?.status ?? 'inactive',
-    membershipId: topSecret?.membership_id ?? null,
-    expiresAt: topSecret?.expires_at ?? null,
-    interval: topSecret?.interval ?? null,
-    cancelAtPeriodEnd: topSecret?.cancel_at_period_end ?? false,
+    isActive: data?.top_secret_enabled === true && 
+              (data?.top_secret_status === 'active' || data?.top_secret_status === 'trial'),
+    status: data?.top_secret_status ?? '',
+    membershipId: null,
+    expiresAt: data?.top_secret_expires_at ?? null,
     isLoading,
     refresh,
   };
 }
 
 export function useUserMeta() {
-  const { isAdmin, isTester, userRole, isLoading } = useUserStatus();
-  
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<{ role: string; is_tester: boolean } | null>(null);
+
+  useEffect(() => {
+    async function fetchMeta() {
+      if (!user?.id) {
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, is_tester')
+          .eq('id', user.id)
+          .single();
+        
+        setData(profile);
+      } catch (err) {
+        console.error('[useUserMeta] Error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    fetchMeta();
+  }, [user?.id]);
+
   return {
-    isAdmin,
-    isTester,
-    role: userRole,
+    role: data?.role ?? null,
+    isTester: data?.is_tester ?? false,
+    isAdmin: data?.role === 'admin' || data?.role === 'super_admin',
     isLoading,
   };
 }

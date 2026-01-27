@@ -1005,9 +1005,39 @@ async function handlePaymentSucceeded(
         if (userResult) {
           const { data: currentProfile } = await supabase
             .from('profiles')
-            .select('top_secret_interval, top_secret_status')
+            .select('top_secret_interval, top_secret_status, top_secret_whop_membership_id')
             .eq('id', userResult.id)
             .single();
+          
+          // 🔥 v3.9.0: Cancel old monthly membership when upgrading to yearly
+          if (currentProfile?.top_secret_interval === 'monthly' && 
+              currentProfile?.top_secret_whop_membership_id &&
+              currentProfile.top_secret_whop_membership_id !== membershipId) {
+            
+            console.log("🔥 Cancelling old monthly membership:", currentProfile.top_secret_whop_membership_id);
+            
+            try {
+              const cancelResponse = await fetch(
+                `https://api.whop.com/api/v5/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${WHOP_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ cancellation_mode: "immediately" }),
+                }
+              );
+              
+              if (cancelResponse.ok) {
+                console.log("✅ Old monthly membership cancelled successfully");
+              } else {
+                console.warn("⚠️ Failed to cancel old membership:", await cancelResponse.text());
+              }
+            } catch (cancelError) {
+              console.error("❌ Error cancelling old membership:", cancelError);
+            }
+          }
           
           if (currentProfile?.top_secret_interval === 'monthly' && 
               ['active', 'trial', 'trialing'].includes(currentProfile?.top_secret_status || '')) {

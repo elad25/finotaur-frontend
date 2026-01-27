@@ -270,11 +270,18 @@ serve(async (req: Request) => {
 
     console.log("🛒 Creating Whop checkout session (V2 API)...");
 
-    const whopRequestBody: Record<string, any> = {
+const whopRequestBody: Record<string, any> = {
       plan_id: plan_id,
       metadata: metadata,
       redirect_url: finalRedirectUrl,
     };
+
+    // 🔥 v1.5.0: Skip trial for upgrade flows (yearly plans from existing subscribers)
+    const isUpgradeFlow = finalRedirectUrl.includes('upgrade=');
+    if (isUpgradeFlow) {
+      whopRequestBody.skip_trial = true;
+      console.log("✅ Upgrade flow detected - skipping trial");
+    }
 
     // 🔥 v1.4.0: Only add affiliate code if NOT applying intro discount
     // (they use the same 'd' parameter in the URL)
