@@ -213,14 +213,16 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_PLATFORM_ENTERPRISE': 'platform_enterprise',
   
   // ═══════════════════════════════════════════
-  // 🔥 v4.3.0: Newsletter (War Zone) - FIXED IDs!
+  // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED!
   // ═══════════════════════════════════════════
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
+  'plan_BPJdT6Tyjmzcx': 'newsletter_monthly_topsecret',
   
-  // Top Secret
-  'plan_mAOfrSszpymjL': 'top_secret_monthly',
-  'plan_YoeD6wWBxss7Q': 'top_secret_yearly',
+  // Top Secret - SYNCED with WHOP_PLAN_IDS!
+  'plan_tUvQbCrEQ4197': 'top_secret_monthly',
+  'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
+  'plan_7VQxCZ5Kpw6f0': 'top_secret_monthly_warzone',
 };
 
 // ============================================
@@ -237,7 +239,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.basic_monthly,
     name: 'basic',
     displayName: 'Basic',
-    price: 19.99,
+     price: 30,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 25,
@@ -517,7 +519,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   // ═══════════════════════════════════════════
   newsletter_monthly: {
     id: 'newsletter_monthly',
-    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,  // plan_24vWi8dY3uDHM
+    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly,  // plan_U6lF2eO5y9469
     whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly,  // prod_qlaV5Uu6LZlYn
     name: 'newsletter',
     displayName: 'War Zone Intelligence',
@@ -528,10 +530,15 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     trialDays: 7,
     isNewsletter: true,
     discordIncluded: true,
-    badge: '🔥 7-Day Free Trial',
+    badge: '🔥 7-Day Free Trial + 50% OFF',
     category: 'journal',
+    hasIntroDiscount: true,
+    introDiscountMonths: 2,
+    introDiscountPercent: 50,
+    introPrice: 44.99,
     features: [
-      '🎁 7 days FREE trial',
+      '🎁 14 days FREE trial',
+      '🔥 Then $44.99/month for 2 months (50% OFF)',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -547,11 +554,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   // 🔥 NEW: Top Secret member discounted plan
   newsletter_monthly_topsecret: {
     id: 'newsletter_monthly_topsecret',
-    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly_topsecret,  // plan_a7uEGsUbr92nn
+    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly_topsecret,  // plan_BPJdT6Tyjmzcx
     whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly_topsecret,  // prod_u7QrZi90xiCZA
     name: 'newsletter',
     displayName: 'War Zone Intelligence (Top Secret Member)',
-    price: 19.99,  // 🔥 Discounted price for Top Secret members
+    price: 30,  // 🔥 Discounted price for Top Secret members - $30/month
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
@@ -562,7 +569,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     category: 'journal',
     features: [
       '🎁 7 days FREE trial',
-      '💰 Special Top Secret member price: $19.99/mo (save $29/mo!)',
+      '💰 Special Top Secret member price: $30/mo (save $39.99/mo!)',
       'Daily institutional-grade PDF report (8-14 pages)',
       'Macro breakdown & market structure analysis',
       'Unusual Options Activity (UOA) tracking',
@@ -626,7 +633,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     hasIntroDiscount: true,
     introDiscountMonths: 2,
     introDiscountPercent: 50,
-    introPrice: 35,
+    introPrice: 45,
     features: [
       '🎁 14 days FREE trial',
       '🔥 Then $45/month for 2 months (50% OFF)',

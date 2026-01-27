@@ -20,7 +20,7 @@ import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 // =====================================================
 // CONFIGURATION
 // =====================================================
-const WHOP_MONTHLY_PLAN_ID = 'plan_24vWi8dY3uDHM'; // WAR ZONE Monthly
+const WHOP_MONTHLY_PLAN_ID = 'plan_U6lF2eO5y9469'; // WAR ZONE Monthly
 const WHOP_YEARLY_PLAN_ID = 'plan_bp2QTGuwfpj0A'; // WAR ZONE Yearly
 const MONTHLY_PRICE = 69.99;
 const YEARLY_PRICE = 699;

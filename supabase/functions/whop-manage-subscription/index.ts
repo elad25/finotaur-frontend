@@ -54,6 +54,8 @@ interface CancelRequest {
   action: "cancel";
   product: ProductType;
   reason?: string;
+  cancelBothProducts?: boolean;  // 🔥 NEW: When true, cancel both products
+  confirmPriceIncrease?: boolean;  // 🔥 NEW: User confirmed they understand price will increase
 }
 
 interface ReactivateRequest {
@@ -282,9 +284,9 @@ function getProductStatus(profile: any, product: ProductType): {
         status: profile.top_secret_status ?? "inactive",
         cancelAtPeriodEnd: profile.top_secret_cancel_at_period_end ?? false,
         expiresAt: profile.top_secret_expires_at,
-        isTrial: profile.top_secret_status === "trial",
-        trialEndsAt: null, // Top Secret doesn't have trial
-        isPaid: profile.top_secret_status === "active", // Top Secret is paid when active
+        isTrial: profile.top_secret_is_in_trial ?? profile.top_secret_status === "trial",
+        trialEndsAt: profile.top_secret_trial_ends_at,
+        isPaid: profile.top_secret_status === "active" && !profile.top_secret_is_in_trial,
       };
     default:
       return { 
@@ -312,6 +314,48 @@ function getProductDisplayName(product: ProductType): string {
     default:
       return product;
   }
+}
+
+// ============================================
+// 🔥 NEW: Check if user has bundle (both products)
+// ============================================
+
+interface BundleStatus {
+  hasBundle: boolean;
+  newsletterActive: boolean;
+  topSecretActive: boolean;
+  newsletterIsDiscounted: boolean;  // Was purchased at $30 (Top Secret member discount)
+  topSecretIsDiscounted: boolean;   // Was purchased at $50 (War Zone member discount)
+  otherProduct: ProductType | null;
+  otherProductName: string | null;
+}
+
+function checkBundleStatus(profile: any, cancellingProduct: ProductType): BundleStatus {
+  const newsletterActive = profile.newsletter_enabled && 
+    ['active', 'trial', 'trialing'].includes(profile.newsletter_status || '');
+  const topSecretActive = profile.top_secret_enabled && 
+    ['active', 'trial', 'trialing'].includes(profile.top_secret_status || '');
+  
+  const hasBundle = newsletterActive && topSecretActive;
+  
+  // Check if products were purchased at discounted bundle price
+  // Newsletter at $30 = Top Secret member discount (plan_BPJdT6Tyjmzcx)
+  // Top Secret at $50 = War Zone member discount (plan_7VQxCZ5Kpw6f0)
+  const newsletterIsDiscounted = profile.newsletter_whop_plan_id === 'plan_BPJdT6Tyjmzcx';
+  const topSecretIsDiscounted = profile.top_secret_whop_plan_id === 'plan_7VQxCZ5Kpw6f0';
+  
+  const otherProduct = cancellingProduct === 'newsletter' ? 'top_secret' : 'newsletter';
+  const otherProductName = cancellingProduct === 'newsletter' ? 'Top Secret' : 'War Zone Newsletter';
+  
+  return {
+    hasBundle,
+    newsletterActive,
+    topSecretActive,
+    newsletterIsDiscounted,
+    topSecretIsDiscounted,
+    otherProduct: hasBundle ? otherProduct : null,
+    otherProductName: hasBundle ? otherProductName : null,
+  };
 }
 
 // ============================================
@@ -361,9 +405,10 @@ serve(async (req: Request) => {
         newsletter_enabled, newsletter_status, newsletter_whop_membership_id,
         newsletter_expires_at, newsletter_cancel_at_period_end,
         newsletter_paid, newsletter_trial_ends_at, newsletter_started_at,
+        newsletter_whop_plan_id, newsletter_interval,
         top_secret_enabled, top_secret_status, top_secret_whop_membership_id,
         top_secret_expires_at, top_secret_cancel_at_period_end, top_secret_interval,
-        top_secret_started_at
+        top_secret_started_at, top_secret_whop_plan_id, top_secret_is_in_trial
       `)
       .eq("id", user.id)
       .single();
@@ -401,8 +446,20 @@ serve(async (req: Request) => {
       case "status":
         return handleStatus(profile, product, corsHeaders);
 
+      // 🔥 NEW: Check bundle status before cancellation
+      case "check_bundle":
+        return handleCheckBundle(profile, product, corsHeaders);
+
       case "cancel":
-        return handleCancel(supabase, profile, product, (body as CancelRequest).reason, corsHeaders);
+        return handleCancel(
+          supabase, 
+          profile, 
+          product, 
+          (body as CancelRequest).reason, 
+          (body as CancelRequest).cancelBothProducts,
+          (body as CancelRequest).confirmPriceIncrease,
+          corsHeaders
+        );
 
       case "reactivate":
         return handleReactivate(supabase, profile, product, corsHeaders);
@@ -463,7 +520,65 @@ async function handleStatus(
 }
 
 // ============================================
-// CANCEL HANDLER - v2.3.0 with Period-End Cancellation for Trials
+// 🔥 NEW: CHECK BUNDLE HANDLER
+// Returns bundle status so frontend can show appropriate popup
+// ============================================
+
+async function handleCheckBundle(
+  profile: any,
+  product: ProductType,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  const bundleStatus = checkBundleStatus(profile, product);
+  
+  // Determine if cancelling this product will affect pricing of the other
+  let priceImpact: {
+    willIncreasePrice: boolean;
+    currentPrice: number;
+    newPrice: number;
+    affectedProduct: string;
+  } | null = null;
+  
+  if (bundleStatus.hasBundle) {
+    if (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) {
+      // Cancelling Top Secret will increase Newsletter price from $30 to $69.99
+      priceImpact = {
+        willIncreasePrice: true,
+        currentPrice: 30,
+        newPrice: 69.99,
+        affectedProduct: 'War Zone Newsletter',
+      };
+    } else if (product === 'newsletter' && bundleStatus.topSecretIsDiscounted) {
+      // Cancelling Newsletter will increase Top Secret price from $50 to $89.99
+      priceImpact = {
+        willIncreasePrice: true,
+        currentPrice: 50,
+        newPrice: 89.99,
+        affectedProduct: 'Top Secret',
+      };
+    }
+  }
+  
+  return new Response(
+    JSON.stringify({
+      success: true,
+      hasBundle: bundleStatus.hasBundle,
+      otherProduct: bundleStatus.otherProduct,
+      otherProductName: bundleStatus.otherProductName,
+      priceImpact,
+      bundleDetails: {
+        newsletterActive: bundleStatus.newsletterActive,
+        topSecretActive: bundleStatus.topSecretActive,
+        newsletterIsDiscounted: bundleStatus.newsletterIsDiscounted,
+        topSecretIsDiscounted: bundleStatus.topSecretIsDiscounted,
+      },
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+// ============================================
+// CANCEL HANDLER - v2.4.0 with Bundle Support
 // ============================================
 
 async function handleCancel(
@@ -471,8 +586,39 @@ async function handleCancel(
   profile: any,
   product: ProductType,
   reason: string | undefined,
+  cancelBothProducts: boolean | undefined,
+  confirmPriceIncrease: boolean | undefined,
   corsHeaders: Record<string, string>
 ): Promise<Response> {
+  // 🔥 NEW: Check bundle status
+  const bundleStatus = checkBundleStatus(profile, product);
+  
+  // If user has bundle and didn't confirm, return error asking for confirmation
+  if (bundleStatus.hasBundle) {
+    // Check if cancelling will affect pricing
+    const willAffectPricing = 
+      (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) ||
+      (product === 'newsletter' && bundleStatus.topSecretIsDiscounted);
+    
+    if (willAffectPricing && !cancelBothProducts && !confirmPriceIncrease) {
+      return new Response(
+        JSON.stringify({ 
+          error: "bundle_confirmation_required",
+          message: "You have both products. Please confirm how to proceed.",
+          hasBundle: true,
+          otherProduct: bundleStatus.otherProduct,
+          otherProductName: bundleStatus.otherProductName,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // If user chose to cancel both products
+    if (cancelBothProducts) {
+      console.log(`🔄 User chose to cancel BOTH products`);
+      // We'll handle this after the main cancellation by also cancelling the other product
+    }
+  }
   const membershipId = getMembershipId(profile, product);
   const productStatus = getProductStatus(profile, product);
   const productName = getProductDisplayName(product);
@@ -682,21 +828,138 @@ async function handleCancel(
           })
         : 'the end of your billing period';
 
-      console.log(`✅ Orphan subscription scheduled for cancellation`);
+console.log(`✅ Subscription scheduled for cancellation`);
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: `Your ${productName} subscription has been scheduled for cancellation. You'll continue to have access until ${expiresDate}.`,
-          subscription: {
-            product,
-            status: productStatus.status,
-            cancelAtPeriodEnd: true,
-            expiresAt: productStatus.expiresAt,
+    // 🔥 NEW: Handle bundle-related actions after main cancellation
+    let bundleAction: string | null = null;
+    
+    if (bundleStatus.hasBundle) {
+      if (cancelBothProducts) {
+        // Cancel the other product too
+        const otherProduct = bundleStatus.otherProduct!;
+        const otherMembershipId = otherProduct === 'newsletter' 
+          ? profile.newsletter_whop_membership_id 
+          : profile.top_secret_whop_membership_id;
+        
+        console.log(`🔄 Also cancelling ${otherProduct} (bundle cancellation)`);
+        
+        if (otherMembershipId && WHOP_API_KEY) {
+          await cancelWhopMembership(otherMembershipId, "at_period_end");
+        }
+        
+        // Update DB for other product
+        const otherUpdateData: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (otherProduct === 'newsletter') {
+          otherUpdateData.newsletter_cancel_at_period_end = true;
+        } else {
+          otherUpdateData.top_secret_cancel_at_period_end = true;
+        }
+        
+        await supabase
+          .from("profiles")
+          .update(otherUpdateData)
+          .eq("id", profile.id);
+        
+        bundleAction = `both_cancelled`;
+        
+        await logSubscriptionEvent(supabase, {
+          user_id: profile.id,
+          event_type: "bundle_both_cancelled",
+          old_plan: "bundle",
+          new_plan: "none",
+          reason: "User chose to cancel both products",
+          metadata: {
+            initiated_from: product,
+            also_cancelled: otherProduct,
           },
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        });
+        
+      } else if (confirmPriceIncrease) {
+        // 🔥 v2.5.0: User confirmed they're OK with price increase
+        // NEW FLOW: Cancel the OTHER product at period end too
+        // When it deactivates, webhook will send resubscribe email with full price checkout link
+        const otherProduct = bundleStatus.otherProduct!;
+        const otherMembershipId = otherProduct === 'newsletter' 
+          ? profile.newsletter_whop_membership_id 
+          : profile.top_secret_whop_membership_id;
+        
+        console.log(`💰 User confirmed price increase for ${otherProduct}`);
+        console.log(`🔄 Cancelling ${otherProduct} at period end (will send resubscribe email when deactivated)`);
+        
+        // Cancel the other product in Whop at period end
+        if (otherMembershipId && WHOP_API_KEY) {
+          const cancelResponse = await fetch(`https://api.whop.com/api/v5/memberships/${otherMembershipId}/cancel`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${WHOP_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ cancellation_mode: "at_period_end" }),
+          });
+          
+          if (cancelResponse.ok) {
+            console.log(`✅ ${otherProduct} membership cancelled at period end in Whop`);
+          } else {
+            console.warn(`⚠️ Failed to cancel ${otherProduct} in Whop: ${await cancelResponse.text()}`);
+          }
+        }
+        
+        // Update DB: mark other product for cancellation AND set pending price change flag
+        const flagUpdateData: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        
+        if (otherProduct === 'newsletter') {
+          flagUpdateData.newsletter_cancel_at_period_end = true;
+          flagUpdateData.newsletter_pending_price_change = true;
+          flagUpdateData.newsletter_new_price = 69.99;
+        } else {
+          flagUpdateData.top_secret_cancel_at_period_end = true;
+          flagUpdateData.top_secret_pending_price_change = true;
+          flagUpdateData.top_secret_new_price = 89.99;
+        }
+        
+        await supabase
+          .from("profiles")
+          .update(flagUpdateData)
+          .eq("id", profile.id);
+        
+        bundleAction = `other_product_cancelled_for_resubscribe`;
+        
+        await logSubscriptionEvent(supabase, {
+          user_id: profile.id,
+          event_type: "bundle_partial_cancel_resubscribe_scheduled",
+          old_plan: "bundle_discounted",
+          new_plan: `${otherProduct}_pending_resubscribe`,
+          reason: "User cancelled one product, other cancelled for resubscribe at full price",
+          metadata: {
+            cancelled_product: product,
+            remaining_product: otherProduct,
+            other_product_membership_id: otherMembershipId,
+            price_change: otherProduct === 'newsletter' ? '30 -> 69.99' : '50 -> 89.99',
+            flow: "cancel_at_period_end_then_resubscribe_email",
+          },
+        });
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `Your ${productName} subscription has been scheduled for cancellation. You'll continue to have access until ${expiresDate}.`,
+        subscription: {
+          product,
+          status: productStatus.status,
+          cancelAtPeriodEnd: true,
+          expiresAt: productStatus.expiresAt,
+        },
+        bundleAction,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
     }
 
     // Other Whop errors - return the error
@@ -749,6 +1012,101 @@ async function handleCancel(
   });
 
   // ============================================
+  // 🔥 STEP 3.5: Handle bundle-related actions
+  // ============================================
+  
+  let bundleAction: string | null = null;
+  
+  if (bundleStatus.hasBundle) {
+    if (cancelBothProducts) {
+      const otherProduct = bundleStatus.otherProduct!;
+      const otherMembershipId = otherProduct === 'newsletter' 
+        ? profile.newsletter_whop_membership_id 
+        : profile.top_secret_whop_membership_id;
+      
+      console.log(`🔄 Also cancelling ${otherProduct} (bundle cancellation)`);
+      
+      if (otherMembershipId && WHOP_API_KEY) {
+        await cancelWhopMembership(otherMembershipId, "at_period_end");
+      }
+      
+      const otherUpdateData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (otherProduct === 'newsletter') {
+        otherUpdateData.newsletter_cancel_at_period_end = true;
+      } else {
+        otherUpdateData.top_secret_cancel_at_period_end = true;
+      }
+      
+      await supabase.from("profiles").update(otherUpdateData).eq("id", profile.id);
+      bundleAction = "both_cancelled";
+      
+    } else if (confirmPriceIncrease) {
+      // 🔥 v2.5.0: Cancel the OTHER product at period end too
+      // When it deactivates, webhook will send resubscribe email with full price checkout link
+      const otherProduct = bundleStatus.otherProduct!;
+      const otherMembershipId = otherProduct === 'newsletter' 
+        ? profile.newsletter_whop_membership_id 
+        : profile.top_secret_whop_membership_id;
+      
+      console.log(`💰 User confirmed price increase for ${otherProduct}`);
+      console.log(`🔄 Cancelling ${otherProduct} at period end (will send resubscribe email when deactivated)`);
+      
+      // Cancel the other product in Whop at period end
+      if (otherMembershipId && WHOP_API_KEY) {
+        const cancelResponse = await fetch(`https://api.whop.com/api/v5/memberships/${otherMembershipId}/cancel`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${WHOP_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ cancellation_mode: "at_period_end" }),
+        });
+        
+        if (cancelResponse.ok) {
+          console.log(`✅ ${otherProduct} membership cancelled at period end in Whop`);
+        } else {
+          console.warn(`⚠️ Failed to cancel ${otherProduct} in Whop: ${await cancelResponse.text()}`);
+        }
+      }
+      
+      const flagUpdateData: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      
+      if (otherProduct === 'newsletter') {
+        flagUpdateData.newsletter_cancel_at_period_end = true;
+        flagUpdateData.newsletter_pending_price_change = true;
+        flagUpdateData.newsletter_new_price = 69.99;
+      } else {
+        flagUpdateData.top_secret_cancel_at_period_end = true;
+        flagUpdateData.top_secret_pending_price_change = true;
+        flagUpdateData.top_secret_new_price = 89.99;
+      }
+      
+      await supabase.from("profiles").update(flagUpdateData).eq("id", profile.id);
+      bundleAction = "other_product_cancelled_for_resubscribe";
+      
+      await logSubscriptionEvent(supabase, {
+        user_id: profile.id,
+        event_type: "bundle_partial_cancel_resubscribe_scheduled",
+        old_plan: "bundle_discounted",
+        new_plan: `${otherProduct}_pending_resubscribe`,
+        reason: "User cancelled one product, other cancelled for resubscribe at full price",
+        metadata: {
+          cancelled_product: product,
+          remaining_product: otherProduct,
+          other_product_membership_id: otherMembershipId,
+          price_change: otherProduct === 'newsletter' ? '30 -> 69.99' : '50 -> 89.99',
+          flow: "cancel_at_period_end_then_resubscribe_email",
+        },
+      });
+    }
+  }
+
+  // ============================================
   // STEP 4: Return success response
   // ============================================
 
@@ -772,6 +1130,7 @@ async function handleCancel(
         cancelAtPeriodEnd: true,
         expiresAt: productStatus.expiresAt,
       },
+      bundleAction,
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
   );

@@ -37,14 +37,15 @@ const WHOP_API_URL = "https://api.whop.com/api/v2/checkout_sessions";
 // 🔥 v1.4.0: Intro discount coupon code
 const INTRO_DISCOUNT_COUPON = "FINOTAUR50";
 
-// 🔥 v1.4.0: Plans that get the intro discount coupon
+// 🔥 v1.5.0: Plans that get the intro discount coupon (FINOTAUR50)
+// Synced with whop-config.ts v4.4.0
 const INTRO_DISCOUNT_PLAN_IDS = new Set([
-  // Top Secret
-  'plan_mAOfrSszpymjL',   // Top Secret Monthly ($70) - 🔥 UPDATED
-  'plan_YoeD6wWBxss7Q',   // Top Secret Yearly
-  // War Zone Newsletter
-  'plan_LCBG5yJpoNtW3',   // War Zone Monthly
-  'prod_8b3VWkZdena4B',   // War Zone Yearly
+  // Top Secret - Regular plans
+  'plan_tUvQbCrEQ4197',   // Top Secret Monthly ($89.99/mo)
+  'plan_PxxbBlSdkyeo7',   // Top Secret Yearly ($899/yr)
+  // War Zone Newsletter - Regular plans  
+  'plan_U6lF2eO5y9469',   // War Zone Monthly ($69.99/mo)
+  'plan_bp2QTGuwfpj0A',   // War Zone Yearly ($699/yr)
 ]);
 
 // ============================================
@@ -91,19 +92,15 @@ interface WhopCheckoutResponse {
   'plan_v7QKxkvKIZooe': '/app/journal/pricing?payment=success&source=whop',
   'plan_gBG436aeJxaHU': '/app/journal/pricing?payment=success&source=whop',
   // Newsletter (War Zone) - ALL PLAN IDS
-  'plan_LCBG5yJpoNtW3': '/app/all-markets/warzone?payment=success&source=whop',
-  'prod_8b3VWkZdena4B': '/app/all-markets/warzone?payment=success&source=whop',
-  'plan_24vWi8dY3uDHM': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from PricingSelection)
-  'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // 🔥 War Zone Yearly (redirect to settings on upgrade)
-  'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly (from Landing)
-  'plan_a7uEGsUbr92nn': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret discount
-  'plan_BPJdT6Tyjmzcx': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly - Top Secret Members
-// Top Secret - All Plan IDs
-  'plan_mAOfrSszpymjL': '/app/top-secret?payment=success&source=whop',
-  'plan_YoeD6wWBxss7Q': '/app/top-secret?payment=success&source=whop',
-  'plan_tUvQbCrEQ4197': '/app/top-secret?payment=success&source=whop',
-  'plan_PxxbBlSdkyeo7': '/app/settings?tab=billing&upgrade=top_secret_yearly_success',  // 🔥 Top Secret Yearly (redirect to settings on upgrade)
-  'plan_7VQxCZ5Kpw6f0': '/app/top-secret?payment=success&source=whop',
+   'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly ($69.99)
+  'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // War Zone Yearly ($699) - upgrade redirect
+  'plan_BPJdT6Tyjmzcx': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly for Top Secret Members ($30)
+// ═══════════════════════════════════════════
+  // Top Secret - Synced with whop-config.ts v4.4.0
+  // ═══════════════════════════════════════════
+  'plan_tUvQbCrEQ4197': '/app/top-secret?payment=success&source=whop',  // Top Secret Monthly ($89.99)
+  'plan_PxxbBlSdkyeo7': '/app/settings?tab=billing&upgrade=top_secret_yearly_success',  // Top Secret Yearly ($899) - upgrade redirect
+  'plan_7VQxCZ5Kpw6f0': '/app/top-secret?payment=success&source=whop',  // Top Secret for War Zone Members ($50)
 };
 
 // ============================================
@@ -256,7 +253,7 @@ serve(async (req: Request) => {
     let finalRedirectUrl = redirect_url;
     
     if (!finalRedirectUrl) {
-      const planPath = PLAN_REDIRECT_PATHS[plan_id] || '/app/journal/settings?payment=success&source=whop';
+      const planPath = PLAN_REDIRECT_PATHS[plan_id] || '/app/settings?tab=billing&payment=success&source=whop';
       finalRedirectUrl = `${BASE_REDIRECT_URL}${planPath}`;
     }
 

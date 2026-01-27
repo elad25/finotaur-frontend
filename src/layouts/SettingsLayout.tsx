@@ -520,8 +520,17 @@ const BillingTab = () => {
   // Newsletter cancellation state
   const [showNewsletterCancelDialog, setShowNewsletterCancelDialog] = useState(false);
   const [showTopSecretCancelDialog, setShowTopSecretCancelDialog] = useState(false);
-  const [cancellingNewsletter, setCancellingNewsletter] = useState(false);
   const [cancellingTopSecret, setCancellingTopSecret] = useState(false);
+  const [cancellingNewsletter, setCancellingNewsletter] = useState(false);
+  
+  // 🔥 NEW: Bundle cancellation states
+  const [showBundleCancelDialog, setShowBundleCancelDialog] = useState(false);
+  const [bundleCancelProduct, setBundleCancelProduct] = useState<'newsletter' | 'top_secret' | null>(null);
+  const [bundleInfo, setBundleInfo] = useState<{
+    otherProductName: string;
+    priceImpact: { currentPrice: number; newPrice: number; affectedProduct: string } | null;
+  } | null>(null);
+  const [bundleCancelLoading, setBundleCancelLoading] = useState(false);
   // 🔥 NEW: Separate loading states for reactivation
   const [reactivatingNewsletter, setReactivatingNewsletter] = useState(false);
   const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
@@ -609,21 +618,98 @@ const BillingTab = () => {
   
   const isLifetime = profile?.is_lifetime ?? false;
 
-  // Handle newsletter cancellation (War Zone)
-  const handleCancelNewsletter = async () => {
+// 🔥 NEW: Check for bundle before cancelling
+  const checkBundleBeforeCancel = async (product: 'newsletter' | 'top_secret') => {
+    if (!user) return;
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "check_bundle",
+            product,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (data.hasBundle && data.priceImpact) {
+        // Show bundle dialog
+        setBundleCancelProduct(product);
+        setBundleInfo({
+          otherProductName: data.otherProductName,
+          priceImpact: data.priceImpact,
+        });
+        setShowBundleCancelDialog(true);
+        return true; // Indicates bundle dialog shown
+      }
+      
+      return false; // No bundle, proceed with normal cancel
+    } catch (error) {
+      console.error('Error checking bundle:', error);
+      return false;
+    }
+  };
+
+  const handleCancelNewsletter = async (cancelBothProducts?: boolean, confirmPriceIncrease?: boolean) => {
+    if (!user) return;
+    
+    // First check for bundle (only if not already confirmed)
+    if (!cancelBothProducts && !confirmPriceIncrease) {
+      const hasBundleDialog = await checkBundleBeforeCancel('newsletter');
+      if (hasBundleDialog) {
+        setShowNewsletterCancelDialog(false);
+        return;
+      }
+    }
+    
     setCancellingNewsletter(true);
     try {
-      const result = await manageProductSubscription("cancel", "newsletter", "User requested cancellation");
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (!result.success) {
-        throw new Error(result.error || "Failed to cancel newsletter");
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            product: "newsletter",
+            reason: "User requested cancellation",
+            cancelBothProducts,
+            confirmPriceIncrease,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel newsletter");
       }
       
       // Refresh profile to get updated state from DB
       await refreshProfile();
       
       setShowNewsletterCancelDialog(false);
-      toast.success(result.message || 'Newsletter subscription will be cancelled at period end');
+      toast.success(data.message || 'Newsletter subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling newsletter:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to cancel newsletter');
@@ -631,7 +717,6 @@ const BillingTab = () => {
       setCancellingNewsletter(false);
     }
   };
-
 
   // Handle newsletter reactivation
   const handleReactivateNewsletter = async () => {
@@ -658,20 +743,55 @@ const BillingTab = () => {
 
 
   // Handle Top Secret cancellation
-  const handleCancelTopSecret = async () => {
+  const handleCancelTopSecret = async (cancelBothProducts?: boolean, confirmPriceIncrease?: boolean) => {
+    if (!user) return;
+    
+    // First check for bundle (only if not already confirmed)
+    if (!cancelBothProducts && !confirmPriceIncrease) {
+      const hasBundleDialog = await checkBundleBeforeCancel('top_secret');
+      if (hasBundleDialog) {
+        setShowTopSecretCancelDialog(false);
+        return;
+      }
+    }
+    
     setCancellingTopSecret(true);
     try {
-      const result = await manageProductSubscription("cancel", "top_secret", "User requested cancellation");
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (!result.success) {
-        throw new Error(result.error || "Failed to cancel Top Secret");
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            product: "top_secret",
+            reason: "User requested cancellation",
+            cancelBothProducts,
+            confirmPriceIncrease,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel Top Secret");
       }
       
       // Refresh profile to get updated state from DB
       await refreshProfile();
       
       setShowTopSecretCancelDialog(false);
-      toast.success(result.message || 'Top Secret subscription will be cancelled at period end');
+      toast.success(data.message || 'Top Secret subscription will be cancelled at period end');
     } catch (error) {
       console.error('Error cancelling Top Secret:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to cancel Top Secret');
@@ -1040,7 +1160,7 @@ const BillingTab = () => {
                 </Badge>
               </div>
               <span className="text-xl font-bold text-white">
-                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? (newsletterInterval === 'yearly' ? '$699/yr' : '$69.99/mo') : 'Free'}
+                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? (newsletterInterval === 'yearly' ? '$699/year' : '$69.99/mo') : 'Free'}
               </span>
             </div>
             
@@ -1337,8 +1457,8 @@ const BillingTab = () => {
                         <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
                         <span className="text-zinc-400">
                           {topSecretPricing.introMonthsRemaining === 2 
-                            ? '$45 → $45 → Then $89.99/mo'
-                            : '$45 → Then $89.99/mo'
+                            ? '$44.99 → $44.99 → Then $89.99/mo'
+                            : '$44.99 → Then $89.99/mo'
                           }
                         </span>
                       </div>
@@ -1431,7 +1551,7 @@ const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 Limited: 14-day FREE trial → $45/mo for 2 months → $89.99/mo
+                    🔥 Limited: 14-day FREE trial → $44.99/mo for 2 months → $89.99/mo
                   </p>
                 </div>
                 <Button
@@ -1486,7 +1606,7 @@ const BillingTab = () => {
             </Button>
             <Button
               variant="destructive"
-              onClick={handleCancelNewsletter}
+              onClick={() => handleCancelNewsletter()}
               disabled={cancellingNewsletter}
             >
               {cancellingNewsletter ? (
@@ -1533,7 +1653,7 @@ const BillingTab = () => {
             </Button>
             <Button
               variant="destructive"
-              onClick={handleCancelTopSecret}
+              onClick={() => handleCancelTopSecret()}
               disabled={cancellingTopSecret}
             >
               {cancellingTopSecret ? (
@@ -1546,6 +1666,94 @@ const BillingTab = () => {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🔥 NEW: Bundle Cancellation Dialog */}
+      <Dialog open={showBundleCancelDialog} onOpenChange={setShowBundleCancelDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              You Have Both Products
+            </DialogTitle>
+            <DialogDescription>
+              You're subscribed to both War Zone and Top Secret. What would you like to do?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            {bundleInfo?.priceImpact && (
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-sm text-amber-200 leading-relaxed">
+                  <strong>⚠️ Price Change Notice:</strong>
+                  <br />
+                  If you cancel only {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}, 
+                  your <strong>{bundleInfo.priceImpact.affectedProduct}</strong> subscription will increase from{' '}
+                  <strong>${bundleInfo.priceImpact.currentPrice}/mo</strong> to{' '}
+                  <strong>${bundleInfo.priceImpact.newPrice}/mo</strong> at your next billing date.
+                </p>
+              </div>
+            )}
+            
+            <div className="space-y-3">
+              <Button
+                variant="outline"
+                className="w-full justify-start h-auto py-3 px-4 border-red-500/30 hover:bg-red-500/10"
+                onClick={async () => {
+                  setBundleCancelLoading(true);
+                  setShowBundleCancelDialog(false);
+                  if (bundleCancelProduct === 'newsletter') {
+                    await handleCancelNewsletter(true, false); // Cancel both
+                  } else {
+                    await handleCancelTopSecret(true, false); // Cancel both
+                  }
+                  setBundleCancelLoading(false);
+                }}
+                disabled={bundleCancelLoading}
+              >
+                <div className="text-left">
+                  <p className="font-medium text-red-400">Cancel Both Subscriptions</p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Cancel both War Zone and Top Secret at period end
+                  </p>
+                </div>
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="w-full justify-start h-auto py-3 px-4 border-amber-500/30 hover:bg-amber-500/10"
+                onClick={async () => {
+                  setBundleCancelLoading(true);
+                  setShowBundleCancelDialog(false);
+                  if (bundleCancelProduct === 'newsletter') {
+                    await handleCancelNewsletter(false, true); // Confirm price increase
+                  } else {
+                    await handleCancelTopSecret(false, true); // Confirm price increase
+                  }
+                  setBundleCancelLoading(false);
+                }}
+                disabled={bundleCancelLoading}
+              >
+                <div className="text-left">
+                  <p className="font-medium text-amber-400">
+                    Cancel Only {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Keep {bundleInfo?.otherProductName} at ${bundleInfo?.priceImpact?.newPrice}/mo
+                  </p>
+                </div>
+              </Button>
+              
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShowBundleCancelDialog(false)}
+              >
+                Never Mind, Keep Both
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -2074,6 +2282,7 @@ export const SettingsLayout = () => {
           top_secret_is_in_trial,
           top_secret_trial_ends_at,
           top_secret_trial_used,
+          top_secret_paid,
           metadata,
           portfolio_size,
           risk_per_trade,
