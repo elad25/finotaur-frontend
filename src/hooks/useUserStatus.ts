@@ -89,9 +89,9 @@ export function useUserStatus() {
     queryFn: async (): Promise<UserFullStatus | null> => {
       if (!userId) return null;
 
-      const { data, error } = await supabase.rpc('get_user_full_status', {
-        p_user_id: userId,
-      });
+      const { data, error } = await supabase.rpc('get_user_subscription_status', {
+  p_user_id: user.id
+});
 
       if (error) {
         console.error('[useUserStatus] RPC error:', error);
