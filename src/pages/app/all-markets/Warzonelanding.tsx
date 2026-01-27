@@ -1369,7 +1369,7 @@ const fetchReports = useCallback(async (showLoading = true) => {
     .select('*')
     .eq('visibility', 'live')
     .order('report_date', { ascending: false })
-    .limit(5),
+    .limit(10),
   supabase
     .from('weekly_reports')
     .select('*')
@@ -1487,48 +1487,82 @@ console.log('[WAR ZONE] 🔍 All report dates:', liveReports.map((r: DailyReport
 })));
 
 // =====================================================
-// DAILY REPORT ASSIGNMENT LOGIC v8.0
-// Top button: Most recent live report (null only if before 9 AM NY AND no report for today)
-// Bottom card: Second most recent report (always available for download)
+// DAILY REPORT ASSIGNMENT LOGIC v10.0 - SIMPLIFIED
+// Top button (currentDayReport): Report for TODAY only
+// Bottom card (previousDayReport): The MOST RECENT live report that is NOT today
+//
+// When midnight passes:
+//   - Top button becomes "Coming Soon" (no report for new day yet)
+//   - Bottom card shows what WAS in the top button (the most recent report)
 // =====================================================
 const nyHour = nyTime.getHours();
 const isBeforeReportTime = nyHour < 9; // Before 9:00 AM NY
 
-// Check if there's a report for today
-const hasTodayReport = liveReports.some((r: DailyReport) => 
-  normalizeDate(r.report_date) === todayNY
-);
-
-// Only show "Coming Soon" if before 9 AM AND no report exists for today
-// After 9 AM or if a report exists, always show the most recent report
-setIsBeforeDailyReportTime(isBeforeReportTime && !hasTodayReport);
-
-// Today's report - show most recent live report
-// Only null if before 9 AM AND no report for today yet
-const todaysReport = (isBeforeReportTime && !hasTodayReport)
-  ? null
-  : (liveReports.length > 0 ? liveReports[0] : null);
-
-// Previous report - second most recent live report
-const previousReport = liveReports.length > 1 ? liveReports[1] : null;
-
-console.log('[WAR ZONE] 📌 Daily Report Assignment (v7.0):', {
+console.log('[WAR ZONE] 📅 Current time check:', {
   todayNY,
   nyHour,
   isBeforeReportTime,
-  currentDaily: todaysReport ? normalizeDate(todaysReport.report_date) : 'WAITING',
-  previousDaily: previousReport ? normalizeDate(previousReport.report_date) : 'NONE'
+  totalLiveReports: liveReports.length
 });
 
-setCurrentDayReport(todaysReport);
+// DEBUG: Show ALL live reports with their dates
+console.log('[WAR ZONE] 📋 ALL LIVE REPORTS IN DB:', liveReports.map((r: DailyReport, index: number) => ({
+  index,
+  id: r.id.substring(0, 8) + '...',
+  report_date: r.report_date,
+  normalized_date: normalizeDate(r.report_date),
+  isToday: normalizeDate(r.report_date) === todayNY,
+  created_at: r.created_at,
+  updated_at: r.updated_at
+})));
+
+// Find report for TODAY specifically (by report_date)
+const todayReport = liveReports.find((r: DailyReport) => 
+  normalizeDate(r.report_date) === todayNY
+);
+
+// Previous report = MOST RECENT live report that is NOT today
+// Since liveReports is sorted by report_date DESC, the first non-today report is the most recent previous
+const previousReport = liveReports.find((r: DailyReport) => 
+  normalizeDate(r.report_date) !== todayNY
+) || null;
+
+console.log('[WAR ZONE] 🎯 ASSIGNMENT RESULT:', {
+  todayNY,
+  todayReport_id: todayReport?.id?.substring(0, 8) || 'NONE',
+  todayReport_date: todayReport ? normalizeDate(todayReport.report_date) : 'N/A',
+  previousReport_id: previousReport?.id?.substring(0, 8) || 'NONE', 
+  previousReport_date: previousReport ? normalizeDate(previousReport.report_date) : 'N/A'
+});
+
+// Only show "Coming Soon" if before 9 AM AND no report exists for today
+const hasTodayReport = !!todayReport;
+setIsBeforeDailyReportTime(isBeforeReportTime && !hasTodayReport);
+
+// Today's report - show only if it exists AND (after 9 AM OR report already published)
+const currentReport = (isBeforeReportTime && !hasTodayReport)
+  ? null
+  : todayReport || null;
+
+console.log('[WAR ZONE] 📌 Daily Report Assignment (v10.0):', {
+  todayNY,
+  nyHour,
+  isBeforeReportTime,
+  hasTodayReport,
+  currentDaily: currentReport ? `${normalizeDate(currentReport.report_date)} (${currentReport.id})` : 'WAITING',
+  previousDaily: previousReport ? `${normalizeDate(previousReport.report_date)} (${previousReport.id})` : 'NONE',
+  allReportDates: liveReports.map((r: DailyReport) => normalizeDate(r.report_date))
+});
+
+setCurrentDayReport(currentReport);
 setPreviousDayReport(previousReport);
         
         // DEBUG: Log what we found
         console.log('[WAR ZONE] 📊 Reports found:', {
           totalFromDB: dailyData.length,
           liveOnly: liveReports.length,
-          todaysReport: todaysReport?.id || 'none',
-          todaysDate: todaysReport ? normalizeDate(todaysReport.report_date) : 'N/A',
+          todayReport: todayReport?.id || 'none',
+          todayDate: todayReport ? normalizeDate(todayReport.report_date) : 'N/A',
           previousReport: previousReport?.id || 'none', 
           previousDate: previousReport ? normalizeDate(previousReport.report_date) : 'N/A',
           allLiveDates: liveReports.map((r: DailyReport) => normalizeDate(r.report_date))
@@ -1536,7 +1570,7 @@ setPreviousDayReport(previousReport);
         
         console.log('[WAR ZONE] 📅 Report assignment (DATE-BASED):', {
           todayNY,
-          current: todaysReport ? normalizeDate(todaysReport.report_date) : 'none (no report for today yet)',
+          current: todayReport ? normalizeDate(todayReport.report_date) : 'none (no report for today yet)',
           previous: previousReport ? normalizeDate(previousReport.report_date) : 'none',
         });
         
