@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { useWarZoneStatus, useTopSecretStatus, useUserMeta } from '@/hooks/useUserStatus';
 import { ChevronRight } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
@@ -2750,7 +2751,6 @@ export default function WarZoneLandingSimple({ previewMode = null }: WarZoneLand
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [isLoading, setIsLoading] = useState(previewMode ? false : true);
   
   // Mock status for preview modes
   const mockActiveStatus: NewsletterStatus = {
@@ -2767,11 +2767,7 @@ export default function WarZoneLandingSimple({ previewMode = null }: WarZoneLand
     is_active: true,
   };
   
-  const [newsletterStatus, setNewsletterStatus] = useState<NewsletterStatus | null>(
-    previewMode === 'subscriber' ? mockActiveStatus : null
-  );
-  const [topSecretStatus, setTopSecretStatus] = useState<TopSecretStatus>({ is_active: false, membership_id: null });
-const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
 const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [showLoginRequired, setShowLoginRequired] = useState(false);
@@ -2786,49 +2782,63 @@ const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   
 
-const checkSubscriptionStatus = useCallback(async () => {
-    if (!user?.id) { setIsLoading(false); return; }
-    try {
-      // Check Top Secret status
-      const { data: topSecretData } = await supabase
-        .from('profiles')
-        .select('top_secret_enabled, top_secret_status, top_secret_whop_membership_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (topSecretData) {
-        setTopSecretStatus({
-          is_active: topSecretData.top_secret_enabled && ['active', 'trial'].includes(topSecretData.top_secret_status ?? ''),
-          membership_id: topSecretData.top_secret_whop_membership_id
-        });
-      }
+// 🔥 NEW: Use optimized hooks instead of manual queries
+const { 
+  isActive: isWarZoneActive, 
+  isInTrial: isWarZoneInTrial,
+  status: warZoneStatusStr,
+  membershipId: warZoneMembershipId,
+  expiresAt: warZoneExpiresAt,
+  trialEndsAt: warZoneTrialEndsAt,
+  cancelAtPeriodEnd: warZoneCancelAtPeriodEnd,
+  daysRemaining: warZoneDaysRemaining,
+  trialDaysRemaining: warZoneTrialDaysRemaining,
+  isLoading: isWarZoneLoading,
+  refresh: refreshWarZone,
+} = useWarZoneStatus();
 
-      const { data, error } = await supabase.rpc('get_newsletter_status', { p_user_id: user.id });
-      if (error) {
-        const { data: profile } = await supabase.from('profiles').select('newsletter_enabled, newsletter_status, newsletter_trial_ends_at, newsletter_expires_at, newsletter_whop_membership_id, newsletter_cancel_at_period_end').eq('id', user.id).single();
-        if (profile) {
-          const trialEndsAt = profile.newsletter_trial_ends_at ? new Date(profile.newsletter_trial_ends_at) : null;
-          const now = new Date();
-          setNewsletterStatus({ newsletter_enabled: profile.newsletter_enabled ?? false, newsletter_status: profile.newsletter_status ?? 'inactive', newsletter_whop_membership_id: profile.newsletter_whop_membership_id, newsletter_started_at: null, newsletter_expires_at: profile.newsletter_expires_at, newsletter_trial_ends_at: profile.newsletter_trial_ends_at, newsletter_cancel_at_period_end: profile.newsletter_cancel_at_period_end ?? false, days_until_expiry: null, days_until_trial_ends: trialEndsAt ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : null, is_in_trial: profile.newsletter_status === 'trial', is_active: profile.newsletter_enabled && ['active', 'trial'].includes(profile.newsletter_status ?? '') });
-        }
-      } else if (data && data.length > 0) { setNewsletterStatus(data[0]); }
-    } catch (error) { console.error('Error:', error); } finally { setIsLoading(false); }
-  }, [user?.id]);
+const {
+  isActive: isTopSecretActive,
+  membershipId: topSecretMembershipId,
+  isLoading: isTopSecretLoading,
+} = useTopSecretStatus();
 
-  useEffect(() => { if (pollCount > 0 && pollCount <= 15) { const t = setTimeout(() => { checkSubscriptionStatus().then(() => { if (newsletterStatus?.is_active) setPollCount(0); else setPollCount(p => p + 1); }); }, 2000); return () => clearTimeout(t); } }, [pollCount, newsletterStatus?.is_active, checkSubscriptionStatus]);
+const { isTester } = useUserMeta();
+
+// Convert to existing NewsletterStatus format for compatibility
+const newsletterStatus: NewsletterStatus | null = isWarZoneLoading ? null : {
+  newsletter_enabled: isWarZoneActive || isWarZoneInTrial,
+  newsletter_status: warZoneStatusStr,
+  newsletter_whop_membership_id: warZoneMembershipId,
+  newsletter_started_at: null,
+  newsletter_expires_at: warZoneExpiresAt,
+  newsletter_trial_ends_at: warZoneTrialEndsAt,
+  newsletter_cancel_at_period_end: warZoneCancelAtPeriodEnd,
+  days_until_expiry: warZoneDaysRemaining,
+  days_until_trial_ends: warZoneTrialDaysRemaining,
+  is_in_trial: isWarZoneInTrial,
+  is_active: isWarZoneActive,
+};
+
+const topSecretStatus: TopSecretStatus = {
+  is_active: isTopSecretActive,
+  membership_id: topSecretMembershipId,
+};
+
+const isLoading = isWarZoneLoading || isTopSecretLoading;
   
-  // 🔥 FIX: Start polling immediately if returning from payment
-  useEffect(() => { 
-    const paymentSuccess = searchParams.get('payment') === 'success';
-    const fromWhop = searchParams.get('source') === 'whop';
-    
-    if (paymentSuccess || fromWhop) {
-      console.log('[WAR ZONE] 🎉 Returning from successful payment, starting subscription poll...');
-      setPollCount(1); // Start polling for subscription activation
-    }
-    
-    checkSubscriptionStatus(); 
-  }, [checkSubscriptionStatus, searchParams]);
+useEffect(() => { 
+  const paymentSuccess = searchParams.get('payment') === 'success';
+  const fromWhop = searchParams.get('source') === 'whop';
+  
+  if (paymentSuccess || fromWhop) {
+    console.log('[WAR ZONE] 🎉 Returning from successful payment, refreshing status...');
+    // 🔥 Use the hook's refresh instead of polling
+    setTimeout(() => refreshWarZone(), 1000);
+    setTimeout(() => refreshWarZone(), 3000);
+    setTimeout(() => refreshWarZone(), 5000);
+  }
+}, [searchParams, refreshWarZone]);
 
   const fetchLatestReport = useCallback(async () => { setIsLoadingReport(true); setReportError(null); try { const { data: { session } } = await supabase.auth.getSession(); if (!session?.access_token) { setReportError('Please login'); setIsLoadingReport(false); return; } const r = await fetch(`${API_BASE}/api/newsletter/latest`, { headers: { 'Authorization': `Bearer ${session.access_token}` } }); const d = await r.json(); if (!r.ok) { setReportError(d.error || 'Failed'); return; } if (d.success && d.data) setCurrentReport(d.data); else setCurrentReport(null); } catch (e) { setReportError('Failed to load'); } finally { setIsLoadingReport(false); } }, []);
 
@@ -2876,7 +2886,7 @@ const handleAcceptDisclaimer = async () => {
     }); 
     if (error) throw error; 
     if (data?.success) { 
-      await checkSubscriptionStatus(); 
+      refreshWarZone(); 
       setShowCancelModal(false); 
     } else throw new Error(data?.error || 'Failed'); 
   } catch (e) { 
@@ -2938,7 +2948,10 @@ const duplicatedTestimonials = [...scrollingTestimonials, ...scrollingTestimonia
         onCancelClick={() => alert('Cancel disabled in preview mode')} 
       />
     );
-  } else {
+  }
+  
+  // Handle previewMode === null (normal flow) - newsletterStatus comes from hook
+  if (!previewMode) {
     // Normal flow
     if (isLoading) return <div className="min-h-screen bg-[#0a0806] flex items-center justify-center"><Loader2 className="w-14 h-14 animate-spin text-[#C9A646]" /></div>;
     if (newsletterStatus?.is_active) return (<><CancelSubscriptionModal isOpen={showCancelModal} onClose={() => setShowCancelModal(false)} onConfirm={handleCancelSubscription} isProcessing={isCancelling} trialDaysRemaining={newsletterStatus.days_until_trial_ends} /><ActiveSubscriberView newsletterStatus={newsletterStatus} onCancelClick={() => setShowCancelModal(true)} /></>);

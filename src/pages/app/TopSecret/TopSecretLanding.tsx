@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 import { supabase } from '@/lib/supabase';
+import { useWarZoneStatus } from '@/hooks/useUserStatus';
 import {
   TrendingUp,
   Bitcoin,
@@ -185,36 +186,16 @@ export default function TopSecretLanding() {
     },
   });
 
-  // 🔥 v3.3: Check if user has War Zone subscription
-  useEffect(() => {
-    const checkWarZoneStatus = async () => {
-      if (!user?.id) {
-        setIsCheckingStatus(false);
-        return;
-      }
-      
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('newsletter_enabled, newsletter_status')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile) {
-          const hasWarZone = profile.newsletter_enabled && 
-                            ['active', 'trial'].includes(profile.newsletter_status ?? '');
-          setIsWarZoneMember(hasWarZone);
-          console.log('[TOP SECRET] War Zone member:', hasWarZone);
-        }
-      } catch (error) {
-        console.error('[TOP SECRET] Error checking War Zone status:', error);
-      } finally {
-        setIsCheckingStatus(false);
-      }
-    };
-    
-    checkWarZoneStatus();
-  }, [user?.id]);
+  // 🔥 v3.4: Use optimized hook instead of manual query
+const { isActive: isWarZoneMemberFromHook, isLoading: isWarZoneLoading } = useWarZoneStatus();
+
+// Sync with local state for compatibility
+useEffect(() => {
+  if (!isWarZoneLoading) {
+    setIsWarZoneMember(isWarZoneMemberFromHook);
+    setIsCheckingStatus(false);
+  }
+}, [isWarZoneMemberFromHook, isWarZoneLoading]);
 
   // 🔥 v3.3: Handle subscription with War Zone discount
   const handleSubscribe = (billingInterval: 'monthly' | 'yearly') => {
