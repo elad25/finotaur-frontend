@@ -47,6 +47,19 @@ const NEWSLETTER_PLAN_IDS = new Set([
   'plan_a7uEGsUbr92nn',  // War Zone Monthly - Top Secret Member discount
 ]);
 
+// ============================================
+// HELPER: Get billing interval from plan ID
+// ============================================
+
+const YEARLY_PLAN_IDS = new Set([
+  'plan_bp2QTGuwfpj0A',  // War Zone Yearly
+  'plan_PxxbBlSdkyeo7',  // Top Secret Yearly
+]);
+
+function getBillingInterval(planId: string): 'monthly' | 'yearly' {
+  return YEARLY_PLAN_IDS.has(planId) ? 'yearly' : 'monthly';
+}
+
 // Default commission rates (fallback if DB config not found)
 const DEFAULT_COMMISSION_RATES = {
   tier_1: 0.10,  // 10%
@@ -1191,7 +1204,7 @@ async function handleMembershipActivated(
       membershipId,
       productId: productId || '',
       finotaurUserId,
-    });
+    }, payload);  // 🔥 v3.7.0: Pass payload for plan ID extraction
   }
 
   // 🔥 Handle Top Secret activation
@@ -1243,7 +1256,8 @@ interface NewsletterActivationParams {
 
 async function handleNewsletterActivation(
   supabase: SupabaseClient,
-  params: NewsletterActivationParams
+  params: NewsletterActivationParams,
+  payload: WhopWebhookPayload
 ): Promise<{ success: boolean; message: string }> {
   const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
 
@@ -1256,7 +1270,8 @@ async function handleNewsletterActivation(
   try {
     // Call the newsletter-specific RPC function
     // 🔥 v3.7.0: Get billing interval from plan ID in membership data
-    const planId = (payload.data as WhopMembershipData).plan?.id || '';
+    const membershipData = payload.data as WhopMembershipData;
+    const planId = membershipData.plan?.id || '';
     const billingInterval = getBillingInterval(planId);
     
     const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
