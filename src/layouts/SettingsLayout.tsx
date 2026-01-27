@@ -1123,19 +1123,18 @@ const BillingTab = () => {
                   <div className="flex items-center gap-2">
                     {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
                     {newsletterInterval === 'monthly' && !profile?.newsletter_cancel_at_period_end && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleUpgradeNewsletterToYearly}
-                        disabled={upgradingNewsletter}
-                        className="border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 hover:border-yellow-400/50"
-                      >
-                        {upgradingNewsletter ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Upgrading...</>
-                        ) : (
-                          <><Crown className="w-3 h-3 mr-1.5" />Upgrade to Yearly (Save $140)</>
-                        )}
-                      </Button>
+<Button
+  size="sm"
+  onClick={handleUpgradeNewsletterToYearly}
+  disabled={upgradingNewsletter}
+  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+>
+  {upgradingNewsletter ? (
+    <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
+  ) : (
+    <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $140)</>
+  )}
+</Button>
                     )}
                     {profile?.newsletter_cancel_at_period_end ? (
                       <Button
@@ -1375,16 +1374,15 @@ const BillingTab = () => {
                     {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
                     {topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && !topSecretPricing.isInTrial && (
                       <Button
-                        variant="outline"
                         size="sm"
                         onClick={handleUpgradeTopSecretToYearly}
                         disabled={upgradingTopSecret}
-                        className="border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 hover:border-yellow-400/50"
+                        className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
                       >
                         {upgradingTopSecret ? (
-                          <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Upgrading...</>
+                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Upgrading...</>
                         ) : (
-                          <><Crown className="w-3 h-3 mr-1.5" />Upgrade to Yearly (Save $180)</>
+                          <><Crown className="w-3.5 h-3.5 mr-1.5" />Upgrade to Yearly (Save $180)</>
                         )}
                       </Button>
                     )}
