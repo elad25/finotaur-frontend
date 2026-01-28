@@ -60,8 +60,10 @@ export function useWarZoneStatus() {
   }, [refresh]);
 
   // 🔥 Map DB fields to hook interface
-  const isActive = data?.newsletter_paid === true && 
-                   (data?.newsletter_status === 'active' || data?.newsletter_status === 'trial');
+  // Trial users should have access even if newsletter_paid is false
+  const isActive = data?.newsletter_status === 'active' || 
+                   data?.newsletter_status === 'trial' || 
+                   data?.newsletter_status === 'trialing';
   const isInTrial = data?.newsletter_status === 'trial';
 
   return {

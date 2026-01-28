@@ -222,7 +222,7 @@ interface UserLookupResult {
   id: string;
   email: string;
   emailMismatch: boolean;
-  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email' | 'pending_checkout_email' | 'pending_checkout_single' | 'pending_checkout_partial' | 'pending_checkout_single_recent';
+  lookupMethod: 'finotaur_user_id' | 'email' | 'whop_customer_email' | 'partial_email' | 'pending_checkout_email' | 'pending_checkout_single' | 'pending_checkout_partial' | 'pending_checkout_single_recent' | 'pending_checkout_whop_user_id';
 }
 
 // ============================================
@@ -552,11 +552,36 @@ async function tryFindUser(
 async function findUserFromPendingCheckout(
   supabase: SupabaseClient,
   whopEmail: string | undefined,
-  productType: 'newsletter' | 'top_secret' | 'journal'
+  productType: 'newsletter' | 'top_secret' | 'journal',
+  whopUserId?: string  // 🔥 v3.13.0: Added Whop User ID for better matching
 ): Promise<UserLookupResult | null> {
-  if (!whopEmail) return null;
+console.log("🔍 Looking up user in pending_checkouts for:", { whopEmail, whopUserId, productType });
   
-  console.log("🔍 Looking up user in pending_checkouts for:", whopEmail);
+  // 🔥 PRIORITY 0: Check by Whop User ID first (most reliable for returning customers)
+  if (whopUserId) {
+    const { data: pendingByWhopUser } = await supabase
+      .from("pending_checkouts")
+      .select("user_id, user_email")
+      .eq("whop_user_id", whopUserId)
+      .eq("product_type", productType)
+      .is("completed_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (pendingByWhopUser) {
+      console.log("✅ Found user in pending_checkouts by Whop User ID:", pendingByWhopUser.user_id);
+      return {
+        id: pendingByWhopUser.user_id,
+        email: pendingByWhopUser.user_email,
+        emailMismatch: whopEmail ? pendingByWhopUser.user_email.toLowerCase() !== whopEmail.toLowerCase() : false,
+        lookupMethod: 'pending_checkout_whop_user_id',
+      };
+    }
+  }
+  
+  if (!whopEmail) return null;
   
   // Check if the Whop email matches a pending checkout's user_email
   const { data: pendingByEmail } = await supabase
@@ -684,7 +709,8 @@ async function findUser(
   supabase: SupabaseClient,
   finotaurUserId: string | null,
   whopEmail: string | undefined,
-  productType?: 'newsletter' | 'top_secret' | 'journal'
+  productType?: 'newsletter' | 'top_secret' | 'journal',
+  whopUserId?: string  // 🔥 v3.13.0: Added for better pending_checkout matching
 ): Promise<UserLookupResult | null> {
   
   // First attempt - standard lookup
@@ -692,7 +718,7 @@ async function findUser(
   
   // 🔥 NEW: If not found, try pending_checkouts table
   if (!user && productType) {
-    user = await findUserFromPendingCheckout(supabase, whopEmail, productType);
+    user = await findUserFromPendingCheckout(supabase, whopEmail, productType, whopUserId);
   }
   
   // 🔥 RETRY LOGIC: If not found and we have identifiers, wait and retry
@@ -1300,7 +1326,7 @@ async function handlePaymentSucceeded(
       
       if (!resolvedUserId) {
         console.log("🔍 finotaurUserId is null, searching pending_checkouts...");
-        const pendingUser = await findUserFromPendingCheckout(supabase, whopEmail, 'newsletter');
+        const pendingUser = await findUserFromPendingCheckout(supabase, whopEmail, 'newsletter', whopUserId);
         
         if (pendingUser) {
           console.log("✅ Found user from pending_checkouts:", pendingUser.id);
@@ -1308,7 +1334,7 @@ async function handlePaymentSucceeded(
           resolvedEmail = pendingUser.email;
         } else {
           // Also try findUser which includes other lookup methods
-          const foundUser = await findUser(supabase, null, whopEmail, 'newsletter');
+          const foundUser = await findUser(supabase, null, whopEmail, 'newsletter', whopUserId);
           if (foundUser) {
             console.log("✅ Found user via findUser:", foundUser.id);
             resolvedUserId = foundUser.id;
