@@ -182,6 +182,7 @@ interface WhopMembershipData {
   product: WhopProduct;
   plan?: { id: string };
   status: string;
+  cancel_at_period_end?: boolean;  // 🔥 v3.15.0: Added for cancel_at_period_end_changed webhook
   promo_code?: { id: string } | null;
   created_at?: string;
   canceled_at?: string | null;
@@ -1051,6 +1052,10 @@ serve(async (req: Request) => {
       case "membership.went_invalid":
       case "membership.canceled":
         result = await handleMembershipDeactivated(supabase, payload, finotaurUserId);
+        break;
+
+      case "membership.cancel_at_period_end_changed":
+        result = await handleCancelAtPeriodEndChanged(supabase, payload, finotaurUserId, finotaurEmail);
         break;
 
       case "payment.failed":
@@ -2344,6 +2349,44 @@ async function handleMembershipDeactivated(
   // ═══════════════════════════════════════════════
 
   if (isNewsletterDeactivation) {
+    console.log("📰 Processing newsletter deactivation...");
+    
+    // 🔥 v3.14.0: Check if user reactivated in our DB before processing deactivation
+    // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, newsletter_cancel_at_period_end, newsletter_whop_membership_id, newsletter_status')
+      .eq('newsletter_whop_membership_id', membershipId)
+      .single();
+    
+    if (profile && profile.newsletter_cancel_at_period_end === false) {
+      console.log(`⚠️ User reactivated newsletter in DB - user wants to KEEP subscription`);
+      console.log(`💡 User ID: ${profile.id}, Email: ${profile.email}`);
+      console.log(`💡 Whop cancelled the membership, but user clicked "Undo Cancellation"`);
+      console.log(`💡 Keeping access and NOT deactivating - user should resubscribe to continue after this`);
+      
+      // 🔥 v3.14.0: DON'T change status to needs_resubscribe yet!
+      // Keep the user's current access intact - they clicked "undo cancellation"
+      // Just log the event and let them know they need to resubscribe
+      await supabase.from('subscription_events').insert({
+        user_id: profile.id,
+        event_type: 'whop_deactivated_but_user_reactivated',
+        old_plan: profile.newsletter_status || 'trial',
+        new_plan: profile.newsletter_status || 'trial',
+        metadata: {
+          whop_membership_id: membershipId,
+          user_reactivated_in_db: true,
+          note: 'Whop sent deactivation but user had clicked Undo Cancellation - keeping access',
+          action_needed: 'User should resubscribe to continue access'
+        }
+      });
+      
+      return { 
+        success: true, 
+        message: `Newsletter: User reactivated in DB, keeping access. Email: ${profile.email}` 
+      };
+    }
+    
     console.log("📰 Calling deactivate_newsletter_subscription RPC...");
     
     const { data: result, error } = await supabase.rpc('deactivate_newsletter_subscription', {
@@ -2384,6 +2427,44 @@ async function handleMembershipDeactivated(
   // ═══════════════════════════════════════════════
 
   if (isTopSecretDeactivation) {
+    console.log("🔐 Processing top secret deactivation...");
+    
+    // 🔥 v3.14.0: Check if user reactivated in our DB before processing deactivation
+    // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, top_secret_cancel_at_period_end, top_secret_whop_membership_id, top_secret_status')
+      .eq('top_secret_whop_membership_id', membershipId)
+      .single();
+    
+    if (profile && profile.top_secret_cancel_at_period_end === false) {
+      console.log(`⚠️ User reactivated top_secret in DB - user wants to KEEP subscription`);
+      console.log(`💡 User ID: ${profile.id}, Email: ${profile.email}`);
+      console.log(`💡 Whop cancelled the membership, but user clicked "Undo Cancellation"`);
+      console.log(`💡 Keeping access and NOT deactivating - user should resubscribe to continue after this`);
+      
+      // 🔥 v3.14.0: DON'T change status to needs_resubscribe yet!
+      // Keep the user's current access intact - they clicked "undo cancellation"
+      // Just log the event and let them know they need to resubscribe
+      await supabase.from('subscription_events').insert({
+        user_id: profile.id,
+        event_type: 'whop_deactivated_but_user_reactivated',
+        old_plan: profile.top_secret_status || 'trial',
+        new_plan: profile.top_secret_status || 'trial',
+        metadata: {
+          whop_membership_id: membershipId,
+          user_reactivated_in_db: true,
+          note: 'Whop sent deactivation but user had clicked Undo Cancellation - keeping access',
+          action_needed: 'User should resubscribe to continue access'
+        }
+      });
+      
+      return { 
+        success: true, 
+        message: `Top Secret: User reactivated in DB, keeping access. Email: ${profile.email}` 
+      };
+    }
+    
     console.log("🔐 Calling deactivate_top_secret_subscription RPC...");
     
     const { data: result, error } = await supabase.rpc('deactivate_top_secret_subscription', {
@@ -2501,6 +2582,135 @@ async function handleNewsletterDeactivation(
     console.error("❌ handleNewsletterDeactivation error:", error);
     return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
   }
+}
+
+// ============================================
+// 🔥 v3.15.0: HANDLE CANCEL AT PERIOD END CHANGED
+// This webhook fires when user cancels OR uncancels via Whop UI
+// ============================================
+
+async function handleCancelAtPeriodEndChanged(
+  supabase: SupabaseClient,
+  payload: WhopWebhookPayload,
+  finotaurUserId: string | null,
+  finotaurEmail: string | null
+): Promise<{ success: boolean; message: string }> {
+  const data = payload.data as WhopMembershipData;
+  const membershipId = data.id;
+  const cancelAtPeriodEnd = data.cancel_at_period_end ?? true;
+  const productId = data.product?.id;
+  const planId = data.plan?.id;
+  const userEmail = data.user?.email || finotaurEmail || '';
+  
+  console.log(`🔄 Cancel at period end changed:`, {
+    membershipId,
+    cancelAtPeriodEnd,
+    productId,
+    planId,
+    userEmail
+  });
+
+  // Determine product type
+  const isNewsletterProduct = isNewsletter(productId);
+  const isTopSecretProduct = isTopSecret(productId);
+
+  if (!isNewsletterProduct && !isTopSecretProduct) {
+    return { success: true, message: `Product ${productId} not tracked` };
+  }
+
+  // Find user by membership ID or email
+  let profile = null;
+  
+  if (isNewsletterProduct) {
+    const { data: foundProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("newsletter_whop_membership_id", membershipId)
+      .single();
+    profile = foundProfile;
+  } else if (isTopSecretProduct) {
+    const { data: foundProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("top_secret_whop_membership_id", membershipId)
+      .single();
+    profile = foundProfile;
+  }
+  
+  // Fallback: try by finotaur_user_id
+  if (!profile && finotaurUserId) {
+    const { data: foundProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", finotaurUserId)
+      .single();
+    profile = foundProfile;
+  }
+  
+  // Fallback: try by email
+  if (!profile && userEmail) {
+    const { data: foundProfile } = await supabase
+      .from("profiles")
+      .select("*")
+      .ilike("email", userEmail)
+      .single();
+    profile = foundProfile;
+  }
+
+  if (!profile) {
+    console.log(`⚠️ No profile found for membership ${membershipId}`);
+    return { success: true, message: `No profile found for membership ${membershipId}` };
+  }
+
+  // Update the cancel_at_period_end flag based on Whop's webhook
+  const updateData: Record<string, any> = {
+    updated_at: new Date().toISOString()
+  };
+  
+  if (isNewsletterProduct) {
+    updateData.newsletter_cancel_at_period_end = cancelAtPeriodEnd;
+    
+    await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", profile.id);
+    
+    console.log(`✅ Newsletter cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
+  }
+
+  if (isTopSecretProduct) {
+    updateData.top_secret_cancel_at_period_end = cancelAtPeriodEnd;
+    
+    await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", profile.id);
+    
+    console.log(`✅ Top Secret cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
+  }
+
+  // Log the event
+  await supabase.from("subscription_events").insert({
+    user_id: profile.id,
+    event_type: cancelAtPeriodEnd ? "subscription_scheduled_cancel_whop" : "subscription_reactivated_whop",
+    old_plan: isNewsletterProduct ? profile.newsletter_status : profile.top_secret_status,
+    new_plan: isNewsletterProduct ? profile.newsletter_status : profile.top_secret_status,
+    metadata: {
+      whop_membership_id: membershipId,
+      product_id: productId,
+      plan_id: planId,
+      cancel_at_period_end: cancelAtPeriodEnd,
+      source: "whop_webhook_cancel_at_period_end_changed"
+    }
+  });
+
+  const action = cancelAtPeriodEnd ? "scheduled for cancellation" : "REACTIVATED";
+  const product = isNewsletterProduct ? "Newsletter" : "Top Secret";
+  
+  return { 
+    success: true, 
+    message: `${product} ${action} via Whop for ${profile.email}` 
+  };
 }
 
 // ============================================

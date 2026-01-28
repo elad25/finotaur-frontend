@@ -439,7 +439,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Everything in Core, plus:',
       '🎁 Journal Premium INCLUDED ($40/mo value)',
       '🎁 Choose 1 Newsletter included',
-      'AI-powered market insights',
       'Advanced screeners',
       'Custom reports & exports',
       'Unlimited price alerts',

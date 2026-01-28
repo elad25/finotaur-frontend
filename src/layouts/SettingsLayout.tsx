@@ -1229,7 +1229,7 @@ const BillingTab = () => {
               </div>
               <div className="flex items-center gap-2.5 text-sm text-zinc-300">
                 <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>AI-powered analysis</span>
+                <span>Institutional-grade analysis</span>
               </div>
               <div className="flex items-center gap-2.5 text-sm text-zinc-300">
                 <Crown className="w-4 h-4 text-purple-400 shrink-0" />
