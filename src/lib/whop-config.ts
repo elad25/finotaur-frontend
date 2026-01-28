@@ -200,8 +200,11 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },
   'prod_u7QrZi90xiCZA': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true, isTopSecretDiscount: true },  // 🔥 NEW
   
-  // Top Secret
+  // Top Secret - Regular
   'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
+  
+  // 🔥 Top Secret For War Zone Members - ADDED!
+  'prod_e8Er36RubeFXU': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
 };
 
 // Plan ID to Name lookup

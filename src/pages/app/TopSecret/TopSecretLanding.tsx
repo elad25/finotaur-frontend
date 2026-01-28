@@ -197,23 +197,35 @@ useEffect(() => {
   }
 }, [isWarZoneMemberFromHook, isWarZoneLoading]);
 
-  // 🔥 v3.3: Handle subscription with War Zone discount
-  const handleSubscribe = (billingInterval: 'monthly' | 'yearly') => {
+  // 🔥 v3.5: Handle subscription with War Zone discount - USES EDGE FUNCTION
+  const handleSubscribe = async (billingInterval: 'monthly' | 'yearly') => {
     setSelectedPlan(billingInterval);
     
-    // If War Zone member and monthly, use discounted plan
+    // If War Zone member and monthly, use discounted plan via proper checkout flow
     if (isWarZoneMember && billingInterval === 'monthly') {
-      // Direct redirect to Whop with discounted plan
-      const params = new URLSearchParams();
-      if (user?.email) params.set('email', user.email);
-      if (user?.id) {
-        params.set('metadata[finotaur_user_id]', user.id);
-        params.set('metadata[finotaur_email]', user.email || '');
-        params.set('metadata[is_warzone_member]', 'true');
+      // 🔥 Save pending checkout BEFORE redirecting
+      if (user?.id && user?.email) {
+        const checkoutToken = crypto.randomUUID();
+        try {
+          await supabase.from('pending_checkouts').insert({
+            user_id: user.id,
+            user_email: user.email,
+            checkout_token: checkoutToken,
+            product_type: 'top_secret',
+            billing_interval: 'monthly',
+            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          });
+          console.log('✅ Pending checkout saved for Top Secret (War Zone discount)');
+        } catch (err) {
+          console.warn('⚠️ Failed to save pending checkout:', err);
+        }
       }
-      params.set('redirect_url', 'https://www.finotaur.com/app/top-secret?payment=success');
       
-      window.location.href = `https://whop.com/checkout/${WHOP_TOPSECRET_FOR_WARZONE}?${params.toString()}`;
+      // Use initiateCheckout with special war zone discount plan
+      initiateCheckout({
+        planName: 'top_secret_warzone' as any,
+        billingInterval: 'monthly',
+      });
       return;
     }
     
