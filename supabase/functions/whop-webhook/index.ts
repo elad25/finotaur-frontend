@@ -1649,12 +1649,34 @@ async function handleNewsletterActivation(
     const planId = membershipData.plan?.id || '';
     const billingInterval = getBillingInterval(planId);
     
+    // 🔥 v3.13.0: Try to find user from pending_checkouts if finotaurUserId is null
+    let resolvedUserId = finotaurUserId;
+    let resolvedEmail = userEmail;
+    
+    if (!resolvedUserId) {
+      console.log("🔍 finotaurUserId is null, searching pending_checkouts for activation...");
+      const pendingUser = await findUserFromPendingCheckout(supabase, userEmail, 'newsletter');
+      
+      if (pendingUser) {
+        console.log("✅ Found user from pending_checkouts:", pendingUser.id);
+        resolvedUserId = pendingUser.id;
+        resolvedEmail = pendingUser.email;
+      } else {
+        const foundUser = await findUser(supabase, null, userEmail, 'newsletter');
+        if (foundUser) {
+          console.log("✅ Found user via findUser:", foundUser.id);
+          resolvedUserId = foundUser.id;
+          resolvedEmail = foundUser.email;
+        }
+      }
+    }
+    
     const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
-      p_user_email: userEmail || '',
+      p_user_email: resolvedEmail || '',
       p_whop_user_id: whopUserId || '',
       p_whop_membership_id: membershipId || '',
       p_whop_product_id: productId || '',
-      p_finotaur_user_id: finotaurUserId || null,
+      p_finotaur_user_id: resolvedUserId || null,
       p_billing_interval: billingInterval,
     });
 
