@@ -616,6 +616,34 @@ const BillingTab = () => {
   
   const topSecretPricing = getTopSecretPricingInfo();
   
+  // 🔥 NEW: Newsletter (War Zone) Pricing Info
+  const getNewsletterPricingInfo = () => {
+    if (!profile?.newsletter_started_at) {
+      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: 0 };
+    }
+    
+    const startedAt = new Date(profile.newsletter_started_at);
+    const now = new Date();
+    
+    // Trial is 7 days, then intro pricing kicks in (50% off for 2 months = $34.99)
+    const trialEndDate = new Date(startedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const introEndDate = new Date(trialEndDate.getTime() + 2 * 30 * 24 * 60 * 60 * 1000); // ~2 months after trial
+    
+    if (now < trialEndDate) {
+      // Still in trial
+      return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
+    } else if (now < introEndDate) {
+      // In intro period ($34.99/mo - 50% off)
+      const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
+      return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 44.99 };
+    } else {
+      // Regular pricing ($69.99/mo)
+      return { isInTrial: false, isInIntro: false, introMonthsRemaining: 0, currentPrice: 69.99 };
+    }
+  };
+  
+  const newsletterPricing = getNewsletterPricingInfo();
+  
   const isLifetime = profile?.is_lifetime ?? false;
 
 // 🔥 NEW: Check for bundle before cancelling
@@ -1131,7 +1159,7 @@ const BillingTab = () => {
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <span className="text-xl font-bold text-white">
-                  {newsletterStatus === 'trial' ? 'Free Trial' : newsletterIsActive ? 'Premium' : 'Free'}
+                  {newsletterIsActive ? 'Premium Access' : 'Not Subscribed'}
                 </span>
                 {newsletterIsActive && newsletterInterval === 'yearly' && (
                   <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
@@ -1159,33 +1187,54 @@ const BillingTab = () => {
                   )}
                 </Badge>
               </div>
-              <span className="text-xl font-bold text-white">
-                {newsletterStatus === 'trial' ? 'Free' : newsletterIsActive ? (newsletterInterval === 'yearly' ? '$699/year' : '$69.99/mo') : 'Free'}
-              </span>
+              <div className="text-right">
+                {newsletterIsActive ? (
+                  newsletterInterval === 'yearly' ? (
+                    <span className="text-xl font-bold text-white">$699/yr</span>
+                  ) : newsletterPricing.isInTrial ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white">Free Trial</span>
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs px-2 py-0.5">
+                        {newsletterPricing.trialDaysRemaining} days left
+                      </Badge>
+                    </div>
+                  ) : newsletterPricing.isInIntro ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold text-white">$44.99/mo</span>
+                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs px-2 py-0.5">
+                        50% OFF
+                      </Badge>
+                    </div>
+                  ) : (
+                    <span className="text-xl font-bold text-white">$69.99/mo</span>
+                  )
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-500 line-through text-sm">$69.99</span>
+                    <span className="text-xl font-bold text-white">$44.99/mo</span>
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Features Grid */}
             <div className="grid grid-cols-2 gap-3 mb-5">
               <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
                 <span>Daily market intelligence</span>
               </div>
               <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Private Discord access</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
                 <span>AI-powered analysis</span>
               </div>
-              {newsletterIsActive && (
-                <>
-                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                    <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
-                    <span>Institutional insights</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                    <Crown className="w-4 h-4 text-[#C9A646] shrink-0" />
-                    <span>Exclusive alerts</span>
-                  </div>
-                </>
-              )}
+              <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <Crown className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>Exclusive war zone alerts</span>
+              </div>
             </div>
 
             {/* Billing Info for Active Subscribers */}
@@ -1208,14 +1257,41 @@ const BillingTab = () => {
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
-                      {newsletterStatus === 'trial' ? 'First charge' : 'Next billing'}
+                      {newsletterPricing.isInTrial ? 'First charge' : 'Next billing'}
                     </p>
                     <p className="text-zinc-200 font-medium flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
-                      {formatDate(profile?.newsletter_expires_at)}
+                      {newsletterPricing.isInTrial && profile?.newsletter_started_at
+                        ? formatDate(new Date(new Date(profile.newsletter_started_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString())
+                        : formatDate(profile?.newsletter_expires_at)
+                      }
                     </p>
                   </div>
                 </div>
+                
+                {newsletterInterval === 'monthly' && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/30">
+                    {newsletterPricing.isInTrial ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">7-Day Trial</Badge>
+                        <span className="text-zinc-400">→ Then $44.99/mo for 2 months → $69.99/mo after</span>
+                      </div>
+                    ) : newsletterPricing.isInIntro ? (
+                      <div className="flex items-center gap-2 text-xs">
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">Intro Pricing</Badge>
+                        <span className="text-zinc-400">
+                          {newsletterPricing.introMonthsRemaining === 2 
+                            ? '$44.99 → $44.99 → Then $69.99/mo'
+                            : '$44.99 → Then $69.99/mo'
+                          }
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-zinc-500">Regular pricing active</p>
+                    )}
+                  </div>
+                )}
+                
                 {profile?.newsletter_started_at && (
                   <div className="mt-2 pt-2 border-t border-zinc-700/30">
                     <p className="text-xs text-zinc-500">Member since {formatDate(profile.newsletter_started_at)}</p>
@@ -1300,8 +1376,18 @@ const BillingTab = () => {
               </div>
             ) : (
               <div className="pt-4 border-t border-zinc-700/50">
-                <Button disabled size="sm" className="w-full bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700">
-                  Coming Soon
+                <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-xs text-emerald-400 text-center font-medium">
+                    🔥 Limited: 7-day FREE trial → $44.99/mo for 2 months → $69.99/mo
+                  </p>
+                </div>
+                <Button
+                  onClick={() => navigate('/app/all-markets/warzone')}
+                  size="sm"
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-medium shadow-lg shadow-purple-900/20"
+                >
+                  Start Free Trial
+                  <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             )}
