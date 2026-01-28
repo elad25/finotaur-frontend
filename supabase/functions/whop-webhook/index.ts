@@ -1137,9 +1137,9 @@ async function handlePaymentSucceeded(
       const planId = data.plan?.id || '';
       const billingInterval = getBillingInterval(planId);
       
-      // 🔥 v3.9.1: Check if this is an upgrade from monthly to yearly
-      // Only check for upgrade if NOT first payment (existing subscriber upgrading)
-      if (billingInterval === 'yearly' && !isFirstPayment) {
+      // 🔥 v3.14.0: Check if this is an upgrade from monthly to yearly
+      // Check for upgrade if user has existing trial/active monthly subscription
+      if (billingInterval === 'yearly') {
         const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
         
         if (userResult) {
@@ -1149,8 +1149,9 @@ async function handlePaymentSucceeded(
             .eq('id', userResult.id)
             .single();
           
+          // 🔥 v3.14.0: Detect upgrade from monthly (including trial!) to yearly
           if (currentProfile?.newsletter_interval === 'monthly' && 
-              ['active', 'trial'].includes(currentProfile?.newsletter_status || '')) {
+              ['active', 'trial', 'trialing'].includes(currentProfile?.newsletter_status || '')) {
             // This IS an upgrade! Use the upgrade function
             console.log("🔥 Detected Newsletter UPGRADE from monthly to yearly");
             
@@ -1286,9 +1287,10 @@ if (isTopSecretPayment) {
       // and user receives email with checkout link to resubscribe at full price
       // See handleMembershipDeactivated() for the implementation
       
-      // 🔥 Check if this is an upgrade from monthly to yearly
-      if (billingInterval === 'yearly' && !isFirstPayment) {
-        const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
+      // 🔥 v3.14.0: Check if this is an upgrade from monthly to yearly
+      // Check for upgrade if user has existing trial/active monthly subscription
+      if (billingInterval === 'yearly') {
+        const userResult = await findUser(supabase, finotaurUserId, userEmail, 'top_secret');
         
         if (userResult) {
           const { data: currentProfile } = await supabase
@@ -1297,6 +1299,7 @@ if (isTopSecretPayment) {
             .eq('id', userResult.id)
             .single();
           
+          // 🔥 v3.14.0: Detect upgrade from monthly (including trial!) to yearly
           if (currentProfile?.top_secret_interval === 'monthly' && 
               ['active', 'trial', 'trialing'].includes(currentProfile?.top_secret_status || '')) {
             // This IS an upgrade!
@@ -1590,7 +1593,7 @@ async function handleMembershipActivated(
       membershipId,
       productId: productId || '',
       finotaurUserId,
-    });
+    }, payload);  // 🔥 v3.14.0: Pass payload for plan ID extraction
   }
 
   // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
@@ -1671,6 +1674,25 @@ async function handleNewsletterActivation(
       }
     }
     
+    // 🔥 v3.14.0: If this is a YEARLY plan, check if user is upgrading from monthly trial
+    // If so, SKIP activation - let payment.succeeded handle the upgrade
+    if (billingInterval === 'yearly' && resolvedUserId) {
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('newsletter_interval, newsletter_status, newsletter_whop_membership_id')
+        .eq('id', resolvedUserId)
+        .single();
+      
+      if (currentProfile?.newsletter_interval === 'monthly' && 
+          ['active', 'trial', 'trialing'].includes(currentProfile?.newsletter_status || '')) {
+        console.log("🔥 Yearly activation for existing monthly subscriber - skipping, will be handled by payment.succeeded");
+        return { 
+          success: true, 
+          message: `Newsletter yearly upgrade detected - deferring to payment.succeeded handler` 
+        };
+      }
+    }
+    
     const { data: result, error } = await supabase.rpc('activate_newsletter_subscription', {
       p_user_email: resolvedEmail || '',
       p_whop_user_id: whopUserId || '',
@@ -1716,7 +1738,8 @@ interface TopSecretActivationParams {
 
 async function handleTopSecretActivation(
   supabase: SupabaseClient,
-  params: TopSecretActivationParams
+  params: TopSecretActivationParams,
+  payload: WhopWebhookPayload
 ): Promise<{ success: boolean; message: string }> {
   const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
 
@@ -1727,6 +1750,30 @@ async function handleTopSecretActivation(
   });
 
   try {
+    // 🔥 v3.14.0: Get plan ID to check if this is yearly
+    const membershipData = payload.data as WhopMembershipData;
+    const planId = membershipData.plan?.id || '';
+    const billingInterval = getBillingInterval(planId);
+    
+    // 🔥 v3.14.0: If this is a YEARLY plan, check if user is upgrading from monthly
+    // If so, SKIP activation - let payment.succeeded handle the upgrade
+    if (billingInterval === 'yearly' && finotaurUserId) {
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('top_secret_interval, top_secret_status')
+        .eq('id', finotaurUserId)
+        .single();
+      
+      if (currentProfile?.top_secret_interval === 'monthly' && 
+          ['active', 'trial', 'trialing'].includes(currentProfile?.top_secret_status || '')) {
+        console.log("🔥 Yearly activation for existing monthly subscriber - skipping, will be handled by payment.succeeded");
+        return { 
+          success: true, 
+          message: `Top Secret yearly upgrade detected - deferring to payment.succeeded handler` 
+        };
+      }
+    }
+    
     // Note: For membership.activated without payment (which shouldn't happen for Top Secret 
     // since it has no trial), we still call activate to ensure the user is set up
     const { data: result, error } = await supabase.rpc('activate_top_secret_subscription', {
