@@ -316,11 +316,10 @@ export const TopNav = () => {
                 <ChevronDown className="w-4 h-4 text-[#A0A0A0]" />
               </Button>
             </DropdownMenuTrigger>
-
-            <DropdownMenuContent 
-              align="end" 
-              className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20"
-            >
+<DropdownMenuContent 
+  align="end" 
+  className="w-56 bg-[#0F0F0F] border border-[#C9A646]/20 z-[150]"
+>
               {/* User Info */}
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">

@@ -22,7 +22,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
-import { Loader2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import JournalDiscountPopup from '@/components/JournalDiscountPopup';
 
@@ -52,8 +52,7 @@ type PageState =
 // CONSTANTS
 // ========================================
 
-const MAX_POLL_ATTEMPTS = 15;  // 15 attempts × 2 seconds = 30 seconds max wait
-const POLL_INTERVAL = 2000;   // 2 seconds between checks
+const PAYMENT_SUCCESS_DELAY = 1500;  // Brief success message before redirect
 
 // ========================================
 // COMPONENT
@@ -66,9 +65,6 @@ export default function TopSecretPage() {
 
   const [pageState, setPageState] = useState<PageState>('loading');
   const [status, setStatus] = useState<TopSecretStatus | null>(null);
-  const [pollAttempts, setPollAttempts] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
   // Journal discount popup state
   const [showJournalDiscount, setShowJournalDiscount] = useState(false);
   const [hasShownDiscount, setHasShownDiscount] = useState(false);
@@ -111,64 +107,36 @@ export default function TopSecretPage() {
   }, [user?.id]);
 
   // ========================================
-  // Poll for Subscription Status (after payment)
+  // Handle Payment Success (no polling - trust webhook)
   // ========================================
   
   useEffect(() => {
-    let pollTimer: NodeJS.Timeout | null = null;
+    if (pageState !== 'checking_payment') return;
 
-    async function pollForSubscription() {
-      if (pageState !== 'checking_payment') return;
-      if (pollAttempts >= MAX_POLL_ATTEMPTS) {
-        // Max attempts reached - show error state
-        setErrorMessage('Payment received but not yet updated in the system. Try refreshing the page in a few minutes.');
-        setPageState('show_landing');
-        return;
-      }
-
-      console.log(`🔄 Polling for subscription... attempt ${pollAttempts + 1}/${MAX_POLL_ATTEMPTS}`);
+    console.log('✅ Payment detected, showing success and redirecting...');
+    
+    // Clear URL params immediately
+    setSearchParams({});
+    
+    // Show brief success, then go to dashboard
+    // The webhook will update the DB - we trust it
+    setTimeout(() => {
+      setPageState('payment_success');
       
-      const newStatus = await checkTopSecretStatus();
-      
-      if (newStatus?.isActive) {
-        // Subscription is now active!
-        console.log('✅ Subscription confirmed!');
-        setStatus(newStatus);
-        setPageState('payment_success');
+      // Check if user has already dismissed the discount
+      const hasDismissedDiscount = localStorage.getItem('journal_discount_dismissed') === 'true';
 
-        // Clear URL params
-        setSearchParams({});
+      setTimeout(() => {
+        if (!hasDismissedDiscount && !hasShownDiscount) {
+          setShowJournalDiscount(true);
+          setHasShownDiscount(true);
+        } else {
+          setPageState('show_dashboard');
+        }
+      }, PAYMENT_SUCCESS_DELAY);
+    }, 500);
 
-        // Check if user has already dismissed the discount
-        const hasDismissedDiscount = localStorage.getItem('journal_discount_dismissed') === 'true';
-
-        // Show Journal discount popup after a brief celebration (if not dismissed before)
-        setTimeout(() => {
-          if (!hasDismissedDiscount && !hasShownDiscount) {
-            setShowJournalDiscount(true);
-            setHasShownDiscount(true);
-          } else {
-            // If already dismissed, go directly to dashboard
-            setPageState('show_dashboard');
-          }
-        }, 2500); // Show success message for 2.5 seconds before popup
-
-        return;
-      }
-
-      // Not active yet, try again
-      setPollAttempts(prev => prev + 1);
-      pollTimer = setTimeout(pollForSubscription, POLL_INTERVAL);
-    }
-
-    if (pageState === 'checking_payment') {
-      pollForSubscription();
-    }
-
-    return () => {
-      if (pollTimer) clearTimeout(pollTimer);
-    };
-  }, [pageState, pollAttempts, checkTopSecretStatus, setSearchParams, hasShownDiscount]);
+  }, [pageState, setSearchParams, hasShownDiscount]);
 
   // ========================================
   // Initial Load
@@ -199,48 +167,13 @@ export default function TopSecretPage() {
         return;
       }
 
-      // If returning from payment and not yet active, activate directly
-if (isPaymentReturn && !currentStatus?.isActive) {
-  console.log('🔄 Payment return detected, activating subscription...');
-  setPageState('checking_payment');
-  
-  // Call activation API directly instead of waiting for webhook
-  try {
-    const { data: activationResult, error } = await supabase.rpc('activate_top_secret_from_checkout', {
-      p_user_id: user.id,
-    });
-    
-    if (!error && activationResult?.success) {
-      console.log('✅ Subscription activated directly!');
-      setStatus({
-        isActive: true,
-        isAdmin: false,
-        status: 'active',
-        expiresAt: activationResult.expires_at ? new Date(activationResult.expires_at) : null,
-      });
-      setPageState('payment_success');
-      setSearchParams({});
-      
-      // Show Journal discount after celebration
-      const hasDismissedDiscount = localStorage.getItem('journal_discount_dismissed') === 'true';
-      setTimeout(() => {
-        if (!hasDismissedDiscount && !hasShownDiscount) {
-          setShowJournalDiscount(true);
-          setHasShownDiscount(true);
-        } else {
-          setPageState('show_dashboard');
-        }
-      }, 2500);
-      return;
-    }
-  } catch (err) {
-    console.log('⚠️ Direct activation failed, falling back to polling');
-  }
-  
-  // Fallback to polling if direct activation failed
-  setStatus(currentStatus);
-  return;
-}
+      // If returning from payment - show success and trust webhook
+      if (isPaymentReturn) {
+        console.log('✅ Payment return detected');
+        setStatus(currentStatus);
+        setPageState('checking_payment'); // Will trigger the success flow
+        return;
+      }
 
       // Otherwise, set status and show appropriate page
       setStatus(currentStatus);
@@ -266,7 +199,7 @@ if (isPaymentReturn && !currentStatus?.isActive) {
     );
   }
 
-  // Checking payment state (polling)
+  // Checking payment state - brief loading
   if (pageState === 'checking_payment') {
     return (
       <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
@@ -275,39 +208,15 @@ if (isPaymentReturn && !currentStatus?.isActive) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="relative mb-6">
-            <div className="w-20 h-20 mx-auto rounded-full bg-amber-500/20 flex items-center justify-center">
-              <Clock className="w-10 h-10 text-amber-400" />
-            </div>
-            <motion.div 
-              className="absolute inset-0 w-20 h-20 mx-auto rounded-full border-2 border-amber-400 border-t-transparent"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-            />
+          <div className="w-20 h-20 mx-auto rounded-full bg-green-500/20 flex items-center justify-center mb-6">
+            <CheckCircle className="w-10 h-10 text-green-400" />
           </div>
           
           <h2 className="text-2xl font-bold text-white mb-3">
-            Verifying Payment...
+            Payment Successful!
           </h2>
-          <p className="text-gray-400 mb-6">
-            Payment received! Waiting for confirmation...
-            <br />
-            <span className="text-sm text-gray-500">
-              Check {pollAttempts + 1} of {MAX_POLL_ATTEMPTS}
-            </span>
-          </p>
-          
-          <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-            <motion.div 
-              className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-              initial={{ width: '0%' }}
-              animate={{ width: `${((pollAttempts + 1) / MAX_POLL_ATTEMPTS) * 100}%` }}
-              transition={{ duration: 0.5 }}
-            />
-          </div>
-          
-          <p className="text-xs text-gray-600 mt-4">
-            If this takes too long, try refreshing the page
+          <p className="text-gray-400">
+            Redirecting to your dashboard...
           </p>
         </motion.div>
       </div>
@@ -364,37 +273,6 @@ if (isPaymentReturn && !currentStatus?.isActive) {
             </p>
           </motion.div>
         )}
-      </div>
-    );
-  }
-
-  // Error message (if any)
-  if (errorMessage) {
-    return (
-      <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center">
-        <motion.div 
-          className="text-center max-w-md mx-auto p-8"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="w-20 h-20 mx-auto rounded-full bg-amber-500/20 flex items-center justify-center mb-6">
-            <AlertCircle className="w-10 h-10 text-amber-400" />
-          </div>
-          
-          <h2 className="text-xl font-bold text-white mb-3">
-            Waiting for Confirmation
-          </h2>
-          <p className="text-gray-400 mb-6">
-            {errorMessage}
-          </p>
-          
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-amber-500 text-black font-semibold rounded-xl hover:bg-amber-400 transition-colors"
-          >
-            Refresh Page
-          </button>
-        </motion.div>
       </div>
     );
   }

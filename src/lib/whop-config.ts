@@ -846,8 +846,9 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   const params = new URLSearchParams();
   
   if (userEmail) {
-    params.set('email', userEmail);
-  }
+  params.append('email', userEmail);
+  params.append('lock_email', 'true');
+}
   
   if (userId) {
     params.set('metadata[finotaur_user_id]', userId);
