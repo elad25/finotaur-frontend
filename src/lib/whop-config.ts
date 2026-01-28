@@ -157,7 +157,8 @@ export const WHOP_PRODUCT_IDS = {
   
   // Top Secret
   top_secret: 'prod_nl6YXbLp4t5pz',
-  top_secret_warzone: 'prod_nl6YXbLp4t5pz',  // Same product, different plan
+  top_secret_warzone: 'prod_e8Er36RubeFXU',  // 🔥 NEW: Top Secret for War Zone members
+  
 } as const;
 
 // 🔥 Platform Product IDs Set - for quick lookup

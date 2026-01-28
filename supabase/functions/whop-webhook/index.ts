@@ -44,10 +44,9 @@ const NEWSLETTER_PRODUCT_IDS = new Set([
 ]);
 
 // 🔥 Top Secret Product IDs - Synced with whop-config.ts v4.4.0
-// Note: All Top Secret plans use the SAME product ID (prod_nl6YXbLp4t5pz)
-// The different pricing comes from different PLAN IDs
 const TOP_SECRET_PRODUCT_IDS = new Set([
-  'prod_nl6YXbLp4t5pz',  // Top Secret (all plans: monthly, yearly, warzone discount)
+  'prod_nl6YXbLp4t5pz',  // Top Secret (regular: monthly $89.99, yearly $899)
+  'prod_e8Er36RubeFXU',  // Top Secret For War Zone Members ($50/month)
 ]);
 
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
@@ -364,8 +363,9 @@ async function getPlanInfo(
     "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 69.99, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 699.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     "prod_u7QrZi90xiCZA": { plan: "newsletter", interval: "monthly", price: 30.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
-    // Top Secret fallback - Note: Same product ID for all plans, interval determined by plan_id
+    // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
+    "prod_e8Er36RubeFXU": { plan: "top_secret", interval: "monthly", price: 50.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },  // 🔥 Top Secret For War Zone
   };
 
   return fallbackMapping[productId] || null;
