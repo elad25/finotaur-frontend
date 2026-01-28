@@ -984,8 +984,8 @@ const TermsModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
 };
 
 // ============================================
-// DISCLAIMER POPUP - OPTIMIZED FOR VIEWPORT
-// Fits screen properly, doesn't go under nav
+// DISCLAIMER POPUP - REDESIGNED
+// Price next to WAR ZONE, larger window, no Trading Room
 // ============================================
 const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInterval, isTopSecretMember }: { isOpen: boolean; onClose: () => void; onAccept: () => void; isProcessing: boolean; billingInterval: BillingInterval; isTopSecretMember: boolean }) => {
   const [agreed, setAgreed] = useState(false);
@@ -996,7 +996,7 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-20">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-16">
       {/* Terms Modal */}
       <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
       
@@ -1007,20 +1007,20 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
         onClick={onClose} 
       />
       
-      {/* Popup Card - Compact size */}
-      <div className="relative w-full max-w-[380px]">
+      {/* Popup Card - Larger */}
+      <div className="relative w-full max-w-[480px]">
         
         {/* Glow effects */}
-        <div className="absolute -inset-2 rounded-2xl opacity-40" style={{
-          background: 'linear-gradient(135deg, rgba(201,166,70,0.3) 0%, transparent 50%, rgba(201,166,70,0.2) 100%)',
-          filter: 'blur(20px)'
+        <div className="absolute -inset-3 rounded-3xl opacity-40" style={{
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.4) 0%, transparent 50%, rgba(201,166,70,0.3) 100%)',
+          filter: 'blur(25px)'
         }} />
         
         {/* Main card */}
         <div className="relative rounded-2xl overflow-hidden" style={{ 
           background: 'linear-gradient(180deg, rgba(32,26,20,0.99) 0%, rgba(18,14,10,1) 100%)',
           border: '1px solid rgba(201,166,70,0.5)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 20px 50px rgba(0,0,0,0.6)'
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 25px 60px rgba(0,0,0,0.6), 0 0 80px rgba(201,166,70,0.1)'
         }}>
           
           {/* Top gold line */}
@@ -1028,192 +1028,175 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
             background: 'linear-gradient(90deg, transparent 5%, rgba(201,166,70,0.5) 20%, rgba(244,217,123,0.9) 50%, rgba(201,166,70,0.5) 80%, transparent 95%)'
           }} />
 
-          {/* Content - Compact padding */}
-          <div className="px-5 pt-4 pb-5">
+          {/* Content */}
+          <div className="px-8 pt-6 pb-7">
             
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2.5">
+            {/* Header Row - WAR ZONE + Price on same line */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
+                {/* Crown icon */}
                 <div className="relative">
-                  <div className="absolute inset-0 rounded-lg blur-md" style={{ background: 'rgba(201,166,70,0.3)' }} />
-                  <div className="relative w-9 h-9 rounded-lg flex items-center justify-center" style={{ 
+                  <div className="absolute inset-0 rounded-xl blur-md" style={{ background: 'rgba(201,166,70,0.4)' }} />
+                  <div className="relative w-12 h-12 rounded-xl flex items-center justify-center" style={{ 
                     background: 'linear-gradient(135deg, rgba(201,166,70,0.3) 0%, rgba(201,166,70,0.1) 100%)',
                     border: '1px solid rgba(201,166,70,0.5)'
                   }}>
-                    <Crown className="w-5 h-5 text-[#F4D97B]" />
+                    <Crown className="w-6 h-6 text-[#F4D97B]" />
                   </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white tracking-wide">WAR ZONE</h2>
-                  <p className="text-[#C9A646]/70 text-[10px] font-medium tracking-wider uppercase">{isMonthly ? 'Monthly' : 'Annual'} Membership</p>
+                
+                {/* Title + Price */}
+                <div className="flex items-baseline gap-3">
+                  <h2 className="text-2xl font-bold text-white tracking-wide">WAR ZONE</h2>
+                  <div className="flex items-baseline gap-1">
+                    {isMonthly && isTopSecretMember && originalPrice && (
+                      <span className="text-lg text-[#C9A646]/40 line-through">${originalPrice}</span>
+                    )}
+                    <span className="text-2xl font-bold" style={{ 
+                      background: 'linear-gradient(180deg, #F4D97B 0%, #C9A646 100%)', 
+                      WebkitBackgroundClip: 'text', 
+                      WebkitTextFillColor: 'transparent'
+                    }}>${displayPrice}</span>
+                    <span className="text-[#C9A646]/60 text-base">/{isMonthly ? 'mo' : 'yr'}</span>
+                  </div>
                 </div>
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+              
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
                 <X className="w-5 h-5 text-[#C9A646]/50 hover:text-[#C9A646]" />
               </button>
             </div>
 
-            {/* Price Section - Compact */}
-            <div className="text-center mb-4">
+            {/* Subtitle / Billing info */}
+            <div className="mb-6">
               {isMonthly && isTopSecretMember && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mb-2" style={{ 
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-3" style={{ 
                   background: 'linear-gradient(135deg, rgba(147,51,234,0.2) 0%, rgba(147,51,234,0.1) 100%)',
                   border: '1px solid rgba(147,51,234,0.4)'
                 }}>
-                  <Crown className="w-3 h-3 text-purple-400" />
-                  <span className="text-purple-300 text-[10px] font-semibold tracking-wide">TOP SECRET DISCOUNT</span>
+                  <Crown className="w-4 h-4 text-purple-400" />
+                  <span className="text-purple-300 text-sm font-semibold">TOP SECRET DISCOUNT</span>
                 </div>
               )}
-              <div className="flex items-baseline justify-center gap-1.5 mb-1">
-                {isMonthly && isTopSecretMember && originalPrice && (
-                  <span className="text-xl text-[#C9A646]/40 line-through">${originalPrice}</span>
-                )}
-                <span className="text-4xl font-bold" style={{ 
-                  background: 'linear-gradient(180deg, #F4D97B 0%, #D4AF37 50%, #A68A3A 100%)', 
-                  WebkitBackgroundClip: 'text', 
-                  WebkitTextFillColor: 'transparent'
-                }}>${displayPrice}</span>
-                <span className="text-[#C9A646]/70 text-base font-medium">/{isMonthly ? 'month' : 'year'}</span>
-              </div>
               {!isMonthly && (
-                <p className="text-[#C9A646]/80 text-xs">~${Math.round(YEARLY_MONTHLY_EQUIVALENT)}/month • <span className="text-green-400 font-semibold">Save ${YEARLY_SAVINGS}/year</span></p>
+                <p className="text-[#C9A646]/80 text-base">~${Math.round(YEARLY_MONTHLY_EQUIVALENT)}/month • <span className="text-green-400 font-semibold">Save ${YEARLY_SAVINGS}/year</span></p>
               )}
               {isMonthly && isTopSecretMember && (
-                <p className="text-green-400 text-xs font-semibold">Save ${(MONTHLY_PRICE - MONTHLY_PRICE_TOPSECRET).toFixed(2)}/month!</p>
+                <p className="text-green-400 text-base font-semibold">Save ${(MONTHLY_PRICE - MONTHLY_PRICE_TOPSECRET).toFixed(2)}/month!</p>
               )}
               {isMonthly && !isTopSecretMember && (
-                <p className="text-[#C9A646]/50 text-xs">Billed monthly</p>
+                <p className="text-[#C9A646]/50 text-base">Billed monthly • Cancel anytime</p>
               )}
-              
-              {/* Divider */}
-              <div className="flex items-center gap-2 mt-3">
-                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.3))' }} />
-                <span className="text-[#8B8175] text-[10px] italic">Everything you need to trade with confidence</span>
-                <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, rgba(201,166,70,0.3), transparent)' }} />
-              </div>
             </div>
 
-            {/* What's Included - Compact grid */}
-            <div className="rounded-lg p-3 mb-3" style={{ 
+            {/* What's Included - 3 items only */}
+            <div className="rounded-xl p-5 mb-5" style={{ 
               background: 'linear-gradient(180deg, rgba(30,25,18,0.6) 0%, rgba(20,16,12,0.8) 100%)',
-              border: '1px solid rgba(201,166,70,0.2)'
+              border: '1px solid rgba(201,166,70,0.25)'
             }}>
-              <h4 className="text-white font-semibold text-xs mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#F4D97B]" />
+              <h4 className="text-white font-semibold text-base mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-[#F4D97B]" />
                 What's Included
               </h4>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+              <div className="grid grid-cols-3 gap-4">
                 {/* Daily Report */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
-                    background: 'rgba(201,166,70,0.1)', 
-                    border: '1px solid rgba(201,166,70,0.25)' 
+                <div className="flex flex-col items-center text-center gap-2">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ 
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)', 
+                    border: '1px solid rgba(201,166,70,0.3)' 
                   }}>
-                    <FileText className="w-3.5 h-3.5 text-[#C9A646]" />
+                    <FileText className="w-5 h-5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-xs font-medium leading-tight">Daily Report</p>
-                    <p className="text-[#8B8175] text-[10px]">9:00 AM NY</p>
+                    <p className="text-white text-sm font-semibold">Daily Report</p>
+                    <p className="text-[#8B8175] text-xs">9:00 AM NY</p>
                   </div>
                 </div>
                 
                 {/* Weekly Review */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
-                    background: 'rgba(201,166,70,0.1)', 
-                    border: '1px solid rgba(201,166,70,0.25)' 
+                <div className="flex flex-col items-center text-center gap-2">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ 
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)', 
+                    border: '1px solid rgba(201,166,70,0.3)' 
                   }}>
-                    <Calendar className="w-3.5 h-3.5 text-[#C9A646]" />
+                    <Calendar className="w-5 h-5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-xs font-medium leading-tight">Weekly Review</p>
-                    <p className="text-[#8B8175] text-[10px]">Every Sunday</p>
+                    <p className="text-white text-sm font-semibold">Weekly Review</p>
+                    <p className="text-[#8B8175] text-xs">Every Sunday</p>
                   </div>
                 </div>
                 
                 {/* Discord */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
-                    background: 'rgba(201,166,70,0.1)', 
-                    border: '1px solid rgba(201,166,70,0.25)' 
+                <div className="flex flex-col items-center text-center gap-2">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ 
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)', 
+                    border: '1px solid rgba(201,166,70,0.3)' 
                   }}>
-                    <DiscordIcon className="w-3.5 h-3.5 text-[#C9A646]" />
+                    <DiscordIcon className="w-5 h-5 text-[#C9A646]" />
                   </div>
                   <div>
-                    <p className="text-white text-xs font-medium leading-tight">Discord</p>
-                    <p className="text-[#8B8175] text-[10px]">847+ traders</p>
-                  </div>
-                </div>
-                
-                {/* Trading Room */}
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ 
-                    background: 'rgba(201,166,70,0.1)', 
-                    border: '1px solid rgba(201,166,70,0.25)' 
-                  }}>
-                    <Activity className="w-3.5 h-3.5 text-[#C9A646]" />
-                  </div>
-                  <div>
-                    <p className="text-white text-xs font-medium leading-tight">Trading Room</p>
+                    <p className="text-white text-sm font-semibold">Discord</p>
+                    <p className="text-[#8B8175] text-xs">847+ traders</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Trial/Value Badge - Compact */}
+            {/* Trial/Value Badge */}
             {isMonthly ? (
-              <div className="relative flex items-center gap-3 px-3 py-2.5 rounded-lg mb-3" style={{ 
+              <div className="relative flex items-center gap-4 px-5 py-4 rounded-xl mb-5" style={{ 
                 background: 'linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(34,197,94,0.04) 100%)', 
-                border: '1px solid rgba(34,197,94,0.3)'
+                border: '1px solid rgba(34,197,94,0.35)'
               }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{
+                <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{
                   background: 'rgba(34,197,94,0.15)',
-                  border: '1px solid rgba(34,197,94,0.35)'
+                  border: '1px solid rgba(34,197,94,0.4)'
                 }}>
-                  <Shield className="w-4 h-4 text-green-400" />
+                  <Shield className="w-6 h-6 text-green-400" />
                 </div>
                 <div>
-                  <p className="text-green-400 font-bold text-sm">7-Day Free Trial</p>
-                  <p className="text-[#8B8175] text-[10px]">Full access • Cancel anytime • No charge during trial</p>
+                  <p className="text-green-400 font-bold text-lg">7-Day Free Trial</p>
+                  <p className="text-[#8B8175] text-sm">Full access • Cancel anytime • No charge during trial</p>
                 </div>
               </div>
             ) : (
-              <div className="relative flex items-center gap-3 px-3 py-2.5 rounded-lg mb-3" style={{ 
+              <div className="relative flex items-center gap-4 px-5 py-4 rounded-xl mb-5" style={{ 
                 background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.04) 100%)', 
-                border: '1px solid rgba(201,166,70,0.3)'
+                border: '1px solid rgba(201,166,70,0.35)'
               }}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{
+                <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{
                   background: 'rgba(201,166,70,0.15)',
-                  border: '1px solid rgba(201,166,70,0.35)'
+                  border: '1px solid rgba(201,166,70,0.4)'
                 }}>
-                  <TrendingUp className="w-4 h-4 text-[#F4D97B]" />
+                  <TrendingUp className="w-6 h-6 text-[#F4D97B]" />
                 </div>
                 <div>
-                  <p className="text-[#F4D97B] font-bold text-sm">Best Value — Save ${YEARLY_SAVINGS}!</p>
-                  <p className="text-[#8B8175] text-[10px]">Lock in your price • Full year access</p>
+                  <p className="text-[#F4D97B] font-bold text-lg">Best Value — Save ${YEARLY_SAVINGS}!</p>
+                  <p className="text-[#8B8175] text-sm">Lock in your price • Full year access • Instant activation</p>
                 </div>
               </div>
             )}
 
-            {/* Checkbox - Compact */}
-            <label className="flex items-start gap-2.5 cursor-pointer mb-4 group">
+            {/* Checkbox */}
+            <label className="flex items-start gap-3 cursor-pointer mb-6 group">
               <div className="relative flex-shrink-0 mt-0.5">
                 <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="sr-only" />
                 <div 
                   className={cn(
-                    "w-5 h-5 rounded flex items-center justify-center transition-all",
+                    "w-6 h-6 rounded flex items-center justify-center transition-all",
                     !agreed && "group-hover:border-[#C9A646]/70"
                   )}
                   style={{ 
                     background: agreed ? 'linear-gradient(135deg, #C9A646, #F4D97B)' : 'rgba(201,166,70,0.05)',
                     border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
-                    boxShadow: agreed ? '0 0 10px rgba(201,166,70,0.4)' : 'none'
+                    boxShadow: agreed ? '0 0 12px rgba(201,166,70,0.4)' : 'none'
                   }}
                 >
-                  {agreed && <Check className="w-3.5 h-3.5 text-black" />}
+                  {agreed && <Check className="w-4 h-4 text-black" />}
                 </div>
               </div>
-              <span className="text-[#A8A090] text-xs leading-relaxed">
+              <span className="text-[#A8A090] text-sm leading-relaxed">
                 I acknowledge that FINOTAUR does not provide investment advice and that all content is for informational purposes only. I agree to the{' '}
                 <button 
                   type="button"
@@ -1226,10 +1209,10 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
             </label>
 
             {/* Buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-4">
               <button 
                 onClick={onClose}
-                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:bg-[#C9A646]/15"
+                className="flex-1 py-4 rounded-xl font-semibold text-base transition-all hover:bg-[#C9A646]/15"
                 style={{ 
                   background: 'rgba(201,166,70,0.06)',
                   border: '1px solid rgba(201,166,70,0.25)',
@@ -1242,19 +1225,19 @@ const DisclaimerPopup = ({ isOpen, onClose, onAccept, isProcessing, billingInter
                 onClick={onAccept}
                 disabled={!agreed || isProcessing}
                 className={cn(
-                  "flex-[1.4] py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all",
+                  "flex-[1.5] py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all",
                   agreed ? "hover:scale-[1.02] active:scale-[0.98]" : "cursor-not-allowed opacity-50"
                 )}
                 style={agreed ? { 
                   background: 'linear-gradient(135deg, #A68A3A 0%, #C9A646 20%, #F4D97B 50%, #C9A646 80%, #A68A3A 100%)',
-                  boxShadow: '0 4px 20px rgba(201,166,70,0.5)',
+                  boxShadow: '0 4px 25px rgba(201,166,70,0.5)',
                   color: '#1a1510'
                 } : {
                   background: 'rgba(201,166,70,0.15)',
                   color: 'rgba(201,166,70,0.4)'
                 }}
               >
-                {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Rocket className="w-5 h-5" />}
                 {isProcessing ? 'Processing...' : isMonthly ? 'Start 7-Day Free Trial' : 'Subscribe Now'}
               </button>
             </div>
@@ -1535,12 +1518,33 @@ const todayReport = liveReports.find((r: DailyReport) =>
   normalizeDate(r.report_date) === todayNY
 );
 
-// Previous report = MOST RECENT live report that is BEFORE today (not future)
-// This ensures we show past reports, not future ones
-const previousReport = liveReports.find((r: DailyReport) => {
-  const reportDate = normalizeDate(r.report_date);
-  return reportDate !== todayNY && reportDate < todayNY;
-}) || null;
+// =====================================================
+// PREVIOUS REPORT LOGIC v12.0 - MIDNIGHT FIX
+// 
+// Previous report should ALWAYS show the most recent live report
+// that the user can access (for the "Previous Reports" card)
+//
+// Before 9 AM: This is the ONLY report available, so show the latest
+// After 9 AM: Show the report before today's (if today's exists)
+// =====================================================
+
+let previousReport: DailyReport | null;
+
+if (isBeforeReportTime) {
+  // Before 9 AM (including midnight): Show the MOST RECENT report
+  // This is the last trading day's report - always available
+  previousReport = liveReports.length > 0 ? liveReports[0] : null;
+  
+  console.log('[WAR ZONE] 🌙 Before 9 AM - Previous Reports shows most recent:', previousReport?.id);
+} else {
+  // After 9 AM: Show the report before today's
+  previousReport = liveReports.find((r: DailyReport) => {
+    const reportDate = normalizeDate(r.report_date);
+    return reportDate !== todayNY && reportDate < todayNY;
+  }) || null;
+  
+  console.log('[WAR ZONE] ☀️ After 9 AM - Previous Reports shows yesterday\'s:', previousReport?.id);
+}
 
 console.log('[WAR ZONE] 🎯 ASSIGNMENT RESULT:', {
   todayNY,
