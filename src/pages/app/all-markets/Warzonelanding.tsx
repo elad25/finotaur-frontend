@@ -2867,17 +2867,9 @@ const handleAcceptDisclaimer = async () => {
   try { 
     const { data: profile } = await supabase.from('profiles').select('newsletter_unsubscribe_token').eq('id', user.id).single(); 
     if (!profile?.newsletter_unsubscribe_token) await supabase.from('profiles').update({ newsletter_unsubscribe_token: crypto.randomUUID(), updated_at: new Date().toISOString() }).eq('id', user.id); 
+    
     const isYearly = billingInterval === 'yearly';
     const isTopSecretDiscount = billingInterval === 'monthly' && topSecretStatus.is_active;
-    
-    let checkoutBaseUrl: string;
-    if (isYearly) {
-      checkoutBaseUrl = WHOP_CHECKOUT_BASE_URL_YEARLY;
-    } else if (isTopSecretDiscount) {
-      checkoutBaseUrl = `https://whop.com/checkout/${WHOP_MONTHLY_PLAN_ID_TOPSECRET}`;
-    } else {
-      checkoutBaseUrl = WHOP_CHECKOUT_BASE_URL_MONTHLY;
-    }
     
     // 🔥 Generate unique checkout token
     const checkoutToken = crypto.randomUUID();
@@ -2888,11 +2880,62 @@ const handleAcceptDisclaimer = async () => {
       user_email: user.email,
       checkout_token: checkoutToken,
       product_type: 'newsletter',
-      billing_interval: billingInterval
+      billing_interval: billingInterval,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
+    console.log('✅ Pending checkout saved for War Zone');
+    
+    // 🔥 v2.1: Use Edge Function for ALL checkout flows (proper metadata handling)
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+    
+    // Determine which plan to use
+    let planId: string;
+    if (isYearly) {
+      planId = WHOP_YEARLY_PLAN_ID;
+    } else if (isTopSecretDiscount) {
+      planId = WHOP_MONTHLY_PLAN_ID_TOPSECRET;
+    } else {
+      planId = WHOP_MONTHLY_PLAN_ID;
+    }
+    
+    if (accessToken) {
+      // 🔥 Try Edge Function first (best metadata handling)
+      try {
+        const response = await supabase.functions.invoke('create-whop-checkout', {
+          body: {
+            plan_id: planId,
+            email: user.email,
+            user_id: user.id,
+            subscription_category: 'journal',
+          },
+        });
+        
+        if (response.data?.checkout_url) {
+          console.log('✅ Using Edge Function checkout URL');
+          setShowDisclaimer(false);
+          window.location.href = response.data.checkout_url;
+          return;
+        }
+      } catch (err) {
+        console.warn('⚠️ Edge Function failed, falling back to direct URL:', err);
+      }
+    }
+    
+    // 🔥 Fallback: Direct URL (may have metadata issues with different emails)
+    console.warn('⚠️ Using direct Whop URL fallback');
+    let checkoutBaseUrl: string;
+    if (isYearly) {
+      checkoutBaseUrl = WHOP_CHECKOUT_BASE_URL_YEARLY;
+    } else if (isTopSecretDiscount) {
+      checkoutBaseUrl = `https://whop.com/checkout/${WHOP_MONTHLY_PLAN_ID_TOPSECRET}`;
+    } else {
+      checkoutBaseUrl = WHOP_CHECKOUT_BASE_URL_MONTHLY;
+    }
     
     const params = new URLSearchParams(); 
     params.set('email', user.email); 
+    params.set('lock_email', 'true');
     params.set('metadata[finotaur_user_id]', user.id);
     params.set('metadata[finotaur_email]', user.email);
     params.set('metadata[checkout_token]', checkoutToken);

@@ -33,7 +33,7 @@ export type JournalPlanName = 'basic' | 'premium';
 export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_pro' | 'platform_enterprise';
 
 // All plan names
-export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret';
+export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret' | 'top_secret_warzone' | 'newsletter_topsecret';
 
 export type BillingInterval = 'monthly' | 'yearly';
 
@@ -55,7 +55,9 @@ export type PlanId =
   | 'newsletter_monthly_topsecret'
   | 'top_secret_monthly'
   | 'top_secret_yearly'
-  | 'top_secret_monthly_warzone';  // 🔥 NEW: War Zone member discounted plan
+  | 'top_secret_monthly_warzone'
+  | 'top_secret_warzone_monthly'    // 🔥 For checkout flow - War Zone member discount
+  | 'newsletter_topsecret_monthly'; // 🔥 For checkout flow - Top Secret member discount
 
 
 export interface PlanConfig {
@@ -124,7 +126,11 @@ export const WHOP_PLAN_IDS = {
   // Top Secret
   top_secret_monthly: 'plan_tUvQbCrEQ4197',           // Top Secret Monthly - $89.99/month
   top_secret_yearly: 'plan_PxxbBlSdkyeo7',            // Top Secret Yearly - $899/year
-  top_secret_monthly_warzone: 'plan_7VQxCZ5Kpw6f0',   // 🔥 NEW: Top Secret For War Zone - $50/month
+  top_secret_monthly_warzone: 'plan_7VQxCZ5Kpw6f0',   // Top Secret For War Zone - $50/month
+  
+  // 🔥 Discount plan aliases for checkout flow (same IDs, different keys for PlanName lookup)
+  top_secret_warzone_monthly: 'plan_7VQxCZ5Kpw6f0',   // Top Secret for War Zone members - $50/month
+  newsletter_topsecret_monthly: 'plan_BPJdT6Tyjmzcx', // War Zone for Top Secret members - $30/month
 } as const;
 
 // 🔥 Product IDs - Used for WEBHOOK identification
@@ -699,6 +705,65 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'PDF Downloads & Archive Access',
       'Discord Community Access',
       'Email Delivery',
+    ],
+  },
+
+  // ═══════════════════════════════════════════
+  // 🔥 CROSS-PRODUCT DISCOUNT PLANS (for checkout flow)
+  // ═══════════════════════════════════════════
+  
+  // Top Secret for War Zone Members - $50/month (checkout flow alias)
+  top_secret_warzone_monthly: {
+    id: 'top_secret_warzone_monthly' as PlanId,
+    whopPlanId: 'plan_7VQxCZ5Kpw6f0',
+    whopProductId: 'prod_nl6YXbLp4t5pz',
+    name: 'top_secret_warzone' as PlanName,
+    displayName: 'Top Secret (War Zone Member Price)',
+    price: 50,
+    period: 'monthly',
+    periodLabel: '/month',
+    maxTrades: 0,
+    trialDays: 14,
+    isTopSecret: true,
+    discordIncluded: true,
+    badge: '🔥 War Zone Discount - Save $39.99/mo',
+    category: 'journal',
+    features: [
+      '🎁 14 days FREE trial',
+      '💰 Special War Zone member price: $50/month',
+      'Monthly ISM Manufacturing Report',
+      '2x Company Deep Dive Reports',
+      '2x Crypto Market Reports',
+      'PDF Downloads & Archive Access',
+      'Discord Community Access',
+      'Email Delivery',
+    ],
+  },
+  
+  // War Zone for Top Secret Members - $30/month (checkout flow alias)
+  newsletter_topsecret_monthly: {
+    id: 'newsletter_topsecret_monthly' as PlanId,
+    whopPlanId: 'plan_BPJdT6Tyjmzcx',
+    whopProductId: 'prod_u7QrZi90xiCZA',
+    name: 'newsletter_topsecret' as PlanName,
+    displayName: 'War Zone (Top Secret Member Price)',
+    price: 30,
+    period: 'monthly',
+    periodLabel: '/month',
+    maxTrades: 0,
+    trialDays: 7,
+    isNewsletter: true,
+    discordIncluded: true,
+    badge: '🔥 Top Secret Discount - Save $39.99/mo',
+    category: 'journal',
+    features: [
+      '🎁 7 days FREE trial',
+      '💰 Special Top Secret member price: $30/month',
+      'Daily institutional-grade PDF report',
+      'Macro breakdown & market structure analysis',
+      'Private Discord community',
+      'Finotaur Trading Room access',
+      'Real-time alerts',
     ],
   },
 };

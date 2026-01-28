@@ -1069,6 +1069,81 @@ serve(async (req: Request) => {
 });
 
 // ============================================
+// 🔥 v3.16.0: VALIDATE USER EMAIL - Prevent duplicate purchases with different emails
+// ============================================
+
+async function validateAndLockUserEmail(
+  supabase: SupabaseClient,
+  finotaurUserId: string | null,
+  whopEmail: string,
+  productType: 'newsletter' | 'top_secret' | 'journal'
+): Promise<{ 
+  valid: boolean; 
+  userId: string | null; 
+  userEmail: string | null;
+  reason?: string;
+}> {
+  // If we have finotaur_user_id, check if user already has a different whop_customer_email
+  if (finotaurUserId) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, whop_customer_email')
+      .eq('id', finotaurUserId)
+      .single();
+    
+    if (profile) {
+      // If user already has a whop_customer_email and it's different, reject
+      if (profile.whop_customer_email && 
+          profile.whop_customer_email.toLowerCase() !== whopEmail.toLowerCase()) {
+        console.log("⚠️ User trying to purchase with different email!", {
+          finotaurUserId,
+          existingWhopEmail: profile.whop_customer_email,
+          newWhopEmail: whopEmail,
+        });
+        
+        // Return the existing user - we'll link to their account anyway
+        return {
+          valid: true,
+          userId: profile.id,
+          userEmail: profile.email,
+          reason: `Email mismatch ignored - linking to existing account (${profile.email})`,
+        };
+      }
+      
+      // First purchase or same email - all good
+      return {
+        valid: true,
+        userId: profile.id,
+        userEmail: profile.email,
+      };
+    }
+  }
+  
+  // No finotaur_user_id - try to find user by whop_customer_email
+  const { data: existingByWhopEmail } = await supabase
+    .from('profiles')
+    .select('id, email, whop_customer_email')
+    .ilike('whop_customer_email', whopEmail)
+    .maybeSingle();
+  
+  if (existingByWhopEmail) {
+    console.log("✅ Found existing user by whop_customer_email:", existingByWhopEmail.id);
+    return {
+      valid: true,
+      userId: existingByWhopEmail.id,
+      userEmail: existingByWhopEmail.email,
+    };
+  }
+  
+  // No existing user found - this is okay for first purchase
+  return {
+    valid: true,
+    userId: null,
+    userEmail: null,
+  };
+}
+
+// ============================================
 // PAYMENT SUCCEEDED
 // 🔥 v3.5.0: Now accepts finotaurEmail parameter
 // ============================================
@@ -1161,6 +1236,8 @@ async function handlePaymentSucceeded(
               console.log("🔥 Cancelling old monthly membership:", currentProfile.newsletter_whop_membership_id);
               
               try {
+                console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
+                
                 const cancelResponse = await fetch(
                   `https://api.whop.com/api/v5/memberships/${currentProfile.newsletter_whop_membership_id}/cancel`,
                   {
@@ -1173,10 +1250,13 @@ async function handlePaymentSucceeded(
                   }
                 );
                 
+                const responseText = await cancelResponse.text();
+                console.log("📝 Cancel response status:", cancelResponse.status, "body:", responseText);
+                
                 if (cancelResponse.ok) {
                   console.log("✅ Old monthly membership cancelled successfully");
                 } else {
-                  console.warn("⚠️ Failed to cancel old membership:", await cancelResponse.text());
+                  console.warn("⚠️ Failed to cancel old membership:", cancelResponse.status, responseText);
                 }
               } catch (cancelError) {
                 console.error("❌ Error cancelling old membership:", cancelError);
@@ -1311,6 +1391,8 @@ if (isTopSecretPayment) {
               console.log("🔥 Cancelling old monthly membership:", currentProfile.top_secret_whop_membership_id);
               
               try {
+                console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
+                
                 const cancelResponse = await fetch(
                   `https://api.whop.com/api/v5/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
                   {
@@ -1323,10 +1405,13 @@ if (isTopSecretPayment) {
                   }
                 );
                 
+                const responseText = await cancelResponse.text();
+                console.log("📝 Cancel response status:", cancelResponse.status, "body:", responseText);
+                
                 if (cancelResponse.ok) {
                   console.log("✅ Old monthly membership cancelled successfully");
                 } else {
-                  console.warn("⚠️ Failed to cancel old membership:", await cancelResponse.text());
+                  console.warn("⚠️ Failed to cancel old membership:", cancelResponse.status, responseText);
                 }
               } catch (cancelError) {
                 console.error("❌ Error cancelling old membership:", cancelError);
@@ -1639,19 +1724,30 @@ async function handleNewsletterActivation(
 ): Promise<{ success: boolean; message: string }> {
   const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
 
-  console.log("📰 Processing NEWSLETTER activation (trial start):", {
+  // 🔥 v3.15.0: Get billing interval FIRST - before any logging
+  const membershipData = payload.data as WhopMembershipData;
+  const planId = membershipData.plan?.id || '';
+  const billingInterval = getBillingInterval(planId);
+
+  console.log("📰 Processing NEWSLETTER activation:", {
     userEmail,
     finotaurUserId,
     membershipId,
+    planId,
+    billingInterval,
   });
 
+  // 🔥 v3.15.0: If this is a YEARLY plan, SKIP activation entirely!
+  // Let payment.succeeded handle it - yearly has no trial!
+  if (billingInterval === 'yearly') {
+    console.log("🔥 YEARLY Newsletter activation detected - SKIPPING COMPLETELY! Deferring to payment.succeeded");
+    return { 
+      success: true, 
+      message: `Newsletter yearly activation SKIPPED - payment.succeeded will handle it` 
+    };
+  }
+
   try {
-    // Call the newsletter-specific RPC function
-    // 🔥 v3.7.0: Get billing interval from plan ID in membership data
-    const membershipData = payload.data as WhopMembershipData;
-    const planId = membershipData.plan?.id || '';
-    const billingInterval = getBillingInterval(planId);
-    
     // 🔥 v3.13.0: Try to find user from pending_checkouts if finotaurUserId is null
     let resolvedUserId = finotaurUserId;
     let resolvedEmail = userEmail;
@@ -1671,25 +1767,6 @@ async function handleNewsletterActivation(
           resolvedUserId = foundUser.id;
           resolvedEmail = foundUser.email;
         }
-      }
-    }
-    
-    // 🔥 v3.14.0: If this is a YEARLY plan, check if user is upgrading from monthly trial
-    // If so, SKIP activation - let payment.succeeded handle the upgrade
-    if (billingInterval === 'yearly' && resolvedUserId) {
-      const { data: currentProfile } = await supabase
-        .from('profiles')
-        .select('newsletter_interval, newsletter_status, newsletter_whop_membership_id')
-        .eq('id', resolvedUserId)
-        .single();
-      
-      if (currentProfile?.newsletter_interval === 'monthly' && 
-          ['active', 'trial', 'trialing'].includes(currentProfile?.newsletter_status || '')) {
-        console.log("🔥 Yearly activation for existing monthly subscriber - skipping, will be handled by payment.succeeded");
-        return { 
-          success: true, 
-          message: `Newsletter yearly upgrade detected - deferring to payment.succeeded handler` 
-        };
       }
     }
     
@@ -1743,21 +1820,33 @@ async function handleTopSecretActivation(
 ): Promise<{ success: boolean; message: string }> {
   const { userEmail, whopUserId, membershipId, productId, finotaurUserId } = params;
 
+  // 🔥 v3.15.0: Get billing interval FIRST - before any logging
+  const membershipData = payload.data as WhopMembershipData;
+  const planId = membershipData.plan?.id || '';
+  const billingInterval = getBillingInterval(planId);
+
   console.log("🔐 Processing TOP SECRET activation:", {
     userEmail,
     finotaurUserId,
     membershipId,
+    planId,
+    billingInterval,
   });
 
+  // 🔥 v3.15.0: If this is a YEARLY plan, SKIP activation entirely!
+  // Let payment.succeeded handle it
+  if (billingInterval === 'yearly') {
+    console.log("🔥 YEARLY Top Secret activation detected - SKIPPING COMPLETELY! Deferring to payment.succeeded");
+    return { 
+      success: true, 
+      message: `Top Secret yearly activation SKIPPED - payment.succeeded will handle it` 
+    };
+  }
+
   try {
-    // 🔥 v3.14.0: Get plan ID to check if this is yearly
-    const membershipData = payload.data as WhopMembershipData;
-    const planId = membershipData.plan?.id || '';
-    const billingInterval = getBillingInterval(planId);
-    
     // 🔥 v3.14.0: If this is a YEARLY plan, check if user is upgrading from monthly
     // If so, SKIP activation - let payment.succeeded handle the upgrade
-    if (billingInterval === 'yearly' && finotaurUserId) {
+    if (finotaurUserId) {
       const { data: currentProfile } = await supabase
         .from('profiles')
         .select('top_secret_interval, top_secret_status')
