@@ -840,8 +840,8 @@ async function cancelWarZoneForTopSecretMember(
       };
     }
 
-// 🔥 v3.8.0: Call Whop API to cancel at period end (correct endpoint)
-    const whopResponse = await fetch(`https://api.whop.com/api/v5/memberships/${warZoneMembershipId}/cancel`, {
+// 🔥 v3.17.0: Call Whop API to cancel at period end (new API endpoint)
+    const whopResponse = await fetch(`https://api.whop.com/api/v2/memberships/${warZoneMembershipId}/cancel`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WHOP_API_KEY}`,
@@ -1269,15 +1269,15 @@ async function handlePaymentSucceeded(
               try {
                 console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
                 
+                // 🔥 v3.17.0: Use terminate endpoint for immediate cancellation of old membership
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v5/memberships/${currentProfile.newsletter_whop_membership_id}/cancel`,
+                  `https://api.whop.com/api/v2/memberships/${currentProfile.newsletter_whop_membership_id}/terminate`,
                   {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${WHOP_API_KEY}`,
                       'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ cancellation_mode: "immediately" }),
                   }
                 );
                 
@@ -1424,15 +1424,15 @@ if (isTopSecretPayment) {
               try {
                 console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
                 
+                // 🔥 v3.17.0: Use terminate endpoint for immediate cancellation of old membership
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v5/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
+                  `https://api.whop.com/api/v2/memberships/${currentProfile.top_secret_whop_membership_id}/terminate`,
                   {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${WHOP_API_KEY}`,
                       'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ cancellation_mode: "immediately" }),
                   }
                 );
                 

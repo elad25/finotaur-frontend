@@ -1,21 +1,24 @@
 // =====================================================
-// FINOTAUR PRODUCT SUBSCRIPTION MANAGEMENT - v2.3.0
+// FINOTAUR PRODUCT SUBSCRIPTION MANAGEMENT - v3.2.0
 // =====================================================
 // Edge Function for managing Newsletter & Top Secret subscriptions
 // 
 // Handles: Newsletter (War Zone) & Top Secret products
 // Actions: cancel, reactivate, status
 //
+// 🔥 v3.2.0 CHANGES - PAUSE/RESUME FLOW:
+// - CHANGED: Cancel now uses Whop PAUSE API instead of Cancel API
+// - CHANGED: Reactivate now uses Whop RESUME API
+// - WHY: Pause/Resume is fully reversible, Cancel is NOT reversible via API
+// - User "cancels" → Whop pauses payment collection (payment_collection_paused = true)
+// - User "reactivates" → Whop resumes payment collection (payment_collection_paused = false)
+// - User keeps access while paused, but NO new charges until resumed
+// - When billing period ends + still paused → membership goes invalid
+// - Perfect sync between Finotaur DB and Whop state
+//
 // 🔥 v2.3.0 CHANGES:
 // - FIXED: Trial/Free cancellation now sets cancel_at_period_end = true
 // - User keeps access until trial_ends_at or expires_at
-// - Immediate cancellation only happens when Whop webhook fires at period end
-// - Better UX: user sees "Cancelling" status, not immediate loss of access
-//
-// 🔥 v2.2.0 CHANGES:
-// - NEW: Reactivate cancelled FREE/TRIAL subscriptions directly in DB
-// - Trial users can now reactivate without going through checkout again
-// - Better handling of all subscription states
 //
 // Deployment:
 // supabase functions deploy whop-manage-subscription
@@ -80,6 +83,7 @@ interface WhopMembership {
   id: string;
   status: string;
   cancel_at_period_end: boolean;
+  payment_collection_paused: boolean;  // 🔥 v3.2.0: New field for Pause/Resume flow
   renewal_period_end: string;
   product: { id: string; title: string };
   plan: { id: string };
@@ -94,32 +98,34 @@ async function cancelWhopMembership(
   mode: "at_period_end" | "immediate" = "at_period_end"
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string; skipWhop?: boolean }> {
   try {
-    // 🔥 v2.6.0: Check if API key exists before calling Whop
+    // 🔥 v3.2.0: Check if API key exists before calling Whop
     if (!WHOP_API_KEY) {
       console.warn(`⚠️ WHOP_API_KEY not configured - skipping Whop API call`);
       return { success: true, skipWhop: true };
     }
 
-    console.log(`🔄 Canceling Whop membership ${membershipId} with mode: ${mode}`);
+    console.log(`🔄 Pausing Whop membership ${membershipId} (using Pause instead of Cancel for reversibility)`);
 
-    // 🔥 v3.1.0 FIX: Use correct Whop API endpoint from docs.whop.com
-    // Whop API: POST /api/v1/memberships/{id}/cancel
-    const response = await fetch(`https://api.whop.com/api/v1/memberships/${membershipId}/cancel`, {
+    // 🔥 v3.2.0: Use PAUSE API instead of Cancel
+    // Pause stops payment collection but keeps membership intact
+    // Resume can then reactivate it - unlike Cancel which is irreversible
+    // Whop API: POST /memberships/{id}/pause
+    const response = await fetch(`https://api.whop.com/api/v1/memberships/${membershipId}/pause`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ 
-        cancellation_mode: mode === "immediate" ? "immediate" : "at_period_end"
+        void_payments: false  // Don't void existing past_due payments
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
+      console.error(`❌ Whop Pause API error: ${response.status} - ${errorText}`);
       
-      // 🔥 v2.6.0: If 401 (unauthorized) or 404 (not found), continue with DB-only update
+      // 🔥 v3.2.0: If 401 (unauthorized) or 404 (not found), continue with DB-only update
       if (response.status === 401 || response.status === 404) {
         console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
         return { success: true, skipWhop: true };
@@ -129,12 +135,13 @@ async function cancelWhopMembership(
     }
 
     const data = await response.json();
-    console.log(`✅ Whop membership canceled:`, data);
+    console.log(`✅ Whop membership paused:`, data);
+    console.log(`   payment_collection_paused: ${data.payment_collection_paused}`);
     return { success: true, data };
 
   } catch (error) {
-    console.error(`❌ Cancel Whop membership error:`, error);
-    // 🔥 v2.6.0: On network errors, continue with DB-only update
+    console.error(`❌ Pause Whop membership error:`, error);
+    // 🔥 v3.2.0: On network errors, continue with DB-only update
     console.warn(`⚠️ Whop API network error - continuing with DB-only update`);
     return { success: true, skipWhop: true };
   }
@@ -149,42 +156,39 @@ async function reactivateWhopMembership(
       return { success: true, skipWhop: true };
     }
 
-    console.log(`🔄 Attempting to reactivate Whop membership ${membershipId}`);
+    console.log(`🔄 Resuming Whop membership ${membershipId}`);
 
-    // 🔥 v3.15.0: Try Whop's resume endpoint - may work for paused subscriptions
-    // For cancel_at_period_end, user must uncancel via Whop UI
-    // When they do, we receive membership.cancel_at_period_end_changed webhook
-    
-    try {
-      const response = await fetch(`https://api.whop.com/api/v5/company/memberships/${membershipId}/resume`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHOP_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log(`✅ Whop resume API succeeded:`, result);
-        return { success: true, skipWhop: false, data: result };
-      } else {
-        const errorText = await response.text();
-        console.log(`⚠️ Whop resume API returned ${response.status}: ${errorText}`);
+    // 🔥 v3.2.0: Use RESUME API - this works because we use PAUSE instead of Cancel
+    // Resume reactivates payment collection on a paused membership
+    // Whop API: POST /memberships/{id}/resume
+    const response = await fetch(`https://api.whop.com/api/v1/memberships/${membershipId}/resume`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${WHOP_API_KEY}`,
+        "Content-Type": "application/json"
       }
-    } catch (resumeError) {
-      console.log(`⚠️ Whop resume API error:`, resumeError);
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✅ Whop Resume API succeeded:`, result);
+      console.log(`   payment_collection_paused: ${result.payment_collection_paused}`);
+      return { success: true, skipWhop: false, data: result };
+    } else {
+      const errorText = await response.text();
+      console.error(`❌ Whop Resume API error: ${response.status} - ${errorText}`);
+      
+      // If 401 (unauthorized) or 404 (not found), continue with DB-only update
+      if (response.status === 401 || response.status === 404) {
+        console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
+        return { success: true, skipWhop: true };
+      }
+      
+      return { success: false, error: `Whop Resume API error: ${response.status} - ${errorText}` };
     }
-    
-    // Resume didn't work - this is expected for cancel_at_period_end
-    console.log(`⚠️ Whop API doesn't support uncancel - updating DB only`);
-    console.log(`💡 User must uncancel at: https://whop.com/billing/manage/`);
-    console.log(`💡 When they do, we'll receive membership.cancel_at_period_end_changed webhook`);
-    
-    return { success: true, skipWhop: true };
 
   } catch (error) {
-    console.error(`❌ Reactivate Whop membership error:`, error);
+    console.error(`❌ Resume Whop membership error:`, error);
     console.warn(`⚠️ Continuing with DB-only update`);
     return { success: true, skipWhop: true };
   }
@@ -929,13 +933,13 @@ console.log(`✅ Subscription scheduled for cancellation`);
         
         // Cancel the other product in Whop at period end
         if (otherMembershipId && WHOP_API_KEY) {
-          const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/cancel`, {
+          const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/pause`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${WHOP_API_KEY}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ cancellation_mode: "at_period_end" }),
+            body: JSON.stringify({ void_payments: false }),
           });
           
           if (cancelResponse.ok) {
@@ -1073,13 +1077,13 @@ console.log(`✅ Subscription scheduled for cancellation`);
       
       // Cancel the discounted product in Whop at period end
       if (otherMembershipId && WHOP_API_KEY) {
-        const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/cancel`, {
+        const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/pause`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${WHOP_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ cancellation_mode: "at_period_end" }),
+          body: JSON.stringify({ void_payments: false }),
         });
         
         if (cancelResponse.ok) {
@@ -1162,13 +1166,13 @@ console.log(`✅ Subscription scheduled for cancellation`);
       
       // Cancel the other product in Whop at period end
       if (otherMembershipId && WHOP_API_KEY) {
-        const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/cancel`, {
+        const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/pause`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${WHOP_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ cancellation_mode: "at_period_end" }),
+          body: JSON.stringify({ void_payments: false }),
         });
         
         if (cancelResponse.ok) {

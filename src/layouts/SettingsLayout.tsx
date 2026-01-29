@@ -1396,17 +1396,40 @@ const BillingTab = () => {
       </Card>
 
       {/* 🔥 TOP SECRET CARD */}
-      <Card className="p-6 bg-gradient-to-br from-red-950/40 via-zinc-900/80 to-zinc-900/90 border-red-600/30 relative overflow-hidden shadow-xl shadow-red-900/10">
+      <Card className={cn(
+        "p-6 relative overflow-hidden shadow-xl",
+        topSecretIsActive && topSecretInterval === 'yearly'
+          ? "bg-gradient-to-br from-yellow-950/40 via-amber-950/30 to-zinc-900/90 border-2 border-yellow-500/40 shadow-yellow-900/20"
+          : "bg-gradient-to-br from-red-950/40 via-zinc-900/80 to-zinc-900/90 border-red-600/30 shadow-red-900/10"
+      )}>
         {/* Subtle animated glow */}
-        <div className="absolute inset-0 bg-gradient-to-r from-red-600/5 via-transparent to-orange-600/5" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-r via-transparent",
+          topSecretIsActive && topSecretInterval === 'yearly'
+            ? "from-yellow-500/10 to-amber-500/10"
+            : "from-red-600/5 to-orange-600/5"
+        )} />
+        <div className={cn(
+          "absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent",
+          topSecretIsActive && topSecretInterval === 'yearly'
+            ? "via-yellow-500/60"
+            : "via-red-500/50"
+        )} />
         
         <div className="relative">
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/30 to-orange-500/20 flex items-center justify-center border border-red-500/40 shadow-lg shadow-red-500/20">
-                <Flame className="w-5 h-5 text-red-300" />
+              <div className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center shadow-lg",
+                topSecretIsActive && topSecretInterval === 'yearly'
+                  ? "bg-gradient-to-br from-yellow-500/40 to-amber-500/30 border border-yellow-500/50 shadow-yellow-500/30"
+                  : "bg-gradient-to-br from-red-500/30 to-orange-500/20 border border-red-500/40 shadow-red-500/20"
+              )}>
+                <Flame className={cn(
+                  "w-5 h-5",
+                  topSecretIsActive && topSecretInterval === 'yearly' ? "text-yellow-300" : "text-red-300"
+                )} />
               </div>
               <div>
                 <h2 className="font-semibold text-white text-lg flex items-center gap-2">
@@ -1423,7 +1446,12 @@ const BillingTab = () => {
                 href="https://whop.com/finotaur" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-xs text-zinc-500 hover:text-red-300 flex items-center gap-1.5 transition-colors"
+                className={cn(
+                  "text-xs flex items-center gap-1.5 transition-colors",
+                  topSecretInterval === 'yearly'
+                    ? "text-zinc-500 hover:text-yellow-300"
+                    : "text-zinc-500 hover:text-red-300"
+                )}
               >
                 Manage on Whop <ExternalLink className="w-3 h-3" />
               </a>
@@ -1438,6 +1466,11 @@ const BillingTab = () => {
                 <span className="text-xl font-bold text-white">
                   {topSecretIsActive ? 'Premium Access' : 'Not Subscribed'}
                 </span>
+                {topSecretIsActive && topSecretInterval === 'yearly' && (
+                  <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-xs px-2.5 py-1 shadow-lg shadow-yellow-500/20">
+                    <Crown className="w-3.5 h-3.5 mr-1.5" />Annual Member
+                  </Badge>
+                )}
                 <Badge variant="outline" className={cn(
                   "px-2.5 py-1",
                   profile?.top_secret_cancel_at_period_end
@@ -1511,11 +1544,21 @@ const BillingTab = () => {
 
             {/* Billing Info for Active Subscribers */}
             {topSecretIsActive && (
-              <div className="mb-5 p-4 rounded-lg bg-zinc-800/50 border border-zinc-700/40">
+              <div className={cn(
+                "mb-5 p-4 rounded-lg",
+                topSecretInterval === 'yearly'
+                  ? "bg-gradient-to-br from-yellow-900/20 to-amber-900/10 border border-yellow-500/30"
+                  : "bg-zinc-800/50 border border-zinc-700/40"
+              )}>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
-                    <p className="capitalize text-zinc-200 font-medium">{topSecretInterval}</p>
+                    <p className={cn(
+                      "capitalize font-medium",
+                      topSecretInterval === 'yearly' ? "text-yellow-300" : "text-zinc-200"
+                    )}>
+                      {topSecretInterval === 'yearly' ? '✨ Yearly' : 'Monthly'}
+                    </p>
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
@@ -1570,7 +1613,11 @@ const BillingTab = () => {
                     {profile?.top_secret_cancel_at_period_end ? (
                       <span className="flex items-center gap-2">
                         <Clock className="w-3.5 h-3.5 text-amber-400" />
-                        Access until {formatDate(profile?.top_secret_expires_at)}
+                        Access until {formatDate(
+                          topSecretPricing.isInTrial && profile?.top_secret_trial_ends_at
+                            ? profile.top_secret_trial_ends_at
+                            : profile?.top_secret_expires_at
+                        )}
                       </span>
                     ) : (
                       <span>Full classified access</span>
@@ -1578,7 +1625,7 @@ const BillingTab = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     {/* 🔥 NEW: Upgrade to Yearly button for monthly subscribers */}
-                    {topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && !topSecretPricing.isInTrial && (
+                    {topSecretInterval === 'monthly' && !profile?.top_secret_cancel_at_period_end && (
                       <Button
                         size="sm"
                         onClick={handleUpgradeTopSecretToYearly}
@@ -1611,9 +1658,9 @@ const BillingTab = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => setShowTopSecretCancelDialog(true)}
-                        className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
                       >
-                        Cancel
+                        Unsubscribe
                       </Button>
                     )}
                   </div>
@@ -1676,7 +1723,6 @@ const BillingTab = () => {
             <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <p className="text-sm text-amber-200 leading-relaxed">
                 <strong>What you'll miss:</strong>
-                <br />• Daily AI-powered market analysis
                 <br />• Exclusive war zone alerts
                 <br />• {newsletterPaid ? 'Premium institutional insights' : 'Free market updates'}
               </p>
