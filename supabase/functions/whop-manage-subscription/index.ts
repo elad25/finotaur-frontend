@@ -359,11 +359,78 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
   const newsletterIsDiscounted = profile.newsletter_whop_plan_id === 'plan_BPJdT6Tyjmzcx';
   const topSecretIsDiscounted = profile.top_secret_whop_plan_id === 'plan_7VQxCZ5Kpw6f0';
   
-  // 🔥 v2.6.0: Check if cancelling product is at FULL price (meaning other is discounted)
-  const newsletterIsFullPrice = profile.newsletter_whop_plan_id === 'plan_U6lF2eO5y9469' || 
-                                 profile.newsletter_whop_plan_id === 'plan_bp2QTGuwfpj0A';
-  const topSecretIsFullPrice = profile.top_secret_whop_plan_id === 'plan_tUvQbCrEQ4197' || 
-                                profile.top_secret_whop_plan_id === 'plan_PxxbBlSdkyeo7';
+  // 🔥 v3.4.0 FIX: Check explicit full price plan IDs
+  const explicitNewsletterFullPrice = profile.newsletter_whop_plan_id === 'plan_U6lF2eO5y9469' || 
+                                       profile.newsletter_whop_plan_id === 'plan_bp2QTGuwfpj0A';
+  const explicitTopSecretFullPrice = profile.top_secret_whop_plan_id === 'plan_tUvQbCrEQ4197' || 
+                                      profile.top_secret_whop_plan_id === 'plan_PxxbBlSdkyeo7';
+  
+  // 🔥 v3.4.0 FIX: When plan_id is missing/null, use timing-based detection
+  // The FIRST product purchased is always at FULL PRICE
+  // The SECOND product purchased is at DISCOUNTED price (bundle discount)
+  // Compare started_at timestamps to determine which was first
+  const newsletterStarted = profile.newsletter_started_at ? new Date(profile.newsletter_started_at) : null;
+  const topSecretStarted = profile.top_secret_started_at ? new Date(profile.top_secret_started_at) : null;
+  
+  let newsletterIsFullPrice = explicitNewsletterFullPrice;
+  let topSecretIsFullPrice = explicitTopSecretFullPrice;
+  
+  // If we have a bundle but plan_ids are missing, infer from timestamps
+  if (hasBundle && !newsletterIsDiscounted && !topSecretIsDiscounted && 
+      !explicitNewsletterFullPrice && !explicitTopSecretFullPrice) {
+    if (newsletterStarted && topSecretStarted) {
+      // First product = full price, Second product = discounted
+      if (newsletterStarted < topSecretStarted) {
+        // Newsletter was purchased first → Newsletter is FULL PRICE, Top Secret is DISCOUNTED
+        newsletterIsFullPrice = true;
+        // Note: topSecretIsDiscounted stays false because plan_id doesn't match,
+        // but we know it's the "second" product
+      } else {
+        // Top Secret was purchased first → Top Secret is FULL PRICE, Newsletter is DISCOUNTED
+        topSecretIsFullPrice = true;
+      }
+    }
+  }
+  
+  // 🔥 DEBUG: Log the detection
+  console.log(`📊 Bundle Status Check:`, {
+    cancellingProduct,
+    hasBundle,
+    newsletterActive,
+    topSecretActive,
+    newsletter_whop_plan_id: profile.newsletter_whop_plan_id,
+    top_secret_whop_plan_id: profile.top_secret_whop_plan_id,
+    newsletterIsDiscounted,
+    topSecretIsDiscounted,
+    newsletterIsFullPrice,
+    topSecretIsFullPrice,
+    explicitNewsletterFullPrice,
+    explicitTopSecretFullPrice,
+    newsletterStarted: newsletterStarted?.toISOString(),
+    topSecretStarted: topSecretStarted?.toISOString(),
+  });
+  
+  // Inferred full price: if the OTHER product is discounted, THIS one must be full price
+  const newsletterIsFullPrice = explicitNewsletterFullPrice || 
+                                 (hasBundle && topSecretIsDiscounted && !newsletterIsDiscounted);
+  const topSecretIsFullPrice = explicitTopSecretFullPrice || 
+                                (hasBundle && newsletterIsDiscounted && !topSecretIsDiscounted);
+  
+  // 🔥 DEBUG: Log the detection
+  console.log(`📊 Bundle Status Check:`, {
+    cancellingProduct,
+    hasBundle,
+    newsletterActive,
+    topSecretActive,
+    newsletter_whop_plan_id: profile.newsletter_whop_plan_id,
+    top_secret_whop_plan_id: profile.top_secret_whop_plan_id,
+    newsletterIsDiscounted,
+    topSecretIsDiscounted,
+    newsletterIsFullPrice,
+    topSecretIsFullPrice,
+    explicitNewsletterFullPrice,
+    explicitTopSecretFullPrice,
+  });
   
   const otherProduct = cancellingProduct === 'newsletter' ? 'top_secret' : 'newsletter';
   const otherProductName = cancellingProduct === 'newsletter' ? 'Top Secret' : 'War Zone Newsletter';
@@ -568,22 +635,30 @@ async function handleCheckBundle(
     affectedProduct: string;
   } | null = null;
   
-  // 🔥 NEW: Track if cancelling FULL PRICE product (discounted product will be cancelled)
+  // 🔥 v2.7.0: Determine cancellation scenario
+  // Scenario A: Cancelling FULL PRICE product → discounted product loses its discount
+  // Scenario B: Cancelling DISCOUNTED product → full price product continues unchanged
   let cancellingFullPriceProduct = false;
   let discountedProductWillBeCancelled = false;
   
   if (bundleStatus.hasBundle) {
-    // Case 1: Cancelling DISCOUNTED product (user pays less) → other product's price stays same
-    if (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) {
-      // Cancelling Top Secret will increase Newsletter price from $30 to $69.99
+    // 🔥 v3.4.0: Simplified logic - if cancelling product is FULL PRICE, the other is affected
+    
+    // Scenario A: Cancelling TOP SECRET at full price → War Zone loses discount
+    if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice) {
+      cancellingFullPriceProduct = true;
+      discountedProductWillBeCancelled = true;
       priceImpact = {
         willIncreasePrice: true,
         currentPrice: 30,
         newPrice: 69.99,
         affectedProduct: 'War Zone Newsletter',
       };
-    } else if (product === 'newsletter' && bundleStatus.topSecretIsDiscounted) {
-      // Cancelling Newsletter will increase Top Secret price from $50 to $89.99
+    }
+    // Scenario A: Cancelling WAR ZONE at full price → Top Secret loses discount
+    else if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice) {
+      cancellingFullPriceProduct = true;
+      discountedProductWillBeCancelled = true;
       priceImpact = {
         willIncreasePrice: true,
         currentPrice: 50,
@@ -591,28 +666,12 @@ async function handleCheckBundle(
         affectedProduct: 'Top Secret',
       };
     }
-    
-    // 🔥 Case 2: Cancelling FULL PRICE product → discounted product will need decision
-    if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) {
-      // User is cancelling War Zone ($69.99) - Top Secret is at discounted $50
-      cancellingFullPriceProduct = true;
-      discountedProductWillBeCancelled = true;
-      priceImpact = {
-        willIncreasePrice: false, // The OTHER product doesn't increase, it gets cancelled or upgraded
-        currentPrice: 50, // Top Secret current discounted price
-        newPrice: 89.99, // Top Secret full price if they want to keep it
-        affectedProduct: 'Top Secret',
-      };
-    } else if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted) {
-      // User is cancelling Top Secret ($89.99) - War Zone is at discounted $30
-      cancellingFullPriceProduct = true;
-      discountedProductWillBeCancelled = true;
-      priceImpact = {
-        willIncreasePrice: false,
-        currentPrice: 30, // War Zone current discounted price
-        newPrice: 69.99, // War Zone full price if they want to keep it
-        affectedProduct: 'War Zone Newsletter',
-      };
+    // Scenario B: Cancelling DISCOUNTED product → other product unaffected
+    else if (product === 'top_secret' && !bundleStatus.topSecretIsFullPrice) {
+      priceImpact = null;
+    }
+    else if (product === 'newsletter' && !bundleStatus.newsletterIsFullPrice) {
+      priceImpact = null;
     }
   }
   
@@ -623,15 +682,15 @@ async function handleCheckBundle(
       otherProduct: bundleStatus.otherProduct,
       otherProductName: bundleStatus.otherProductName,
       priceImpact,
-      cancellingFullPriceProduct,  // 🔥 NEW
-      discountedProductWillBeCancelled,  // 🔥 NEW
+      cancellingFullPriceProduct,  // 🔥 NEW: Flag for scenario A
+      discountedProductWillBeCancelled,  // 🔥 NEW: Flag indicating other product will be cancelled
       bundleDetails: {
         newsletterActive: bundleStatus.newsletterActive,
         topSecretActive: bundleStatus.topSecretActive,
         newsletterIsDiscounted: bundleStatus.newsletterIsDiscounted,
         topSecretIsDiscounted: bundleStatus.topSecretIsDiscounted,
-        newsletterIsFullPrice: bundleStatus.newsletterIsFullPrice,  // 🔥 NEW
-        topSecretIsFullPrice: bundleStatus.topSecretIsFullPrice,  // 🔥 NEW
+        newsletterIsFullPrice: bundleStatus.newsletterIsFullPrice,
+        topSecretIsFullPrice: bundleStatus.topSecretIsFullPrice,
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
