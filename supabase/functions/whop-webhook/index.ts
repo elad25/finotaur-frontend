@@ -47,6 +47,7 @@ const NEWSLETTER_PRODUCT_IDS = new Set([
 const TOP_SECRET_PRODUCT_IDS = new Set([
   'prod_nl6YXbLp4t5pz',  // Top Secret (regular: monthly $89.99, yearly $899)
   'prod_e8Er36RubeFXU',  // Top Secret For War Zone Members ($50/month)
+  'prod_aGd9mbl2XUIFO',  // Top Secret Yearly ($899/year) - STANDALONE YEARLY PRODUCT
 ]);
 
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
@@ -1269,15 +1270,18 @@ async function handlePaymentSucceeded(
               try {
                 console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
                 
-                // 🔥 v3.17.0: Use terminate endpoint for immediate cancellation of old membership
+                // 🔥 v3.18.0: Use cancel endpoint with immediate mode for old membership
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v2/memberships/${currentProfile.newsletter_whop_membership_id}/terminate`,
+                  `https://api.whop.com/api/v2/memberships/${currentProfile.newsletter_whop_membership_id}/cancel`,
                   {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${WHOP_API_KEY}`,
                       'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({
+                      cancellation_mode: 'immediate'
+                    }),
                   }
                 );
                 
@@ -1424,15 +1428,18 @@ if (isTopSecretPayment) {
               try {
                 console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
                 
-                // 🔥 v3.17.0: Use terminate endpoint for immediate cancellation of old membership
+                // 🔥 v3.18.0: Use cancel endpoint with immediate mode for old membership
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v2/memberships/${currentProfile.top_secret_whop_membership_id}/terminate`,
+                  `https://api.whop.com/api/v2/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
                   {
                     method: 'POST',
                     headers: {
                       'Authorization': `Bearer ${WHOP_API_KEY}`,
                       'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({
+                      cancellation_mode: 'immediate'
+                    }),
                   }
                 );
                 
@@ -1456,6 +1463,7 @@ if (isTopSecretPayment) {
               p_user_id: userResult.id,
               p_new_whop_membership_id: membershipId,
               p_new_expires_at: expiresAt.toISOString(),
+              p_new_plan_id: planId,  // 🔥 v3.18.0: Pass plan ID for interval detection
             });
             
             if (upgradeError) {

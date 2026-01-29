@@ -1,56 +1,24 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
+import { lazy, Suspense } from 'react';
+import { useUserMeta } from '@/hooks/useUserStatus';
 import Warzonelanding from './Warzonelanding';
 
-// Lazy import for admin component - CORRECT PATH based on App.tsx
+// Lazy import for admin component
 const NewsletterSub = lazy(() => import('@/pages/app/journal/admin/NewsletterSub'));
 
 /**
- * ⚔️ WAR ZONE PAGE
+ * ⚔️ WAR ZONE PAGE - OPTIMIZED
  * 
- * This page shows different content based on user role:
- * - Regular users: Landing page to subscribe to newsletter
- * - Admin users: Full newsletter management panel (NewsletterSub)
+ * Uses useUserMeta hook (shared cache) instead of separate DB query
+ * 
+ * Flow:
+ * - Admin/Super Admin → NewsletterSub (full admin panel)
+ * - Regular users → Warzonelanding (handles subscriber vs non-subscriber internally)
  * 
  * Route: /app/all-markets/warzone
  */
 export default function WarZonePage() {
-  const { user } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Check if user is admin by querying the database directly
-  useEffect(() => {
-    async function checkAdmin() {
-      if (!user?.id) {
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error checking admin status:', error);
-          setIsAdmin(false);
-        } else {
-          setIsAdmin(data?.role === 'admin' || data?.role === 'super_admin');
-        }
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        setIsAdmin(false);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    checkAdmin();
-  }, [user?.id]);
+  // 🔥 OPTIMIZED: Uses shared cached hook instead of separate DB call
+  const { isAdmin, isLoading } = useUserMeta();
 
   // Loading state
   if (isLoading) {
@@ -81,5 +49,6 @@ export default function WarZonePage() {
   }
 
   // 👤 Regular users see the landing page
+  // (Warzonelanding handles subscriber vs non-subscriber internally)
   return <Warzonelanding />;
 }

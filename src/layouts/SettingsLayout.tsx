@@ -1499,7 +1499,7 @@ const BillingTab = () => {
               <div className="text-right">
                 {topSecretIsActive ? (
                   topSecretInterval === 'yearly' ? (
-                    <span className="text-xl font-bold text-white">$500/yr</span>
+                    <span className="text-xl font-bold text-white">$899/yr</span>
                   ) : topSecretPricing.isInTrial ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xl font-bold text-white">Free Trial</span>

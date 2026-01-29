@@ -205,6 +205,9 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   
   // 🔥 Top Secret For War Zone Members - ADDED!
   'prod_e8Er36RubeFXU': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
+  
+  // 🔥 Top Secret Yearly - STANDALONE PRODUCT
+  'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
 };
 
 // Plan ID to Name lookup
