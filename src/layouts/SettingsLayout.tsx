@@ -529,6 +529,16 @@ const BillingTab = () => {
   const [bundleInfo, setBundleInfo] = useState<{
     otherProductName: string;
     priceImpact: { currentPrice: number; newPrice: number; affectedProduct: string } | null;
+    cancellingFullPriceProduct?: boolean;
+    discountedProductWillBeCancelled?: boolean;
+    bundleDetails?: {
+      newsletterActive: boolean;
+      topSecretActive: boolean;
+      newsletterIsDiscounted: boolean;
+      topSecretIsDiscounted: boolean;
+      newsletterIsFullPrice: boolean;
+      topSecretIsFullPrice: boolean;
+    };
   } | null>(null);
   const [bundleCancelLoading, setBundleCancelLoading] = useState(false);
   // 🔥 NEW: Separate loading states for reactivation
@@ -671,12 +681,15 @@ const BillingTab = () => {
 
       const data = await response.json();
       
-      if (data.hasBundle && data.priceImpact) {
+      if (data.hasBundle && (data.priceImpact || data.cancellingFullPriceProduct)) {
         // Show bundle dialog
         setBundleCancelProduct(product);
         setBundleInfo({
           otherProductName: data.otherProductName,
           priceImpact: data.priceImpact,
+          cancellingFullPriceProduct: data.cancellingFullPriceProduct,  // 🔥 NEW
+          discountedProductWillBeCancelled: data.discountedProductWillBeCancelled,  // 🔥 NEW
+          bundleDetails: data.bundleDetails,  // 🔥 NEW
         });
         setShowBundleCancelDialog(true);
         return true; // Indicates bundle dialog shown
@@ -1805,21 +1818,41 @@ const BillingTab = () => {
         </DialogContent>
       </Dialog>
 
-      {/* 🔥 NEW: Bundle Cancellation Dialog */}
+      {/* 🔥 UPDATED: Bundle Cancellation Dialog - handles both scenarios */}
       <Dialog open={showBundleCancelDialog} onOpenChange={setShowBundleCancelDialog}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              You Have Both Products
+              {bundleInfo?.cancellingFullPriceProduct 
+                ? 'Bundle Subscription Notice' 
+                : 'You Have Both Products'}
             </DialogTitle>
             <DialogDescription>
-              You're subscribed to both War Zone and Top Secret. What would you like to do?
+              {bundleInfo?.cancellingFullPriceProduct 
+                ? `You're cancelling ${bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'} which is at full price. Your ${bundleInfo?.otherProductName} is at a discounted bundle price and cannot continue at that rate.`
+                : "You're subscribed to both War Zone and Top Secret. What would you like to do?"}
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4 space-y-4">
-            {bundleInfo?.priceImpact && (
+            {/* 🔥 Show different notice based on scenario */}
+            {bundleInfo?.cancellingFullPriceProduct ? (
+              // Scenario: Cancelling FULL PRICE product
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-sm text-amber-200 leading-relaxed">
+                  <strong>⚠️ Bundle Discount Notice:</strong>
+                  <br />
+                  Your <strong>{bundleInfo.otherProductName}</strong> is currently at the discounted price of{' '}
+                  <strong>${bundleInfo.priceImpact?.currentPrice}/mo</strong>. 
+                  <br /><br />
+                  Without {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}, 
+                  you can either cancel both or keep {bundleInfo.otherProductName} at the regular price of{' '}
+                  <strong>${bundleInfo.priceImpact?.newPrice}/mo</strong>.
+                </p>
+              </div>
+            ) : bundleInfo?.priceImpact && (
+              // Scenario: Cancelling DISCOUNTED product
               <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
                 <p className="text-sm text-amber-200 leading-relaxed">
                   <strong>⚠️ Price Change Notice:</strong>
@@ -1833,6 +1866,7 @@ const BillingTab = () => {
             )}
             
             <div className="space-y-3">
+              {/* Option A: Cancel Both */}
               <Button
                 variant="outline"
                 className="w-full justify-start h-auto py-3 px-4 border-red-500/30 hover:bg-red-500/10"
@@ -1856,6 +1890,7 @@ const BillingTab = () => {
                 </div>
               </Button>
               
+              {/* Option B: Keep one product */}
               <Button
                 variant="outline"
                 className="w-full justify-start h-auto py-3 px-4 border-amber-500/30 hover:bg-amber-500/10"
@@ -1872,15 +1907,32 @@ const BillingTab = () => {
                 disabled={bundleCancelLoading}
               >
                 <div className="text-left">
-                  <p className="font-medium text-amber-400">
-                    Cancel Only {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}
-                  </p>
-                  <p className="text-xs text-zinc-500 mt-1">
-                    Keep {bundleInfo?.otherProductName} at ${bundleInfo?.priceImpact?.newPrice}/mo
-                  </p>
+                  {bundleInfo?.cancellingFullPriceProduct ? (
+                    // Cancelling full price → keep discounted at full price
+                    <>
+                      <p className="font-medium text-amber-400">
+                        Keep {bundleInfo?.otherProductName} at ${bundleInfo?.priceImpact?.newPrice}/mo
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Cancel {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'} only. 
+                        {bundleInfo?.otherProductName} will continue at the regular price.
+                      </p>
+                    </>
+                  ) : (
+                    // Cancelling discounted → other product increases
+                    <>
+                      <p className="font-medium text-amber-400">
+                        Cancel Only {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Keep {bundleInfo?.otherProductName} at ${bundleInfo?.priceImpact?.newPrice}/mo
+                      </p>
+                    </>
+                  )}
                 </div>
               </Button>
               
+              {/* Option C: Go back */}
               <Button
                 variant="ghost"
                 className="w-full"

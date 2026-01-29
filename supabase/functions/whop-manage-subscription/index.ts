@@ -568,7 +568,12 @@ async function handleCheckBundle(
     affectedProduct: string;
   } | null = null;
   
+  // 🔥 NEW: Track if cancelling FULL PRICE product (discounted product will be cancelled)
+  let cancellingFullPriceProduct = false;
+  let discountedProductWillBeCancelled = false;
+  
   if (bundleStatus.hasBundle) {
+    // Case 1: Cancelling DISCOUNTED product (user pays less) → other product's price stays same
     if (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) {
       // Cancelling Top Secret will increase Newsletter price from $30 to $69.99
       priceImpact = {
@@ -586,6 +591,29 @@ async function handleCheckBundle(
         affectedProduct: 'Top Secret',
       };
     }
+    
+    // 🔥 Case 2: Cancelling FULL PRICE product → discounted product will need decision
+    if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) {
+      // User is cancelling War Zone ($69.99) - Top Secret is at discounted $50
+      cancellingFullPriceProduct = true;
+      discountedProductWillBeCancelled = true;
+      priceImpact = {
+        willIncreasePrice: false, // The OTHER product doesn't increase, it gets cancelled or upgraded
+        currentPrice: 50, // Top Secret current discounted price
+        newPrice: 89.99, // Top Secret full price if they want to keep it
+        affectedProduct: 'Top Secret',
+      };
+    } else if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted) {
+      // User is cancelling Top Secret ($89.99) - War Zone is at discounted $30
+      cancellingFullPriceProduct = true;
+      discountedProductWillBeCancelled = true;
+      priceImpact = {
+        willIncreasePrice: false,
+        currentPrice: 30, // War Zone current discounted price
+        newPrice: 69.99, // War Zone full price if they want to keep it
+        affectedProduct: 'War Zone Newsletter',
+      };
+    }
   }
   
   return new Response(
@@ -595,11 +623,15 @@ async function handleCheckBundle(
       otherProduct: bundleStatus.otherProduct,
       otherProductName: bundleStatus.otherProductName,
       priceImpact,
+      cancellingFullPriceProduct,  // 🔥 NEW
+      discountedProductWillBeCancelled,  // 🔥 NEW
       bundleDetails: {
         newsletterActive: bundleStatus.newsletterActive,
         topSecretActive: bundleStatus.topSecretActive,
         newsletterIsDiscounted: bundleStatus.newsletterIsDiscounted,
         topSecretIsDiscounted: bundleStatus.topSecretIsDiscounted,
+        newsletterIsFullPrice: bundleStatus.newsletterIsFullPrice,  // 🔥 NEW
+        topSecretIsFullPrice: bundleStatus.topSecretIsFullPrice,  // 🔥 NEW
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -624,32 +656,36 @@ async function handleCancel(
   
   // If user has bundle and didn't confirm, return error asking for confirmation
   if (bundleStatus.hasBundle) {
-    // Check if cancelling will affect pricing
+    // Check if cancelling will affect pricing (user cancelling discounted product)
     const willAffectPricing = 
       (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) ||
       (product === 'newsletter' && bundleStatus.topSecretIsDiscounted);
     
-    // 🔥 v2.6.0: Check if cancelling FULL PRICE product (other product is discounted)
+    // 🔥 v3.3.0: Check if cancelling FULL PRICE product (other product is discounted)
     const cancellingFullPriceProduct = 
       (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) ||
       (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted);
     
-    // 🔥 v2.6.0: If cancelling full price product, automatically cancel the discounted one too
-    // No confirmation needed - the discounted product depends on the full price one
-    if (cancellingFullPriceProduct) {
-      console.log(`🔥 Cancelling FULL PRICE ${product} - will automatically cancel discounted ${bundleStatus.otherProduct}`);
-      // Force cancelBothProducts behavior - the discounted product MUST be cancelled
-      // But we'll send them an email to resubscribe at full price if they want
-    }
-    
-    if (willAffectPricing && !cancelBothProducts && !confirmPriceIncrease && !cancellingFullPriceProduct) {
+    // 🔥 v3.3.0 FIX: Both cases require confirmation via popup - NO automatic cancellation!
+    // Case 1: Cancelling discounted product - affects other product's pricing
+    // Case 2: Cancelling full price product - discounted product will be cancelled (needs user choice)
+    if ((willAffectPricing || cancellingFullPriceProduct) && !cancelBothProducts && !confirmPriceIncrease) {
+      const isFullPriceCancel = cancellingFullPriceProduct;
+      const otherProductPrice = bundleStatus.otherProduct === 'newsletter' ? 30 : 50;
+      const otherProductFullPrice = bundleStatus.otherProduct === 'newsletter' ? 69.99 : 89.99;
+      
       return new Response(
         JSON.stringify({ 
           error: "bundle_confirmation_required",
-          message: "You have both products. Please confirm how to proceed.",
+          message: isFullPriceCancel 
+            ? `You're cancelling the full-price product. The discounted ${bundleStatus.otherProductName} cannot exist without it.`
+            : "You have both products. Please confirm how to proceed.",
           hasBundle: true,
+          cancellingFullPriceProduct: isFullPriceCancel,  // 🔥 NEW
           otherProduct: bundleStatus.otherProduct,
           otherProductName: bundleStatus.otherProductName,
+          otherProductCurrentPrice: otherProductPrice,  // 🔥 NEW
+          otherProductFullPrice: otherProductFullPrice,  // 🔥 NEW
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -1059,76 +1095,11 @@ console.log(`✅ Subscription scheduled for cancellation`);
   
   let bundleAction: string | null = null;
   
-  // 🔥 v2.6.0: Check if we're cancelling full price product (auto-cancel discounted)
-  const cancellingFullPriceProduct = bundleStatus.hasBundle && (
-    (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) ||
-    (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted)
-  );
+  // 🔥 v3.3.0: Removed auto-cancel logic - now requires user confirmation via popup
+  // All bundle cancellation decisions now require explicit user choice
   
   if (bundleStatus.hasBundle) {
-    // 🔥 v2.6.0: Auto-cancel discounted product when full price is cancelled
-    if (cancellingFullPriceProduct) {
-      const otherProduct = bundleStatus.otherProduct!;
-      const otherMembershipId = otherProduct === 'newsletter' 
-        ? profile.newsletter_whop_membership_id 
-        : profile.top_secret_whop_membership_id;
-      
-      console.log(`🔥 Auto-cancelling DISCOUNTED ${otherProduct} because FULL PRICE ${product} was cancelled`);
-      
-      // Cancel the discounted product in Whop at period end
-      if (otherMembershipId && WHOP_API_KEY) {
-        const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/pause`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${WHOP_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ void_payments: false }),
-        });
-        
-        if (cancelResponse.ok) {
-          console.log(`✅ Discounted ${otherProduct} membership cancelled at period end in Whop`);
-        } else {
-          console.warn(`⚠️ Failed to cancel discounted ${otherProduct} in Whop: ${await cancelResponse.text()}`);
-        }
-      }
-      
-      // Update DB: mark discounted product for cancellation with pending resubscribe flag
-      const discountedUpdateData: Record<string, any> = {
-        updated_at: new Date().toISOString(),
-      };
-      
-      if (otherProduct === 'newsletter') {
-        discountedUpdateData.newsletter_cancel_at_period_end = true;
-        discountedUpdateData.newsletter_pending_price_change = true;
-        discountedUpdateData.newsletter_new_price = 69.99;
-      } else {
-        discountedUpdateData.top_secret_cancel_at_period_end = true;
-        discountedUpdateData.top_secret_pending_price_change = true;
-        discountedUpdateData.top_secret_new_price = 89.99;
-      }
-      
-      await supabase.from("profiles").update(discountedUpdateData).eq("id", profile.id);
-      
-      bundleAction = "discounted_product_auto_cancelled";
-      
-      // Log the automatic cancellation
-      await logSubscriptionEvent(supabase, {
-        user_id: profile.id,
-        event_type: "bundle_auto_cancel_discounted",
-        old_plan: "bundle",
-        new_plan: product,
-        reason: `Full price ${product} cancelled - discounted ${otherProduct} automatically cancelled`,
-        metadata: {
-          cancelled_product: product,
-          auto_cancelled_product: otherProduct,
-          was_discounted: true,
-          price_change: otherProduct === 'newsletter' ? '30 -> 69.99' : '50 -> 89.99',
-          flow: "auto_cancel_discounted_product",
-        },
-      });
-      
-    } else if (cancelBothProducts) {
+    if (cancelBothProducts) {
       const otherProduct = bundleStatus.otherProduct!;
       const otherMembershipId = otherProduct === 'newsletter' 
         ? profile.newsletter_whop_membership_id 

@@ -1463,7 +1463,6 @@ if (isTopSecretPayment) {
               p_user_id: userResult.id,
               p_new_whop_membership_id: membershipId,
               p_new_expires_at: expiresAt.toISOString(),
-              p_new_plan_id: planId,  // 🔥 v3.18.0: Pass plan ID for interval detection
             });
             
             if (upgradeError) {

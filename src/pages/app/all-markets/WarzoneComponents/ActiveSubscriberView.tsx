@@ -27,10 +27,33 @@ import {
   CommunityCards,
 } from './WarzonelandingComponents';
 
-import { useWarZoneData } from '@/hooks/useWarZoneData';
+// Import the hook - adjust path based on your project structure
+// Option 1: If hook is in hooks folder
+import { useWarZoneData, type DailyReport, type WeeklyReport } from '@/hooks/useWarZoneData';
+// Option 2: If using from same folder, uncomment below:
+// import { useWarZoneData, type DailyReport, type WeeklyReport } from '../hooks/useWarZoneData';
 
 // Import CSS
 import '@/styles/warzone.css';
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+const formatReportDate = (dateStr: string): string => {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+};
+
+const formatReportTime = (createdAt: string): string => {
+  const date = new Date(createdAt);
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/New_York'
+  });
+};
 
 // ============================================
 // TYPES
@@ -63,6 +86,7 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
     isLoading,
     refetch,
     downloadReport,
+    clearTestReport,
   } = useWarZoneData();
 
   // Download handlers
@@ -82,9 +106,15 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
     if (previousWeeklyReport) downloadReport(previousWeeklyReport, 'weekly');
   }, [previousWeeklyReport, downloadReport]);
 
-  const handleTestDownload = useCallback(() => {
-    if (testDailyReport) downloadReport(testDailyReport, 'daily');
-  }, [testDailyReport, downloadReport]);
+  // Handler for report clicks (used by TestReportCard)
+  const handleReportClick = useCallback((report: DailyReport | WeeklyReport, type: 'daily' | 'weekly') => {
+    downloadReport(report, type);
+  }, [downloadReport]);
+
+  // Refetch as async function
+  const handleRefetch = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return (
     <div className="min-h-screen bg-[#0a0806] relative overflow-hidden">
@@ -257,8 +287,11 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
           {isTester && testDailyReport && (
             <TestReportCard 
               testDailyReport={testDailyReport}
-              onDownload={handleTestDownload}
-              onPublishSuccess={refetch}
+              formatReportDate={formatReportDate}
+              formatReportTime={formatReportTime}
+              handleReportClick={handleReportClick}
+              onPublishSuccess={handleRefetch}
+              clearTestReport={clearTestReport}
             />
           )}
 

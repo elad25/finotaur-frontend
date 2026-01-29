@@ -17,6 +17,9 @@ import { cn } from '@/lib/utils';
 import { DiscordIcon } from './VisualComponents';
 import type { DailyReport, WeeklyReport } from '@/hooks/useWarZoneData';
 
+// Re-export types for other components
+export type { DailyReport, WeeklyReport };
+
 // ============================================
 // CONFIGURATION
 // ============================================
@@ -376,12 +379,18 @@ export const CountdownDisplay = memo(function CountdownDisplay({
 
 export const TestReportCard = memo(function TestReportCard({ 
   testDailyReport, 
-  onDownload,
+  formatReportDate,
+  formatReportTime,
+  handleReportClick,
   onPublishSuccess,
+  clearTestReport,
 }: { 
   testDailyReport: DailyReport;
-  onDownload: () => void;
+  formatReportDate: (dateStr: string) => string;
+  formatReportTime: (createdAt: string) => string;
+  handleReportClick: (report: DailyReport, type: 'daily' | 'weekly') => void;
   onPublishSuccess: () => void;
+  clearTestReport: () => void;
 }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -390,6 +399,7 @@ export const TestReportCard = memo(function TestReportCard({
     setIsPublishing(true);
     try {
       const testReportDate = testDailyReport.report_date.split('T')[0];
+      console.log('[WAR ZONE] 📅 Publishing test report for date:', testReportDate);
       
       const response = await fetch(`${CONFIG.API_BASE}/api/reports/publish`, {
         method: 'POST',
@@ -403,19 +413,29 @@ export const TestReportCard = memo(function TestReportCard({
       const data = await response.json();
 
       if (!response.ok || !data.success) {
+        console.error('[WAR ZONE] ❌ API publish failed:', data.error);
         alert(`Failed to publish report: ${data.error || 'Unknown error'}`);
         return;
       }
 
+      console.log('[WAR ZONE] ✅ Report published to PUBLIC via API:', testDailyReport.id);
+      
       await new Promise(resolve => setTimeout(resolve, 800));
       setShowConfirmModal(false);
+      
+      // Clear the test report from state immediately
+      clearTestReport();
+      
+      // Refetch reports
+      console.log('[WAR ZONE] 🔄 Refetching reports...');
       onPublishSuccess();
-    } catch {
+    } catch (err) {
+      console.error('[WAR ZONE] ❌ Error publishing report:', err);
       alert('Error publishing report. Please try again.');
     } finally {
       setIsPublishing(false);
     }
-  }, [testDailyReport, onPublishSuccess]);
+  }, [testDailyReport, onPublishSuccess, clearTestReport]);
 
   return (
     <>
@@ -498,7 +518,7 @@ export const TestReportCard = memo(function TestReportCard({
           <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
             🧪 TESTER ONLY
           </span>
-          <span className="text-[#C9A646]/50 text-sm">Visible only to testers</span>
+          <span className="text-[#C9A646]/50 text-sm">This report is visible only to testers</span>
         </div>
         
         <div
@@ -511,7 +531,7 @@ export const TestReportCard = memo(function TestReportCard({
         >
           <div className="flex items-start justify-between">
             <button
-              onClick={onDownload}
+              onClick={() => handleReportClick(testDailyReport, 'daily')}
               className="flex items-center gap-3 text-left flex-1"
             >
               <div 
@@ -540,6 +560,7 @@ export const TestReportCard = memo(function TestReportCard({
             
             {/* Action Buttons */}
             <div className="flex items-center gap-2 ml-4">
+              {/* Publish to Live Button */}
               <button
                 onClick={() => setShowConfirmModal(true)}
                 className="px-4 py-2 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all hover:scale-[1.02]"
@@ -553,8 +574,9 @@ export const TestReportCard = memo(function TestReportCard({
                 Publish to Live
               </button>
               
+              {/* Download Button */}
               <button
-                onClick={onDownload}
+                onClick={() => handleReportClick(testDailyReport, 'daily')}
                 className="p-2 rounded-xl transition-all hover:bg-purple-500/20"
                 style={{ border: '1px solid rgba(147,51,234,0.3)' }}
               >
