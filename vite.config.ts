@@ -1,6 +1,4 @@
-// vite.config.ts - FIXED v3.1
-// 🔥 Fixed circular dependency issue in vendor-charts
-
+// vite.config.ts - WORKING VERSION (object syntax)
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
@@ -66,87 +64,53 @@ export default defineConfig({
     target: 'esnext',
     minify: 'esbuild',
     sourcemap: false,
+    chunkSizeWarningLimit: 500,
     
     rollupOptions: {
       output: {
-        manualChunks: (id) => {
-          // 🔥 FIX: Don't split d3 separately - keep with recharts
-          if (id.includes('node_modules/recharts') || 
-              id.includes('node_modules/d3-') ||
-              id.includes('node_modules/victory-') ||
-              id.includes('node_modules/internmap') ||
-              id.includes('node_modules/delaunator')) {
-            return 'vendor-charts';
-          }
-          
-          // Core React - MUST be first to avoid circular deps
-          if (id.includes('node_modules/react/') || 
-              id.includes('node_modules/react-dom/') ||
-              id.includes('node_modules/scheduler/')) {
-            return 'vendor-react';
-          }
-          
-          // React Router (depends on react)
-          if (id.includes('node_modules/react-router') ||
-              id.includes('node_modules/@remix-run/router')) {
-            return 'vendor-router';
-          }
+        // ✅ OBJECT SYNTAX - Safe, no circular dependency issues
+        manualChunks: {
+          // Core React
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           
           // Data layer
-          if (id.includes('node_modules/@tanstack/react-query') || 
-              id.includes('node_modules/@supabase/')) {
-            return 'vendor-data';
-          }
+          'vendor-data': ['@tanstack/react-query', '@supabase/supabase-js'],
           
-          // Animation (separate due to size)
-          if (id.includes('node_modules/framer-motion') ||
-              id.includes('node_modules/motion')) {
-            return 'vendor-motion';
-          }
+          // Animation
+          'vendor-motion': ['framer-motion'],
           
-          // Radix UI
-          if (id.includes('node_modules/@radix-ui/')) {
-            return 'vendor-radix';
-          }
+          // UI Components (Radix)
+          'vendor-radix': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-select',
+            '@radix-ui/react-tooltip',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-checkbox',
+            '@radix-ui/react-switch',
+          ],
           
           // Icons
-          if (id.includes('node_modules/lucide-react')) {
-            return 'vendor-icons';
-          }
+          'vendor-icons': ['lucide-react'],
           
-          // Utils - small, can be in one chunk
-          if (id.includes('node_modules/dayjs') || 
-              id.includes('node_modules/date-fns') ||
-              id.includes('node_modules/clsx') ||
-              id.includes('node_modules/tailwind-merge') ||
-              id.includes('node_modules/class-variance-authority')) {
-            return 'vendor-utils';
-          }
+          // Charts - ONLY recharts, NOT d3 (d3 will be bundled automatically)
+          'vendor-charts': ['recharts'],
           
-          // 🔥 App pages - only if not importing from node_modules
-          if (!id.includes('node_modules')) {
-            if (id.includes('/warzone/') || 
-                id.includes('Warzone') || 
-                id.includes('WarZone')) {
-              return 'page-warzone';
-            }
-            
-            if (id.includes('/journal/')) {
-              return 'page-journal';
-            }
-            
-            if (id.includes('/admin/')) {
-              return 'page-admin';
-            }
-          }
-          
-          // Let Vite handle the rest automatically
-          return undefined;
+          // Utils
+          'vendor-utils': [
+            'dayjs',
+            'date-fns', 
+            'clsx', 
+            'tailwind-merge', 
+            'class-variance-authority',
+            'immer',
+            'zustand',
+          ],
         },
       },
     },
-    
-    chunkSizeWarningLimit: 500,
   },
 
   css: {
