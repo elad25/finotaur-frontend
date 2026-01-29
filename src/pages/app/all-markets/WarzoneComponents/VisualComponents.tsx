@@ -1,14 +1,14 @@
 // =====================================================
-// FINOTAUR WAR ZONE - Visual Components v2.0
+// FINOTAUR WAR ZONE - Visual Components v3.0
 // 
 // 🔥 OPTIMIZATIONS:
-// - All components wrapped in React.memo
-// - Particles generated once with useMemo
-// - No inline styles (uses CSS classes)
-// - Lightweight SVG icons
+// - Memoized particle/sparkle arrays
+// - CSS animations moved to external stylesheet
+// - React.memo on all components
 // =====================================================
 
 import { memo, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 
 // ============================================
 // ICONS
@@ -55,19 +55,9 @@ export const CompassIcon = memo(function CompassIcon({ className }: { className?
 // PARTICLE BACKGROUND
 // ============================================
 
-interface Particle {
-  id: number;
-  left: string;
-  size: number;
-  duration: number;
-  delay: number;
-  opacity: number;
-  color: string;
-}
-
-export const ParticleBackground = memo(function ParticleBackground({ count = 40 }: { count?: number }) {
-  const particles = useMemo<Particle[]>(() => 
-    Array.from({ length: count }, (_, i) => ({
+export const ParticleBackground = memo(function ParticleBackground() {
+  const particles = useMemo(() => 
+    Array.from({ length: 40 }, (_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       size: Math.random() * 3 + 1,
@@ -77,23 +67,23 @@ export const ParticleBackground = memo(function ParticleBackground({ count = 40 
       color: Math.random() > 0.5 
         ? `rgba(255, ${140 + Math.random() * 60}, ${20 + Math.random() * 40}, 1)`
         : `rgba(${200 + Math.random() * 55}, ${160 + Math.random() * 50}, ${50 + Math.random() * 30}, 1)`,
-    }))
-  , [count]);
+    })), []
+  );
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {particles.map((p) => (
         <div
           key={p.id}
-          className="particle"
+          className="absolute rounded-full"
           style={{
             left: p.left,
             bottom: '-10px',
-            width: p.size,
-            height: p.size,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
             background: p.color,
             boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
-            animationDuration: `${p.duration}s`,
+            animation: `particle-rise ${p.duration}s linear infinite`,
             animationDelay: `${p.delay}s`,
             opacity: p.opacity,
           }}
@@ -107,42 +97,34 @@ export const ParticleBackground = memo(function ParticleBackground({ count = 40 
 // SPARKLE EFFECT
 // ============================================
 
-interface Sparkle {
-  id: number;
-  left: string;
-  top: string;
-  size: number;
-  delay: number;
-  duration: number;
-}
-
-export const SparkleEffect = memo(function SparkleEffect({ count = 8 }: { count?: number }) {
-  const sparkles = useMemo<Sparkle[]>(() => 
-    Array.from({ length: count }, (_, i) => ({
+export const SparkleEffect = memo(function SparkleEffect() {
+  const sparkles = useMemo(() => 
+    Array.from({ length: 8 }, (_, i) => ({
       id: i,
       left: `${10 + Math.random() * 80}%`,
       top: `${10 + Math.random() * 80}%`,
       size: Math.random() * 3 + 1,
       delay: Math.random() * 4,
       duration: Math.random() * 3 + 2,
-    }))
-  , [count]);
+    })), []
+  );
 
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {sparkles.map((s) => (
         <div
           key={s.id}
-          className="absolute sparkle"
+          className="absolute"
           style={{
             left: s.left,
             top: s.top,
-            width: s.size,
-            height: s.size,
-            animationDuration: `${s.duration}s`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            animation: `sparkle ${s.duration}s ease-in-out infinite`,
             animationDelay: `${s.delay}s`,
           }}
         >
+          {/* 4-point star sparkle */}
           <svg viewBox="0 0 24 24" fill="none" className="w-full h-full">
             <path
               d="M12 0L13.5 10.5L24 12L13.5 13.5L12 24L10.5 13.5L0 12L10.5 10.5L12 0Z"
@@ -159,41 +141,32 @@ export const SparkleEffect = memo(function SparkleEffect({ count = 8 }: { count?
 // GLOWING DUST
 // ============================================
 
-interface DustParticle {
-  id: number;
-  left: string;
-  top: string;
-  size: number;
-  duration: number;
-  delay: number;
-}
-
-export const GlowingDust = memo(function GlowingDust({ count = 40 }: { count?: number }) {
-  const dustParticles = useMemo<DustParticle[]>(() => 
-    Array.from({ length: count }, (_, i) => ({
+export const GlowingDust = memo(function GlowingDust() {
+  const dustParticles = useMemo(() => 
+    Array.from({ length: 40 }, (_, i) => ({
       id: i,
       left: `${Math.random() * 100}%`,
       top: `${Math.random() * 100}%`,
       size: Math.random() * 2 + 1,
       duration: Math.random() * 10 + 8,
       delay: Math.random() * 8,
-    }))
-  , [count]);
+    })), []
+  );
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 2 }}>
       {dustParticles.map((p) => (
         <div
           key={p.id}
-          className="dust-particle"
+          className="absolute rounded-full"
           style={{
             left: p.left,
             top: p.top,
-            width: p.size,
-            height: p.size,
-            background: 'rgba(201, 166, 70, 0.4)',
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            background: `rgba(201, 166, 70, 0.4)`,
             boxShadow: `0 0 ${p.size * 2}px rgba(201, 166, 70, 0.2)`,
-            animationDuration: `${p.duration}s`,
+            animation: `dust-float ${p.duration}s ease-in-out infinite`,
             animationDelay: `${p.delay}s`,
           }}
         />
@@ -209,32 +182,54 @@ export const GlowingDust = memo(function GlowingDust({ count = 40 }: { count?: n
 export const GoldenDivider = memo(function GoldenDivider() {
   return (
     <div className="relative w-full h-[2px] my-0">
-      <div className="absolute inset-0 divider-gold" />
+      <div 
+        className="absolute inset-0"
+        style={{
+          background: 'linear-gradient(90deg, transparent 0%, #C9A646 20%, #F4D97B 50%, #C9A646 80%, transparent 100%)',
+          boxShadow: '0 0 20px rgba(201,166,70,0.6), 0 0 40px rgba(201,166,70,0.4), 0 0 60px rgba(201,166,70,0.2)',
+        }}
+      />
     </div>
   );
 });
 
 // ============================================
-// LOADING SPINNER
+// GLOWING BADGE
 // ============================================
 
-export const LoadingSpinner = memo(function LoadingSpinner({ 
-  size = 'md',
-  text 
-}: { 
-  size?: 'sm' | 'md' | 'lg';
-  text?: string;
-}) {
-  const sizeClasses = {
-    sm: 'h-6 w-6',
-    md: 'h-12 w-12',
-    lg: 'h-16 w-16',
-  };
-
+export const GlowingBadge = memo(function GlowingBadge({ className }: { className?: string }) {
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className={`animate-spin rounded-full border-b-2 border-[#C9A646] ${sizeClasses[size]}`} />
-      {text && <p className="text-sm text-gray-500">{text}</p>}
+    <div 
+      className={`relative inline-flex flex-col items-center gap-1 px-10 py-5 rounded-xl overflow-hidden ${className || ''}`}
+      style={{ 
+        background: 'linear-gradient(180deg, rgba(30,25,18,0.95) 0%, rgba(20,16,12,0.95) 100%)', 
+        boxShadow: '0 0 40px rgba(201,166,70,0.4), inset 0 1px 0 rgba(255,255,255,0.05)' 
+      }}
+    >
+      {/* Top glowing line */}
+      <div 
+        className="absolute top-0 left-0 right-0 h-[3px]" 
+        style={{ 
+          background: 'linear-gradient(90deg, transparent 0%, rgba(201,166,70,0.8) 15%, rgba(244,217,123,1) 50%, rgba(201,166,70,0.8) 85%, transparent 100%)', 
+          boxShadow: '0 0 15px rgba(201,166,70,0.8), 0 3px 12px rgba(201,166,70,0.5)' 
+        }} 
+      />
+      {/* Bottom glowing line */}
+      <div 
+        className="absolute bottom-0 left-0 right-0 h-[3px]" 
+        style={{ 
+          background: 'linear-gradient(90deg, transparent 0%, rgba(201,166,70,0.8) 15%, rgba(244,217,123,1) 50%, rgba(201,166,70,0.8) 85%, transparent 100%)', 
+          boxShadow: '0 0 15px rgba(201,166,70,0.8), 0 -3px 12px rgba(201,166,70,0.5)' 
+        }} 
+      />
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+        </span>
+        <span className="text-[#C9A646] text-base font-bold tracking-wide">153 of 1,000 Seats Remaining</span>
+      </div>
+      <span className="text-[#C9A646]/60 text-sm">Daily Market Intelligence</span>
     </div>
   );
 });
@@ -245,9 +240,32 @@ export const LoadingSpinner = memo(function LoadingSpinner({
 
 export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...' }: { text?: string }) {
   return (
-    <div className="flex items-center justify-center min-h-[60vh] bg-[#080812]">
-      <LoadingSpinner size="md" text={text} />
+    <div className="min-h-screen bg-[#0a0806] flex flex-col items-center justify-center">
+      <Loader2 className="w-14 h-14 animate-spin text-[#C9A646] mb-4" />
+      <p className="text-[#C9A646]/60">{text}</p>
     </div>
+  );
+});
+
+// ============================================
+// BULL IMAGE COMPONENT
+// ============================================
+
+export const BullImage = memo(function BullImage({ 
+  className,
+  style,
+}: { 
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <img 
+      src="/assets/Bull-WarZone.png"
+      alt="War Zone Bull" 
+      className={className}
+      style={style}
+      loading="eager"
+    />
   );
 });
 
@@ -258,7 +276,7 @@ export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...'
 export const AmbientGlow = memo(function AmbientGlow({ 
   position = 'left',
   size = 800,
-  opacity = 0.35 
+  opacity = 0.35,
 }: { 
   position?: 'left' | 'right' | 'center';
   size?: number;
@@ -272,25 +290,29 @@ export const AmbientGlow = memo(function AmbientGlow({
 
   return (
     <div 
-      className="absolute rounded-full pointer-events-none ambient-glow-gold"
+      className="absolute rounded-full pointer-events-none"
       style={{
         ...positionStyles[position],
-        width: size,
-        height: size,
-        opacity,
+        width: `${size}px`,
+        height: `${size}px`,
+        background: `radial-gradient(circle, rgba(201,166,70,${opacity}) 0%, rgba(201,166,70,${opacity * 0.43}) 30%, rgba(201,166,70,${opacity * 0.14}) 50%, transparent 70%)`,
+        filter: 'blur(100px)',
       }}
     />
   );
 });
 
 // ============================================
-// FIRE GLOW (Bottom gradient)
+// FIRE GLOW (Bottom)
 // ============================================
 
 export const FireGlow = memo(function FireGlow() {
   return (
     <div 
-      className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none ambient-glow-fire"
+      className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none"
+      style={{ 
+        background: 'linear-gradient(180deg, transparent 0%, rgba(201,166,70,0.05) 50%, rgba(255,140,30,0.1) 100%)'
+      }}
     />
   );
 });

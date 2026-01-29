@@ -1,5 +1,5 @@
 // =====================================================
-// FINOTAUR WAR ZONE - Active Subscriber View v2.0
+// FINOTAUR WAR ZONE - Active Subscriber View v3.0
 // 
 // 🔥 OPTIMIZATIONS:
 // - Uses centralized useWarZoneData hook
@@ -11,12 +11,10 @@
 // =====================================================
 
 import { memo, useCallback } from 'react';
-import { FileText, Calendar, Clock, Loader2, Headphones } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { FileText, Calendar, Clock, Loader2 } from 'lucide-react';
 
 import { 
   ParticleBackground, 
-  DiscordIcon, 
   FireGlow,
   AmbientGlow,
 } from './VisualComponents';
@@ -27,11 +25,9 @@ import {
   CountdownDisplay,
   TestReportCard,
   CommunityCards,
-  formatReportDate,
-  formatReportTime,
 } from './WarzonelandingComponents';
 
-import { useWarZoneData, type DailyReport, type WeeklyReport } from '@/hooks/useWarZoneData';
+import { useWarZoneData } from '@/hooks/useWarZoneData';
 
 // Import CSS
 import '@/styles/warzone.css';
@@ -62,8 +58,6 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
     isTester,
     isInTrial,
     trialDaysRemaining,
-    isBeforeDailyReportTime,
-    isBeforeWeeklyReportTime,
     dailyCountdown,
     weeklyCountdown,
     isLoading,
@@ -93,11 +87,17 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
   }, [testDailyReport, downloadReport]);
 
   return (
-    <div className="min-h-screen bg-warzone relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0806] relative overflow-hidden">
       
+      {/* CSS for heading font */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
+        .heading-serif{font-family:'Playfair Display',Georgia,serif}
+      `}</style>
+
       {/* Trial Banner */}
       {isInTrial && trialDaysRemaining !== null && (
-        <div className="relative z-50 trial-banner px-4 py-3 text-center">
+        <div className="relative z-50 bg-gradient-to-r from-[#C9A646]/20 via-[#C9A646]/10 to-[#C9A646]/20 border-b border-[#C9A646]/30 px-4 py-3 text-center">
           <p className="text-[#C9A646] text-sm font-semibold flex items-center justify-center gap-2">
             <Clock className="w-4 h-4" />
             Free trial ends in {trialDaysRemaining} day{trialDaysRemaining !== 1 ? 's' : ''}
@@ -111,7 +111,9 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
         <AmbientGlow position="left" size={800} opacity={0.35} />
         
         {/* Particles */}
-        <ParticleBackground count={60} />
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <ParticleBackground />
+        </div>
 
         {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pt-12 pb-8">
@@ -121,11 +123,11 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
             
             {/* Left: Text Content */}
             <div className="text-center lg:text-left lg:flex-1 lg:max-w-xl">
-              <h1 className="font-bold leading-[1.05] tracking-tight mb-6">
+              <h1 className="font-bold leading-[1.05] tracking-tight mb-6" style={{ letterSpacing: '-0.03em' }}>
                 <span className="text-3xl md:text-4xl lg:text-5xl text-white block heading-serif italic mb-2">
                   Welcome to the
                 </span>
-                <span className="text-5xl md:text-6xl lg:text-7xl block gradient-gold-text font-bold tracking-tight">
+                <span className="text-5xl md:text-6xl lg:text-7xl block bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent font-bold tracking-tight">
                   WAR ZONE
                 </span>
               </h1>
@@ -143,7 +145,12 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
                   <button
                     onClick={handleDailyDownload}
                     disabled={isLoading}
-                    className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 btn-gold"
+                    className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+                      color: '#000', 
+                      boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+                    }}
                   >
                     {isLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
@@ -167,7 +174,12 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
                   <button
                     onClick={handleWeeklyDownload}
                     disabled={isLoading}
-                    className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 btn-gold"
+                    className="group px-6 py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+                      color: '#000', 
+                      boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+                    }}
                   >
                     {isLoading ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
@@ -196,12 +208,19 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
 
             {/* Right: Bull Image */}
             <div className="relative flex-shrink-0 lg:flex-1 flex justify-center lg:justify-end -mr-8 lg:-mr-16">
-              <div className="relative z-10 overflow-hidden bull-mask">
+              <div
+                className="relative z-10 overflow-hidden"
+                style={{
+                  maskImage: 'radial-gradient(ellipse 70% 80% at 50% 50%, black 30%, transparent 70%)',
+                  WebkitMaskImage: 'radial-gradient(ellipse 70% 80% at 50% 50%, black 30%, transparent 70%)',
+                }}
+              >
                 <img 
                   src={CONFIG.BULL_IMAGE} 
                   alt="War Zone Bull" 
-                  className="w-[500px] md:w-[600px] lg:w-[700px] h-auto glow-fire"
+                  className="w-[500px] md:w-[600px] lg:w-[700px] h-auto"
                   style={{ 
+                    filter: 'drop-shadow(0 0 80px rgba(255,130,30,0.8)) drop-shadow(0 0 40px rgba(255,100,20,0.6))',
                     mixBlendMode: 'lighten',
                     marginTop: '-22%',
                     marginBottom: '-45%',

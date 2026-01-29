@@ -1,14 +1,42 @@
 // =====================================================
-// WAR ZONE COMPONENTS - Central Export
+// FINOTAUR WAR ZONE - Module Exports
 // =====================================================
 
-// Main components
+// Main landing page component
+export { default } from './Warzonelanding';
 export { default as Warzonelanding } from './Warzonelanding';
-export { default as ActiveSubscriberView } from './ActiveSubscriberView';
 
 // Sub-components
-export * from './WarzonelandingComponents';
-export * from './VisualComponents';
+export { ActiveSubscriberView } from './ActiveSubscriberView';
 
-// Types
-export type { DailyReport, WeeklyReport, WarZoneData } from '@/hooks/useWarZoneData';
+// Visual components
+export {
+  ParticleBackground,
+  SparkleEffect,
+  GlowingDust,
+  GoldenDivider,
+  GlowingBadge,
+  DiscordIcon,
+  BellIcon,
+  CompassIcon,
+  BullImage,
+  AmbientGlow,
+  FireGlow,
+  FullPageLoader,
+} from './VisualComponents';
+
+// Landing components
+export {
+  CONFIG,
+  YEARLY_SAVINGS,
+  BillingToggle,
+  StatsBar,
+  FeatureIcons,
+  ReportCard,
+  CountdownDisplay,
+  TestReportCard,
+  CommunityCards,
+  formatReportDate,
+  formatReportTime,
+  type BillingInterval,
+} from './WarzonelandingComponents';

@@ -1,61 +1,27 @@
 // =====================================================
-// FINOTAUR WAR ZONE LANDING PAGE - OPTIMIZED v2.0
+// FINOTAUR WAR ZONE - Landing Components v3.0
 // 
 // 🔥 OPTIMIZATIONS:
-// - External CSS (browser cached)
-// - React.memo on all components
+// - All components wrapped in React.memo
 // - useMemo/useCallback for expensive operations
-// - Centralized data hook (useWarZoneData)
-// - Code splitting for modals
+// - External CSS classes
 // - No inline styles where possible
-// 
-// ✅ SAME UI & LOGIC - Just faster!
 // =====================================================
 
-import { useState, useEffect, useCallback, useRef, memo, useMemo, lazy, Suspense } from 'react';
-import { motion } from 'framer-motion';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/lib/supabase';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import { useState, useCallback, memo, useMemo } from 'react';
 import { 
-  CheckCircle2, Shield, Clock, ArrowRight, FileText,
-  Loader2, Globe, Headphones, Calendar, Sparkles, 
-  ChevronDown, X, AlertCircle, LogIn, XCircle, 
-  Crown, Rocket, TrendingUp, Check, Send, Target,
-  BarChart3, Zap, ChevronRight, Activity,
+  FileText, Calendar, Clock, Loader2, Headphones, 
+  Shield, Target, ChevronRight, Send, AlertCircle,
 } from 'lucide-react';
-
-// Optimized components (same folder)
-import { 
-  ParticleBackground, 
-  SparkleEffect, 
-  GoldenDivider, 
-  DiscordIcon, 
-  BellIcon, 
-  CompassIcon,
-  FullPageLoader,
-  AmbientGlow,
-  FireGlow,
-} from './VisualComponents';
-
-// Centralized data hook
-import { useWarZoneData, type DailyReport, type WeeklyReport } from '@/hooks/useWarZoneData';
-
-// Lazy load modals (code splitting)
-const DisclaimerPopup = lazy(() => import('./modals/DisclaimerPopup'));
-const LoginRequiredPopup = lazy(() => import('./modals/LoginRequiredPopup'));
-const CancelSubscriptionModal = lazy(() => import('./modals/CancelSubscriptionModal'));
-const TermsModal = lazy(() => import('./modals/TermsModal'));
-
-// Import external CSS
-import '@/styles/warzone.css';
+import { cn } from '@/lib/utils';
+import { DiscordIcon } from './VisualComponents';
+import type { DailyReport, WeeklyReport } from '@/hooks/useWarZoneData';
 
 // ============================================
 // CONFIGURATION
 // ============================================
 
-const CONFIG = {
+export const CONFIG = {
   WHOP_MONTHLY_PLAN_ID: 'plan_U6lF2eO5y9469',
   WHOP_YEARLY_PLAN_ID: 'plan_bp2QTGuwfpj0A',
   WHOP_MONTHLY_PLAN_ID_TOPSECRET: 'plan_BPJdT6Tyjmzcx',
@@ -69,15 +35,15 @@ const CONFIG = {
   BULL_IMAGE: '/assets/Bull-WarZone.png',
 } as const;
 
-const YEARLY_SAVINGS = Math.round((CONFIG.MONTHLY_PRICE * 12) - CONFIG.YEARLY_PRICE);
+export const YEARLY_SAVINGS = Math.round((CONFIG.MONTHLY_PRICE * 12) - CONFIG.YEARLY_PRICE);
 
-type BillingInterval = 'monthly' | 'yearly';
+export type BillingInterval = 'monthly' | 'yearly';
 
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
 
-const formatReportDate = (dateStr: string): string => {
+export const formatReportDate = (dateStr: string): string => {
   return new Date(dateStr).toLocaleDateString('en-US', { 
     weekday: 'long', 
     month: 'long', 
@@ -85,7 +51,7 @@ const formatReportDate = (dateStr: string): string => {
   });
 };
 
-const formatReportTime = (createdAt: string): string => {
+export const formatReportTime = (createdAt: string): string => {
   return new Date(createdAt).toLocaleTimeString('en-US', { 
     hour: 'numeric', 
     minute: '2-digit',
@@ -95,25 +61,37 @@ const formatReportTime = (createdAt: string): string => {
 };
 
 // ============================================
-// MEMOIZED SUB-COMPONENTS
+// STATS DATA
 // ============================================
 
-// Billing Toggle
-const BillingToggle = memo(function BillingToggle({ 
+const STATS = [
+  { value: '9:00 AM', label: 'Daily Delivery' },
+  { value: '847+', label: 'Active Traders' },
+  { value: '7 Days', label: 'Free Trial' },
+  { value: '24/7', label: 'Discord Access' }
+];
+
+// ============================================
+// BILLING TOGGLE
+// ============================================
+
+export const BillingToggle = memo(function BillingToggle({ 
   selected, 
-  onChange 
+  onChange,
+  className,
 }: { 
   selected: BillingInterval; 
   onChange: (interval: BillingInterval) => void;
+  className?: string;
 }) {
   return (
-    <div className="flex items-center justify-center gap-3">
+    <div className={cn("flex items-center justify-center gap-3", className)}>
       <button 
         onClick={() => onChange('monthly')} 
         className={cn(
           "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300", 
           selected === 'monthly' 
-            ? "btn-gold" 
+            ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
             : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
         )}
       >
@@ -124,7 +102,7 @@ const BillingToggle = memo(function BillingToggle({
         className={cn(
           "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 relative", 
           selected === 'yearly' 
-            ? "btn-gold" 
+            ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
             : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
         )}
       >
@@ -142,8 +120,131 @@ const BillingToggle = memo(function BillingToggle({
   );
 });
 
-// Report Card
-const ReportCard = memo(function ReportCard({
+// ============================================
+// STATS BAR
+// ============================================
+
+export const StatsBar = memo(function StatsBar({ isMobile = false }: { isMobile?: boolean }) {
+  if (isMobile) {
+    return (
+      <div className="bg-[#0a0806] py-5 px-4 relative z-50">
+        <div className="grid grid-cols-4 gap-2">
+          {STATS.map((stat, i) => (
+            <div key={i} className="text-center">
+              <div className="text-lg sm:text-xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">
+                {stat.value}
+              </div>
+              <div className="text-slate-400 text-[8px] sm:text-[9px] mt-1 tracking-wide uppercase">
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-40">
+      {/* Top golden line */}
+      <div className="relative w-full h-[1px]">
+        <div 
+          className="absolute inset-0" 
+          style={{ 
+            background: 'linear-gradient(90deg, transparent 0%, rgba(201,166,70,0.5) 20%, rgba(244,217,123,0.8) 50%, rgba(201,166,70,0.5) 80%, transparent 100%)' 
+          }} 
+        />
+      </div>
+      
+      <div 
+        className="relative z-50" 
+        style={{ 
+          background: 'linear-gradient(180deg, rgba(15,12,8,0.98) 0%, rgba(10,8,6,0.99) 100%)' 
+        }}
+      >
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="grid grid-cols-4">
+            {STATS.map((stat, i) => (
+              <div key={i} className="text-center relative px-6">
+                <div className="text-3xl md:text-4xl lg:text-5xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">
+                  {stat.value}
+                </div>
+                <div className="text-slate-400 text-xs mt-2 tracking-wide uppercase">
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      
+      {/* Bottom golden line */}
+      <div className="relative w-full h-[1px]">
+        <div 
+          className="absolute inset-0" 
+          style={{ 
+            background: 'linear-gradient(90deg, transparent 0%, rgba(201,166,70,0.5) 20%, rgba(244,217,123,0.8) 50%, rgba(201,166,70,0.5) 80%, transparent 100%)' 
+          }} 
+        />
+      </div>
+    </div>
+  );
+});
+
+// ============================================
+// FEATURE ICONS ROW
+// ============================================
+
+export const FeatureIcons = memo(function FeatureIcons({ isMobile = false }: { isMobile?: boolean }) {
+  const features = [
+    { icon: FileText, title: 'Daily Briefing', subtitle: '9:00 AM NY' },
+    { icon: Shield, title: 'Institutional', subtitle: 'Grade Intel' },
+    { icon: Target, title: 'Actionable', subtitle: 'Trade Ideas' },
+  ];
+
+  if (isMobile) {
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+        {features.map((f, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+              <f.icon className="w-3.5 h-3.5 text-[#C9A646]" strokeWidth={1.5} />
+            </div>
+            <div>
+              <div className="text-white font-bold">{f.title}</div>
+              <div className="text-slate-400 text-[10px]">{f.subtitle}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-6 relative z-20">
+      {features.map((f, i) => (
+        <div key={i} className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+            <f.icon className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
+          </div>
+          <div>
+            <div className="text-white font-bold text-sm">{f.title}</div>
+            <div className="text-slate-400 text-xs">{f.subtitle}</div>
+          </div>
+          {i < features.length - 1 && (
+            <div className="w-px h-10 bg-[#C9A646]/30 ml-4" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+});
+
+// ============================================
+// REPORT CARD
+// ============================================
+
+export const ReportCard = memo(function ReportCard({
   report,
   type,
   isLoading,
@@ -160,20 +261,31 @@ const ReportCard = memo(function ReportCard({
   const hasReport = !!report;
   
   if (variant === 'current' && !hasReport) {
-    return null; // Will show countdown instead
+    return null;
   }
 
   return (
     <div
       className={cn(
-        "group relative p-5 rounded-2xl text-left transition-all duration-300 card-warzone",
-        hasReport && "card-warzone-hover cursor-pointer"
+        "group relative p-5 rounded-2xl text-left transition-all duration-300",
+        hasReport && "hover:scale-[1.02] cursor-pointer"
       )}
+      style={{ 
+        background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+        border: '1px solid rgba(201,166,70,0.25)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+      }}
       onClick={hasReport ? onDownload : undefined}
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center icon-container-gold">
+          <div 
+            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ 
+              background: 'rgba(201,166,70,0.15)',
+              border: '1px solid rgba(201,166,70,0.3)'
+            }}
+          >
             {isLoading ? (
               <Loader2 className="w-5 h-5 text-[#C9A646] animate-spin" />
             ) : (
@@ -205,12 +317,21 @@ const ReportCard = memo(function ReportCard({
           <ChevronRight className="w-5 h-5 text-[#C9A646] transition-transform group-hover:translate-x-1" />
         )}
       </div>
+      {hasReport && (
+        <div 
+          className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+        />
+      )}
     </div>
   );
 });
 
-// Countdown Display
-const CountdownDisplay = memo(function CountdownDisplay({
+// ============================================
+// COUNTDOWN DISPLAY
+// ============================================
+
+export const CountdownDisplay = memo(function CountdownDisplay({
   title,
   subtitle,
   countdown,
@@ -220,8 +341,21 @@ const CountdownDisplay = memo(function CountdownDisplay({
   countdown: { hours: number; minutes: number; seconds: number };
 }) {
   return (
-    <div className="px-8 py-4 rounded-xl flex items-center gap-4 card-warzone">
-      <div className="w-12 h-12 rounded-xl flex items-center justify-center icon-container-gold">
+    <div 
+      className="px-8 py-4 rounded-xl font-semibold text-base flex items-center gap-4"
+      style={{ 
+        background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.05) 100%)',
+        border: '1px solid rgba(201,166,70,0.25)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+      }}
+    >
+      <div 
+        className="w-12 h-12 rounded-xl flex items-center justify-center"
+        style={{ 
+          background: 'rgba(201,166,70,0.15)',
+          border: '1px solid rgba(201,166,70,0.3)'
+        }}
+      >
         <Clock className="w-6 h-6 text-[#C9A646] animate-pulse" />
       </div>
       <div className="text-left">
@@ -234,8 +368,11 @@ const CountdownDisplay = memo(function CountdownDisplay({
   );
 });
 
-// Test Report Card
-const TestReportCard = memo(function TestReportCard({ 
+// ============================================
+// TEST REPORT CARD (For Testers Only)
+// ============================================
+
+export const TestReportCard = memo(function TestReportCard({ 
   testDailyReport, 
   onDownload,
   onPublishSuccess,
@@ -283,10 +420,19 @@ const TestReportCard = memo(function TestReportCard({
       {/* Confirmation Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 modal-backdrop" onClick={() => setShowConfirmModal(false)} />
-          <div className="relative modal-card border-green-500/30 rounded-2xl max-w-md w-full p-6">
+          <div 
+            className="absolute inset-0 bg-black/90 backdrop-blur-md" 
+            onClick={() => setShowConfirmModal(false)} 
+          />
+          <div 
+            className="relative rounded-2xl max-w-md w-full p-6"
+            style={{
+              background: 'linear-gradient(to br, #1a1410, #12100c, #0a0806)',
+              border: '1px solid rgba(34,197,94,0.3)',
+            }}
+          >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl icon-container-green flex items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
                 <Send className="w-6 h-6 text-green-400" />
               </div>
               <div>
@@ -295,12 +441,24 @@ const TestReportCard = memo(function TestReportCard({
               </div>
             </div>
             
-            <div className="bg-[#1a1410] rounded-xl p-4 mb-6 border border-[#C9A646]/20">
+            <div 
+              className="rounded-xl p-4 mb-6"
+              style={{
+                background: '#1a1410',
+                border: '1px solid rgba(201,166,70,0.2)',
+              }}
+            >
               <p className="text-[#C9A646]/80 text-sm mb-2">Report:</p>
               <p className="text-white font-semibold">{formatReportDate(testDailyReport.report_date)}</p>
             </div>
 
-            <div className="bg-yellow-500/10 rounded-xl p-4 mb-6 border border-yellow-500/30">
+            <div 
+              className="rounded-xl p-4 mb-6"
+              style={{
+                background: 'rgba(234,179,8,0.1)',
+                border: '1px solid rgba(234,179,8,0.3)',
+              }}
+            >
               <p className="text-yellow-400 text-sm flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 Replaces current LIVE report
@@ -310,14 +468,19 @@ const TestReportCard = memo(function TestReportCard({
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmModal(false)}
-                className="flex-1 py-3 rounded-xl font-semibold text-sm bg-[#C9A646]/10 border border-[#C9A646]/30 text-[#C9A646] hover:bg-[#C9A646]/20"
+                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:bg-[#C9A646]/10"
+                style={{ 
+                  background: 'rgba(201,166,70,0.08)',
+                  border: '1px solid rgba(201,166,70,0.3)',
+                  color: '#C9A646'
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={handlePublishToLive}
                 disabled={isPublishing}
-                className="flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white"
+                className="flex-1 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white transition-all"
               >
                 {isPublishing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4" />}
                 Publish
@@ -330,14 +493,32 @@ const TestReportCard = memo(function TestReportCard({
       {/* Test Report Card */}
       <div className="mt-4 mb-6">
         <div className="flex items-center gap-2 mb-3">
-          <span className="badge-tester px-2 py-1 rounded-md text-xs font-bold">🧪 TESTER ONLY</span>
+          <span className="px-2 py-1 rounded-md text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+            🧪 TESTER ONLY
+          </span>
           <span className="text-[#C9A646]/50 text-sm">Visible only to testers</span>
         </div>
         
-        <div className="group relative w-full p-5 rounded-2xl card-test-report">
+        <div
+          className="group relative w-full p-5 rounded-2xl transition-all duration-300"
+          style={{ 
+            background: 'linear-gradient(135deg, rgba(147,51,234,0.15) 0%, rgba(88,28,135,0.1) 100%)',
+            border: '2px solid rgba(147,51,234,0.4)',
+            boxShadow: '0 4px 20px rgba(147,51,234,0.2)'
+          }}
+        >
           <div className="flex items-start justify-between">
-            <button onClick={onDownload} className="flex items-center gap-3 text-left flex-1">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center icon-container-purple">
+            <button
+              onClick={onDownload}
+              className="flex items-center gap-3 text-left flex-1"
+            >
+              <div 
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ 
+                  background: 'rgba(147,51,234,0.2)',
+                  border: '1px solid rgba(147,51,234,0.4)'
+                }}
+              >
                 <FileText className="w-5 h-5 text-purple-400" />
               </div>
               <div>
@@ -345,51 +526,77 @@ const TestReportCard = memo(function TestReportCard({
                   <p className="text-white font-semibold">
                     🧪 TEST: {formatReportDate(testDailyReport.created_at)}
                   </p>
-                  <span className="badge-pending px-2 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
-                    PENDING
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 animate-pulse">
+                    PENDING REVIEW
                   </span>
                 </div>
                 <p className="text-purple-400/60 text-xs">
-                  Generated at {formatReportTime(testDailyReport.updated_at || testDailyReport.created_at)} ET
+                  Generated at {formatReportTime(testDailyReport.updated_at || testDailyReport.created_at)} ET • {testDailyReport.id}
                 </p>
               </div>
             </button>
             
+            {/* Action Buttons */}
             <div className="flex items-center gap-2 ml-4">
               <button
                 onClick={() => setShowConfirmModal(true)}
-                className="btn-publish px-4 py-2 rounded-xl font-semibold text-sm flex items-center gap-2"
+                className="px-4 py-2 rounded-xl font-semibold text-sm flex items-center gap-2 transition-all hover:scale-[1.02]"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(34,197,94,0.2) 0%, rgba(22,163,74,0.15) 100%)',
+                  border: '1px solid rgba(34,197,94,0.5)',
+                  color: '#22c55e'
+                }}
               >
                 <Send className="w-4 h-4" />
-                Publish
+                Publish to Live
               </button>
+              
               <button
                 onClick={onDownload}
-                className="p-2 rounded-xl border border-purple-500/30 hover:bg-purple-500/20"
+                className="p-2 rounded-xl transition-all hover:bg-purple-500/20"
+                style={{ border: '1px solid rgba(147,51,234,0.3)' }}
               >
                 <ChevronRight className="w-5 h-5 text-purple-400" />
               </button>
             </div>
           </div>
+          <div 
+            className="absolute bottom-0 left-4 right-4 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(147,51,234,0.5), transparent)' }}
+          />
         </div>
       </div>
     </>
   );
 });
 
-// Discord & Trading Room Cards
-const CommunityCards = memo(function CommunityCards() {
+// ============================================
+// COMMUNITY CARDS
+// ============================================
+
+export const CommunityCards = memo(function CommunityCards() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* Discord */}
+      {/* Discord Community */}
       <a 
         href={CONFIG.DISCORD_INVITE_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02] card-warzone"
+        className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02]"
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+          border: '1px solid rgba(201,166,70,0.25)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+        }}
       >
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center card-discord">
+          <div 
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ 
+              background: 'rgba(88,101,242,0.15)',
+              border: '1px solid rgba(88,101,242,0.3)'
+            }}
+          >
             <DiscordIcon className="w-6 h-6 text-[#5865F2]" />
           </div>
           <div>
@@ -397,7 +604,14 @@ const CommunityCards = memo(function CommunityCards() {
             <p className="text-[#C9A646]/50 text-sm">Join 847+ active traders</p>
           </div>
         </div>
-        <button className="w-full py-3 rounded-xl font-semibold text-sm card-discord text-[#5865F2]">
+        <button 
+          className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+          style={{ 
+            background: 'rgba(88,101,242,0.15)',
+            border: '1px solid rgba(88,101,242,0.4)',
+            color: '#5865F2'
+          }}
+        >
           Join Now
         </button>
       </a>
@@ -407,10 +621,21 @@ const CommunityCards = memo(function CommunityCards() {
         href={CONFIG.DISCORD_INVITE_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02] card-warzone"
+        className="group p-6 rounded-2xl transition-all duration-300 hover:scale-[1.02]"
+        style={{ 
+          background: 'linear-gradient(135deg, rgba(25,20,15,0.9) 0%, rgba(35,28,20,0.8) 100%)',
+          border: '1px solid rgba(201,166,70,0.25)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+        }}
       >
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center card-trading-room">
+          <div 
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ 
+              background: 'rgba(168,85,247,0.15)',
+              border: '1px solid rgba(168,85,247,0.3)'
+            }}
+          >
             <Headphones className="w-6 h-6 text-purple-400" />
           </div>
           <div>
@@ -418,98 +643,17 @@ const CommunityCards = memo(function CommunityCards() {
             <p className="text-[#C9A646]/50 text-sm">Live market analysis now</p>
           </div>
         </div>
-        <button className="w-full py-3 rounded-xl font-semibold text-sm card-trading-room text-purple-400">
+        <button 
+          className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+          style={{ 
+            background: 'rgba(168,85,247,0.15)',
+            border: '1px solid rgba(168,85,247,0.4)',
+            color: '#A855F7'
+          }}
+        >
           Join Now
         </button>
       </a>
     </div>
   );
 });
-
-// Stats data
-const STATS = [
-  { value: '9:00 AM', label: 'Daily Delivery' },
-  { value: '847+', label: 'Active Traders' },
-  { value: '7 Days', label: 'Free Trial' },
-  { value: '24/7', label: 'Discord Access' },
-];
-
-// Stats Bar
-const StatsBar = memo(function StatsBar() {
-  return (
-    <div className="grid grid-cols-4 gap-2 md:gap-4">
-      {STATS.map((stat, i) => (
-        <div key={i} className="text-center">
-          <div className="text-lg sm:text-xl md:text-3xl lg:text-5xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">
-            {stat.value}
-          </div>
-          <div className="text-slate-400 text-[8px] sm:text-[9px] md:text-xs mt-1 tracking-wide uppercase">
-            {stat.label}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-});
-
-// Feature Icons Row
-const FeatureIcons = memo(function FeatureIcons({ size = 'md' }: { size?: 'sm' | 'md' }) {
-  const iconSize = size === 'sm' ? 'w-3.5 h-3.5' : 'w-4 h-4';
-  const containerSize = size === 'sm' ? 'w-8 h-8' : 'w-9 h-9';
-  const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
-  const subTextSize = size === 'sm' ? 'text-[10px]' : 'text-xs';
-
-  return (
-    <div className="flex flex-wrap items-center gap-4 md:gap-6">
-      <div className="flex items-center gap-2">
-        <div className={`${containerSize} rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5`}>
-          <FileText className={`${iconSize} text-[#C9A646]`} strokeWidth={1.5} />
-        </div>
-        <div>
-          <div className={`text-white font-bold ${textSize}`}>Daily Briefing</div>
-          <div className={`text-slate-400 ${subTextSize}`}>9:00 AM NY</div>
-        </div>
-      </div>
-      
-      <div className="w-px h-8 md:h-10 bg-[#C9A646]/30 hidden sm:block" />
-      
-      <div className="flex items-center gap-2">
-        <div className={`${containerSize} rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5`}>
-          <Shield className={`${iconSize} text-[#C9A646]`} strokeWidth={1.5} />
-        </div>
-        <div>
-          <div className={`text-white font-bold ${textSize}`}>Institutional</div>
-          <div className={`text-slate-400 ${subTextSize}`}>Grade Intel</div>
-        </div>
-      </div>
-      
-      <div className="w-px h-8 md:h-10 bg-[#C9A646]/30 hidden sm:block" />
-      
-      <div className="flex items-center gap-2">
-        <div className={`${containerSize} rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5`}>
-          <Target className={`${iconSize} text-[#C9A646]`} strokeWidth={1.5} />
-        </div>
-        <div>
-          <div className={`text-white font-bold ${textSize}`}>Actionable</div>
-          <div className={`text-slate-400 ${subTextSize}`}>Trade Ideas</div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-export {
-  CONFIG,
-  YEARLY_SAVINGS,
-  BillingToggle,
-  ReportCard,
-  CountdownDisplay,
-  TestReportCard,
-  CommunityCards,
-  StatsBar,
-  FeatureIcons,
-  formatReportDate,
-  formatReportTime,
-};
-
-export type { BillingInterval };

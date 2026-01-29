@@ -19,12 +19,25 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
       <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" onClick={onClose} />
       
       {/* Modal */}
-      <div className="relative w-full max-w-2xl max-h-[80vh] rounded-2xl overflow-hidden modal-card">
+      <div 
+        className="relative w-full max-w-2xl max-h-[80vh] rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(180deg, rgba(30,25,18,0.99) 0%, rgba(15,12,8,1) 100%)',
+          border: '1px solid rgba(201,166,70,0.4)',
+          boxShadow: '0 0 60px rgba(201,166,70,0.2), 0 25px 50px rgba(0,0,0,0.5)'
+        }}
+      >
         
         {/* Header */}
         <div className="sticky top-0 flex items-center justify-between p-4 border-b border-[#C9A646]/20 bg-[#0a0806]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center icon-container-gold">
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.25) 0%, rgba(201,166,70,0.1) 100%)',
+                border: '1px solid rgba(201,166,70,0.4)'
+              }}
+            >
               <FileText className="w-5 h-5 text-[#C9A646]" />
             </div>
             <div>
@@ -41,7 +54,7 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
         </div>
         
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh] scrollbar-warzone">
+        <div className="p-6 overflow-y-auto max-h-[60vh]">
           <div className="prose prose-invert prose-sm max-w-none">
             
             <h4 className="text-[#C9A646] font-semibold text-base mb-3">1. Service Description</h4>
@@ -115,7 +128,12 @@ const TermsModal = memo(function TermsModal({ isOpen, onClose }: TermsModalProps
         <div className="sticky bottom-0 p-4 border-t border-[#C9A646]/20 bg-[#0a0806]">
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-xl font-semibold text-sm btn-gold"
+            className="w-full py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02]"
+            style={{
+              background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
+              color: '#000',
+              boxShadow: '0 4px 20px rgba(201,166,70,0.4)'
+            }}
           >
             I Understand
           </button>

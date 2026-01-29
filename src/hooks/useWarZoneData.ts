@@ -1,5 +1,5 @@
 // =====================================================
-// FINOTAUR WAR ZONE - Centralized Data Hook v2.0
+// FINOTAUR WAR ZONE - Centralized Data Hook v2.1
 // 
 // 🔥 OPTIMIZATIONS:
 // - Single source of truth for all War Zone data
@@ -7,6 +7,8 @@
 // - Parallel fetching
 // - Automatic realtime subscriptions
 // - Throttled refetch (10s minimum)
+// 
+// ✅ Added newsletterMembershipId for cancel modal
 // =====================================================
 
 import { useCallback, useMemo, useEffect, useRef } from 'react';
@@ -76,9 +78,12 @@ export interface WarZoneData {
   isInTrial: boolean;
   trialDaysRemaining: number | null;
   
+  // Membership IDs
+  newsletterMembershipId: string | null;  // ✅ Added
+  topSecretMembershipId: string | null;
+  
   // Top Secret status
   isTopSecretMember: boolean;
-  topSecretMembershipId: string | null;
   
   // Time info
   isBeforeDailyReportTime: boolean;
@@ -442,9 +447,12 @@ export function useWarZoneData(): WarZoneData {
     isInTrial,
     trialDaysRemaining,
     
+    // Membership IDs - ✅ Added newsletterMembershipId
+    newsletterMembershipId: profile?.newsletter_whop_membership_id || null,
+    topSecretMembershipId: profile?.top_secret_membership_id || null,
+    
     // Top Secret
     isTopSecretMember: !!isTopSecretMember,
-    topSecretMembershipId: profile?.top_secret_membership_id || null,
     
     // Time info
     isBeforeDailyReportTime: reportsData?.isBeforeDailyReportTime ?? true,

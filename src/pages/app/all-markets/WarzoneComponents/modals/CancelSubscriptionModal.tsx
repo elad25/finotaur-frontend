@@ -85,17 +85,18 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 backdrop-blur-md bg-black/80"
-        onClick={handleClose} 
-      />
+      <div className="absolute inset-0 backdrop-blur-md bg-black/80" onClick={handleClose} />
       
-      {/* Modal */}
       <div className="relative w-full max-w-md">
-        <div className="relative rounded-2xl overflow-hidden modal-card">
+        <div 
+          className="relative rounded-2xl overflow-hidden"
+          style={{
+            background: 'linear-gradient(180deg, rgba(30,25,18,0.99) 0%, rgba(15,12,8,1) 100%)',
+            border: '1px solid rgba(201,166,70,0.3)',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.5)'
+          }}
+        >
           
-          {/* Close button */}
           <button 
             onClick={handleClose}
             className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.03] border border-white/10 hover:bg-white/[0.08] transition-all z-10"
@@ -105,7 +106,6 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
 
           <div className="p-6">
             
-            {/* Step: Confirm */}
             {step === 'confirm' && (
               <>
                 <div className="flex justify-center mb-4">
@@ -119,7 +119,6 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
                   You'll lose access to all War Zone features at the end of your billing period.
                 </p>
 
-                {/* What you'll lose */}
                 <div className="space-y-2 mb-6">
                   {[
                     { icon: Shield, text: 'Daily Intelligence Reports' },
@@ -137,7 +136,12 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
                 <div className="flex gap-3">
                   <button
                     onClick={handleClose}
-                    className="flex-1 py-3 rounded-xl font-semibold text-sm btn-gold"
+                    className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all hover:scale-[1.02]"
+                    style={{
+                      background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
+                      color: '#000',
+                      boxShadow: '0 4px 20px rgba(201,166,70,0.4)'
+                    }}
                   >
                     Keep Subscription
                   </button>
@@ -151,13 +155,10 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
               </>
             )}
 
-            {/* Step: Reason */}
             {step === 'reason' && (
               <>
                 <h3 className="text-white font-bold text-xl text-center mb-2">Help us improve</h3>
-                <p className="text-slate-400 text-center text-sm mb-6">
-                  Why are you canceling? (Optional)
-                </p>
+                <p className="text-slate-400 text-center text-sm mb-6">Why are you canceling? (Optional)</p>
 
                 <div className="space-y-2 mb-6">
                   {reasons.map((reason) => (
@@ -194,7 +195,6 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
               </>
             )}
 
-            {/* Step: Processing */}
             {step === 'processing' && (
               <div className="py-8 text-center">
                 <Loader2 className="w-12 h-12 text-[#C9A646] animate-spin mx-auto mb-4" />
@@ -203,7 +203,6 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
               </div>
             )}
 
-            {/* Step: Success */}
             {step === 'success' && (
               <div className="py-8 text-center">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center bg-green-500/15 border border-green-500/30 mx-auto mb-4">
@@ -216,7 +215,6 @@ const CancelSubscriptionModal = memo(function CancelSubscriptionModal({
               </div>
             )}
 
-            {/* Step: Error */}
             {step === 'error' && (
               <div className="py-8 text-center">
                 <div className="w-14 h-14 rounded-full flex items-center justify-center bg-red-500/15 border border-red-500/30 mx-auto mb-4">

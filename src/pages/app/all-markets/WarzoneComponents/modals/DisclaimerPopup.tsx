@@ -88,7 +88,12 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
         }}>
           
           {/* Top gold line */}
-          <div className="absolute top-0 left-0 right-0 h-[2px] divider-gold" />
+          <div 
+            className="absolute top-0 left-0 right-0 h-[2px]" 
+            style={{ 
+              background: 'linear-gradient(90deg, transparent 5%, rgba(201,166,70,0.5) 20%, rgba(244,217,123,0.9) 50%, rgba(201,166,70,0.5) 80%, transparent 95%)' 
+            }} 
+          />
 
           {/* Content */}
           <div className="px-8 pt-6 pb-7">
@@ -96,7 +101,13 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl flex items-center justify-center icon-container-gold">
+                <div 
+                  className="w-11 h-11 rounded-xl flex items-center justify-center"
+                  style={{
+                    background: 'rgba(201,166,70,0.15)',
+                    border: '1px solid rgba(201,166,70,0.3)'
+                  }}
+                >
                   <Crown className="w-5 h-5 text-[#C9A646]" />
                 </div>
                 <div>
@@ -196,9 +207,14 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
               className={cn(
                 "w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all",
                 agreed && !isProcessing
-                  ? "btn-gold"
+                  ? "hover:scale-[1.02]"
                   : "bg-slate-700/50 text-slate-500 cursor-not-allowed"
               )}
+              style={agreed && !isProcessing ? {
+                background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
+                color: '#000',
+                boxShadow: '0 4px 20px rgba(201,166,70,0.4)'
+              } : undefined}
             >
               {isProcessing ? (
                 <>
