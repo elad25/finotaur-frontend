@@ -1,7 +1,5 @@
-// vite.config.ts - OPTIMIZED FOR PRODUCTION v3.0
-// 🔥 Better code splitting for War Zone
-// 🔥 Pre-bundling for faster dev
-// 🔥 Compression for smaller bundles
+// vite.config.ts - FIXED v3.1
+// 🔥 Fixed circular dependency issue in vendor-charts
 
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -30,29 +28,19 @@ export default defineConfig({
     },
   },
 
-  // 🔥 CRITICAL: Pre-bundle heavy dependencies for faster dev
   optimizeDeps: {
     include: [
-      // Core React
       'react',
       'react-dom',
       'react-router-dom',
-      
-      // Data layer
       '@tanstack/react-query',
       '@supabase/supabase-js',
-      
-      // Date/time
       'dayjs',
       'date-fns',
-      
-      // UI Components
       'lucide-react',
       'framer-motion',
       'recharts',
       'sonner',
-      
-      // Radix UI
       '@radix-ui/react-dialog',
       '@radix-ui/react-dropdown-menu',
       '@radix-ui/react-select',
@@ -62,8 +50,6 @@ export default defineConfig({
       '@radix-ui/react-slot',
       '@radix-ui/react-checkbox',
       '@radix-ui/react-switch',
-      
-      // Utils
       'class-variance-authority',
       'clsx',
       'tailwind-merge',
@@ -76,21 +62,34 @@ export default defineConfig({
     },
   },
 
-  // 🔥 Build optimizations
   build: {
     target: 'esnext',
     minify: 'esbuild',
     sourcemap: false,
     
-    // 🔥 Better code splitting
     rollupOptions: {
       output: {
         manualChunks: (id) => {
-          // Core React
+          // 🔥 FIX: Don't split d3 separately - keep with recharts
+          if (id.includes('node_modules/recharts') || 
+              id.includes('node_modules/d3-') ||
+              id.includes('node_modules/victory-') ||
+              id.includes('node_modules/internmap') ||
+              id.includes('node_modules/delaunator')) {
+            return 'vendor-charts';
+          }
+          
+          // Core React - MUST be first to avoid circular deps
           if (id.includes('node_modules/react/') || 
-              id.includes('node_modules/react-dom/') || 
-              id.includes('node_modules/react-router-dom/')) {
+              id.includes('node_modules/react-dom/') ||
+              id.includes('node_modules/scheduler/')) {
             return 'vendor-react';
+          }
+          
+          // React Router (depends on react)
+          if (id.includes('node_modules/react-router') ||
+              id.includes('node_modules/@remix-run/router')) {
+            return 'vendor-router';
           }
           
           // Data layer
@@ -99,15 +98,10 @@ export default defineConfig({
             return 'vendor-data';
           }
           
-          // Animation
-          if (id.includes('node_modules/framer-motion')) {
+          // Animation (separate due to size)
+          if (id.includes('node_modules/framer-motion') ||
+              id.includes('node_modules/motion')) {
             return 'vendor-motion';
-          }
-          
-          // Charts
-          if (id.includes('node_modules/recharts') || 
-              id.includes('node_modules/d3-')) {
-            return 'vendor-charts';
           }
           
           // Radix UI
@@ -120,46 +114,45 @@ export default defineConfig({
             return 'vendor-icons';
           }
           
-          // Utils
+          // Utils - small, can be in one chunk
           if (id.includes('node_modules/dayjs') || 
               id.includes('node_modules/date-fns') ||
               id.includes('node_modules/clsx') ||
-              id.includes('node_modules/tailwind-merge')) {
+              id.includes('node_modules/tailwind-merge') ||
+              id.includes('node_modules/class-variance-authority')) {
             return 'vendor-utils';
           }
           
-          // 🔥 WAR ZONE - Separate chunk
-          if (id.includes('/warzone/') || 
-              id.includes('Warzone') || 
-              id.includes('WarZone')) {
-            return 'page-warzone';
+          // 🔥 App pages - only if not importing from node_modules
+          if (!id.includes('node_modules')) {
+            if (id.includes('/warzone/') || 
+                id.includes('Warzone') || 
+                id.includes('WarZone')) {
+              return 'page-warzone';
+            }
+            
+            if (id.includes('/journal/')) {
+              return 'page-journal';
+            }
+            
+            if (id.includes('/admin/')) {
+              return 'page-admin';
+            }
           }
           
-          // Journal pages
-          if (id.includes('/journal/')) {
-            return 'page-journal';
-          }
-          
-          // Admin pages
-          if (id.includes('/admin/')) {
-            return 'page-admin';
-          }
+          // Let Vite handle the rest automatically
+          return undefined;
         },
       },
     },
     
-    // 🔥 Chunk size warnings
     chunkSizeWarningLimit: 500,
   },
 
-  // 🔥 CSS optimization
   css: {
     devSourcemap: false,
   },
 
-  // Reduce console noise
   logLevel: 'info',
-  
-  // Cache for faster subsequent loads
   cacheDir: 'node_modules/.vite',
 })
