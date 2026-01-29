@@ -682,16 +682,16 @@ const BillingTab = () => {
 
       const data = await response.json();
       
-      // 🔥 v2.7.0: Show dialog for BOTH scenarios:
-      // Scenario A: Cancelling full price product (priceImpact exists, cancellingFullPriceProduct = true)
-      // Scenario B: Cancelling discounted product (no priceImpact, but hasBundle = true)
-      if (data.hasBundle) {
-        // Show bundle dialog for any bundle scenario
+      // 🔥 v2.8.0: Only show Bundle Dialog for Scenario A (cancelling full price product)
+      // Scenario A: Cancelling full price product → discounted product loses discount → Show Bundle Dialog
+      // Scenario B: Cancelling discounted product → full price product unaffected → Show NORMAL Dialog (not Bundle!)
+      if (data.hasBundle && data.cancellingFullPriceProduct) {
+        // Only show bundle dialog when cancelling FULL PRICE product
         setBundleCancelProduct(product);
         setBundleInfo({
           otherProductName: data.otherProductName,
           priceImpact: data.priceImpact,
-          cancellingFullPriceProduct: data.cancellingFullPriceProduct || false,
+          cancellingFullPriceProduct: true,
           discountedProductWillBeCancelled: data.discountedProductWillBeCancelled || false,
           bundleDetails: data.bundleDetails,
           hasBundle: true,
@@ -699,6 +699,9 @@ const BillingTab = () => {
         setShowBundleCancelDialog(true);
         return true; // Indicates bundle dialog shown
       }
+      
+      // Scenario B: Cancelling discounted product - proceed with normal cancel dialog
+      // The full price product continues unchanged
       
       return false; // No bundle, proceed with normal cancel
     } catch (error) {
@@ -1886,16 +1889,10 @@ const BillingTab = () => {
               </div>
               
               <DialogTitle className="text-xl font-semibold text-white mb-1">
-                {bundleInfo?.cancellingFullPriceProduct 
-                  ? 'Important: Bundle Pricing Impact'
-                  : 'Bundle Member Benefits'
-                }
+                ⚠️ Bundle Price Impact
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
-                {bundleInfo?.cancellingFullPriceProduct
-                  ? `Canceling ${bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'} will affect your bundle discount`
-                  : "You're enjoying exclusive bundle pricing on both products"
-                }
+                You're cancelling {bundleCancelProduct === 'newsletter' ? 'War Zone ($69.99/mo)' : 'Top Secret ($89.99/mo)'}
               </DialogDescription>
             </div>
           </div>
@@ -1922,26 +1919,7 @@ const BillingTab = () => {
               </div>
             </div>
           )}
-          
-          {/* 🔥 SCENARIO B Notice: Cancelling DISCOUNTED product (no impact on other) */}
-          {!bundleInfo?.cancellingFullPriceProduct && bundleInfo?.hasBundle && (
-            <div className="mx-6 mb-4">
-              <div className="relative p-4 rounded-xl bg-gradient-to-r from-blue-500/5 via-cyan-500/5 to-emerald-500/5 border border-blue-500/20">
-                <div className="relative flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-blue-300">No Impact on {bundleInfo.otherProductName}</p>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Your {bundleInfo.otherProductName} subscription will continue at its current price - no changes needed.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          
+
           {/* Options - Different based on scenario */}
           <div className="px-6 pb-2 space-y-2">
             
@@ -2012,41 +1990,7 @@ const BillingTab = () => {
                   </div>
                 </button>
               </>
-            ) : (
-              /* 🔥 SCENARIO B Options: Discounted product cancellation */
-              <>
-                {/* Option: Just cancel the discounted one */}
-                <button
-                  onClick={async () => {
-                    setBundleCancelLoading(true);
-                    setShowBundleCancelDialog(false);
-                    if (bundleCancelProduct === 'newsletter') {
-                      await handleCancelNewsletter(false, false);
-                    } else {
-                      await handleCancelTopSecret(false, false);
-                    }
-                    setBundleCancelLoading(false);
-                  }}
-                  disabled={bundleCancelLoading}
-                  className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
-                        <X className="w-5 h-5 text-red-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-white group-hover:text-red-300 transition-colors">
-                          Cancel {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}
-                        </p>
-                        <p className="text-xs text-zinc-500">{bundleInfo?.otherProductName} continues at current price</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
-                  </div>
-                </button>
-              </>
-            )}
+            ) : null}
           </div>
           
           {/* Keep Both - Premium CTA */}
@@ -2056,9 +2000,9 @@ const BillingTab = () => {
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
-              {bundleInfo?.cancellingFullPriceProduct ? 'Keep Both & Save Money' : "Never Mind, I'll Keep It"}
+              Never Mind, Keep Both
             </button>
-            {bundleInfo?.cancellingFullPriceProduct && bundleInfo?.priceImpact && (
+            {bundleInfo?.priceImpact && (
               <p className="text-center text-xs text-zinc-500 mt-2">
                 You're saving ${(bundleInfo.priceImpact.newPrice - bundleInfo.priceImpact.currentPrice).toFixed(2)}/mo with your bundle
               </p>

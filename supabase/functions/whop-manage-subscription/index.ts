@@ -611,28 +611,17 @@ async function handleCheckBundle(
     affectedProduct: string;
   } | null = null;
   
-  // 🔥 v2.7.0: Determine cancellation scenario
-  // Scenario A: Cancelling FULL PRICE product → discounted product loses its discount
-  // Scenario B: Cancelling DISCOUNTED product → full price product continues unchanged
+  // 🔥 v2.8.0: Determine cancellation scenario
+  // Scenario A: Cancelling FULL PRICE product → discounted product loses its discount → Show Bundle Dialog
+  // Scenario B: Cancelling DISCOUNTED product → full price product continues unchanged → NO Bundle Dialog needed
   let cancellingFullPriceProduct = false;
   let discountedProductWillBeCancelled = false;
   
   if (bundleStatus.hasBundle) {
-    // 🔥 v3.4.0: Simplified logic - if cancelling product is FULL PRICE, the other is affected
+    // Check if user is cancelling the FULL PRICE product (which affects the discounted one)
     
-    // Scenario A: Cancelling TOP SECRET at full price → War Zone loses discount
-    if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice) {
-      cancellingFullPriceProduct = true;
-      discountedProductWillBeCancelled = true;
-      priceImpact = {
-        willIncreasePrice: true,
-        currentPrice: 30,
-        newPrice: 69.99,
-        affectedProduct: 'War Zone Newsletter',
-      };
-    }
-    // Scenario A: Cancelling WAR ZONE at full price → Top Secret loses discount
-    else if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice) {
+    // Scenario A: Cancelling WAR ZONE at full price ($69.99) → Top Secret ($50) loses discount
+    if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) {
       cancellingFullPriceProduct = true;
       discountedProductWillBeCancelled = true;
       priceImpact = {
@@ -642,24 +631,40 @@ async function handleCheckBundle(
         affectedProduct: 'Top Secret',
       };
     }
-    // Scenario B: Cancelling DISCOUNTED product → other product unaffected
-    else if (product === 'top_secret' && !bundleStatus.topSecretIsFullPrice) {
-      priceImpact = null;
+    // Scenario A: Cancelling TOP SECRET at full price ($89.99) → War Zone ($30) loses discount
+    else if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted) {
+      cancellingFullPriceProduct = true;
+      discountedProductWillBeCancelled = true;
+      priceImpact = {
+        willIncreasePrice: true,
+        currentPrice: 30,
+        newPrice: 69.99,
+        affectedProduct: 'War Zone Newsletter',
+      };
     }
-    else if (product === 'newsletter' && !bundleStatus.newsletterIsFullPrice) {
+    // Scenario B: Cancelling DISCOUNTED product → other product at full price is unaffected
+    // Return hasBundle=false so frontend shows normal cancel dialog
+    else {
+      // Don't set priceImpact - the other product is at full price and unaffected
       priceImpact = null;
+      // Important: We return hasBundle=false for Scenario B so frontend uses normal dialog
     }
   }
+  
+  // 🔥 v2.8.0: For Scenario B, return hasBundle=false so frontend shows normal cancel dialog
+  const effectiveHasBundle = cancellingFullPriceProduct ? bundleStatus.hasBundle : false;
   
   return new Response(
     JSON.stringify({
       success: true,
-      hasBundle: bundleStatus.hasBundle,
+      // 🔥 v2.8.0: Only return hasBundle=true for Scenario A (full price cancellation)
+      // Scenario B uses normal dialog, so we return hasBundle=false
+      hasBundle: effectiveHasBundle,
       otherProduct: bundleStatus.otherProduct,
       otherProductName: bundleStatus.otherProductName,
       priceImpact,
-      cancellingFullPriceProduct,  // 🔥 NEW: Flag for scenario A
-      discountedProductWillBeCancelled,  // 🔥 NEW: Flag indicating other product will be cancelled
+      cancellingFullPriceProduct,
+      discountedProductWillBeCancelled,
       bundleDetails: {
         newsletterActive: bundleStatus.newsletterActive,
         topSecretActive: bundleStatus.topSecretActive,
