@@ -694,38 +694,31 @@ async function handleCancel(
   // 🔥 NEW: Check bundle status
   const bundleStatus = checkBundleStatus(profile, product);
   
-  // If user has bundle and didn't confirm, return error asking for confirmation
+  // If user has bundle and didn't confirm, check if confirmation is needed
   if (bundleStatus.hasBundle) {
-    // Check if cancelling will affect pricing (user cancelling discounted product)
-    const willAffectPricing = 
-      (product === 'top_secret' && bundleStatus.newsletterIsDiscounted) ||
-      (product === 'newsletter' && bundleStatus.topSecretIsDiscounted);
-    
-    // 🔥 v3.3.0: Check if cancelling FULL PRICE product (other product is discounted)
+    // 🔥 v2.8.0 FIX: Only require confirmation when cancelling FULL PRICE product
+    // Scenario A: Cancelling full price product → discounted product loses discount → NEEDS confirmation
+    // Scenario B: Cancelling discounted product → full price product unaffected → NO confirmation needed
     const cancellingFullPriceProduct = 
       (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) ||
       (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted);
     
-    // 🔥 v3.3.0 FIX: Both cases require confirmation via popup - NO automatic cancellation!
-    // Case 1: Cancelling discounted product - affects other product's pricing
-    // Case 2: Cancelling full price product - discounted product will be cancelled (needs user choice)
-    if ((willAffectPricing || cancellingFullPriceProduct) && !cancelBothProducts && !confirmPriceIncrease) {
-      const isFullPriceCancel = cancellingFullPriceProduct;
+    // 🔥 v2.8.0: ONLY require confirmation for Scenario A (cancelling full price product)
+    // Scenario B (cancelling discounted product) proceeds without popup
+    if (cancellingFullPriceProduct && !cancelBothProducts && !confirmPriceIncrease) {
       const otherProductPrice = bundleStatus.otherProduct === 'newsletter' ? 30 : 50;
       const otherProductFullPrice = bundleStatus.otherProduct === 'newsletter' ? 69.99 : 89.99;
       
       return new Response(
         JSON.stringify({ 
           error: "bundle_confirmation_required",
-          message: isFullPriceCancel 
-            ? `You're cancelling the full-price product. The discounted ${bundleStatus.otherProductName} cannot exist without it.`
-            : "You have both products. Please confirm how to proceed.",
+          message: `You're cancelling the full-price product. The discounted ${bundleStatus.otherProductName} cannot exist without it.`,
           hasBundle: true,
-          cancellingFullPriceProduct: isFullPriceCancel,  // 🔥 NEW
+          cancellingFullPriceProduct: true,
           otherProduct: bundleStatus.otherProduct,
           otherProductName: bundleStatus.otherProductName,
-          otherProductCurrentPrice: otherProductPrice,  // 🔥 NEW
-          otherProductFullPrice: otherProductFullPrice,  // 🔥 NEW
+          otherProductCurrentPrice: otherProductPrice,
+          otherProductFullPrice: otherProductFullPrice,
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
