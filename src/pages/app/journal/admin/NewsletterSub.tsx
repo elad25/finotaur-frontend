@@ -49,7 +49,7 @@ FileDown,
 import { toast } from 'sonner';
 import { lazy, Suspense } from 'react';
 
-const WarZoneLandingSimple = lazy(() => import('@/pages/app/all-markets/Warzonelanding'));
+const WarZoneLandingSimple = lazy(() => import("@/pages/app/all-markets/WarzoneComponents/Warzonelanding"));
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
 // ============================================

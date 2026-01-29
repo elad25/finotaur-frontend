@@ -1,54 +1,58 @@
-import { lazy, Suspense } from 'react';
-import { useUserMeta } from '@/hooks/useUserStatus';
-import Warzonelanding from './Warzonelanding';
+// =====================================================
+// WAR ZONE PAGE - Entry Point
+// 
+// Route: /app/all-markets/warzone
+// 
+// This is the ONLY War Zone file in all-markets root.
+// All components are in ./WarzoneComponents/
+// =====================================================
 
-// Lazy import for admin component
+import { lazy, Suspense, memo } from 'react';
+import { useUserMeta } from '@/hooks/useUserStatus';
+
+// Loading component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[60vh] bg-[#080812]">
+    <div className="flex flex-col items-center gap-4">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]" />
+      <p className="text-sm text-gray-500">Loading...</p>
+    </div>
+  </div>
+);
+
+// Lazy imports - from WarzoneComponents folder
+const Warzonelanding = lazy(() => import('./WarzoneComponents/Warzonelanding'));
 const NewsletterSub = lazy(() => import('@/pages/app/journal/admin/NewsletterSub'));
 
 /**
- * ⚔️ WAR ZONE PAGE - OPTIMIZED
- * 
- * Uses useUserMeta hook (shared cache) instead of separate DB query
+ * ⚔️ WAR ZONE PAGE
  * 
  * Flow:
- * - Admin/Super Admin → NewsletterSub (full admin panel)
- * - Regular users → Warzonelanding (handles subscriber vs non-subscriber internally)
- * 
- * Route: /app/all-markets/warzone
+ * - Admin → NewsletterSub (admin panel)
+ * - Users → Warzonelanding (handles subscriber/non-subscriber)
  */
-export default function WarZonePage() {
-  // 🔥 OPTIMIZED: Uses shared cached hook instead of separate DB call
+function WarZonePage() {
   const { isAdmin, isLoading } = useUserMeta();
 
-  // Loading state
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh] bg-[#080812]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
-          <p className="text-sm text-gray-500">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
-  // 🔐 Admin sees the full newsletter management
+  // Admin view
   if (isAdmin) {
     return (
-      <Suspense fallback={
-        <div className="flex items-center justify-center min-h-[60vh] bg-[#080812]">
-          <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#C9A646]"></div>
-            <p className="text-sm text-gray-500">Loading admin panel...</p>
-          </div>
-        </div>
-      }>
+      <Suspense fallback={<PageLoader />}>
         <NewsletterSub />
       </Suspense>
     );
   }
 
-  // 👤 Regular users see the landing page
-  // (Warzonelanding handles subscriber vs non-subscriber internally)
-  return <Warzonelanding />;
+  // User view
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <Warzonelanding />
+    </Suspense>
+  );
 }
+
+export default memo(WarZonePage);
