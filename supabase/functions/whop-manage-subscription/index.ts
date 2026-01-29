@@ -45,8 +45,9 @@ type ProductType = "newsletter" | "top_secret";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-auth",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
+  "Access-Control-Max-Age": "86400",
 };
 
 // ============================================
@@ -368,7 +369,6 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
   // 🔥 v3.4.0 FIX: When plan_id is missing/null, use timing-based detection
   // The FIRST product purchased is always at FULL PRICE
   // The SECOND product purchased is at DISCOUNTED price (bundle discount)
-  // Compare started_at timestamps to determine which was first
   const newsletterStarted = profile.newsletter_started_at ? new Date(profile.newsletter_started_at) : null;
   const topSecretStarted = profile.top_secret_started_at ? new Date(profile.top_secret_started_at) : null;
   
@@ -379,14 +379,11 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
   if (hasBundle && !newsletterIsDiscounted && !topSecretIsDiscounted && 
       !explicitNewsletterFullPrice && !explicitTopSecretFullPrice) {
     if (newsletterStarted && topSecretStarted) {
-      // First product = full price, Second product = discounted
       if (newsletterStarted < topSecretStarted) {
-        // Newsletter was purchased first → Newsletter is FULL PRICE, Top Secret is DISCOUNTED
+        // Newsletter was purchased first → Newsletter is FULL PRICE
         newsletterIsFullPrice = true;
-        // Note: topSecretIsDiscounted stays false because plan_id doesn't match,
-        // but we know it's the "second" product
       } else {
-        // Top Secret was purchased first → Top Secret is FULL PRICE, Newsletter is DISCOUNTED
+        // Top Secret was purchased first → Top Secret is FULL PRICE
         topSecretIsFullPrice = true;
       }
     }
@@ -404,32 +401,8 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
     topSecretIsDiscounted,
     newsletterIsFullPrice,
     topSecretIsFullPrice,
-    explicitNewsletterFullPrice,
-    explicitTopSecretFullPrice,
     newsletterStarted: newsletterStarted?.toISOString(),
     topSecretStarted: topSecretStarted?.toISOString(),
-  });
-  
-  // Inferred full price: if the OTHER product is discounted, THIS one must be full price
-  const newsletterIsFullPrice = explicitNewsletterFullPrice || 
-                                 (hasBundle && topSecretIsDiscounted && !newsletterIsDiscounted);
-  const topSecretIsFullPrice = explicitTopSecretFullPrice || 
-                                (hasBundle && newsletterIsDiscounted && !topSecretIsDiscounted);
-  
-  // 🔥 DEBUG: Log the detection
-  console.log(`📊 Bundle Status Check:`, {
-    cancellingProduct,
-    hasBundle,
-    newsletterActive,
-    topSecretActive,
-    newsletter_whop_plan_id: profile.newsletter_whop_plan_id,
-    top_secret_whop_plan_id: profile.top_secret_whop_plan_id,
-    newsletterIsDiscounted,
-    topSecretIsDiscounted,
-    newsletterIsFullPrice,
-    topSecretIsFullPrice,
-    explicitNewsletterFullPrice,
-    explicitTopSecretFullPrice,
   });
   
   const otherProduct = cancellingProduct === 'newsletter' ? 'top_secret' : 'newsletter';
@@ -453,9 +426,12 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
 // ============================================
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
+  // Handle CORS preflight - MUST return 200 with proper headers
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
   }
 
   try {
