@@ -1306,7 +1306,11 @@ const BillingTab = () => {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-400">
                     {profile?.newsletter_cancel_at_period_end ? (
-                      <span>Access until {formatDate(profile?.newsletter_expires_at)}</span>
+                      <span>Access until {formatDate(
+                        newsletterPricing.isInTrial && profile?.newsletter_trial_ends_at
+                          ? profile.newsletter_trial_ends_at
+                          : profile?.newsletter_expires_at
+                      )}</span>
                     ) : newsletterStatus === 'trial' ? (
                       <span className="flex items-center gap-2">
                         <Clock className="w-3.5 h-3.5 text-purple-400" />
