@@ -605,7 +605,7 @@ const BillingTab = () => {
       // Still in trial
       return { isInTrial: true, isInIntro: false, introMonthsRemaining: 2, currentPrice: 0, trialDaysRemaining: Math.ceil((trialEndDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)) };
     } else if (now < introEndDate) {
-      // In intro period ($45/mo - 50% off)
+      // In intro period ($44.99/mo - 50% off)
       const monthsIntoIntro = Math.floor((now.getTime() - trialEndDate.getTime()) / (30 * 24 * 60 * 60 * 1000));
       return { isInTrial: false, isInIntro: true, introMonthsRemaining: 2 - monthsIntoIntro, currentPrice: 45 };
     } else {
@@ -1509,7 +1509,7 @@ const BillingTab = () => {
                     </div>
                   ) : topSecretPricing.isInIntro ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xl font-bold text-white">$45/mo</span>
+                      <span className="text-xl font-bold text-white">$44.99/mo</span>
                       <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs px-2 py-0.5">
                         50% OFF
                       </Badge>
@@ -1520,7 +1520,7 @@ const BillingTab = () => {
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className="text-zinc-500 line-through text-sm">$89.99</span>
-                    <span className="text-xl font-bold text-white">$45/mo</span>
+                    <span className="text-xl font-bold text-white">$44.99/mo</span>
                   </div>
                 )}
               </div>
@@ -1583,7 +1583,7 @@ const BillingTab = () => {
                     {topSecretPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">14-Day Trial</Badge>
-                        <span className="text-zinc-400">→ Then $45/mo for 2 months → $89.99/mo after</span>
+                        <span className="text-zinc-400">→ Then $44.99/mo for 2 months → $89.99/mo after</span>
                       </div>
                     ) : topSecretPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
