@@ -31,6 +31,8 @@ export const CONFIG = {
   YEARLY_MONTHLY_EQUIVALENT: 58.25,
   DISCORD_INVITE_URL: 'https://whop.com/joined/finotaur/discord-UJWtnrAZQebLPC/app/',
   REDIRECT_URL: 'https://www.finotaur.com/app/all-markets/warzone',
+  WHOP_CHECKOUT_BASE_URL_MONTHLY: 'https://whop.com/checkout/plan_U6lF2eO5y9469',
+  WHOP_CHECKOUT_BASE_URL_YEARLY: 'https://whop.com/checkout/plan_bp2QTGuwfpj0A',
   API_BASE: import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app',
   BULL_IMAGE: '/assets/Bull-WarZone.png',
 } as const;

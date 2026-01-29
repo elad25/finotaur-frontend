@@ -14,14 +14,18 @@
 import { useState, useCallback, memo, lazy, Suspense, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/providers/AuthProvider';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import { 
   Shield, Clock, ArrowRight, FileText,
   Loader2, Globe, Sparkles, Crown, Rocket, 
   TrendingUp, Check, Target, BarChart3, Zap, Activity,
   ChevronDown, XCircle, Headphones,
 } from 'lucide-react';
+
+// 🔥 Use the ORIGINAL hooks from useUserStatus
+import { useWarZoneStatus, useTopSecretStatus, useUserMeta } from '@/hooks/useUserStatus';
 
 // Visual components (same folder)
 import { 
@@ -46,9 +50,6 @@ import {
 
 // Active subscriber view (same folder)
 import ActiveSubscriberView from './ActiveSubscriberView';
-
-// Centralized data hook
-import { useWarZoneData } from '@/hooks/useWarZoneData';
 
 // Lazy load modals (code splitting) - from modals subfolder
 const DisclaimerPopup = lazy(() => import('./modals/DisclaimerPopup'));
@@ -1133,6 +1134,7 @@ interface WarzonelandingProps {
 
 function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
   // State
@@ -1141,30 +1143,50 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [billingInterval, setBillingInterval] = useState<BillingInterval>('monthly');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
-  // Centralized data hook
+  // 🔥 Use the ORIGINAL hooks from useUserStatus
+  const { 
+    isActive: isWarZoneActive, 
+    isInTrial: isWarZoneInTrial,
+    status: warZoneStatusStr,
+    membershipId: warZoneMembershipId,
+    trialDaysRemaining: warZoneTrialDaysRemaining,
+    isLoading: isWarZoneLoading,
+    refresh: refreshWarZone,
+  } = useWarZoneStatus();
+
   const {
-    isSubscriber: realIsSubscriber,
-    isTopSecretMember,
-    isLoading,
-    newsletterMembershipId,
-    refetch,
-  } = useWarZoneData();
-  
-  // Alias for cancel modal
-  const membershipId = newsletterMembershipId;
+    isActive: isTopSecretActive,
+    membershipId: topSecretMembershipId,
+    isLoading: isTopSecretLoading,
+  } = useTopSecretStatus();
 
+  const { isTester } = useUserMeta();
+
+  // Derived values
+  const isLoading = isWarZoneLoading || isTopSecretLoading;
+  const isTopSecretMember = isTopSecretActive;
+  
+  // Subscriber check - same as original
+  const realIsSubscriber = isWarZoneActive || isWarZoneInTrial;
+  
   // Preview mode overrides
   const isSubscriber = previewMode === 'subscriber' ? true : previewMode === 'landing' ? false : realIsSubscriber;
 
-  // Handle payment success redirect
-  useEffect(() => {
-    const success = searchParams.get('success');
+  // Handle payment success redirect - SAME AS ORIGINAL
+  useEffect(() => { 
+    const paymentSuccess = searchParams.get('payment') === 'success';
+    const fromWhop = searchParams.get('source') === 'whop';
     
-    if (success === 'true') {
-      refetch();
+    if (paymentSuccess || fromWhop) {
+      console.log('[WAR ZONE] 🎉 Returning from successful payment, refreshing status...');
+      // 🔥 Use the hook's refresh instead of polling
+      setTimeout(() => refreshWarZone(), 1000);
+      setTimeout(() => refreshWarZone(), 3000);
+      setTimeout(() => refreshWarZone(), 5000);
     }
-  }, [searchParams, refetch]);
+  }, [searchParams, refreshWarZone]);
 
   // Subscribe handler
   const handleSubscribeClick = useCallback(() => {
@@ -1175,30 +1197,144 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
     setShowDisclaimer(true);
   }, [user]);
 
-  // Proceed to Whop checkout
+  // Login redirect handler
+  const handleLoginRedirect = useCallback(() => {
+    sessionStorage.setItem('return_after_login', window.location.pathname);
+    navigate('/login');
+  }, [navigate]);
+
+  // Proceed to Whop checkout - ORIGINAL LOGIC
   const handleProceedToCheckout = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id || !user?.email) { 
+      setShowDisclaimer(false); 
+      setShowLoginPopup(true); 
+      return; 
+    }
     
     setIsProcessing(true);
     
     try {
-      const planId = billingInterval === 'monthly' 
-        ? CONFIG.WHOP_MONTHLY_PLAN_ID 
-        : CONFIG.WHOP_YEARLY_PLAN_ID;
+      // Save unsubscribe token if missing
+      const { data: profile } = await supabase.from('profiles').select('newsletter_unsubscribe_token').eq('id', user.id).single();
+      if (!profile?.newsletter_unsubscribe_token) {
+        await supabase.from('profiles').update({ 
+          newsletter_unsubscribe_token: crypto.randomUUID(), 
+          updated_at: new Date().toISOString() 
+        }).eq('id', user.id);
+      }
       
-      const checkoutUrl = `https://whop.com/checkout/${planId}?d2c=true&email=${encodeURIComponent(user.email || '')}&metadata[user_id]=${user.id}&redirect_url=${encodeURIComponent(CONFIG.REDIRECT_URL + '?success=true')}`;
+      const isYearly = billingInterval === 'yearly';
+      const isTopSecretDiscount = billingInterval === 'monthly' && isTopSecretMember;
       
-      window.location.href = checkoutUrl;
-    } catch (error) {
-      console.error('Checkout error:', error);
+      // Generate unique checkout token
+      const checkoutToken = crypto.randomUUID();
+      
+      // Save pending checkout BEFORE redirecting to Whop
+      await supabase.from('pending_checkouts').insert({
+        user_id: user.id,
+        user_email: user.email,
+        checkout_token: checkoutToken,
+        product_type: 'newsletter',
+        billing_interval: billingInterval,
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      });
+      console.log('✅ Pending checkout saved for War Zone');
+      
+      // Get access token for Edge Function
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      // Determine which plan to use
+      let planId: string;
+      if (isYearly) {
+        planId = CONFIG.WHOP_YEARLY_PLAN_ID;
+      } else if (isTopSecretDiscount) {
+        planId = CONFIG.WHOP_MONTHLY_PLAN_ID_TOPSECRET;
+      } else {
+        planId = CONFIG.WHOP_MONTHLY_PLAN_ID;
+      }
+      
+      // Try Edge Function first
+      if (accessToken) {
+        try {
+          const response = await supabase.functions.invoke('create-whop-checkout', {
+            body: {
+              plan_id: planId,
+              email: user.email,
+              user_id: user.id,
+              subscription_category: 'journal',
+            },
+          });
+          
+          if (response.data?.checkout_url) {
+            console.log('✅ Using Edge Function checkout URL');
+            setShowDisclaimer(false);
+            window.location.href = response.data.checkout_url;
+            return;
+          }
+        } catch (err) {
+          console.warn('⚠️ Edge Function failed, falling back to direct URL:', err);
+        }
+      }
+      
+      // Fallback: Direct URL
+      console.warn('⚠️ Using direct Whop URL fallback');
+      let checkoutBaseUrl: string;
+      if (isYearly) {
+        checkoutBaseUrl = CONFIG.WHOP_CHECKOUT_BASE_URL_YEARLY;
+      } else if (isTopSecretDiscount) {
+        checkoutBaseUrl = `https://whop.com/checkout/${CONFIG.WHOP_MONTHLY_PLAN_ID_TOPSECRET}`;
+      } else {
+        checkoutBaseUrl = CONFIG.WHOP_CHECKOUT_BASE_URL_MONTHLY;
+      }
+      
+      const params = new URLSearchParams(); 
+      params.set('email', user.email); 
+      params.set('lock_email', 'true');
+      params.set('metadata[finotaur_user_id]', user.id);
+      params.set('metadata[finotaur_email]', user.email);
+      params.set('metadata[checkout_token]', checkoutToken);
+      params.set('metadata[billing_interval]', billingInterval);
+      params.set('metadata[is_topsecret_member]', String(isTopSecretMember));
+      if (topSecretMembershipId) {
+        params.set('metadata[topsecret_membership_id]', topSecretMembershipId);
+      }
+      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success`);
+      
+      setShowDisclaimer(false);
+      window.location.href = `${checkoutBaseUrl}?${params.toString()}`;
+    } catch (e) {
+      console.error('Checkout error:', e);
       setIsProcessing(false);
+      alert('Error starting checkout. Please try again.');
     }
-  }, [user, billingInterval]);
+  }, [user, billingInterval, isTopSecretMember, topSecretMembershipId]);
 
-  // Cancel success handler
-  const handleCancelSuccess = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // Cancel subscription handler - ORIGINAL LOGIC
+  const handleCancelSubscription = useCallback(async () => {
+    if (!user?.id) return;
+    
+    setIsCancelling(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('newsletter-cancel', {
+        body: { action: 'cancel' }
+      });
+      
+      if (error) throw error;
+      
+      if (data?.success) {
+        refreshWarZone();
+        setShowCancelModal(false);
+      } else {
+        throw new Error(data?.error || 'Failed');
+      }
+    } catch (e) {
+      alert('Failed. Contact support@finotaur.com');
+    } finally {
+      setIsCancelling(false);
+    }
+  }, [user?.id, refreshWarZone]);
 
   // Loading state
   if (isLoading && !previewMode) {
@@ -1215,8 +1351,9 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
           <CancelSubscriptionModal
             isOpen={showCancelModal}
             onClose={() => setShowCancelModal(false)}
-            membershipId={membershipId}
-            onSuccess={handleCancelSuccess}
+            onConfirm={handleCancelSubscription}
+            isProcessing={isCancelling}
+            trialDaysRemaining={warZoneTrialDaysRemaining}
           />
         </Suspense>
       </>
@@ -1249,6 +1386,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
         <LoginRequiredPopup
           isOpen={showLoginPopup}
           onClose={() => setShowLoginPopup(false)}
+          onLogin={handleLoginRedirect}
         />
       </Suspense>
     </>

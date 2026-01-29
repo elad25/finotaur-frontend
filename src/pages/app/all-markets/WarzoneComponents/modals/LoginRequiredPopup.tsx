@@ -1,119 +1,46 @@
 // =====================================================
-// LOGIN REQUIRED POPUP - Code Split Modal
+// LOGIN REQUIRED POPUP - ORIGINAL SIMPLE DESIGN
 // =====================================================
 
 import { memo } from 'react';
-import { X, LogIn, Sparkles, Crown, Calendar, Check } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { DiscordIcon } from '../VisualComponents';
+import { X, LogIn } from 'lucide-react';
 
 interface LoginRequiredPopupProps {
   isOpen: boolean;
   onClose: () => void;
+  onLogin: () => void;
 }
 
 const LoginRequiredPopup = memo(function LoginRequiredPopup({ 
   isOpen, 
-  onClose 
+  onClose,
+  onLogin,
 }: LoginRequiredPopupProps) {
-  const navigate = useNavigate();
-  
   if (!isOpen) return null;
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
-        className="absolute inset-0 backdrop-blur-md" 
-        style={{ background: 'radial-gradient(ellipse at center, rgba(20,16,12,0.95) 0%, rgba(0,0,0,0.98) 100%)' }}
-        onClick={onClose} 
-      />
-      
-      <div className="relative w-full max-w-[440px]">
-        <div className="absolute -inset-3 rounded-3xl opacity-30" style={{
-          background: 'linear-gradient(135deg, rgba(201,166,70,0.3) 0%, transparent 50%, rgba(201,166,70,0.2) 100%)',
-          filter: 'blur(20px)'
-        }} />
-        
-        <div className="relative rounded-2xl overflow-hidden" style={{ 
-          background: 'linear-gradient(180deg, rgba(32,26,20,0.99) 0%, rgba(18,14,10,1) 100%)',
-          border: '1px solid rgba(201,166,70,0.4)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 50px rgba(0,0,0,0.5)'
-        }}>
-          
-          <div 
-            className="absolute top-0 left-0 right-0 h-[2px]" 
-            style={{ 
-              background: 'linear-gradient(90deg, transparent 5%, rgba(201,166,70,0.5) 20%, rgba(244,217,123,0.9) 50%, rgba(201,166,70,0.5) 80%, transparent 95%)' 
-            }} 
-          />
-
-          <div className="px-7 pt-6 pb-6">
-            <button 
-              onClick={onClose} 
-              className="absolute top-4 right-4 w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.03] border border-white/10 hover:bg-white/[0.08] transition-all"
-            >
-              <X className="w-4 h-4 text-slate-400" />
-            </button>
-            
-            <div className="flex justify-center mb-5">
-              <div 
-                className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(201,166,70,0.25) 0%, rgba(201,166,70,0.1) 100%)',
-                  border: '1px solid rgba(201,166,70,0.4)',
-                  boxShadow: '0 0 30px rgba(201,166,70,0.2)'
-                }}
-              >
-                <LogIn className="w-8 h-8 text-[#C9A646]" />
-              </div>
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose} />
+      <div className="relative bg-gradient-to-br from-[#1a1410] via-[#12100c] to-[#0a0806] border border-[#C9A646]/30 rounded-2xl max-w-md w-full">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#C9A646]/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#C9A646]/10">
+              <LogIn className="w-5 h-5 text-[#C9A646]" />
             </div>
-            
-            <h3 className="text-white font-bold text-2xl text-center mb-2">Login Required</h3>
-            <p className="text-[#C9A646]/60 text-center text-sm mb-6">Sign in to start your free trial</p>
-            
-            <div className="space-y-2 mb-6">
-              {[
-                { icon: Crown, text: 'Daily Intelligence Reports' },
-                { icon: Calendar, text: 'Weekly Tactical Reviews' },
-                { icon: DiscordIcon, text: 'Discord Community' },
-              ].map((feature, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#C9A646]/10">
-                    <feature.icon className="w-3.5 h-3.5 text-[#C9A646]" />
-                  </div>
-                  <span className="text-slate-300 text-sm">{feature.text}</span>
-                  <Check className="w-4 h-4 text-[#C9A646]/50 ml-auto" />
-                </div>
-              ))}
-            </div>
-            
-            <div className="space-y-3">
-              <button
-                onClick={() => navigate('/login', { state: { from: '/app/all-markets/warzone' } })}
-                className="w-full py-3.5 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
-                style={{
-                  background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
-                  color: '#000',
-                  boxShadow: '0 4px 20px rgba(201,166,70,0.4)'
-                }}
-              >
-                <LogIn className="w-5 h-5" />
-                Login
-              </button>
-              
-              <button
-                onClick={() => navigate('/register', { state: { from: '/app/all-markets/warzone' } })}
-                className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 bg-white/[0.03] border border-[#C9A646]/30 text-[#C9A646] hover:bg-[#C9A646]/10 transition-all"
-              >
-                <Sparkles className="w-4 h-4" />
-                Create Account
-              </button>
-            </div>
-            
-            <p className="text-center text-slate-500 text-xs mt-4">
-              7-day free trial • No credit card required to browse
-            </p>
+            <h2 className="text-lg font-bold text-white">Login Required</h2>
           </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-[#C9A646]/10">
+            <X className="w-5 h-5 text-[#C9A646]/60" />
+          </button>
+        </div>
+        <div className="p-6">
+          <p className="text-[#C9A646]/70 text-center mb-6">Please login to subscribe.</p>
+          <button 
+            onClick={onLogin} 
+            className="w-full py-4 rounded-xl font-bold bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black flex items-center justify-center gap-2"
+          >
+            <LogIn className="w-5 h-5" /> Login / Sign Up
+          </button>
         </div>
       </div>
     </div>
