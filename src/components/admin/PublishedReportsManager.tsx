@@ -1,7 +1,12 @@
 // =====================================================
-// PUBLISHED REPORTS MANAGER - Admin Component v2.0
+// PUBLISHED REPORTS MANAGER - Admin Component v2.1 FIXED
 // =====================================================
 // Place in: src/components/admin/PublishedReportsManager.tsx
+//
+// 🔥 v2.1 FIX:
+// - Added filter to exclude 'daily' reports from all queries
+// - Stats now show only Top Secret reports (ism, company, crypto, weekly)
+// - Fixed the discrepancy between admin (16) and client (8) counts
 //
 // Features:
 // - Same visual style as TopSecretDashboard (user view)
@@ -161,7 +166,20 @@ interface GroupedReports {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
-const REPORT_TYPE_CONFIG = {
+// 🔥 v2.1: Valid Top Secret report types (excludes 'daily' and other non-TS types)
+const VALID_REPORT_TYPES = ['ism', 'company', 'crypto', 'weekly'] as const;
+type ValidReportType = typeof VALID_REPORT_TYPES[number];
+
+const REPORT_TYPE_CONFIG: Record<ValidReportType, {
+  name: string;
+  shortName: string;
+  icon: React.ElementType;
+  gradient: string;
+  bgGradient: string;
+  borderColor: string;
+  textColor: string;
+  iconBg: string;
+}> = {
   ism: {
     name: 'Macro Report',
     shortName: 'Macro',
@@ -207,6 +225,11 @@ const REPORT_TYPE_CONFIG = {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+// 🔥 v2.1: Helper to check if report type is valid
+function isValidReportType(type: string): type is ValidReportType {
+  return VALID_REPORT_TYPES.includes(type as ValidReportType);
+}
 
 function getMonthKey(date: Date): string {
   return format(date, 'yyyy-MM');
@@ -288,7 +311,7 @@ async function downloadReportPdf(report: PublishedReport): Promise<boolean> {
 }
 
 // ============================================
-// ADMIN STATS SECTION
+// ADMIN STATS SECTION (Memoized)
 // ============================================
 
 interface AdminStatsSectionProps {
@@ -296,8 +319,8 @@ interface AdminStatsSectionProps {
   isLoading: boolean;
 }
 
-const AdminStatsSection: React.FC<AdminStatsSectionProps> = ({ stats, isLoading }) => {
-  const statCards = [
+const AdminStatsSection = React.memo<AdminStatsSectionProps>(({ stats, isLoading }) => {
+  const statCards = useMemo(() => [
     {
       title: 'Active Subscribers',
       value: stats.activeSubscribers,
@@ -340,7 +363,7 @@ const AdminStatsSection: React.FC<AdminStatsSectionProps> = ({ stats, isLoading 
       iconBg: 'bg-gradient-to-br from-[#C9A646] to-orange-500',
       valueColor: 'text-[#C9A646]',
     },
-  ];
+  ], [stats]);
 
   return (
     <div className="rounded-xl border border-white/10 bg-gradient-to-br from-[#0d0d18] to-[#080812] p-6">
@@ -381,10 +404,12 @@ const AdminStatsSection: React.FC<AdminStatsSectionProps> = ({ stats, isLoading 
       </div>
     </div>
   );
-};
+});
+
+AdminStatsSection.displayName = 'AdminStatsSection';
 
 // ============================================
-// TOP SECRET STATS SECTION
+// TOP SECRET STATS SECTION (Memoized)
 // ============================================
 
 interface TopSecretStatsSectionProps {
@@ -392,7 +417,7 @@ interface TopSecretStatsSectionProps {
   isLoading: boolean;
 }
 
-const TopSecretStatsSection: React.FC<TopSecretStatsSectionProps> = ({ stats, isLoading }) => {
+const TopSecretStatsSection = React.memo<TopSecretStatsSectionProps>(({ stats, isLoading }) => {
   return (
     <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-[#0d0d18] to-[#080812] p-6">
       {/* Header */}
@@ -551,16 +576,19 @@ const TopSecretStatsSection: React.FC<TopSecretStatsSectionProps> = ({ stats, is
       )}
     </div>
   );
-};
+});
+
+TopSecretStatsSection.displayName = 'TopSecretStatsSection';
+
 // ============================================
-// REPORT STATS SECTION
+// REPORT STATS SECTION (Memoized)
 // ============================================
 
 interface ReportStatsSectionProps {
   stats: ReportStats;
 }
 
-const ReportStatsSection: React.FC<ReportStatsSectionProps> = ({ stats }) => {
+const ReportStatsSection = React.memo<ReportStatsSectionProps>(({ stats }) => {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
       <div className="bg-[#0d0d18] rounded-xl p-4 border border-white/10">
@@ -620,10 +648,12 @@ const ReportStatsSection: React.FC<ReportStatsSectionProps> = ({ stats }) => {
       </div>
     </div>
   );
-};
+});
+
+ReportStatsSection.displayName = 'ReportStatsSection';
 
 // ============================================
-// VISIBILITY TOGGLE (LIVE/TEST)
+// VISIBILITY TOGGLE (LIVE/TEST) - Memoized
 // ============================================
 
 interface VisibilityToggleProps {
@@ -635,7 +665,7 @@ interface VisibilityToggleProps {
   testCount: number;
 }
 
-const VisibilityToggle: React.FC<VisibilityToggleProps> = ({
+const VisibilityToggle = React.memo<VisibilityToggleProps>(({
   showLive,
   showTest,
   onToggleLive,
@@ -680,7 +710,9 @@ const VisibilityToggle: React.FC<VisibilityToggleProps> = ({
       </button>
     </div>
   );
-};
+});
+
+VisibilityToggle.displayName = 'VisibilityToggle';
 
 // ============================================
 // COMPACT REPORT CARD (Latest Reports Grid)
@@ -695,7 +727,7 @@ interface CompactReportCardProps {
   isPromoting: boolean;
 }
 
-const CompactReportCard: React.FC<CompactReportCardProps> = ({
+const CompactReportCard = React.memo<CompactReportCardProps>(({
   report,
   onDownload,
   onEdit,
@@ -816,7 +848,9 @@ const CompactReportCard: React.FC<CompactReportCardProps> = ({
       </div>
     </motion.div>
   );
-};
+});
+
+CompactReportCard.displayName = 'CompactReportCard';
 
 // ============================================
 // ARCHIVE REPORT ROW
@@ -832,7 +866,7 @@ interface ArchiveReportRowProps {
   isPromoting: boolean;
 }
 
-const ArchiveReportRow: React.FC<ArchiveReportRowProps> = ({
+const ArchiveReportRow = React.memo<ArchiveReportRowProps>(({
   report,
   onDownload,
   onEdit,
@@ -973,7 +1007,9 @@ const ArchiveReportRow: React.FC<ArchiveReportRowProps> = ({
       </div>
     </motion.div>
   );
-};
+});
+
+ArchiveReportRow.displayName = 'ArchiveReportRow';
 
 // ============================================
 // MONTH GROUP COMPONENT
@@ -992,7 +1028,7 @@ interface MonthGroupProps {
   promotingReportId: string | null;
 }
 
-const MonthGroup: React.FC<MonthGroupProps> = ({
+const MonthGroup = React.memo<MonthGroupProps>(({
   monthKey,
   reports,
   isExpanded,
@@ -1048,8 +1084,8 @@ const MonthGroup: React.FC<MonthGroupProps> = ({
           {/* Type badges */}
           <div className="hidden sm:flex items-center gap-1.5">
             {Object.entries(reportCounts.counts).map(([type, count]) => {
-              const config = REPORT_TYPE_CONFIG[type as keyof typeof REPORT_TYPE_CONFIG];
-              if (!config) return null;
+              if (!isValidReportType(type)) return null;
+              const config = REPORT_TYPE_CONFIG[type];
               return (
                 <span 
                   key={type}
@@ -1099,7 +1135,9 @@ const MonthGroup: React.FC<MonthGroupProps> = ({
       </AnimatePresence>
     </div>
   );
-};
+});
+
+MonthGroup.displayName = 'MonthGroup';
 
 // ============================================
 // EDIT MODAL COMPONENT
@@ -1280,7 +1318,7 @@ interface SearchBarProps {
   onTypeChange: (value: string) => void;
 }
 
-const SearchFilterBar: React.FC<SearchBarProps> = ({ value, onChange, typeFilter, onTypeChange }) => {
+const SearchFilterBar = React.memo<SearchBarProps>(({ value, onChange, typeFilter, onTypeChange }) => {
   return (
     <div className="flex flex-col sm:flex-row gap-4">
       <div className="relative flex-1">
@@ -1318,7 +1356,9 @@ const SearchFilterBar: React.FC<SearchBarProps> = ({ value, onChange, typeFilter
       </div>
     </div>
   );
-};
+});
+
+SearchFilterBar.displayName = 'SearchFilterBar';
 
 // ============================================
 // MAIN COMPONENT
@@ -1397,20 +1437,22 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
     },
   });
 
-  // Fetch reports
+  // 🔥 v2.1 FIX: Fetch reports with filter to EXCLUDE 'daily' and other non-TS types
   const { data: reports, isLoading: reportsLoading, error, refetch } = useQuery({
     queryKey: ['published-reports-admin'],
     queryFn: async (): Promise<PublishedReport[]> => {
+      // 🔥 FIX: Filter to only get Top Secret report types
       const { data, error } = await supabase
         .from('published_reports')
         .select('*')
+        .in('report_type', VALID_REPORT_TYPES) // ✅ Only ism, company, crypto, weekly
         .order('is_pinned', { ascending: false })
         .order('is_featured', { ascending: false })
         .order('published_at', { ascending: false });
 
       if (error) throw error;
-      console.log('[PublishedReportsManager] Fetched reports:', data?.length, data);
-      return data || [];
+      console.log('[PublishedReportsManager] Fetched Top Secret reports:', data?.length);
+      return (data || []) as PublishedReport[];
     },
   });
 
@@ -1486,7 +1528,7 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
 
   // Latest reports (for top grid)
   const latestByType = useMemo(() => {
-    const types: Array<'ism' | 'company' | 'crypto' | 'weekly'> = ['ism', 'company', 'crypto', 'weekly'];
+    const types: ValidReportType[] = ['ism', 'company', 'crypto', 'weekly'];
     const result: PublishedReport[] = [];
     for (const type of types) {
       const latest = filteredReports.find(r => r.report_type === type);
@@ -1584,6 +1626,11 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
     setPromotingReportId(null);
   }, [updateMutation]);
 
+  const handleToggleLive = useCallback(() => setShowLive(prev => !prev), []);
+  const handleToggleTest = useCallback(() => setShowTest(prev => !prev), []);
+  const handleSearchChange = useCallback((value: string) => setSearchQuery(value), []);
+  const handleTypeChange = useCallback((value: string) => setTypeFilter(value), []);
+
   if (error) {
     return (
       <div className={`bg-[#0d0d18] rounded-xl p-8 border border-red-500/30 ${className}`}>
@@ -1666,17 +1713,17 @@ const PublishedReportsManager: React.FC<PublishedReportsManagerProps> = ({ class
         <VisibilityToggle
           showLive={showLive}
           showTest={showTest}
-          onToggleLive={() => setShowLive(!showLive)}
-          onToggleTest={() => setShowTest(!showTest)}
+          onToggleLive={handleToggleLive}
+          onToggleTest={handleToggleTest}
           liveCount={reportStats.liveCount}
           testCount={reportStats.testCount}
         />
         
         <SearchFilterBar
           value={searchQuery}
-          onChange={setSearchQuery}
+          onChange={handleSearchChange}
           typeFilter={typeFilter}
-          onTypeChange={setTypeFilter}
+          onTypeChange={handleTypeChange}
         />
       </div>
 
