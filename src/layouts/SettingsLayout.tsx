@@ -1832,52 +1832,97 @@ const BillingTab = () => {
   </DialogContent>
 </Dialog>
 
-      {/* Top Secret Cancel Confirmation Dialog */}
-      <Dialog open={showTopSecretCancelDialog} onOpenChange={setShowTopSecretCancelDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cancel Top Secret Access?</DialogTitle>
-            <DialogDescription>
-              You'll lose access to exclusive intelligence and private community.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <p className="text-sm text-amber-200 leading-relaxed">
-                <strong>What you'll miss:</strong>
-                <br />• Exclusive market intelligence
-                <br />• Private Discord community access
-                <br />• Premium insider alerts
-                <br />• Early access to new features
-              </p>
+      {/* Top Secret Cancel Confirmation Dialog - Premium Design */}
+<Dialog open={showTopSecretCancelDialog} onOpenChange={setShowTopSecretCancelDialog}>
+  <DialogContent className="sm:max-w-md p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden">
+    {/* Premium Header with Gradient */}
+    <div className="relative px-6 pt-6 pb-4">
+      {/* Decorative gradient orbs */}
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-red-500/10 rounded-full blur-3xl" />
+      <div className="absolute -top-10 -left-10 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl" />
+      
+      <div className="relative">
+        {/* Icon badge */}
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 flex items-center justify-center mb-4 shadow-lg shadow-red-500/10">
+          <Flame className="w-6 h-6 text-red-400" />
+        </div>
+        
+        <DialogTitle className="text-xl font-semibold text-white mb-1">
+          Cancel Top Secret Access?
+        </DialogTitle>
+        <DialogDescription className="text-zinc-400 text-sm">
+          You'll lose access to exclusive intelligence and private community.
+        </DialogDescription>
+      </div>
+    </div>
+    
+    {/* What you'll miss section */}
+    <div className="mx-6 mb-4">
+      <div className="relative p-4 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5 border border-amber-500/20">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent rounded-xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <p className="text-sm font-medium text-amber-300">What you'll miss</p>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span>Exclusive market intelligence reports</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span>Private Discord community access</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span>Premium insider alerts & signals</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+              <span>Early access to new features</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
 
-          <DialogFooter className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowTopSecretCancelDialog(false)}
-            >
-              Keep Subscription
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => handleCancelTopSecret()}
-              disabled={cancellingTopSecret}
-            >
-              {cancellingTopSecret ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Cancelling...
-                </>
-              ) : (
-                'Confirm Cancellation'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+    {/* Action Buttons */}
+    <div className="p-6 pt-2 space-y-3">
+      {/* Keep Subscription - Primary CTA */}
+      <button
+        onClick={() => setShowTopSecretCancelDialog(false)}
+        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+      >
+        <CheckCircle2 className="w-4 h-4" />
+        Keep My Subscription
+      </button>
+      
+      {/* Cancel - Secondary/Destructive */}
+      <button
+        onClick={() => handleCancelTopSecret()}
+        disabled={cancellingTopSecret}
+        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
+      >
+        {cancellingTopSecret ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Cancelling...</span>
+          </>
+        ) : (
+          <>
+            <X className="w-4 h-4" />
+            <span>Yes, Cancel My Subscription</span>
+          </>
+        )}
+      </button>
+      
+      <p className="text-center text-xs text-zinc-500">
+        You'll retain access until the end of your billing period
+      </p>
+    </div>
+  </DialogContent>
+</Dialog>
 
       {/* 🔥 v2.7.0: Smart Bundle Cancellation Dialog - handles BOTH scenarios */}
       <Dialog open={showBundleCancelDialog} onOpenChange={setShowBundleCancelDialog}>

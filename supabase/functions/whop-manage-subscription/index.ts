@@ -611,17 +611,50 @@ async function handleCheckBundle(
     affectedProduct: string;
   } | null = null;
   
-  // 🔥 v2.8.0: Determine cancellation scenario
+  // 🔥 v3.5.0: Determine cancellation scenario using TIMESTAMPS when plan_ids are missing
   // Scenario A: Cancelling FULL PRICE product → discounted product loses its discount → Show Bundle Dialog
   // Scenario B: Cancelling DISCOUNTED product → full price product continues unchanged → NO Bundle Dialog needed
   let cancellingFullPriceProduct = false;
   let discountedProductWillBeCancelled = false;
   
   if (bundleStatus.hasBundle) {
-    // Check if user is cancelling the FULL PRICE product (which affects the discounted one)
+    // 🔥 v3.5.0 FIX: When plan_ids are missing, infer from timestamps
+    // The FIRST product purchased is FULL PRICE, the SECOND is DISCOUNTED
+    const newsletterStarted = profile.newsletter_started_at ? new Date(profile.newsletter_started_at) : null;
+    const topSecretStarted = profile.top_secret_started_at ? new Date(profile.top_secret_started_at) : null;
+    
+    // Determine effective pricing based on explicit plan_ids OR timestamps
+    let effectiveNewsletterIsFullPrice = bundleStatus.newsletterIsFullPrice;
+    let effectiveTopSecretIsFullPrice = bundleStatus.topSecretIsFullPrice;
+    let effectiveNewsletterIsDiscounted = bundleStatus.newsletterIsDiscounted;
+    let effectiveTopSecretIsDiscounted = bundleStatus.topSecretIsDiscounted;
+    
+    // If neither product has explicit discount/full price markers, use timestamps
+    if (!effectiveNewsletterIsDiscounted && !effectiveTopSecretIsDiscounted) {
+      if (newsletterStarted && topSecretStarted) {
+        if (newsletterStarted < topSecretStarted) {
+          // Newsletter first → Newsletter FULL PRICE, Top Secret DISCOUNTED
+          effectiveNewsletterIsFullPrice = true;
+          effectiveTopSecretIsDiscounted = true;
+        } else {
+          // Top Secret first → Top Secret FULL PRICE, Newsletter DISCOUNTED
+          effectiveTopSecretIsFullPrice = true;
+          effectiveNewsletterIsDiscounted = true;
+        }
+      }
+    }
+    
+    console.log(`🔍 Effective pricing detection:`, {
+      effectiveNewsletterIsFullPrice,
+      effectiveTopSecretIsFullPrice,
+      effectiveNewsletterIsDiscounted,
+      effectiveTopSecretIsDiscounted,
+      newsletterStarted: newsletterStarted?.toISOString(),
+      topSecretStarted: topSecretStarted?.toISOString(),
+    });
     
     // Scenario A: Cancelling WAR ZONE at full price ($69.99) → Top Secret ($50) loses discount
-    if (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) {
+    if (product === 'newsletter' && effectiveNewsletterIsFullPrice && effectiveTopSecretIsDiscounted) {
       cancellingFullPriceProduct = true;
       discountedProductWillBeCancelled = true;
       priceImpact = {
@@ -632,7 +665,7 @@ async function handleCheckBundle(
       };
     }
     // Scenario A: Cancelling TOP SECRET at full price ($89.99) → War Zone ($30) loses discount
-    else if (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted) {
+    else if (product === 'top_secret' && effectiveTopSecretIsFullPrice && effectiveNewsletterIsDiscounted) {
       cancellingFullPriceProduct = true;
       discountedProductWillBeCancelled = true;
       priceImpact = {
@@ -653,6 +686,13 @@ async function handleCheckBundle(
   
   // 🔥 v2.8.0: For Scenario B, return hasBundle=false so frontend shows normal cancel dialog
   const effectiveHasBundle = cancellingFullPriceProduct ? bundleStatus.hasBundle : false;
+  
+  console.log(`📤 check_bundle response:`, {
+    hasBundle: effectiveHasBundle,
+    cancellingFullPriceProduct,
+    discountedProductWillBeCancelled,
+    priceImpact,
+  });
   
   return new Response(
     JSON.stringify({
@@ -696,12 +736,32 @@ async function handleCancel(
   
   // If user has bundle and didn't confirm, check if confirmation is needed
   if (bundleStatus.hasBundle) {
-    // 🔥 v2.8.0 FIX: Only require confirmation when cancelling FULL PRICE product
-    // Scenario A: Cancelling full price product → discounted product loses discount → NEEDS confirmation
-    // Scenario B: Cancelling discounted product → full price product unaffected → NO confirmation needed
+    // 🔥 v3.5.0 FIX: Infer pricing from timestamps when plan_ids are missing
+    const newsletterStarted = profile.newsletter_started_at ? new Date(profile.newsletter_started_at) : null;
+    const topSecretStarted = profile.top_secret_started_at ? new Date(profile.top_secret_started_at) : null;
+    
+    let effectiveNewsletterIsFullPrice = bundleStatus.newsletterIsFullPrice;
+    let effectiveTopSecretIsFullPrice = bundleStatus.topSecretIsFullPrice;
+    let effectiveNewsletterIsDiscounted = bundleStatus.newsletterIsDiscounted;
+    let effectiveTopSecretIsDiscounted = bundleStatus.topSecretIsDiscounted;
+    
+    // If neither has explicit markers, use timestamps
+    if (!effectiveNewsletterIsDiscounted && !effectiveTopSecretIsDiscounted) {
+      if (newsletterStarted && topSecretStarted) {
+        if (newsletterStarted < topSecretStarted) {
+          effectiveNewsletterIsFullPrice = true;
+          effectiveTopSecretIsDiscounted = true;
+        } else {
+          effectiveTopSecretIsFullPrice = true;
+          effectiveNewsletterIsDiscounted = true;
+        }
+      }
+    }
+    
+    // 🔥 v3.5.0: Use effective pricing for confirmation check
     const cancellingFullPriceProduct = 
-      (product === 'newsletter' && bundleStatus.newsletterIsFullPrice && bundleStatus.topSecretIsDiscounted) ||
-      (product === 'top_secret' && bundleStatus.topSecretIsFullPrice && bundleStatus.newsletterIsDiscounted);
+      (product === 'newsletter' && effectiveNewsletterIsFullPrice && effectiveTopSecretIsDiscounted) ||
+      (product === 'top_secret' && effectiveTopSecretIsFullPrice && effectiveNewsletterIsDiscounted);
     
     // 🔥 v2.8.0: ONLY require confirmation for Scenario A (cancelling full price product)
     // Scenario B (cancelling discounted product) proceeds without popup
