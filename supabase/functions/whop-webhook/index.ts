@@ -50,12 +50,33 @@ const TOP_SECRET_PRODUCT_IDS = new Set([
   'prod_aGd9mbl2XUIFO',  // Top Secret Yearly ($899/year) - STANDALONE YEARLY PRODUCT
 ]);
 
+// 🔥 v5.0.0: Bundle Product IDs - War Zone + Top Secret together
+const BUNDLE_PRODUCT_IDS = new Set([
+  'prod_LtP5GbpPfp9bn',  // Bundle Monthly - $109/month with 7-day trial
+  'prod_CbWpZrn5P7wc9',  // Bundle Yearly - $997/year (no trial)
+]);
+
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
 const TOP_SECRET_PLAN_IDS = new Set([
   'plan_tUvQbCrEQ4197',  // Top Secret Monthly ($89.99)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899)
   'plan_7VQxCZ5Kpw6f0',  // Top Secret for War Zone Members ($50)
 ]);
+
+// 🔥 v5.0.0: Bundle Plan IDs
+const BUNDLE_PLAN_IDS = new Set([
+  'plan_ujyQUPIi7UIvN',  // Bundle Monthly - $109/month
+  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $997/year
+]);
+
+// ============================================
+// HELPER: Check if product is Bundle
+// ============================================
+
+function isBundle(productId: string | undefined): boolean {
+  if (!productId) return false;
+  return BUNDLE_PRODUCT_IDS.has(productId);
+}
 
 // 🔥 v3.9.0: Newsletter Plan IDs - Synced with whop-config.ts v4.4.0
 const NEWSLETTER_PLAN_IDS = new Set([
@@ -72,6 +93,7 @@ const NEWSLETTER_PLAN_IDS = new Set([
 const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
+  'plan_M2zS1EoNXJF10',  // Bundle Yearly ($997/year)
 ]);
 
 // 🔥 v3.8.0: Cross-product discount Plan IDs
@@ -368,6 +390,9 @@ async function getPlanInfo(
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
     "prod_e8Er36RubeFXU": { plan: "top_secret", interval: "monthly", price: 50.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },  // 🔥 Top Secret For War Zone
+    // 🔥 v5.0.0: Bundle fallback - War Zone + Top Secret
+    "prod_LtP5GbpPfp9bn": { plan: "bundle", interval: "monthly", price: 109.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
+    "prod_CbWpZrn5P7wc9": { plan: "bundle", interval: "yearly", price: 997.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
   };
 
   return fallbackMapping[productId] || null;
@@ -1528,6 +1553,63 @@ if (isTopSecretPayment) {
     }
 
     // ═══════════════════════════════════════════════
+    // 🔥 v5.0.0: BUNDLE PAYMENT (War Zone + Top Secret)
+    // ═══════════════════════════════════════════════
+    
+    const isBundlePayment = isBundle(productId);
+    
+    if (isBundlePayment) {
+      console.log("📦 Processing BUNDLE payment...");
+      
+      const planId = data.plan?.id || '';
+      const billingInterval = getBillingInterval(planId);
+      
+      // Find user
+      let resolvedUserId = finotaurUserId;
+      let resolvedEmail = userEmail;
+      
+      if (!resolvedUserId) {
+        const foundUser = await findUser(supabase, null, whopEmail, 'newsletter', whopUserId);
+        if (foundUser) {
+          resolvedUserId = foundUser.id;
+          resolvedEmail = foundUser.email;
+        }
+      }
+      
+      if (!resolvedUserId) {
+        console.error("❌ User not found for Bundle payment");
+        return { success: false, message: "User not found for Bundle payment" };
+      }
+      
+      const isInTrial = data.billing_reason === 'subscription_create' && billingInterval === 'monthly';
+      const trialEndsAt = isInTrial 
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() 
+        : null;
+      
+      const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
+        p_user_id: resolvedUserId,
+        p_whop_membership_id: membershipId,
+        p_whop_user_id: whopUserId,
+        p_plan_id: planId,
+        p_billing_interval: billingInterval,
+        p_is_trial: isInTrial,
+        p_trial_ends_at: trialEndsAt,
+        p_renewal_period_end: null,  // Will be set by Whop webhook
+      });
+      
+      if (error) {
+        console.error("❌ activate_bundle_subscription RPC error:", error);
+        return { success: false, message: `Bundle activation failed: ${error.message}` };
+      }
+      
+      console.log("✅ Bundle payment processed:", result);
+      return { 
+        success: true, 
+        message: `Bundle activated for ${resolvedEmail} (${billingInterval})` 
+      };
+    }
+
+    // ═══════════════════════════════════════════════
     // 🔥 JOURNAL SUBSCRIPTION - Use RPC!
     // ═══════════════════════════════════════════════
 
@@ -1708,7 +1790,56 @@ async function handleMembershipActivated(
     }, payload);  // 🔥 v3.7.0: Pass payload for plan ID extraction
   }
 
-  // 🔥 Handle Top Secret activation
+// ═══════════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE SUBSCRIPTION (War Zone + Top Secret)
+  // ═══════════════════════════════════════════════
+
+  if (isBundle(productId)) {
+    console.log("📦 Processing BUNDLE activation...");
+    
+    const planId = data.plan?.id || '';
+    const billingInterval = getBillingInterval(planId);
+    const isInTrial = data.status === 'trialing';
+    const trialEndsAt = isInTrial && data.renewal_period_end 
+      ? new Date(data.renewal_period_end).toISOString() 
+      : null;
+    
+    // Find user
+    const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
+    if (!userResult) {
+      console.error("❌ User not found for Bundle activation");
+      return { success: false, message: "User not found for Bundle activation" };
+    }
+    
+    const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
+      p_user_id: userResult.id,
+      p_whop_membership_id: membershipId,
+      p_whop_user_id: whopUserId,
+      p_plan_id: planId,
+      p_billing_interval: billingInterval,
+      p_is_trial: isInTrial,
+      p_trial_ends_at: trialEndsAt,
+      p_renewal_period_end: data.renewal_period_end 
+        ? new Date(data.renewal_period_end).toISOString() 
+        : null,
+    });
+
+    if (error) {
+      console.error("❌ activate_bundle_subscription RPC error:", error);
+      return { success: false, message: `Bundle activation failed: ${error.message}` };
+    }
+
+    console.log("✅ Bundle activated:", result);
+    return { 
+      success: true, 
+      message: `Bundle activated for ${result?.email || userEmail} (${billingInterval})` 
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // 🔥 TOP SECRET SUBSCRIPTION
+  // ═══════════════════════════════════════════════
+
   if (isTopSecretActivation) {
     return await handleTopSecretActivation(supabase, {
       userEmail,  // 🔥 v3.5.0: Uses finotaurEmail if available
@@ -2521,6 +2652,29 @@ async function handleMembershipDeactivated(
     return { 
       success: result?.success ?? true, 
       message: `Top Secret deactivated: ${result?.email || userEmail}${warZoneMessage}${resubscribeMessage}` 
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE DEACTIVATION
+  // ═══════════════════════════════════════════════
+
+  if (isBundle(productId)) {
+    console.log("📦 Processing BUNDLE deactivation...");
+    
+    const { data: result, error } = await supabase.rpc('deactivate_bundle_subscription', {
+      p_whop_membership_id: membershipId,
+    });
+
+    if (error) {
+      console.error("❌ deactivate_bundle_subscription RPC error:", error);
+      return { success: false, message: `Bundle deactivation failed: ${error.message}` };
+    }
+
+    console.log("✅ Bundle deactivated:", result);
+    return { 
+      success: result?.success ?? true, 
+      message: `Bundle deactivated: ${result?.email || userEmail}` 
     };
   }
 

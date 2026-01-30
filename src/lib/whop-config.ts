@@ -33,7 +33,7 @@ export type JournalPlanName = 'basic' | 'premium';
 export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_pro' | 'platform_enterprise';
 
 // All plan names
-export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret' | 'top_secret_warzone' | 'newsletter_topsecret';
+export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret' | 'top_secret_warzone' | 'newsletter_topsecret' | 'bundle';
 
 export type BillingInterval = 'monthly' | 'yearly';
 
@@ -57,7 +57,10 @@ export type PlanId =
   | 'top_secret_yearly'
   | 'top_secret_monthly_warzone'
   | 'top_secret_warzone_monthly'    // 🔥 For checkout flow - War Zone member discount
-  | 'newsletter_topsecret_monthly'; // 🔥 For checkout flow - Top Secret member discount
+  | 'newsletter_topsecret_monthly'  // 🔥 For checkout flow - Top Secret member discount
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret together
+  | 'bundle_monthly'
+  | 'bundle_yearly';
 
 
 export interface PlanConfig {
@@ -78,6 +81,7 @@ export interface PlanConfig {
   trialOnceOnly?: boolean;
   isNewsletter?: boolean;
   isTopSecret?: boolean;
+  isBundle?: boolean;           // 🔥 v5.0.0: Bundle product flag
   discordIncluded?: boolean;
   category: SubscriptionCategory;
   isPlatform?: boolean;
@@ -131,6 +135,12 @@ export const WHOP_PLAN_IDS = {
   // 🔥 Discount plan aliases for checkout flow (same IDs, different keys for PlanName lookup)
   top_secret_warzone_monthly: 'plan_7VQxCZ5Kpw6f0',   // Top Secret for War Zone members - $50/month
   newsletter_topsecret_monthly: 'plan_BPJdT6Tyjmzcx', // War Zone for Top Secret members - $30/month
+  
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
+  // ═══════════════════════════════════════════
+  bundle_monthly: 'plan_ujyQUPIi7UIvN',   // Bundle Monthly - $109/month with 7-day trial
+  bundle_yearly: 'plan_M2zS1EoNXJF10',    // Bundle Yearly - $997/year (no trial)
 } as const;
 
 // 🔥 Product IDs - Used for WEBHOOK identification
@@ -159,6 +169,12 @@ export const WHOP_PRODUCT_IDS = {
   top_secret: 'prod_nl6YXbLp4t5pz',
   top_secret_warzone: 'prod_e8Er36RubeFXU',  // 🔥 NEW: Top Secret for War Zone members
   
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
+  // ═══════════════════════════════════════════
+  bundle_monthly: 'prod_LtP5GbpPfp9bn',   // Bundle Monthly Product
+  bundle_yearly: 'prod_CbWpZrn5P7wc9',    // Bundle Yearly Product
+  
 } as const;
 
 // 🔥 Platform Product IDs Set - for quick lookup
@@ -179,6 +195,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   isTopSecret?: boolean;
   isPlatform?: boolean;
   isTopSecretDiscount?: boolean;  // 🔥 NEW: For Top Secret member discounted plans
+  isBundle?: boolean;             // 🔥 v5.0.0: For Bundle products
 }> = {
   // Journal
   'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly', category: 'journal' },
@@ -208,6 +225,12 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   
   // 🔥 Top Secret Yearly - STANDALONE PRODUCT
   'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
+  
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
+  // ═══════════════════════════════════════════
+  'prod_LtP5GbpPfp9bn': { plan: 'bundle', interval: 'monthly', category: 'journal', isBundle: true, isNewsletter: true, isTopSecret: true },
+  'prod_CbWpZrn5P7wc9': { plan: 'bundle', interval: 'yearly', category: 'journal', isBundle: true, isNewsletter: true, isTopSecret: true },
 };
 
 // Plan ID to Name lookup
@@ -236,6 +259,10 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_tUvQbCrEQ4197': 'top_secret_monthly',
   'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
   'plan_7VQxCZ5Kpw6f0': 'top_secret_monthly_warzone',
+  
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
+  'plan_ujyQUPIi7UIvN': 'bundle_monthly',
+  'plan_M2zS1EoNXJF10': 'bundle_yearly',
 };
 
 // ============================================
@@ -772,6 +799,74 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Real-time alerts',
     ],
   },
+
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret ($109/mo or $997/yr)
+  // BEST VALUE: Save $49.98/month vs buying separately!
+  // ═══════════════════════════════════════════
+  bundle_monthly: {
+    id: 'bundle_monthly' as PlanId,
+    whopPlanId: 'plan_ujyQUPIi7UIvN',
+    whopProductId: 'prod_LtP5GbpPfp9bn',
+    name: 'bundle' as PlanName,
+    displayName: 'War Zone + Top Secret Bundle',
+    price: 109,
+    period: 'monthly',
+    periodLabel: '/month',
+    maxTrades: 0,
+    trialDays: 7,
+    isNewsletter: true,
+    isTopSecret: true,
+    isBundle: true,
+    discordIncluded: true,
+    popular: true,
+    badge: '🔥 BEST VALUE - 7-Day Free Trial',
+    category: 'journal',
+    features: [
+      '🎁 7 days FREE trial',
+      '💰 Save $49.98/month vs buying separately!',
+      '📰 War Zone Daily Intelligence Report',
+      '🔐 Top Secret Exclusive Research',
+      'All Premium Discord channels',
+      'Trading Room access',
+      'Real-time alerts for both products',
+      'ISM Manufacturing Report',
+      '2x Company Deep Dives monthly',
+      '2x Crypto Market Reports monthly',
+    ],
+  },
+  bundle_yearly: {
+    id: 'bundle_yearly' as PlanId,
+    whopPlanId: 'plan_M2zS1EoNXJF10',
+    whopProductId: 'prod_CbWpZrn5P7wc9',
+    name: 'bundle' as PlanName,
+    displayName: 'War Zone + Top Secret Bundle (Annual)',
+    price: 997,
+    period: 'yearly',
+    periodLabel: '/year',
+    monthlyEquivalent: 83.08,  // $997/12 = ~$83.08/month
+    maxTrades: 0,
+    trialDays: 0,  // No trial for yearly
+    isNewsletter: true,
+    isTopSecret: true,
+    isBundle: true,
+    discordIncluded: true,
+    popular: true,
+    badge: '💎 ULTIMATE VALUE - Save $311/year',
+    category: 'journal',
+    features: [
+      '💰 Save $311/year vs monthly bundle!',
+      '💰 Save $601.88/year vs separate products!',
+      '📰 War Zone Daily Intelligence Report',
+      '🔐 Top Secret Exclusive Research',
+      'All Premium Discord channels',
+      'Trading Room access',
+      'Real-time alerts for both products',
+      'ISM Manufacturing Report',
+      '2x Company Deep Dives monthly',
+      '2x Crypto Market Reports monthly',
+    ],
+  },
 };
 
 // ============================================
@@ -795,6 +890,18 @@ export function isNewsletterProduct(productId: string): boolean {
 
 export function isTopSecretProduct(productId: string): boolean {
   return productId === WHOP_PRODUCT_IDS.top_secret;
+}
+
+// 🔥 v5.0.0: Check if product is a Bundle
+export function isBundleProduct(productId: string): boolean {
+  return productId === WHOP_PRODUCT_IDS.bundle_monthly || 
+         productId === WHOP_PRODUCT_IDS.bundle_yearly;
+}
+
+// 🔥 v5.0.0: Check if plan is a Bundle plan
+export function isBundlePlan(planId: string): boolean {
+  return planId === WHOP_PLAN_IDS.bundle_monthly || 
+         planId === WHOP_PLAN_IDS.bundle_yearly;
 }
 
 export function isPlatformProduct(productId: string): boolean {
@@ -875,6 +982,7 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
     WHOP_PLAN_IDS.platform_pro_yearly,
     WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     WHOP_PLAN_IDS.top_secret_yearly,
+    WHOP_PLAN_IDS.bundle_yearly,      // 🔥 v5.0.0: Bundle Yearly
   ];
   
   return yearlyPlanIds.includes(planId as any) ? 'yearly' : 'monthly';

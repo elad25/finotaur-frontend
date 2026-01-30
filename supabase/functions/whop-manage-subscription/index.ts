@@ -37,7 +37,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 // Product types
-type ProductType = "newsletter" | "top_secret";
+type ProductType = "newsletter" | "top_secret" | "bundle";
 
 // ============================================
 // CORS HEADERS
@@ -107,18 +107,17 @@ async function cancelWhopMembership(
 
     console.log(`🔄 Pausing Whop membership ${membershipId} (using Pause instead of Cancel for reversibility)`);
 
-    // 🔥 v3.2.0: Use PAUSE API instead of Cancel
-    // Pause stops payment collection but keeps membership intact
-    // Resume can then reactivate it - unlike Cancel which is irreversible
-    // Whop API: POST /memberships/{id}/pause
-    const response = await fetch(`https://api.whop.com/api/v1/memberships/${membershipId}/pause`, {
+    // 🔥 v3.3.0: Use Cancel API with at_period_end mode
+    // Whop now supports Uncancel API, so Cancel is reversible!
+    // API: POST /memberships/{id}/cancel with cancellation_mode: "at_period_end"
+    const response = await fetch(`https://api.whop.com/api/v2/memberships/${membershipId}/cancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ 
-        void_payments: false  // Don't void existing past_due payments
+        cancellation_mode: mode === "immediate" ? "immediate" : "at_period_end"
       }),
     });
 
@@ -159,10 +158,10 @@ async function reactivateWhopMembership(
 
     console.log(`🔄 Resuming Whop membership ${membershipId}`);
 
-    // 🔥 v3.2.0: Use RESUME API - this works because we use PAUSE instead of Cancel
-    // Resume reactivates payment collection on a paused membership
-    // Whop API: POST /memberships/{id}/resume
-    const response = await fetch(`https://api.whop.com/api/v1/memberships/${membershipId}/resume`, {
+    // 🔥 v3.3.0: Use UNCANCEL API - Whop now supports this!
+    // Uncancel removes cancel_at_period_end flag
+    // API: POST /memberships/{id}/uncancel
+    const response = await fetch(`https://api.whop.com/api/v2/memberships/${membershipId}/uncancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
@@ -375,16 +374,26 @@ function checkBundleStatus(profile: any, cancellingProduct: ProductType): Bundle
   let newsletterIsFullPrice = explicitNewsletterFullPrice;
   let topSecretIsFullPrice = explicitTopSecretFullPrice;
   
-  // If we have a bundle but plan_ids are missing, infer from timestamps
-  if (hasBundle && !newsletterIsDiscounted && !topSecretIsDiscounted && 
-      !explicitNewsletterFullPrice && !explicitTopSecretFullPrice) {
-    if (newsletterStarted && topSecretStarted) {
-      if (newsletterStarted < topSecretStarted) {
-        // Newsletter was purchased first → Newsletter is FULL PRICE
-        newsletterIsFullPrice = true;
-      } else {
-        // Top Secret was purchased first → Top Secret is FULL PRICE
-        topSecretIsFullPrice = true;
+  // 🔥 v4.1.0 FIX: If one product has explicit discount, the OTHER must be full price
+  // This fixes the case where newsletter_whop_plan_id is NULL but topSecretIsDiscounted is true
+  if (hasBundle) {
+    // If Top Secret is discounted, Newsletter MUST be full price (and vice versa)
+    if (topSecretIsDiscounted && !newsletterIsDiscounted && !explicitNewsletterFullPrice) {
+      newsletterIsFullPrice = true;
+    }
+    if (newsletterIsDiscounted && !topSecretIsDiscounted && !explicitTopSecretFullPrice) {
+      topSecretIsFullPrice = true;
+    }
+    
+    // Fallback: If neither has explicit markers, use timestamps
+    if (!newsletterIsDiscounted && !topSecretIsDiscounted && 
+        !explicitNewsletterFullPrice && !explicitTopSecretFullPrice) {
+      if (newsletterStarted && topSecretStarted) {
+        if (newsletterStarted < topSecretStarted) {
+          newsletterIsFullPrice = true;
+        } else {
+          topSecretIsFullPrice = true;
+        }
       }
     }
   }

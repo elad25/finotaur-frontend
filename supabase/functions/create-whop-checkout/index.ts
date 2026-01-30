@@ -46,6 +46,13 @@ const INTRO_DISCOUNT_PLAN_IDS = new Set([
   // War Zone Newsletter - Regular plans  
   'plan_U6lF2eO5y9469',   // War Zone Monthly ($69.99/mo)
   'plan_bp2QTGuwfpj0A',   // War Zone Yearly ($699/yr)
+  // 🔥 v5.0.0: Bundle does NOT get intro discount (already best value)
+]);
+
+// 🔥 v5.0.0: Bundle Plan IDs
+const BUNDLE_PLAN_IDS = new Set([
+  'plan_ujyQUPIi7UIvN',   // Bundle Monthly - $109/month
+  'plan_M2zS1EoNXJF10',   // Bundle Yearly - $997/year
 ]);
 
 // ============================================
@@ -101,6 +108,12 @@ interface WhopCheckoutResponse {
   'plan_tUvQbCrEQ4197': '/app/top-secret?payment=success&source=whop',  // Top Secret Monthly ($89.99)
   'plan_PxxbBlSdkyeo7': '/app/settings?tab=billing&upgrade=top_secret_yearly_success',  // Top Secret Yearly ($899) - upgrade redirect
   'plan_7VQxCZ5Kpw6f0': '/app/top-secret?payment=success&source=whop',  // Top Secret for War Zone Members ($50)
+  
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: Bundle - War Zone + Top Secret
+  // ═══════════════════════════════════════════
+  'plan_ujyQUPIi7UIvN': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Monthly ($109)
+  'plan_M2zS1EoNXJF10': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Yearly ($997)
 };
 
 // ============================================

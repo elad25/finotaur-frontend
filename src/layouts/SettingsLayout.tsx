@@ -115,6 +115,18 @@ interface ProfileData {
   top_secret_trial_ends_at: string | null;
   top_secret_trial_used: boolean;
   
+  // 🔥 v5.0.0: Bundle subscription (War Zone + Top Secret)
+  bundle_enabled: boolean;
+  bundle_status: string | null;
+  bundle_whop_membership_id: string | null;
+  bundle_started_at: string | null;
+  bundle_expires_at: string | null;
+  bundle_interval: string | null;
+  bundle_cancel_at_period_end: boolean;
+  bundle_is_in_trial: boolean;
+  bundle_trial_ends_at: string | null;
+  bundle_trial_used: boolean;
+  
   // UI preferences (stored in metadata JSONB)
   metadata: {
     compact_mode?: boolean;
@@ -1433,6 +1445,8 @@ const BillingTab = () => {
           ? "bg-gradient-to-br from-yellow-950/40 via-amber-950/30 to-zinc-900/90 border-2 border-yellow-500/40 shadow-yellow-900/20"
           : "bg-gradient-to-br from-red-950/40 via-zinc-900/80 to-zinc-900/90 border-red-600/30 shadow-red-900/10"
       )}>
+
+
         {/* Subtle animated glow */}
         <div className={cn(
           "absolute inset-0 bg-gradient-to-r via-transparent",
@@ -1731,6 +1745,89 @@ const BillingTab = () => {
           </div>
         </div>
       </Card>
+
+      {/* 🔥 BUNDLE CARD - War Zone + Top Secret Combined */}
+      {!profile?.bundle_enabled && !newsletterIsActive && !topSecretIsActive && (
+        <Card className="p-6 relative overflow-hidden shadow-xl bg-gradient-to-br from-amber-950/40 via-yellow-950/30 to-zinc-900/90 border-2 border-amber-500/40 shadow-amber-900/20">
+          {/* Subtle animated glow */}
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-transparent to-yellow-500/10" />
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+          
+          <div className="relative">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/40 to-yellow-500/30 border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                  <Crown className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-white text-lg flex items-center gap-2">
+                    War Zone + Top Secret Bundle
+                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
+                      Best Value
+                    </Badge>
+                  </h2>
+                  <p className="text-xs text-zinc-400">Complete Research Package</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Main Content Box */}
+            <div className="p-5 rounded-xl bg-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm">
+              {/* Plan & Price Row */}
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <span className="text-xl font-bold text-white">Premium Bundle</span>
+                </div>
+                <div className="text-right">
+                  <div className="flex flex-col items-end">
+                    <span className="text-zinc-500 line-through text-sm">$159.98/mo</span>
+                    <span className="text-xl font-bold text-amber-400">$109/mo</span>
+                    <span className="text-xs text-emerald-400">Save $49.98/mo!</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Features Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>War Zone Daily Reports</span>
+                </div>
+                <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Top Secret Research</span>
+                </div>
+                <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>All Premium Discord</span>
+                </div>
+                <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>Priority Support</span>
+                </div>
+              </div>
+
+              {/* CTA */}
+              <div className="pt-4 border-t border-zinc-700/50">
+                <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-xs text-emerald-400 text-center font-medium">
+                    💎 Save $49.98/month vs buying separately! 7-day FREE trial included.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => navigate('/app/all-markets/warzone?bundle=true')}
+                  size="sm"
+                  className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-black font-medium shadow-lg shadow-amber-900/20"
+                >
+                  Get the Bundle
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Info Card */}
       <Card className="p-4 bg-zinc-900/30 border-zinc-800">
@@ -2549,6 +2646,16 @@ export const SettingsLayout = () => {
           top_secret_trial_ends_at,
           top_secret_trial_used,
           top_secret_paid,
+          bundle_enabled,
+          bundle_status,
+          bundle_whop_membership_id,
+          bundle_started_at,
+          bundle_expires_at,
+          bundle_interval,
+          bundle_cancel_at_period_end,
+          bundle_is_in_trial,
+          bundle_trial_ends_at,
+          bundle_trial_used,
           metadata,
           portfolio_size,
           risk_per_trade,

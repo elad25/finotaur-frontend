@@ -349,6 +349,18 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     window.open('mailto:enterprise@finotaur.com?subject=Enterprise%20Plan%20Inquiry', '_blank');
   }, []);
 
+  // ═══════════════════════════════════════════
+  // 🔥 v5.0.0: BUNDLE CHECKOUT HELPERS
+  // ═══════════════════════════════════════════
+
+  const checkoutBundleMonthly = useCallback(() => {
+    initiateCheckout({ planName: 'bundle', billingInterval: 'monthly' });
+  }, [initiateCheckout]);
+
+  const checkoutBundleYearly = useCallback(() => {
+    initiateCheckout({ planName: 'bundle', billingInterval: 'yearly' });
+  }, [initiateCheckout]);
+
   return {
     // Generic checkout
     initiateCheckout,
@@ -365,6 +377,10 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     checkoutPlatformProMonthly,
     checkoutPlatformProYearly,
     contactEnterpriseSales,
+    
+    // 🔥 v5.0.0: Bundle checkout helpers
+    checkoutBundleMonthly,
+    checkoutBundleYearly,
     
     // State
     isLoading,
