@@ -665,6 +665,8 @@ const BillingTab = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
+      console.log(`🔍 Checking bundle before cancel for ${product}...`);
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
         {
@@ -682,10 +684,13 @@ const BillingTab = () => {
 
       const data = await response.json();
       
+      console.log(`📊 Bundle check response:`, data);
+      
       // 🔥 v2.8.0: Only show Bundle Dialog for Scenario A (cancelling full price product)
       // Scenario A: Cancelling full price product → discounted product loses discount → Show Bundle Dialog
       // Scenario B: Cancelling discounted product → full price product unaffected → Show NORMAL Dialog (not Bundle!)
       if (data.hasBundle && data.cancellingFullPriceProduct) {
+        console.log(`🎯 Scenario A detected - showing Bundle Dialog`);
         // Only show bundle dialog when cancelling FULL PRICE product
         setBundleCancelProduct(product);
         setBundleInfo({
@@ -702,6 +707,7 @@ const BillingTab = () => {
       
       // Scenario B: Cancelling discounted product - proceed with normal cancel dialog
       // The full price product continues unchanged
+      console.log(`📋 Scenario B or no bundle - showing normal dialog`);
       
       return false; // No bundle, proceed with normal cancel
     } catch (error) {
