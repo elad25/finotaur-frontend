@@ -863,6 +863,7 @@ export default function TopSecretLanding() {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
   const [isWarZoneMember, setIsWarZoneMember] = useState(false);
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [showBundlePopup, setShowBundlePopup] = useState(false);
   
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
@@ -886,40 +887,168 @@ export default function TopSecretLanding() {
   const handleSubscribe = useCallback(async (billingInterval: 'monthly' | 'yearly') => {
     setSelectedPlan(billingInterval);
     
-    // If War Zone member and monthly, use discounted plan via proper checkout flow
+    // 🔥 If War Zone member, show Bundle popup instead of going directly to checkout
     if (isWarZoneMember && billingInterval === 'monthly') {
-      // Save pending checkout BEFORE redirecting
-      if (user?.id && user?.email) {
-        const checkoutToken = crypto.randomUUID();
-        try {
-          await supabase.from('pending_checkouts').insert({
-            user_id: user.id,
-            user_email: user.email,
-            checkout_token: checkoutToken,
-            product_type: 'top_secret',
-            billing_interval: 'monthly',
-            expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-          });
-          console.log('✅ Pending checkout saved for Top Secret (War Zone discount)');
-        } catch (err) {
-          console.warn('⚠️ Failed to save pending checkout:', err);
-        }
-      }
-      
-      // Use initiateCheckout with special war zone discount plan
-      initiateCheckout({
-        planName: 'top_secret_warzone' as any,
-        billingInterval: 'monthly',
-      });
+      setShowBundlePopup(true);
       return;
     }
     
-    // Regular checkout flow
+    // Regular checkout flow (non-War Zone members)
     initiateCheckout({
       planName: 'top_secret',
       billingInterval,
     });
-  }, [isWarZoneMember, user, initiateCheckout]);
+  }, [isWarZoneMember, initiateCheckout]);
+
+  // 🔥 Handler for Bundle checkout from popup
+  const handleBundleCheckout = useCallback(async () => {
+    setShowBundlePopup(false);
+    
+    // Save pending checkout BEFORE redirecting
+    if (user?.id && user?.email) {
+      const checkoutToken = crypto.randomUUID();
+      try {
+        await supabase.from('pending_checkouts').insert({
+          user_id: user.id,
+          user_email: user.email,
+          checkout_token: checkoutToken,
+          product_type: 'bundle',
+          billing_interval: 'monthly',
+          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        });
+        console.log('✅ Pending checkout saved for Bundle');
+      } catch (err) {
+        console.warn('⚠️ Failed to save pending checkout:', err);
+      }
+    }
+    
+    // Redirect to Bundle checkout ($97/month)
+    initiateCheckout({
+      planName: 'bundle' as any,
+      billingInterval: 'monthly',
+    });
+  }, [user, initiateCheckout]);
+
+  // 🔥 Bundle Upgrade Popup Component
+  const BundleUpgradePopup = () => {
+    if (!showBundlePopup) return null;
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowBundlePopup(false)}
+        />
+        
+        {/* Popup Content */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="relative w-full max-w-md rounded-2xl overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
+            border: '1px solid rgba(201,166,70,0.3)',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.2)'
+          }}
+        >
+          {/* Header */}
+          <div 
+            className="px-6 py-5 text-center"
+            style={{
+              background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+              borderBottom: '1px solid rgba(201,166,70,0.2)'
+            }}
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
+                 style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <Gift className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-400 text-sm font-semibold">Special Offer for War Zone Members</span>
+            </div>
+            <h3 className="text-2xl font-bold text-white">Upgrade to Bundle</h3>
+          </div>
+          
+          {/* Body */}
+          <div className="px-6 py-6">
+            <p className="text-slate-400 text-center mb-6">
+              Get <span className="text-white font-semibold">both War Zone + Top Secret</span> for one low price!
+            </p>
+            
+            {/* Price Comparison */}
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
+                <span className="text-slate-400">War Zone Newsletter</span>
+                <span className="text-slate-500 line-through">$69.99/mo</span>
+              </div>
+              <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
+                <span className="text-slate-400">Top Secret Reports</span>
+                <span className="text-slate-500 line-through">$89.99/mo</span>
+              </div>
+              <div className="flex justify-between items-center p-4 rounded-lg"
+                   style={{ 
+                     background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                     border: '1px solid rgba(201,166,70,0.3)'
+                   }}>
+                <div>
+                  <span className="text-[#C9A646] font-bold text-lg">Bundle Price</span>
+                  <p className="text-emerald-400 text-sm">Save $62.98/month!</p>
+                </div>
+                <span className="text-[#C9A646] font-bold text-2xl">$97/mo</span>
+              </div>
+            </div>
+            
+            {/* What You Get */}
+            <div className="space-y-2 mb-6">
+              <p className="text-slate-500 text-sm font-medium mb-2">What you'll get:</p>
+              <div className="flex items-center gap-2 text-slate-300">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>War Zone Newsletter (Daily Signals)</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Top Secret Reports (10 Monthly)</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>7-Day Free Trial</span>
+              </div>
+            </div>
+            
+            {/* CTA Buttons */}
+            <div className="space-y-3">
+              <Button
+                onClick={handleBundleCheckout}
+                disabled={isLoading}
+                className="w-full py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000',
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+                }}
+              >
+                {isLoading ? (
+                  <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <Crown className="w-5 h-5" />
+                    Get Bundle for $97/month
+                  </span>
+                )}
+              </Button>
+              
+              <button
+                onClick={() => setShowBundlePopup(false)}
+                className="w-full py-3 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+              >
+                No thanks, I'll pass
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  };
 
   return (
     <section className="min-h-screen py-8 px-4 relative overflow-hidden bg-[#0A0A0A]">
@@ -1048,6 +1177,9 @@ export default function TopSecretLanding() {
           </p>
         </motion.div>
       </motion.div>
+      
+      {/* 🔥 Bundle Upgrade Popup */}
+      <BundleUpgradePopup />
     </section>
   );
 }
