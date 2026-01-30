@@ -946,7 +946,7 @@ export default function TopSecretLanding() {
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative w-full max-w-md rounded-2xl overflow-hidden"
+          className="relative w-full max-w-sm rounded-2xl overflow-hidden max-h-[calc(100vh-120px)]"
           style={{
             background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
             border: '1px solid rgba(201,166,70,0.3)',
@@ -955,72 +955,72 @@ export default function TopSecretLanding() {
         >
           {/* Header */}
           <div 
-            className="px-6 py-5 text-center"
+            className="px-5 py-3 text-center"
             style={{
               background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
               borderBottom: '1px solid rgba(201,166,70,0.2)'
             }}
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-2"
                  style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <Gift className="w-4 h-4 text-emerald-400" />
-              <span className="text-emerald-400 text-sm font-semibold">Special Offer for War Zone Members</span>
+              <Gift className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-emerald-400 text-xs font-semibold">Special Offer for War Zone Members</span>
             </div>
-            <h3 className="text-2xl font-bold text-white">Upgrade to Bundle</h3>
+            <h3 className="text-xl font-bold text-white">Upgrade to Bundle</h3>
           </div>
           
           {/* Body */}
-          <div className="px-6 py-6">
-            <p className="text-slate-400 text-center mb-6">
+          <div className="px-5 py-4">
+            <p className="text-slate-400 text-center text-sm mb-4">
               Get <span className="text-white font-semibold">both War Zone + Top Secret</span> for one low price!
             </p>
             
             {/* Price Comparison */}
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
-                <span className="text-slate-400">War Zone Newsletter</span>
-                <span className="text-slate-500 line-through">$69.99/mo</span>
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
+                <span className="text-slate-400 text-sm">War Zone Newsletter</span>
+                <span className="text-slate-500 line-through text-sm">$69.99/mo</span>
               </div>
-              <div className="flex justify-between items-center p-3 rounded-lg bg-white/5">
-                <span className="text-slate-400">Top Secret Reports</span>
-                <span className="text-slate-500 line-through">$89.99/mo</span>
+              <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
+                <span className="text-slate-400 text-sm">Top Secret Reports</span>
+                <span className="text-slate-500 line-through text-sm">$89.99/mo</span>
               </div>
-              <div className="flex justify-between items-center p-4 rounded-lg"
+              <div className="flex justify-between items-center p-3 rounded-lg"
                    style={{ 
                      background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
                      border: '1px solid rgba(201,166,70,0.3)'
                    }}>
                 <div>
-                  <span className="text-[#C9A646] font-bold text-lg">Bundle Price</span>
-                  <p className="text-emerald-400 text-sm">Save $62.98/month!</p>
+                  <span className="text-[#C9A646] font-bold">Bundle Price</span>
+                  <p className="text-emerald-400 text-xs">Save $62.98/month!</p>
                 </div>
-                <span className="text-[#C9A646] font-bold text-2xl">$97/mo</span>
+                <span className="text-[#C9A646] font-bold text-xl">$97/mo</span>
               </div>
             </div>
             
             {/* What You Get */}
-            <div className="space-y-2 mb-6">
-              <p className="text-slate-500 text-sm font-medium mb-2">What you'll get:</p>
-              <div className="flex items-center gap-2 text-slate-300">
-                <Check className="w-4 h-4 text-emerald-400" />
+            <div className="space-y-1.5 mb-4">
+              <p className="text-slate-500 text-xs font-medium mb-1">What you'll get:</p>
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
                 <span>War Zone Newsletter (Daily Signals)</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-300">
-                <Check className="w-4 h-4 text-emerald-400" />
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Top Secret Reports (10 Monthly)</span>
               </div>
-              <div className="flex items-center gap-2 text-slate-300">
-                <Check className="w-4 h-4 text-emerald-400" />
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
                 <span>7-Day Free Trial</span>
               </div>
             </div>
             
             {/* CTA Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Button
                 onClick={handleBundleCheckout}
                 disabled={isLoading}
-                className="w-full py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
+                className="w-full py-3 text-base font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
                 style={{
                   background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
                   color: '#000',
@@ -1028,10 +1028,10 @@ export default function TopSecretLanding() {
                 }}
               >
                 {isLoading ? (
-                  <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
+                  <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto" />
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    <Crown className="w-5 h-5" />
+                    <Crown className="w-4 h-4" />
                     Get Bundle for $97/month
                   </span>
                 )}
@@ -1039,7 +1039,7 @@ export default function TopSecretLanding() {
               
               <button
                 onClick={() => setShowBundlePopup(false)}
-                className="w-full py-3 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+                className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
               >
                 No thanks, I'll pass
               </button>
