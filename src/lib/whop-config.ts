@@ -1051,7 +1051,9 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   
   // Success redirect URL based on product type
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
-  if (plan.isNewsletter) {
+  if (plan.isBundle) {
+    params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop&bundle=true`);
+  } else if (plan.isNewsletter) {
     params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop`);
   } else if (plan.isTopSecret) {
     params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success&source=whop`);
