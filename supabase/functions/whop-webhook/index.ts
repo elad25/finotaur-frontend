@@ -1830,6 +1830,69 @@ async function handleMembershipActivated(
     }
 
     console.log("✅ Bundle activated:", result);
+    
+    // 🔥 v5.1.0: Cancel previous individual subscriptions when bundle is purchased
+    // Check if user had separate Top Secret or Newsletter subscriptions
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('top_secret_whop_membership_id, newsletter_whop_membership_id')
+      .eq('id', userResult.id)
+      .single();
+    
+    if (userProfile) {
+      // Cancel previous Top Secret subscription if exists and different from bundle
+      if (userProfile.top_secret_whop_membership_id && 
+          userProfile.top_secret_whop_membership_id !== membershipId) {
+        console.log("🔄 Cancelling previous Top Secret subscription:", userProfile.top_secret_whop_membership_id);
+        try {
+          const cancelResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${userProfile.top_secret_whop_membership_id}/cancel`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ cancellation_mode: 'immediate' }),
+            }
+          );
+          if (cancelResponse.ok) {
+            console.log("✅ Previous Top Secret subscription cancelled");
+          } else {
+            console.warn("⚠️ Failed to cancel Top Secret:", await cancelResponse.text());
+          }
+        } catch (cancelErr) {
+          console.warn("⚠️ Error cancelling Top Secret:", cancelErr);
+        }
+      }
+      
+      // Cancel previous Newsletter subscription if exists and different from bundle
+      if (userProfile.newsletter_whop_membership_id && 
+          userProfile.newsletter_whop_membership_id !== membershipId) {
+        console.log("🔄 Cancelling previous Newsletter subscription:", userProfile.newsletter_whop_membership_id);
+        try {
+          const cancelResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${userProfile.newsletter_whop_membership_id}/cancel`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ cancellation_mode: 'immediate' }),
+            }
+          );
+          if (cancelResponse.ok) {
+            console.log("✅ Previous Newsletter subscription cancelled");
+          } else {
+            console.warn("⚠️ Failed to cancel Newsletter:", await cancelResponse.text());
+          }
+        } catch (cancelErr) {
+          console.warn("⚠️ Error cancelling Newsletter:", cancelErr);
+        }
+      }
+    }
+
     return { 
       success: true, 
       message: `Bundle activated for ${result?.email || userEmail} (${billingInterval})` 
