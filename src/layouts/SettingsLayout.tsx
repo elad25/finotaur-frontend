@@ -1924,23 +1924,23 @@ const BillingTab = () => {
   </DialogContent>
 </Dialog>
 
-      {/* 🔥 v2.7.0: Smart Bundle Cancellation Dialog - handles BOTH scenarios */}
+      {/* 🔥 v3.0: Bundle Cancellation Dialog - Simplified: Cancel Both or Keep Both */}
       <Dialog open={showBundleCancelDialog} onOpenChange={setShowBundleCancelDialog}>
         <DialogContent className="sm:max-w-md p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden">
           {/* Premium Header with Gradient */}
           <div className="relative px-6 pt-6 pb-4">
             {/* Decorative gradient orbs */}
             <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl" />
-            <div className="absolute -top-10 -left-10 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl" />
+            <div className="absolute -top-10 -left-10 w-32 h-32 bg-red-500/10 rounded-full blur-3xl" />
             
             <div className="relative">
               {/* Icon badge */}
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-amber-500/30 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
-                <Crown className="w-6 h-6 text-amber-400" />
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-red-500/20 border border-amber-500/30 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
               </div>
               
               <DialogTitle className="text-xl font-semibold text-white mb-1">
-                ⚠️ Bundle Price Impact
+                Bundle Cancellation
               </DialogTitle>
               <DialogDescription className="text-zinc-400 text-sm">
                 You're cancelling {bundleCancelProduct === 'newsletter' ? 'War Zone ($69.99/mo)' : 'Top Secret ($89.99/mo)'}
@@ -1948,22 +1948,30 @@ const BillingTab = () => {
             </div>
           </div>
           
-          {/* 🔥 SCENARIO A: Cancelling FULL PRICE product (discounted product loses discount) */}
+          {/* Warning: Other product will also be cancelled */}
           {bundleInfo?.cancellingFullPriceProduct && bundleInfo?.priceImpact && (
             <div className="mx-6 mb-4">
-              <div className="relative p-4 rounded-xl bg-gradient-to-r from-red-500/5 via-orange-500/5 to-amber-500/5 border border-red-500/20">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-red-500/10 via-transparent to-transparent rounded-xl" />
-                <div className="relative flex gap-3">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-                    <AlertTriangle className="w-4 h-4 text-red-400" />
+              <div className="relative p-4 rounded-xl bg-gradient-to-r from-red-500/5 via-orange-500/5 to-amber-500/5 border border-amber-500/30">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent rounded-xl" />
+                <div className="relative">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <p className="text-sm font-medium text-amber-300">
+                      {bundleInfo.priceImpact.affectedProduct} Will Also Be Cancelled
+                    </p>
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-red-300">Bundle Discount Will End</p>
-                    <p className="text-xs text-zinc-400 leading-relaxed">
-                      Your <span className="text-white font-medium">{bundleInfo.priceImpact.affectedProduct}</span> is currently{' '}
-                      <span className="text-emerald-400 font-semibold">${bundleInfo.priceImpact.currentPrice}/mo</span> because of your bundle.
-                      Without the bundle, the regular price is{' '}
-                      <span className="text-red-400 font-semibold">${bundleInfo.priceImpact.newPrice}/mo</span>.
+                  <div className="space-y-2 text-xs text-zinc-400 leading-relaxed">
+                    <p>
+                      Your <span className="text-white font-medium">{bundleInfo.priceImpact.affectedProduct}</span> is at bundle price{' '}
+                      <span className="text-emerald-400 font-semibold">(${bundleInfo.priceImpact.currentPrice}/mo)</span>.
+                      This price requires an active {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'}.
+                    </p>
+                    <p>
+                      Both subscriptions will be cancelled at the end of your billing period.
+                    </p>
+                    <p className="text-zinc-500 pt-1">
+                      Want to keep {bundleInfo.priceImpact.affectedProduct}?{' '}
+                      <span className="text-zinc-400">You can resubscribe at ${bundleInfo.priceImpact.newPrice}/mo after.</span>
                     </p>
                   </div>
                 </div>
@@ -1971,81 +1979,40 @@ const BillingTab = () => {
             </div>
           )}
 
-          {/* Options - Different based on scenario */}
-          <div className="px-6 pb-2 space-y-2">
+          {/* Action Buttons - Only Cancel Both or Keep Both */}
+          <div className="p-6 pt-2 space-y-3">
+            {/* Cancel Both Subscriptions */}
+            <button
+              onClick={async () => {
+                setBundleCancelLoading(true);
+                setShowBundleCancelDialog(false);
+                if (bundleCancelProduct === 'newsletter') {
+                  await handleCancelNewsletter(true, false);
+                } else {
+                  await handleCancelTopSecret(true, false);
+                }
+                setBundleCancelLoading(false);
+              }}
+              disabled={bundleCancelLoading}
+              className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
+                    <X className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-white group-hover:text-red-300 transition-colors">
+                      Cancel Both Subscriptions
+                    </p>
+                    <p className="text-xs text-zinc-500">Access until end of billing period</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
+              </div>
+            </button>
             
-            {/* 🔥 SCENARIO A Options: Full price product cancellation */}
-            {bundleInfo?.cancellingFullPriceProduct ? (
-              <>
-                {/* Option 1: Cancel Both */}
-                <button
-                  onClick={async () => {
-                    setBundleCancelLoading(true);
-                    setShowBundleCancelDialog(false);
-                    if (bundleCancelProduct === 'newsletter') {
-                      await handleCancelNewsletter(true, false);
-                    } else {
-                      await handleCancelTopSecret(true, false);
-                    }
-                    setBundleCancelLoading(false);
-                  }}
-                  disabled={bundleCancelLoading}
-                  className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
-                        <X className="w-5 h-5 text-red-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-white group-hover:text-red-300 transition-colors">
-                          Cancel Both Products
-                        </p>
-                        <p className="text-xs text-zinc-500">End all subscriptions at period end</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
-                  </div>
-                </button>
-                
-                {/* Option 2: Continue with price increase */}
-                <button
-                  onClick={async () => {
-                    setBundleCancelLoading(true);
-                    setShowBundleCancelDialog(false);
-                    if (bundleCancelProduct === 'newsletter') {
-                      await handleCancelNewsletter(false, true);
-                    } else {
-                      await handleCancelTopSecret(false, true);
-                    }
-                    setBundleCancelLoading(false);
-                  }}
-                  disabled={bundleCancelLoading}
-                  className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-amber-500/40 bg-zinc-800/30 hover:bg-amber-500/5 transition-all duration-200"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center group-hover:bg-amber-500/20 transition-colors">
-                        <AlertCircle className="w-5 h-5 text-amber-400" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-white group-hover:text-amber-300 transition-colors">
-                          Continue with {bundleInfo?.priceImpact?.affectedProduct} at ${bundleInfo?.priceImpact?.newPrice}/mo
-                        </p>
-                        <p className="text-xs text-zinc-500">
-                          Cancel {bundleCancelProduct === 'newsletter' ? 'War Zone' : 'Top Secret'} • You'll receive an email to resubscribe at full price
-                        </p>
-                      </div>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-amber-400 group-hover:translate-x-1 transition-all" />
-                  </div>
-                </button>
-              </>
-            ) : null}
-          </div>
-          
-          {/* Keep Both - Premium CTA */}
-          <div className="p-6 pt-4">
+            {/* Keep Both - Premium CTA */}
             <button
               onClick={() => setShowBundleCancelDialog(false)}
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
@@ -2053,11 +2020,6 @@ const BillingTab = () => {
               <CheckCircle2 className="w-4 h-4" />
               Never Mind, Keep Both
             </button>
-            {bundleInfo?.priceImpact && (
-              <p className="text-center text-xs text-zinc-500 mt-2">
-                You're saving ${(bundleInfo.priceImpact.newPrice - bundleInfo.priceImpact.currentPrice).toFixed(2)}/mo with your bundle
-              </p>
-            )}
           </div>
         </DialogContent>
       </Dialog>    </div>

@@ -1002,7 +1002,7 @@ export default function TopSecretLanding() {
           <h2 className="text-2xl md:text-3xl font-bold text-center mb-3 text-white">
             What You'll Receive
           </h2>
-          <p className="text-slate-500 text-center mb-12">5 premium reports delivered every month</p>
+          <p className="text-slate-500 text-center mb-12">10 premium reports delivered every month</p>
 
           <div className="grid md:grid-cols-3 gap-8">
             {REPORT_TYPES.map((report) => (
