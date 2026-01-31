@@ -282,6 +282,8 @@ function getMembershipId(profile: any, product: ProductType): string | null {
       return profile.newsletter_whop_membership_id;
     case "top_secret":
       return profile.top_secret_whop_membership_id;
+    case "bundle":
+      return profile.bundle_whop_membership_id;
     default:
       return null;
   }
@@ -307,7 +309,6 @@ function getProductStatus(profile: any, product: ProductType): {
         status: profile.newsletter_status ?? "inactive",
         cancelAtPeriodEnd: profile.newsletter_cancel_at_period_end ?? false,
         expiresAt: profile.newsletter_expires_at,
-        // Check BOTH status AND paid flag
         isTrial: profile.newsletter_status === "trial" || (profile.newsletter_enabled && !profile.newsletter_paid),
         trialEndsAt: profile.newsletter_trial_ends_at,
         isPaid: profile.newsletter_paid ?? false,
@@ -321,6 +322,16 @@ function getProductStatus(profile: any, product: ProductType): {
         isTrial: profile.top_secret_is_in_trial ?? profile.top_secret_status === "trial",
         trialEndsAt: profile.top_secret_trial_ends_at,
         isPaid: profile.top_secret_status === "active" && !profile.top_secret_is_in_trial,
+      };
+    case "bundle":
+      return {
+        enabled: profile.bundle_enabled ?? false,
+        status: profile.bundle_status ?? "inactive",
+        cancelAtPeriodEnd: profile.bundle_cancel_at_period_end ?? false,
+        expiresAt: profile.bundle_expires_at,
+        isTrial: profile.bundle_is_in_trial ?? profile.bundle_status === "trial",
+        trialEndsAt: profile.bundle_trial_ends_at,
+        isPaid: profile.bundle_status === "active" && !profile.bundle_is_in_trial,
       };
     default:
       return { 
@@ -345,6 +356,8 @@ function getProductDisplayName(product: ProductType): string {
       return "War Zone Newsletter";
     case "top_secret":
       return "Top Secret";
+    case "bundle":
+      return "War Zone + Top Secret Bundle";
     default:
       return product;
   }
@@ -504,7 +517,10 @@ serve(async (req: Request) => {
         newsletter_whop_plan_id, newsletter_interval,
         top_secret_enabled, top_secret_status, top_secret_whop_membership_id,
         top_secret_expires_at, top_secret_cancel_at_period_end, top_secret_interval,
-        top_secret_started_at, top_secret_whop_plan_id, top_secret_is_in_trial
+        top_secret_started_at, top_secret_whop_plan_id, top_secret_is_in_trial,
+        bundle_enabled, bundle_status, bundle_whop_membership_id,
+        bundle_expires_at, bundle_cancel_at_period_end, bundle_interval,
+        bundle_started_at, bundle_is_in_trial, bundle_trial_ends_at
       `)
       .eq("id", user.id)
       .single();
@@ -528,9 +544,9 @@ serve(async (req: Request) => {
     const body: RequestBody = await req.json();
     const { product } = body;
 
-    if (!product || !["newsletter", "top_secret"].includes(product)) {
+    if (!product || !["newsletter", "top_secret", "bundle"].includes(product)) {
       return new Response(
-        JSON.stringify({ error: "Invalid product. Must be 'newsletter' or 'top_secret'" }),
+        JSON.stringify({ error: "Invalid product. Must be 'newsletter', 'top_secret', or 'bundle'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -1166,6 +1182,8 @@ console.log(`✅ Subscription scheduled for cancellation`);
     updateData.newsletter_cancel_at_period_end = true;
   } else if (product === "top_secret") {
     updateData.top_secret_cancel_at_period_end = true;
+  } else if (product === "bundle") {
+    updateData.bundle_cancel_at_period_end = true;
   }
 
   const { error: updateError } = await supabase
@@ -1615,6 +1633,8 @@ async function handleReactivate(
       updateData.newsletter_cancel_at_period_end = false;
     } else if (product === "top_secret") {
       updateData.top_secret_cancel_at_period_end = false;
+    } else if (product === "bundle") {
+      updateData.bundle_cancel_at_period_end = false;
     }
 
     const { error: updateError } = await supabase
@@ -1688,6 +1708,8 @@ async function handleReactivate(
       updateData.newsletter_cancel_at_period_end = false;
     } else if (product === "top_secret") {
       updateData.top_secret_cancel_at_period_end = false;
+    } else if (product === "bundle") {
+      updateData.bundle_cancel_at_period_end = false;
     }
 
     const { error: updateError } = await supabase
