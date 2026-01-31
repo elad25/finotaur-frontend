@@ -168,6 +168,7 @@ export const WHOP_PRODUCT_IDS = {
   // Top Secret
   top_secret: 'prod_nl6YXbLp4t5pz',
   top_secret_warzone: 'prod_e8Er36RubeFXU',  // 🔥 NEW: Top Secret for War Zone members
+  top_secret_yearly: 'prod_aGd9mbl2XUIFO',   // 🔥 Top Secret Yearly - standalone product
   
   // ═══════════════════════════════════════════
   // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret

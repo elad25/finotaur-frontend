@@ -53,7 +53,7 @@ const TOP_SECRET_PRODUCT_IDS = new Set([
 // 🔥 v5.0.0: Bundle Product IDs - War Zone + Top Secret together
 const BUNDLE_PRODUCT_IDS = new Set([
   'prod_LtP5GbpPfp9bn',  // Bundle Monthly - $109/month with 7-day trial
-  'prod_CbWpZrn5P7wc9',  // Bundle Yearly - $997/year (no trial)
+  'prod_CbWpZrn5P7wc9',  // Bundle Yearly - $1,090/year (no trial)
 ]);
 
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
@@ -66,7 +66,7 @@ const TOP_SECRET_PLAN_IDS = new Set([
 // 🔥 v5.0.0: Bundle Plan IDs
 const BUNDLE_PLAN_IDS = new Set([
   'plan_ICooR8aqtdXad',  // Bundle Monthly - $109/month
-  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $1090/year
+  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $1,090/year
 ]);
 
 // ============================================
@@ -93,7 +93,7 @@ const NEWSLETTER_PLAN_IDS = new Set([
 const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
-  'plan_M2zS1EoNXJF10',  // Bundle Yearly ($997/year)
+  'plan_M2zS1EoNXJF10',  // Bundle Yearly ($1090/year)
 ]);
 
 // 🔥 v3.8.0: Cross-product discount Plan IDs
@@ -2132,8 +2132,9 @@ async function handleMembershipActivated(
       if (hasExistingTopSecret) {
         console.log("⏸️ Pausing existing Top Secret subscription:", existingTopSecretMembershipId);
         try {
+          // 🔥 v5.5.0: Whop API v2 - correct endpoint
           const pauseResponse = await fetch(
-            `https://api.whop.com/memberships/${existingTopSecretMembershipId}/pause`,
+            `https://api.whop.com/api/v2/memberships/${existingTopSecretMembershipId}/pause_payment_collection`,
             {
               method: 'POST',
               headers: {
@@ -2159,8 +2160,9 @@ async function handleMembershipActivated(
       if (hasExistingNewsletter) {
         console.log("⏸️ Pausing existing Newsletter subscription:", existingNewsletterMembershipId);
         try {
+          // 🔥 v5.5.0: Whop API v2 - correct endpoint
           const pauseResponse = await fetch(
-            `https://api.whop.com/memberships/${existingNewsletterMembershipId}/pause`,
+            `https://api.whop.com/api/v2/memberships/${existingNewsletterMembershipId}/pause_payment_collection`,
             {
               method: 'POST',
               headers: {
@@ -3040,8 +3042,9 @@ async function handleMembershipDeactivated(
         if (profile.top_secret_paused_for_bundle && profile.top_secret_whop_membership_id) {
           console.log("▶️ Resuming paused Top Secret subscription:", profile.top_secret_whop_membership_id);
           try {
+            // 🔥 v5.5.0: Whop API v2 - correct endpoint
             const resumeResponse = await fetch(
-              `https://api.whop.com/api/v1/memberships/${profile.top_secret_whop_membership_id}/resume`,
+              `https://api.whop.com/api/v2/memberships/${profile.top_secret_whop_membership_id}/resume_payment_collection`,
               {
                 method: 'POST',
                 headers: {
@@ -3071,8 +3074,9 @@ async function handleMembershipDeactivated(
         if (profile.newsletter_paused_for_bundle && profile.newsletter_whop_membership_id) {
           console.log("▶️ Resuming paused Newsletter subscription:", profile.newsletter_whop_membership_id);
           try {
+            // 🔥 v5.5.0: Whop API v2 - correct endpoint
             const resumeResponse = await fetch(
-              `https://api.whop.com/api/v1/memberships/${profile.newsletter_whop_membership_id}/resume`,
+              `https://api.whop.com/api/v2/memberships/${profile.newsletter_whop_membership_id}/resume_payment_collection`,
               {
                 method: 'POST',
                 headers: {
@@ -3202,8 +3206,9 @@ async function handleCancelAtPeriodEndChanged(
   // Determine product type
   const isNewsletterProduct = isNewsletter(productId);
   const isTopSecretProduct = isTopSecret(productId);
+  const isBundleProduct = isBundle(productId);
 
-  if (!isNewsletterProduct && !isTopSecretProduct) {
+  if (!isNewsletterProduct && !isTopSecretProduct && !isBundleProduct) {
     return { success: true, message: `Product ${productId} not tracked` };
   }
 
@@ -3278,23 +3283,42 @@ async function handleCancelAtPeriodEndChanged(
     console.log(`✅ Top Secret cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
   }
 
+  // 🔥 v5.5.0: Handle Bundle cancel_at_period_end
+  if (isBundleProduct) {
+    updateData.bundle_cancel_at_period_end = cancelAtPeriodEnd;
+    
+    await supabase
+      .from("profiles")
+      .update(updateData)
+      .eq("id", profile.id);
+    
+    console.log(`✅ Bundle cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
+  }
+
   // Log the event
+  const currentStatus = isNewsletterProduct 
+    ? profile.newsletter_status 
+    : isTopSecretProduct 
+      ? profile.top_secret_status 
+      : profile.bundle_status;
+      
   await supabase.from("subscription_events").insert({
     user_id: profile.id,
     event_type: cancelAtPeriodEnd ? "subscription_scheduled_cancel_whop" : "subscription_reactivated_whop",
-    old_plan: isNewsletterProduct ? profile.newsletter_status : profile.top_secret_status,
-    new_plan: isNewsletterProduct ? profile.newsletter_status : profile.top_secret_status,
+    old_plan: currentStatus,
+    new_plan: currentStatus,
     metadata: {
       whop_membership_id: membershipId,
       product_id: productId,
       plan_id: planId,
       cancel_at_period_end: cancelAtPeriodEnd,
-      source: "whop_webhook_cancel_at_period_end_changed"
+      source: "whop_webhook_cancel_at_period_end_changed",
+      product_type: isNewsletterProduct ? 'newsletter' : isTopSecretProduct ? 'top_secret' : 'bundle'
     }
   });
 
   const action = cancelAtPeriodEnd ? "scheduled for cancellation" : "REACTIVATED";
-  const product = isNewsletterProduct ? "Newsletter" : "Top Secret";
+  const product = isNewsletterProduct ? "Newsletter" : isTopSecretProduct ? "Top Secret" : "Bundle";
   
   return { 
     success: true, 
