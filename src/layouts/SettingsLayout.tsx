@@ -2090,7 +2090,7 @@ const BillingTab = () => {
 
                           {/* CTA Button */}
                           <Button
-                            onClick={() => window.open(`https://whop.com/checkout/plan_ujyQUPIi7UIvN?email=${user?.email || ''}`, '_blank')}
+                            onClick={() => window.open(`https://whop.com/checkout/plan_ICooR8aqtdXad?email=${user?.email || ''}`, '_blank')}
                             size="sm"
                             className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-semibold text-xs py-2"
                           >
