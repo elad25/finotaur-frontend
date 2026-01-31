@@ -913,7 +913,7 @@ const BillingTab = () => {
           },
           body: JSON.stringify({
             plan_id: 'plan_bp2QTGuwfpj0A', // War Zone Yearly plan
-            subscription_category: 'journal',
+            subscription_category: 'newsletter',
             email: user.email,
             user_id: user.id,
             redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=newsletter_yearly_success`,
@@ -960,7 +960,7 @@ const BillingTab = () => {
           },
           body: JSON.stringify({
             plan_id: 'plan_PxxbBlSdkyeo7', // Top Secret Yearly plan
-            subscription_category: 'journal',
+            subscription_category: 'top_secret',
             email: user.email,
             user_id: user.id,
             redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=top_secret_yearly_success`,
@@ -2091,7 +2091,10 @@ const BillingTab = () => {
 
                           {/* CTA Button */}
                           <Button
-                            onClick={() => window.open(`https://whop.com/checkout/plan_ICooR8aqtdXad?email=${user?.email || ''}`, '_blank')}
+                            onClick={() => {
+                              const redirectUrl = encodeURIComponent(`${window.location.origin}/app/settings?tab=billing&upgrade=bundle_monthly_success`);
+                              window.location.href = `https://whop.com/checkout/plan_ICooR8aqtdXad?email=${user?.email || ''}&redirect_url=${redirectUrl}`;
+                            }}
                             size="sm"
                             className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-semibold text-xs py-2"
                           >
@@ -2148,7 +2151,10 @@ const BillingTab = () => {
 
                           {/* CTA Button */}
                           <Button
-                            onClick={() => window.open(`https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}`, '_blank')}
+                            onClick={() => {
+                              const redirectUrl = encodeURIComponent(`${window.location.origin}/app/settings?tab=billing&upgrade=bundle_yearly_success`);
+                              window.location.href = `https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}&redirect_url=${redirectUrl}`;
+                            }}
                             size="sm"
                             className="w-full bg-gradient-to-r from-yellow-500 to-amber-400 hover:from-yellow-400 hover:to-amber-300 text-black font-semibold text-xs py-2"
                           >
@@ -2650,94 +2656,158 @@ const BillingTab = () => {
             </>
           ) : (
             /* ═══════════════════════════════════════════════ */
-            /* 🔥 MONTHLY BUNDLE - Original Cancel Both flow */
+            /* 🔥 MONTHLY BUNDLE - Same flow as Yearly but without discount */
             /* ═══════════════════════════════════════════════ */
             <>
-              {/* Header */}
-              <div className="relative px-6 pt-6 pb-4">
-                <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl" />
-                <div className="absolute -top-10 -left-10 w-32 h-32 bg-red-500/10 rounded-full blur-3xl" />
-                
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-red-500/20 border border-amber-500/30 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
-                    <AlertTriangle className="w-6 h-6 text-amber-400" />
-                  </div>
-                  
-                  <DialogTitle className="text-xl font-semibold text-white mb-1">
-                    Bundle Cancellation
-                  </DialogTitle>
-                  <DialogDescription className="text-zinc-400 text-sm">
-                    You're cancelling {bundleCancelProduct === 'newsletter' ? 'War Zone ($69.99/mo)' : 'Top Secret ($89.99/mo)'}
-                  </DialogDescription>
-                </div>
-              </div>
-
-              {/* Warning */}
-              {bundleInfo?.cancellingFullPriceProduct && bundleInfo?.priceImpact && (
-                <div className="mx-6 mb-4">
-                  <div className="relative p-4 rounded-xl bg-gradient-to-r from-red-500/5 via-orange-500/5 to-amber-500/5 border border-amber-500/30">
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent rounded-xl" />
+              {/* ═══ STEP 1: Options ═══ */}
+              {bundleCancelStep === 'options' && (
+                <>
+                  {/* Header */}
+                  <div className="relative px-6 pt-6 pb-4">
+                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl" />
+                    <div className="absolute -top-10 -left-10 w-32 h-32 bg-red-500/10 rounded-full blur-3xl" />
+                    
                     <div className="relative">
-                      <div className="flex items-center gap-2 mb-3">
-                        <AlertTriangle className="w-4 h-4 text-amber-400" />
-                        <p className="text-sm font-medium text-amber-300">
-                          {bundleInfo.priceImpact.affectedProduct} Will Also Be Cancelled
-                        </p>
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-red-500/20 border border-amber-500/30 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
+                        <AlertTriangle className="w-6 h-6 text-amber-400" />
                       </div>
-                      <div className="space-y-2 text-xs text-zinc-400 leading-relaxed">
-                        <p>
-                          Your <span className="text-white font-medium">{bundleInfo.priceImpact.affectedProduct}</span> is at bundle price{' '}
-                          <span className="text-emerald-400 font-semibold">(${bundleInfo.priceImpact.currentPrice}/mo)</span>.
-                        </p>
-                        <p>
-                          Both subscriptions will be cancelled at the end of your billing period.
-                        </p>
-                      </div>
+                      
+                      <DialogTitle className="text-xl font-semibold text-white mb-1">
+                        Cancel Monthly Bundle?
+                      </DialogTitle>
+                      <DialogDescription className="text-zinc-400 text-sm">
+                        Choose what you'd like to do with your subscription
+                      </DialogDescription>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* Buttons */}
-              <div className="p-6 pt-2 space-y-3">
-                <button
-                  onClick={async () => {
-                    setBundleCancelLoading(true);
-                    setShowBundleCancelDialog(false);
-                    if (bundleCancelProduct === 'newsletter') {
-                      await handleCancelNewsletter(true, false);
-                    } else {
-                      await handleCancelTopSecret(true, false);
-                    }
-                    setBundleCancelLoading(false);
-                  }}
-                  disabled={bundleCancelLoading}
-                  className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
-                        <X className="w-5 h-5 text-red-400" />
+                  <div className="p-6 pt-2 space-y-3">
+                    {/* Option 1: Keep Top Secret Monthly */}
+                    <button
+                      onClick={() => {
+                        const redirectUrl = encodeURIComponent(`${window.location.origin}/app/settings?tab=billing&upgrade=top_secret_monthly_success`);
+                        window.location.href = `https://whop.com/checkout/plan_tUvQbCrEQ4197?email=${user?.email || ''}&redirect_url=${redirectUrl}`;
+                        setShowBundleCancelDialog(false);
+                        toast.info('Complete checkout to switch to Top Secret Monthly. Then cancel your Bundle.');
+                      }}
+                      disabled={bundleCancelLoading}
+                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
+                            <Flame className="w-5 h-5 text-red-400" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-medium text-white group-hover:text-red-300 transition-colors">
+                              Keep Top Secret Only
+                            </p>
+                            <p className="text-xs text-zinc-500">$89.99/month • Cancel War Zone</p>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
                       </div>
-                      <div className="text-left">
-                        <p className="font-medium text-white group-hover:text-red-300 transition-colors">
-                          Cancel Both Subscriptions
-                        </p>
-                        <p className="text-xs text-zinc-500">Access until end of billing period</p>
+                    </button>
+
+                    {/* Option 2: Keep War Zone Monthly */}
+                    <button
+                      onClick={() => {
+                        const redirectUrl = encodeURIComponent(`${window.location.origin}/app/settings?tab=billing&upgrade=newsletter_monthly_success`);
+                        window.location.href = `https://whop.com/checkout/plan_U6lF2eO5y9469?email=${user?.email || ''}&redirect_url=${redirectUrl}`;
+                        setShowBundleCancelDialog(false);
+                        toast.info('Complete checkout to switch to War Zone Monthly. Then cancel your Bundle.');
+                      }}
+                      disabled={bundleCancelLoading}
+                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-purple-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors">
+                            <Mail className="w-5 h-5 text-purple-400" />
+                          </div>
+                          <div className="text-left">
+                            <p className="font-medium text-white group-hover:text-purple-300 transition-colors">
+                              Keep War Zone Only
+                            </p>
+                            <p className="text-xs text-zinc-500">$69.99/month • Cancel Top Secret</p>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-purple-400 group-hover:translate-x-1 transition-all" />
                       </div>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-zinc-600 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
+                    </button>
+
+                    {/* Option 3: Cancel Everything */}
+                    <button
+                      onClick={async () => {
+                        setBundleCancelLoading(true);
+                        try {
+                          const { data: { session } } = await supabase.auth.getSession();
+                          if (!session?.access_token) throw new Error("Not authenticated");
+                          
+                          const response = await fetch(
+                            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+                            {
+                              method: "POST",
+                              headers: {
+                                "Authorization": `Bearer ${session.access_token}`,
+                                "Content-Type": "application/json",
+                              },
+                              body: JSON.stringify({
+                                action: "cancel",
+                                product: "bundle",
+                                reason: "User cancelled monthly bundle",
+                              }),
+                            }
+                          );
+                          const data = await response.json();
+                          if (data.success) {
+                            toast.success('Bundle cancelled. Access continues until period end.');
+                            refreshProfile();
+                          } else {
+                            toast.error(data.error || 'Failed to cancel');
+                          }
+                        } catch (error) {
+                          toast.error('Failed to cancel bundle');
+                        } finally {
+                          setBundleCancelLoading(false);
+                          setShowBundleCancelDialog(false);
+                          setBundleCancelStep('options');
+                        }
+                      }}
+                      disabled={bundleCancelLoading}
+                      className="w-full group p-4 rounded-xl border border-red-500/30 hover:border-red-500/50 bg-red-500/5 hover:bg-red-500/10 transition-all duration-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center group-hover:bg-red-500/30 transition-colors">
+                            {bundleCancelLoading ? (
+                              <Loader2 className="w-5 h-5 text-red-400 animate-spin" />
+                            ) : (
+                              <X className="w-5 h-5 text-red-400" />
+                            )}
+                          </div>
+                          <div className="text-left">
+                            <p className="font-medium text-red-300 group-hover:text-red-200 transition-colors">
+                              Cancel Everything
+                            </p>
+                            <p className="text-xs text-red-400/70">End all subscriptions at period end</p>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-red-500/50 group-hover:text-red-400 group-hover:translate-x-1 transition-all" />
+                      </div>
+                    </button>
+
+                    {/* Keep Bundle Button */}
+                    <button
+                      onClick={() => setShowBundleCancelDialog(false)}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-medium transition-all duration-200 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Never Mind, Keep My Bundle
+                    </button>
                   </div>
-                </button>
-                
-                <button
-                  onClick={() => setShowBundleCancelDialog(false)}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Never Mind, Keep Both
-                </button>
-              </div>
+                </>
+              )}
             </>
           )}
         </DialogContent>

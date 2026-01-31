@@ -32,7 +32,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ============================================
 
 const WHOP_API_KEY = Deno.env.get("WHOP_API_KEY") || "";
-const WHOP_API_URL = "https://api.whop.com/api/v1";
+const WHOP_API_URL = "https://api.whop.com";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
@@ -107,10 +107,10 @@ async function cancelWhopMembership(
 
     console.log(`🔄 Pausing Whop membership ${membershipId} (using Pause instead of Cancel for reversibility)`);
 
-    // 🔥 v3.3.0: Use Cancel API with at_period_end mode
-    // Whop now supports Uncancel API, so Cancel is reversible!
+    // 🔥 v3.4.0: Use new Whop Docs API (not v2!)
+    // Cancel with at_period_end mode - reversible via Uncancel
     // API: POST /memberships/{id}/cancel with cancellation_mode: "at_period_end"
-    const response = await fetch(`https://api.whop.com/api/v2/memberships/${membershipId}/cancel`, {
+    const response = await fetch(`https://api.whop.com/memberships/${membershipId}/cancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
@@ -156,12 +156,12 @@ async function reactivateWhopMembership(
       return { success: true, skipWhop: true };
     }
 
-    console.log(`🔄 Resuming Whop membership ${membershipId}`);
+    console.log(`🔄 Uncanceling Whop membership ${membershipId}`);
 
-    // 🔥 v3.3.0: Use UNCANCEL API - Whop now supports this!
+    // 🔥 v3.4.0: Use new Whop Docs API (not v2!)
     // Uncancel removes cancel_at_period_end flag
-    // API: POST /memberships/{id}/uncancel
-    const response = await fetch(`https://api.whop.com/api/v2/memberships/${membershipId}/uncancel`, {
+    // API: POST /memberships/{id}/uncancel (new docs.whop.com API)
+    const response = await fetch(`https://api.whop.com/memberships/${membershipId}/uncancel`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${WHOP_API_KEY}`,
@@ -171,20 +171,41 @@ async function reactivateWhopMembership(
 
     if (response.ok) {
       const result = await response.json();
-      console.log(`✅ Whop Resume API succeeded:`, result);
-      console.log(`   payment_collection_paused: ${result.payment_collection_paused}`);
+      console.log(`✅ Whop Uncancel API succeeded:`, result);
+      console.log(`   cancel_at_period_end: ${result.cancel_at_period_end}`);
       return { success: true, skipWhop: false, data: result };
     } else {
       const errorText = await response.text();
-      console.error(`❌ Whop Resume API error: ${response.status} - ${errorText}`);
+      console.error(`❌ Whop Uncancel API error: ${response.status} - ${errorText}`);
       
-      // If 401 (unauthorized) or 404 (not found), continue with DB-only update
+      // 🔥 v3.4.0: Try Resume API as fallback (for paused memberships)
+      if (response.status === 401 || response.status === 422) {
+        console.log(`🔄 Trying Resume API as fallback...`);
+        const resumeResponse = await fetch(`https://api.whop.com/memberships/${membershipId}/resume`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${WHOP_API_KEY}`,
+            "Content-Type": "application/json"
+          }
+        });
+        
+        if (resumeResponse.ok) {
+          const resumeResult = await resumeResponse.json();
+          console.log(`✅ Whop Resume API succeeded:`, resumeResult);
+          return { success: true, skipWhop: false, data: resumeResult };
+        }
+        
+        const resumeError = await resumeResponse.text();
+        console.error(`❌ Whop Resume API also failed: ${resumeResponse.status} - ${resumeError}`);
+      }
+      
+      // If all APIs fail, continue with DB-only update
       if (response.status === 401 || response.status === 404) {
         console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
         return { success: true, skipWhop: true };
       }
       
-      return { success: false, error: `Whop Resume API error: ${response.status} - ${errorText}` };
+      return { success: false, error: `Whop Uncancel API error: ${response.status} - ${errorText}` };
     }
 
   } catch (error) {
