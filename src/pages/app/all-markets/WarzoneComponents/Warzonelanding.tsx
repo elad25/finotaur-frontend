@@ -1189,21 +1189,19 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
     }
   }, [searchParams, refreshWarZone]);
 
-  // Subscribe handler
+  // Subscribe handler - Always show disclaimer popup (handles all cases internally)
   const handleSubscribeClick = useCallback(() => {
     if (!user) {
       setShowLoginPopup(true);
       return;
     }
     
-    // 🔥 If Top Secret member and monthly, show Bundle popup
-    if (isTopSecretMember && billingInterval === 'monthly') {
-      setShowBundlePopup(true);
-      return;
-    }
-    
+    // Show the plan selection popup - it handles:
+    // 1. Regular users: Shows both WAR ZONE + Bundle side by side
+    // 2. Top Secret members: Shows Bundle-only upgrade offer
+    // 3. Yearly billing: Shows single WAR ZONE option
     setShowDisclaimer(true);
-  }, [user, isTopSecretMember, billingInterval]);
+  }, [user]);
 
 // 🔥 Handler for Bundle checkout from popup
   const handleBundleCheckout = useCallback(async () => {
@@ -1581,6 +1579,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
           isProcessing={isProcessing}
           billingInterval={billingInterval}
           isTopSecretMember={isTopSecretMember}
+          onSelectBundle={handleBundleCheckout}
         />
       </Suspense>
 

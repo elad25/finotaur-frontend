@@ -118,7 +118,7 @@ export default function TopSecretPage() {
       if (error) throw error;
 
       const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
-      const isActive = profile?.top_secret_status === 'active' && profile?.top_secret_enabled === true;
+      const isActive = ['active', 'trial', 'trialing'].includes(profile?.top_secret_status || '') && profile?.top_secret_enabled === true;
       const expiresAt = profile?.top_secret_expires_at ? new Date(profile.top_secret_expires_at) : null;
       const isExpired = expiresAt && expiresAt < new Date();
 
