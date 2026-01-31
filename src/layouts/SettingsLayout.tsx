@@ -558,6 +558,7 @@ const BillingTab = () => {
   // 🔥 NEW: Separate loading states for reactivation
   const [reactivatingNewsletter, setReactivatingNewsletter] = useState(false);
   const [reactivatingTopSecret, setReactivatingTopSecret] = useState(false);
+  const [reactivatingBundle, setReactivatingBundle] = useState(false);
   // 🔥 NEW: Upgrade states
   const [upgradingNewsletter, setUpgradingNewsletter] = useState(false);
   const [upgradingTopSecret, setUpgradingTopSecret] = useState(false);
@@ -1986,12 +1987,16 @@ const BillingTab = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={reactivatingBundle}
                         onClick={async () => {
-                          // Reactivate bundle - similar to newsletter reactivation
-                          const { data: { session } } = await supabase.auth.getSession();
-                          if (!session?.access_token) return;
-                          
+                          setReactivatingBundle(true);
                           try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            if (!session?.access_token) {
+                              toast.error('Please log in to reactivate');
+                              return;
+                            }
+                          
                             const response = await fetch(
                               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
                               {
@@ -2008,18 +2013,24 @@ const BillingTab = () => {
                             );
                             const data = await response.json();
                             if (data.success) {
-                              toast.success('Bundle subscription reactivated');
-                              refreshProfile();
+                              toast.success('Bundle subscription reactivated!');
+                              await refreshProfile();
                             } else {
                               toast.error(data.error || 'Failed to reactivate');
                             }
                           } catch (error) {
                             toast.error('Failed to reactivate bundle');
+                          } finally {
+                            setReactivatingBundle(false);
                           }
                         }}
                         className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
                       >
-                        Reactivate Bundle
+                        {reactivatingBundle ? (
+                          <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Reactivating...</>
+                        ) : (
+                          <>Reactivate Bundle</>
+                        )}
                       </Button>
                     ) : (
                       <Button
@@ -2380,7 +2391,7 @@ const BillingTab = () => {
       }}>
         <DialogContent className={cn(
           "p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden",
-          profile?.bundle_interval === 'yearly' ? "sm:max-w-lg" : "sm:max-w-md"
+          profile?.bundle_interval === 'yearly' ? "sm:max-w-[420px]" : "sm:max-w-md"
         )}>
           {/* ═══════════════════════════════════════════════ */}
           {/* 🔥 YEARLY BUNDLE CANCELLATION */}
@@ -2621,101 +2632,83 @@ const BillingTab = () => {
               {/* ═══ STEP 2: Retention Offer (after clicking Cancel Everything) ═══ */}
               {bundleCancelStep === 'retention_offer' && (
                 <>
-                  {/* Premium Header with Gold/Amber Theme */}
-                  <div className="relative px-6 pt-8 pb-6 overflow-hidden">
+                  {/* Premium Header with Gold/Amber Theme - Compact */}
+                  <div className="relative px-5 pt-5 pb-4 overflow-hidden">
                     {/* Luxurious gradient background */}
                     <div className="absolute inset-0 bg-gradient-to-br from-amber-950/60 via-yellow-950/40 to-zinc-900" />
                     
-                    {/* Animated gradient orbs */}
-                    <div className="absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br from-amber-400/30 via-yellow-500/20 to-transparent rounded-full blur-3xl animate-pulse" />
-                    <div className="absolute -top-20 -left-20 w-48 h-48 bg-gradient-to-br from-yellow-400/25 via-amber-500/15 to-transparent rounded-full blur-3xl" />
-                    <div className="absolute bottom-0 right-0 w-40 h-40 bg-gradient-to-tl from-amber-500/20 to-transparent rounded-full blur-2xl" />
+                    {/* Animated gradient orbs - smaller */}
+                    <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-amber-400/25 via-yellow-500/15 to-transparent rounded-full blur-3xl animate-pulse" />
+                    <div className="absolute -top-12 -left-12 w-32 h-32 bg-gradient-to-br from-yellow-400/20 via-amber-500/10 to-transparent rounded-full blur-3xl" />
                     
                     {/* Top accent line - golden */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500/50 via-yellow-400 to-amber-500/50" />
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-amber-500/50 via-yellow-400 to-amber-500/50" />
                     
-                    {/* Sparkle effects */}
-                    <div className="absolute top-4 right-8 w-2 h-2 bg-yellow-400 rounded-full animate-ping opacity-60" />
-                    <div className="absolute top-12 right-16 w-1.5 h-1.5 bg-amber-300 rounded-full animate-ping opacity-40 animation-delay-300" />
-                    
-                    <div className="relative">
-                      {/* Premium icon with golden glow */}
-                      <div className="relative w-16 h-16 mb-5">
-                        <div className="absolute inset-0 bg-gradient-to-br from-amber-400/50 to-yellow-500/50 rounded-2xl blur-xl animate-pulse" />
-                        <div className="relative w-full h-full rounded-2xl bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 flex items-center justify-center shadow-2xl shadow-amber-500/40">
-                          <Sparkles className="w-8 h-8 text-black" />
+                    <div className="relative flex items-center gap-4">
+                      {/* Premium icon with golden glow - smaller */}
+                      <div className="relative w-11 h-11 shrink-0">
+                        <div className="absolute inset-0 bg-gradient-to-br from-amber-400/40 to-yellow-500/40 rounded-xl blur-lg" />
+                        <div className="relative w-full h-full rounded-xl bg-gradient-to-br from-amber-400 via-yellow-400 to-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                          <Sparkles className="w-5 h-5 text-black" />
                         </div>
                       </div>
                       
-                      <DialogTitle className="text-2xl font-bold text-white mb-2">
-                        Wait! We Have a <span className="bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-300 bg-clip-text text-transparent">Special Offer</span>
-                      </DialogTitle>
-                      <DialogDescription className="text-amber-100/70 text-sm">
-                        Before you go, we'd like to offer you an exclusive discount
-                      </DialogDescription>
+                      <div>
+                        <DialogTitle className="text-lg font-bold text-white">
+                          Wait — <span className="bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-300 bg-clip-text text-transparent">Special Offer</span>
+                        </DialogTitle>
+                        <DialogDescription className="text-amber-100/60 text-xs">
+                          An exclusive discount, just for you
+                        </DialogDescription>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Offer Content */}
-                  <div className="px-6 pb-6 space-y-4">
+                  {/* Offer Content - Compact */}
+                  <div className="px-5 pb-5 space-y-3">
                     {/* Premium Offer Card */}
-                    <div className="relative p-6 rounded-2xl overflow-hidden">
+                    <div className="relative p-4 rounded-xl overflow-hidden">
                       {/* Card background with gradient */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 via-yellow-500/15 to-amber-600/10" />
-                      <div className="absolute inset-0 border-2 border-amber-400/50 rounded-2xl" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-amber-500/15 via-yellow-500/10 to-amber-600/5" />
+                      <div className="absolute inset-0 border border-amber-400/40 rounded-xl" />
                       
                       {/* Shine effect on card */}
                       <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent" />
                       
                       {/* Exclusive offer badge */}
-                      <div className="absolute -top-0.5 left-6">
-                        <div className="relative">
-                          <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-yellow-400 blur-sm" />
-                          <span className="relative px-4 py-1.5 rounded-b-lg text-xs font-bold bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 text-black shadow-lg flex items-center gap-1.5">
-                            <Crown className="w-3.5 h-3.5" />
-                            EXCLUSIVE OFFER
-                          </span>
-                        </div>
+                      <div className="absolute -top-0.5 left-4">
+                        <span className="px-2.5 py-1 rounded-b-md text-[10px] font-bold bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 text-black shadow-md flex items-center gap-1">
+                          <Crown className="w-3 h-3" />
+                          EXCLUSIVE OFFER
+                        </span>
                       </div>
                       
-                      <div className="relative pt-6">
-                        {/* Title */}
-                        <h4 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/30 to-yellow-500/30 border border-amber-400/50 flex items-center justify-center">
-                            <Crown className="w-5 h-5 text-amber-300" />
+                      <div className="relative pt-5">
+                        {/* Price Display - Compact */}
+                        <div className="mb-3 p-3 rounded-lg bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-zinc-700/50">
+                          <p className="text-xs text-zinc-400 mb-1.5">Your new yearly price:</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 bg-clip-text text-transparent">$926.50</span>
+                            <span className="text-zinc-500 line-through text-sm">$1,090</span>
+                            <span className="text-xs text-zinc-500">/year</span>
                           </div>
-                          Stay & Save 15%
-                        </h4>
-                        
-                        {/* Price Display */}
-                        <div className="mb-5 p-4 rounded-xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-zinc-700/50">
-                          <p className="text-sm text-zinc-400 mb-2">Your new yearly price:</p>
-                          <div className="flex items-baseline gap-3">
-                            <span className="text-4xl font-bold bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 bg-clip-text text-transparent">$926.50</span>
-                            <span className="text-zinc-500 line-through text-lg">$1,090</span>
-                            <span className="text-sm text-zinc-500">/year</span>
-                          </div>
-                          <div className="mt-2 flex items-center gap-2">
-                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
-                              Save $163.50
-                            </Badge>
-                          </div>
+                          <Badge className="mt-1.5 bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+                            Save $163.50
+                          </Badge>
                         </div>
 
-                        {/* Coupon Code Display */}
-                        <div className="mb-5 p-4 rounded-xl bg-gradient-to-br from-amber-500/10 to-yellow-500/5 border-2 border-dashed border-amber-400/40">
-                          <p className="text-xs text-amber-300/70 mb-2 uppercase tracking-wide font-medium">Use this coupon code:</p>
+                        {/* Coupon Code Display - Compact */}
+                        <div className="mb-3 p-3 rounded-lg bg-gradient-to-br from-amber-500/10 to-yellow-500/5 border border-dashed border-amber-400/30">
+                          <p className="text-[10px] text-amber-300/60 mb-1.5 uppercase tracking-wide font-medium">Coupon code:</p>
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-amber-400/20 flex items-center justify-center">
-                                <Sparkles className="w-4 h-4 text-amber-400" />
-                              </div>
-                              <span className="text-2xl font-mono font-bold bg-gradient-to-r from-amber-300 to-yellow-300 bg-clip-text text-transparent tracking-widest">FINOTAUR15</span>
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                              <span className="text-lg font-mono font-bold bg-gradient-to-r from-amber-300 to-yellow-300 bg-clip-text text-transparent tracking-wider">FINOTAUR15</span>
                             </div>
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-amber-400/50 text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 hover:border-amber-400"
+                              className="h-7 px-2 text-xs border-amber-400/40 text-amber-300 hover:text-amber-200 hover:bg-amber-500/10"
                               onClick={() => {
                                 navigator.clipboard.writeText('FINOTAUR15');
                                 toast.success('Coupon code copied!');
@@ -2726,7 +2719,7 @@ const BillingTab = () => {
                           </div>
                         </div>
 
-                        {/* Apply Discount Button - Premium Gold */}
+                        {/* Apply Discount Button - Compact */}
                         <button
                           onClick={() => {
                             setBundleCancelLoading(true);
@@ -2736,23 +2729,17 @@ const BillingTab = () => {
                             setBundleCancelStep('options');
                           }}
                           disabled={bundleCancelLoading}
-                          className="w-full relative py-4 px-6 rounded-xl overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full relative py-2.5 px-4 rounded-lg overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {/* Animated gradient background */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 bg-[length:200%_100%] group-hover:animate-shimmer" />
+                          <div className="absolute inset-0 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
                           
-                          {/* Shine effect */}
-                          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                          </div>
-                          
-                          <div className="relative flex items-center justify-center gap-2 font-bold text-black text-lg">
+                          <div className="relative flex items-center justify-center gap-2 font-bold text-black text-sm">
                             {bundleCancelLoading ? (
-                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <>
-                                <Sparkles className="w-5 h-5" />
+                                <Sparkles className="w-4 h-4" />
                                 Apply 15% Discount & Stay
                               </>
                             )}
@@ -2762,12 +2749,12 @@ const BillingTab = () => {
                     </div>
 
                     {/* Divider */}
-                    <div className="relative py-2">
+                    <div className="relative py-1">
                       <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-zinc-700/50"></div>
                       </div>
                       <div className="relative flex justify-center">
-                        <span className="px-4 text-xs text-zinc-500 bg-zinc-900">or</span>
+                        <span className="px-3 text-[10px] text-zinc-500 bg-zinc-900">or</span>
                       </div>
                     </div>
 
@@ -2810,10 +2797,10 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full py-3.5 px-4 rounded-xl border border-zinc-700/50 hover:border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-300 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full py-2.5 px-3 rounded-lg border border-zinc-700/50 hover:border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-300 transition-all text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {bundleCancelLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" />
                       ) : (
                         "No thanks, cancel my subscription"
                       )}
@@ -2823,9 +2810,9 @@ const BillingTab = () => {
                     <button
                       onClick={() => setBundleCancelStep('options')}
                       disabled={bundleCancelLoading}
-                      className="w-full py-2 text-zinc-500 hover:text-amber-400 text-xs transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full py-1.5 text-zinc-500 hover:text-amber-400 text-[11px] transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <ArrowRight className="w-3 h-3 rotate-180" />
+                      <ArrowRight className="w-2.5 h-2.5 rotate-180" />
                       Back to options
                     </button>
                   </div>
