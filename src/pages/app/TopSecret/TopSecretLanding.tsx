@@ -574,17 +574,17 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             {/* Price Comparison */}
             <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">War Zone Newsletter</span>
-                <span className="text-slate-500 line-through">$69.99</span>
+                <span className="text-slate-400">War Zone Newsletter</span>
+                <span className="text-slate-300 line-through">$69.99</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Top Secret Reports</span>
-                <span className="text-slate-500 line-through">$89.99</span>
+                <span className="text-slate-400">Top Secret Reports</span>
+                <span className="text-slate-300 line-through">$89.99</span>
               </div>
               <div className="border-t border-slate-700 my-2" />
               <div className="flex justify-between">
-                <span className="text-slate-400">Separately:</span>
-                <span className="text-slate-500 line-through">$159.98/mo</span>
+                <span className="text-slate-300">Separately:</span>
+                <span className="text-slate-200 line-through">$159.98/mo</span>
               </div>
             </div>
 
@@ -804,8 +804,8 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             {/* Price Comparison */}
             <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Monthly Bundle × 12</span>
-                <span className="text-slate-500 line-through">$1,308</span>
+                <span className="text-slate-400">Monthly Bundle × 12</span>
+                <span className="text-slate-200 line-through">$1,308</span>
               </div>
             </div>
 
