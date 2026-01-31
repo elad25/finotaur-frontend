@@ -1677,7 +1677,7 @@ if (isTopSecretPayment) {
             console.log("🗑️ Cancelling paused Top Secret subscription:", profile.top_secret_whop_membership_id);
             try {
               await fetch(
-                `https://api.whop.com/api/v5/memberships/${profile.top_secret_whop_membership_id}/cancel`,
+                `https://api.whop.com/api/v1/memberships/${profile.top_secret_whop_membership_id}/cancel`,
                 {
                   method: 'POST',
                   headers: {
@@ -1698,7 +1698,7 @@ if (isTopSecretPayment) {
             console.log("🗑️ Cancelling paused Newsletter subscription:", profile.newsletter_whop_membership_id);
             try {
               await fetch(
-                `https://api.whop.com/api/v5/memberships/${profile.newsletter_whop_membership_id}/cancel`,
+                `https://api.whop.com/api/v1/memberships/${profile.newsletter_whop_membership_id}/cancel`,
                 {
                   method: 'POST',
                   headers: {
@@ -1963,12 +1963,26 @@ async function handleMembershipActivated(
       .single();
     
     if (userProfile) {
+      console.log("🔍 Checking for existing subscriptions to pause:", {
+        top_secret_whop_membership_id: userProfile.top_secret_whop_membership_id,
+        top_secret_enabled: userProfile.top_secret_enabled,
+        newsletter_whop_membership_id: userProfile.newsletter_whop_membership_id,
+        newsletter_enabled: userProfile.newsletter_enabled,
+        bundle_membership_id: membershipId,
+      });
+      
       const hasExistingTopSecret = userProfile.top_secret_whop_membership_id && 
                                     userProfile.top_secret_whop_membership_id !== membershipId &&
                                     userProfile.top_secret_enabled;
       const hasExistingNewsletter = userProfile.newsletter_whop_membership_id && 
                                      userProfile.newsletter_whop_membership_id !== membershipId &&
                                      userProfile.newsletter_enabled;
+      
+      console.log("🔍 Subscription check results:", {
+        hasExistingTopSecret,
+        hasExistingNewsletter,
+        billingInterval,
+      });
       
       if (billingInterval === 'yearly') {
         // 🔥 YEARLY BUNDLE: Cancel all existing subscriptions IMMEDIATELY (no trial)
@@ -2041,7 +2055,7 @@ async function handleMembershipActivated(
           console.log("⏸️ Pausing existing Top Secret subscription:", userProfile.top_secret_whop_membership_id);
           try {
             const pauseResponse = await fetch(
-              `https://api.whop.com/api/v5/memberships/${userProfile.top_secret_whop_membership_id}/pause`,
+              `https://api.whop.com/api/v1/memberships/${userProfile.top_secret_whop_membership_id}/pause`,
               {
                 method: 'POST',
                 headers: {
@@ -2068,7 +2082,7 @@ async function handleMembershipActivated(
           console.log("⏸️ Pausing existing Newsletter subscription:", userProfile.newsletter_whop_membership_id);
           try {
             const pauseResponse = await fetch(
-              `https://api.whop.com/api/v5/memberships/${userProfile.newsletter_whop_membership_id}/pause`,
+              `https://api.whop.com/api/v1/memberships/${userProfile.newsletter_whop_membership_id}/pause`,
               {
                 method: 'POST',
                 headers: {
@@ -2950,7 +2964,7 @@ async function handleMembershipDeactivated(
           console.log("▶️ Resuming paused Top Secret subscription:", profile.top_secret_whop_membership_id);
           try {
             const resumeResponse = await fetch(
-              `https://api.whop.com/api/v5/memberships/${profile.top_secret_whop_membership_id}/resume`,
+              `https://api.whop.com/api/v1/memberships/${profile.top_secret_whop_membership_id}/resume`,
               {
                 method: 'POST',
                 headers: {
@@ -2981,7 +2995,7 @@ async function handleMembershipDeactivated(
           console.log("▶️ Resuming paused Newsletter subscription:", profile.newsletter_whop_membership_id);
           try {
             const resumeResponse = await fetch(
-              `https://api.whop.com/api/v5/memberships/${profile.newsletter_whop_membership_id}/resume`,
+              `https://api.whop.com/api/v1/memberships/${profile.newsletter_whop_membership_id}/resume`,
               {
                 method: 'POST',
                 headers: {

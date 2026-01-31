@@ -113,7 +113,7 @@ interface WhopCheckoutResponse {
   // 🔥 v5.0.0: Bundle - War Zone + Top Secret
   // ═══════════════════════════════════════════
   'plan_ICooR8aqtdXad': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Monthly ($109)
-  'plan_M2zS1EoNXJF10': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Yearly ($1090)
+  'plan_M2zS1EoNXJF10': '/app/settings?tab=billing&upgrade=bundle_yearly_success',  // Bundle Yearly ($1090) - upgrade redirect
 };
 
 // ============================================

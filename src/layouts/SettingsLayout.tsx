@@ -1935,9 +1935,44 @@ const BillingTab = () => {
                   <div className="space-y-3">
                     {profile?.bundle_interval === 'monthly' && !profile?.bundle_cancel_at_period_end && (
                       <Button
-                        onClick={() => {
-                          // Create checkout for yearly bundle
-                          window.open(`https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}`, '_blank');
+                        onClick={async () => {
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            
+                            if (!session?.access_token) {
+                              toast.error("Please log in to upgrade");
+                              return;
+                            }
+
+                            const response = await fetch(
+                              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-whop-checkout`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Authorization": `Bearer ${session.access_token}`,
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                  plan_id: 'plan_M2zS1EoNXJF10', // Bundle Yearly plan
+                                  subscription_category: 'bundle',
+                                  email: user?.email,
+                                  user_id: user?.id,
+                                  redirect_url: `${window.location.origin}/app/settings?tab=billing&upgrade=bundle_yearly_success`,
+                                }),
+                              }
+                            );
+
+                            const data = await response.json();
+                            
+                            if (!response.ok || !data.checkout_url) {
+                              throw new Error(data.error || "Failed to create checkout session");
+                            }
+
+                            window.location.href = data.checkout_url;
+                          } catch (error) {
+                            console.error('Error upgrading Bundle:', error);
+                            toast.error(error instanceof Error ? error.message : 'Failed to start upgrade');
+                          }
                         }}
                         size="sm"
                         className="w-full bg-gradient-to-r from-yellow-600 to-amber-500 hover:from-yellow-500 hover:to-amber-400 text-black font-semibold shadow-lg shadow-yellow-900/30"
