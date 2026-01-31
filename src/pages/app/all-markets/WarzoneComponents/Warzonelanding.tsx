@@ -603,10 +603,212 @@ const FAQSection = memo(function FAQSection() {
 const PricingSection = memo(function PricingSection({
   onSubscribe,
   setBillingInterval,
+  isTopSecretMember = false,
+  onBundleSubscribe,
 }: {
   onSubscribe: () => void;
   setBillingInterval: (interval: BillingInterval) => void;
+  isTopSecretMember?: boolean;
+  onBundleSubscribe?: () => void;
 }) {
+  // 🔥 If Top Secret member - show BUNDLE ONLY pricing
+  if (isTopSecretMember && onBundleSubscribe) {
+    return (
+      <section className="py-24 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent"/>
+        
+        {/* Enhanced Gold Orbs */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-[#C9A646]/[0.12] rounded-full blur-[150px]"/>
+        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.10] rounded-full blur-[100px]"/>
+        
+        <div className="max-w-6xl mx-auto relative z-10">
+          <div className="text-center mb-8">
+            {/* Special Badge for Top Secret Members */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
+                 style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
+              <Sparkles className="w-4 h-4 text-[#C9A646]" />
+              <span className="text-[#C9A646] text-sm font-semibold">Exclusive Offer for Top Secret Members</span>
+            </div>
+            
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
+              <span className="text-white heading-serif block">Add War Zone to Your Arsenal</span>
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Get the Ultimate Bundle</span>
+            </h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              As a Top Secret member, get War Zone + Top Secret together and save $50.98/month
+            </p>
+          </div>
+
+          {/* Bundle Cards */}
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {/* Monthly Bundle Card */}
+            <div
+              className="rounded-2xl relative overflow-hidden"
+              style={{ 
+                background: 'linear-gradient(180deg, rgba(30,28,24,0.95) 0%, rgba(20,18,14,0.98) 100%)', 
+                border: '2px solid rgba(201,166,70,0.4)', 
+                boxShadow: '0 0 40px rgba(201,166,70,0.15), 0 8px 40px rgba(0,0,0,0.5)' 
+              }}
+            >
+              <div className="absolute top-5 left-5">
+                <span 
+                  className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider"
+                  style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}
+                >
+                  BUNDLE MONTHLY
+                </span>
+              </div>
+              
+              <div className="absolute top-5 right-5">
+                <span className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider bg-green-500 text-white shadow-lg shadow-green-500/30">
+                  7-DAY TRIAL
+                </span>
+              </div>
+              
+              <div className="p-6 pt-16">
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-slate-500 line-through text-sm">$159.98</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-6xl font-bold text-white">$109</span>
+                    <span className="text-slate-400 text-lg">/month</span>
+                  </div>
+                  <p className="text-emerald-400 font-bold text-sm mt-2">Save $50.98/month!</p>
+                </div>
+                
+                <button 
+                  onClick={onBundleSubscribe} 
+                  className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                  style={{ 
+                    background: 'linear-gradient(135deg, #C9A646, #D4AF37, #F4D97B, #D4AF37, #C9A646)', 
+                    color: '#000', 
+                    boxShadow: '0 4px 25px rgba(201,166,70,0.5)' 
+                  }}
+                >
+                  <Crown className="w-5 h-5" />
+                  GET BUNDLE — START FREE TRIAL
+                </button>
+                <p className="text-slate-500 text-sm text-center mb-6">7-day free trial. Cancel anytime.</p>
+                
+                <div className="space-y-3 border-t border-white/10 pt-5">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">War Zone Daily Intelligence</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">Top Secret Reports (10/month)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-400 flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">Private Discord + Trading Room</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Yearly Bundle Card - BEST VALUE */}
+            <div
+              className="rounded-2xl relative overflow-hidden"
+              style={{ 
+                background: 'linear-gradient(180deg, rgba(35,30,22,0.98) 0%, rgba(22,18,12,0.99) 100%)', 
+                border: '2px solid rgba(201,166,70,0.5)', 
+                boxShadow: '0 0 40px rgba(201,166,70,0.15), 0 8px 40px rgba(0,0,0,0.5)' 
+              }}
+            >
+              <div 
+                className="absolute top-0 left-0 right-0 h-1"
+                style={{ background: 'linear-gradient(90deg, transparent, #C9A646, transparent)' }}
+              />
+              
+              <div className="absolute top-5 left-5">
+                <span 
+                  className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider"
+                  style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}
+                >
+                  BUNDLE YEARLY
+                </span>
+              </div>
+              
+              <div className="absolute top-5 right-5">
+                <span className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider bg-green-500 text-white shadow-lg shadow-green-500/30">
+                  🔥 BEST VALUE
+                </span>
+              </div>
+              
+              <div className="p-6 pt-16">
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-slate-500 line-through text-sm">$1,308/year</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-6xl font-bold text-white">$1,090</span>
+                    <span className="text-slate-400 text-lg">/year</span>
+                  </div>
+                  <p className="text-emerald-400 font-bold text-sm mt-2">Save $218/year! (~$90.83/mo)</p>
+                </div>
+                
+                <div className="bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-xl p-3 mb-5">
+                  <p className="text-[#C9A646] text-sm font-medium text-center">⚡ Lock in this price before it increases</p>
+                </div>
+                
+                <button 
+                  onClick={() => { setBillingInterval('yearly'); onBundleSubscribe?.(); }} 
+                  className="w-full py-5 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                  style={{ 
+                    background: 'linear-gradient(135deg, #C9A646, #D4AF37, #F4D97B, #D4AF37, #C9A646)', 
+                    color: '#000', 
+                    boxShadow: '0 4px 25px rgba(201,166,70,0.5)' 
+                  }}
+                >
+                  <Crown className="w-5 h-5" />
+                  GET YEARLY BUNDLE
+                </button>
+                <p className="text-slate-500 text-sm text-center mb-6">Locked price. Cancel anytime.</p>
+                
+                <div className="space-y-3 border-t border-white/10 pt-5">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">Everything in Monthly Bundle</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">Price Locked Forever</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                    <span className="text-slate-300 text-sm">Founding Member Status</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Trust Badges */}
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-8 text-slate-400">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-[#C9A646]"/>
+              <span className="text-sm">Secure payment</span>
+            </div>
+            <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block"/>
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-green-400"/>
+              <span className="text-sm">7-Day Free Trial</span>
+            </div>
+            <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block"/>
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-[#C9A646]"/>
+              <span className="text-sm">Cancel anytime</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // 🔥 Regular users - show standard War Zone pricing
   return (
     <section className="py-24 px-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
@@ -1044,11 +1246,15 @@ const LandingView = memo(function LandingView({
   billingInterval,
   setBillingInterval,
   isProcessing,
+  isTopSecretMember = false,
+  onBundleSubscribe,
 }: {
   onSubscribe: () => void;
   billingInterval: BillingInterval;
   setBillingInterval: (interval: BillingInterval) => void;
   isProcessing: boolean;
+  isTopSecretMember?: boolean;
+  onBundleSubscribe?: () => void;
 }) {
   return (
     <div className="min-h-screen bg-[#0a0806] overflow-hidden relative">
@@ -1104,6 +1310,8 @@ const LandingView = memo(function LandingView({
       <PricingSection 
         onSubscribe={onSubscribe}
         setBillingInterval={setBillingInterval}
+        isTopSecretMember={isTopSecretMember}
+        onBundleSubscribe={onBundleSubscribe}
       />
 
       {/* FOOTER */}
@@ -1606,6 +1814,8 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
         billingInterval={billingInterval}
         setBillingInterval={setBillingInterval}
         isProcessing={isProcessing}
+        isTopSecretMember={isTopSecretMember}
+        onBundleSubscribe={handleBundleCheckout}
       />
 
       {/* Modals */}

@@ -1751,8 +1751,8 @@ const BillingTab = () => {
       )}
 
       {/* 🔥 BUNDLE CARD - War Zone + Top Secret Combined */}
-      {/* Show Bundle card if: user has bundle OR doesn't have both products separately */}
-      {(profile?.bundle_enabled || (!newsletterIsActive && !topSecretIsActive)) && (
+      {/* Show Bundle card ALWAYS - whether user has bundle, one product, or neither */}
+      {(profile?.bundle_enabled || !profile?.bundle_enabled) && (
         <Card className={cn(
           "p-6 relative overflow-hidden shadow-xl border-2",
           profile?.bundle_enabled && profile?.bundle_interval === 'yearly'
