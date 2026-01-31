@@ -1230,8 +1230,8 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
       
-      // Bundle plan ID - $97/month
-      const bundlePlanId = 'plan_ICooR8aqtdXad';
+// Bundle plan ID - $109/month with 7-day trial
+const bundlePlanId = 'plan_ICooR8aqtdXad';
       
       // Try Edge Function first
       if (accessToken) {
