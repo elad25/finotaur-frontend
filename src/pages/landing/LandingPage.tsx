@@ -299,7 +299,14 @@ const WarZoneLandingPage = () => {
                 maskComposite: 'intersect',
                 WebkitMaskComposite: 'source-in'
               }}>
-                <img src={BullWarZone} alt="War Zone Bull" className="w-[550px] xl:w-[600px] 2xl:w-[650px] h-auto" style={{ mixBlendMode: 'lighten' }}/>
+                <img 
+  src={BullWarZone} 
+  alt="War Zone Bull" 
+  className="w-[550px] xl:w-[600px] 2xl:w-[650px] h-auto pointer-events-none select-none" 
+  style={{ mixBlendMode: 'lighten' }}
+  draggable={false}
+  onContextMenu={(e) => e.preventDefault()}
+/>
               </div>
             </motion.div>
           </div>
