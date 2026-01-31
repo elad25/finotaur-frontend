@@ -26,6 +26,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cancelMembership as centralCancelMembership, uncancelMembership, resumeMembership as centralResumeMembership, getMembership } from "../_shared/whop-api.ts";
 
 // ============================================
 // CONFIGURATION
@@ -119,70 +120,26 @@ async function cancelWhopMembership(
   mode: "at_period_end" | "immediate" = "at_period_end"
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string; skipWhop?: boolean }> {
   try {
-    // 🔥 v3.2.0: Check if API key exists before calling Whop
-    if (!WHOP_API_KEY) {
-      console.warn(`⚠️ WHOP_API_KEY not configured - skipping Whop API call`);
-      return { success: true, skipWhop: true };
-    }
-
-    // 🔥 v4.3.0: Use PAUSE for regular cancellations, CANCEL only for immediate
-    if (mode === "immediate") {
-      console.log(`🗑️ Cancelling Whop membership ${membershipId} immediately`);
-      const response = await fetch(`https://api.whop.com/memberships/${membershipId}/cancel`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHOP_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ cancellation_mode: "immediate" }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ Whop Cancel API error: ${response.status} - ${errorText}`);
-        if (response.status === 401 || response.status === 404) {
-          console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
-          return { success: true, skipWhop: true };
-        }
-        return { success: false, error: `Whop API error: ${response.status}` };
-      }
-
-      const data = await response.json();
-      console.log(`✅ Whop membership cancelled immediately:`, data);
-      return { success: true, data };
-    }
-
-    // PAUSE for at_period_end (reversible with Resume)
-    console.log(`⏸️ Pausing Whop membership ${membershipId}`);
-    const response = await fetch(`https://api.whop.com/memberships/${membershipId}/pause`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${WHOP_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Whop Pause API error: ${response.status} - ${errorText}`);
-      
-      // 🔥 v4.3.0: If 401/404, continue with DB-only update
-      if (response.status === 401 || response.status === 404) {
-        console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
+    const result = await centralCancelMembership(membershipId, mode);
+    
+    if (!result.success) {
+      // Handle graceful fallback cases
+      if (result.status === 404 || result.status === 401) {
+        console.warn(`⚠️ Whop API ${result.status} - continuing with DB-only update`);
         return { success: true, skipWhop: true };
       }
-      
-      return { success: false, error: `Whop API error: ${response.status}` };
+      if (result.status === 422) {
+        console.warn(`⚠️ Membership already cancelled (422) - continuing with DB-only update`);
+        return { success: true, skipWhop: true };
+      }
+      return { success: false, error: result.error };
     }
-
-    const data = await response.json();
-    console.log(`✅ Whop membership paused:`, data);
-    console.log(`   payment_collection_paused: ${data.payment_collection_paused}`);
-    return { success: true, data };
+    
+    console.log(`✅ Whop membership ${mode === 'immediate' ? 'cancelled immediately' : 'scheduled for cancellation'}:`, result.data);
+    return { success: true, data: result.data as WhopMembership };
 
   } catch (error) {
-    console.error(`❌ Pause Whop membership error:`, error);
-    // 🔥 v3.2.0: On network errors, continue with DB-only update
+    console.error(`❌ Cancel Whop membership error:`, error);
     console.warn(`⚠️ Whop API network error - continuing with DB-only update`);
     return { success: true, skipWhop: true };
   }
@@ -192,68 +149,40 @@ async function reactivateWhopMembership(
   membershipId: string
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string; skipWhop?: boolean }> {
   try {
-    if (!WHOP_API_KEY) {
-      console.warn(`⚠️ WHOP_API_KEY not configured - skipping Whop API call`);
-      return { success: true, skipWhop: true };
-    }
-
     console.log(`🔄 Reactivating Whop membership ${membershipId}`);
 
-    // 🔥 v4.5.0: CORRECT Whop API flow per docs.whop.com:
-    // 1. If membership was PAUSED → use /resume
-    // 2. If membership was CANCELLED at_period_end → use /uncancel
-    // First try /resume (for paused memberships)
+    // Step 1: Try UNCANCEL first (for memberships cancelled with at_period_end)
+    console.log(`🔄 Step 1: Trying Uncancel API...`);
+    const uncancelResult = await uncancelMembership(membershipId);
     
-    console.log(`🔄 Step 1: Trying Resume API (for paused memberships)...`);
-    const resumeResponse = await fetch(`https://api.whop.com/memberships/${membershipId}/resume`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${WHOP_API_KEY}`,
-        "Content-Type": "application/json"
-      }
-    });
-
-    if (resumeResponse.ok) {
-      const result = await resumeResponse.json();
-      console.log(`✅ Whop Resume API succeeded:`, result);
-      console.log(`   payment_collection_paused: ${result.payment_collection_paused}`);
-      return { success: true, skipWhop: false, data: result };
+    if (uncancelResult.success && uncancelResult.status !== 422) {
+      console.log(`✅ Whop Uncancel API succeeded`);
+      return { success: true, skipWhop: false, data: uncancelResult.data as WhopMembership };
     }
     
-    const resumeErrorText = await resumeResponse.text();
-    console.log(`⚠️ Resume API returned ${resumeResponse.status}: ${resumeErrorText}`);
-    
-    // 🔥 v4.5.0: If Resume fails (membership wasn't paused), try Uncancel
-    if (resumeResponse.status === 422 || resumeResponse.status === 400) {
-      console.log(`🔄 Step 2: Trying Uncancel API (for cancelled memberships)...`);
-      const uncancelResponse = await fetch(`https://api.whop.com/memberships/${membershipId}/uncancel`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHOP_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      });
+    // Step 2: If Uncancel fails (422 = not scheduled for cancellation), try Resume
+    if (uncancelResult.status === 422 || uncancelResult.status === 400) {
+      console.log(`🔄 Step 2: Trying Resume API (for paused memberships)...`);
+      const resumeResult = await centralResumeMembership(membershipId);
       
-      if (uncancelResponse.ok) {
-        const uncancelResult = await uncancelResponse.json();
-        console.log(`✅ Whop Uncancel API succeeded:`, uncancelResult);
-        return { success: true, skipWhop: false, data: uncancelResult };
+      if (resumeResult.success) {
+        console.log(`✅ Whop Resume API succeeded`);
+        return { success: true, skipWhop: false, data: resumeResult.data as WhopMembership };
       }
       
-      const uncancelError = await uncancelResponse.text();
-      console.error(`❌ Whop Uncancel API also failed: ${uncancelResponse.status} - ${uncancelError}`);
+      console.error(`❌ Whop Resume API also failed: ${resumeResult.error}`);
     }
     
-    // If all APIs fail, continue with DB-only update
-    if (resumeResponse.status === 401 || resumeResponse.status === 404) {
-        console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
-        return { success: true, skipWhop: true };
+    // If both fail with auth/not-found, fallback to DB-only
+    if (uncancelResult.status === 401 || uncancelResult.status === 404) {
+      console.warn(`⚠️ Whop API auth/not found error - continuing with DB-only update`);
+      return { success: true, skipWhop: true };
     }
       
-    return { success: false, error: `Whop API error: ${resumeResponse.status}` };
+    return { success: false, error: uncancelResult.error || `Whop API error` };
 
   } catch (error) {
-    console.error(`❌ Resume Whop membership error:`, error);
+    console.error(`❌ Reactivate Whop membership error:`, error);
     console.warn(`⚠️ Continuing with DB-only update`);
     return { success: true, skipWhop: true };
   }
@@ -263,21 +192,13 @@ async function getWhopMembership(
   membershipId: string
 ): Promise<{ success: boolean; data?: WhopMembership; error?: string }> {
   try {
-    const response = await fetch(`${WHOP_API_URL}/memberships/${membershipId}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${WHOP_API_KEY}`,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Whop API error: ${response.status} - ${errorText}`);
-      return { success: false, error: `Whop API error: ${response.status}` };
+    const result = await getMembership(membershipId);
+    
+    if (!result.success) {
+      return { success: false, error: result.error };
     }
 
-    const data = await response.json();
-    return { success: true, data };
+    return { success: true, data: result.data as WhopMembership };
 
   } catch (error) {
     console.error(`❌ Get Whop membership error:`, error);

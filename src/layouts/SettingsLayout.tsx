@@ -2247,7 +2247,8 @@ const BillingTab = () => {
       {/* Keep Subscription - Primary CTA */}
       <button
         onClick={() => setShowNewsletterCancelDialog(false)}
-        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+        disabled={cancellingNewsletter}
+        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <CheckCircle2 className="w-4 h-4" />
         Keep My Subscription
@@ -2257,7 +2258,7 @@ const BillingTab = () => {
       <button
         onClick={() => handleCancelNewsletter()}
         disabled={cancellingNewsletter}
-        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
+        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30 disabled:hover:text-zinc-400"
       >
         {cancellingNewsletter ? (
           <>
@@ -2339,7 +2340,8 @@ const BillingTab = () => {
       {/* Keep Subscription - Primary CTA */}
       <button
         onClick={() => setShowTopSecretCancelDialog(false)}
-        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+        disabled={cancellingTopSecret}
+        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <CheckCircle2 className="w-4 h-4" />
         Keep My Subscription
@@ -2349,7 +2351,7 @@ const BillingTab = () => {
       <button
         onClick={() => handleCancelTopSecret()}
         disabled={cancellingTopSecret}
-        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
+        className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30 disabled:hover:text-zinc-400"
       >
         {cancellingTopSecret ? (
           <>
@@ -2458,7 +2460,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full group relative p-5 rounded-2xl border border-zinc-700/50 hover:border-red-500/50 bg-gradient-to-br from-zinc-800/80 via-zinc-800/60 to-zinc-900/80 hover:from-red-950/40 hover:via-zinc-800/60 hover:to-zinc-900/80 transition-all duration-300 overflow-hidden"
+                      className="w-full group relative p-5 rounded-2xl border border-zinc-700/50 hover:border-red-500/50 bg-gradient-to-br from-zinc-800/80 via-zinc-800/60 to-zinc-900/80 hover:from-red-950/40 hover:via-zinc-800/60 hover:to-zinc-900/80 transition-all duration-300 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50"
                     >
                       {/* Hover glow effect */}
                       <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/5 to-red-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -2528,7 +2530,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full group relative p-5 rounded-2xl border border-zinc-700/50 hover:border-purple-500/50 bg-gradient-to-br from-zinc-800/80 via-zinc-800/60 to-zinc-900/80 hover:from-purple-950/40 hover:via-zinc-800/60 hover:to-zinc-900/80 transition-all duration-300 overflow-hidden"
+                      className="w-full group relative p-5 rounded-2xl border border-zinc-700/50 hover:border-purple-500/50 bg-gradient-to-br from-zinc-800/80 via-zinc-800/60 to-zinc-900/80 hover:from-purple-950/40 hover:via-zinc-800/60 hover:to-zinc-900/80 transition-all duration-300 overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50"
                     >
                       {/* Hover glow effect */}
                       <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -2572,7 +2574,7 @@ const BillingTab = () => {
                     <button
                       onClick={() => setBundleCancelStep('retention_offer')}
                       disabled={bundleCancelLoading}
-                      className="w-full group relative p-4 rounded-xl border border-red-500/20 hover:border-red-500/40 bg-gradient-to-br from-red-950/20 to-zinc-900/50 hover:from-red-950/40 hover:to-zinc-900/50 transition-all duration-300"
+                      className="w-full group relative p-4 rounded-xl border border-red-500/20 hover:border-red-500/40 bg-gradient-to-br from-red-950/20 to-zinc-900/50 hover:from-red-950/40 hover:to-zinc-900/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -2594,7 +2596,8 @@ const BillingTab = () => {
                     <div className="pt-2">
                       <button
                         onClick={() => setShowBundleCancelDialog(false)}
-                        className="w-full relative py-4 px-6 rounded-2xl overflow-hidden group"
+                        disabled={bundleCancelLoading}
+                        className="w-full relative py-4 px-6 rounded-2xl overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {/* Animated gradient background */}
                         <div className="absolute inset-0 bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-600 bg-[length:200%_100%] group-hover:animate-shimmer" />
@@ -2726,13 +2729,14 @@ const BillingTab = () => {
                         {/* Apply Discount Button - Premium Gold */}
                         <button
                           onClick={() => {
+                            setBundleCancelLoading(true);
                             const redirectUrl = encodeURIComponent(`${window.location.origin}/app/settings?tab=billing&upgrade=bundle_yearly_discount`);
                             window.location.href = `https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}&d=FINOTAUR15&redirect_url=${redirectUrl}`;
                             setShowBundleCancelDialog(false);
                             setBundleCancelStep('options');
                           }}
                           disabled={bundleCancelLoading}
-                          className="w-full relative py-4 px-6 rounded-xl overflow-hidden group"
+                          className="w-full relative py-4 px-6 rounded-xl overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {/* Animated gradient background */}
                           <div className="absolute inset-0 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 bg-[length:200%_100%] group-hover:animate-shimmer" />
@@ -2806,7 +2810,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full py-3.5 px-4 rounded-xl border border-zinc-700/50 hover:border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-300 transition-all text-sm font-medium"
+                      className="w-full py-3.5 px-4 rounded-xl border border-zinc-700/50 hover:border-zinc-600 bg-zinc-800/30 hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-300 transition-all text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {bundleCancelLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin mx-auto" />
@@ -2818,7 +2822,8 @@ const BillingTab = () => {
                     {/* Back Button */}
                     <button
                       onClick={() => setBundleCancelStep('options')}
-                      className="w-full py-2 text-zinc-500 hover:text-amber-400 text-xs transition-colors flex items-center justify-center gap-1"
+                      disabled={bundleCancelLoading}
+                      className="w-full py-2 text-zinc-500 hover:text-amber-400 text-xs transition-colors flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ArrowRight className="w-3 h-3 rotate-180" />
                       Back to options
@@ -2895,7 +2900,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200"
+                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -2953,7 +2958,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-purple-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200"
+                      className="w-full group p-4 rounded-xl border border-zinc-700/50 hover:border-purple-500/40 bg-zinc-800/30 hover:bg-zinc-800/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-zinc-700/50 disabled:hover:bg-zinc-800/30"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -3010,7 +3015,7 @@ const BillingTab = () => {
                         }
                       }}
                       disabled={bundleCancelLoading}
-                      className="w-full group p-4 rounded-xl border border-red-500/30 hover:border-red-500/50 bg-red-500/5 hover:bg-red-500/10 transition-all duration-200"
+                      className="w-full group p-4 rounded-xl border border-red-500/30 hover:border-red-500/50 bg-red-500/5 hover:bg-red-500/10 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-red-500/30 disabled:hover:bg-red-500/5"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -3035,7 +3040,8 @@ const BillingTab = () => {
                     {/* Keep Bundle Button */}
                     <button
                       onClick={() => setShowBundleCancelDialog(false)}
-                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-medium transition-all duration-200 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 flex items-center justify-center gap-2"
+                      disabled={bundleCancelLoading}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-medium transition-all duration-200 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       Never Mind, Keep My Bundle
