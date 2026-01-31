@@ -1108,30 +1108,6 @@ const HeroMobile = memo(function HeroMobile({
             <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">the Market.</span>
           </span>
         </h1>
-
-        {/* Mobile Bull */}
-        <div className="relative w-full flex justify-center my-2">
-          <div className="absolute inset-0 overflow-hidden z-0">
-            <ParticleBackground />
-          </div>
-          <div 
-            className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[320px] h-[80px] z-10"
-            style={{ 
-              background: 'radial-gradient(ellipse, rgba(255,140,30,0.4) 0%, rgba(200,100,20,0.15) 50%, transparent 80%)', 
-              filter: 'blur(20px)' 
-            }}
-          />
-          <img 
-            src={CONFIG.BULL_IMAGE}
-            alt="War Zone Bull" 
-            className="relative z-20 w-[200px] sm:w-[240px] h-auto" 
-            style={{ 
-              filter: 'drop-shadow(0 0 40px rgba(255,150,50,0.3))',
-              mixBlendMode: 'lighten'
-            }}
-          />
-        </div>
-
         {/* Description */}
         <p className="text-[#C9A646]/70 text-sm leading-relaxed text-center mb-4 max-w-sm">
           <span className="text-[#C9A646] font-bold">WAR ZONE</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
@@ -1264,8 +1240,10 @@ const HeroDesktop = memo(function HeroDesktop({
             <img 
               src={CONFIG.BULL_IMAGE}
               alt="War Zone Bull" 
-              className="w-[500px] xl:w-[580px] 2xl:w-[650px] h-auto object-contain"
+              className="w-[500px] xl:w-[580px] 2xl:w-[650px] h-auto object-contain pointer-events-none select-none"
               style={{ filter: 'drop-shadow(0 0 80px rgba(255,150,50,0.3))' }}
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
             />
           </div>
           
