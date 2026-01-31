@@ -2010,6 +2010,37 @@ async function handleMembershipActivated(
       return { success: false, message: "User not found for Bundle activation" };
     }
     
+    // 🔥 v5.4.0: READ membership IDs BEFORE calling RPC (RPC will clear them!)
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled, bundle_whop_membership_id')
+      .eq('id', userResult.id)
+      .single();
+    
+    // Save existing membership IDs for pause/cancel logic BEFORE RPC clears them
+    const existingTopSecretMembershipId = existingProfile?.top_secret_whop_membership_id;
+    const existingNewsletterMembershipId = existingProfile?.newsletter_whop_membership_id;
+    const hasExistingTopSecret = existingTopSecretMembershipId && 
+                                  existingTopSecretMembershipId !== membershipId &&
+                                  existingProfile?.top_secret_enabled;
+    const hasExistingNewsletter = existingNewsletterMembershipId && 
+                                   existingNewsletterMembershipId !== membershipId &&
+                                   existingProfile?.newsletter_enabled;
+    
+    console.log("🔍 Checking for existing subscriptions to pause:", {
+      top_secret_whop_membership_id: existingTopSecretMembershipId,
+      top_secret_enabled: existingProfile?.top_secret_enabled,
+      newsletter_whop_membership_id: existingNewsletterMembershipId,
+      newsletter_enabled: existingProfile?.newsletter_enabled,
+      bundle_membership_id: membershipId,
+    });
+    
+    console.log("🔍 Subscription check results:", {
+      hasExistingTopSecret,
+      hasExistingNewsletter,
+      billingInterval,
+    });
+    
     const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
       p_user_id: userResult.id,
       p_whop_membership_id: membershipId,
@@ -2030,156 +2061,125 @@ async function handleMembershipActivated(
 
     console.log("✅ Bundle activated:", result);
     
-    // 🔥 v5.3.0: Handle existing subscriptions based on bundle type
-    // - Monthly Bundle (with trial): PAUSE subscriptions, cancel when trial converts
-    // - Yearly Bundle (no trial): CANCEL IMMEDIATE right away
-    const { data: userProfile } = await supabase
-      .from('profiles')
-      .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled')
-      .eq('id', userResult.id)
-      .single();
+    // 🔥 v5.4.0: Now handle existing subscriptions USING THE SAVED membership IDs
+    // (existingProfile was read BEFORE RPC, so it has the original membership IDs)
     
-    if (userProfile) {
-      console.log("🔍 Checking for existing subscriptions to pause:", {
-        top_secret_whop_membership_id: userProfile.top_secret_whop_membership_id,
-        top_secret_enabled: userProfile.top_secret_enabled,
-        newsletter_whop_membership_id: userProfile.newsletter_whop_membership_id,
-        newsletter_enabled: userProfile.newsletter_enabled,
-        bundle_membership_id: membershipId,
-      });
+    if (billingInterval === 'yearly') {
+      // 🔥 YEARLY BUNDLE: Cancel all existing subscriptions IMMEDIATELY (no trial)
+      console.log("📦 Yearly Bundle - cancelling existing subscriptions immediately");
       
-      const hasExistingTopSecret = userProfile.top_secret_whop_membership_id && 
-                                    userProfile.top_secret_whop_membership_id !== membershipId &&
-                                    userProfile.top_secret_enabled;
-      const hasExistingNewsletter = userProfile.newsletter_whop_membership_id && 
-                                     userProfile.newsletter_whop_membership_id !== membershipId &&
-                                     userProfile.newsletter_enabled;
+      if (hasExistingTopSecret) {
+        console.log("🗑️ Cancelling existing Top Secret subscription:", existingTopSecretMembershipId);
+        try {
+          const cancelResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${existingTopSecretMembershipId}/cancel`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ cancellation_mode: 'immediate' }),
+            }
+          );
+          if (cancelResponse.ok) {
+            console.log("✅ Top Secret subscription cancelled immediately");
+          } else {
+            console.warn("⚠️ Failed to cancel Top Secret:", await cancelResponse.text());
+          }
+        } catch (cancelErr) {
+          console.warn("⚠️ Error cancelling Top Secret:", cancelErr);
+        }
+      }
       
-      console.log("🔍 Subscription check results:", {
-        hasExistingTopSecret,
-        hasExistingNewsletter,
-        billingInterval,
-      });
+      if (hasExistingNewsletter) {
+        console.log("🗑️ Cancelling existing Newsletter subscription:", existingNewsletterMembershipId);
+        try {
+          const cancelResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${existingNewsletterMembershipId}/cancel`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ cancellation_mode: 'immediate' }),
+            }
+          );
+          if (cancelResponse.ok) {
+            console.log("✅ Newsletter subscription cancelled immediately");
+          } else {
+            console.warn("⚠️ Failed to cancel Newsletter:", await cancelResponse.text());
+          }
+        } catch (cancelErr) {
+          console.warn("⚠️ Error cancelling Newsletter:", cancelErr);
+        }
+      }
       
-      if (billingInterval === 'yearly') {
-        // 🔥 YEARLY BUNDLE: Cancel all existing subscriptions IMMEDIATELY (no trial)
-        console.log("📦 Yearly Bundle - cancelling existing subscriptions immediately");
+      // Clear any paused flags
+      await supabase
+        .from('profiles')
+        .update({ 
+          top_secret_paused_for_bundle: false,
+          newsletter_paused_for_bundle: false,
+        })
+        .eq('id', userResult.id);
         
-        if (hasExistingTopSecret) {
-          console.log("🗑️ Cancelling existing Top Secret subscription:", userProfile.top_secret_whop_membership_id);
-          try {
-            const cancelResponse = await fetch(
-              `https://api.whop.com/api/v2/memberships/${userProfile.top_secret_whop_membership_id}/cancel`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${WHOP_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ cancellation_mode: 'immediate' }),
-              }
-            );
-            if (cancelResponse.ok) {
-              console.log("✅ Top Secret subscription cancelled immediately");
-            } else {
-              console.warn("⚠️ Failed to cancel Top Secret:", await cancelResponse.text());
+    } else {
+      // 🔥 MONTHLY BUNDLE (with trial): PAUSE subscriptions, will cancel when trial converts
+      console.log("📦 Monthly Bundle with trial - pausing existing subscriptions");
+      
+      if (hasExistingTopSecret) {
+        console.log("⏸️ Pausing existing Top Secret subscription:", existingTopSecretMembershipId);
+        try {
+          const pauseResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${existingTopSecretMembershipId}/pause`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
             }
-          } catch (cancelErr) {
-            console.warn("⚠️ Error cancelling Top Secret:", cancelErr);
+          );
+          if (pauseResponse.ok) {
+            console.log("✅ Top Secret subscription paused");
+            await supabase
+              .from('profiles')
+              .update({ top_secret_paused_for_bundle: true })
+              .eq('id', userResult.id);
+          } else {
+            console.warn("⚠️ Failed to pause Top Secret:", await pauseResponse.text());
           }
+        } catch (pauseErr) {
+          console.warn("⚠️ Error pausing Top Secret:", pauseErr);
         }
-        
-        if (hasExistingNewsletter) {
-          console.log("🗑️ Cancelling existing Newsletter subscription:", userProfile.newsletter_whop_membership_id);
-          try {
-            const cancelResponse = await fetch(
-              `https://api.whop.com/api/v2/memberships/${userProfile.newsletter_whop_membership_id}/cancel`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${WHOP_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ cancellation_mode: 'immediate' }),
-              }
-            );
-            if (cancelResponse.ok) {
-              console.log("✅ Newsletter subscription cancelled immediately");
-            } else {
-              console.warn("⚠️ Failed to cancel Newsletter:", await cancelResponse.text());
+      }
+      
+      if (hasExistingNewsletter) {
+        console.log("⏸️ Pausing existing Newsletter subscription:", existingNewsletterMembershipId);
+        try {
+          const pauseResponse = await fetch(
+            `https://api.whop.com/api/v2/memberships/${existingNewsletterMembershipId}/pause`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHOP_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
             }
-          } catch (cancelErr) {
-            console.warn("⚠️ Error cancelling Newsletter:", cancelErr);
+          );
+          if (pauseResponse.ok) {
+            console.log("✅ Newsletter subscription paused");
+            await supabase
+              .from('profiles')
+              .update({ newsletter_paused_for_bundle: true })
+              .eq('id', userResult.id);
+          } else {
+            console.warn("⚠️ Failed to pause Newsletter:", await pauseResponse.text());
           }
-        }
-        
-        // Clear any paused flags
-        await supabase
-          .from('profiles')
-          .update({ 
-            top_secret_paused_for_bundle: false,
-            newsletter_paused_for_bundle: false,
-            top_secret_enabled: false,
-            newsletter_enabled: false,
-          })
-          .eq('id', userResult.id);
-          
-      } else {
-        // 🔥 MONTHLY BUNDLE (with trial): PAUSE subscriptions, will cancel when trial converts
-        console.log("📦 Monthly Bundle with trial - pausing existing subscriptions");
-        
-        if (hasExistingTopSecret) {
-          console.log("⏸️ Pausing existing Top Secret subscription:", userProfile.top_secret_whop_membership_id);
-          try {
-            const pauseResponse = await fetch(
-              `https://api.whop.com/api/v1/memberships/${userProfile.top_secret_whop_membership_id}/pause`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${WHOP_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            if (pauseResponse.ok) {
-              console.log("✅ Top Secret subscription paused");
-              await supabase
-                .from('profiles')
-                .update({ top_secret_paused_for_bundle: true })
-                .eq('id', userResult.id);
-            } else {
-              console.warn("⚠️ Failed to pause Top Secret:", await pauseResponse.text());
-            }
-          } catch (pauseErr) {
-            console.warn("⚠️ Error pausing Top Secret:", pauseErr);
-          }
-        }
-        
-        if (hasExistingNewsletter) {
-          console.log("⏸️ Pausing existing Newsletter subscription:", userProfile.newsletter_whop_membership_id);
-          try {
-            const pauseResponse = await fetch(
-              `https://api.whop.com/api/v1/memberships/${userProfile.newsletter_whop_membership_id}/pause`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${WHOP_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-              }
-            );
-            if (pauseResponse.ok) {
-              console.log("✅ Newsletter subscription paused");
-              await supabase
-                .from('profiles')
-                .update({ newsletter_paused_for_bundle: true })
-                .eq('id', userResult.id);
-            } else {
-              console.warn("⚠️ Failed to pause Newsletter:", await pauseResponse.text());
-            }
-          } catch (pauseErr) {
-            console.warn("⚠️ Error pausing Newsletter:", pauseErr);
-          }
+        } catch (pauseErr) {
+          console.warn("⚠️ Error pausing Newsletter:", pauseErr);
         }
       }
     }

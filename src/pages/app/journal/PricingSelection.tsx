@@ -4,18 +4,23 @@
 // Styled like TOP SECRET PricingSelection
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { 
   Crown, Shield, LogOut, Check, Clock, ArrowRight, ChevronRight,
-  FileText, Calendar, Headphones, Zap
+  FileText, Calendar, Headphones, Zap, X, Loader2, Rocket, Sparkles, Gift
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import { cn } from '@/lib/utils';
+
+// Lazy load Terms Modal from WarzoneComponents
+const TermsModal = lazy(() => import('../all-markets/WarzoneComponents/modals/TermsModal'));
+
 
 // =====================================================
 // CONFIGURATION
@@ -52,7 +57,10 @@ export default function WarZonePricingSelection() {
 
   const [checkingSubscription, setCheckingSubscription] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
-  
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [disclaimerAgreed, setDisclaimerAgreed] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
+  const [pendingBillingInterval, setPendingBillingInterval] = useState<'monthly' | 'yearly' | null>(null);
 
   const { initiateCheckout, isLoading } = useWhopCheckout({
     onSuccess: () => {
@@ -176,19 +184,30 @@ export default function WarZonePricingSelection() {
   };
 
   // =====================================================
-  // Handle Payment - Show popup first for monthly
+  // Handle Payment - Show disclaimer popup first
   // =====================================================
-  const handlePayment = async (billingInterval: 'monthly' | 'yearly') => {
+  const handlePayment = (billingInterval: 'monthly' | 'yearly') => {
     if (!user) {
       toast.error("Please log in to continue");
       return;
     }
 
+    // Show disclaimer popup instead of going directly to checkout
+    setPendingBillingInterval(billingInterval);
     setSelectedPlan(billingInterval);
+    setDisclaimerAgreed(false);
+    setShowDisclaimer(true);
+  };
 
+  // Handle actual checkout after disclaimer is accepted
+  const handleProceedToCheckout = async () => {
+    if (!pendingBillingInterval || !disclaimerAgreed) return;
+    
+    setShowDisclaimer(false);
+    
     await initiateCheckout({
       planName: 'newsletter',
-      billingInterval,
+      billingInterval: pendingBillingInterval,
     });
   };
 
@@ -242,6 +261,251 @@ export default function WarZonePricingSelection() {
       </div>
     );
   }
+
+  // =====================================================
+  // DISCLAIMER POPUP COMPONENT
+  // =====================================================
+  const DisclaimerPopup = () => {
+    if (!showDisclaimer) return null;
+    
+    const isMonthly = pendingBillingInterval === 'monthly';
+    const displayPrice = isMonthly ? MONTHLY_PRICE : YEARLY_PRICE;
+    
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center py-8 px-4">
+        <Suspense fallback={null}>
+          <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
+        </Suspense>
+        
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 backdrop-blur-md" 
+          style={{ background: 'rgba(0,0,0,0.88)' }} 
+          onClick={() => setShowDisclaimer(false)} 
+        />
+        
+        {/* Popup Card */}
+        <div className="relative w-full max-w-sm max-h-[calc(100vh-160px)] overflow-hidden mt-12">
+          {/* Glow effects */}
+          <div 
+            className="absolute -inset-[2px] rounded-2xl opacity-70 animate-pulse" 
+            style={{ 
+              background: 'linear-gradient(135deg, rgba(244,217,123,0.5) 0%, rgba(201,166,70,0.2) 25%, transparent 50%, rgba(201,166,70,0.2) 75%, rgba(244,217,123,0.5) 100%)',
+              filter: 'blur(10px)',
+              animationDuration: '3s'
+            }} 
+          />
+          <div 
+            className="absolute -inset-[1px] rounded-2xl" 
+            style={{ background: 'linear-gradient(180deg, rgba(244,217,123,0.3) 0%, transparent 30%, transparent 70%, rgba(201,166,70,0.2) 100%)' }} 
+          />
+          
+          <div 
+            className="relative rounded-2xl overflow-hidden"
+            style={{ 
+              background: 'linear-gradient(180deg, rgba(32,28,20,0.99) 0%, rgba(18,15,11,1) 100%)',
+              border: '1px solid rgba(201,166,70,0.4)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(244,217,123,0.1)'
+            }}
+          >
+            {/* Top accent line */}
+            <div 
+              className="absolute top-0 left-[5%] right-[5%] h-[2px]" 
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.8), transparent)' }} 
+            />
+
+            <div className="px-5 pt-5 pb-5">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 
+                    className="text-xl font-bold tracking-wide"
+                    style={{ 
+                      background: 'linear-gradient(180deg, #FFFFFF 0%, #E5E5E5 100%)', 
+                      WebkitBackgroundClip: 'text', 
+                      WebkitTextFillColor: 'transparent' 
+                    }}
+                  >
+                    WAR ZONE
+                  </h2>
+                  <p className="text-[#8B8175] text-sm mt-0.5">
+                    {isMonthly ? 'Start your 7-day free trial' : 'Get annual access'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowDisclaimer(false)} 
+                  className="p-2 rounded-lg hover:bg-white/5 transition-all hover:scale-105"
+                  style={{ border: '1px solid rgba(201,166,70,0.2)' }}
+                >
+                  <X className="w-5 h-5 text-[#C9A646]/50 hover:text-[#C9A646]" />
+                </button>
+              </div>
+
+              {/* Plan Card */}
+              <div 
+                className="rounded-xl p-5 mb-5"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                {/* Badge */}
+                <div className="mb-3">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold"
+                    style={{
+                      background: isMonthly ? 'rgba(201,166,70,0.15)' : 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                      border: isMonthly ? '1px solid rgba(201,166,70,0.3)' : 'none',
+                      color: isMonthly ? '#C9A646' : '#000'
+                    }}
+                  >
+                    <FileText className="w-3 h-3" />
+                    {isMonthly ? 'MONTHLY' : 'YEARLY - BEST DEAL'}
+                  </span>
+                </div>
+
+                {/* Title */}
+                <h3 className="text-lg font-bold text-white mb-3">War Zone Newsletter</h3>
+
+                {/* Price */}
+                <div className="mb-4">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-white">${displayPrice}</span>
+                    <span className="text-slate-500 text-sm">/{isMonthly ? 'mo' : 'yr'}</span>
+                  </div>
+                  <p className="text-emerald-400 text-xs font-medium mt-1">
+                    {isMonthly ? '7-Day Free Trial' : `Save $${YEARLY_SAVINGS}/year (~$${YEARLY_MONTHLY_EQUIVALENT}/mo)`}
+                  </p>
+                </div>
+
+                {/* Features */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-3.5 h-3.5 text-[#C9A646] flex-shrink-0" />
+                    <span>Daily Market Briefing (9AM NY)</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-3.5 h-3.5 text-[#C9A646] flex-shrink-0" />
+                    <span>Weekly Deep Dive Analysis</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-3.5 h-3.5 text-[#C9A646] flex-shrink-0" />
+                    <span>Private Discord (847+ traders)</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-3.5 h-3.5 text-[#C9A646] flex-shrink-0" />
+                    <span>Trading Room Access</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Disclaimer Checkbox - Premium Style */}
+              <div 
+                className="rounded-xl p-4 mb-4 relative overflow-hidden"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.08), 0 4px 12px rgba(0,0,0,0.2)'
+                }}
+              >
+                {/* Inner glow effect */}
+                <div 
+                  className="absolute top-0 left-0 right-0 h-px"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.3), transparent)' }}
+                />
+                
+                <label className="flex items-start gap-3 cursor-pointer group relative z-10">
+                  <div className="relative flex-shrink-0 mt-0.5">
+                    <input 
+                      type="checkbox" 
+                      checked={disclaimerAgreed} 
+                      onChange={(e) => setDisclaimerAgreed(e.target.checked)} 
+                      className="sr-only" 
+                    />
+                    <div 
+                      className={cn(
+                        "w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200",
+                        !disclaimerAgreed && "group-hover:border-[#C9A646]/70 group-hover:scale-110"
+                      )}
+                      style={{ 
+                        background: disclaimerAgreed 
+                          ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)' 
+                          : 'rgba(201,166,70,0.08)',
+                        border: disclaimerAgreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
+                        boxShadow: disclaimerAgreed 
+                          ? '0 0 20px rgba(201,166,70,0.5), inset 0 1px 0 rgba(255,255,255,0.3)' 
+                          : 'inset 0 1px 2px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      {disclaimerAgreed && <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />}
+                    </div>
+                  </div>
+                  <span className="text-[#A09080] text-sm leading-relaxed">
+                    I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
+                    <button 
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }}
+                      className="text-[#C9A646] hover:text-[#F4D97B] underline underline-offset-2 transition-colors font-medium"
+                    >
+                      Terms & Disclaimer
+                    </button>
+                  </span>
+                </label>
+              </div>
+
+              {/* CTA Button */}
+              <button 
+                onClick={handleProceedToCheckout}
+                disabled={!disclaimerAgreed || isLoading}
+                className={cn(
+                  "w-full py-4 rounded-xl font-bold text-base flex items-center justify-center gap-2 transition-all mb-3",
+                  disclaimerAgreed ? "hover:scale-[1.02] active:scale-[0.98]" : "cursor-not-allowed"
+                )}
+                style={disclaimerAgreed ? { 
+                  background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
+                  boxShadow: '0 6px 25px rgba(201,166,70,0.45), inset 0 1px 0 rgba(255,255,255,0.2)',
+                  color: '#1a1510'
+                } : {
+                  background: 'rgba(201,166,70,0.15)',
+                  color: 'rgba(201,166,70,0.4)'
+                }}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-5 h-5" />
+                    {isMonthly ? 'Start Free Trial' : 'Subscribe Now'}
+                  </>
+                )}
+              </button>
+
+              {/* Cancel Button */}
+              <button 
+                onClick={() => setShowDisclaimer(false)}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#C9A646]/10"
+                style={{ 
+                  background: 'transparent',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                  color: '#8B8175'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            
+            {/* Bottom accent */}
+            <div 
+              className="absolute bottom-0 left-[5%] right-[5%] h-[2px]" 
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.5), transparent)' }} 
+            />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // =====================================================
   // MAIN RENDER
@@ -625,6 +889,9 @@ export default function WarZonePricingSelection() {
         </motion.div>
 
       </div>
+      
+      {/* Disclaimer Popup */}
+      <DisclaimerPopup />
     </section>
   );
 }

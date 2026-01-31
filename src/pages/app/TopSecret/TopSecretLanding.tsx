@@ -22,6 +22,7 @@ import {
   ArrowRight,
   Crown,
   Eye,
+  X,
   Target,
   BarChart3,
   Gift,
@@ -66,10 +67,10 @@ const WARZONE_MEMBER_PRICE = 50;
 
 // Bundle Pricing (War Zone + Top Secret)
 const BUNDLE_PRICES = {
-  monthly: 97,
+  monthly: 109,
   yearly: 1090,
   monthlyEquivalent: 90.83,
-  savings: 74, // vs buying separately monthly
+  savings: 50.98, // vs buying separately monthly ($159.98 - $109)
 };
 
 // Top Secret Only Pricing (for non-War Zone members)
@@ -533,18 +534,16 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
       className="relative p-8 rounded-2xl"
       style={{
         background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
-        border: isWarZoneMember ? '2px solid rgba(147,51,234,0.5)' : '2px solid rgba(201,166,70,0.4)',
-        boxShadow: isWarZoneMember ? '0 0 50px rgba(147,51,234,0.2)' : '0 0 40px rgba(201,166,70,0.15)'
+        border: isWarZoneMember ? '2px solid rgba(201,166,70,0.5)' : '2px solid rgba(201,166,70,0.4)',
+        boxShadow: isWarZoneMember ? '0 0 50px rgba(201,166,70,0.2)' : '0 0 40px rgba(201,166,70,0.15)'
       }}
     >
       {/* Badge */}
       <div className="absolute -top-3 left-8">
         <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
           style={{
-            background: isWarZoneMember 
-              ? 'linear-gradient(135deg, #9333EA 0%, #A855F7 50%, #9333EA 100%)'
-              : 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-            color: isWarZoneMember ? '#fff' : '#000'
+            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+            color: '#000'
           }}
         >
           {isWarZoneMember ? '🔥 BEST VALUE' : 'MONTHLY'}
@@ -558,11 +557,11 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             {/* Bundle Header */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4"
                  style={{
-                   background: 'linear-gradient(135deg, rgba(147,51,234,0.2) 0%, rgba(147,51,234,0.1) 100%)',
-                   border: '1px solid rgba(147,51,234,0.4)'
+                   background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.1) 100%)',
+                   border: '1px solid rgba(201,166,70,0.4)'
                  }}>
-              <Package className="w-4 h-4 text-purple-400" />
-              <span className="text-purple-300 text-sm font-semibold">Ultimate Bundle</span>
+              <Package className="w-4 h-4 text-[#C9A646]" />
+              <span className="text-[#C9A646] text-sm font-semibold">Ultimate Bundle</span>
             </div>
             
             <h3 className="text-xl font-bold text-white mb-2">
@@ -616,9 +615,9 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
               disabled={isLoading}
               className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
               style={{
-                background: 'linear-gradient(135deg, #9333EA 0%, #A855F7 50%, #9333EA 100%)',
-                color: '#fff',
-                boxShadow: '0 8px 32px rgba(147,51,234,0.4)'
+                background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
+                color: '#000',
+                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
               }}
             >
               {isLoading ? (
@@ -629,7 +628,7 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
               ) : (
                 <span className="flex items-center justify-center gap-2">
                   <Crown className="w-5 h-5" />
-                  GET BUNDLE — $97/mo
+                  GET BUNDLE — $109/mo
                 </span>
               )}
             </Button>
@@ -642,15 +641,15 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             <div className="space-y-2 border-t border-slate-800 pt-4">
               <p className="text-xs text-slate-500 font-medium mb-2">WHAT'S INCLUDED:</p>
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300">War Zone Newsletter (Daily)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300">Top Secret Reports (10/month)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300">Discord Access</span>
               </div>
             </div>
@@ -765,18 +764,16 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
       className="relative p-8 rounded-2xl"
       style={{
         background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
-        border: isWarZoneMember ? '2px solid rgba(147,51,234,0.5)' : '2px solid rgba(201,166,70,0.5)',
-        boxShadow: isWarZoneMember ? '0 0 50px rgba(147,51,234,0.2)' : '0 0 50px rgba(201,166,70,0.2)'
+        border: '2px solid rgba(201,166,70,0.5)',
+        boxShadow: '0 0 50px rgba(201,166,70,0.2)'
       }}
     >
       {/* Badge */}
       <div className="absolute -top-3 right-8">
         <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
           style={{
-            background: isWarZoneMember 
-              ? 'linear-gradient(135deg, #9333EA 0%, #A855F7 50%, #9333EA 100%)'
-              : 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-            color: isWarZoneMember ? '#fff' : '#000'
+            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+            color: '#000'
           }}
         >
           {isWarZoneMember ? '⚡ ULTIMATE' : 'BEST DEAL'}
@@ -790,11 +787,11 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             {/* Bundle Yearly Header */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-4"
                  style={{
-                   background: 'linear-gradient(135deg, rgba(147,51,234,0.2) 0%, rgba(147,51,234,0.1) 100%)',
-                   border: '1px solid rgba(147,51,234,0.4)'
+                   background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.1) 100%)',
+                   border: '1px solid rgba(201,166,70,0.4)'
                  }}>
-              <Zap className="w-4 h-4 text-purple-400" />
-              <span className="text-purple-300 text-sm font-semibold">Bundle Annual</span>
+              <Zap className="w-4 h-4 text-[#C9A646]" />
+              <span className="text-[#C9A646] text-sm font-semibold">Bundle Annual</span>
             </div>
 
             <h3 className="text-xl font-bold text-white mb-2">
@@ -808,7 +805,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             <div className="space-y-2 mb-4 p-3 rounded-xl bg-white/5">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Monthly Bundle × 12</span>
-                <span className="text-slate-500 line-through">$1,164</span>
+                <span className="text-slate-500 line-through">$1,308</span>
               </div>
             </div>
 
@@ -819,26 +816,26 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
                 <span className="text-xl text-slate-400">/year</span>
               </div>
               <p className="text-emerald-400 text-base font-semibold">
-                Just ${BUNDLE_PRICES.monthlyEquivalent}/month — Save $74!
+                Just ${BUNDLE_PRICES.monthlyEquivalent}/month — Save $218!
               </p>
             </div>
 
             {/* Benefits */}
             <div className="space-y-3 mb-6">
               <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300 font-medium">War Zone Newsletter (Full Year)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300 font-medium">Top Secret Reports (Full Year)</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300 font-medium">Priority Access to new features</span>
               </div>
               <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-purple-400 flex-shrink-0" />
+                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
                 <span className="text-sm text-slate-300 font-medium">Founding Members badge</span>
               </div>
             </div>
@@ -849,14 +846,14 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
               disabled={isLoading}
               className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] mb-3"
               style={{
-                background: 'linear-gradient(135deg, #9333EA 0%, #A855F7 50%, #9333EA 100%)',
-                color: '#fff',
-                boxShadow: '0 8px 32px rgba(147,51,234,0.4)'
+                background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
+                color: '#000',
+                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
               }}
             >
               {isLoading && selectedPlan === 'yearly' ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                   Redirecting...
                 </div>
               ) : (
@@ -1144,7 +1141,7 @@ export default function TopSecretLanding() {
       }
     }
     
-    // Redirect to Bundle checkout ($97/month)
+    // Redirect to Bundle checkout ($109/month)
     initiateCheckout({
       planName: 'bundle' as any,
       billingInterval: 'monthly',
