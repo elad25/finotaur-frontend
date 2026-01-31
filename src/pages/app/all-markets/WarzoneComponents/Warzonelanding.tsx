@@ -1413,7 +1413,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
     }
   }, [user?.id, refreshWarZone]);
 
-// 🔥 Bundle Upgrade Popup Component
+// 🔥 Bundle Upgrade Popup Component - Premium Style
   const BundleUpgradePopup = () => {
     if (!showBundlePopup) return null;
     
@@ -1425,113 +1425,150 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
           onClick={() => setShowBundlePopup(false)}
         />
         
-        {/* Popup Content */}
+        {/* Premium Card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative w-full max-w-sm rounded-2xl overflow-hidden max-h-[calc(100vh-120px)]"
+          className="relative w-full max-w-md rounded-2xl overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
-            border: '1px solid rgba(201,166,70,0.3)',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.2)'
+            background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(15,15,15,0.98) 100%)',
+            border: '2px solid rgba(201,166,70,0.4)',
+            boxShadow: '0 0 60px rgba(201,166,70,0.2), 0 25px 50px -12px rgba(0,0,0,0.8)'
           }}
         >
-          {/* Header */}
+          {/* Top Gold Line */}
           <div 
-            className="px-5 py-3 text-center"
-            style={{
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-              borderBottom: '1px solid rgba(201,166,70,0.2)'
-            }}
+            className="absolute top-0 left-0 right-0 h-1"
+            style={{ background: 'linear-gradient(90deg, transparent, #C9A646, #F4D97B, #C9A646, transparent)' }}
+          />
+          
+          {/* Close Button */}
+          <button 
+            onClick={() => setShowBundlePopup(false)}
+            className="absolute right-4 top-4 p-1.5 rounded-lg hover:bg-white/10 transition-colors z-10"
           >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-2"
-                 style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 text-xs font-semibold">Special Offer for Top Secret Members</span>
+            <XCircle className="w-5 h-5 text-slate-400 hover:text-white" />
+          </button>
+          
+          {/* 7-Day Trial Badge */}
+          <div className="absolute -top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div className="px-4 py-1.5 rounded-full text-xs font-bold"
+              style={{
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                color: '#fff',
+                boxShadow: '0 4px 15px rgba(16,185,129,0.5)'
+              }}
+            >
+              7-DAY FREE TRIAL
             </div>
-            <h3 className="text-xl font-bold text-white">Upgrade to Bundle</h3>
+          </div>
+
+          {/* Header */}
+          <div className="px-6 pt-8 pb-4 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4"
+                 style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
+              <Sparkles className="w-4 h-4 text-[#C9A646]" />
+              <span className="text-[#C9A646] text-sm font-semibold">Special Offer for Top Secret Members</span>
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-2">Upgrade to Bundle</h3>
+            <p className="text-slate-400 text-sm">
+              Get <span className="text-white font-semibold">War Zone + Top Secret</span> together
+            </p>
           </div>
           
-          {/* Body */}
-          <div className="px-5 py-4">
-            <p className="text-slate-400 text-center text-sm mb-4">
-              Get <span className="text-white font-semibold">both War Zone + Top Secret</span> for one low price!
-            </p>
-            
-            {/* Price Comparison */}
-            <div className="space-y-2 mb-4">
-              <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                <span className="text-slate-400 text-sm">War Zone Newsletter</span>
-                <span className="text-slate-500 line-through text-sm">$69.99/mo</span>
+          {/* Price Section */}
+          <div className="px-6 pb-4">
+            <div 
+              className="p-4 rounded-xl text-center mb-4"
+              style={{
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)',
+                border: '1px solid rgba(201,166,70,0.2)'
+              }}
+            >
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <span className="text-slate-500 line-through text-sm">$69.99</span>
+                <span className="text-slate-600">+</span>
+                <span className="text-slate-500 line-through text-sm">$89.99</span>
+                <span className="text-slate-600">=</span>
+                <span className="text-slate-500 line-through text-sm">$159.98/mo</span>
               </div>
-              <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                <span className="text-slate-400 text-sm">Top Secret Reports</span>
-                <span className="text-slate-500 line-through text-sm">$89.99/mo</span>
+              <div className="flex items-baseline justify-center gap-2">
+                <span className="text-4xl font-bold"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >$109</span>
+                <span className="text-slate-400">/month</span>
               </div>
-              <div className="flex justify-between items-center p-3 rounded-lg"
-                   style={{ 
-                     background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                     border: '1px solid rgba(201,166,70,0.3)'
-                   }}>
-                <div>
-                  <span className="text-[#C9A646] font-bold">Bundle Price</span>
-                  <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
-                </div>
-                <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
-              </div>
+              <p className="text-emerald-400 text-sm font-semibold mt-1">
+                Save $50.98/month!
+              </p>
             </div>
-            
-            {/* What You Get */}
-            <div className="space-y-1.5 mb-4">
-              <p className="text-slate-500 text-xs font-medium mb-1">What you'll get:</p>
+          </div>
+          
+          {/* Features */}
+          <div className="px-6 pb-5">
+            <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center gap-2 text-slate-300 text-sm">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>War Zone Newsletter (Daily Signals)</span>
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>War Zone Daily Intel</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Top Secret Reports (10 Monthly)</span>
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>Top Secret (10/mo)</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>Private Discord</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <span>7-Day Free Trial</span>
               </div>
             </div>
-            
-            {/* CTA Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={handleBundleCheckout}
-                disabled={isProcessing}
-                className="w-full py-3 text-base font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
-                style={{
-                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                  color: '#000',
-                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
-                }}
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Crown className="w-4 h-4" />
-                    Get Bundle for $109/month
-                  </>
-                )}
-              </button>
-              
-              {/* Only show skip button if user is NOT a Top Secret member */}
-              {!isTopSecretMember && (
-                <button
-                  onClick={() => setShowBundlePopup(false)}
-                  className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-                >
-                  No thanks, I'll pass
-                </button>
-              )}
-            </div>
           </div>
+          
+          {/* CTA Button */}
+          <div className="px-6 pb-6">
+            <button
+              onClick={handleBundleCheckout}
+              disabled={isProcessing}
+              className="w-full py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+              style={{
+                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                color: '#000',
+                boxShadow: '0 8px 32px rgba(201,166,70,0.4)'
+              }}
+            >
+              {isProcessing ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <Crown className="w-5 h-5" />
+                  Start Free Trial
+                </>
+              )}
+            </button>
+            
+            {/* Only show skip button if user is NOT a Top Secret member */}
+            {!isTopSecretMember && (
+              <button
+                onClick={() => setShowBundlePopup(false)}
+                className="w-full py-3 text-slate-500 hover:text-slate-400 transition-colors text-sm mt-2"
+              >
+                No thanks, I'll pass
+              </button>
+            )}
+          </div>
+          
+          {/* Bottom Gold Line */}
+          <div 
+            className="absolute bottom-0 left-0 right-0 h-px"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+          />
         </motion.div>
       </div>
     );
