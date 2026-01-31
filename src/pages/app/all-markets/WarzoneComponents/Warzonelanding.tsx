@@ -1476,9 +1476,9 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
                    }}>
                 <div>
                   <span className="text-[#C9A646] font-bold">Bundle Price</span>
-                  <p className="text-emerald-400 text-xs">Save $62.98/month!</p>
+                  <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
                 </div>
-                <span className="text-[#C9A646] font-bold text-xl">$97/mo</span>
+                <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
               </div>
             </div>
             
@@ -1516,7 +1516,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
                 ) : (
                   <>
                     <Crown className="w-4 h-4" />
-                    Get Bundle for $97/month
+                    Get Bundle for $109/month
                   </>
                 )}
               </button>

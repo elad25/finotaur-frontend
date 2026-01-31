@@ -145,9 +145,9 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                      }}>
                   <div>
                     <span className="text-[#C9A646] font-bold">Bundle Price</span>
-                    <p className="text-emerald-400 text-xs">Save $62.98/month!</p>
+                    <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
                   </div>
-                  <span className="text-[#C9A646] font-bold text-xl">$97/mo</span>
+                  <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
                 </div>
               </div>
               
@@ -244,7 +244,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   ) : (
                     <>
                       <Crown className="w-4 h-4" />
-                      Get Bundle for $97/month
+                      Get Bundle for $109/month
                     </>
                   )}
                 </button>
@@ -489,12 +489,12 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                           WebkitTextFillColor: 'transparent' 
                         }}
                       >
-                        $97
+                        $109
                       </span>
                       <span className="text-slate-500 text-sm">/mo</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Save $62.98/month!
+                      Save $50.98/month!
                     </p>
                   </div>
 
@@ -540,7 +540,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     ) : (
                       <Crown className="w-4 h-4" />
                     )}
-                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Bundle for $97/mo'}
+                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Bundle for $109/mo'}
                   </button>
                 </div>
               )}
