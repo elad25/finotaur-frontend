@@ -233,7 +233,7 @@ const WarZoneLandingPage = () => {
 
   return (
     <div className="min-h-screen overflow-hidden relative">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');.heading-serif{font-family:'Playfair Display',Georgia,serif}@keyframes hero-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}.hero-orb{animation:hero-orb 8s ease-in-out infinite}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');.heading-serif{font-family:'Playfair Display',Georgia,serif}@keyframes hero-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}.hero-orb{animation:hero-orb 8s ease-in-out infinite}*{-webkit-user-drag:none;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;}img{pointer-events:none;}`}</style>
       <Navbar/>
 
       {/* HERO */}

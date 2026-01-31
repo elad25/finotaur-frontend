@@ -901,159 +901,168 @@ const PricingSection = memo(function PricingSection({
         <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {/* Monthly Card */}
           <div
-            className="rounded-2xl relative overflow-hidden"
-            style={{ 
-              background: 'linear-gradient(180deg, rgba(30,28,24,0.95) 0%, rgba(20,18,14,0.98) 100%)', 
-              border: '1px solid rgba(201,166,70,0.3)', 
-              boxShadow: '0 8px 40px rgba(0,0,0,0.5)' 
+            className="relative p-8 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
+              border: '2px solid rgba(201,166,70,0.4)',
+              boxShadow: '0 0 40px rgba(201,166,70,0.15)'
             }}
           >
-            <div className="absolute top-5 left-5">
-              <span 
-                className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider"
-                style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}
+            {/* Badge */}
+            <div className="absolute -top-3 left-8">
+              <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000'
+                }}
               >
                 MONTHLY
-              </span>
+              </div>
             </div>
             
-            <div className="p-6 pt-16">
-              <div className="mb-5">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-6xl font-bold text-white">${CONFIG.MONTHLY_PRICE}</span>
-                  <span className="text-slate-400 text-lg">/month</span>
+            <div className="pt-6">
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-5xl font-bold text-white">${CONFIG.MONTHLY_PRICE}</span>
+                  <span className="text-xl text-slate-400">/month</span>
                 </div>
-                <p className="text-green-400 font-bold text-sm mt-2 tracking-wide">FREE 7 DAY TRIAL</p>
+                <p className="text-sm font-bold text-emerald-400 mb-1">FREE 7 DAY TRIAL</p>
               </div>
               
+{/* CTA Button */}
               <button 
                 onClick={onSubscribe} 
-                className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2 mb-3"
                 style={{ 
-                  background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', 
                   color: '#000', 
-                  boxShadow: '0 4px 20px rgba(201,166,70,0.4)' 
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)' 
                 }}
               >
                 START FREE TRIAL <ArrowRight className="w-5 h-5"/>
               </button>
-              <p className="text-slate-500 text-sm text-center mb-8">Risk-free. Cancel anytime.</p>
+              <p className="text-xs text-center text-slate-500 mb-6">Risk-free. Cancel anytime.</p>
               
-              <div className="space-y-6">
+              {/* Features */}
+              <div className="space-y-4 border-t border-slate-800 pt-6">
                 <div>
-                  <div className="flex items-start gap-3 mb-2">
-                    <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Daily Market Briefing</h4>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5"/>
+                    <span className="text-base font-bold text-white">Daily Market Briefing</span>
                   </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">Every trading day at 9:00 AM NY. Know exactly what matters before the market opens.</p>
+                  <p className="text-sm text-slate-400 ml-7">Every trading day at 9:00 AM NY. Know exactly what matters before the market opens.</p>
                 </div>
                 
                 <div>
-                  <div className="flex items-start gap-3 mb-2">
-                    <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Sector Rotation Intel</h4>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5"/>
+                    <span className="text-base font-bold text-white">Sector Rotation Intel</span>
                   </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">Where institutional money is flowing — and where it is leaving. Position before the crowd.</p>
+                  <p className="text-sm text-slate-400 ml-7">Where institutional money is flowing — and where it is leaving. Position before the crowd.</p>
                 </div>
                 
                 <div>
-                  <div className="flex items-start gap-3 mb-2">
-                    <Check className="w-5 h-5 text-[#C9A646] mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Private Discord + Trading Room</h4>
+                  <div className="flex items-start gap-2 mb-1">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0 mt-0.5"/>
+                    <span className="text-base font-bold text-white">Private Discord + Trading Room</span>
                   </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">24/7 access to serious traders and real-time market discussion.</p>
+                  <p className="text-sm text-slate-400 ml-7">24/7 access to serious traders and real-time market discussion.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Yearly Card */}
+{/* Yearly Card */}
           <div
-            className="rounded-2xl relative overflow-hidden"
-            style={{ 
-              background: 'linear-gradient(180deg, rgba(35,30,22,0.98) 0%, rgba(22,18,12,0.99) 100%)', 
-              border: '2px solid rgba(201,166,70,0.5)', 
-              boxShadow: '0 0 40px rgba(201,166,70,0.15), 0 8px 40px rgba(0,0,0,0.5)' 
+            className="relative p-8 rounded-2xl"
+            style={{
+              background: 'linear-gradient(135deg, rgba(30,30,30,0.95) 0%, rgba(20,20,20,0.98) 100%)',
+              border: '2px solid rgba(201,166,70,0.5)',
+              boxShadow: '0 0 50px rgba(201,166,70,0.2)'
             }}
           >
-            <div 
-              className="absolute top-0 left-0 right-0 h-1"
-              style={{ background: 'linear-gradient(90deg, transparent, #C9A646, transparent)' }}
-            />
-            
-            <div className="absolute top-5 left-5">
-              <span 
-                className="px-4 py-1.5 rounded-full text-xs font-bold tracking-wider"
-                style={{ background: 'linear-gradient(135deg, #C9A646, #F4D97B)', color: '#000' }}
+            {/* Badge - Left */}
+            <div className="absolute -top-3 left-8">
+              <div className="px-4 py-1.5 rounded-full text-sm font-bold shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                  color: '#000'
+                }}
               >
                 YEARLY
-              </span>
+              </div>
             </div>
             
-            <div className="absolute top-5 right-5">
-              <span className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-wider bg-green-500 text-white shadow-lg shadow-green-500/30">
+            {/* Badge - Right */}
+            <div className="absolute -top-3 right-8">
+              <div className="px-3 py-1.5 rounded-full text-xs font-bold shadow-lg bg-emerald-500 text-white">
                 🔥 BEST DEAL
-              </span>
+              </div>
             </div>
-            
-            <div className="p-6 pt-16">
-              <div className="mb-5">
-                <div className="flex items-baseline gap-3">
-                  <span className="text-6xl font-bold text-white">${CONFIG.YEARLY_PRICE}</span>
-                  <span className="text-slate-400 text-lg">/year</span>
+            <div className="pt-6">
+              <div className="mb-6">
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-5xl font-bold text-white">${CONFIG.YEARLY_PRICE}</span>
+                  <span className="text-xl text-slate-400">/year</span>
                 </div>
-                <div className="flex items-center gap-3 mt-2">
+                <div className="flex items-center gap-3 mb-2">
                   <span className="text-slate-500 line-through text-sm">${Math.round(CONFIG.MONTHLY_PRICE * 12)}/year</span>
-                  <span className="px-2 py-0.5 rounded bg-green-500/20 text-green-400 text-xs font-bold">SAVE ${YEARLY_SAVINGS}</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold">SAVE ${YEARLY_SAVINGS}</span>
                 </div>
-                <p className="text-[#C9A646] font-semibold text-sm mt-2">→ That's only ${Math.round(CONFIG.YEARLY_PRICE / 12)}/month</p>
+                <p className="text-emerald-400 text-base font-semibold">→ That's only ${Math.round(CONFIG.YEARLY_PRICE / 12)}/month</p>
               </div>
               
               <div className="bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-xl p-3 mb-5">
-                <p className="text-[#C9A646] text-sm font-medium text-center">⚡ Lock in this price before it increases</p>
+                <p className="text-[#C9A646] text-sm font-medium text-center flex items-center justify-center gap-2">
+                  <Zap className="w-4 h-4" />
+                  Lock in this price before it increases
+                </p>
               </div>
               
+              {/* CTA Button */}
               <button 
                 onClick={() => { setBillingInterval('yearly'); onSubscribe(); }} 
-                className="w-full py-5 rounded-xl font-bold text-lg flex items-center justify-center gap-2 mb-3 transition-all hover:scale-[1.02]"
+                className="w-full py-6 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2 mb-3"
                 style={{ 
-                  background: 'linear-gradient(135deg, #C9A646, #D4AF37, #F4D97B, #D4AF37, #C9A646)', 
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', 
                   color: '#000', 
-                  boxShadow: '0 4px 25px rgba(201,166,70,0.5)' 
+                  boxShadow: '0 8px 32px rgba(201,166,70,0.4)' 
                 }}
               >
                 GET 2 MONTHS FREE <ArrowRight className="w-5 h-5"/>
               </button>
-              <p className="text-slate-500 text-sm text-center mb-6">Locked price forever. Cancel anytime.</p>
+              <p className="text-xs text-center text-slate-500 mb-6">Locked price forever. Cancel anytime.</p>
               
-              <div className="space-y-5">
-                <div>
-                  <div className="flex items-start gap-3 mb-1">
-                    <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Everything in Monthly</h4>
-                  </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">Daily briefing, sector intel, Discord & Trading Room — all included.</p>
+              {/* Features */}
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-300 font-medium">Everything in Monthly</span>
                 </div>
-                
-                <div>
-                  <div className="flex items-start gap-3 mb-1">
-                    <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Price Locked Forever</h4>
-                  </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">Your rate never increases — even when prices go up for new members.</p>
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-300 font-medium">Price Locked Forever</span>
                 </div>
-                
-                <div>
-                  <div className="flex items-start gap-3 mb-1">
-                    <Check className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0"/>
-                    <h4 className="text-white font-bold">Founding Member Status</h4>
-                  </div>
-                  <p className="text-slate-400 text-sm pl-8 leading-relaxed">Early access to new features & priority support.</p>
+                <div className="flex items-center gap-2">
+                  <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-300 font-medium">Founding Member Status</span>
                 </div>
               </div>
               
-              <div className="mt-6 pt-5 border-t border-white/10 text-center">
-                <p className="text-slate-500 text-xs">Trusted by <span className="text-[#C9A646] font-semibold">847+ traders</span> worldwide</p>
+              {/* Additional Perks */}
+              <div className="space-y-2 border-t border-slate-800 pt-6">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-400">Cancel anytime</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-400">Best yearly value</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0"/>
+                  <span className="text-sm text-slate-400">No lock-in contracts</span>
+                </div>
               </div>
             </div>
           </div>
