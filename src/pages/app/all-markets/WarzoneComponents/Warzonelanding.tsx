@@ -414,8 +414,8 @@ const MoreThanBriefingSection = memo(function MoreThanBriefingSection() {
       <div className="max-w-5xl mx-auto relative z-10">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">More</span>
-            <span className="heading-serif italic text-white"> Than Just a Briefing</span>
+            <span className="text-white heading-serif block">More Than Just a Briefing</span>
+            <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Join the Community</span>
           </h2>
           <p className="text-slate-400 text-lg">Join a community of serious traders and get exclusive trading room access.</p>
         </div>
@@ -516,7 +516,7 @@ const FAQSection = memo(function FAQSection() {
       <div className="max-w-4xl mx-auto relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            <span className="text-white heading-serif">Frequently Asked </span>
+            <span className="text-white heading-serif block">Frequently Asked</span>
             <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Questions</span>
           </h2>
           <p className="text-slate-400 text-base">Everything you need to know before joining the War Zone.</p>
@@ -622,10 +622,8 @@ const PricingSection = memo(function PricingSection({
       <div className="max-w-6xl mx-auto relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
-            <span className="heading-serif italic text-white block">You are Already in the Market.</span>
-          </h2>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-            <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Why Do It Without WAR ZONE?</span>
+            <span className="text-white heading-serif block">You are Already in the Market.</span>
+            <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Why Do It Without WAR ZONE?</span>
           </h2>
         </div>
 

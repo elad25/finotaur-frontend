@@ -327,7 +327,7 @@ const WarZoneLandingPage = () => {
         <div className="absolute top-1/3 left-1/4 w-[400px] h-[350px] bg-[#F4D97B]/[0.04] rounded-full blur-[120px]"/>
         <div className="max-w-5xl mx-auto relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="text-white heading-serif">The Difference Between </span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Reacting and Anticipating</span></h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="text-white heading-serif block">The Difference Between</span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Reacting and Anticipating</span></h2>
             <p className="text-slate-400 text-lg max-w-2xl mx-auto">Most traders start their day overwhelmed. WAR ZONE traders start with clarity.</p>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -354,8 +354,7 @@ const WarZoneLandingPage = () => {
         <div className="max-w-5xl mx-auto relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="flex justify-center mb-8"><div className="w-16 h-16"><CompassIcon className="w-full h-full"/></div></motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-2"><span className="text-white heading-serif">This Is Not a Newsletter.</span></h2>
-            <h3 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6"><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">It is a Daily Market Briefing.</span></h3>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6"><span className="text-white heading-serif block">This Is Not a Newsletter.</span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">It is a Daily Market Briefing.</span></h2>
             <p className="text-slate-400 text-lg">Most traders consume <span className="text-slate-300">information</span>. Professionals consume <span className="text-white font-medium italic">interpretation</span>.</p>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
@@ -379,7 +378,7 @@ const WarZoneLandingPage = () => {
         <div className="absolute top-1/2 right-1/3 w-[400px] h-[400px] bg-[#C9A646]/[0.05] rounded-full blur-[130px]"/>
         <div className="max-w-5xl mx-auto relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">More</span><span className="heading-serif italic text-white"> Than Just a Briefing</span></h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="text-white heading-serif block">More Than Just a Briefing</span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Join the Community</span></h2>
             <p className="text-slate-400 text-lg">Join a community of serious traders and get exclusive trading room access.</p>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -400,7 +399,7 @@ const WarZoneLandingPage = () => {
         <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-[#C9A646]/[0.04] rounded-full blur-[120px]"/>
         <div className="max-w-4xl mx-auto relative z-10">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="text-white heading-serif">Frequently Asked </span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Questions</span></h2>
+            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4"><span className="text-white heading-serif block">Frequently Asked</span><span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Questions</span></h2>
           </motion.div>
           <div className="space-y-4">
             {faqs.map((faq, i) => (
@@ -431,10 +430,8 @@ const WarZoneLandingPage = () => {
           {/* Header */}
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 leading-tight">
-              <span className="heading-serif italic text-white block">You are Already in the Market.</span>
-            </h2>
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-              <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Why Do It Without WAR ZONE?</span>
+              <span className="text-white heading-serif block">You are Already in the Market.</span>
+              <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Why Do It Without WAR ZONE?</span>
             </h2>
           </motion.div>
 
