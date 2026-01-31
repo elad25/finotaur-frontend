@@ -279,8 +279,16 @@ async function logSubscriptionEvent(
 function getMembershipId(profile: any, product: ProductType): string | null {
   switch (product) {
     case "newsletter":
+      // 🔥 v4.2.0: If user has Bundle, use bundle_whop_membership_id for newsletter operations
+      if (profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.newsletter_whop_membership_id) {
+        return profile.bundle_whop_membership_id;
+      }
       return profile.newsletter_whop_membership_id;
     case "top_secret":
+      // 🔥 v4.2.0: If user has Bundle, use bundle_whop_membership_id for top_secret operations
+      if (profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.top_secret_whop_membership_id) {
+        return profile.bundle_whop_membership_id;
+      }
       return profile.top_secret_whop_membership_id;
     case "bundle":
       return profile.bundle_whop_membership_id;
@@ -304,24 +312,48 @@ function getProductStatus(profile: any, product: ProductType): {
 } {
   switch (product) {
     case "newsletter":
+      // 🔥 v4.2.0: If newsletter is via Bundle, inherit Bundle's trial/paid status
+      const newsletterViaBundleOnly = profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.newsletter_whop_membership_id;
       return {
         enabled: profile.newsletter_enabled ?? false,
         status: profile.newsletter_status ?? "inactive",
-        cancelAtPeriodEnd: profile.newsletter_cancel_at_period_end ?? false,
-        expiresAt: profile.newsletter_expires_at,
-        isTrial: profile.newsletter_status === "trial" || (profile.newsletter_enabled && !profile.newsletter_paid),
-        trialEndsAt: profile.newsletter_trial_ends_at,
-        isPaid: profile.newsletter_paid ?? false,
+        cancelAtPeriodEnd: newsletterViaBundleOnly 
+          ? (profile.bundle_cancel_at_period_end ?? false)
+          : (profile.newsletter_cancel_at_period_end ?? false),
+        expiresAt: newsletterViaBundleOnly 
+          ? profile.bundle_expires_at 
+          : profile.newsletter_expires_at,
+        isTrial: newsletterViaBundleOnly
+          ? (profile.bundle_is_in_trial ?? profile.bundle_status === "trial")
+          : (profile.newsletter_status === "trial" || (profile.newsletter_enabled && !profile.newsletter_paid)),
+        trialEndsAt: newsletterViaBundleOnly
+          ? profile.bundle_trial_ends_at
+          : profile.newsletter_trial_ends_at,
+        isPaid: newsletterViaBundleOnly
+          ? (profile.bundle_status === "active" && !profile.bundle_is_in_trial)
+          : (profile.newsletter_paid ?? false),
       };
     case "top_secret":
+      // 🔥 v4.2.0: If top_secret is via Bundle, inherit Bundle's trial/paid status
+      const topSecretViaBundleOnly = profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.top_secret_whop_membership_id;
       return {
         enabled: profile.top_secret_enabled ?? false,
         status: profile.top_secret_status ?? "inactive",
-        cancelAtPeriodEnd: profile.top_secret_cancel_at_period_end ?? false,
-        expiresAt: profile.top_secret_expires_at,
-        isTrial: profile.top_secret_is_in_trial ?? profile.top_secret_status === "trial",
-        trialEndsAt: profile.top_secret_trial_ends_at,
-        isPaid: profile.top_secret_status === "active" && !profile.top_secret_is_in_trial,
+        cancelAtPeriodEnd: topSecretViaBundleOnly 
+          ? (profile.bundle_cancel_at_period_end ?? false)
+          : (profile.top_secret_cancel_at_period_end ?? false),
+        expiresAt: topSecretViaBundleOnly 
+          ? profile.bundle_expires_at 
+          : profile.top_secret_expires_at,
+        isTrial: topSecretViaBundleOnly
+          ? (profile.bundle_is_in_trial ?? profile.bundle_status === "trial")
+          : (profile.top_secret_is_in_trial ?? profile.top_secret_status === "trial"),
+        trialEndsAt: topSecretViaBundleOnly
+          ? profile.bundle_trial_ends_at
+          : profile.top_secret_trial_ends_at,
+        isPaid: topSecretViaBundleOnly
+          ? (profile.bundle_status === "active" && !profile.bundle_is_in_trial)
+          : (profile.top_secret_status === "active" && !profile.top_secret_is_in_trial),
       };
     case "bundle":
       return {
@@ -824,6 +856,12 @@ async function handleCancel(
   const productStatus = getProductStatus(profile, product);
   const productName = getProductDisplayName(product);
 
+  // 🔥 v4.2.0: Enhanced logging for debugging Bundle-related cancellations
+  const isViaBundleOnly = profile.bundle_enabled && 
+                           profile.bundle_whop_membership_id && 
+                           ((product === 'newsletter' && !profile.newsletter_whop_membership_id) ||
+                            (product === 'top_secret' && !profile.top_secret_whop_membership_id));
+  
   console.log(`🔄 Cancel request for ${product}:`, {
     membershipId,
     status: productStatus.status,
@@ -833,6 +871,9 @@ async function handleCancel(
     cancelAtPeriodEnd: productStatus.cancelAtPeriodEnd,
     trialEndsAt: productStatus.trialEndsAt,
     expiresAt: productStatus.expiresAt,
+    isViaBundleOnly,
+    bundleEnabled: profile.bundle_enabled,
+    bundleMembershipId: profile.bundle_whop_membership_id,
   });
 
   // Validate: must be active or trial
@@ -880,22 +921,25 @@ async function handleCancel(
       updated_at: new Date().toISOString(),
     };
 
+    // 🔥 v4.2.0: Check if this product is via Bundle
+    const newsletterViaBundleOnly = product === "newsletter" && profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.newsletter_whop_membership_id;
+    const topSecretViaBundleOnly = product === "top_secret" && profile.bundle_enabled && profile.bundle_whop_membership_id && !profile.top_secret_whop_membership_id;
+
     if (product === "newsletter") {
       updateData = {
         ...updateData,
         // 🔥 KEY CHANGE: Keep enabled=true, status=trial/active, just mark for cancellation
         newsletter_cancel_at_period_end: true,
-        // DO NOT set newsletter_enabled = false
-        // DO NOT set newsletter_status = 'cancelled'
-        // Keep the membership ID for tracking
+        // 🔥 v4.2.0: If via Bundle, also mark Bundle for cancellation
+        ...(newsletterViaBundleOnly && { bundle_cancel_at_period_end: true }),
       };
     } else if (product === "top_secret") {
       updateData = {
         ...updateData,
         // 🔥 KEY CHANGE: Keep enabled=true, status stays as-is, just mark for cancellation
         top_secret_cancel_at_period_end: true,
-        // DO NOT set top_secret_enabled = false
-        // DO NOT set top_secret_status = 'cancelled'
+        // 🔥 v4.2.0: If via Bundle, also mark Bundle for cancellation
+        ...(topSecretViaBundleOnly && { bundle_cancel_at_period_end: true }),
       };
     }
 
@@ -1092,7 +1136,7 @@ console.log(`✅ Subscription scheduled for cancellation`);
         
         // Cancel the other product in Whop at period end
         if (otherMembershipId && WHOP_API_KEY) {
-          const cancelResponse = await fetch(`https://api.whop.com/api/v1/memberships/${otherMembershipId}/pause`, {
+          const cancelResponse = await fetch(`https://api.whop.com/memberships/${otherMembershipId}/pause`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${WHOP_API_KEY}`,

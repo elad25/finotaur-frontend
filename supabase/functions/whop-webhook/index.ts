@@ -1455,7 +1455,7 @@ if (isTopSecretPayment) {
                 
                 // 🔥 v3.18.0: Use cancel endpoint with immediate mode for old membership
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v2/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
+                  `https://api.whop.com/memberships/${currentProfile.top_secret_whop_membership_id}/cancel`,
                   {
                     method: 'POST',
                     headers: {
@@ -1589,7 +1589,7 @@ if (isTopSecretPayment) {
                 console.log("🔑 WHOP_API_KEY exists:", !!WHOP_API_KEY, "length:", WHOP_API_KEY?.length || 0);
                 
                 const cancelResponse = await fetch(
-                  `https://api.whop.com/api/v2/memberships/${currentProfile.bundle_whop_membership_id}/cancel`,
+                  `https://api.whop.com/memberships/${currentProfile.bundle_whop_membership_id}/cancel`,
                   {
                     method: 'POST',
                     headers: {
@@ -1657,7 +1657,7 @@ if (isTopSecretPayment) {
             
             try {
               const cancelResponse = await fetch(
-                `https://api.whop.com/api/v1/memberships/${currentProfile.bundle_whop_membership_id}/cancel`,
+                `https://api.whop.com/memberships/${currentProfile.bundle_whop_membership_id}/cancel`,
                 {
                   method: 'POST',
                   headers: {
@@ -2072,7 +2072,7 @@ async function handleMembershipActivated(
         console.log("🗑️ Cancelling existing Top Secret subscription:", existingTopSecretMembershipId);
         try {
           const cancelResponse = await fetch(
-            `https://api.whop.com/api/v2/memberships/${existingTopSecretMembershipId}/cancel`,
+            `https://api.whop.com/memberships/${existingTopSecretMembershipId}/cancel`,
             {
               method: 'POST',
               headers: {
@@ -2096,7 +2096,7 @@ async function handleMembershipActivated(
         console.log("🗑️ Cancelling existing Newsletter subscription:", existingNewsletterMembershipId);
         try {
           const cancelResponse = await fetch(
-            `https://api.whop.com/api/v2/memberships/${existingNewsletterMembershipId}/cancel`,
+            `https://api.whop.com/memberships/${existingNewsletterMembershipId}/cancel`,
             {
               method: 'POST',
               headers: {
@@ -2133,7 +2133,7 @@ async function handleMembershipActivated(
         console.log("⏸️ Pausing existing Top Secret subscription:", existingTopSecretMembershipId);
         try {
           const pauseResponse = await fetch(
-            `https://api.whop.com/api/v2/memberships/${existingTopSecretMembershipId}/pause`,
+            `https://api.whop.com/memberships/${existingTopSecretMembershipId}/pause`,
             {
               method: 'POST',
               headers: {
@@ -2160,7 +2160,7 @@ async function handleMembershipActivated(
         console.log("⏸️ Pausing existing Newsletter subscription:", existingNewsletterMembershipId);
         try {
           const pauseResponse = await fetch(
-            `https://api.whop.com/api/v2/memberships/${existingNewsletterMembershipId}/pause`,
+            `https://api.whop.com/memberships/${existingNewsletterMembershipId}/pause`,
             {
               method: 'POST',
               headers: {
