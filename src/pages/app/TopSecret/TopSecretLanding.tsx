@@ -1126,11 +1126,11 @@ export default function TopSecretLanding() {
                   {/* Price */}
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-white">$997</span>
+                      <span className="text-3xl font-bold text-white">$1090</span>
                       <span className="text-slate-500">/year</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Just $83/mo — Save $311/year!
+                      Just $90.83/mo — Save $218/year!
                     </p>
                   </div>
 
@@ -1178,13 +1178,15 @@ export default function TopSecretLanding() {
               </div>
             </div>
             
-            {/* Skip Button */}
-            <button
-              onClick={handleTopSecretOnlyCheckout}
-              className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-            >
-              No thanks, just Top Secret for $89.99/month →
-            </button>
+            {/* Skip Button - Only show if user is NOT a War Zone member */}
+            {!isWarZoneMember && (
+              <button
+                onClick={handleTopSecretOnlyCheckout}
+                className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+              >
+                No thanks, just Top Secret for $89.99/month →
+              </button>
+            )}
           </div>
         </motion.div>
       </div>

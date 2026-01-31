@@ -51,8 +51,8 @@ const INTRO_DISCOUNT_PLAN_IDS = new Set([
 
 // 🔥 v5.0.0: Bundle Plan IDs
 const BUNDLE_PLAN_IDS = new Set([
-  'plan_ujyQUPIi7UIvN',   // Bundle Monthly - $109/month
-  'plan_M2zS1EoNXJF10',   // Bundle Yearly - $997/year
+  'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month
+  'plan_M2zS1EoNXJF10',   // Bundle Yearly - $1090/year
 ]);
 
 // ============================================
@@ -112,8 +112,8 @@ interface WhopCheckoutResponse {
   // ═══════════════════════════════════════════
   // 🔥 v5.0.0: Bundle - War Zone + Top Secret
   // ═══════════════════════════════════════════
-  'plan_ujyQUPIi7UIvN': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Monthly ($109)
-  'plan_M2zS1EoNXJF10': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Yearly ($997)
+  'plan_ICooR8aqtdXad': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Monthly ($109)
+  'plan_M2zS1EoNXJF10': '/app/all-markets/warzone?payment=success&source=whop&bundle=true',  // Bundle Yearly ($1090)
 };
 
 // ============================================

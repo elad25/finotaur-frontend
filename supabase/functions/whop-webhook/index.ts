@@ -65,8 +65,8 @@ const TOP_SECRET_PLAN_IDS = new Set([
 
 // 🔥 v5.0.0: Bundle Plan IDs
 const BUNDLE_PLAN_IDS = new Set([
-  'plan_ujyQUPIi7UIvN',  // Bundle Monthly - $109/month
-  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $997/year
+  'plan_ICooR8aqtdXad',  // Bundle Monthly - $109/month
+  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $1090/year
 ]);
 
 // ============================================
@@ -392,7 +392,7 @@ async function getPlanInfo(
     "prod_e8Er36RubeFXU": { plan: "top_secret", interval: "monthly", price: 50.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },  // 🔥 Top Secret For War Zone
     // 🔥 v5.0.0: Bundle fallback - War Zone + Top Secret
     "prod_LtP5GbpPfp9bn": { plan: "bundle", interval: "monthly", price: 109.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
-    "prod_CbWpZrn5P7wc9": { plan: "bundle", interval: "yearly", price: 997.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
+    "prod_CbWpZrn5P7wc9": { plan: "bundle", interval: "yearly", price: 1090.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
   };
 
   return fallbackMapping[productId] || null;

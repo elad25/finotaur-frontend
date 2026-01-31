@@ -1231,7 +1231,7 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
       const accessToken = sessionData?.session?.access_token;
       
       // Bundle plan ID - $97/month
-      const bundlePlanId = 'plan_ujyQUPIi7UIvN';
+      const bundlePlanId = 'plan_ICooR8aqtdXad';
       
       // Try Edge Function first
       if (accessToken) {
@@ -1521,12 +1521,15 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
                 )}
               </button>
               
-              <button
-                onClick={() => setShowBundlePopup(false)}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-              >
-                No thanks, I'll pass
-              </button>
+              {/* Only show skip button if user is NOT a Top Secret member */}
+              {!isTopSecretMember && (
+                <button
+                  onClick={() => setShowBundlePopup(false)}
+                  className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+                >
+                  No thanks, I'll pass
+                </button>
+              )}
             </div>
           </div>
         </motion.div>

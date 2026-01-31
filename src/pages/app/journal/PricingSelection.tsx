@@ -28,10 +28,10 @@ const YEARLY_SAVINGS = Math.round((MONTHLY_PRICE * 12) - YEARLY_PRICE);
 const YEARLY_MONTHLY_EQUIVALENT = Math.round(YEARLY_PRICE / 12);
 
 // 🔥 v5.0.0: Bundle Configuration
-const WHOP_BUNDLE_MONTHLY_PLAN_ID = 'plan_ujyQUPIi7UIvN'; // Bundle Monthly
+const WHOP_BUNDLE_MONTHLY_PLAN_ID = 'plan_ICooR8aqtdXad'; // Bundle Monthly
 const WHOP_BUNDLE_YEARLY_PLAN_ID = 'plan_M2zS1EoNXJF10';  // Bundle Yearly
 const BUNDLE_MONTHLY_PRICE = 109;
-const BUNDLE_YEARLY_PRICE = 997;
+const BUNDLE_YEARLY_PRICE = 1090;
 
 // =====================================================
 // ICONS

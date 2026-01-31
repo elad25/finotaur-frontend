@@ -139,8 +139,8 @@ export const WHOP_PLAN_IDS = {
   // ═══════════════════════════════════════════
   // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
   // ═══════════════════════════════════════════
-  bundle_monthly: 'plan_ujyQUPIi7UIvN',   // Bundle Monthly - $109/month with 7-day trial
-  bundle_yearly: 'plan_M2zS1EoNXJF10',    // Bundle Yearly - $997/year (no trial)
+  bundle_monthly: 'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month with 7-day trial
+  bundle_yearly: 'plan_M2zS1EoNXJF10',    // Bundle Yearly - $1090/year (no trial)
 } as const;
 
 // 🔥 Product IDs - Used for WEBHOOK identification
@@ -261,7 +261,7 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_7VQxCZ5Kpw6f0': 'top_secret_monthly_warzone',
   
   // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
-  'plan_ujyQUPIi7UIvN': 'bundle_monthly',
+  'plan_ICooR8aqtdXad': 'bundle_monthly',
   'plan_M2zS1EoNXJF10': 'bundle_yearly',
 };
 
@@ -806,7 +806,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   // ═══════════════════════════════════════════
   bundle_monthly: {
     id: 'bundle_monthly' as PlanId,
-    whopPlanId: 'plan_ujyQUPIi7UIvN',
+    whopPlanId: 'plan_ICooR8aqtdXad',
     whopProductId: 'prod_LtP5GbpPfp9bn',
     name: 'bundle' as PlanName,
     displayName: 'War Zone + Top Secret Bundle',
@@ -835,16 +835,16 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       '2x Crypto Market Reports monthly',
     ],
   },
-  bundle_yearly: {
+bundle_yearly: {
     id: 'bundle_yearly' as PlanId,
     whopPlanId: 'plan_M2zS1EoNXJF10',
     whopProductId: 'prod_CbWpZrn5P7wc9',
     name: 'bundle' as PlanName,
     displayName: 'War Zone + Top Secret Bundle (Annual)',
-    price: 997,
+    price: 1090,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 83.08,  // $997/12 = ~$83.08/month
+    monthlyEquivalent: 90.83,  // $1090/12 = ~$90.83/month
     maxTrades: 0,
     trialDays: 0,  // No trial for yearly
     isNewsletter: true,
@@ -852,11 +852,11 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     isBundle: true,
     discordIncluded: true,
     popular: true,
-    badge: '💎 ULTIMATE VALUE - Save $311/year',
+    badge: '💎 ULTIMATE VALUE - Save $218/year',
     category: 'journal',
     features: [
-      '💰 Save $311/year vs monthly bundle!',
-      '💰 Save $601.88/year vs separate products!',
+      '💰 Save $218/year vs monthly bundle!',
+      '💰 Save $508.88/year vs separate products!',
       '📰 War Zone Daily Intelligence Report',
       '🔐 Top Secret Exclusive Research',
       'All Premium Discord channels',

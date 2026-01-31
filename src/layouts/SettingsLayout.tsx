@@ -1848,8 +1848,8 @@ const BillingTab = () => {
                   {profile?.bundle_enabled ? (
                     profile?.bundle_interval === 'yearly' ? (
                       <div className="flex flex-col items-end">
-                        <span className="text-xl font-bold text-yellow-300">$997/yr</span>
-                        <span className="text-xs text-emerald-400">Save $311/year!</span>
+                        <span className="text-xl font-bold text-yellow-300">$1090/yr</span>
+                        <span className="text-xs text-emerald-400">Save $218/year!</span>
                       </div>
                     ) : profile?.bundle_is_in_trial ? (
                       <div className="flex items-center gap-2">
@@ -1943,7 +1943,7 @@ const BillingTab = () => {
                         className="w-full bg-gradient-to-r from-yellow-600 to-amber-500 hover:from-yellow-500 hover:to-amber-400 text-black font-semibold shadow-lg shadow-yellow-900/30"
                       >
                         <Crown className="w-4 h-4 mr-2" />
-                        Upgrade to Yearly (Save $311)
+                        Upgrade to Yearly (Save $218)
                       </Button>
                     )}
                     {profile?.bundle_cancel_at_period_end ? (
@@ -1996,37 +1996,139 @@ const BillingTab = () => {
                       </Button>
                     )}
                   </div>
-                ) : (
-                  /* No Bundle - Show promotional CTA */
+               ) : (
+                  /* No Bundle - Show two pricing cards side by side */
                   <>
-                    <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <p className="text-xs text-emerald-400 text-center font-medium">
-                        💎 Save $49.98/month vs buying separately! 7-day FREE trial included.
-                      </p>
+                    {/* Price Comparison Banner */}
+                    <div className="flex flex-wrap justify-center gap-2 mb-4 text-xs">
+                      <span className="text-zinc-500 line-through">War Zone $69.99</span>
+                      <span className="text-zinc-600">+</span>
+                      <span className="text-zinc-500 line-through">Top Secret $89.99</span>
+                      <span className="text-zinc-600">=</span>
+                      <span className="text-zinc-500 line-through">$159.98/mo</span>
+                    </div>
+
+                    {/* Two Pricing Cards */}
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {/* Monthly Bundle Card */}
+                      <div className="relative p-4 rounded-xl bg-zinc-800/60 border border-amber-500/30">
+                        {/* 7-Day Trial Badge */}
+                        <div className="absolute -top-2.5 left-3">
+                          <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/30">
+                            7-DAY FREE TRIAL
+                          </div>
+                        </div>
+
+                        <div className="pt-3">
+                          <h4 className="text-sm font-bold text-white mb-2">Monthly Bundle</h4>
+                          
+                          {/* Price */}
+                          <div className="mb-3">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold text-amber-400">$109</span>
+                              <span className="text-zinc-500 text-xs">/month</span>
+                            </div>
+                            <p className="text-emerald-400 text-[10px] font-semibold mt-0.5">
+                              Save $50.98/month vs separate!
+                            </p>
+                          </div>
+
+                          {/* Features */}
+                          <div className="space-y-1.5 mb-3">
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span>War Zone Daily Intelligence</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span>Top Secret Reports (10/mo)</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span>Private Discord Access</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                              <span>7-Day Free Trial</span>
+                            </div>
+                          </div>
+
+                          {/* CTA Button */}
+                          <Button
+                            onClick={() => window.open(`https://whop.com/checkout/plan_ujyQUPIi7UIvN?email=${user?.email || ''}`, '_blank')}
+                            size="sm"
+                            className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-semibold text-xs py-2"
+                          >
+                            <Crown className="w-3 h-3 mr-1" />
+                            Start Free Trial
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Yearly Bundle Card - BEST VALUE */}
+                      <div className="relative p-4 rounded-xl bg-gradient-to-br from-yellow-900/40 to-amber-900/30 border-2 border-yellow-500/50 shadow-lg shadow-yellow-500/10">
+                        {/* BEST VALUE Badge */}
+                        <div className="absolute -top-2.5 right-3">
+                          <div className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-yellow-500 to-amber-400 text-black shadow-lg shadow-yellow-500/30">
+                            BEST VALUE
+                          </div>
+                        </div>
+
+                        <div className="pt-3">
+                          <h4 className="text-sm font-bold bg-gradient-to-r from-yellow-400 to-amber-300 bg-clip-text text-transparent mb-2">
+                            Yearly Bundle
+                          </h4>
+                          
+                          {/* Price */}
+                          <div className="mb-3">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-bold text-white">$1090</span>
+                              <span className="text-zinc-500 text-xs">/year</span>
+                            </div>
+                            <p className="text-emerald-400 text-[10px] font-semibold mt-0.5">
+                              Just $90.83/mo — Save $218/year!
+                            </p>
+                          </div>
+
+                          {/* Features */}
+                          <div className="space-y-1.5 mb-3">
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                              <span>Everything in Monthly</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                              <span>Locked price for 12 months</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                              <span>Priority support access</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-zinc-300 text-xs">
+                              <CheckCircle2 className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                              <span>Founding member badge</span>
+                            </div>
+                          </div>
+
+                          {/* CTA Button */}
+                          <Button
+                            onClick={() => window.open(`https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}`, '_blank')}
+                            size="sm"
+                            className="w-full bg-gradient-to-r from-yellow-500 to-amber-400 hover:from-yellow-400 hover:to-amber-300 text-black font-semibold text-xs py-2"
+                          >
+                            <Crown className="w-3 h-3 mr-1" />
+                            Get Yearly Bundle
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                     
-                    {/* Pricing Options - Monthly vs Yearly */}
-                    <div className="grid grid-cols-2 gap-3 mb-3">
-                      <div className="p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
-                        <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Monthly</p>
-                        <p className="text-lg font-bold text-amber-400">$109<span className="text-xs text-zinc-500">/mo</span></p>
-                        <p className="text-[10px] text-zinc-500">7-day free trial</p>
-                      </div>
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-yellow-900/30 to-amber-900/20 border border-yellow-500/40">
-                        <p className="text-xs text-yellow-400 uppercase tracking-wide mb-1">Yearly</p>
-                        <p className="text-lg font-bold text-yellow-300">$997<span className="text-xs text-zinc-500">/yr</span></p>
-                        <p className="text-[10px] text-emerald-400">Save $311/year!</p>
-                      </div>
-                    </div>
-                    
-                    <Button
-                      onClick={() => navigate('/app/all-markets/warzone?bundle=true')}
-                      size="sm"
-                      className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-black font-semibold shadow-lg shadow-amber-900/20"
-                    >
-                      Get the Bundle
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
+                    {/* Link to Top Secret page for more info */}
+                    <p className="text-center text-xs text-zinc-500">
+                      <a href="/app/top-secret" className="text-amber-400 hover:text-amber-300 transition-colors">
+                        No thanks, just Top Secret for $89.99/month →
+                      </a>
+                    </p>
                   </>
                 )}
               </div>
