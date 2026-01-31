@@ -1638,6 +1638,83 @@ if (isTopSecretPayment) {
         return { success: false, message: "User not found for Bundle payment" };
       }
       
+      // 🔥 v5.4.0: Check if this is an upgrade from monthly to yearly
+      if (billingInterval === 'yearly') {
+        const { data: currentProfile } = await supabase
+          .from('profiles')
+          .select('bundle_interval, bundle_status, bundle_whop_membership_id')
+          .eq('id', resolvedUserId)
+          .single();
+        
+        if (currentProfile?.bundle_interval === 'monthly' && 
+            ['active', 'trial', 'trialing'].includes(currentProfile?.bundle_status || '')) {
+          console.log("🔥 Detected Bundle UPGRADE from monthly to yearly");
+          
+          // Cancel old monthly membership in Whop
+          if (currentProfile.bundle_whop_membership_id && 
+              currentProfile.bundle_whop_membership_id !== membershipId) {
+            console.log("🔥 Cancelling old monthly Bundle membership:", currentProfile.bundle_whop_membership_id);
+            
+            try {
+              const cancelResponse = await fetch(
+                `https://api.whop.com/api/v1/memberships/${currentProfile.bundle_whop_membership_id}/cancel`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${WHOP_API_KEY}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ cancellation_mode: 'immediate' }),
+                }
+              );
+              
+              if (cancelResponse.ok) {
+                console.log("✅ Old monthly Bundle membership cancelled successfully");
+              } else {
+                console.warn("⚠️ Failed to cancel old Bundle membership:", await cancelResponse.text());
+              }
+            } catch (cancelError) {
+              console.error("❌ Error cancelling old Bundle membership:", cancelError);
+            }
+          }
+          
+          // Update DB directly for upgrade (bypass regular activation)
+          const expiresAt = new Date();
+          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+          
+          await supabase
+            .from('profiles')
+            .update({
+              bundle_interval: 'yearly',
+              bundle_status: 'active',
+              bundle_whop_membership_id: membershipId,
+              bundle_expires_at: expiresAt.toISOString(),
+              bundle_is_in_trial: false,
+              bundle_trial_ends_at: null,
+              bundle_cancel_at_period_end: false,
+              newsletter_interval: 'yearly',
+              newsletter_status: 'active',
+              newsletter_expires_at: expiresAt.toISOString(),
+              newsletter_is_in_trial: false,
+              newsletter_trial_ends_at: null,
+              top_secret_interval: 'yearly',
+              top_secret_status: 'active',
+              top_secret_expires_at: expiresAt.toISOString(),
+              top_secret_is_in_trial: false,
+              top_secret_trial_ends_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', resolvedUserId);
+          
+          console.log("✅ Bundle upgraded to yearly for user:", resolvedEmail);
+          
+          return { 
+            success: true, 
+            message: `Bundle UPGRADED to yearly: ${resolvedEmail}` 
+          };
+        }
+      }
+      
       const isInTrial = data.billing_reason === 'subscription_create' && billingInterval === 'monthly';
       const trialEndsAt = isInTrial 
         ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() 
