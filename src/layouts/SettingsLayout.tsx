@@ -1139,7 +1139,8 @@ const BillingTab = () => {
         )}
       </Card>
 
-      {/* 🔥 WAR ZONE NEWSLETTER CARD */}
+      {/* 🔥 WAR ZONE NEWSLETTER CARD - Hide if user has Bundle */}
+      {!profile?.bundle_enabled && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         newsletterIsActive && newsletterInterval === 'yearly'
@@ -1437,8 +1438,10 @@ const BillingTab = () => {
           </div>
         </div>
       </Card>
+      )}
 
-      {/* 🔥 TOP SECRET CARD */}
+      {/* 🔥 TOP SECRET CARD - Hide if user has Bundle */}
+      {!profile?.bundle_enabled && (
       <Card className={cn(
         "p-6 relative overflow-hidden shadow-xl",
         topSecretIsActive && topSecretInterval === 'yearly'
@@ -1745,31 +1748,73 @@ const BillingTab = () => {
           </div>
         </div>
       </Card>
+      )}
 
       {/* 🔥 BUNDLE CARD - War Zone + Top Secret Combined */}
-      {!profile?.bundle_enabled && !newsletterIsActive && !topSecretIsActive && (
-        <Card className="p-6 relative overflow-hidden shadow-xl bg-gradient-to-br from-amber-950/40 via-yellow-950/30 to-zinc-900/90 border-2 border-amber-500/40 shadow-amber-900/20">
+      {/* Show Bundle card if: user has bundle OR doesn't have both products separately */}
+      {(profile?.bundle_enabled || (!newsletterIsActive && !topSecretIsActive)) && (
+        <Card className={cn(
+          "p-6 relative overflow-hidden shadow-xl border-2",
+          profile?.bundle_enabled && profile?.bundle_interval === 'yearly'
+            ? "bg-gradient-to-br from-yellow-950/50 via-amber-950/40 to-zinc-900/90 border-yellow-500/50 shadow-yellow-900/30"
+            : "bg-gradient-to-br from-amber-950/40 via-yellow-950/30 to-zinc-900/90 border-amber-500/40 shadow-amber-900/20"
+        )}>
           {/* Subtle animated glow */}
-          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-transparent to-yellow-500/10" />
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+          <div className={cn(
+            "absolute inset-0 bg-gradient-to-r via-transparent",
+            profile?.bundle_enabled && profile?.bundle_interval === 'yearly'
+              ? "from-yellow-500/15 to-amber-500/15"
+              : "from-amber-500/10 to-yellow-500/10"
+          )} />
+          <div className={cn(
+            "absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent",
+            profile?.bundle_enabled && profile?.bundle_interval === 'yearly'
+              ? "via-yellow-400/70"
+              : "via-amber-500/60"
+          )} />
           
           <div className="relative">
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/40 to-yellow-500/30 border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/30">
-                  <Crown className="w-5 h-5 text-amber-300" />
+                <div className={cn(
+                  "w-10 h-10 rounded-xl border flex items-center justify-center shadow-lg",
+                  profile?.bundle_enabled && profile?.bundle_interval === 'yearly'
+                    ? "bg-gradient-to-br from-yellow-500/50 to-amber-500/40 border-yellow-500/60 shadow-yellow-500/40"
+                    : "bg-gradient-to-br from-amber-500/40 to-yellow-500/30 border-amber-500/50 shadow-amber-500/30"
+                )}>
+                  <Crown className={cn(
+                    "w-5 h-5",
+                    profile?.bundle_enabled && profile?.bundle_interval === 'yearly' ? "text-yellow-300" : "text-amber-300"
+                  )} />
                 </div>
                 <div>
                   <h2 className="font-semibold text-white text-lg flex items-center gap-2">
                     War Zone + Top Secret Bundle
-                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
-                      Best Value
-                    </Badge>
+                    {profile?.bundle_enabled && profile?.bundle_interval === 'yearly' && (
+                      <Badge className="bg-gradient-to-r from-yellow-500/30 to-amber-500/30 text-yellow-300 border border-yellow-500/50 text-[10px] px-2 py-0.5 uppercase tracking-wider shadow-lg shadow-yellow-500/20">
+                        <Crown className="w-3 h-3 mr-1" />Annual
+                      </Badge>
+                    )}
+                    {!profile?.bundle_enabled && (
+                      <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/40 text-[10px] px-2 py-0.5 uppercase tracking-wider">
+                        Best Value
+                      </Badge>
+                    )}
                   </h2>
                   <p className="text-xs text-zinc-400">Complete Research Package</p>
                 </div>
               </div>
+              {profile?.bundle_enabled && (
+                <a 
+                  href="https://whop.com/finotaur" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-zinc-500 hover:text-amber-300 flex items-center gap-1.5 transition-colors"
+                >
+                  Manage on Whop <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
             
             {/* Main Content Box */}
@@ -1777,14 +1822,52 @@ const BillingTab = () => {
               {/* Plan & Price Row */}
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                  <span className="text-xl font-bold text-white">Premium Bundle</span>
+                  <span className="text-xl font-bold text-white">
+                    {profile?.bundle_enabled ? 'Active Bundle' : 'Premium Bundle'}
+                  </span>
+                  {profile?.bundle_enabled && (
+                    <Badge variant="outline" className={cn(
+                      "px-2.5 py-1",
+                      profile?.bundle_cancel_at_period_end
+                        ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                        : profile?.bundle_is_in_trial
+                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    )}>
+                      {profile?.bundle_cancel_at_period_end ? (
+                        <><Clock className="w-3 h-3 mr-1" />Cancelling</>
+                      ) : profile?.bundle_is_in_trial ? (
+                        <><Clock className="w-3 h-3 mr-1" />Trial</>
+                      ) : (
+                        <><CheckCircle2 className="w-3 h-3 mr-1" />Active</>
+                      )}
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-right">
-                  <div className="flex flex-col items-end">
-                    <span className="text-zinc-500 line-through text-sm">$159.98/mo</span>
-                    <span className="text-xl font-bold text-amber-400">$109/mo</span>
-                    <span className="text-xs text-emerald-400">Save $49.98/mo!</span>
-                  </div>
+                  {profile?.bundle_enabled ? (
+                    profile?.bundle_interval === 'yearly' ? (
+                      <div className="flex flex-col items-end">
+                        <span className="text-xl font-bold text-yellow-300">$997/yr</span>
+                        <span className="text-xs text-emerald-400">Save $311/year!</span>
+                      </div>
+                    ) : profile?.bundle_is_in_trial ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl font-bold text-white">Free Trial</span>
+                        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs px-2 py-0.5">
+                          {Math.max(0, Math.ceil((new Date(profile?.bundle_trial_ends_at || '').getTime() - Date.now()) / (24 * 60 * 60 * 1000)))} days left
+                        </Badge>
+                      </div>
+                    ) : (
+                      <span className="text-xl font-bold text-amber-400">$109/mo</span>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-end">
+                      <span className="text-zinc-500 line-through text-sm">$159.98/mo</span>
+                      <span className="text-xl font-bold text-amber-400">$109/mo</span>
+                      <span className="text-xs text-emerald-400">Save $49.98/mo!</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -1808,21 +1891,144 @@ const BillingTab = () => {
                 </div>
               </div>
 
-              {/* CTA */}
-              <div className="pt-4 border-t border-zinc-700/50">
-                <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-xs text-emerald-400 text-center font-medium">
-                    💎 Save $49.98/month vs buying separately! 7-day FREE trial included.
-                  </p>
+              {/* Billing Info for Active Bundle Subscribers */}
+              {profile?.bundle_enabled && (
+                <div className={cn(
+                  "mb-5 p-4 rounded-lg",
+                  profile?.bundle_interval === 'yearly'
+                    ? "bg-gradient-to-br from-yellow-900/20 to-amber-900/10 border border-yellow-500/30"
+                    : "bg-zinc-800/50 border border-zinc-700/40"
+                )}>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Billing cycle</p>
+                      <p className={cn(
+                        "capitalize font-medium",
+                        profile?.bundle_interval === 'yearly' ? "text-yellow-300" : "text-zinc-200"
+                      )}>
+                        {profile?.bundle_interval === 'yearly' ? '✨ Yearly' : 'Monthly'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">
+                        {profile?.bundle_is_in_trial ? 'First charge' : 'Next billing'}
+                      </p>
+                      <p className="text-zinc-200 font-medium flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+                        {formatDate(profile?.bundle_is_in_trial ? profile?.bundle_trial_ends_at : profile?.bundle_expires_at)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {profile?.bundle_started_at && (
+                    <div className="mt-2 pt-2 border-t border-zinc-700/30">
+                      <p className="text-xs text-zinc-500">Member since {formatDate(profile.bundle_started_at)}</p>
+                    </div>
+                  )}
                 </div>
-                <Button
-                  onClick={() => navigate('/app/all-markets/warzone?bundle=true')}
-                  size="sm"
-                  className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-black font-medium shadow-lg shadow-amber-900/20"
-                >
-                  Get the Bundle
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+              )}
+
+              {/* CTA Section */}
+              <div className="pt-4 border-t border-zinc-700/50">
+                {profile?.bundle_enabled ? (
+                  /* Active Bundle - Show Upgrade to Yearly or Cancel */
+                  <div className="space-y-3">
+                    {profile?.bundle_interval === 'monthly' && !profile?.bundle_cancel_at_period_end && (
+                      <Button
+                        onClick={() => {
+                          // Create checkout for yearly bundle
+                          window.open(`https://whop.com/checkout/plan_M2zS1EoNXJF10?email=${user?.email || ''}`, '_blank');
+                        }}
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-yellow-600 to-amber-500 hover:from-yellow-500 hover:to-amber-400 text-black font-semibold shadow-lg shadow-yellow-900/30"
+                      >
+                        <Crown className="w-4 h-4 mr-2" />
+                        Upgrade to Yearly (Save $311)
+                      </Button>
+                    )}
+                    {profile?.bundle_cancel_at_period_end ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          // Reactivate bundle - similar to newsletter reactivation
+                          const { data: { session } } = await supabase.auth.getSession();
+                          if (!session?.access_token) return;
+                          
+                          try {
+                            const response = await fetch(
+                              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Authorization": `Bearer ${session.access_token}`,
+                                  "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                  action: "reactivate",
+                                  product: "bundle",
+                                }),
+                              }
+                            );
+                            const data = await response.json();
+                            if (data.success) {
+                              toast.success('Bundle subscription reactivated');
+                              refreshProfile();
+                            } else {
+                              toast.error(data.error || 'Failed to reactivate');
+                            }
+                          } catch (error) {
+                            toast.error('Failed to reactivate bundle');
+                          }
+                        }}
+                        className="w-full border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+                      >
+                        Reactivate Bundle
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowBundleCancelDialog(true)}
+                        className="w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+                      >
+                        Unsubscribe
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  /* No Bundle - Show promotional CTA */
+                  <>
+                    <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <p className="text-xs text-emerald-400 text-center font-medium">
+                        💎 Save $49.98/month vs buying separately! 7-day FREE trial included.
+                      </p>
+                    </div>
+                    
+                    {/* Pricing Options - Monthly vs Yearly */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50">
+                        <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Monthly</p>
+                        <p className="text-lg font-bold text-amber-400">$109<span className="text-xs text-zinc-500">/mo</span></p>
+                        <p className="text-[10px] text-zinc-500">7-day free trial</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-gradient-to-br from-yellow-900/30 to-amber-900/20 border border-yellow-500/40">
+                        <p className="text-xs text-yellow-400 uppercase tracking-wide mb-1">Yearly</p>
+                        <p className="text-lg font-bold text-yellow-300">$997<span className="text-xs text-zinc-500">/yr</span></p>
+                        <p className="text-[10px] text-emerald-400">Save $311/year!</p>
+                      </div>
+                    </div>
+                    
+                    <Button
+                      onClick={() => navigate('/app/all-markets/warzone?bundle=true')}
+                      size="sm"
+                      className="w-full bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-black font-semibold shadow-lg shadow-amber-900/20"
+                    >
+                      Get the Bundle
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>

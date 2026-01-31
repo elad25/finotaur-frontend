@@ -76,7 +76,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
           onClick={onClose} 
         />
         
-        <div className="relative w-full max-w-sm max-h-[calc(100vh-80px)] overflow-hidden">
+        <div className="relative w-full max-w-sm max-h-[calc(100vh-160px)] overflow-hidden mt-12">
           {/* Glow effects */}
           <div 
             className="absolute -inset-[2px] rounded-2xl opacity-70 animate-pulse" 
@@ -168,40 +168,58 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                 </div>
               </div>
 
-              {/* Disclaimer Checkbox */}
-              <label className="flex items-start gap-2.5 cursor-pointer mb-4 group p-2 rounded-lg hover:bg-white/[0.02] transition-colors">
-                <div className="relative flex-shrink-0 mt-0.5">
-                  <input 
-                    type="checkbox" 
-                    checked={agreed} 
-                    onChange={(e) => setAgreed(e.target.checked)} 
-                    className="sr-only" 
-                  />
-                  <div 
-                    className={cn(
-                      "w-5 h-5 rounded flex items-center justify-center transition-all",
-                      !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-105"
-                    )}
-                    style={{ 
-                      background: agreed ? 'linear-gradient(135deg, #C9A646, #F4D97B)' : 'rgba(201,166,70,0.06)',
-                      border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
-                      boxShadow: agreed ? '0 0 15px rgba(201,166,70,0.4)' : 'none'
-                    }}
-                  >
-                    {agreed && <Check className="w-3.5 h-3.5 text-black" />}
+              {/* Disclaimer Checkbox - Premium Style */}
+              <div 
+                className="rounded-xl p-3 mb-4 relative overflow-hidden"
+                style={{ 
+                  background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+                  border: '1px solid rgba(201,166,70,0.25)',
+                  boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.08), 0 4px 12px rgba(0,0,0,0.2)'
+                }}
+              >
+                <div 
+                  className="absolute top-0 left-0 right-0 h-px"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.3), transparent)' }}
+                />
+                
+                <label className="flex items-start gap-2.5 cursor-pointer group relative z-10">
+                  <div className="relative flex-shrink-0 mt-0.5">
+                    <input 
+                      type="checkbox" 
+                      checked={agreed} 
+                      onChange={(e) => setAgreed(e.target.checked)} 
+                      className="sr-only" 
+                    />
+                    <div 
+                      className={cn(
+                        "w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200",
+                        !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-110"
+                      )}
+                      style={{ 
+                        background: agreed 
+                          ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)' 
+                          : 'rgba(201,166,70,0.08)',
+                        border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
+                        boxShadow: agreed 
+                          ? '0 0 20px rgba(201,166,70,0.5), inset 0 1px 0 rgba(255,255,255,0.3)' 
+                          : 'inset 0 1px 2px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      {agreed && <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />}
+                    </div>
                   </div>
-                </div>
-                <span className="text-[#9A9080] text-xs leading-relaxed">
-                  I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
-                  <button 
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }}
-                    className="text-[#C9A646] hover:text-[#F4D97B] underline underline-offset-2 transition-colors font-medium"
-                  >
-                    Terms & Disclaimer
-                  </button>
-                </span>
-              </label>
+                  <span className="text-[#A09080] text-sm leading-relaxed">
+                    I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
+                    <button 
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }}
+                      className="text-[#C9A646] hover:text-[#F4D97B] underline underline-offset-2 transition-colors font-medium"
+                    >
+                      Terms & Disclaimer
+                    </button>
+                  </span>
+                </label>
+              </div>
               
               {/* CTA Buttons */}
               <div className="space-y-2">
@@ -267,7 +285,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
       
       {/* Popup Card - Wide for two columns, narrow for single */}
       <div className={cn(
-        "relative w-full max-h-[calc(100vh-80px)] overflow-hidden",
+        "relative w-full max-h-[calc(100vh-160px)] overflow-hidden mt-12",
         showBothOptions ? "max-w-3xl" : "max-w-sm"
       )}>
         {/* Glow effects */}
@@ -528,15 +546,22 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
               )}
             </div>
 
-            {/* Shared Disclaimer Checkbox */}
+            {/* Shared Disclaimer Checkbox - Premium Style */}
             <div 
-              className="rounded-xl p-4 mb-4"
+              className="rounded-xl p-4 mb-4 relative overflow-hidden"
               style={{ 
-                background: 'linear-gradient(135deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.02) 100%)',
-                border: '1px solid rgba(201,166,70,0.15)',
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+                border: '1px solid rgba(201,166,70,0.25)',
+                boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.08), 0 4px 12px rgba(0,0,0,0.2)'
               }}
             >
-              <label className="flex items-start gap-3 cursor-pointer group">
+              {/* Inner glow effect */}
+              <div 
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.3), transparent)' }}
+              />
+              
+              <label className="flex items-start gap-3 cursor-pointer group relative z-10">
                 <div className="relative flex-shrink-0 mt-0.5">
                   <input 
                     type="checkbox" 
@@ -546,19 +571,23 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   />
                   <div 
                     className={cn(
-                      "w-5 h-5 rounded flex items-center justify-center transition-all",
-                      !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-105"
+                      "w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200",
+                      !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-110"
                     )}
                     style={{ 
-                      background: agreed ? 'linear-gradient(135deg, #C9A646, #F4D97B)' : 'rgba(201,166,70,0.06)',
+                      background: agreed 
+                        ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)' 
+                        : 'rgba(201,166,70,0.08)',
                       border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
-                      boxShadow: agreed ? '0 0 15px rgba(201,166,70,0.4)' : 'none'
+                      boxShadow: agreed 
+                        ? '0 0 20px rgba(201,166,70,0.5), inset 0 1px 0 rgba(255,255,255,0.3)' 
+                        : 'inset 0 1px 2px rgba(0,0,0,0.2)'
                     }}
                   >
-                    {agreed && <Check className="w-3.5 h-3.5 text-black" />}
+                    {agreed && <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />}
                   </div>
                 </div>
-                <span className="text-[#9A9080] text-xs leading-relaxed">
+                <span className="text-[#A09080] text-sm leading-relaxed">
                   I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
                   <button 
                     type="button"
