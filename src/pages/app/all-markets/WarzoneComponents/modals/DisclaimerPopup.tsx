@@ -24,14 +24,16 @@ interface DisclaimerPopupProps {
   billingInterval: BillingInterval;
   isTopSecretMember: boolean;
   onSelectBundle?: () => void;
+  onSelectBundleYearly?: () => void;
 }
 
 const DisclaimerPopup = memo(function DisclaimerPopup({ 
-  isOpen, onClose, onAccept, isProcessing, billingInterval, isTopSecretMember, onSelectBundle
+  isOpen, onClose, onAccept, isProcessing, billingInterval, isTopSecretMember, onSelectBundle, onSelectBundleYearly
 }: DisclaimerPopupProps) {
   const [agreed, setAgreed] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [selectedOption, setSelectedOption] = useState<'single' | 'bundle' | null>(null);
+  const [bundleTab, setBundleTab] = useState<'monthly' | 'yearly'>('monthly');
   
   const isMonthly = billingInterval === 'monthly';
   const displayPrice = isMonthly 
@@ -59,7 +61,11 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
   const handleBundleClick = () => {
     if (!agreed || !onSelectBundle) return;
     setSelectedOption('bundle');
-    onSelectBundle();
+    if (bundleTab === 'yearly' && onSelectBundleYearly) {
+      onSelectBundleYearly();
+    } else {
+      onSelectBundle();
+    }
   };
 
   // ============================================
@@ -124,32 +130,93 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
 
               <h2 className="text-xl font-bold text-white text-center mb-4">Upgrade to Bundle</h2>
               
-              <p className="text-slate-400 text-center text-sm mb-4">
+              <p className="text-slate-400 text-center text-sm mb-3">
                 Get <span className="text-white font-semibold">both War Zone + Top Secret</span> for one low price!
               </p>
-              
-              {/* Price Comparison */}
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                  <span className="text-slate-400 text-sm">War Zone Newsletter</span>
-                  <span className="text-slate-500 line-through text-sm">$69.99/mo</span>
-                </div>
-                <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                  <span className="text-slate-400 text-sm">Top Secret Reports</span>
-                  <span className="text-slate-500 line-through text-sm">$89.99/mo</span>
-                </div>
-                <div className="flex justify-between items-center p-3 rounded-lg"
-                     style={{ 
-                       background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                       border: '1px solid rgba(201,166,70,0.3)'
-                     }}>
-                  <div>
-                    <span className="text-[#C9A646] font-bold">Bundle Price</span>
-                    <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
-                  </div>
-                  <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
-                </div>
+
+              {/* Monthly / Yearly Tabs */}
+              <div className="flex rounded-xl overflow-hidden border border-[#C9A646]/30 mb-4">
+                <button
+                  onClick={() => setBundleTab('monthly')}
+                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                  style={bundleTab === 'monthly' ? {
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                    color: '#000',
+                  } : {
+                    background: 'transparent',
+                    color: '#C9A646',
+                  }}
+                >
+                  Monthly
+                </button>
+                <button
+                  onClick={() => setBundleTab('yearly')}
+                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                  style={bundleTab === 'yearly' ? {
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                    color: '#000',
+                  } : {
+                    background: 'transparent',
+                    color: '#C9A646',
+                  }}
+                >
+                  Yearly
+                  <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={bundleTab === 'yearly' ? {
+                      background: 'rgba(0,0,0,0.2)',
+                      color: '#000',
+                    } : {
+                      background: 'rgba(16,185,129,0.2)',
+                      color: '#10B981',
+                    }}
+                  >
+                    SAVE $218
+                  </span>
+                </button>
               </div>
+              
+              {/* Price Section — Dynamic based on tab */}
+              {bundleTab === 'monthly' ? (
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
+                    <span className="text-slate-400 text-sm">War Zone Newsletter</span>
+                    <span className="text-slate-500 line-through text-sm">$69.99/mo</span>
+                  </div>
+                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
+                    <span className="text-slate-400 text-sm">Top Secret Reports</span>
+                    <span className="text-slate-500 line-through text-sm">$89.99/mo</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 rounded-lg"
+                       style={{ 
+                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                         border: '1px solid rgba(201,166,70,0.3)'
+                       }}>
+                    <div>
+                      <span className="text-[#C9A646] font-bold">Bundle Price</span>
+                      <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
+                    </div>
+                    <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
+                    <span className="text-slate-400 text-sm">Monthly Bundle × 12</span>
+                    <span className="text-slate-500 line-through text-sm">$1,308/yr</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 rounded-lg"
+                       style={{ 
+                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+                         border: '1px solid rgba(201,166,70,0.3)'
+                       }}>
+                    <div>
+                      <span className="text-[#C9A646] font-bold">Yearly Bundle</span>
+                      <p className="text-emerald-400 text-xs">Just $90.83/mo — Save $218!</p>
+                    </div>
+                    <span className="text-[#C9A646] font-bold text-xl">$1,090/yr</span>
+                  </div>
+                </div>
+              )}
               
               {/* What You Get */}
               <div className="space-y-1.5 mb-4">
@@ -164,8 +231,20 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                 </div>
                 <div className="flex items-center gap-2 text-slate-300 text-sm">
                   <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>7-Day Free Trial</span>
+                  <span>{bundleTab === 'monthly' ? '7-Day Free Trial' : 'Full Year Access'}</span>
                 </div>
+                {bundleTab === 'yearly' && (
+                  <>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-3.5 h-3.5 text-[#C9A646]" />
+                      <span>Locked price for 12 months</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-3.5 h-3.5 text-[#C9A646]" />
+                      <span>Founding member badge</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Disclaimer Checkbox - Premium Style */}
@@ -242,10 +321,10 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   {isProcessing ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
-                    <>
-                      <Crown className="w-4 h-4" />
-                      Get Bundle for $109/month
-                    </>
+<>
+                    <Crown className="w-4 h-4" />
+                    {bundleTab === 'monthly' ? 'Start Free Trial — $109/mo' : 'Get Yearly Bundle — $1,090/yr'}
+                  </>
                   )}
                 </button>
                 

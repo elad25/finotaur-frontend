@@ -1538,6 +1538,80 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
     }
   }, [user]);
 
+  // 🔥 Handler for Bundle YEARLY checkout from popup
+  const handleBundleYearlyCheckout = useCallback(async () => {
+    if (!user?.id || !user?.email) {
+      setShowBundlePopup(false);
+      setShowLoginPopup(true);
+      return;
+    }
+    
+    setShowBundlePopup(false);
+    setIsProcessing(true);
+    
+    try {
+      const checkoutToken = crypto.randomUUID();
+      
+      // Save pending checkout
+      await supabase.from('pending_checkouts').insert({
+        user_id: user.id,
+        user_email: user.email,
+        checkout_token: checkoutToken,
+        product_type: 'bundle',
+        billing_interval: 'yearly',
+        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      });
+      console.log('✅ Pending checkout saved for Bundle Yearly');
+      
+      // Get access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      // Bundle Yearly plan ID - $1090/year (no trial)
+      const bundleYearlyPlanId = 'plan_M2zS1EoNXJF10';
+      
+      // Try Edge Function first
+      if (accessToken) {
+        try {
+          const response = await supabase.functions.invoke('create-whop-checkout', {
+            body: {
+              plan_id: bundleYearlyPlanId,
+              email: user.email,
+              user_id: user.id,
+              subscription_category: 'bundle',
+            },
+          });
+          
+          if (response.data?.checkout_url) {
+            console.log('✅ Using Edge Function checkout URL for Bundle Yearly');
+            window.location.href = response.data.checkout_url;
+            return;
+          }
+        } catch (err) {
+          console.warn('⚠️ Edge Function failed, falling back to direct URL:', err);
+        }
+      }
+      
+      // Fallback: Direct URL
+      const checkoutBaseUrl = `https://whop.com/checkout/${bundleYearlyPlanId}`;
+      const params = new URLSearchParams();
+      params.set('email', user.email);
+      params.set('lock_email', 'true');
+      params.set('metadata[finotaur_user_id]', user.id);
+      params.set('metadata[finotaur_email]', user.email);
+      params.set('metadata[checkout_token]', checkoutToken);
+      params.set('metadata[product_type]', 'bundle');
+      params.set('metadata[billing_interval]', 'yearly');
+      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success&bundle=true`);
+      
+      window.location.href = `${checkoutBaseUrl}?${params.toString()}`;
+    } catch (e) {
+      console.error('Bundle Yearly checkout error:', e);
+      setIsProcessing(false);
+      alert('Error starting checkout. Please try again.');
+    }
+  }, [user]);
+
   // Login redirect handler
   const handleLoginRedirect = useCallback(() => {
     sessionStorage.setItem('return_after_login', window.location.pathname);
@@ -1677,8 +1751,10 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
     }
   }, [user?.id, refreshWarZone]);
 
-// 🔥 Bundle Upgrade Popup Component - Premium Style
+// 🔥 Bundle Upgrade Popup Component - v2.0 with Monthly + Yearly tabs
   const BundleUpgradePopup = () => {
+    const [bundleTab, setBundleTab] = useState<'monthly' | 'yearly'>('monthly');
+
     if (!showBundlePopup) return null;
     
     return (
@@ -1714,22 +1790,9 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
           >
             <XCircle className="w-5 h-5 text-slate-400 hover:text-white" />
           </button>
-          
-          {/* 7-Day Trial Badge */}
-          <div className="absolute -top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div className="px-4 py-1.5 rounded-full text-xs font-bold"
-              style={{
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                color: '#fff',
-                boxShadow: '0 4px 15px rgba(16,185,129,0.5)'
-              }}
-            >
-              7-DAY FREE TRIAL
-            </div>
-          </div>
 
           {/* Header */}
-          <div className="px-6 pt-8 pb-4 text-center">
+          <div className="px-6 pt-6 pb-4 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4"
                  style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
               <Sparkles className="w-4 h-4 text-[#C9A646]" />
@@ -1740,37 +1803,139 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
               Get <span className="text-white font-semibold">War Zone + Top Secret</span> together
             </p>
           </div>
-          
-          {/* Price Section */}
+
+          {/* Monthly / Yearly Tabs */}
           <div className="px-6 pb-4">
-            <div 
-              className="p-4 rounded-xl text-center mb-4"
-              style={{
-                background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)',
-                border: '1px solid rgba(201,166,70,0.2)'
-              }}
-            >
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <span className="text-slate-500 line-through text-sm">$69.99</span>
-                <span className="text-slate-600">+</span>
-                <span className="text-slate-500 line-through text-sm">$89.99</span>
-                <span className="text-slate-600">=</span>
-                <span className="text-slate-500 line-through text-sm">$159.98/mo</span>
-              </div>
-              <div className="flex items-baseline justify-center gap-2">
-                <span className="text-4xl font-bold"
-                  style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent'
+            <div className="flex rounded-xl overflow-hidden border border-[#C9A646]/30">
+              <button
+                onClick={() => setBundleTab('monthly')}
+                className="flex-1 py-2.5 text-sm font-semibold transition-all"
+                style={bundleTab === 'monthly' ? {
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                  color: '#000',
+                } : {
+                  background: 'transparent',
+                  color: '#C9A646',
+                }}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBundleTab('yearly')}
+                className="flex-1 py-2.5 text-sm font-semibold transition-all relative"
+                style={bundleTab === 'yearly' ? {
+                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                  color: '#000',
+                } : {
+                  background: 'transparent',
+                  color: '#C9A646',
+                }}
+              >
+                Yearly
+                <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={bundleTab === 'yearly' ? {
+                    background: 'rgba(0,0,0,0.2)',
+                    color: '#000',
+                  } : {
+                    background: 'rgba(16,185,129,0.2)',
+                    color: '#10B981',
                   }}
-                >$109</span>
-                <span className="text-slate-400">/month</span>
-              </div>
-              <p className="text-emerald-400 text-sm font-semibold mt-1">
-                Save $50.98/month!
-              </p>
+                >
+                  SAVE $218
+                </span>
+              </button>
             </div>
+          </div>
+          
+          {/* Price Section — Changes based on tab */}
+          <div className="px-6 pb-4">
+            {bundleTab === 'monthly' ? (
+              <>
+                {/* Monthly Trial Badge */}
+                <div className="flex justify-center mb-3">
+                  <div className="px-4 py-1.5 rounded-full text-xs font-bold"
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#fff',
+                      boxShadow: '0 4px 15px rgba(16,185,129,0.5)'
+                    }}
+                  >
+                    7-DAY FREE TRIAL
+                  </div>
+                </div>
+
+                <div 
+                  className="p-4 rounded-xl text-center mb-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)',
+                    border: '1px solid rgba(201,166,70,0.2)'
+                  }}
+                >
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-slate-500 line-through text-sm">$69.99</span>
+                    <span className="text-slate-600">+</span>
+                    <span className="text-slate-500 line-through text-sm">$89.99</span>
+                    <span className="text-slate-600">=</span>
+                    <span className="text-slate-500 line-through text-sm">$159.98/mo</span>
+                  </div>
+                  <div className="flex items-baseline justify-center gap-2">
+                    <span className="text-4xl font-bold"
+                      style={{
+                        background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                      }}
+                    >$109</span>
+                    <span className="text-slate-400">/month</span>
+                  </div>
+                  <p className="text-emerald-400 text-sm font-semibold mt-1">
+                    Save $50.98/month!
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Yearly — Best Value Badge */}
+                <div className="flex justify-center mb-3">
+                  <div className="px-4 py-1.5 rounded-full text-xs font-bold"
+                    style={{
+                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                      color: '#000',
+                      boxShadow: '0 4px 12px rgba(201,166,70,0.4)'
+                    }}
+                  >
+                    BEST VALUE
+                  </div>
+                </div>
+
+                <div 
+                  className="p-4 rounded-xl text-center mb-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(201,166,70,0.02) 100%)',
+                    border: '1px solid rgba(201,166,70,0.2)'
+                  }}
+                >
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <span className="text-slate-500 text-sm">Monthly Bundle × 12</span>
+                    <span className="text-slate-600">=</span>
+                    <span className="text-slate-500 line-through text-sm">$1,308/yr</span>
+                  </div>
+                  <div className="flex items-baseline justify-center gap-2">
+                    <span className="text-4xl font-bold"
+                      style={{
+                        background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                      }}
+                    >$1,090</span>
+                    <span className="text-slate-400">/year</span>
+                  </div>
+                  <p className="text-emerald-400 text-sm font-semibold mt-1">
+                    Just $90.83/mo — Save $218/year!
+                  </p>
+                </div>
+              </>
+            )}
           </div>
           
           {/* Features */}
@@ -1790,15 +1955,27 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>7-Day Free Trial</span>
+                <span>{bundleTab === 'monthly' ? '7-Day Free Trial' : 'Full Year Access'}</span>
               </div>
+              {bundleTab === 'yearly' && (
+                <>
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                    <span>Locked price 12 months</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300 text-sm">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                    <span>Founding member badge</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
           
           {/* CTA Button */}
           <div className="px-6 pb-6">
             <button
-              onClick={handleBundleCheckout}
+              onClick={bundleTab === 'monthly' ? handleBundleCheckout : handleBundleYearlyCheckout}
               disabled={isProcessing}
               className="w-full py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
               style={{
@@ -1812,7 +1989,7 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
               ) : (
                 <>
                   <Crown className="w-5 h-5" />
-                  Start Free Trial
+                  {bundleTab === 'monthly' ? 'Start Free Trial — $109/mo' : 'Get Yearly Bundle — $1,090/yr'}
                 </>
               )}
             </button>
@@ -1884,6 +2061,7 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
           billingInterval={billingInterval}
           isTopSecretMember={isTopSecretMember}
           onSelectBundle={handleBundleCheckout}
+          onSelectBundleYearly={handleBundleYearlyCheckout}
         />
       </Suspense>
 
