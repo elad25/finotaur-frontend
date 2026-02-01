@@ -487,9 +487,10 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
     open: false,
     user: null,
   });
-  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{ open: boolean; users: string[] }>({
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState<{ open: boolean; users: string[]; loading: boolean }>({
     open: false,
     users: [],
+    loading: false,
   });
 
 
@@ -1182,6 +1183,9 @@ const handleUpdateUser = async (userId: string, updates: Partial<AllUsersUser>) 
 
 
 const handleDeleteUsers = async (userIds: string[]) => {
+  // Show loading state immediately
+  setDeleteConfirmDialog(prev => ({ ...prev, loading: true }));
+  
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Not authenticated');
@@ -1202,8 +1206,8 @@ const handleDeleteUsers = async (userIds: string[]) => {
       throw new Error(data?.error || 'Delete operation failed');
     }
 
-    // Close dialog first
-    setDeleteConfirmDialog({ open: false, users: [] });
+    // Close dialog and clear selection
+    setDeleteConfirmDialog({ open: false, users: [], loading: false });
     setSelectedUsers(new Set());
     
     // Show detailed result
@@ -1224,7 +1228,7 @@ const handleDeleteUsers = async (userIds: string[]) => {
     
   } catch (err) {
     console.error('[Admin] Error deleting users:', err);
-    setDeleteConfirmDialog({ open: false, users: [] });
+    setDeleteConfirmDialog({ open: false, users: [], loading: false });
     showToast(`Failed to delete users: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
   }
 };
@@ -3600,7 +3604,7 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
                         <DropdownMenuSeparator className="bg-[#2A2A2A]" />
                         
                         <DropdownMenuItem 
-                          onClick={() => setDeleteConfirmDialog({ open: true, users: Array.from(selectedUsers) })}
+                          onClick={() => setDeleteConfirmDialog({ open: true, users: Array.from(selectedUsers), loading: false })}
                           className="text-red-400 hover:bg-[#2A2A2A] cursor-pointer"
                         >
                           <Ban className="h-4 w-4 mr-2" />
@@ -4043,7 +4047,7 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
                                   <DropdownMenuSeparator className="bg-[#2A2A2A]" />
                                   
                                   <DropdownMenuItem 
-                                    onClick={() => setDeleteConfirmDialog({ open: true, users: [user.id] })}
+                                    onClick={() => setDeleteConfirmDialog({ open: true, users: [user.id], loading: false })}
                                     className="text-red-400 hover:bg-[#2A2A2A] cursor-pointer"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2" />
@@ -6268,37 +6272,66 @@ You can use these variables:
       ===================================================== */}
       <Dialog 
         open={deleteConfirmDialog.open} 
-        onOpenChange={(open) => !open && setDeleteConfirmDialog({ open: false, users: [] })}
+        onOpenChange={(open) => {
+          if (!open && !deleteConfirmDialog.loading) {
+            setDeleteConfirmDialog({ open: false, users: [], loading: false });
+          }
+        }}
       >
-        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A]">
+        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A]" onPointerDownOutside={(e) => deleteConfirmDialog.loading && e.preventDefault()} onEscapeKeyDown={(e) => deleteConfirmDialog.loading && e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-[#F4F4F4] flex items-center gap-2">
-              <Ban className="h-5 w-5 text-red-400" />
-              Delete User(s)
+              {deleteConfirmDialog.loading ? (
+                <Loader2 className="h-5 w-5 text-red-400 animate-spin" />
+              ) : (
+                <Ban className="h-5 w-5 text-red-400" />
+              )}
+              {deleteConfirmDialog.loading ? 'Deleting Users...' : 'Delete User(s)'}
             </DialogTitle>
             <DialogDescription className="text-[#808080]">
-              Are you sure you want to delete {deleteConfirmDialog.users.length} user(s)?
+              {deleteConfirmDialog.loading 
+                ? `Deleting ${deleteConfirmDialog.users.length} user(s)... Please wait.`
+                : `Are you sure you want to delete ${deleteConfirmDialog.users.length} user(s)?`
+              }
             </DialogDescription>
           </DialogHeader>
           
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-            <p className="text-sm text-red-400">⚠️ This action cannot be undone. All user data will be permanently deleted.</p>
-          </div>
+          {deleteConfirmDialog.loading ? (
+            <div className="py-8 flex flex-col items-center gap-4">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full border-4 border-[#2A2A2A] border-t-red-500 animate-spin" />
+              </div>
+              <p className="text-sm text-[#808080] animate-pulse">Processing deletion...</p>
+              <div className="w-full bg-[#1A1A1A] rounded-full h-2 overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-400">⚠️ This action cannot be undone. All user data will be permanently deleted.</p>
+            </div>
+          )}
 
           <DialogFooter>
             <Button 
               variant="outline" 
-              onClick={() => setDeleteConfirmDialog({ open: false, users: [] })} 
+              onClick={() => setDeleteConfirmDialog({ open: false, users: [], loading: false })} 
               className="border-[#2A2A2A]"
+              disabled={deleteConfirmDialog.loading}
             >
               Cancel
             </Button>
             <Button 
               onClick={() => handleDeleteUsers(deleteConfirmDialog.users)} 
               className="bg-red-500 hover:bg-red-600"
+              disabled={deleteConfirmDialog.loading}
             >
-              <Ban className="h-4 w-4 mr-2" />
-              Delete {deleteConfirmDialog.users.length} User(s)
+              {deleteConfirmDialog.loading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Ban className="h-4 w-4 mr-2" />
+              )}
+              {deleteConfirmDialog.loading ? 'Deleting...' : `Delete ${deleteConfirmDialog.users.length} User(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
