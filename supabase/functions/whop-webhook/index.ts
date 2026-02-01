@@ -2705,9 +2705,42 @@ async function handleMembershipDeactivated(
     // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, newsletter_cancel_at_period_end, newsletter_whop_membership_id, newsletter_status')
+      .select('id, email, newsletter_cancel_at_period_end, newsletter_whop_membership_id, newsletter_status, bundle_enabled, bundle_status, bundle_whop_membership_id')
       .eq('newsletter_whop_membership_id', membershipId)
       .single();
+    
+    // 🔥 v5.9.0: If user has an active Bundle, SKIP Newsletter deactivation entirely!
+    if (profile && profile.bundle_enabled && ['active', 'trial', 'trialing'].includes(profile.bundle_status || '')) {
+      console.log(`✅ User has active Bundle (${profile.bundle_status}) - SKIPPING Newsletter deactivation`);
+      console.log(`💡 Bundle membership: ${profile.bundle_whop_membership_id}`);
+      console.log(`💡 Deactivated Newsletter membership: ${membershipId} (old, replaced by bundle)`);
+      
+      await supabase
+        .from('profiles')
+        .update({ 
+          newsletter_whop_membership_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id);
+      
+      await supabase.from('subscription_events').insert({
+        user_id: profile.id,
+        event_type: 'newsletter_deactivation_skipped_bundle_active',
+        old_plan: 'newsletter',
+        new_plan: 'bundle',
+        metadata: {
+          deactivated_membership_id: membershipId,
+          bundle_membership_id: profile.bundle_whop_membership_id,
+          bundle_status: profile.bundle_status,
+          note: 'Old Newsletter membership deactivated by Whop after Bundle purchase - skipped deactivation',
+        }
+      });
+      
+      return { 
+        success: true, 
+        message: `Newsletter deactivation SKIPPED - user has active Bundle. Email: ${profile.email}` 
+      };
+    }
     
     if (profile && profile.newsletter_cancel_at_period_end === false) {
       console.log(`⚠️ User reactivated newsletter in DB - user wants to KEEP subscription`);
@@ -2783,9 +2816,45 @@ async function handleMembershipDeactivated(
     // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, top_secret_cancel_at_period_end, top_secret_whop_membership_id, top_secret_status')
+      .select('id, email, top_secret_cancel_at_period_end, top_secret_whop_membership_id, top_secret_status, bundle_enabled, bundle_status, bundle_whop_membership_id')
       .eq('top_secret_whop_membership_id', membershipId)
       .single();
+    
+    // 🔥 v5.9.0: If user has an active Bundle, SKIP Top Secret deactivation entirely!
+    // When user upgrades to Bundle, Whop deactivates the old Top Secret membership.
+    // We must NOT let that deactivation override the Bundle's granted access.
+    if (profile && profile.bundle_enabled && ['active', 'trial', 'trialing'].includes(profile.bundle_status || '')) {
+      console.log(`✅ User has active Bundle (${profile.bundle_status}) - SKIPPING Top Secret deactivation`);
+      console.log(`💡 Bundle membership: ${profile.bundle_whop_membership_id}`);
+      console.log(`💡 Deactivated Top Secret membership: ${membershipId} (old, replaced by bundle)`);
+      
+      // Clear the old Top Secret membership ID so future deactivation webhooks don't match
+      await supabase
+        .from('profiles')
+        .update({ 
+          top_secret_whop_membership_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id);
+      
+      await supabase.from('subscription_events').insert({
+        user_id: profile.id,
+        event_type: 'top_secret_deactivation_skipped_bundle_active',
+        old_plan: 'top_secret',
+        new_plan: 'bundle',
+        metadata: {
+          deactivated_membership_id: membershipId,
+          bundle_membership_id: profile.bundle_whop_membership_id,
+          bundle_status: profile.bundle_status,
+          note: 'Old Top Secret membership deactivated by Whop after Bundle purchase - skipped deactivation',
+        }
+      });
+      
+      return { 
+        success: true, 
+        message: `Top Secret deactivation SKIPPED - user has active Bundle. Email: ${profile.email}` 
+      };
+    }
     
     if (profile && profile.top_secret_cancel_at_period_end === false) {
       console.log(`⚠️ User reactivated top_secret in DB - user wants to KEEP subscription`);

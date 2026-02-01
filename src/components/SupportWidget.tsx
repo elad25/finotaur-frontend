@@ -8,6 +8,7 @@
 // 📅 30-day notification history
 // 🛡️ Admins see ALL reports (not filtered by target_group)
 // 🆕 v3.0: Category selection + improved welcome flow
+// 🔧 v3.1: Fixed widget height to not overlap SUBNAV
 // ============================================
 
 import { useState, useEffect, useRef } from 'react';
@@ -315,11 +316,16 @@ export default function SupportWidget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('support_tickets')
         .select('*')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.warn('Could not load tickets:', error.message);
+        return;
+      }
 
       if (data) {
         setTickets(data);
@@ -657,24 +663,41 @@ async function loadTicketById(ticketId: string) {
           ? TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.label 
           : 'Support Request';
 
-        const { data, error } = await supabase
-          .from('support_tickets')
-          .insert({
-            user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
-            user_email: userEmail,
-            user_name: userName,
-            subject: categoryLabel,
-            category: selectedCategory,
-            message: currentMessage.trim(),
-            messages: [newMessage],
-            status: 'open',
-          })
-          .select()
-          .single();
+        const ticketPayload = {
+          user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
+          user_email: userEmail,
+          user_name: userName,
+          subject: categoryLabel,
+          category: selectedCategory,
+          message: currentMessage.trim(),
+          messages: [newMessage],
+          status: 'open',
+        };
 
-        if (error) throw error;
+        let data: any = null;
+        let dbSuccess = false;
 
-        if (!isGuest) {
+        // Attempt DB insert with 1 retry
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const { data: insertData, error } = await supabase
+            .from('support_tickets')
+            .insert(ticketPayload)
+            .select()
+            .single();
+
+          if (!error && insertData) {
+            data = insertData;
+            dbSuccess = true;
+            break;
+          }
+
+          console.error(`DB insert attempt ${attempt + 1} failed:`, error);
+          if (attempt === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+
+        if (dbSuccess && !isGuest) {
           setSelectedTicket(data);
           setIsNewConversation(false);
           setMessageSent(true);
@@ -684,7 +707,7 @@ async function loadTicketById(ticketId: string) {
         setCurrentMessage('');
         setAttachments([]);
         
-        // Send email notification
+        // Send email notification (always attempt — acts as fallback if DB failed)
         try {
           const { data: { session } } = await supabase.auth.getSession();
           
@@ -697,26 +720,37 @@ async function loadTicketById(ticketId: string) {
                 'Authorization': `Bearer ${session?.access_token || ''}`,
               },
               body: JSON.stringify({
-                type: 'new_ticket',
-                record: data,
+                type: dbSuccess ? 'new_ticket' : 'fallback_ticket',
+                record: data || ticketPayload,
+                db_failed: !dbSuccess,
               }),
             }
           );
         } catch (e) {
-          console.error('Email error:', e);
+          console.error('Email fallback also failed:', e);
         }
 
-        toast.success(
-          isGuest 
-            ? "Message sent! We'll respond to your email soon." 
-            : "Message sent! Our team will get back to you shortly."
-        );
+        if (dbSuccess) {
+          toast.success(
+            isGuest 
+              ? "Message sent! We'll respond to your email soon." 
+              : "Message sent! Our team will get back to you shortly."
+          );
+        } else {
+          toast.warning(
+            "We received your message via email. Our team will get back to you shortly."
+          );
+        }
         
         if (isGuest) {
           setMessageSent(true);
           setTimeout(() => {
             handleClose();
           }, 3000);
+        }
+
+        if (!dbSuccess && !isGuest) {
+          setMessageSent(true);
         }
         
         return;
@@ -727,23 +761,71 @@ async function loadTicketById(ticketId: string) {
       const existingMessages = Array.isArray(selectedTicket.messages) ? selectedTicket.messages : [];
       const updatedMessages = [...existingMessages, newMessage];
 
-      const { data, error } = await supabase
-        .from('support_tickets')
-        .update({
-          messages: updatedMessages,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', selectedTicket.id)
-        .select()
-        .single();
+      let updateSuccess = false;
 
-      if (error) throw error;
+      // Attempt DB update with 1 retry
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { data, error } = await supabase
+          .from('support_tickets')
+          .update({
+            messages: updatedMessages,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', selectedTicket.id)
+          .select()
+          .single();
 
-      setSelectedTicket(data);
+        if (!error && data) {
+          setSelectedTicket(data);
+          updateSuccess = true;
+          break;
+        }
+
+        console.error(`DB update attempt ${attempt + 1} failed:`, error);
+        if (attempt === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+
+      if (!updateSuccess) {
+        // Fallback: send reply via email so it's not lost
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          
+          await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-support-email`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token || ''}`,
+              },
+              body: JSON.stringify({
+                type: 'fallback_reply',
+                record: {
+                  id: selectedTicket.id,
+                  user_email: userEmail,
+                  user_name: userName,
+                  subject: selectedTicket.subject,
+                  message: currentMessage.trim(),
+                },
+                db_failed: true,
+              }),
+            }
+          );
+          
+          toast.warning("Message sent via email — we'll sync it shortly.");
+        } catch (e) {
+          console.error('Email fallback also failed:', e);
+          toast.error('Failed to send message. Please try again later.');
+          return;
+        }
+      }
+
       setCurrentMessage('');
       setAttachments([]);
       inputRef.current?.focus();
-      loadUserTickets();
+      if (updateSuccess) loadUserTickets();
     } catch (error: any) {
       console.error('Error:', error);
       toast.error('Failed to send message');
@@ -948,7 +1030,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-8 right-8 z-50 group"
+          className="fixed bottom-8 right-8 z-[200] group"
         >
           <div className="absolute inset-0 rounded-full bg-[#1E88E5] opacity-30 blur-xl group-hover:opacity-50 transition-all duration-200"></div>
           
@@ -973,14 +1055,21 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         </button>
       )}
 
-      {/* Main Window */}
+      {/* ==================== MAIN WINDOW ==================== */}
+      {/* 
+        🔧 FIX: Added max-h-[calc(100vh-80px-32px)] to constrain the widget.
+        - 80px = SUBNAV height (adjust if your nav is different)
+        - 32px = bottom-8 offset (2rem)
+        This ensures the widget grows UP TO the SUBNAV but never overlaps it.
+        The inner card also gets flex + max-h so content scrolls properly.
+      */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-50 w-[420px] animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-[200] w-[420px] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
           
-          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30">
+          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30 flex flex-col max-h-[calc(100vh-80px-32px)]">
             {/* Header */}
-            <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20">
+            <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20 flex-shrink-0">
               <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
               
               <div className="flex items-center justify-between">
@@ -1056,8 +1145,13 @@ function hasUnreadMessages(ticket: Ticket): boolean {
               )}
             </div>
 
-            {/* Content Area */}
-            <div className="h-[600px] flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black">
+            {/* ==================== CONTENT AREA ==================== */}
+            {/* 
+              🔧 FIX: Changed from h-[600px] to flex-1 + min-h-0 + overflow-hidden.
+              This lets the content area fill whatever space remains after the header,
+              instead of forcing a fixed 600px that could push past the SUBNAV.
+            */}
+            <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black overflow-hidden">
               {/* Guest Form Overlay */}
               {showGuestForm && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -1127,9 +1221,9 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
               {/* ==================== UPDATES TAB ==================== */}
               {!isGuest && activeTab === 'updates' && (
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0">
                   {isAdmin && (
-                    <div className="px-4 pt-3">
+                    <div className="px-4 pt-3 flex-shrink-0">
                       <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-center gap-2">
                         <Shield className="h-4 w-4 text-purple-400" />
                         <span className="text-xs text-purple-300">
@@ -1141,7 +1235,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   
                   {/* Clear All Button */}
                   {systemUpdates.length > 0 && unreadUpdatesCount > 0 && (
-                    <div className="px-4 pt-3">
+                    <div className="px-4 pt-3 flex-shrink-0">
                       <button
                         onClick={clearAllUpdates}
                         className="w-full h-9 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#7F6823]/40 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 group"
@@ -1154,7 +1248,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     </div>
                   )}
                   
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
                     {loadingUpdates ? (
                       <div className="flex items-center justify-center h-full">
                         <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#D4AF37] border-t-transparent"></div>
@@ -1292,8 +1386,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                 <>
                   {/* Conversations List View */}
                   {!isGuest && view === 'list' && (
-                    <div className="flex-1 flex flex-col">
-                      <div className="flex-1 overflow-y-auto pt-3">
+                    <div className="flex-1 flex flex-col min-h-0">
+                      <div className="flex-1 overflow-y-auto pt-3 min-h-0">
                         {tickets.length === 0 ? (
                           <div className="flex flex-col items-center justify-center h-full p-8">
                             <div className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center mb-4">
@@ -1368,7 +1462,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         )}
                       </div>
 
-                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
                         <button
                           onClick={handleNewChat}
                           className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
@@ -1385,7 +1479,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   {/* Chat View */}
                   {view === 'chat' && (
                     <>
-                      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                      <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
                         {isNewConversation ? (
                           <div className="space-y-4">
                             {/* Welcome Message */}
@@ -1628,7 +1722,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       
                       {/* Input Area */}
                       {!messageSent && (
-                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
                           {attachments.length > 0 && (
                             <div className="mb-3 flex flex-wrap gap-2">
                               {attachments.map((file, idx) => (
@@ -1705,7 +1799,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
                       {/* After message sent - show back button */}
                       {messageSent && !isGuest && (
-                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4">
+                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
                           <button
                             onClick={handleBackToList}
                             className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out"
