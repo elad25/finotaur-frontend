@@ -592,7 +592,10 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
       const { data: rpcData, error: rpcError } = await supabase
         .rpc('get_comprehensive_subscription_stats');
 
+      console.log('📊 fetchStats RPC result:', { rpcData: rpcData ? 'received' : 'null', rpcError: rpcError?.message });
+
       if (!rpcError && rpcData) {
+        console.log('📊 Stats loaded:', { overall: rpcData.overall, trials: rpcData.trials });
         setStats(rpcData as ComprehensiveStats);
         setLastUpdated(new Date());
         return;
@@ -1055,6 +1058,7 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
   // =====================================================
 
 const fetchAllUsers = useCallback(async () => {
+  console.log('👥 fetchAllUsers called, tab:', activeTab);
   setAllUsersLoading(true);
   try {
     // Build filters object for the RPC function
@@ -1089,10 +1093,14 @@ const fetchAllUsers = useCallback(async () => {
       filters.has_active_subscription = true;
     }
 
+    console.log('👥 Filters:', filters);
+
     // First get the count
     const { data: countData, error: countError } = await supabase.rpc('admin_count_users', {
       p_filters: filters
     });
+
+    console.log('👥 Count result:', { countData, countError: countError?.message });
 
     if (countError) {
       console.error('Count error:', countError);
@@ -1108,6 +1116,8 @@ const fetchAllUsers = useCallback(async () => {
       p_sort_by: allUsersFilters.sortBy,
       p_sort_order: allUsersFilters.sortOrder.toUpperCase()
     });
+
+    console.log('👥 Users result:', { count: data?.length, error: error?.message, firstUser: data?.[0] });
 
     if (error) throw error;
 
@@ -1183,14 +1193,16 @@ const handleUpdateUser = async (userId: string, updates: Partial<AllUsersUser>) 
 
 
 const handleDeleteUsers = async (userIds: string[]) => {
-  // Show loading state immediately
-  setDeleteConfirmDialog(prev => ({ ...prev, loading: true }));
-  
+  // Close dialog immediately and clear selection — don't block the UI
+  setDeleteConfirmDialog({ open: false, users: [], loading: false });
+  setSelectedUsers(new Set());
+  showToast(`Deleting ${userIds.length} user(s) in background...`, 'info');
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Not authenticated');
 
-    console.log('[Admin] Deleting users:', userIds.length);
+    console.log('[Admin] Deleting users in background:', userIds.length);
 
     const { data, error } = await supabase.functions.invoke('admin-delete-users', {
       body: { user_ids: userIds },
@@ -1206,17 +1218,12 @@ const handleDeleteUsers = async (userIds: string[]) => {
       throw new Error(data?.error || 'Delete operation failed');
     }
 
-    // Close dialog and clear selection
-    setDeleteConfirmDialog({ open: false, users: [], loading: false });
-    setSelectedUsers(new Set());
-    
-    // Show detailed result
     const { deleted_count, failed_count, results } = data;
-    
+
     if (failed_count > 0) {
       console.warn('[Admin] Some deletions failed:', results?.failed);
       showToast(
-        `Deleted ${deleted_count} user(s), ${failed_count} failed. Check console for details.`, 
+        `Deleted ${deleted_count} user(s), ${failed_count} failed. Check console for details.`,
         failed_count === userIds.length ? 'error' : 'warning'
       );
     } else {
@@ -1225,11 +1232,11 @@ const handleDeleteUsers = async (userIds: string[]) => {
 
     // Refresh the list
     fetchAllUsers();
-    
+
   } catch (err) {
     console.error('[Admin] Error deleting users:', err);
-    setDeleteConfirmDialog({ open: false, users: [], loading: false });
     showToast(`Failed to delete users: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    fetchAllUsers();
   }
 };
 
@@ -1402,93 +1409,101 @@ const handleDeleteUsers = async (userIds: string[]) => {
       alert('Failed to export users');
     }
   };
-
-  // Fetch Dashboard Stats
-  const fetchDashboardStats = async () => {
+const fetchDashboardStats = async () => {
     try {
       const { data, error } = await supabase.rpc('admin_get_dashboard_stats');
+      console.log('📊 admin_get_dashboard_stats raw:', data);
 
       if (error) throw error;
-      setDashboardStats(data);
+
+      // DB returns TABLE format → Supabase wraps in array
+      const row = Array.isArray(data) ? data[0] : data;
+
+      if (row) {
+        setDashboardStats({
+          success: true,
+          users: {
+            total: row.total_users || 0,
+            active_today: row.daily_active_users || 0,
+            banned: 0,
+          },
+          subscriptions: {
+            journal_active: (row.basic_users || 0) + (row.premium_users || 0),
+            newsletter_active: row.newsletter_users || 0,
+            top_secret_active: row.top_secret_users || 0,
+          },
+        });
+      }
     } catch (err) {
       console.error('Dashboard stats error:', err);
     }
   };
 
-  // Delete Users (via Edge Function)
-  const handleDeleteUsersAdmin = async (userIds: string[]) => {
-    if (!confirm(`Are you sure you want to PERMANENTLY DELETE ${userIds.length} user(s)? This cannot be undone!`)) {
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('admin-delete-users', {
-        body: { user_ids: userIds }
-      });
-
-      if (error) throw error;
-      
-      alert(`Deleted: ${data.deleted}, Failed: ${data.failed}`);
-      if (data.errors?.length > 0) {
-        console.error('Delete errors:', data.errors);
-      }
-      
-      fetchAllUsers();
-      setSelectedUsers(new Set());
-    } catch (err) {
-      console.error('Delete error:', err);
-      alert(`Failed to delete users: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  };
-
-  // Cancel All Subscriptions (via Edge Function)
-  const handleCancelAllSubscriptions = async (userIds: string[]) => {
-    if (!confirm(`Cancel ALL subscriptions for ${userIds.length} user(s)?`)) {
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('admin-cancel-subscriptions', {
-        body: { user_ids: userIds }
-      });
-
-      if (error) throw error;
-      
-      alert(`Processed: ${data.processed}, Whop cancelled: ${data.whop_cancelled}`);
-      fetchAllUsers();
-      setSelectedUsers(new Set());
-    } catch (err) {
-      console.error('Cancel error:', err);
-      alert(`Failed to cancel subscriptions: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  };
+   
 
   // Soft delete - just mark as banned (safer option)
 const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
   try {
-    for (const userId of userIds) {
-      const { data, error } = await supabase.rpc('admin_toggle_ban', {
-        p_user_id: userId,
-        p_is_banned: ban,
-        p_reason: ban ? 'Banned by admin' : 'Unbanned by admin'
-      });
+    // ביצוע מקבילי — כל הקריאות יוצאות בבת אחת
+    const results = await Promise.allSettled(
+      userIds.map(userId =>
+        supabase.rpc('admin_toggle_ban', {
+          p_user_id: userId,
+          p_is_banned: ban,
+          p_reason: ban ? 'Banned by admin' : 'Unbanned by admin'
+        })
+      )
+    );
 
-      if (error) throw error;
-      if (data && !data.success) {
-        console.error(`Failed to ${ban ? 'ban' : 'unban'} ${userId}:`, data.error);
-      }
-    }
+    const succeeded = results.filter(r => r.status === 'fulfilled' && r.value.data?.success !== false).length;
+    const failed = results.length - succeeded;
 
     fetchAllUsers();
     setSelectedUsers(new Set());
-    showToast(`Successfully ${ban ? 'banned' : 'unbanned'} ${userIds.length} user(s)`, 'success');
+    
+    if (failed > 0) {
+      showToast(`${ban ? 'Banned' : 'Unbanned'} ${succeeded} user(s), ${failed} failed`, 'warning');
+    } else {
+      showToast(`Successfully ${ban ? 'banned' : 'unbanned'} ${succeeded} user(s)`, 'success');
+    }
   } catch (err) {
     console.error('Error:', err);
     showToast(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
   }
 };
 
+// Bulk Soft Delete — שומר את המשתמשים ב-DB עם deleted_at, ניתן לשחזור
+const handleBulkSoftDelete = async (userIds: string[]) => {
+  if (!confirm(`Soft delete ${userIds.length} user(s)? They can be restored within 30 days.`)) {
+    return;
+  }
 
+  try {
+    const { data, error } = await supabase.rpc('admin_bulk_soft_delete', {
+      p_user_ids: userIds,
+      p_reason: 'Bulk soft delete by admin'
+    });
+
+    if (error) throw error;
+
+    if (!data?.success) {
+      throw new Error(data?.error || 'Bulk soft delete failed');
+    }
+
+    fetchAllUsers();
+    setSelectedUsers(new Set());
+
+    const { deleted_count, failed_count } = data;
+    if (failed_count > 0) {
+      showToast(`Soft deleted ${deleted_count}, ${failed_count} failed (may be super admins).`, 'warning');
+    } else {
+      showToast(`Successfully soft deleted ${deleted_count} user(s). Recoverable for 30 days.`, 'success');
+    }
+  } catch (err) {
+    console.error('Bulk soft delete error:', err);
+    showToast(`Failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+  }
+};
 
   // Cancel all subscriptions for users
   const handleCancelSubscriptions = async (userIds: string[]) => {
@@ -2441,49 +2456,59 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Fetch dashboard stats on mount
+  // =====================================================
+  // ACTIVE TAB STATE — לטעינה עצלה
+  // =====================================================
+  const [activeTab, setActiveTab] = useState('overview');
+  const [tabsLoaded, setTabsLoaded] = useState<Set<string>>(new Set());
+
+  // Fetch dashboard stats on mount (only overview)
   useEffect(() => {
     fetchDashboardStats();
   }, []);
 
-  // Auto-load users on mount
+  // Lazy-load data when tab becomes active
   useEffect(() => {
-    fetchAllUsers();
-  }, []); // Load once on mount
+    if (tabsLoaded.has(activeTab)) return; // כבר טען
 
-  // Auto-load KPIs on mount
-  useEffect(() => {
-    fetchKPIMetrics();
-    fetchDeepDiveAnalysis();
-    fetchSubscriptionEvents();
-  }, []);
+    switch (activeTab) {
+      case 'all-users':
+        fetchAllUsers();
+        break;
+      case 'kpis':
+        fetchKPIMetrics();
+        break;
+      case 'subscriptions':
+        fetchDeepDiveAnalysis();
+        fetchSubscriptionEvents();
+        break;
+      case 'announcements':
+        fetchRecentAnnouncements();
+        break;
+    }
+
+    setTabsLoaded(prev => new Set([...prev, activeTab]));
+  }, [activeTab]);
 
   // Update estimated recipients when selection changes
   useEffect(() => {
+    if (activeTab !== 'announcements') return;
     const timer = setTimeout(() => {
       fetchEstimatedRecipients();
     }, 300);
     return () => clearTimeout(timer);
-  }, [announcementRecipients, fetchEstimatedRecipients]);
+  }, [announcementRecipients, fetchEstimatedRecipients, activeTab]);
 
-  // Load recent announcements on mount
+  // Reload when filters or pagination change (single debounced effect)
   useEffect(() => {
-    fetchRecentAnnouncements();
-  }, []);
-
-  // Reload when filters change (with debounce for search)
-  useEffect(() => {
+    if (activeTab !== 'all-users' && !tabsLoaded.has('all-users')) return;
+    
     const timeoutId = setTimeout(() => {
       fetchAllUsers();
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [allUsersFilters]);
-
-  // Load users on pagination change
-  useEffect(() => {
-    fetchAllUsers();
-  }, [allUsersPagination.page, allUsersPagination.pageSize]);
+  }, [allUsersFilters, allUsersPagination.page, allUsersPagination.pageSize]);
 
   // =====================================================
   // STAT CARD COMPONENT
@@ -2818,7 +2843,7 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] p-6 lg:p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0A0A0A] p-6 lg:p-8 relative">
       {/* 🔮 Premium Luxury Background - Refined & Elegant */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         {/* Subtle gradient base */}
@@ -2875,7 +2900,7 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-6 relative z-10">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full relative z-10">
         <TabsList className="bg-[#0F0F0F]/90 backdrop-blur-md border border-[#252525] rounded-xl p-1.5 flex-wrap shadow-xl shadow-black/20">
           <TabsTrigger value="overview" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#C9A646] data-[state=active]:to-[#D4AF5B] data-[state=active]:text-black data-[state=active]:shadow-lg data-[state=active]:shadow-[#C9A646]/20 rounded-lg transition-all duration-300 px-4">
             Overview
@@ -3563,22 +3588,21 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
                         <DropdownMenuSeparator className="bg-[#2A2A2A]" />
                         
                         <DropdownMenuItem 
-  onClick={() => handleBanUsers(Array.from(selectedUsers), true)}
-  className="text-orange-400 hover:bg-[#2A2A2A] cursor-pointer"
->
-  <Ban className="h-4 w-4 mr-2" />
-  Ban Users
-</DropdownMenuItem>
+                          onClick={() => handleBanUsers(Array.from(selectedUsers), true)}
+                          className="text-orange-400 hover:bg-[#2A2A2A] cursor-pointer"
+                        >
+                          <Ban className="h-4 w-4 mr-2" />
+                          Ban Users
+                        </DropdownMenuItem>
 
-<DropdownMenuItem 
-  onClick={() => handleBanUsers(Array.from(selectedUsers), false)}
-  className="text-emerald-400 hover:bg-[#2A2A2A] cursor-pointer"
->
-  <Ban className="h-4 w-4 mr-2" />
-  Unban Users
-</DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleBanUsers(Array.from(selectedUsers), false)}
+                          className="text-emerald-400 hover:bg-[#2A2A2A] cursor-pointer"
+                        >
+                          <Ban className="h-4 w-4 mr-2" />
+                          Unban Users
+                        </DropdownMenuItem>
 
-                        
                         <DropdownMenuItem 
                           onClick={() => handleCancelSubscriptions(Array.from(selectedUsers))}
                           className="text-yellow-400 hover:bg-[#2A2A2A] cursor-pointer"
@@ -3589,7 +3613,6 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
 
                         <DropdownMenuItem 
                           onClick={() => {
-                            // Navigate to announcements tab with pre-selected users
                             const selectedEmails = allUsers
                               .filter(u => selectedUsers.has(u.id))
                               .map(u => u.email);
@@ -3602,6 +3625,14 @@ const handleBanUsers = async (userIds: string[], ban: boolean = true) => {
                         </DropdownMenuItem>
 
                         <DropdownMenuSeparator className="bg-[#2A2A2A]" />
+
+                        <DropdownMenuItem 
+                          onClick={() => handleBulkSoftDelete(Array.from(selectedUsers))}
+                          className="text-orange-400 hover:bg-[#2A2A2A] cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Soft Delete (Recoverable)
+                        </DropdownMenuItem>
                         
                         <DropdownMenuItem 
                           onClick={() => setDeleteConfirmDialog({ open: true, users: Array.from(selectedUsers), loading: false })}
@@ -6278,7 +6309,7 @@ You can use these variables:
           }
         }}
       >
-        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A]" onPointerDownOutside={(e) => deleteConfirmDialog.loading && e.preventDefault()} onEscapeKeyDown={(e) => deleteConfirmDialog.loading && e.preventDefault()}>
+        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A]">
           <DialogHeader>
             <DialogTitle className="text-[#F4F4F4] flex items-center gap-2">
               {deleteConfirmDialog.loading ? (
@@ -6307,8 +6338,28 @@ You can use these variables:
               </div>
             </div>
           ) : (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-sm text-red-400">⚠️ This action cannot be undone. All user data will be permanently deleted.</p>
+            <div className="space-y-3">
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-sm text-red-400">⚠️ This action cannot be undone. All user data will be permanently deleted.</p>
+              </div>
+              
+              {/* רשימת המשתמשים שיימחקו */}
+              {deleteConfirmDialog.users.length > 0 && (
+                <div className="max-h-40 overflow-y-auto p-3 bg-[#1A1A1A] rounded-lg border border-[#2A2A2A]">
+                  <p className="text-xs text-[#808080] mb-2">Users to be deleted:</p>
+                  <div className="space-y-1">
+                    {deleteConfirmDialog.users.map(userId => {
+                      const user = allUsers.find(u => u.id === userId);
+                      return (
+                        <div key={userId} className="flex items-center justify-between text-xs">
+                          <span className="text-[#F4F4F4]">{user?.email || userId}</span>
+                          <span className="text-[#606060]">{user?.account_type || 'free'}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6317,9 +6368,8 @@ You can use these variables:
               variant="outline" 
               onClick={() => setDeleteConfirmDialog({ open: false, users: [], loading: false })} 
               className="border-[#2A2A2A]"
-              disabled={deleteConfirmDialog.loading}
             >
-              Cancel
+              {deleteConfirmDialog.loading ? 'Dismiss' : 'Cancel'}
             </Button>
             <Button 
               onClick={() => handleDeleteUsers(deleteConfirmDialog.users)} 

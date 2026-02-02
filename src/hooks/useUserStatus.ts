@@ -27,7 +27,7 @@ interface SubscriptionStatus {
   top_secret_enabled: boolean;
   top_secret_status: string;
   top_secret_expires_at: string | null;
-  top_secret_membership_id: string | null;
+  top_secret_whop_membership_id: string | null;
   // User meta
   role: string;
   is_tester: boolean;
@@ -123,7 +123,7 @@ export function useUnifiedUserStatus(): UnifiedUserStatus {
           top_secret_enabled,
           top_secret_status,
           top_secret_expires_at,
-          top_secret_membership_id,
+          top_secret_whop_membership_id,
           role,
           is_tester,
           email
@@ -148,7 +148,7 @@ export function useUnifiedUserStatus(): UnifiedUserStatus {
         top_secret_enabled: profile?.top_secret_enabled ?? false,
         top_secret_status: profile?.top_secret_status ?? 'inactive',
         top_secret_expires_at: profile?.top_secret_expires_at ?? null,
-        top_secret_membership_id: profile?.top_secret_membership_id ?? null,
+        top_secret_whop_membership_id: profile?.top_secret_whop_membership_id ?? null,
         role: profile?.role ?? 'user',
         is_tester: profile?.is_tester ?? false,
         email: profile?.email ?? '',
@@ -212,7 +212,7 @@ export function useUnifiedUserStatus(): UnifiedUserStatus {
       topSecret: {
         isActive: topSecretIsActive,
         status: raw?.top_secret_status ?? '',
-        membershipId: raw?.top_secret_membership_id ?? null,
+        membershipId: raw?.top_secret_whop_membership_id ?? null,
         expiresAt: raw?.top_secret_expires_at ?? null,
       },
       

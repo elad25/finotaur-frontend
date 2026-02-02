@@ -115,6 +115,21 @@ serve(async (req) => {
         // Subscription events
         await supabaseAdmin.from("subscription_events").delete().eq("user_id", userId);
 
+        // Pending checkouts
+        await supabaseAdmin.from("pending_checkouts").delete().eq("user_id", userId);
+
+        // Admin activity log (where user is target)
+        await supabaseAdmin.from("admin_activity_log").delete().eq("target_user_id", userId);
+
+        // User preferences
+        await supabaseAdmin.from("user_preferences").delete().eq("user_id", userId);
+
+        // Impersonation sessions
+        await supabaseAdmin.from("impersonation_sessions").delete().eq("impersonated_user_id", userId);
+
+        // Announcements read status
+        await supabaseAdmin.from("announcement_reads").delete().eq("user_id", userId);
+
         // 3. Delete profile
         const { error: profileDeleteError } = await supabaseAdmin
           .from("profiles")

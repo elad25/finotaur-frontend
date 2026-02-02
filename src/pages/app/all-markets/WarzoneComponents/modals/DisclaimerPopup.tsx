@@ -33,7 +33,6 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
   const [agreed, setAgreed] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [selectedOption, setSelectedOption] = useState<'single' | 'bundle' | null>(null);
-  const [bundleTab, setBundleTab] = useState<'monthly' | 'yearly'>('monthly');
   
   const isMonthly = billingInterval === 'monthly';
   const displayPrice = isMonthly 
@@ -61,11 +60,13 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
   const handleBundleClick = () => {
     if (!agreed || !onSelectBundle) return;
     setSelectedOption('bundle');
-    if (bundleTab === 'yearly' && onSelectBundleYearly) {
-      onSelectBundleYearly();
-    } else {
-      onSelectBundle();
-    }
+    onSelectBundle();
+  };
+
+  const handleBundleYearlyClick = () => {
+    if (!agreed || !onSelectBundleYearly) return;
+    setSelectedOption('bundle');
+    onSelectBundleYearly();
   };
 
   // ============================================
@@ -73,275 +74,299 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
   // ============================================
   if (showBundleOnly) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center py-8 px-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <TermsModal isOpen={showTerms} onClose={() => setShowTerms(false)} />
         
         <div 
-          className="absolute inset-0 backdrop-blur-md" 
-          style={{ background: 'rgba(0,0,0,0.88)' }} 
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           onClick={onClose} 
         />
         
-        <div className="relative w-full max-w-sm max-h-[calc(100vh-160px)] overflow-hidden mt-12">
-          {/* Glow effects */}
+        {/* Wide popup for two columns — matches TOP_SECRET_LANDING */}
+        <div
+          className="relative w-full max-w-2xl rounded-2xl overflow-hidden max-h-[calc(100vh-80px)] overflow-y-auto"
+          style={{
+            background: 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)',
+            border: '1px solid rgba(201,166,70,0.3)',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.2)'
+          }}
+        >
+          {/* Header */}
           <div 
-            className="absolute -inset-[2px] rounded-2xl opacity-70 animate-pulse" 
-            style={{ 
-              background: 'linear-gradient(135deg, rgba(244,217,123,0.5) 0%, rgba(201,166,70,0.2) 25%, transparent 50%, rgba(201,166,70,0.2) 75%, rgba(244,217,123,0.5) 100%)',
-              filter: 'blur(10px)',
-              animationDuration: '3s'
-            }} 
-          />
-          <div 
-            className="absolute -inset-[1px] rounded-2xl" 
-            style={{ background: 'linear-gradient(180deg, rgba(244,217,123,0.3) 0%, transparent 30%, transparent 70%, rgba(201,166,70,0.2) 100%)' }} 
-          />
-          
-          <div 
-            className="relative rounded-2xl overflow-hidden"
-            style={{ 
-              background: 'linear-gradient(180deg, rgba(32,28,20,0.99) 0%, rgba(18,15,11,1) 100%)',
-              border: '1px solid rgba(201,166,70,0.4)',
-              boxShadow: '0 25px 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(244,217,123,0.1)'
+            className="px-6 py-4 text-center relative"
+            style={{
+              background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
+              borderBottom: '1px solid rgba(201,166,70,0.2)'
             }}
           >
-            {/* Top accent line */}
-            <div 
-              className="absolute top-0 left-[5%] right-[5%] h-[2px]" 
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.8), transparent)' }} 
-            />
+            {/* Close button */}
+            <button 
+              onClick={onClose}
+              className="absolute right-4 top-4 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400 hover:text-white" />
+            </button>
+            
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-3"
+                 style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <Gift className="w-4 h-4 text-emerald-400" />
+              <span className="text-emerald-400 text-sm font-semibold">Special Offer for Top Secret Members</span>
+            </div>
+            <h3 className="text-2xl font-bold text-white">War Zone + Top Secret Bundle</h3>
+            <p className="text-slate-400 text-sm mt-1">Get both products for one low price!</p>
+          </div>
+          
+          {/* Body — Two Column Layout */}
+          <div className="px-6 py-6">
+            {/* Price Comparison Banner */}
+            <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
+              <span className="text-slate-500 line-through">War Zone $69.99</span>
+              <span className="text-slate-600">+</span>
+              <span className="text-slate-500 line-through">Top Secret $89.99</span>
+              <span className="text-slate-600">=</span>
+              <span className="text-slate-500 line-through">$159.98/mo</span>
+            </div>
 
-            <div className="px-5 pt-5 pb-5">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
-                     style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
-                  <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400 text-xs font-semibold">Special Offer for Top Secret Members</span>
-                </div>
-                <button 
-                  onClick={onClose} 
-                  className="p-1.5 rounded-lg hover:bg-white/5 transition-all"
-                  style={{ border: '1px solid rgba(201,166,70,0.2)' }}
-                >
-                  <X className="w-4 h-4 text-[#C9A646]/50 hover:text-[#C9A646]" />
-                </button>
-              </div>
-
-              <h2 className="text-xl font-bold text-white text-center mb-4">Upgrade to Bundle</h2>
-              
-              <p className="text-slate-400 text-center text-sm mb-3">
-                Get <span className="text-white font-semibold">both War Zone + Top Secret</span> for one low price!
-              </p>
-
-              {/* Monthly / Yearly Tabs */}
-              <div className="flex rounded-xl overflow-hidden border border-[#C9A646]/30 mb-4">
-                <button
-                  onClick={() => setBundleTab('monthly')}
-                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
-                  style={bundleTab === 'monthly' ? {
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                    color: '#000',
-                  } : {
-                    background: 'transparent',
-                    color: '#C9A646',
-                  }}
-                >
-                  Monthly
-                </button>
-                <button
-                  onClick={() => setBundleTab('yearly')}
-                  className="flex-1 py-2.5 text-sm font-semibold transition-all"
-                  style={bundleTab === 'yearly' ? {
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
-                    color: '#000',
-                  } : {
-                    background: 'transparent',
-                    color: '#C9A646',
-                  }}
-                >
-                  Yearly
-                  <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                    style={bundleTab === 'yearly' ? {
-                      background: 'rgba(0,0,0,0.2)',
-                      color: '#000',
-                    } : {
-                      background: 'rgba(16,185,129,0.2)',
-                      color: '#10B981',
+            {/* Two Pricing Cards — Side by Side */}
+            <div className="grid md:grid-cols-2 gap-4 mb-6">
+              {/* Monthly Bundle Card */}
+              <div 
+                className="relative p-5 rounded-xl"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(30,30,30,0.9) 0%, rgba(20,20,20,0.95) 100%)',
+                  border: '1px solid rgba(201,166,70,0.3)',
+                }}
+              >
+                {/* 7-Day Trial Badge */}
+                <div className="absolute -top-2.5 left-4">
+                  <div className="px-3 py-1 rounded-full text-xs font-bold"
+                    style={{
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#fff',
+                      boxShadow: '0 4px 12px rgba(16,185,129,0.4)'
                     }}
                   >
-                    SAVE $218
-                  </span>
-                </button>
-              </div>
-              
-              {/* Price Section — Dynamic based on tab */}
-              {bundleTab === 'monthly' ? (
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                    <span className="text-slate-400 text-sm">War Zone Newsletter</span>
-                    <span className="text-slate-500 line-through text-sm">$69.99/mo</span>
+                    7-DAY FREE TRIAL
                   </div>
-                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                    <span className="text-slate-400 text-sm">Top Secret Reports</span>
-                    <span className="text-slate-500 line-through text-sm">$89.99/mo</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-lg"
-                       style={{ 
-                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                         border: '1px solid rgba(201,166,70,0.3)'
-                       }}>
-                    <div>
-                      <span className="text-[#C9A646] font-bold">Bundle Price</span>
-                      <p className="text-emerald-400 text-xs">Save $50.98/month!</p>
+                </div>
+
+                <div className="pt-4">
+                  <h4 className="text-lg font-bold text-white mb-1">Monthly Bundle</h4>
+                  
+                  {/* Price */}
+                  <div className="mb-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-[#C9A646]">$109</span>
+                      <span className="text-slate-500">/month</span>
                     </div>
-                    <span className="text-[#C9A646] font-bold text-xl">$109/mo</span>
+                    <p className="text-emerald-400 text-xs font-semibold mt-1">
+                      Save $50.98/month vs separate!
+                    </p>
                   </div>
-                </div>
-              ) : (
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between items-center p-2.5 rounded-lg bg-white/5">
-                    <span className="text-slate-400 text-sm">Monthly Bundle × 12</span>
-                    <span className="text-slate-500 line-through text-sm">$1,308/yr</span>
-                  </div>
-                  <div className="flex justify-between items-center p-3 rounded-lg"
-                       style={{ 
-                         background: 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.05) 100%)',
-                         border: '1px solid rgba(201,166,70,0.3)'
-                       }}>
-                    <div>
-                      <span className="text-[#C9A646] font-bold">Yearly Bundle</span>
-                      <p className="text-emerald-400 text-xs">Just $90.83/mo — Save $218!</p>
-                    </div>
-                    <span className="text-[#C9A646] font-bold text-xl">$1,090/yr</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* What You Get */}
-              <div className="space-y-1.5 mb-4">
-                <p className="text-slate-500 text-xs font-medium mb-1">What you'll get:</p>
-                <div className="flex items-center gap-2 text-slate-300 text-sm">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>War Zone Newsletter (Daily Signals)</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300 text-sm">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Top Secret Reports (10 Monthly)</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-300 text-sm">
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{bundleTab === 'monthly' ? '7-Day Free Trial' : 'Full Year Access'}</span>
-                </div>
-                {bundleTab === 'yearly' && (
-                  <>
+
+                  {/* Features */}
+                  <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-3.5 h-3.5 text-[#C9A646]" />
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span>War Zone Daily Intelligence</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span>Top Secret Reports (10/mo)</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span>Private Discord Access</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      <span>7-Day Free Trial</span>
+                    </div>
+                  </div>
+
+                  {/* CTA Button */}
+                  <button
+                    onClick={handleBundleClick}
+                    disabled={!agreed || (isProcessing && selectedOption === 'bundle')}
+                    className={cn(
+                      "w-full py-3 font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2",
+                      agreed ? "hover:scale-[1.02]" : "cursor-not-allowed"
+                    )}
+                    style={agreed ? {
+                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                      color: '#000',
+                      boxShadow: '0 6px 20px rgba(201,166,70,0.3)'
+                    } : {
+                      background: 'rgba(201,166,70,0.15)',
+                      color: 'rgba(201,166,70,0.4)'
+                    }}
+                  >
+                    {isProcessing && selectedOption === 'bundle' ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Crown className="w-4 h-4" />
+                        Start Free Trial
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Yearly Bundle Card — BEST VALUE */}
+              <div 
+                className="relative p-5 rounded-xl"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(40,35,25,0.95) 0%, rgba(25,22,15,0.98) 100%)',
+                  border: '2px solid rgba(201,166,70,0.5)',
+                  boxShadow: '0 0 40px rgba(201,166,70,0.15)'
+                }}
+              >
+                {/* BEST VALUE Badge */}
+                <div className="absolute -top-2.5 right-4">
+                  <div className="px-3 py-1 rounded-full text-xs font-bold"
+                    style={{
+                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                      color: '#000',
+                      boxShadow: '0 4px 12px rgba(201,166,70,0.4)'
+                    }}
+                  >
+                    BEST VALUE
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <h4 className="text-lg font-bold mb-1"
+                    style={{
+                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent'
+                    }}
+                  >
+                    Yearly Bundle
+                  </h4>
+                  
+                  {/* Price */}
+                  <div className="mb-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold text-white">$1090</span>
+                      <span className="text-slate-500">/year</span>
+                    </div>
+                    <p className="text-emerald-400 text-xs font-semibold mt-1">
+                      Just $90.83/mo — Save $218/year!
+                    </p>
+                  </div>
+
+                  {/* Features */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                      <span>Everything in Monthly</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
                       <span>Locked price for 12 months</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-3.5 h-3.5 text-[#C9A646]" />
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                      <span>Priority support access</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
                       <span>Founding member badge</span>
                     </div>
-                  </>
-                )}
-              </div>
-
-              {/* Disclaimer Checkbox - Premium Style */}
-              <div 
-                className="rounded-xl p-3 mb-4 relative overflow-hidden"
-                style={{ 
-                  background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.08), 0 4px 12px rgba(0,0,0,0.2)'
-                }}
-              >
-                <div 
-                  className="absolute top-0 left-0 right-0 h-px"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.3), transparent)' }}
-                />
-                
-                <label className="flex items-start gap-2.5 cursor-pointer group relative z-10">
-                  <div className="relative flex-shrink-0 mt-0.5">
-                    <input 
-                      type="checkbox" 
-                      checked={agreed} 
-                      onChange={(e) => setAgreed(e.target.checked)} 
-                      className="sr-only" 
-                    />
-                    <div 
-                      className={cn(
-                        "w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200",
-                        !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-110"
-                      )}
-                      style={{ 
-                        background: agreed 
-                          ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)' 
-                          : 'rgba(201,166,70,0.08)',
-                        border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
-                        boxShadow: agreed 
-                          ? '0 0 20px rgba(201,166,70,0.5), inset 0 1px 0 rgba(255,255,255,0.3)' 
-                          : 'inset 0 1px 2px rgba(0,0,0,0.2)'
-                      }}
-                    >
-                      {agreed && <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />}
-                    </div>
                   </div>
-                  <span className="text-[#A09080] text-sm leading-relaxed">
-                    I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
-                    <button 
-                      type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }}
-                      className="text-[#C9A646] hover:text-[#F4D97B] underline underline-offset-2 transition-colors font-medium"
-                    >
-                      Terms & Disclaimer
-                    </button>
-                  </span>
-                </label>
-              </div>
-              
-              {/* CTA Buttons */}
-              <div className="space-y-2">
-                <button
-                  onClick={handleBundleClick}
-                  disabled={!agreed || isProcessing}
-                  className={cn(
-                    "w-full py-3 text-base font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2",
-                    agreed ? "hover:scale-[1.02]" : "cursor-not-allowed"
-                  )}
-                  style={agreed ? {
-                    background: 'linear-gradient(135deg, #B8963F 0%, #C9A646 30%, #F4D97B 50%, #C9A646 70%, #B8963F 100%)',
-                    color: '#1a1510',
-                    boxShadow: '0 6px 25px rgba(201,166,70,0.45), inset 0 1px 0 rgba(255,255,255,0.2)'
-                  } : {
-                    background: 'rgba(201,166,70,0.15)',
-                    color: 'rgba(201,166,70,0.4)'
-                  }}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-<>
-                    <Crown className="w-4 h-4" />
-                    {bundleTab === 'monthly' ? 'Start Free Trial — $109/mo' : 'Get Yearly Bundle — $1,090/yr'}
-                  </>
-                  )}
-                </button>
-                
-                <button
-                  onClick={onClose}
-                  className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-                >
-                  No thanks, I'll pass
-                </button>
+
+                  {/* CTA Button */}
+                  <button
+                    onClick={handleBundleYearlyClick}
+                    disabled={!agreed || (isProcessing && selectedOption === 'bundle')}
+                    className={cn(
+                      "w-full py-3 font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-2",
+                      agreed ? "hover:scale-[1.02]" : "cursor-not-allowed"
+                    )}
+                    style={agreed ? {
+                      background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                      color: '#000',
+                      boxShadow: '0 6px 20px rgba(201,166,70,0.4)'
+                    } : {
+                      background: 'rgba(201,166,70,0.15)',
+                      color: 'rgba(201,166,70,0.4)'
+                    }}
+                  >
+                    {isProcessing && selectedOption === 'bundle' ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Crown className="w-4 h-4" />
+                        Get Yearly Bundle
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
-            
-            {/* Bottom accent */}
+
+            {/* Disclaimer Checkbox */}
             <div 
-              className="absolute bottom-0 left-[5%] right-[5%] h-[2px]" 
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.5), transparent)' }} 
-            />
+              className="rounded-xl p-4 mb-4 relative overflow-hidden"
+              style={{ 
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+                border: '1px solid rgba(201,166,70,0.25)',
+                boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.08), 0 4px 12px rgba(0,0,0,0.2)'
+              }}
+            >
+              <div 
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.3), transparent)' }}
+              />
+              
+              <label className="flex items-start gap-3 cursor-pointer group relative z-10">
+                <div className="relative flex-shrink-0 mt-0.5">
+                  <input 
+                    type="checkbox" 
+                    checked={agreed} 
+                    onChange={(e) => setAgreed(e.target.checked)} 
+                    className="sr-only" 
+                  />
+                  <div 
+                    className={cn(
+                      "w-5 h-5 rounded-md flex items-center justify-center transition-all duration-200",
+                      !agreed && "group-hover:border-[#C9A646]/70 group-hover:scale-110"
+                    )}
+                    style={{ 
+                      background: agreed 
+                        ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)' 
+                        : 'rgba(201,166,70,0.08)',
+                      border: agreed ? 'none' : '2px solid rgba(201,166,70,0.4)',
+                      boxShadow: agreed 
+                        ? '0 0 20px rgba(201,166,70,0.5), inset 0 1px 0 rgba(255,255,255,0.3)' 
+                        : 'inset 0 1px 2px rgba(0,0,0,0.2)'
+                    }}
+                  >
+                    {agreed && <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />}
+                  </div>
+                </div>
+                <span className="text-[#A09080] text-sm leading-relaxed">
+                  I acknowledge that FINOTAUR does not provide investment advice. I agree to the{' '}
+                  <button 
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }}
+                    className="text-[#C9A646] hover:text-[#F4D97B] underline underline-offset-2 transition-colors font-medium"
+                  >
+                    Terms & Disclaimer
+                  </button>
+                </span>
+              </label>
+            </div>
+            
+            {/* Skip Button */}
+            <button
+              onClick={onClose}
+              className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+            >
+              No thanks, I'll pass
+            </button>
           </div>
         </div>
       </div>
