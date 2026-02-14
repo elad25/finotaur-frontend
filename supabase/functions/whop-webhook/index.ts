@@ -57,6 +57,13 @@ const BUNDLE_PRODUCT_IDS = new Set([
   'prod_CbWpZrn5P7wc9',  // Bundle Yearly - $1,090/year (no trial)
 ]);
 
+// 🔥 v6.0.0: Platform Product IDs - Core & Enterprise (NOT Bundle/Finotaur - those use BUNDLE)
+const PLATFORM_PRODUCT_IDS = new Set([
+  'prod_HDYzeNp6WOJwh',  // Platform Core Monthly - $59/month with 14-day trial
+  'prod_YAdXQrHtt72Gd',  // Platform Core Yearly - $590/year
+  'prod_CIKv0J5Rq6aFk',  // Platform Enterprise Monthly - $500/month
+]);
+
 // 🔥 v3.10.0: Top Secret Plan IDs - For identifying specific plans
 const TOP_SECRET_PLAN_IDS = new Set([
   'plan_tUvQbCrEQ4197',  // Top Secret Monthly ($89.99)
@@ -79,6 +86,22 @@ function isBundle(productId: string | undefined): boolean {
   return BUNDLE_PRODUCT_IDS.has(productId);
 }
 
+// ============================================
+// 🔥 v6.0.0: HELPER: Check if product is Platform (Core/Enterprise)
+// ============================================
+
+function isPlatform(productId: string | undefined): boolean {
+  if (!productId) return false;
+  return PLATFORM_PRODUCT_IDS.has(productId);
+}
+
+// 🔥 v6.0.0: Get platform plan name from product ID
+function getPlatformPlanFromProduct(productId: string): string {
+  if (productId === 'prod_HDYzeNp6WOJwh' || productId === 'prod_YAdXQrHtt72Gd') return 'platform_core';
+  if (productId === 'prod_CIKv0J5Rq6aFk') return 'platform_enterprise';
+  return 'platform_core'; // fallback
+}
+
 // 🔥 v3.9.0: Newsletter Plan IDs - Synced with whop-config.ts v4.4.0
 const NEWSLETTER_PLAN_IDS = new Set([
   'plan_U6lF2eO5y9469',  // War Zone Monthly ($69.99)
@@ -95,6 +118,7 @@ const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
   'plan_M2zS1EoNXJF10',  // Bundle Yearly ($1090/year)
+  'plan_6w5KTZsSGp7Ss',  // 🔥 Platform Core Yearly ($590/year)
 ]);
 
 // 🔥 v3.8.0: Cross-product discount Plan IDs
@@ -984,9 +1008,10 @@ serve(async (req: Request) => {
     const finotaurUserId = extractFinotaurUserId(payload.data);
     const finotaurEmail = extractFinotaurEmail(payload.data);  // 🔥 v3.5.0
 
-    // 🔥 Detect if this is a newsletter/top secret event
+    // 🔥 Detect if this is a newsletter/top secret/platform event
     const isNewsletterEvent = isNewsletter(productId);
     const isTopSecretEvent = isTopSecret(productId);
+    const isPlatformEvent = isPlatform(productId);
 
     console.log("📨 Webhook received:", {
       eventType,
@@ -998,6 +1023,7 @@ serve(async (req: Request) => {
       productId,
       isNewsletter: isNewsletterEvent,
       isTopSecret: isTopSecretEvent,
+      isPlatform: isPlatformEvent,
     });
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -1609,6 +1635,11 @@ if (isTopSecretPayment) {
               top_secret_expires_at: expiresAt.toISOString(),
               top_secret_is_in_trial: false,
               top_secret_trial_ends_at: null,
+              // 🔥 v6.0.0: Also update platform_plan!
+              platform_plan: 'platform_finotaur',
+              platform_subscription_status: 'active',
+              platform_billing_interval: 'yearly',
+              platform_is_in_trial: false,
               updated_at: new Date().toISOString(),
             })
             .eq('id', resolvedUserId);
@@ -1644,6 +1675,22 @@ if (isTopSecretPayment) {
       }
       
       console.log("✅ Bundle payment processed:", result);
+
+      // 🔥 v6.0.0: Bundle = Finotaur platform plan — update platform_plan!
+      await supabase
+        .from('profiles')
+        .update({
+          platform_plan: 'platform_finotaur',
+          platform_subscription_status: 'active',
+          platform_billing_interval: billingInterval,
+          platform_is_in_trial: false,
+          platform_cancel_at_period_end: false,
+          platform_payment_provider: 'whop',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', resolvedUserId);
+      
+      console.log("✅ Platform plan updated to finotaur for Bundle payment:", resolvedUserId);
       
       // 🔥 v5.2.0: If this is a REAL payment (not trial $0), cancel paused individual subscriptions
       if (paymentAmount > 0) {
@@ -1745,6 +1792,79 @@ if (isTopSecretPayment) {
       return { 
         success: true, 
         message: `Bundle activated for ${resolvedEmail} (${billingInterval})` 
+      };
+    }
+
+    // ═══════════════════════════════════════════════
+    // 🔥 v6.0.0: PLATFORM SUBSCRIPTION (Core / Enterprise)
+    // ═══════════════════════════════════════════════
+
+    if (isPlatform(productId)) {
+      console.log("🖥️ Processing PLATFORM payment...");
+
+      const planId = data.plan?.id || '';
+      const billingInterval = getBillingInterval(planId);
+      const platformPlan = getPlatformPlanFromProduct(productId);
+
+      // Find user
+      const userResult = await findUser(supabase, finotaurUserId, userEmail, 'journal');
+      if (!userResult) {
+        console.error("❌ User not found for Platform activation");
+        return { success: false, message: "User not found for Platform activation. User must register on Finotaur before purchasing." };
+      }
+
+      const resolvedUserId = userResult.id;
+      const resolvedEmail = userResult.email;
+
+      // Detect trial: payment amount = 0 on first payment
+      const isInTrial = isFirstPayment && paymentAmount === 0;
+      const trialEndsAt = isInTrial 
+        ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+      const expiresAt = billingInterval === 'yearly'
+        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          platform_plan: platformPlan,
+          platform_subscription_status: isInTrial ? 'trial' : 'active',
+          platform_billing_interval: billingInterval,
+          platform_subscription_started_at: new Date().toISOString(),
+          platform_subscription_expires_at: isInTrial ? trialEndsAt : expiresAt,
+          platform_trial_ends_at: trialEndsAt,
+          platform_is_in_trial: isInTrial,
+          platform_cancel_at_period_end: false,
+          platform_cancelled_at: null,
+          platform_whop_membership_id: membershipId,
+          platform_whop_user_id: whopUserId,
+          platform_whop_product_id: productId,
+          platform_whop_plan_id: planId,
+          platform_whop_customer_email: whopEmail,
+          platform_payment_provider: 'whop',
+          ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', resolvedUserId);
+
+      if (updateError) {
+        console.error("❌ Platform subscription update error:", updateError);
+        return { success: false, message: `Platform activation failed: ${updateError.message}` };
+      }
+
+      console.log("✅ Platform subscription activated:", {
+        userId: resolvedUserId,
+        email: resolvedEmail,
+        plan: platformPlan,
+        interval: billingInterval,
+        isInTrial,
+      });
+
+      return {
+        success: true,
+        message: `Platform ${platformPlan} activated for ${resolvedEmail} (${billingInterval})${isInTrial ? ' [trial]' : ''}`
       };
     }
 
@@ -2064,6 +2184,27 @@ async function handleMembershipActivated(
     }
 
     console.log("✅ Bundle activated:", result);
+
+    // 🔥 v6.0.0: Bundle = Finotaur platform plan — update platform_plan!
+    await supabase
+      .from('profiles')
+      .update({
+        platform_plan: 'platform_finotaur',
+        platform_subscription_status: isInTrial ? 'trial' : 'active',
+        platform_billing_interval: billingInterval,
+        platform_subscription_started_at: new Date().toISOString(),
+        platform_trial_ends_at: trialEndsAt,
+        platform_is_in_trial: isInTrial,
+        platform_cancel_at_period_end: false,
+        platform_whop_membership_id: membershipId,
+        platform_whop_product_id: productId || '',
+        platform_whop_plan_id: planId,
+        platform_payment_provider: 'whop',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userResult.id);
+    
+    console.log("✅ Platform plan updated to finotaur for Bundle user:", userResult.id);
     
     return { 
       success: true, 
@@ -2083,6 +2224,68 @@ async function handleMembershipActivated(
       productId: productId || '',
       finotaurUserId,
     }, payload);  // 🔥 v3.14.0: Pass payload for plan ID extraction
+  }
+
+  // ═══════════════════════════════════════════════
+  // 🔥 v6.0.0: PLATFORM SUBSCRIPTION (Core / Enterprise)
+  // ═══════════════════════════════════════════════
+
+  if (isPlatform(productId)) {
+    console.log("🖥️ Processing PLATFORM membership.activated...");
+
+    const planId = data.plan?.id || '';
+    const billingInterval = getBillingInterval(planId);
+    const platformPlan = getPlatformPlanFromProduct(productId || '');
+    const isInTrial = data.status === 'trialing';
+    const trialEndsAt = isInTrial && data.renewal_period_end
+      ? new Date(data.renewal_period_end).toISOString()
+      : null;
+
+    // Find user
+    const userResult = await findUser(supabase, finotaurUserId, userEmail, 'journal');
+    if (!userResult) {
+      console.error("❌ User not found for Platform activation");
+      return { success: false, message: "User not found for Platform activation" };
+    }
+
+    // Update profile
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        platform_plan: platformPlan,
+        platform_subscription_status: isInTrial ? 'trial' : 'active',
+        platform_billing_interval: billingInterval,
+        platform_subscription_started_at: new Date().toISOString(),
+        platform_trial_ends_at: trialEndsAt,
+        platform_is_in_trial: isInTrial,
+        platform_cancel_at_period_end: false,
+        platform_whop_membership_id: data.id,
+        platform_whop_user_id: data.user?.id || '',
+        platform_whop_product_id: productId || '',
+        platform_whop_plan_id: planId,
+        platform_whop_customer_email: data.user?.email || '',
+        platform_payment_provider: 'whop',
+        ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userResult.id);
+
+    if (updateError) {
+      console.error("❌ Platform activation update error:", updateError);
+      return { success: false, message: `Platform activation failed: ${updateError.message}` };
+    }
+
+    console.log("✅ Platform membership activated:", {
+      userId: userResult.id,
+      plan: platformPlan,
+      interval: billingInterval,
+      isInTrial,
+    });
+
+    return {
+      success: true,
+      message: `Platform ${platformPlan} membership activated for ${userEmail} (${billingInterval})${isInTrial ? ' [trial]' : ''}`
+    };
   }
 
   // ======= REGULAR JOURNAL SUBSCRIPTION FLOW =======
@@ -3003,9 +3206,68 @@ async function handleMembershipDeactivated(
       }
     }
     
+    // 🔥 v6.0.0: Reset platform_plan when Bundle deactivated
+    if (result?.user_id) {
+      await supabase
+        .from('profiles')
+        .update({
+          platform_plan: 'free',
+          platform_subscription_status: 'cancelled',
+          platform_is_in_trial: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', result.user_id);
+      
+      console.log("✅ Platform plan reset to free after Bundle deactivation:", result.user_id);
+    }
+
     return { 
       success: result?.success ?? true, 
       message: `Bundle deactivated: ${result?.email || userEmail}` 
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // 🔥 v6.0.0: PLATFORM DEACTIVATION (Core / Enterprise)
+  // ═══════════════════════════════════════════════
+
+  if (isPlatform(productId)) {
+    console.log("🖥️ Processing PLATFORM deactivation...");
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, email, platform_plan')
+      .eq('platform_whop_membership_id', membershipId)
+      .single();
+
+    if (!profile) {
+      console.warn("⚠️ No user found for platform deactivation, membership:", membershipId);
+      return { success: true, message: `Platform deactivation: no user found for ${membershipId}` };
+    }
+
+    const oldPlan = profile.platform_plan;
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({
+        platform_plan: 'free',
+        platform_subscription_status: 'cancelled',
+        platform_is_in_trial: false,
+        platform_cancel_at_period_end: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id);
+
+    if (updateError) {
+      console.error("❌ Platform deactivation error:", updateError);
+      return { success: false, message: `Platform deactivation failed: ${updateError.message}` };
+    }
+
+    console.log("✅ Platform deactivated:", { userId: profile.id, email: profile.email, oldPlan });
+
+    return {
+      success: true,
+      message: `Platform deactivated: ${profile.email} (${oldPlan} → free)`
     };
   }
 

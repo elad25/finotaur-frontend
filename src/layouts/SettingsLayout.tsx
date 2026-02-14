@@ -214,12 +214,15 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
     return plans[plan || 'free'] || plans.free;
   }
   
+  // Normalize: strip "platform_" prefix if present (DB stores "platform_core", UI uses "core")
+  const normalizedPlan = (plan || 'free').replace('platform_', '');
+  
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
     core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
     finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
   };
-  return plans[plan || 'free'] || plans.free;
+  return plans[normalizedPlan] || plans.free;
 }
 
 function getTimezoneLabel(value: string | null): string {
@@ -292,7 +295,8 @@ const GeneralTab = () => {
   };
 
   const platformPlan = profile?.platform_plan || 'free';
-  const isPro = platformPlan === 'pro' || platformPlan === 'premium';
+  const isPro = ['platform_core', 'platform_finotaur', 'platform_enterprise'].includes(platformPlan);
+  const platformIsFree = platformPlan === 'free' || !platformPlan;
 
   return (
     <div className="space-y-6">
@@ -308,8 +312,8 @@ const GeneralTab = () => {
           </div>
         </div>
         <Badge className="bg-[#C9A646]/15 text-[#C9A646] border-[#C9A646]/30 border px-3 py-1">
-          {isPro ? <Crown className="w-3.5 h-3.5 mr-1.5" /> : <Zap className="w-3.5 h-3.5 mr-1.5" />}
-          {platformPlan.charAt(0).toUpperCase() + platformPlan.slice(1)}
+          {platformIsFree ? <Zap className="w-3.5 h-3.5 mr-1.5" /> : <Crown className="w-3.5 h-3.5 mr-1.5" />}
+          {getPlanInfo(platformPlan, 'platform').name}
         </Badge>
       </div>
 
@@ -568,7 +572,7 @@ const BillingTab = () => {
   const platformStatus = profile?.platform_subscription_status || 'inactive';
   const platformInfo = getPlanInfo(platformPlan, 'platform');
   const platformIsActive = ['active', 'trial'].includes(platformStatus);
-  const platformIsFree = platformPlan === 'free' || !platformPlan;
+  const platformIsFree = platformPlan === 'free' || platformPlan === null || platformPlan === undefined || !platformPlan;
   
   // Trading Journal subscription
   const journalPlan = profile?.account_type || 'free';
@@ -1003,7 +1007,7 @@ const BillingTab = () => {
       <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            {platformPlan === 'pro' ? (
+            {!platformIsFree ? (
               <Crown className="w-4 h-4 text-[#C9A646]" />
             ) : (
               <Zap className="w-4 h-4 text-zinc-400" />
@@ -1063,7 +1067,7 @@ const BillingTab = () => {
           </div>
 
           {/* Action Buttons */}
-          {platformIsFree ? (
+          {(platformIsFree || platformPlan === 'free') ? (
             <Button
               size="sm"
               onClick={() => navigate('/app/all-markets/pricing')}

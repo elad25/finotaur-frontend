@@ -195,7 +195,9 @@ export default function PlatformPricing() {
           .maybeSingle();
 
         if (!error && data) {
-          setCurrentPlatformPlan(data.platform_plan || 'free');
+          // Normalize: strip "platform_" prefix for UI comparison
+          const rawPlan = data.platform_plan || 'free';
+          setCurrentPlatformPlan(rawPlan.replace('platform_', '') as PlatformPlanId);
           setProTrialUsed(!!data.platform_pro_trial_used_at);
         }
       } catch (error) {
