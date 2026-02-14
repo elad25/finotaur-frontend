@@ -221,7 +221,8 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
     core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
+    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
+    enterprise: { name: 'Enterprise', price: '$500/mo', color: 'bg-gradient-to-r from-[#C9A646]/20 to-amber-500/20 text-[#C9A646] border-[#C9A646]/40' },
   };
   return plans[normalizedPlan] || plans.free;
 }
@@ -1083,13 +1084,22 @@ const BillingTab = () => {
       </div>
 
       {/* Platform Subscription Card (Main Website) */}
-      <Card className="p-5 bg-zinc-900/50 border-zinc-700/50">
+      <Card className={cn(
+        "p-5 relative overflow-hidden",
+        platformPlan === 'platform_core'
+          ? "bg-gradient-to-br from-blue-950/30 via-zinc-900/80 to-zinc-900/90 border-blue-500/30"
+          : ['platform_finotaur', 'platform_enterprise'].includes(platformPlan)
+          ? "bg-gradient-to-br from-yellow-950/40 via-amber-950/30 to-zinc-900/90 border-2 border-[#C9A646]/40 shadow-xl shadow-amber-900/20"
+          : "bg-zinc-900/50 border-zinc-700/50"
+      )}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            {!platformIsFree ? (
-              <Crown className="w-4 h-4 text-[#C9A646]" />
-            ) : (
+            {platformIsFree ? (
               <Zap className="w-4 h-4 text-zinc-400" />
+            ) : ['platform_core'].includes(platformPlan) ? (
+              <Crown className="w-4 h-4 text-blue-400" />
+            ) : (
+              <Crown className="w-4 h-4 text-[#C9A646]" />
             )}
             <h2 className="font-medium text-white">Finotaur Platform</h2>
           </div>
@@ -1164,14 +1174,26 @@ const BillingTab = () => {
           ) : platformIsActive && !isLifetime && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
               {!profile?.platform_cancel_at_period_end && (
-                <Button
-                  size="sm"
-                  onClick={() => navigate('/app/all-markets/pricing')}
-                  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-                >
-                  <Crown className="w-3.5 h-3.5 mr-1.5" />
-                  Upgrade Plan
-                </Button>
+                <>
+                  {profile?.platform_billing_interval === 'monthly' && (
+                    <Button
+                      size="sm"
+                      onClick={() => navigate('/app/all-markets/pricing')}
+                      className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+                    >
+                      <Crown className="w-3.5 h-3.5 mr-1.5" />
+                      Upgrade to Yearly {platformPlan === 'platform_core' ? '(Save 17%)' : '(Save 17%)'}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/app/all-markets/pricing')}
+                    className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+                  >
+                    <Crown className="w-3.5 h-3.5 mr-1.5" />
+                    Upgrade Plan
+                  </Button>
+                </>
               )}
               {profile?.platform_cancel_at_period_end ? (
                 <Button

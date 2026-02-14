@@ -38,7 +38,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 // Product types
-type ProductType = "newsletter" | "top_secret" | "bundle";
+type ProductType = "newsletter" | "top_secret" | "bundle" | "platform";
 
 // ============================================
 // CORS HEADERS
@@ -257,6 +257,8 @@ function getMembershipId(profile: any, product: ProductType): string | null {
       return profile.top_secret_whop_membership_id;
     case "bundle":
       return profile.bundle_whop_membership_id;
+    case "platform":
+      return profile.platform_whop_membership_id;
     default:
       return null;
   }
@@ -330,6 +332,16 @@ function getProductStatus(profile: any, product: ProductType): {
         trialEndsAt: profile.bundle_trial_ends_at,
         isPaid: profile.bundle_status === "active" && !profile.bundle_is_in_trial,
       };
+    case "platform":
+      return {
+        enabled: profile.platform_plan !== 'free' && profile.platform_plan !== null,
+        status: profile.platform_subscription_status ?? "inactive",
+        cancelAtPeriodEnd: profile.platform_cancel_at_period_end ?? false,
+        expiresAt: profile.platform_subscription_expires_at,
+        isTrial: profile.platform_is_in_trial ?? false,
+        trialEndsAt: profile.platform_trial_ends_at,
+        isPaid: profile.platform_subscription_status === "active" && !profile.platform_is_in_trial,
+      };
     default:
       return { 
         enabled: false, 
@@ -355,6 +367,8 @@ function getProductDisplayName(product: ProductType): string {
       return "Top Secret";
     case "bundle":
       return "War Zone + Top Secret Bundle";
+    case "platform":
+      return "Finotaur Platform";
     default:
       return product;
   }
@@ -474,7 +488,11 @@ serve(async (req: Request) => {
         top_secret_started_at, top_secret_whop_plan_id, top_secret_is_in_trial,
         bundle_enabled, bundle_status, bundle_whop_membership_id,
         bundle_expires_at, bundle_cancel_at_period_end, bundle_interval,
-        bundle_started_at, bundle_is_in_trial, bundle_trial_ends_at
+        bundle_started_at, bundle_is_in_trial, bundle_trial_ends_at,
+        platform_plan, platform_subscription_status, platform_whop_membership_id,
+        platform_cancel_at_period_end, platform_subscription_expires_at,
+        platform_trial_ends_at, platform_is_in_trial, platform_cancelled_at,
+        platform_billing_interval
       `)
       .eq("id", user.id)
       .single();
@@ -498,9 +516,9 @@ serve(async (req: Request) => {
     const body: RequestBody = await req.json();
     const { product } = body;
 
-    if (!product || !["newsletter", "top_secret", "bundle"].includes(product)) {
+    if (!product || !["newsletter", "top_secret", "bundle", "platform"].includes(product)) {
       return new Response(
-        JSON.stringify({ error: "Invalid product. Must be 'newsletter', 'top_secret', or 'bundle'" }),
+        JSON.stringify({ error: "Invalid product. Must be 'newsletter', 'top_secret', 'bundle', or 'platform'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -831,6 +849,12 @@ async function handleCancel(
         // 🔥 v4.2.0: If via Bundle, also mark Bundle for cancellation
         ...(topSecretViaBundleOnly && { bundle_cancel_at_period_end: true }),
       };
+    } else if (product === "platform") {
+      updateData = {
+        ...updateData,
+        platform_cancel_at_period_end: true,
+        platform_cancelled_at: new Date().toISOString(),
+      };
     }
 
     const { error: updateError } = await supabase
@@ -926,6 +950,12 @@ async function handleCancel(
           ...updateData,
           top_secret_cancel_at_period_end: true,
         };
+      } else if (product === "platform") {
+        updateData = {
+          ...updateData,
+          platform_cancel_at_period_end: true,
+          platform_cancelled_at: new Date().toISOString(),
+        };
       }
 
       const { error: updateError } = await supabase
@@ -1006,6 +1036,9 @@ console.log(`✅ Subscription scheduled for cancellation`);
     updateData.top_secret_cancel_at_period_end = true;
   } else if (product === "bundle") {
     updateData.bundle_cancel_at_period_end = true;
+  } else if (product === "platform") {
+    updateData.platform_cancel_at_period_end = true;
+    updateData.platform_cancelled_at = new Date().toISOString();
   }
 
   const { error: updateError } = await supabase
@@ -1435,6 +1468,9 @@ async function handleReactivate(
       updateData.top_secret_cancel_at_period_end = false;
     } else if (product === "bundle") {
       updateData.bundle_cancel_at_period_end = false;
+    } else if (product === "platform") {
+      updateData.platform_cancel_at_period_end = false;
+      updateData.platform_cancelled_at = null;
     }
 
     const { error: updateError } = await supabase
@@ -1510,6 +1546,9 @@ async function handleReactivate(
       updateData.top_secret_cancel_at_period_end = false;
     } else if (product === "bundle") {
       updateData.bundle_cancel_at_period_end = false;
+    } else if (product === "platform") {
+      updateData.platform_cancel_at_period_end = false;
+      updateData.platform_cancelled_at = null;
     }
 
     const { error: updateError } = await supabase
@@ -1619,6 +1658,9 @@ async function handleReactivate(
     updateData.newsletter_cancel_at_period_end = false;
   } else if (product === "top_secret") {
     updateData.top_secret_cancel_at_period_end = false;
+  } else if (product === "platform") {
+    updateData.platform_cancel_at_period_end = false;
+    updateData.platform_cancelled_at = null;
   }
 
   const { error: updateError } = await supabase
