@@ -10,9 +10,11 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, Zap, Crown, ArrowRight, Sparkles, Check, TrendingUp, Bell, Shield, Brain, Eye } from 'lucide-react';
+import { Lock, Zap, Crown, ArrowRight, Sparkles, Check, TrendingUp, Bell, Shield, Brain, Eye, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useWhopCheckout } from '@/hooks/useWhopCheckout';
+import { useAuth } from '@/providers/AuthProvider';
 
 interface UpgradeGateProps {
   feature: string;
@@ -119,9 +121,34 @@ export function UpgradeGate({
   limit,
 }: UpgradeGateProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [waitlistJoined, setWaitlistJoined] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'yearly'>('monthly');
   const isLimitReached = reason === 'daily_limit' || reason === 'monthly_limit';
   const requiredTier = PLAN_TIERS.find(t => t.key === upgradeTarget) || PLAN_TIERS[1];
+
+  const {
+    checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
+    checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
+    checkoutPlatformEnterpriseMonthly,
+    isLoading: checkoutLoading,
+  } = useWhopCheckout({
+    onError: (error) => toast.error('Checkout failed', { description: error.message }),
+  });
+
+  const handleCheckout = (planKey: 'core' | 'finotaur' | 'enterprise') => {
+    if (!user) {
+      navigate('/app/all-markets/pricing');
+      return;
+    }
+    if (planKey === 'core') {
+      billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
+    } else if (planKey === 'finotaur') {
+      billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
+    } else if (planKey === 'enterprise') {
+      checkoutPlatformEnterpriseMonthly();
+    }
+  };
 
   const handleJoinWaitlist = () => {
     setWaitlistJoined(true);
@@ -192,6 +219,31 @@ export function UpgradeGate({
           </p>
         </div>
 
+        {/* ── Billing Toggle ── */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <button
+            onClick={() => setBillingInterval('monthly')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              billingInterval === 'monthly'
+                ? 'bg-[#C9A646]/20 text-[#C9A646] border border-[#C9A646]/40'
+                : 'text-[#6B6B6B] hover:text-[#8B8B8B]'
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setBillingInterval('yearly')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+              billingInterval === 'yearly'
+                ? 'bg-[#C9A646]/20 text-[#C9A646] border border-[#C9A646]/40'
+                : 'text-[#6B6B6B] hover:text-[#8B8B8B]'
+            }`}
+          >
+            Yearly
+            <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">Save 17%</span>
+          </button>
+        </div>
+
         {/* ── Plan Cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
 
@@ -232,8 +284,11 @@ export function UpgradeGate({
                     <span className="font-bold text-white">{tier.name}</span>
                   </div>
                   <div className="mb-1">
-                    <span className="text-3xl font-bold text-white">{tier.price}</span>
+                    <span className="text-3xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'core' ? '$49' : '$91'}</span>
                     <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+                    {billingInterval === 'yearly' && (
+                      <span className="text-[10px] text-green-400 ml-2">Billed {tier.key === 'core' ? '$590' : '$1,090'}/yr</span>
+                    )}
                   </div>
                   <p className="text-xs text-[#8B8B8B] mb-4">{tier.description}</p>
 
@@ -249,7 +304,8 @@ export function UpgradeGate({
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/app/all-markets/pricing')}
+                    onClick={() => handleCheckout('core')}
+                    disabled={checkoutLoading}
                     className="w-full mt-5 py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-300"
                     style={{
                       background: 'rgba(255,255,255,0.05)',
@@ -257,7 +313,8 @@ export function UpgradeGate({
                       border: '1px solid rgba(255,255,255,0.1)',
                     }}
                   >
-                    View Core
+                    {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                    Start 14-Day Free Trial
                   </motion.button>
                 </div>
               </motion.div>
@@ -309,9 +366,12 @@ export function UpgradeGate({
                         WebkitTextFillColor: 'transparent',
                       }}
                     >
-                      {tier.price}
+                      {billingInterval === 'monthly' ? tier.price : '$91'}
                     </span>
                     <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+                    {billingInterval === 'yearly' && (
+                      <span className="text-[10px] text-green-400 ml-2">Billed $1,090/yr</span>
+                    )}
                   </div>
                   <p className="text-xs text-[#8B8B8B] mb-4">{tier.description}</p>
 
@@ -327,7 +387,8 @@ export function UpgradeGate({
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => navigate('/app/all-markets/pricing')}
+                    onClick={() => handleCheckout('finotaur')}
+                    disabled={checkoutLoading}
                     className="w-full mt-5 py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all duration-300"
                     style={{
                       background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
@@ -335,7 +396,7 @@ export function UpgradeGate({
                       boxShadow: '0 8px 32px rgba(201,166,70,0.4)',
                     }}
                   >
-                    <Crown className="w-4 h-4" />
+                    {checkoutLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crown className="w-4 h-4" />}
                     Start 14-Day Free Trial
                     <ArrowRight className="w-4 h-4" />
                   </motion.button>
