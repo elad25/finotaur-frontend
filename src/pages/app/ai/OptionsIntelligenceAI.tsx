@@ -1,647 +1,143 @@
-import { useState } from 'react';
-import {
-  Layers,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Target,
-  AlertTriangle,
-  ChevronRight,
-  Eye,
-  Sparkles,
-  BarChart3,
-  DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
-  Info,
-  Filter,
-  Zap,
-  Shield,
-  Gauge
-} from 'lucide-react';
-import {
-  AIPageContainer,
-  AIPageHeader,
-  ImpactBadge,
-  Drawer,
-  COLORS,
-  UserMode
-} from "./AIDesignSystem";
+// src/pages/app/ai/OptionsIntelligenceAI.tsx
 
-// ============================================
-// TYPES
-// ============================================
-interface DealerPositioning {
-  metric: string;
-  value: string;
-  status: 'positive' | 'negative' | 'neutral';
-  soWhat: string;
-}
+import { memo, lazy, Suspense } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { XCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
+import { usePlatformAccess } from '@/hooks/usePlatformAccess';
+import { UpgradeGate } from '@/components/access/UpgradeGate';
 
-interface KeyLevel {
-  price: number;
-  type: 'support' | 'resistance' | 'gamma_flip';
-  strength: 'strong' | 'moderate' | 'weak';
-  note: string;
-}
+// ── Lazy tabs (code-split) ──
+const OverviewTab        = lazy(() => import('@/features/options-ai/components/tabs/OverviewTab').then(m => ({ default: m.OverviewTab })));
+const FlowTab            = lazy(() => import('@/features/options-ai/components/tabs/FlowTab').then(m => ({ default: m.FlowTab })));
+const SqueezeDetectorTab = lazy(() => import('@/features/options-ai/components/tabs/SqueezeDetectorTab').then(m => ({ default: m.SqueezeDetectorTab })));
+const DarkPoolTab        = lazy(() => import('@/features/options-ai/components/tabs/DarkPoolTab').then(m => ({ default: m.DarkPoolTab })));
 
-interface UnusualFlow {
-  symbol: string;
-  type: 'call' | 'put';
-  strike: number;
-  expiry: string;
-  premium: string;
-  volume: number;
-  openInterest: number;
-  volOiRatio: number;
-  sentiment: 'bullish' | 'bearish';
-  aiInsight: string;
-  unusualScore: number;
-}
-
-interface VolRegime {
-  ivRank: number;
-  ivPercentile: number;
-  skew: 'call' | 'put' | 'neutral';
-  termStructure: 'contango' | 'backwardation' | 'flat';
-  interpretation: string;
-}
-
-// ============================================
-// MOCK DATA
-// ============================================
-const DEALER_POSITIONING: DealerPositioning[] = [
-  {
-    metric: 'Net Gamma',
-    value: '-$2.1B',
-    status: 'negative',
-    soWhat: 'Dealers are short gamma. They must sell into weakness and buy into strength, amplifying moves.'
-  },
-  {
-    metric: 'Key Gamma Level',
-    value: '5980 / 6020',
-    status: 'neutral',
-    soWhat: 'SPX between major gamma levels. Expect choppy action until we break one side.'
-  },
-  {
-    metric: '0DTE Intensity',
-    value: 'HIGH (65%)',
-    status: 'negative',
-    soWhat: '0DTE volume at 65% of total. Expect amplified intraday volatility and pin risk at round numbers.'
-  }
-];
-
-const KEY_LEVELS: KeyLevel[] = [
-  { price: 6020, type: 'resistance', strength: 'strong', note: 'Major call wall. Heavy gamma here will cap upside.' },
-  { price: 6000, type: 'gamma_flip', strength: 'strong', note: 'Gamma flip level. Above = stable, below = volatile.' },
-  { price: 5980, type: 'support', strength: 'moderate', note: 'Put support building. Should provide bounce zone.' },
-  { price: 5950, type: 'support', strength: 'strong', note: 'Major put wall. Break here triggers acceleration lower.' },
-  { price: 5900, type: 'support', strength: 'weak', note: 'Psychological level with light positioning.' }
-];
-
-const UNUSUAL_FLOWS: UnusualFlow[] = [
-  {
-    symbol: 'NVDA',
-    type: 'call',
-    strike: 950,
-    expiry: 'Feb 21',
-    premium: '$4.2M',
-    volume: 12500,
-    openInterest: 3200,
-    volOiRatio: 3.9,
-    sentiment: 'bullish',
-    aiInsight: 'Large institutional bet on earnings. Buyer paying up for Feb expiry post-earnings.',
-    unusualScore: 94
-  },
-  {
-    symbol: 'SPY',
-    type: 'put',
-    strike: 590,
-    expiry: 'Jan 17',
-    premium: '$8.1M',
-    volume: 45000,
-    openInterest: 12000,
-    volOiRatio: 3.75,
-    sentiment: 'bearish',
-    aiInsight: 'Hedge or directional bet. Size suggests institutional protection ahead of CPI.',
-    unusualScore: 91
-  },
-  {
-    symbol: 'TSLA',
-    type: 'put',
-    strike: 380,
-    expiry: 'Jan 24',
-    premium: '$2.8M',
-    volume: 8200,
-    openInterest: 1500,
-    volOiRatio: 5.47,
-    sentiment: 'bearish',
-    aiInsight: 'Heavy put buying after Cybertruck recall news. Could be continuation of downside.',
-    unusualScore: 88
-  },
-  {
-    symbol: 'XOM',
-    type: 'call',
-    strike: 115,
-    expiry: 'Feb 21',
-    premium: '$1.9M',
-    volume: 15000,
-    openInterest: 4200,
-    volOiRatio: 3.57,
-    sentiment: 'bullish',
-    aiInsight: 'Energy sector momentum play. Geopolitical tailwind thesis.',
-    unusualScore: 82
-  }
-];
-
-const VOL_REGIME: VolRegime = {
-  ivRank: 68,
-  ivPercentile: 72,
-  skew: 'put',
-  termStructure: 'backwardation',
-  interpretation: 'Options are pricing elevated near-term risk. Put skew suggests hedging demand. Selling premium attractive but size appropriately.'
-};
-
-// ============================================
-// MAIN COMPONENT
-// ============================================
-export default function OptionsIntelligenceAI() {
-  const [userMode, setUserMode] = useState<UserMode>({
-    type: 'trader',
-    horizon: '1D',
-    risk: 'balanced',
-    universe: 'US'
-  });
-  const [selectedFlow, setSelectedFlow] = useState<UnusualFlow | null>(null);
-  const [expiryFilter, setExpiryFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'call' | 'put'>('all');
-
-  const filteredFlows = UNUSUAL_FLOWS.filter(flow => {
-    if (typeFilter !== 'all' && flow.type !== typeFilter) return false;
-    return true;
-  });
-
+function TabFallback() {
   return (
-    <AIPageContainer>
-      <AIPageHeader
-        title="Options Intelligence AI"
-        subtitle="Dealer Positioning & Flow Analysis"
-        icon={Layers}
-        iconColor="#8B5CF6"
-        userMode={userMode}
-        onUserModeChange={setUserMode}
-        onExportPDF={() => {}}
-        onFeedback={() => {}}
-      />
-
-      {/* ============================================ */}
-      {/* DEALER POSITIONING SUMMARY */}
-      {/* ============================================ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 32 }}>
-        {DEALER_POSITIONING.map((item, idx) => {
-          const statusColors = {
-            positive: { color: COLORS.bullish, bg: COLORS.bullishBg },
-            negative: { color: COLORS.bearish, bg: COLORS.bearishBg },
-            neutral: { color: COLORS.textMuted, bg: COLORS.bgInput }
-          };
-
-          return (
-            <div key={idx} style={{
-              background: COLORS.bgCard,
-              border: `1px solid ${statusColors[item.status].color}30`,
-              borderRadius: 16,
-              padding: 20,
-              position: 'relative'
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 3,
-                background: statusColors[item.status].color
-              }} />
-              
-              <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 8 }}>{item.metric}</div>
-              <div style={{ fontSize: 28, fontWeight: 700, color: statusColors[item.status].color, marginBottom: 12 }}>
-                {item.value}
-              </div>
-              <p style={{ fontSize: 12, color: COLORS.textMuted, margin: 0, lineHeight: 1.5 }}>
-                {item.soWhat}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ============================================ */}
-      {/* KEY LEVELS MAP */}
-      {/* ============================================ */}
-      <div style={{
-        background: COLORS.bgCard,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 20,
-        padding: 24,
-        marginBottom: 32
-      }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Target size={20} style={{ color: '#8B5CF6' }} />
-          Key Levels Map
-          <span style={{ fontSize: 12, color: COLORS.textMuted, fontWeight: 400, marginLeft: 8 }}>
-            SPX Options-Based Levels
-          </span>
-        </h3>
-
-        {/* Visual Level Display */}
-        <div style={{ position: 'relative', padding: '20px 0' }}>
-          {/* Vertical Line */}
-          <div style={{
-            position: 'absolute',
-            left: 80,
-            top: 0,
-            bottom: 0,
-            width: 4,
-            background: `linear-gradient(180deg, ${COLORS.bullish}, ${COLORS.mediumImpact}, ${COLORS.bearish})`
-          }} />
-
-          {/* Levels */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {KEY_LEVELS.map((level, idx) => {
-              const typeConfig = {
-                resistance: { color: COLORS.bearish, label: 'RESISTANCE', icon: TrendingDown },
-                support: { color: COLORS.bullish, label: 'SUPPORT', icon: TrendingUp },
-                gamma_flip: { color: COLORS.mediumImpact, label: 'GAMMA FLIP', icon: Activity }
-              };
-              
-              const strengthConfig = {
-                strong: { width: '100%', label: 'Strong' },
-                moderate: { width: '66%', label: 'Moderate' },
-                weak: { width: '33%', label: 'Weak' }
-              };
-
-              const config = typeConfig[level.type];
-              const Icon = config.icon;
-
-              return (
-                <div key={idx} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 20,
-                  paddingLeft: 100
-                }}>
-                  {/* Price */}
-                  <div style={{
-                    position: 'absolute',
-                    left: 0,
-                    width: 70,
-                    textAlign: 'right',
-                    fontSize: 16,
-                    fontWeight: 700,
-                    color: config.color
-                  }}>
-                    {level.price}
-                  </div>
-
-                  {/* Dot on line */}
-                  <div style={{
-                    position: 'absolute',
-                    left: 74,
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    background: config.color,
-                    border: '3px solid #0D1117'
-                  }} />
-
-                  {/* Level Info */}
-                  <div style={{
-                    flex: 1,
-                    padding: 14,
-                    background: `${config.color}10`,
-                    border: `1px solid ${config.color}30`,
-                    borderRadius: 10
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Icon size={16} style={{ color: config.color }} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: config.color }}>{config.label}</span>
-                      </div>
-                      <span style={{
-                        padding: '2px 8px',
-                        background: 'rgba(0,0,0,0.2)',
-                        borderRadius: 4,
-                        fontSize: 10,
-                        color: COLORS.textMuted
-                      }}>
-                        {strengthConfig[level.strength].label}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: 12, color: COLORS.textSecondary, margin: 0, lineHeight: 1.4 }}>
-                      {level.note}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${COLORS.border}` }}>
-          {[
-            { label: 'Resistance', color: COLORS.bearish },
-            { label: 'Gamma Flip', color: COLORS.mediumImpact },
-            { label: 'Support', color: COLORS.bullish }
-          ].map((item, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: item.color }} />
-              <span style={{ fontSize: 12, color: COLORS.textMuted }}>{item.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ============================================ */}
-      {/* UNUSUAL OPTIONS FLOW */}
-      {/* ============================================ */}
-      <div style={{
-        background: COLORS.bgCard,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 20,
-        padding: 24,
-        marginBottom: 32
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={20} style={{ color: COLORS.mediumImpact }} />
-            Unusual Options Flow
-          </h3>
-
-          {/* Filters */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {(['all', 'call', 'put'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setTypeFilter(type)}
-                style={{
-                  padding: '6px 14px',
-                  background: typeFilter === type ? 'rgba(199, 169, 61, 0.15)' : 'transparent',
-                  border: `1px solid ${typeFilter === type ? COLORS.borderGold : COLORS.border}`,
-                  borderRadius: 6,
-                  color: typeFilter === type ? COLORS.gold : COLORS.textMuted,
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize'
-                }}
-              >
-                {type === 'all' ? 'All' : type + 's'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {filteredFlows.map((flow, idx) => (
-            <div 
-              key={idx}
-              onClick={() => setSelectedFlow(flow)}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '120px 100px 120px 100px 80px 1fr',
-                gap: 16,
-                alignItems: 'center',
-                padding: 16,
-                background: COLORS.bgInput,
-                border: `1px solid ${flow.sentiment === 'bullish' ? COLORS.bullishBorder : COLORS.bearishBorder}`,
-                borderRadius: 12,
-                cursor: 'pointer'
-              }}
-            >
-              {/* Symbol & Type */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.gold }}>{flow.symbol}</span>
-                <span style={{
-                  padding: '3px 8px',
-                  background: flow.type === 'call' ? COLORS.bullishBg : COLORS.bearishBg,
-                  color: flow.type === 'call' ? COLORS.bullish : COLORS.bearish,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  borderRadius: 4,
-                  textTransform: 'uppercase'
-                }}>
-                  {flow.type}
-                </span>
-              </div>
-
-              {/* Strike & Expiry */}
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>${flow.strike}</div>
-                <div style={{ fontSize: 11, color: COLORS.textMuted }}>{flow.expiry}</div>
-              </div>
-
-              {/* Premium & Volume */}
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.bullish }}>{flow.premium}</div>
-                <div style={{ fontSize: 11, color: COLORS.textMuted }}>Vol: {flow.volume.toLocaleString()}</div>
-              </div>
-
-              {/* Vol/OI */}
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: flow.volOiRatio > 3 ? COLORS.mediumImpact : COLORS.textMuted }}>
-                  {flow.volOiRatio.toFixed(2)}x
-                </div>
-                <div style={{ fontSize: 11, color: COLORS.textMuted }}>Vol/OI</div>
-              </div>
-
-              {/* Score */}
-              <div style={{
-                padding: '6px 12px',
-                background: flow.unusualScore >= 90 ? COLORS.highImpactBg : flow.unusualScore >= 80 ? COLORS.mediumImpactBg : COLORS.noiseBg,
-                color: flow.unusualScore >= 90 ? COLORS.highImpact : flow.unusualScore >= 80 ? COLORS.mediumImpact : COLORS.textMuted,
-                borderRadius: 6,
-                fontSize: 14,
-                fontWeight: 700,
-                textAlign: 'center'
-              }}>
-                {flow.unusualScore}
-              </div>
-
-              {/* AI Insight Preview */}
-              <div style={{
-                padding: 10,
-                background: 'rgba(199, 169, 61, 0.05)',
-                borderRadius: 8,
-                borderLeft: `3px solid ${COLORS.gold}`
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                  <Sparkles size={10} style={{ color: COLORS.gold }} />
-                  <span style={{ fontSize: 9, color: COLORS.gold, fontWeight: 600 }}>AI INSIGHT</span>
-                </div>
-                <p style={{ fontSize: 11, color: COLORS.textMuted, margin: 0, lineHeight: 1.3 }}>
-                  {flow.aiInsight}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ============================================ */}
-      {/* VOL REGIME */}
-      {/* ============================================ */}
-      <div style={{
-        background: COLORS.bgCard,
-        border: `1px solid ${COLORS.border}`,
-        borderRadius: 20,
-        padding: 24
-      }}>
-        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Gauge size={20} style={{ color: COLORS.neutral }} />
-          Volatility Regime
-        </h3>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 20 }}>
-          {/* IV Rank */}
-          <div style={{ padding: 16, background: COLORS.bgInput, borderRadius: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>IV Rank</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: VOL_REGIME.ivRank > 50 ? COLORS.mediumImpact : COLORS.textMuted }}>
-              {VOL_REGIME.ivRank}
-            </div>
-            <div style={{ height: 4, background: COLORS.border, borderRadius: 2, marginTop: 8 }}>
-              <div style={{ height: '100%', width: `${VOL_REGIME.ivRank}%`, background: VOL_REGIME.ivRank > 50 ? COLORS.mediumImpact : COLORS.bullish, borderRadius: 2 }} />
-            </div>
-          </div>
-
-          {/* IV Percentile */}
-          <div style={{ padding: 16, background: COLORS.bgInput, borderRadius: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>IV Percentile</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: VOL_REGIME.ivPercentile > 50 ? COLORS.mediumImpact : COLORS.textMuted }}>
-              {VOL_REGIME.ivPercentile}%
-            </div>
-          </div>
-
-          {/* Skew */}
-          <div style={{ padding: 16, background: COLORS.bgInput, borderRadius: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Skew</div>
-            <div style={{ 
-              fontSize: 20, 
-              fontWeight: 700, 
-              color: VOL_REGIME.skew === 'put' ? COLORS.bearish : VOL_REGIME.skew === 'call' ? COLORS.bullish : COLORS.textMuted,
-              textTransform: 'capitalize'
-            }}>
-              {VOL_REGIME.skew} Heavy
-            </div>
-          </div>
-
-          {/* Term Structure */}
-          <div style={{ padding: 16, background: COLORS.bgInput, borderRadius: 12, textAlign: 'center' }}>
-            <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Term Structure</div>
-            <div style={{ 
-              fontSize: 20, 
-              fontWeight: 700, 
-              color: VOL_REGIME.termStructure === 'backwardation' ? COLORS.bearish : COLORS.textMuted,
-              textTransform: 'capitalize'
-            }}>
-              {VOL_REGIME.termStructure}
-            </div>
-          </div>
-        </div>
-
-        {/* Interpretation */}
-        <div style={{
-          padding: 16,
-          background: 'rgba(199, 169, 61, 0.05)',
-          borderRadius: 12,
-          borderLeft: `4px solid ${COLORS.gold}`
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-            <Sparkles size={14} style={{ color: COLORS.gold }} />
-            <span style={{ fontSize: 12, color: COLORS.gold, fontWeight: 600 }}>AI INTERPRETATION</span>
-          </div>
-          <p style={{ fontSize: 14, color: COLORS.textPrimary, margin: 0, lineHeight: 1.6 }}>
-            {VOL_REGIME.interpretation}
-          </p>
-        </div>
-      </div>
-
-      {/* ============================================ */}
-      {/* FLOW DETAIL DRAWER */}
-      {/* ============================================ */}
-      <Drawer isOpen={!!selectedFlow} onClose={() => setSelectedFlow(null)} title={`${selectedFlow?.symbol} Flow Analysis`} width={480}>
-        {selectedFlow && (
-          <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-              <span style={{
-                padding: '6px 14px',
-                background: selectedFlow.type === 'call' ? COLORS.bullishBg : COLORS.bearishBg,
-                border: `1px solid ${selectedFlow.type === 'call' ? COLORS.bullishBorder : COLORS.bearishBorder}`,
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                color: selectedFlow.type === 'call' ? COLORS.bullish : COLORS.bearish,
-                textTransform: 'uppercase'
-              }}>
-                {selectedFlow.type}
-              </span>
-              <span style={{
-                padding: '6px 14px',
-                background: selectedFlow.sentiment === 'bullish' ? COLORS.bullishBg : COLORS.bearishBg,
-                border: `1px solid ${selectedFlow.sentiment === 'bullish' ? COLORS.bullishBorder : COLORS.bearishBorder}`,
-                borderRadius: 6,
-                fontSize: 12,
-                fontWeight: 600,
-                color: selectedFlow.sentiment === 'bullish' ? COLORS.bullish : COLORS.bearish,
-                textTransform: 'capitalize'
-              }}>
-                {selectedFlow.sentiment} Sentiment
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 24 }}>
-              <div style={{ padding: 14, background: COLORS.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Strike</div>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>${selectedFlow.strike}</div>
-              </div>
-              <div style={{ padding: 14, background: COLORS.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Expiry</div>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>{selectedFlow.expiry}</div>
-              </div>
-              <div style={{ padding: 14, background: COLORS.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Premium</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.bullish }}>{selectedFlow.premium}</div>
-              </div>
-              <div style={{ padding: 14, background: COLORS.bgInput, borderRadius: 10 }}>
-                <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 4 }}>Vol/OI Ratio</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.mediumImpact }}>{selectedFlow.volOiRatio.toFixed(2)}x</div>
-              </div>
-            </div>
-
-            <div style={{ padding: 16, background: 'rgba(199, 169, 61, 0.1)', borderRadius: 12, marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Sparkles size={14} style={{ color: COLORS.gold }} />
-                <span style={{ fontSize: 12, color: COLORS.gold, fontWeight: 600 }}>AI INSIGHT</span>
-              </div>
-              <p style={{ fontSize: 14, color: COLORS.textPrimary, margin: 0, lineHeight: 1.6 }}>
-                {selectedFlow.aiInsight}
-              </p>
-            </div>
-
-            <button style={{
-              width: '100%',
-              padding: '14px',
-              background: `linear-gradient(135deg, ${COLORS.gold}, ${COLORS.goldDark})`,
-              border: 'none',
-              borderRadius: 10,
-              color: '#000',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}>
-              Add to Watchlist
-            </button>
-          </div>
-        )}
-      </Drawer>
-    </AIPageContainer>
+    <div className="flex items-center justify-center py-24">
+      <Loader2 className="h-8 w-8 text-[#C9A646] animate-spin" />
+    </div>
   );
 }
+
+function OptionsIntelligenceContent() {
+  const {
+    activeTab, setActiveTab,
+    typeFilter, flowSubTab, setFlowSubTab, blockTier, setBlockTier,
+    selectedFlow, data, isLoading, isRefreshing, loadError,
+    filteredFlows, filteredBlocks,
+    deepDiveTicker, deepDiveData, deepDiveLoading, loadDeepDive,
+    handleFilterChange, handleFlowClick, handleCloseDrawer, handleRefresh,
+  } = useOptionsIntelligence();
+
+  return (
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #0d0b08 50%, #0a0a0a 100%)' }}>
+      {/* Background */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[10%] left-[5%] w-[800px] h-[800px] rounded-full blur-[180px]" style={{ background: 'rgba(201,166,70,0.06)' }} />
+        <div className="absolute bottom-[10%] right-[5%] w-[700px] h-[700px] rounded-full blur-[160px]" style={{ background: 'rgba(201,166,70,0.04)' }} />
+        <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[150px]" style={{ background: 'rgba(244,217,123,0.03)' }} />
+      </div>
+
+      <div className="relative z-10 w-full px-6 lg:px-10 py-8 md:py-10">
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
+          <h1 className="text-3xl md:text-4xl font-bold mb-3">
+            <span className="text-white">Options </span>
+            <span style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Intelligence</span>
+          </h1>
+          <div className="flex items-center justify-center gap-3">
+            <p className="text-[#8B8B8B]">Flow Scanner • Squeeze Detector • Dark Pool • Deep Dive</p>
+            {isRefreshing && <Loader2 className="h-4 w-4 text-[#C9A646] animate-spin" />}
+          </div>
+        </motion.div>
+
+        {/* Tabs */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex justify-center mb-8 overflow-x-auto">
+          <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+        </motion.div>
+
+        {/* Loading */}
+        <AnimatePresence>
+          {isLoading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <OptionsLoadingSkeleton />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error */}
+        {loadError && !isLoading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-8 max-w-2xl mx-auto">
+            <Card>
+              <div className="p-8 text-center">
+                <XCircle className="h-12 w-12 text-[#EF4444]/50 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">Failed to Load Data</h3>
+                <p className="text-[#8B8B8B] mb-6">{loadError}</p>
+                <button onClick={handleRefresh} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105" style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', color: '#000' }}>
+                  <RefreshCw className="h-4 w-4" />Retry
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Tab Content */}
+        <AnimatePresence mode="wait">
+          {data && !isLoading && (
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="min-h-[400px]">
+              <Suspense fallback={<TabFallback />}>
+                {activeTab === 'overview'   && <OverviewTab data={data} />}
+                {activeTab === 'flow'       && <FlowTab blockTrades={filteredBlocks} />}
+                {activeTab === 'squeeze'    && <SqueezeDetectorTab data={data} />}
+                {activeTab === 'darkpool'   && <DarkPoolTab />}
+              </Suspense>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Footer */}
+        {data && !isLoading && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-center pt-6 mt-8 border-t border-[#C9A646]/10">
+            <p className="text-xs text-[#6B6B6B]">
+              Data refreshes every 5 minutes<span className="mx-2">•</span>Last update: {new Date(data.lastUpdated).toLocaleTimeString()}
+            </p>
+          </motion.div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        <FlowDrawer isOpen={!!selectedFlow} onClose={handleCloseDrawer} flow={selectedFlow} />
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function OptionsIntelligenceAI() {
+  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const access = canAccessPage('options_intelligence');
+  if (accessLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+      </div>
+    );
+  }
+
+  if (!access.hasAccess) {
+    return (
+      <UpgradeGate
+        feature="Options Intelligence"
+        reason={access.reason}
+        message={access.message}
+        upgradeTarget={access.upgradeTarget}
+        upgradeDisplayName={access.upgradeDisplayName}
+        upgradePrice={access.upgradePrice}
+      />
+    );
+  }
+  return <OptionsIntelligenceContent />;
+}
+
+export default memo(OptionsIntelligenceAI);

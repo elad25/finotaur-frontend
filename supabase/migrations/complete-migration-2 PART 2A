@@ -427,12 +427,12 @@ INSERT INTO public.profiles (
     created_at, updated_at
   ) VALUES (
     NEW.id, NEW.email, v_display_name,
-    'free',                               -- ✅ מתחיל כ-FREE
+    'platform_free',                      -- ✅ מתחיל כ-PLATFORM FREE
     NULL,                                 -- ✅ אין סטטוס מנוי
     FALSE,                                -- ✅ לא ב-trial
     NULL,                                 -- ✅ אין תאריך trial
     FALSE,                                -- ✅ לא השתמש ב-trial
-    0,                                    -- ✅ 0 טריידים (FREE לא יכול ליצור)
+    0,                                    -- ✅ 0 טריידים (לא כולל journal)
     0, 0,
     NULL,                                 -- ✅ אין billing cycle
     10000, 0, 10000, 10000,
@@ -453,7 +453,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.handle_new_user IS 
-'v8.5.10-FIX: Creates profile with account_type=FREE. Trial/Basic only through Whop payment!';
+'v8.5.11: Creates profile with account_type=platform_free. Journal/Newsletter via Whop payment!';
 
 DO $$
 BEGIN
@@ -2402,149 +2402,6 @@ $$;
 COMMENT ON FUNCTION public.start_trial IS 
 'v6.3.0: Starts 14-day trial. Sets account_type=basic, subscription_status=trial. Trial is a STATUS not account_type!';
 
--- ===============================================
--- 🆕 NEW: get_user_subscription_status - v6.3.0
--- This is the RPC function that useSubscription.ts calls!
--- ===============================================
-
-DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.get_user_subscription_status(p_user_id UUID DEFAULT NULL)
-RETURNS TABLE (
-  -- Account info
-  account_type TEXT,
-  role TEXT,
-  
-  -- Subscription status
-  subscription_status TEXT,
-  subscription_interval TEXT,
-  subscription_expires_at TIMESTAMPTZ,
-  subscription_started_at TIMESTAMPTZ,
-  subscription_cancel_at_period_end BOOLEAN,
-  pending_downgrade_plan TEXT,
-  
-  -- Trial info
-  is_in_trial BOOLEAN,
-  trial_ends_at TIMESTAMPTZ,
-  trial_used BOOLEAN,
-  trial_days_remaining INTEGER,
-  
-  -- Trade limits
-  max_trades INTEGER,
-  remaining INTEGER,
-  used INTEGER,
-  plan TEXT,
-  reset_date TEXT,
-  
-  -- Portfolio & Risk
-  initial_portfolio NUMERIC,
-  current_portfolio NUMERIC,
-  portfolio_size NUMERIC,
-  total_pnl NUMERIC,
-  risk_mode TEXT,
-  risk_percentage NUMERIC,
-  fixed_risk_amount NUMERIC,
-  
-  -- Usage tracking
-  trade_count INTEGER,
-  current_month_trades_count INTEGER,
-  current_month_active_days INTEGER,
-  billing_cycle_start DATE,
-  
-  -- Payment provider
-  payment_provider TEXT,
-  whop_user_id TEXT,
-  whop_membership_id TEXT,
-  whop_product_id TEXT,
-  whop_plan_id TEXT,
-  whop_customer_email TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-DECLARE
-  v_user_id UUID;
-  v_profile RECORD;
-  v_limit INTEGER;
-  v_used INTEGER;
-  v_remaining INTEGER;
-  v_trial_days INTEGER;
-BEGIN
-  v_user_id := COALESCE(p_user_id, auth.uid());
-  
-  -- Get full profile
-  SELECT * INTO v_profile
-  FROM public.profiles p
-  WHERE p.id = v_user_id;
-  
-  IF NOT FOUND THEN
-    RETURN;
-  END IF;
-  
-  -- Calculate trade limits
-  v_limit := public.get_trade_limit(v_profile.account_type);
-  v_used := COALESCE(v_profile.current_month_trades_count, 0);
-  
-  -- For unlimited users
-  IF v_profile.role IN ('admin', 'super_admin') 
-     OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
-    v_remaining := 999999;
-  ELSE
-    v_remaining := GREATEST(0, v_limit - v_used);
-  END IF;
-  
-  -- Calculate trial days remaining
-  IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW() THEN
-    v_trial_days := CEIL(EXTRACT(EPOCH FROM (v_profile.trial_ends_at - NOW())) / 86400)::INTEGER;
-  ELSE
-    v_trial_days := 0;
-  END IF;
-  
-  RETURN QUERY SELECT
-    v_profile.account_type::TEXT,
-    v_profile.role::TEXT,
-    v_profile.subscription_status::TEXT,
-    v_profile.subscription_interval::TEXT,
-    v_profile.subscription_expires_at,
-    v_profile.subscription_started_at,
-    COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
-    v_profile.pending_downgrade_plan::TEXT,
-    COALESCE(v_profile.is_in_trial, FALSE),
-    v_profile.trial_ends_at,
-    COALESCE(v_profile.trial_used, FALSE),
-    v_trial_days,
-    v_limit,
-    v_remaining,
-    v_used,
-    v_profile.account_type::TEXT,
-    COALESCE(TO_CHAR(v_profile.billing_cycle_start, 'YYYY-MM-DD'), TO_CHAR(DATE_TRUNC('month', NOW()), 'YYYY-MM-DD')),
-    COALESCE(v_profile.initial_portfolio, 10000),
-    COALESCE(v_profile.current_portfolio, 10000),
-    COALESCE(v_profile.portfolio_size, 10000),
-    COALESCE(v_profile.total_pnl, 0),
-    COALESCE(v_profile.risk_mode, 'percentage'),
-    v_profile.risk_percentage,
-    v_profile.fixed_risk_amount,
-    COALESCE(v_profile.trade_count, 0),
-    v_used,
-    COALESCE(v_profile.current_month_active_days, 0),
-    v_profile.billing_cycle_start,
-    v_profile.payment_provider::TEXT,
-    v_profile.whop_user_id::TEXT,
-    v_profile.whop_membership_id::TEXT,
-    v_profile.whop_product_id::TEXT,
-    v_profile.whop_plan_id::TEXT,
-    v_profile.whop_customer_email::TEXT;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
-
-COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v6.3.0: Returns complete subscription status for frontend useSubscription hook. Includes trial info, trade limits, and Whop details.';
-
 -- ✅ Get User Role (for admin checks)
 -- Drop all versions of get_user_role
 DROP FUNCTION IF EXISTS public.get_user_role() CASCADE;
@@ -3208,17 +3065,23 @@ DROP FUNCTION IF EXISTS public.admin_update_user_account(UUID, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_update_user_account(UUID, TEXT, TEXT) CASCADE;
 DROP FUNCTION IF EXISTS public.admin_update_user_account(UUID, TEXT, TEXT, INTEGER) CASCADE;
 
-CREATE OR REPLACE FUNCTION public.admin_update_user_account(
+-- Drop old function
+DROP FUNCTION IF EXISTS public.admin_update_user_account(UUID, TEXT, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS public.admin_update_user(UUID, JSONB) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.admin_update_user(
   p_user_id UUID,
-  p_account_type TEXT,
-  p_reason TEXT DEFAULT 'Admin update'
+  p_updates JSONB
 )
-RETURNS BOOLEAN
+RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_max_trades INTEGER;
+  v_account_type TEXT;
+  v_old_account_type TEXT;
 BEGIN
   -- Verify admin
   IF NOT EXISTS (
@@ -3227,56 +3090,79 @@ BEGIN
       AND role IN ('admin', 'super_admin')
       AND COALESCE(is_banned, FALSE) = FALSE
   ) THEN
-    RAISE EXCEPTION 'Access denied';
+    RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
-  
-  -- Calculate max_trades
--- Calculate max_trades
-  v_max_trades := CASE p_account_type
+
+  -- Get current values
+  SELECT account_type INTO v_old_account_type
+  FROM public.profiles WHERE id = p_user_id;
+
+  IF v_old_account_type IS NULL THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', 'User not found');
+  END IF;
+
+  -- Extract new account_type if provided
+  v_account_type := COALESCE(p_updates->>'account_type', v_old_account_type);
+
+  -- Calculate max_trades based on new account_type
+  v_max_trades := CASE v_account_type
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
     WHEN 'vip' THEN 999999
-    WHEN 'free' THEN 0          -- ✅ נכון! free = 0
-    ELSE 0                      -- ✅ נכון! default = 0
+    WHEN 'free' THEN 0
+    ELSE 0
   END;
-  
+
+  -- Update all fields that were provided
   UPDATE public.profiles
   SET 
-    account_type = p_account_type,
-    max_trades = v_max_trades,
+    account_type = COALESCE(p_updates->>'account_type', account_type),
+    subscription_status = COALESCE(p_updates->>'subscription_status', subscription_status),
+    newsletter_status = COALESCE(p_updates->>'newsletter_status', newsletter_status),
+    top_secret_status = COALESCE(p_updates->>'top_secret_status', top_secret_status),
+    platform_plan = COALESCE(p_updates->>'platform_plan', platform_plan),
+    is_banned = COALESCE((p_updates->>'is_banned')::BOOLEAN, is_banned),
+    role = COALESCE(p_updates->>'role', role),
+    display_name = COALESCE(p_updates->>'display_name', display_name),
+    max_trades = CASE 
+      WHEN p_updates->>'account_type' IS NOT NULL THEN v_max_trades 
+      ELSE max_trades 
+    END,
     payment_provider = CASE 
-      WHEN p_account_type = 'free' THEN NULL 
-      ELSE 'admin_granted' 
-    END,
-    current_month_trades_count = CASE
-      WHEN p_account_type != 'free' THEN 0
-      ELSE current_month_trades_count
-    END,
-    billing_cycle_start = CASE
-      WHEN p_account_type != 'free' THEN CURRENT_DATE
-      ELSE billing_cycle_start
+      WHEN p_updates->>'account_type' IS NOT NULL AND p_updates->>'account_type' = 'free' THEN NULL
+      WHEN p_updates->>'account_type' IS NOT NULL THEN 'admin_granted'
+      ELSE payment_provider
     END,
     updated_at = NOW()
   WHERE id = p_user_id;
-  
+
   -- Log action
   PERFORM public.log_admin_action(
-    'update_account_type',
+    'ADMIN_UPDATE_USER',
     'user',
     p_user_id,
     jsonb_build_object(
-      'new_type', p_account_type,
-      'reason', p_reason
+      'old_account_type', v_old_account_type,
+      'updates', p_updates
     )
   );
-  
-  RETURN FOUND;
+
+  RETURN jsonb_build_object(
+    'success', TRUE,
+    'message', 'User updated successfully'
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', FALSE, 'error', SQLERRM);
 END;
 $$;
 
-COMMENT ON FUNCTION public.admin_update_user_account IS 
-'v8.5.9: Admin function to change user account type';
+COMMENT ON FUNCTION public.admin_update_user IS 
+'v10.0.0: Generic user update. Accepts JSONB with any profile fields. Admin only.';
+
+GRANT EXECUTE ON FUNCTION public.admin_update_user(UUID, JSONB) TO authenticated;
 
 -- ✅ Get User Activity (Admin Only)
 DROP FUNCTION IF EXISTS public.get_user_activity(UUID) CASCADE;
@@ -3394,7 +3280,7 @@ GRANT EXECUTE ON FUNCTION public.impersonate_user(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.ban_user(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.unban_user(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_users(INTEGER, INTEGER, TEXT, TEXT, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.admin_update_user_account(UUID, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_user(UUID, JSONB) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_activity(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_impersonate_user(UUID) TO authenticated;
 

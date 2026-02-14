@@ -30,7 +30,7 @@ export type SubscriptionCategory = 'journal' | 'platform';
 export type JournalPlanName = 'basic' | 'premium';
 
 // Platform plans (NEW)
-export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_pro' | 'platform_enterprise';
+export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise';
 
 // All plan names
 export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret' | 'top_secret_warzone' | 'newsletter_topsecret' | 'bundle';
@@ -46,9 +46,9 @@ export type PlanId =
   // Platform plans
   | 'platform_core_monthly'
   | 'platform_core_yearly'
-  | 'platform_pro_monthly'
-  | 'platform_pro_yearly'
-  | 'platform_enterprise'
+  | 'platform_finotaur_monthly'
+  | 'platform_finotaur_yearly'
+  | 'platform_enterprise_monthly'
   // Other products
   | 'newsletter_monthly'
   | 'newsletter_yearly'
@@ -88,7 +88,6 @@ export interface PlanConfig {
   comingSoon?: boolean;
   contactSales?: boolean;
   includesJournal?: 'basic' | 'premium';
-  includesNewsletterChoice?: boolean;
   // 🔥 v4.2.0: Discount info
   hasIntroDiscount?: boolean;
   introDiscountMonths?: number;
@@ -109,16 +108,16 @@ export const WHOP_PLAN_IDS = {
   premium_monthly: 'plan_v7QKxkvKIZooe',
   premium_yearly: 'plan_gBG436aeJxaHU',
   
-  // 🔥 Platform - Core ($39/month, 7-day trial)
-  platform_core_monthly: 'prod_HDYzeNp6WOJwh',
-  platform_core_yearly: 'prod_YAdXQrHtt72Gd',
+// 🔥 Platform - Core ($59/month, 14-day trial)
+  platform_core_monthly: 'plan_M4ig2ZhYd2RUE',
+  platform_core_yearly: 'plan_6w5KTZsSGp7Ss',
   
-  // 🔥 Platform - Pro ($69/month, 14-day ONE-TIME trial)
-  platform_pro_monthly: 'prod_lhe19l7l48lKW',
-  platform_pro_yearly: 'prod_3AyUOETP3CoK6',
+  // 🔥 Platform - Finotaur ($109/month, 14-day trial) = Bundle
+  platform_finotaur_monthly: 'plan_ICooR8aqtdXad',
+  platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
   
-  // 🔥 Platform - Enterprise (custom)
-  platform_enterprise: 'plan_PLATFORM_ENTERPRISE',
+  // 🔥 Platform - Enterprise ($500/month, no trial)
+  platform_enterprise_monthly: 'plan_nHveClWPmjJNT',
   
 // ═══════════════════════════════════════════
   // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED WITH WHOP!
@@ -139,7 +138,7 @@ export const WHOP_PLAN_IDS = {
   // ═══════════════════════════════════════════
   // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
   // ═══════════════════════════════════════════
-  bundle_monthly: 'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month with 7-day trial
+  bundle_monthly: 'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month with 14-day trial
   bundle_yearly: 'plan_M2zS1EoNXJF10',    // Bundle Yearly - $1090/year (no trial)
 } as const;
 
@@ -154,9 +153,9 @@ export const WHOP_PRODUCT_IDS = {
   // 🔥 Platform - REAL IDs!
   platform_core_monthly: 'prod_HDYzeNp6WOJwh',
   platform_core_yearly: 'prod_YAdXQrHtt72Gd',
-  platform_pro_monthly: 'prod_lhe19l7l48lKW',
-  platform_pro_yearly: 'prod_3AyUOETP3CoK6',
-  platform_enterprise: 'prod_PLATFORM_ENTERPRISE',
+  platform_finotaur_monthly: 'prod_LtP5GbpPfp9bn',
+  platform_finotaur_yearly: 'prod_CbWpZrn5P7wc9',
+  platform_enterprise_monthly: 'prod_CIKv0J5Rq6aFk',
   
 // ═══════════════════════════════════════════
   // 🔥 v4.3.0: Newsletter (War Zone) - Product IDs
@@ -182,9 +181,9 @@ export const WHOP_PRODUCT_IDS = {
 export const PLATFORM_PRODUCT_IDS = new Set([
   'prod_HDYzeNp6WOJwh',  // Core Monthly
   'prod_YAdXQrHtt72Gd',  // Core Yearly
-  'prod_lhe19l7l48lKW',  // Pro Monthly
-  'prod_3AyUOETP3CoK6',  // Pro Yearly
-  'prod_PLATFORM_ENTERPRISE',
+  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly (Bundle)
+  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly (Bundle)
+  'prod_CIKv0J5Rq6aFk',  // Enterprise
 ]);
 
 // Reverse lookup (for webhooks)
@@ -207,9 +206,9 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   // 🔥 Platform - REAL IDs!
   'prod_HDYzeNp6WOJwh': { plan: 'platform_core', interval: 'monthly', category: 'platform', isPlatform: true },
   'prod_YAdXQrHtt72Gd': { plan: 'platform_core', interval: 'yearly', category: 'platform', isPlatform: true },
-  'prod_lhe19l7l48lKW': { plan: 'platform_pro', interval: 'monthly', category: 'platform', isPlatform: true },
-  'prod_3AyUOETP3CoK6': { plan: 'platform_pro', interval: 'yearly', category: 'platform', isPlatform: true },
-  'prod_PLATFORM_ENTERPRISE': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
+  'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true, isBundle: true },
+  'prod_CbWpZrn5P7wc9': { plan: 'platform_finotaur', interval: 'yearly', category: 'platform', isPlatform: true, isBundle: true },
+  'prod_CIKv0J5Rq6aFk': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
   
 // ═══════════════════════════════════════════
   // 🔥 v4.3.0: Newsletter (War Zone) - All Products
@@ -226,13 +225,7 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   
   // 🔥 Top Secret Yearly - STANDALONE PRODUCT
   'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
-  
-  // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
-  // ═══════════════════════════════════════════
-  'prod_LtP5GbpPfp9bn': { plan: 'bundle', interval: 'monthly', category: 'journal', isBundle: true, isNewsletter: true, isTopSecret: true },
-  'prod_CbWpZrn5P7wc9': { plan: 'bundle', interval: 'yearly', category: 'journal', isBundle: true, isNewsletter: true, isTopSecret: true },
-};
+  };
 
 // Plan ID to Name lookup
 export const PLAN_ID_TO_NAME: Record<string, string> = {
@@ -243,11 +236,14 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_gBG436aeJxaHU': 'premium_yearly',
   
   // Platform
+  'plan_M4ig2ZhYd2RUE': 'platform_core_monthly',
+  'plan_6w5KTZsSGp7Ss': 'platform_core_yearly',
   'prod_HDYzeNp6WOJwh': 'platform_core_monthly',
   'prod_YAdXQrHtt72Gd': 'platform_core_yearly',
-  'prod_lhe19l7l48lKW': 'platform_pro_monthly',
-  'prod_3AyUOETP3CoK6': 'platform_pro_yearly',
-  'plan_PLATFORM_ENTERPRISE': 'platform_enterprise',
+  // 🔥 Finotaur = Bundle (same Whop plan IDs)
+  'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',  // Also used as bundle_monthly
+  'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',   // Also used as bundle_yearly
+  'plan_nHveClWPmjJNT': 'platform_enterprise_monthly',
   
   // ═══════════════════════════════════════════
   // 🔥 v4.4.0: Newsletter (War Zone) - SYNCED!
@@ -261,9 +257,7 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
   'plan_7VQxCZ5Kpw6f0': 'top_secret_monthly_warzone',
   
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
-  'plan_ICooR8aqtdXad': 'bundle_monthly',
-  'plan_M2zS1EoNXJF10': 'bundle_yearly',
+  // 🔥 Note: Bundle uses same plan IDs as Finotaur (see above)
 };
 
 // ============================================
@@ -395,17 +389,17 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.platform_core_monthly,
     name: 'platform_core',
     displayName: 'Core',
-    price: 39,
+    price: 59,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
-    trialDays: 7,
+    trialDays: 14,
     trialOnceOnly: false,
-    badge: '7-Day Free Trial',
+    badge: '14-Day Free Trial',
     category: 'platform',
     isPlatform: true,
     features: [
-      '7-day free trial',
+      '14-day free trial',
       'Full market dashboard',
       'Real-time market data',
       'Advanced charts & indicators',
@@ -422,13 +416,13 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.platform_core_yearly,
     name: 'platform_core',
     displayName: 'Core',
-    price: 349,
+    price: 590,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 29.08,
+    monthlyEquivalent: 49.17,
     maxTrades: 0,
     trialDays: 0,
-    badge: 'Save 25%',
+    badge: 'Save 17%',
     category: 'platform',
     isPlatform: true,
     features: [
@@ -440,36 +434,36 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Basic screeners',
       'Daily market briefing',
       'Priority email support',
-      '3 months FREE!',
+      '1 month FREE!',
     ],
   },
 
   // ═══════════════════════════════════════════
   // 🔥 PLATFORM - PRO ($69/month, 14-day ONE-TIME trial)
   // ═══════════════════════════════════════════
-  platform_pro_monthly: {
-    id: 'platform_pro_monthly',
-    whopPlanId: WHOP_PLAN_IDS.platform_pro_monthly,
-    whopProductId: WHOP_PRODUCT_IDS.platform_pro_monthly,
-    name: 'platform_pro',
-    displayName: 'Pro',
-    price: 69,
+  platform_finotaur_monthly: {
+    id: 'platform_finotaur_monthly',
+    whopPlanId: WHOP_PLAN_IDS.platform_finotaur_monthly,
+    whopProductId: WHOP_PRODUCT_IDS.platform_finotaur_monthly,
+    name: 'platform_finotaur',
+    displayName: 'Finotaur',
+    price: 109,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
     trialDays: 14,
-    trialOnceOnly: true,
+    trialOnceOnly: false,
     popular: true,
     badge: '14-Day Free Trial',
     category: 'platform',
     isPlatform: true,
+    isBundle: true,
     includesJournal: 'premium',
-    includesNewsletterChoice: true,
     features: [
-      '14-day free trial (one-time only)',
+      '14-day free trial',
       'Everything in Core, plus:',
       '🎁 Journal Premium INCLUDED ($40/mo value)',
-      '🎁 Choose 1 Newsletter included',
+      '🎁 War Zone + Top Secret Reports INCLUDED',
       'Advanced screeners',
       'Custom reports & exports',
       'Unlimited price alerts',
@@ -481,29 +475,29 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Early access to new features',
     ],
   },
-  platform_pro_yearly: {
-    id: 'platform_pro_yearly',
-    whopPlanId: WHOP_PLAN_IDS.platform_pro_yearly,
-    whopProductId: WHOP_PRODUCT_IDS.platform_pro_yearly,
-    name: 'platform_pro',
-    displayName: 'Pro',
-    price: 619,
+  platform_finotaur_yearly: {
+    id: 'platform_finotaur_yearly',
+    whopPlanId: WHOP_PLAN_IDS.platform_finotaur_yearly,
+    whopProductId: WHOP_PRODUCT_IDS.platform_finotaur_yearly,
+    name: 'platform_finotaur',
+    displayName: 'Finotaur',
+    price: 1090,
     period: 'yearly',
     periodLabel: '/year',
-    monthlyEquivalent: 51.58,
+    monthlyEquivalent: 90.83,
     maxTrades: 0,
     trialDays: 0,
-    trialOnceOnly: true,
+    trialOnceOnly: false,
     popular: true,
-    badge: 'Best Value - Save 25%',
+    badge: 'Best Value - Save 17%',
     category: 'platform',
     isPlatform: true,
+    isBundle: true,
     includesJournal: 'premium',
-    includesNewsletterChoice: true,
     features: [
       'Everything in Core, plus:',
       '🎁 Journal Premium INCLUDED ($40/mo value)',
-      '🎁 Choose 1 Newsletter included',
+      '🎁 War Zone + Top Secret Reports INCLUDED',
       'AI-powered market insights',
       'Advanced screeners',
       'Custom reports & exports',
@@ -514,31 +508,32 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Institutional-grade analytics',
       'Priority support (24h response)',
       'Early access to new features',
-      '3 months FREE!',
+      '1 month FREE!',
     ],
   },
 
   // ═══════════════════════════════════════════
   // 🔥 PLATFORM - ENTERPRISE (Coming Soon)
   // ═══════════════════════════════════════════
-  platform_enterprise: {
-    id: 'platform_enterprise',
-    whopPlanId: WHOP_PLAN_IDS.platform_enterprise,
-    whopProductId: WHOP_PRODUCT_IDS.platform_enterprise,
+  platform_enterprise_monthly: {
+    id: 'platform_enterprise_monthly',
+    whopPlanId: WHOP_PLAN_IDS.platform_enterprise_monthly,
+    whopProductId: WHOP_PRODUCT_IDS.platform_enterprise_monthly,
     name: 'platform_enterprise',
     displayName: 'Enterprise',
-    price: 0,
+    price: 500,
     period: 'monthly',
-    periodLabel: 'Custom pricing',
+    periodLabel: '/month',
     maxTrades: 0,
-    badge: 'Contact Sales',
+    trialDays: 0,
+    badge: 'Ultimate',
     category: 'platform',
     isPlatform: true,
-    comingSoon: true,
-    contactSales: true,
+    comingSoon: false,
+    contactSales: false,
     includesJournal: 'premium',
     features: [
-      'Everything in Pro, plus:',
+      'Everything in Finotaur, plus:',
       'Dedicated account manager',
       'Custom integrations',
       'White-label options',
@@ -802,7 +797,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
   },
 
   // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret ($109/mo or $997/yr)
+  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret ($109/mo or $1090
+  // /yr)
   // BEST VALUE: Save $49.98/month vs buying separately!
   // ═══════════════════════════════════════════
   bundle_monthly: {
@@ -815,13 +811,13 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 0,
-    trialDays: 7,
+    trialDays: 14,
     isNewsletter: true,
     isTopSecret: true,
     isBundle: true,
     discordIncluded: true,
     popular: true,
-    badge: '🔥 BEST VALUE - 7-Day Free Trial',
+    badge: '🔥 BEST VALUE - 14-Day Free Trial',
     category: 'journal',
     features: [
       '🎁 7 days FREE trial',
@@ -917,8 +913,13 @@ export function isCorePlan(planName: PlanName): boolean {
   return planName === 'platform_core';
 }
 
+export function isFinotaurPlan(planName: PlanName): boolean {
+  return planName === 'platform_finotaur';
+}
+
+// Legacy alias for backward compatibility
 export function isProPlan(planName: PlanName): boolean {
-  return planName === 'platform_pro';
+  return planName === 'platform_finotaur';
 }
 
 export function isEnterprisePlan(planName: PlanName): boolean {
@@ -980,7 +981,7 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
     WHOP_PLAN_IDS.basic_yearly,
     WHOP_PLAN_IDS.premium_yearly,
     WHOP_PLAN_IDS.platform_core_yearly,
-    WHOP_PLAN_IDS.platform_pro_yearly,
+    WHOP_PLAN_IDS.platform_finotaur_yearly,
     WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     WHOP_PLAN_IDS.top_secret_yearly,
     WHOP_PLAN_IDS.bundle_yearly,      // 🔥 v5.0.0: Bundle Yearly
@@ -1036,9 +1037,6 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
     params.set('metadata[subscription_category]', plan.category);
     params.set('metadata[billing_interval]', plan.period);  // 🔥 v4.3.0: Track interval
     
-    if (plan.includesNewsletterChoice && newsletterChoice) {
-      params.set('metadata[newsletter_choice]', newsletterChoice);
-    }
   }
   
   // Apply intro discount coupon for eligible plans
@@ -1117,6 +1115,17 @@ export const PLAN_FEATURES = {
     apiAccess: false,
     prioritySupport: false,
     customReports: false,
+    // Page access
+    stockAnalyzer: true,
+    sectorAnalyzer: false,
+    flowScanner: false,
+    optionsIntelligence: false,
+    aiAssistant: false,
+    macroAnalyzer: false,
+    myPortfolio: false,
+    aiScanner: false,
+    stockAnalysisPerDay: 3,
+    sectorAnalysisPerMonth: 0,
   },
   platform_core: {
     dashboardAccess: true,
@@ -1129,8 +1138,19 @@ export const PLAN_FEATURES = {
     apiAccess: false,
     prioritySupport: true,
     customReports: false,
+    // Page access
+    stockAnalyzer: true,
+    sectorAnalyzer: true,
+    flowScanner: true,
+    optionsIntelligence: false,
+    aiAssistant: true,
+    macroAnalyzer: false,
+    myPortfolio: false,
+    aiScanner: false,
+    stockAnalysisPerDay: 5,
+    sectorAnalysisPerMonth: 3,
   },
-  platform_pro: {
+platform_finotaur: {
     dashboardAccess: true,
     marketData: true,
     advancedCharts: true,
@@ -1141,6 +1161,19 @@ export const PLAN_FEATURES = {
     apiAccess: true,
     prioritySupport: true,
     customReports: true,
+    newsletter: true,
+    topSecret: true,
+    // Page access
+    stockAnalyzer: true,
+    sectorAnalyzer: true,
+    flowScanner: true,
+    optionsIntelligence: true,
+    aiAssistant: true,
+    macroAnalyzer: true,
+    myPortfolio: false,       // Enterprise only
+    aiScanner: true,
+    stockAnalysisPerDay: 7,
+    sectorAnalysisPerMonth: Infinity,
   },
   platform_enterprise: {
     dashboardAccess: true,
@@ -1157,6 +1190,17 @@ export const PLAN_FEATURES = {
     customIntegrations: true,
     sla: true,
     whiteLabel: true,
+    // Page access - ALL PAGES
+    stockAnalyzer: true,
+    sectorAnalyzer: true,
+    flowScanner: true,
+    optionsIntelligence: true,
+    aiAssistant: true,
+    macroAnalyzer: true,
+    myPortfolio: true,        // Enterprise exclusive
+    aiScanner: true,
+    stockAnalysisPerDay: Infinity,
+    sectorAnalysisPerMonth: Infinity,
   },
   newsletter: {
     maxTrades: 0,
@@ -1189,6 +1233,8 @@ export const PLATFORM_LIMITS = {
     savedScreeners: 1,
     alertsActive: 3,
     exportsPerMonth: 0,
+    stockAnalysisPerDay: 3,
+    sectorAnalysisPerMonth: 0,
   },
   platform_core: {
     apiCallsPerDay: 0,
@@ -1196,13 +1242,17 @@ export const PLATFORM_LIMITS = {
     savedScreeners: 10,
     alertsActive: 50,
     exportsPerMonth: 10,
+    stockAnalysisPerDay: 5,
+    sectorAnalysisPerMonth: 3,
   },
-  platform_pro: {
+  platform_finotaur: {
     apiCallsPerDay: 5000,
     watchlistItems: 500,
     savedScreeners: 50,
     alertsActive: 999999,
     exportsPerMonth: 100,
+    stockAnalysisPerDay: 7,
+    sectorAnalysisPerMonth: 999999,
   },
   platform_enterprise: {
     apiCallsPerDay: 999999,

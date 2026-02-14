@@ -22,7 +22,7 @@ import { useWhopCheckout } from '@/hooks/useWhopCheckout';
 // ============================================
 
 type BillingInterval = 'monthly' | 'yearly';
-type PlatformPlanId = 'free' | 'core' | 'pro' | 'enterprise';
+type PlatformPlanId = 'free' | 'core' | 'finotaur' | 'enterprise';
 
 interface PlanConfig {
   id: PlatformPlanId;
@@ -56,6 +56,7 @@ const plans: PlanConfig[] = [
     trialDays: 0,
     features: [
       'All Markets dashboard',
+      'Stock Analyzer (3 analyses/day)',
       'Basic market data',
       'Limited watchlists (5 items)',
       '3 price alerts',
@@ -67,60 +68,66 @@ const plans: PlanConfig[] = [
   {
     id: 'core',
     name: 'Core',
-    monthlyPrice: '$39',
-    yearlyPrice: '$349',
-    yearlyMonthlyEquivalent: '$29',
+    monthlyPrice: '$59',
+    yearlyPrice: '$590',
+    yearlyMonthlyEquivalent: '$49',
     description: 'Full market intelligence',
-    trialDays: 7,
+    trialDays: 14,
     trialOnceOnly: false,
     features: [
       'Everything in Free, plus:',
+      'Stock Analyzer (5 analyses/day)',
+      'Sector Analyzer (3 sectors/month)',
+      'Flow Scanner',
+      'AI Assistant',
       'Real-time market data',
       'Advanced charts & indicators',
       'Unlimited watchlists',
       '50 price alerts',
-      'Basic screeners',
-      'Daily market briefing',
       'Priority email support',
     ],
-    cta: 'Start 7-Day Trial',
+    cta: 'Start 14-Day Trial',
     featured: false,
-    savings: 'Save 25%',
+    savings: 'Save 17%',
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    monthlyPrice: '$69',
-    yearlyPrice: '$619',
-    yearlyMonthlyEquivalent: '$52',
+    id: 'finotaur',
+    name: 'Finotaur',
+    monthlyPrice: '$109',
+    yearlyPrice: '$1,090',
+    yearlyMonthlyEquivalent: '$91',
     description: 'Complete trading ecosystem',
     trialDays: 14,
-    trialOnceOnly: true,
+    trialOnceOnly: false,
     includesJournal: true,
     includesNewsletter: true,
     features: [
       'Everything in Core, plus:',
-      'AI-powered market insights',
-      'Advanced screeners',
-      'Unlimited price alerts',
-      'Options flow analysis',
-      'Institutional analytics',
+      'Stock Analyzer (7 analyses/day)',
+      'Sector Analyzer (unlimited)',
+      'Options Intelligence AI',
+      'Macro Analyzer',
+      'AI Scanner',
+      '🎁 Journal Premium INCLUDED',
+      '🎁 War Zone + Top Secret Reports',
       'Priority 24h support',
     ],
     cta: 'Start 14-Day Trial',
     featured: true,
-    savings: 'Save 25%',
+    savings: 'Save 17%',
   },
   {
     id: 'enterprise',
     name: 'Enterprise',
-    monthlyPrice: 'Custom',
-    yearlyPrice: 'Custom',
-    yearlyMonthlyEquivalent: 'Custom',
-    description: 'Custom solutions for teams',
+    monthlyPrice: '$500',
+    yearlyPrice: '$500',
+    yearlyMonthlyEquivalent: '$500',
+    description: 'Ultimate trading solution',
     trialDays: 0,
     features: [
-      'Everything in Pro, plus:',
+      'Everything in Finotaur, plus:',
+      'Unlimited Stock Analyses',
+      'My Portfolio (exclusive)',
       'Dedicated account manager',
       'Custom integrations',
       'White-label options',
@@ -129,7 +136,7 @@ const plans: PlanConfig[] = [
       'Team management',
       'SSO authentication',
     ],
-    cta: 'Contact Sales',
+    cta: 'Get Enterprise',
     featured: false,
   },
 ];
@@ -151,8 +158,8 @@ export default function PlatformPricing() {
 
   const { 
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
-    checkoutPlatformProMonthly, checkoutPlatformProYearly,
-    contactEnterpriseSales, isLoading: checkoutLoading,
+    checkoutPlatformFinotaurMonthly, checkoutPlatformFinotaurYearly,
+    checkoutPlatformEnterpriseMonthly, isLoading: checkoutLoading,
   } = useWhopCheckout({
     onError: (error) => toast.error('Checkout failed', { description: error.message })
   });
@@ -208,18 +215,15 @@ export default function PlatformPricing() {
   const handlePlanClick = (planId: PlatformPlanId) => {
     if (planId === 'free' || planId === currentPlatformPlan) return;
     
-    if (planId === 'enterprise') {
-      contactEnterpriseSales();
-      return;
-    }
-    
     setLoading(planId);
     
     try {
       if (planId === 'core') {
         billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
-      } else if (planId === 'pro') {
-        billingInterval === 'monthly' ? checkoutPlatformProMonthly() : checkoutPlatformProYearly();
+      } else if (planId === 'finotaur') {
+        billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
+      } else if (planId === 'enterprise') {
+        checkoutPlatformEnterpriseMonthly();
       }
     } catch (error) {
       toast.error('Failed to start checkout');
@@ -232,7 +236,7 @@ export default function PlatformPricing() {
       return { price: 'Free', period: 'forever', billedAs: undefined };
     }
     if (plan.id === 'enterprise') {
-      return { price: 'Custom', period: '', billedAs: undefined };
+      return { price: '$500', period: '/month', billedAs: undefined };
     }
     
     if (billingInterval === 'monthly') {
@@ -270,8 +274,17 @@ export default function PlatformPricing() {
   // ============================================
 
   return (
-    <div className="min-h-screen p-6 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen p-6 md:p-8 relative overflow-hidden">
+      {/* Gold Animated Orbs Background */}
+      <style>{`
+        @keyframes pricing-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}
+        .pricing-orb{animation:pricing-orb 8s ease-in-out infinite}
+      `}</style>
+      <div className="absolute top-[10%] left-[15%] w-[700px] h-[700px] bg-[#C9A646]/[0.08] rounded-full blur-[150px] pricing-orb pointer-events-none" />
+      <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-[#D4BF8E]/[0.06] rounded-full blur-[140px] pricing-orb pointer-events-none" style={{animationDelay:'3s'}} />
+      <div className="absolute top-[50%] left-[50%] w-[500px] h-[500px] bg-[#F4D97B]/[0.04] rounded-full blur-[130px] pricing-orb pointer-events-none" style={{animationDelay:'5s'}} />
+
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-3">
@@ -279,7 +292,7 @@ export default function PlatformPricing() {
             <span className="text-[#C9A646]">Platform Plan</span>
           </h1>
           <p className="text-base text-slate-400 max-w-2xl mx-auto">
-            Unlock powerful market intelligence tools. Pro includes Journal Premium + Newsletter!
+            Unlock powerful market intelligence tools. Finotaur includes Journal Premium + All Reports!
           </p>
         </div>
 
@@ -304,10 +317,10 @@ export default function PlatformPricing() {
               </div>
               <div className="text-left flex-1">
                 <h4 className="text-xl font-semibold text-white mb-2">
-                  Pro Bundle — Save $30+/month
+                  Finotaur Bundle — Save $50+/month
                 </h4>
                 <p className="text-slate-300 text-base leading-relaxed">
-                  Get full market access + Journal Premium + Newsletter choice. 
+                  Get full market access + Journal Premium + War Zone + Top Secret Reports. 
                   {proTrialUsed ? ' Start your subscription today!' : ' Try free for 14 days!'}
                 </p>
               </div>
@@ -349,7 +362,7 @@ export default function PlatformPricing() {
             >
               Yearly
               <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                Save 25%
+                Save 17%
               </span>
             </button>
           </div>
@@ -416,7 +429,7 @@ export default function PlatformPricing() {
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 bg-blue-500 text-white whitespace-nowrap"
                        style={{ zIndex: 50 }}>
                     <Clock className="w-3 h-3" />
-                    7-Day Free Trial
+                    14-Day Free Trial
                   </div>
                 )}
 
@@ -526,7 +539,7 @@ export default function PlatformPricing() {
             <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
             <div className="flex items-center gap-2">
               <Check className="w-5 h-5 text-green-500" />
-              <span className="text-sm">14-Day Pro Trial</span>
+              <span className="text-sm">14-Day Free Trial</span>
             </div>
             <div className="w-1 h-1 rounded-full bg-slate-600 hidden sm:block" />
             <div className="flex items-center gap-2">

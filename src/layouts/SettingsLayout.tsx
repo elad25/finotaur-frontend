@@ -208,16 +208,16 @@ function getPlanInfo(plan: string | null, type: 'platform' | 'journal' = 'platfo
   if (type === 'journal') {
     const plans: Record<string, { name: string; price: string; color: string }> = {
       free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-      basic: { name: 'Basic', price: '$15/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-      premium: { name: 'Premium', price: '$25/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
+      basic: { name: 'Basic', price: '$30/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+      premium: { name: 'Premium', price: '$39.99/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
     };
     return plans[plan || 'free'] || plans.free;
   }
   
   const plans: Record<string, { name: string; price: string; color: string }> = {
     free: { name: 'Free', price: '$0', color: 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' },
-    core: { name: 'Core', price: '$19/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-    pro: { name: 'Pro', price: '$49/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
+    core: { name: 'Core', price: '$59/mo', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+    finotaur: { name: 'Finotaur', price: '$109/mo', color: 'bg-[#C9A646]/20 text-[#C9A646] border-[#C9A646]/30' },
   };
   return plans[plan || 'free'] || plans.free;
 }
@@ -613,7 +613,7 @@ const BillingTab = () => {
         isInTrial: false,
         isInIntro: false, 
         introMonthsRemaining: 0, 
-        currentPrice: topSecretInterval === 'yearly' ? 500 : 89.99,
+        currentPrice: topSecretInterval === 'yearly' ? 899 : 89.99,
         trialDaysRemaining: 0,
       };
     }
@@ -1061,6 +1061,36 @@ const BillingTab = () => {
               </p>
             </div>
           </div>
+
+          {/* Action Buttons */}
+          {platformIsFree ? (
+            <Button
+              size="sm"
+              onClick={() => navigate('/app/all-markets/pricing')}
+              className="mt-4 w-full bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+            >
+              <Crown className="w-3.5 h-3.5 mr-1.5" />
+              Upgrade Plan
+            </Button>
+          ) : platformIsActive && !isLifetime && (
+            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
+              <Button
+                size="sm"
+                onClick={() => navigate('/app/all-markets/pricing')}
+                className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+              >
+                <Crown className="w-3.5 h-3.5 mr-1.5" />
+                Upgrade Plan
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+              >
+                Unsubscribe
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 

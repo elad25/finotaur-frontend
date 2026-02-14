@@ -16,7 +16,7 @@ import { useAuth } from '@/providers/AuthProvider';
 // ================================================
 
 export type AccountType = 'free' | 'trial' | 'basic' | 'premium' | 'admin' | 'vip';
-export type PlatformPlan = 'free' | 'core' | 'pro' | 'enterprise' | null;
+export type PlatformPlan = 'free' | 'core' | 'finotaur' | 'enterprise' | null;
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'past_due' | null;
 export type SubscriptionInterval = 'monthly' | 'yearly' | null;
 export type UserRole = 'user' | 'admin' | 'super_admin';
@@ -39,6 +39,8 @@ export interface TradeLimits {
   subscription_started_at: string | null;
   subscription_cancel_at_period_end: boolean;
   pending_downgrade_plan: string | null;
+  cancellation_reason: string | null;
+  is_lifetime: boolean;
   
   // Trial info (9-12)
   is_in_trial: boolean;
@@ -75,6 +77,33 @@ export interface TradeLimits {
   whop_product_id: string | null;
   whop_plan_id: string | null;
   whop_customer_email: string | null;
+  
+  // Newsletter fields
+  newsletter_paid: boolean;
+  newsletter_status: string | null;
+  newsletter_expires_at: string | null;
+  
+  // Top Secret fields
+  top_secret_enabled: boolean;
+  top_secret_status: string | null;
+  top_secret_expires_at: string | null;
+  
+  // Platform fields
+  platform_plan: PlatformPlan;
+  platform_subscription_status: string | null;
+  platform_billing_interval: SubscriptionInterval;
+  platform_subscription_started_at: string | null;
+  platform_subscription_expires_at: string | null;
+  platform_trial_ends_at: string | null;
+  platform_is_in_trial: boolean;
+  platform_trial_days_remaining: number | null;
+  platform_cancel_at_period_end: boolean;
+  platform_cancelled_at: string | null;
+  platform_whop_membership_id: string | null;
+  platform_finotaur_trial_eligible: boolean;
+  platform_core_trial_eligible: boolean;
+  platform_bundle_journal_granted: boolean;
+  platform_bundle_newsletter_granted: boolean;
 }
 
 export interface WarningState {
@@ -156,7 +185,7 @@ export function useSubscription() {
         // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
         // ═══════════════════════════════════════════════════════════════
 const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-  user_id_param: effectiveUserId
+  p_user_id: effectiveUserId
 });
         
         if (rpcError) {
@@ -220,6 +249,37 @@ const { data, error: rpcError } = await supabase.rpc('get_user_subscription_stat
           whop_product_id: result.whop_product_id || null,
           whop_plan_id: result.whop_plan_id || null,
           whop_customer_email: result.whop_customer_email || null,
+          
+          // Missing DB fields
+          cancellation_reason: result.cancellation_reason || null,
+          is_lifetime: safeBool(result.is_lifetime, false),
+          
+          // Newsletter fields
+          newsletter_paid: safeBool(result.newsletter_paid, false),
+          newsletter_status: result.newsletter_status || null,
+          newsletter_expires_at: result.newsletter_expires_at || null,
+          
+          // Top Secret fields
+          top_secret_enabled: safeBool(result.top_secret_enabled, false),
+          top_secret_status: result.top_secret_status || null,
+          top_secret_expires_at: result.top_secret_expires_at || null,
+          
+          // Platform fields
+          platform_plan: (result.platform_plan || 'free') as PlatformPlan,
+          platform_subscription_status: result.platform_subscription_status || null,
+          platform_billing_interval: (result.platform_billing_interval || null) as SubscriptionInterval,
+          platform_subscription_started_at: result.platform_subscription_started_at || null,
+          platform_subscription_expires_at: result.platform_subscription_expires_at || null,
+          platform_trial_ends_at: result.platform_trial_ends_at || null,
+          platform_is_in_trial: safeBool(result.platform_is_in_trial, false),
+          platform_trial_days_remaining: result.platform_trial_days_remaining !== null ? safeNumber(result.platform_trial_days_remaining, 0) : null,
+          platform_cancel_at_period_end: safeBool(result.platform_cancel_at_period_end, false),
+          platform_cancelled_at: result.platform_cancelled_at || null,
+          platform_whop_membership_id: result.platform_whop_membership_id || null,
+          platform_finotaur_trial_eligible: safeBool(result.platform_finotaur_trial_eligible, true),
+          platform_core_trial_eligible: safeBool(result.platform_core_trial_eligible, true),
+          platform_bundle_journal_granted: safeBool(result.platform_bundle_journal_granted, false),
+          platform_bundle_newsletter_granted: safeBool(result.platform_bundle_newsletter_granted, false),
         };
         
         return tradeLimits;
@@ -323,11 +383,13 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     limits?.is_in_trial === true &&
     !!limits.whop_membership_id;
   
-  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial;
+  const hasJournalFromBundle = limits?.platform_bundle_journal_granted === true;
+  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle;
   
   const effectiveJournalPlan = (() => {
     if (isAdmin) return 'premium';
     if (isLifetimeUser) return 'premium';
+    if (hasJournalFromBundle) return 'premium';
     if (hasDirectJournalSubscription) return limits?.account_type as AccountType;
     if (hasJournalTrial) return 'trial';
     return null;
@@ -424,7 +486,7 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     effectiveJournalPlan,
     hasDirectJournalSubscription,
     hasJournalTrial,
-    hasJournalFromPlatformBundle: false,
+    hasJournalFromPlatformBundle: limits?.platform_bundle_journal_granted === true,
     
     // Account type checks
     isTrial,
@@ -483,7 +545,7 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     platformPlan: null as PlatformPlan,
     isPlatformFree: true,
     isPlatformCore: false,
-    isPlatformPro: false,
+    isPlatformFinotaur: false,
     isPlatformEnterprise: false,
     isPlatformPaid: false,
     isPlatformActive: false,
@@ -546,7 +608,7 @@ export function useSubscriptionStatus() {
     platformPlan,
     isPlatformFree,
     isPlatformCore,
-    isPlatformPro,
+    isPlatformFinotaur,
     isPlatformEnterprise,
     isPlatformPaid,
     isPlatformActive,
@@ -579,7 +641,7 @@ export function useSubscriptionStatus() {
     platformPlan,
     isPlatformFree,
     isPlatformCore,
-    isPlatformPro,
+    isPlatformFinotaur,
     isPlatformEnterprise,
     isPlatformPaid,
     isPlatformActive,
@@ -713,7 +775,7 @@ export function usePlatformSubscription() {
     platformPlan,
     isPlatformFree,
     isPlatformCore,
-    isPlatformPro,
+    isPlatformFinotaur,
     isPlatformEnterprise,
     isPlatformPaid,
     isPlatformActive,
@@ -739,7 +801,7 @@ export function usePlatformSubscription() {
     if (isAdmin) return 'Admin';
     switch (platformPlan) {
       case 'core': return 'Core';
-      case 'pro': return 'Pro';
+      case 'finotaur': return 'Finotaur';
       case 'enterprise': return 'Enterprise';
       default: return 'Free';
     }
@@ -755,14 +817,14 @@ export function usePlatformSubscription() {
   })();
   
   const canUpgradeToCore = !isAdmin && isPlatformFree;
-  const canUpgradeToPro = !isAdmin && (isPlatformFree || isPlatformCore);
+  const canUpgradeToFinotaur = !isAdmin && (isPlatformFree || isPlatformCore);
   
   return {
     plan: platformPlan,
     displayName: platformDisplayName,
     isFree: isPlatformFree,
     isCore: isPlatformCore,
-    isPro: isPlatformPro,
+    isPro: isPlatformFinotaur,
     isEnterprise: isPlatformEnterprise,
     isPaid: isPlatformPaid,
     isAdmin,
@@ -782,7 +844,7 @@ export function usePlatformSubscription() {
     hasAdvancedCharts: hasPlatformAdvancedCharts,
     includesJournalPremium: hasJournalFromPlatformBundle,
     canUpgradeToCore,
-    canUpgradeToPro,
+    canUpgradeToFinotaur,
     needsUpgrade: !isAdmin && isPlatformFree,
     isLoading,
     refresh,

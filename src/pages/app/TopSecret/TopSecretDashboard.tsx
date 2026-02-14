@@ -1290,10 +1290,37 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
   // v2.2: Test Mode toggle - allows testers to view as regular user
   const [testModeEnabled, setTestModeEnabled] = useState(true); // true = see test reports, false = view as regular user
   
+  // v2.4: Email notification toggle
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(true);
+  
   // Effective tester status (considers the toggle)
   const effectiveIsTester = isTester && testModeEnabled;
 
   const currentUserId = userId || user?.id;
+
+  // v2.4: Toggle email notifications handler
+  const handleToggleEmailNotifications = useCallback(async (newValue: boolean) => {
+    if (!currentUserId) return;
+    
+    setEmailNotificationsEnabled(newValue);
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ top_secret_email_notifications: newValue })
+        .eq('id', currentUserId);
+      
+      if (error) {
+        console.error('[EmailToggle] Failed to update:', error);
+        setEmailNotificationsEnabled(!newValue); // Rollback
+      } else {
+        console.log('[EmailToggle] ✅ Updated to:', newValue);
+      }
+    } catch (err) {
+      console.error('[EmailToggle] Error:', err);
+      setEmailNotificationsEnabled(!newValue); // Rollback
+    }
+  }, [currentUserId]);
 
   // Fetch subscription status
   useEffect(() => {
@@ -1311,7 +1338,8 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
             top_secret_trial_ends_at,
             is_tester,
             role,
-            email
+            email,
+            top_secret_email_notifications
           `)
           .eq('id', currentUserId)
           .single();
@@ -1329,6 +1357,9 @@ export default function TopSecretDashboard({ userId }: TopSecretDashboardProps) 
           // v2.1: Check if user is tester or admin
           const isAdmin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
           setIsTester(data.is_tester || isAdmin);
+          
+          // v2.4: Load email notification preference
+          setEmailNotificationsEnabled(data.top_secret_email_notifications !== false);
         }
       } catch (error) {
         console.error('Error fetching subscription:', error);
@@ -2373,6 +2404,41 @@ function processReports(publishedReports: any[]) {
               transition={{ delay: 0.1 }}
             >
               <HowToUseSection />
+            </motion.div>
+
+            {/* v2.4: Email Notification Toggle */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+                <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-amber-400" />
+                  Notification Settings
+                </h3>
+                
+                <div className="flex items-center justify-between p-3 rounded-lg bg-black/20">
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-white">Email Notifications</span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Receive new reports via email
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleToggleEmailNotifications(!emailNotificationsEnabled)}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      emailNotificationsEnabled ? 'bg-amber-500' : 'bg-gray-600'
+                    }`}
+                  >
+                    <motion.div
+                      animate={{ x: emailNotificationsEnabled ? 22 : 2 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      className="absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+              </div>
             </motion.div>
 
             <motion.div

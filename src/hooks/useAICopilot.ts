@@ -38,6 +38,7 @@ export interface UsageInfo {
   tokens_today: number;
   daily_limit: number;
   remaining: number;
+  questions_remaining: number;
   user_tier: string;
   limit_reached: boolean;
 }
@@ -85,10 +86,23 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   }, [user]);
   
   // Load usage stats
+  // FIX: Removed camelCase fallbacks (questionsToday, tokensToday, dailyLimit, limitReached)
+  // that don't exist on the UsageResponse type from aiCopilotApi.ts.
+  // The API returns snake_case only. Map 'tier' → 'user_tier' for the UsageInfo interface.
   const loadUsage = useCallback(async () => {
     try {
       const data = await aiCopilotApi.getUsage();
-      setUsage(data.usage);
+      const raw = data.usage;
+      const remaining = raw.remaining ?? 0;
+      setUsage({
+        questions_today: raw.questions_today ?? 0,
+        tokens_today: raw.tokens_today ?? 0,
+        daily_limit: raw.daily_limit ?? 5,
+        remaining: remaining,
+        questions_remaining: remaining,
+        user_tier: raw.tier ?? 'FREE',
+        limit_reached: raw.limit_reached ?? false,
+      });
     } catch (err) {
       console.error('Failed to load usage:', err);
     }
@@ -246,6 +260,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
               ...prev,
               questions_today: prev.questions_today + 1,
               remaining: Math.max(0, prev.remaining - 1),
+              questions_remaining: Math.max(0, prev.remaining - 1),
               limit_reached: prev.remaining <= 1,
             } : null);
           }

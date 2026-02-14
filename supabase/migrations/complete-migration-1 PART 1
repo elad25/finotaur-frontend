@@ -2218,7 +2218,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   id = auth.uid()
-  AND (account_type IS NULL OR account_type IN ('basic', 'trial'))
+  AND (account_type IS NULL OR account_type IN ('platform_free', 'basic', 'trial'))
 );
 
 -- UPDATE Policy for own profile

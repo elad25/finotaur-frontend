@@ -36,7 +36,7 @@ ALTER TABLE profiles DROP CONSTRAINT IF EXISTS check_paid_has_interval;
 -- Update account_type constraint to include all valid types
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_account_type_check 
-  CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip', 'newsletter', 'top_secret'));
+  CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip', 'newsletter', 'top_secret', 'top_secret_bundle'));
 
 
 -- ============================================
@@ -152,9 +152,9 @@ BEGIN
   END IF;
   
   -- 🔥 ONE-TIME TRIAL TRACKING
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_pro_trial_used_at') THEN
-    ALTER TABLE profiles ADD COLUMN platform_pro_trial_used_at TIMESTAMPTZ;
-    COMMENT ON COLUMN profiles.platform_pro_trial_used_at IS 'When PRO trial was used - NULL means eligible';
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_finotaur_trial_used_at') THEN
+    ALTER TABLE profiles ADD COLUMN platform_finotaur_trial_used_at TIMESTAMPTZ;
+    COMMENT ON COLUMN profiles.platform_finotaur_trial_used_at IS 'When Finotaur trial was used - NULL means eligible';
   END IF;
   
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_core_trial_used_at') THEN
@@ -199,16 +199,12 @@ BEGIN
     ALTER TABLE profiles ADD COLUMN platform_bundle_newsletter_granted BOOLEAN DEFAULT FALSE;
   END IF;
   
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_bundle_newsletter_choice') THEN
-    ALTER TABLE profiles ADD COLUMN platform_bundle_newsletter_choice TEXT;
-  END IF;
-
 END $$;
 
 -- Constraints
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_account_type_check 
-  CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip', 'newsletter', 'top_secret'));
+  CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip', 'newsletter', 'top_secret', 'top_secret_bundle'));
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_payment_provider_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check 
@@ -217,7 +213,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check
 -- Platform constraints
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_plan_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_plan_check 
-  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'core', 'pro', 'enterprise'));
+  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'core', 'finotaur', 'enterprise'));
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_subscription_status_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_subscription_status_check 
@@ -230,10 +226,6 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_platform_billing_interval_check
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_payment_provider_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_payment_provider_check 
   CHECK (platform_payment_provider IS NULL OR platform_payment_provider IN ('whop', 'stripe', 'manual', 'admin_granted'));
-
-ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_bundle_newsletter_choice_check;
-ALTER TABLE profiles ADD CONSTRAINT profiles_platform_bundle_newsletter_choice_check 
-  CHECK (platform_bundle_newsletter_choice IS NULL OR platform_bundle_newsletter_choice IN ('included', 'discounted', 'declined'));
 -- ----------------------------------------
 -- 1.2 AFFILIATE_REFERRALS TABLE - Whop Columns
 -- ----------------------------------------
@@ -401,7 +393,7 @@ CREATE TABLE IF NOT EXISTS platform_plan_mapping (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   whop_plan_id TEXT NOT NULL UNIQUE,
   whop_product_id TEXT NOT NULL,
-  finotaur_plan TEXT NOT NULL CHECK (finotaur_plan IN ('core', 'pro', 'enterprise')),
+  finotaur_plan TEXT NOT NULL,
   billing_interval TEXT NOT NULL CHECK (billing_interval IN ('monthly', 'yearly')),
   price_usd DECIMAL(10,2) NOT NULL,
   trial_days INTEGER DEFAULT 0,
@@ -413,16 +405,26 @@ CREATE TABLE IF NOT EXISTS platform_plan_mapping (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Drop old constraint first
+ALTER TABLE platform_plan_mapping DROP CONSTRAINT IF EXISTS platform_plan_mapping_finotaur_plan_check;
+
+-- Fix existing 'pro' rows to 'finotaur' BEFORE adding constraint
+UPDATE platform_plan_mapping SET finotaur_plan = 'finotaur' WHERE finotaur_plan = 'pro';
+
+-- Now add constraint (all rows are already valid)
+ALTER TABLE platform_plan_mapping ADD CONSTRAINT platform_plan_mapping_finotaur_plan_check 
+  CHECK (finotaur_plan IN ('core', 'finotaur', 'enterprise'));
+
 -- Insert platform plan mappings (UPDATE WITH REAL WHOP IDs!)
 INSERT INTO platform_plan_mapping (
   whop_plan_id, whop_product_id, finotaur_plan, billing_interval, 
   price_usd, trial_days, trial_once_only, includes_journal, includes_newsletter
 ) VALUES 
-  ('plan_PLATFORM_CORE_MONTHLY', 'prod_PLATFORM_CORE_MONTHLY', 'core', 'monthly', 39.00, 7, FALSE, NULL, NULL),
-  ('plan_PLATFORM_CORE_YEARLY', 'prod_PLATFORM_CORE_YEARLY', 'core', 'yearly', 349.00, 7, FALSE, NULL, NULL),
-  ('plan_PLATFORM_PRO_MONTHLY', 'prod_PLATFORM_PRO_MONTHLY', 'pro', 'monthly', 69.00, 14, TRUE, 'premium', 'choice'),
-  ('plan_PLATFORM_PRO_YEARLY', 'prod_PLATFORM_PRO_YEARLY', 'pro', 'yearly', 619.00, 14, TRUE, 'premium', 'choice'),
-  ('plan_PLATFORM_ENTERPRISE', 'prod_PLATFORM_ENTERPRISE', 'enterprise', 'monthly', 0.00, 0, FALSE, 'premium', 'included')
+  ('plan_M4ig2ZhYd2RUE', 'prod_HDYzeNp6WOJwh', 'core', 'monthly', 59.00, 14, FALSE, NULL, NULL),
+  ('plan_6w5KTZsSGp7Ss', 'prod_YAdXQrHtt72Gd', 'core', 'yearly', 590.00, 0, FALSE, NULL, NULL),
+  ('plan_ICooR8aqtdXad', 'prod_LtP5GbpPfp9bn', 'finotaur', 'monthly', 109.00, 14, FALSE, 'premium', 'included'),
+  ('plan_M2zS1EoNXJF10', 'prod_CbWpZrn5P7wc9', 'finotaur', 'yearly', 1090.00, 0, FALSE, 'premium', 'included'),
+  ('plan_nHveClWPmjJNT', 'prod_CIKv0J5Rq6aFk', 'enterprise', 'monthly', 500.00, 0, FALSE, 'premium', 'included')
 ON CONFLICT (whop_plan_id) DO UPDATE SET
   whop_product_id = EXCLUDED.whop_product_id,
   finotaur_plan = EXCLUDED.finotaur_plan,
@@ -441,7 +443,7 @@ ON CONFLICT (whop_plan_id) DO UPDATE SET
 
 CREATE TABLE IF NOT EXISTS platform_bundle_benefits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  platform_plan TEXT NOT NULL CHECK (platform_plan IN ('core', 'pro', 'enterprise')),
+  platform_plan TEXT NOT NULL CHECK (platform_plan IN ('core', 'finotaur', 'enterprise')),
   benefit_type TEXT NOT NULL,
   benefit_value TEXT NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
@@ -449,9 +451,16 @@ CREATE TABLE IF NOT EXISTS platform_bundle_benefits (
   UNIQUE(platform_plan, benefit_type)
 );
 
+-- Drop old constraint, fix data, add updated constraint
+ALTER TABLE platform_bundle_benefits DROP CONSTRAINT IF EXISTS platform_bundle_benefits_platform_plan_check;
+UPDATE platform_bundle_benefits SET platform_plan = 'finotaur' WHERE platform_plan = 'pro';
+ALTER TABLE platform_bundle_benefits ADD CONSTRAINT platform_bundle_benefits_platform_plan_check
+  CHECK (platform_plan IN ('core', 'finotaur', 'enterprise'));
+
 INSERT INTO platform_bundle_benefits (platform_plan, benefit_type, benefit_value) VALUES
-  ('pro', 'journal_plan', 'premium'),
-  ('pro', 'newsletter_choice', 'true'),
+  ('finotaur', 'journal_plan', 'premium'),
+  ('finotaur', 'newsletter_included', 'true'),
+  ('finotaur', 'top_secret_included', 'true'),
   ('enterprise', 'journal_plan', 'premium'),
   ('enterprise', 'newsletter_included', 'true'),
   ('enterprise', 'top_secret_included', 'true')
@@ -525,21 +534,27 @@ CREATE TABLE IF NOT EXISTS subscription_events (
   scheduled_at TIMESTAMPTZ,
   processed_at TIMESTAMPTZ,
   metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  
-  CONSTRAINT valid_event_type CHECK (
-    event_type IN (
-      'upgrade',
-      'downgrade',
-      'downgrade_scheduled',
-      'cancel_scheduled',
-      'cancelled',
-      'reactivated',
-      'payment_failed',
-      'payment_succeeded',
-      'trial_started',
-      'trial_ended'
-    )
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Update constraint separately to handle existing tables
+ALTER TABLE subscription_events DROP CONSTRAINT IF EXISTS valid_event_type;
+ALTER TABLE subscription_events ADD CONSTRAINT valid_event_type CHECK (
+  event_type IN (
+    'upgrade',
+    'downgrade',
+    'downgrade_scheduled',
+    'cancel_scheduled',
+    'cancelled',
+    'deactivated',
+    'reactivated',
+    'reactivated_db_only',
+    'free_reactivated',
+    'payment_failed',
+    'payment_succeeded',
+    'trial_started',
+    'trial_ended',
+    'newsletter_signup_new_user'
   )
 );
 
@@ -1580,7 +1595,7 @@ FROM affiliates a WHERE a.status IN ('active', 'inactive');
 
 DROP FUNCTION IF EXISTS get_user_subscription_status(UUID);
 
-CREATE OR REPLACE FUNCTION get_user_subscription_status(user_id_param UUID)
+CREATE OR REPLACE FUNCTION get_user_subscription_status(p_user_id UUID)
 RETURNS TABLE (
   -- ═══════════════════════════════════════════
   -- JOURNAL SUBSCRIPTION FIELDS (existing)
@@ -1656,11 +1671,10 @@ RETURNS TABLE (
   platform_cancel_at_period_end BOOLEAN,
   platform_cancelled_at TIMESTAMPTZ,
   platform_whop_membership_id TEXT,
-  platform_pro_trial_eligible BOOLEAN,
+  platform_finotaur_trial_eligible BOOLEAN,
   platform_core_trial_eligible BOOLEAN,
   platform_bundle_journal_granted BOOLEAN,
-  platform_bundle_newsletter_granted BOOLEAN,
-  platform_bundle_newsletter_choice TEXT
+  platform_bundle_newsletter_granted BOOLEAN
 )
 LANGUAGE plpgsql
 STABLE
@@ -1679,7 +1693,7 @@ BEGIN
     END
   INTO v_platform_trial_days_remaining
   FROM profiles p
-  WHERE p.id = user_id_param;
+  WHERE p.id = p_user_id;
 
   RETURN QUERY
   SELECT 
@@ -1757,16 +1771,15 @@ BEGIN
     p.platform_whop_membership_id::TEXT,
     
     -- Trial eligibility (NULL = eligible, NOT NULL = already used)
-    (p.platform_pro_trial_used_at IS NULL),
+    (p.platform_finotaur_trial_used_at IS NULL),
     (p.platform_core_trial_used_at IS NULL),
     
     -- Bundle status
     COALESCE(p.platform_bundle_journal_granted, FALSE),
-    COALESCE(p.platform_bundle_newsletter_granted, FALSE),
-    p.platform_bundle_newsletter_choice::TEXT
+    COALESCE(p.platform_bundle_newsletter_granted, FALSE)
     
   FROM profiles p
-  WHERE p.id = user_id_param;
+  WHERE p.id = p_user_id;
 END;
 $$;
 
@@ -1909,34 +1922,6 @@ ALTER TABLE whop_plan_mapping ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whop_webhook_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE affiliate_clicks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscription_events ENABLE ROW LEVEL SECURITY;
-
--- ===============================================
--- 🔥 PROFILES - Admin Access (with SECURITY DEFINER to avoid recursion)
--- ===============================================
-
--- Helper function to check admin status (SECURITY DEFINER bypasses RLS)
-CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM profiles 
-    WHERE id = auth.uid() 
-    AND role IN ('admin', 'super_admin')
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Grant execute to authenticated users
-GRANT EXECUTE ON FUNCTION is_admin() TO authenticated;
-
--- Policy: Users see own profile, Admins see all
-DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
-CREATE POLICY "Admins can view all profiles" ON profiles
-FOR SELECT
-USING (
-  auth.uid() = id  -- User sees their own profile
-  OR is_admin()    -- Admin sees all profiles
-);
 
 -- Plan mapping policies
 DROP POLICY IF EXISTS "Public can read active plan mapping" ON whop_plan_mapping;
@@ -2924,7 +2909,7 @@ BEGIN
     COALESCE(p.newsletter_enabled, FALSE) = TRUE 
       AND COALESCE(p.newsletter_status, 'inactive') IN ('active', 'trial')
   FROM profiles p
-  WHERE p.id = user_id_param;
+  WHERE p.id = p_user_id;
 END;
 $$;
 
@@ -3659,7 +3644,7 @@ BEGIN
     COALESCE(p.top_secret_enabled, FALSE) = TRUE 
       AND COALESCE(p.top_secret_status, 'inactive') = 'active'
   FROM profiles p
-  WHERE p.id = user_id_param;
+  WHERE p.id = p_user_id;
 END;
 $$;
 
@@ -5152,1445 +5137,3 @@ SELECT '🎉 DONE!' as status;
 -- 
 -- Manual run: SELECT run_daily_affiliate_tasks();
 -- ============================================
--- =====================================================
--- FINOTAUR ADMIN DASHBOARD STATS - v2.0.0
--- =====================================================
--- Date: 2026-01-23
--- 
--- 🔥 פונקציה משופרת שמחזירה:
--- - סה"כ משתמשים אמיתי (לא רק עם whop)
--- - פירוט Trial vs Paid לכל מוצר
--- - Revenue מדויק
--- =====================================================
-
-DROP FUNCTION IF EXISTS get_comprehensive_subscription_stats();
-
-CREATE OR REPLACE FUNCTION get_comprehensive_subscription_stats()
-RETURNS JSONB
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_result JSONB;
-BEGIN
-  SELECT jsonb_build_object(
-    'generated_at', NOW(),
-    
-    -- ═══════════════════════════════════════════
-    -- OVERALL STATS
-    -- ═══════════════════════════════════════════
-    'overall', (
-      SELECT jsonb_build_object(
-        'total_users', COUNT(*),
-        'active_today', COUNT(*) FILTER (WHERE last_login_at >= NOW() - INTERVAL '24 hours'),
-        'active_this_week', COUNT(*) FILTER (WHERE last_login_at >= NOW() - INTERVAL '7 days'),
-        'active_this_month', COUNT(*) FILTER (WHERE last_login_at >= NOW() - INTERVAL '30 days'),
-        'new_users_today', COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE),
-        'new_users_this_week', COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days'),
-        'new_users_this_month', COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days')
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- JOURNAL SUBSCRIPTIONS (with Whop = paid)
-    -- ═══════════════════════════════════════════
-    'journal', (
-      SELECT jsonb_build_object(
-        'total_subscribers', COUNT(*) FILTER (
-          WHERE whop_membership_id IS NOT NULL 
-          AND account_type IN ('basic', 'premium')
-          AND subscription_status IN ('active', 'trial')
-        ),
-        'total_paid', COUNT(*) FILTER (
-          WHERE whop_membership_id IS NOT NULL 
-          AND account_type IN ('basic', 'premium')
-          AND subscription_status = 'active'
-          AND payment_provider = 'whop'
-        ),
-        'total_in_trial', COUNT(*) FILTER (
-          WHERE whop_membership_id IS NOT NULL 
-          AND subscription_status = 'trial'
-        ),
-        'basic', jsonb_build_object(
-          'total', COUNT(*) FILTER (
-            WHERE account_type = 'basic' 
-            AND whop_membership_id IS NOT NULL
-            AND subscription_status IN ('active', 'trial')
-          ),
-          'monthly', jsonb_build_object(
-            'total', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'monthly'
-              AND whop_membership_id IS NOT NULL
-              AND subscription_status IN ('active', 'trial')
-            ),
-            'in_trial', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'monthly'
-              AND subscription_status = 'trial'
-              AND whop_membership_id IS NOT NULL
-            ),
-            'paid', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'monthly'
-              AND subscription_status = 'active'
-              AND whop_membership_id IS NOT NULL
-              AND payment_provider = 'whop'
-            )
-          ),
-          'yearly', jsonb_build_object(
-            'total', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'yearly'
-              AND whop_membership_id IS NOT NULL
-              AND subscription_status IN ('active', 'trial')
-            ),
-            'in_trial', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'yearly'
-              AND subscription_status = 'trial'
-              AND whop_membership_id IS NOT NULL
-            ),
-            'paid', COUNT(*) FILTER (
-              WHERE account_type = 'basic' 
-              AND subscription_interval = 'yearly'
-              AND subscription_status = 'active'
-              AND whop_membership_id IS NOT NULL
-            )
-          ),
-          'pending_cancellation', COUNT(*) FILTER (
-            WHERE account_type = 'basic'
-            AND subscription_cancel_at_period_end = TRUE
-            AND whop_membership_id IS NOT NULL
-          )
-        ),
-        'premium', jsonb_build_object(
-          'total', COUNT(*) FILTER (
-            WHERE account_type = 'premium' 
-            AND whop_membership_id IS NOT NULL
-            AND subscription_status IN ('active', 'trial')
-          ),
-          'monthly', jsonb_build_object(
-            'total', COUNT(*) FILTER (
-              WHERE account_type = 'premium' 
-              AND subscription_interval = 'monthly'
-              AND whop_membership_id IS NOT NULL
-              AND subscription_status IN ('active', 'trial')
-            ),
-            'in_trial', COUNT(*) FILTER (
-              WHERE account_type = 'premium' 
-              AND subscription_interval = 'monthly'
-              AND subscription_status = 'trial'
-              AND whop_membership_id IS NOT NULL
-            ),
-            'paid', COUNT(*) FILTER (
-              WHERE account_type = 'premium' 
-              AND subscription_interval = 'monthly'
-              AND subscription_status = 'active'
-              AND whop_membership_id IS NOT NULL
-            )
-          ),
-          'yearly', jsonb_build_object(
-            'total', COUNT(*) FILTER (
-              WHERE account_type = 'premium' 
-              AND subscription_interval = 'yearly'
-              AND whop_membership_id IS NOT NULL
-              AND subscription_status IN ('active', 'trial')
-            ),
-            'in_trial', 0,
-            'paid', COUNT(*) FILTER (
-              WHERE account_type = 'premium' 
-              AND subscription_interval = 'yearly'
-              AND subscription_status = 'active'
-              AND whop_membership_id IS NOT NULL
-            )
-          ),
-          'pending_cancellation', COUNT(*) FILTER (
-            WHERE account_type = 'premium'
-            AND subscription_cancel_at_period_end = TRUE
-            AND whop_membership_id IS NOT NULL
-          )
-        ),
-        -- Free users = registered but no journal subscription
-        'free', COUNT(*) FILTER (
-          WHERE (account_type IS NULL OR account_type = 'free' OR whop_membership_id IS NULL)
-          AND (newsletter_status IS NULL OR newsletter_status = 'inactive')
-          AND (top_secret_status IS NULL OR top_secret_status = 'inactive')
-        ),
-        -- Legacy users = has account_type but no whop (manual/old system)
-        'legacy_no_whop', COUNT(*) FILTER (
-          WHERE account_type IN ('basic', 'premium')
-          AND whop_membership_id IS NULL
-        )
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- NEWSLETTER (WAR ZONE)
-    -- ═══════════════════════════════════════════
-    'newsletter', (
-      SELECT jsonb_build_object(
-        'total_subscribers', COUNT(*) FILTER (
-          WHERE newsletter_status IN ('active', 'trial')
-        ),
-        'monthly', jsonb_build_object(
-          'total', COUNT(*) FILTER (
-            WHERE newsletter_status IN ('active', 'trial')
-          ),
-          'in_trial', COUNT(*) FILTER (
-            WHERE newsletter_status = 'trial'
-          ),
-          'paid', COUNT(*) FILTER (
-            WHERE newsletter_status = 'active'
-            AND newsletter_paid = TRUE
-          ),
-          'top_secret_discount', COUNT(*) FILTER (
-            WHERE newsletter_status IN ('active', 'trial')
-            AND top_secret_status = 'active'
-          )
-        ),
-        'yearly', jsonb_build_object(
-          'total', 0,
-          'paid', 0
-        ),
-        'cancelled', COUNT(*) FILTER (
-          WHERE newsletter_status = 'cancelled'
-        ),
-        'pending_cancellation', COUNT(*) FILTER (
-          WHERE newsletter_cancel_at_period_end = TRUE
-          AND newsletter_status IN ('active', 'trial')
-        )
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- TOP SECRET
-    -- ═══════════════════════════════════════════
-    'top_secret', (
-      SELECT jsonb_build_object(
-        'total_subscribers', COUNT(*) FILTER (
-          WHERE top_secret_status = 'active'
-          AND top_secret_enabled = TRUE
-        ),
-        'monthly', jsonb_build_object(
-          'total', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_interval = 'monthly'
-          ),
-          'in_trial', COUNT(*) FILTER (
-            WHERE top_secret_status = 'trial'
-            OR (top_secret_status = 'active' AND top_secret_started_at > NOW() - INTERVAL '14 days')
-          ),
-          'paid', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_interval = 'monthly'
-            AND top_secret_whop_membership_id IS NOT NULL
-          )
-        ),
-        'yearly', jsonb_build_object(
-          'total', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_interval = 'yearly'
-          ),
-          'in_trial', 0,
-          'paid', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_interval = 'yearly'
-            AND top_secret_whop_membership_id IS NOT NULL
-          )
-        ),
-        'journey', jsonb_build_object(
-          'in_trial', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_started_at > NOW() - INTERVAL '14 days'
-          ),
-          'month_1', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_started_at <= NOW() - INTERVAL '14 days'
-            AND top_secret_started_at > NOW() - INTERVAL '44 days'
-          ),
-          'month_2', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_started_at <= NOW() - INTERVAL '44 days'
-            AND top_secret_started_at > NOW() - INTERVAL '74 days'
-          ),
-          'month_3_plus', COUNT(*) FILTER (
-            WHERE top_secret_status = 'active'
-            AND top_secret_started_at <= NOW() - INTERVAL '74 days'
-          )
-        ),
-        'cancelled', COUNT(*) FILTER (
-          WHERE top_secret_status = 'cancelled'
-        ),
-        'pending_cancellation', COUNT(*) FILTER (
-          WHERE top_secret_cancel_at_period_end = TRUE
-          AND top_secret_status = 'active'
-        )
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- PLATFORM SUBSCRIPTIONS
-    -- ═══════════════════════════════════════════
-    'platform', (
-      SELECT jsonb_build_object(
-        'total_subscribers', COUNT(*) FILTER (
-          WHERE platform_plan IN ('core', 'pro', 'enterprise')
-          AND platform_subscription_status = 'active'
-        ),
-        'free', COUNT(*) FILTER (
-          WHERE platform_plan IS NULL OR platform_plan = 'free'
-        ),
-        'core', jsonb_build_object(
-          'total', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_subscription_status = 'active'),
-          'monthly', jsonb_build_object(
-            'total', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_billing_interval = 'monthly' AND platform_subscription_status = 'active'),
-            'in_trial', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_is_in_trial = TRUE),
-            'paid', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_billing_interval = 'monthly' AND platform_subscription_status = 'active' AND platform_is_in_trial = FALSE)
-          ),
-          'yearly', jsonb_build_object(
-            'total', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_billing_interval = 'yearly' AND platform_subscription_status = 'active'),
-            'paid', COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_billing_interval = 'yearly' AND platform_subscription_status = 'active')
-          )
-        ),
-        'pro', jsonb_build_object(
-          'total', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_subscription_status = 'active'),
-          'monthly', jsonb_build_object(
-            'total', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_billing_interval = 'monthly' AND platform_subscription_status = 'active'),
-            'in_trial', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_is_in_trial = TRUE),
-            'paid', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_billing_interval = 'monthly' AND platform_subscription_status = 'active' AND platform_is_in_trial = FALSE)
-          ),
-          'yearly', jsonb_build_object(
-            'total', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_billing_interval = 'yearly' AND platform_subscription_status = 'active'),
-            'paid', COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_billing_interval = 'yearly' AND platform_subscription_status = 'active')
-          ),
-          'trial_eligible', COUNT(*) FILTER (WHERE platform_pro_trial_used_at IS NULL)
-        ),
-        'enterprise', jsonb_build_object(
-          'total', COUNT(*) FILTER (WHERE platform_plan = 'enterprise')
-        ),
-        'pending_cancellation', COUNT(*) FILTER (
-          WHERE platform_cancel_at_period_end = TRUE
-          AND platform_subscription_status = 'active'
-        )
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- REVENUE (MRR Estimates)
-    -- Based on WHOP paid subscriptions only
-    -- ═══════════════════════════════════════════
-    'revenue', (
-      SELECT jsonb_build_object(
-        'journal_mrr', COALESCE(
-          (COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_status = 'active' AND whop_membership_id IS NOT NULL AND subscription_interval = 'monthly') * 19.99) +
-          (COUNT(*) FILTER (WHERE account_type = 'basic' AND subscription_status = 'active' AND whop_membership_id IS NOT NULL AND subscription_interval = 'yearly') * 12.42) +
-          (COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_status = 'active' AND whop_membership_id IS NOT NULL AND subscription_interval = 'monthly') * 39.99) +
-          (COUNT(*) FILTER (WHERE account_type = 'premium' AND subscription_status = 'active' AND whop_membership_id IS NOT NULL AND subscription_interval = 'yearly') * 24.92)
-        , 0),
-        'newsletter_mrr', COALESCE(
-          (COUNT(*) FILTER (WHERE newsletter_status = 'active' AND newsletter_paid = TRUE) * 49) +
-          (COUNT(*) FILTER (WHERE newsletter_status = 'active' AND newsletter_paid = TRUE AND top_secret_status = 'active') * -29.01)
-        , 0),
-        'top_secret_mrr', COALESCE(
-          (COUNT(*) FILTER (WHERE top_secret_status = 'active' AND top_secret_interval = 'monthly' AND top_secret_whop_membership_id IS NOT NULL) * 70) +
-          (COUNT(*) FILTER (WHERE top_secret_status = 'active' AND top_secret_interval = 'yearly' AND top_secret_whop_membership_id IS NOT NULL) * 41.67)
-        , 0),
-        'platform_mrr', COALESCE(
-          (COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_subscription_status = 'active' AND platform_billing_interval = 'monthly') * 39) +
-          (COUNT(*) FILTER (WHERE platform_plan = 'core' AND platform_subscription_status = 'active' AND platform_billing_interval = 'yearly') * 29.08) +
-          (COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_subscription_status = 'active' AND platform_billing_interval = 'monthly') * 69) +
-          (COUNT(*) FILTER (WHERE platform_plan = 'pro' AND platform_subscription_status = 'active' AND platform_billing_interval = 'yearly') * 51.58)
-        , 0)
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    ),
-    
-    -- ═══════════════════════════════════════════
-    -- TRIAL SUMMARY (across all products)
-    -- ═══════════════════════════════════════════
-    'trials', (
-      SELECT jsonb_build_object(
-        'total_in_trial', 
-          COUNT(*) FILTER (WHERE subscription_status = 'trial' AND whop_membership_id IS NOT NULL) +
-          COUNT(*) FILTER (WHERE newsletter_status = 'trial') +
-          COUNT(*) FILTER (WHERE top_secret_status = 'active' AND top_secret_started_at > NOW() - INTERVAL '14 days') +
-          COUNT(*) FILTER (WHERE platform_is_in_trial = TRUE),
-        'journal_trial', COUNT(*) FILTER (WHERE subscription_status = 'trial' AND whop_membership_id IS NOT NULL),
-        'newsletter_trial', COUNT(*) FILTER (WHERE newsletter_status = 'trial'),
-        'top_secret_trial', COUNT(*) FILTER (WHERE top_secret_status = 'active' AND top_secret_started_at > NOW() - INTERVAL '14 days'),
-        'platform_trial', COUNT(*) FILTER (WHERE platform_is_in_trial = TRUE)
-      )
-      FROM profiles
-      WHERE email IS NOT NULL
-    )
-    
-  ) INTO v_result;
-  
-  RETURN v_result;
-END;
-$$;
-
--- Grants
-GRANT EXECUTE ON FUNCTION get_comprehensive_subscription_stats() TO authenticated;
-GRANT EXECUTE ON FUNCTION get_comprehensive_subscription_stats() TO service_role;
-
--- Test it
-SELECT get_comprehensive_subscription_stats();
-
--- =====================================================
--- 🔥 ADD THIS TO THE END OF YOUR DATABASE FILE
--- =====================================================
--- FINOTAUR ADMIN USER MANAGEMENT - v1.0.0
--- Date: 2026-01-23
--- 
--- הוסף את הקוד הזה לסוף קובץ ה-SQL שלך
--- (אחרי SELECT '🎉 DONE!' as status; האחרון)
--- =====================================================
-
-
--- ============================================
--- PART 20: ADMIN USER MANAGEMENT FUNCTIONS
--- ============================================
-
--- ----------------------------------------
--- 20.1 Admin Update User Function
--- מאפשר לאדמין לעדכן כל שדה בפרופיל
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_update_user(UUID, JSONB);
-
-CREATE OR REPLACE FUNCTION admin_update_user(
-  p_user_id UUID,
-  p_updates JSONB
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_id UUID;
-  v_admin_role TEXT;
-  v_target_role TEXT;
-  v_allowed_fields TEXT[] := ARRAY[
-    'account_type', 'subscription_status', 'subscription_interval',
-    'subscription_expires_at', 'max_trades', 'is_banned', 'role',
-    'newsletter_enabled', 'newsletter_status',
-    'top_secret_enabled', 'top_secret_status',
-    'platform_plan', 'platform_subscription_status',
-    'display_name'
-  ];
-  v_field TEXT;
-BEGIN
-  -- Get admin info
-  SELECT id, role INTO v_admin_id, v_admin_role
-  FROM profiles
-  WHERE id = auth.uid();
-
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Admin access required');
-  END IF;
-
-  -- Get target user's role
-  SELECT role INTO v_target_role FROM profiles WHERE id = p_user_id;
-
-  IF v_target_role IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  -- Only super_admin can edit admins
-  IF v_target_role = 'admin' AND v_admin_role != 'super_admin' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Only super_admin can edit admin users');
-  END IF;
-
-  -- Prevent editing super_admin
-  IF v_target_role = 'super_admin' THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Cannot edit super_admin users');
-  END IF;
-
-  -- Validate fields
-  FOR v_field IN SELECT jsonb_object_keys(p_updates) LOOP
-    IF NOT (v_field = ANY(v_allowed_fields)) THEN
-      RETURN jsonb_build_object('success', false, 'error', 'Invalid field: ' || v_field);
-    END IF;
-  END LOOP;
-
-  -- Execute update
-  UPDATE profiles
-  SET
-    account_type = COALESCE((p_updates->>'account_type')::TEXT, account_type),
-    subscription_status = COALESCE((p_updates->>'subscription_status')::TEXT, subscription_status),
-    subscription_interval = COALESCE((p_updates->>'subscription_interval')::TEXT, subscription_interval),
-    subscription_expires_at = COALESCE((p_updates->>'subscription_expires_at')::TIMESTAMPTZ, subscription_expires_at),
-    max_trades = COALESCE((p_updates->>'max_trades')::INTEGER, max_trades),
-    is_banned = COALESCE((p_updates->>'is_banned')::BOOLEAN, is_banned),
-    role = COALESCE((p_updates->>'role')::TEXT, role),
-    newsletter_enabled = COALESCE((p_updates->>'newsletter_enabled')::BOOLEAN, newsletter_enabled),
-    newsletter_status = COALESCE((p_updates->>'newsletter_status')::TEXT, newsletter_status),
-    top_secret_enabled = COALESCE((p_updates->>'top_secret_enabled')::BOOLEAN, top_secret_enabled),
-    top_secret_status = COALESCE((p_updates->>'top_secret_status')::TEXT, top_secret_status),
-    platform_plan = COALESCE((p_updates->>'platform_plan')::TEXT, platform_plan),
-    platform_subscription_status = COALESCE((p_updates->>'platform_subscription_status')::TEXT, platform_subscription_status),
-    display_name = COALESCE((p_updates->>'display_name')::TEXT, display_name),
-    updated_at = NOW()
-  WHERE id = p_user_id;
-
-  -- Log the action
-  INSERT INTO subscription_events (user_id, event_type, metadata)
-  VALUES (
-    p_user_id,
-    'admin_update',
-    jsonb_build_object(
-      'updated_by', v_admin_id,
-      'updates', p_updates
-    )
-  );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', p_user_id,
-    'updates_applied', p_updates
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.2 Admin Ban/Unban User Function
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_toggle_ban(UUID, BOOLEAN, TEXT);
-
-CREATE OR REPLACE FUNCTION admin_toggle_ban(
-  p_user_id UUID,
-  p_is_banned BOOLEAN,
-  p_reason TEXT DEFAULT NULL
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_id UUID;
-  v_admin_role TEXT;
-  v_target_role TEXT;
-  v_email TEXT;
-BEGIN
-  -- Get admin info
-  SELECT id, role INTO v_admin_id, v_admin_role
-  FROM profiles
-  WHERE id = auth.uid();
-
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  -- Get target info
-  SELECT role, email INTO v_target_role, v_email 
-  FROM profiles 
-  WHERE id = p_user_id;
-
-  IF v_target_role IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  -- Prevent banning admins
-  IF v_target_role IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Cannot ban admin users');
-  END IF;
-
-  -- Update ban status
-  UPDATE profiles
-  SET 
-    is_banned = p_is_banned,
-    updated_at = NOW()
-  WHERE id = p_user_id;
-
-  -- Log the action
-  INSERT INTO subscription_events (user_id, event_type, reason, metadata)
-  VALUES (
-    p_user_id,
-    CASE WHEN p_is_banned THEN 'user_banned' ELSE 'user_unbanned' END,
-    p_reason,
-    jsonb_build_object(
-      'banned_by', v_admin_id,
-      'reason', p_reason
-    )
-  );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', p_user_id,
-    'email', v_email,
-    'is_banned', p_is_banned,
-    'reason', p_reason
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.3 Admin Get User Full Details
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_get_user_details(UUID);
-
-CREATE OR REPLACE FUNCTION admin_get_user_details(p_user_id UUID)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-  v_result JSONB;
-BEGIN
-  -- Check admin
-  SELECT role INTO v_admin_role FROM profiles WHERE id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  SELECT jsonb_build_object(
-    'success', true,
-    'user', jsonb_build_object(
-      'id', p.id,
-      'email', p.email,
-      'display_name', p.display_name,
-      'role', p.role,
-      'is_banned', p.is_banned,
-      'created_at', p.created_at,
-      'last_login_at', p.last_login_at
-    ),
-    'journal', jsonb_build_object(
-      'account_type', p.account_type,
-      'subscription_status', p.subscription_status,
-      'subscription_interval', p.subscription_interval,
-      'subscription_expires_at', p.subscription_expires_at,
-      'whop_membership_id', p.whop_membership_id,
-      'max_trades', p.max_trades,
-      'trade_count', p.trade_count
-    ),
-    'newsletter', jsonb_build_object(
-      'enabled', p.newsletter_enabled,
-      'status', p.newsletter_status,
-      'whop_membership_id', p.newsletter_whop_membership_id,
-      'expires_at', p.newsletter_expires_at
-    ),
-    'top_secret', jsonb_build_object(
-      'enabled', p.top_secret_enabled,
-      'status', p.top_secret_status,
-      'whop_membership_id', p.top_secret_whop_membership_id,
-      'expires_at', p.top_secret_expires_at
-    ),
-    'platform', jsonb_build_object(
-      'plan', p.platform_plan,
-      'status', p.platform_subscription_status,
-      'whop_membership_id', p.platform_whop_membership_id,
-      'expires_at', p.platform_subscription_expires_at
-    )
-  ) INTO v_result
-  FROM profiles p
-  WHERE p.id = p_user_id;
-
-  IF v_result IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  RETURN v_result;
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.4 Admin Search Users
--- חיפוש משתמשים לפי email, display_name, או id
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_search_users(TEXT, INTEGER, INTEGER);
-
-CREATE OR REPLACE FUNCTION admin_search_users(
-  p_query TEXT,
-  p_limit INTEGER DEFAULT 50,
-  p_offset INTEGER DEFAULT 0
-)
-RETURNS TABLE (
-  id UUID,
-  email TEXT,
-  display_name TEXT,
-  account_type TEXT,
-  subscription_status TEXT,
-  newsletter_status TEXT,
-  top_secret_status TEXT,
-  platform_plan TEXT,
-  is_banned BOOLEAN,
-  role TEXT,
-  created_at TIMESTAMPTZ,
-  last_login_at TIMESTAMPTZ,
-  total_count BIGINT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-  v_total BIGINT;
-  v_search TEXT;
-BEGIN
-  -- Check admin
-  SELECT p.role INTO v_admin_role FROM profiles p WHERE p.id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RAISE EXCEPTION 'Unauthorized: Admin access required';
-  END IF;
-
-  -- Prepare search pattern
-  v_search := '%' || LOWER(COALESCE(p_query, '')) || '%';
-
-  -- Get total count
-  SELECT COUNT(*) INTO v_total
-  FROM profiles p
-  WHERE 
-    LOWER(p.email) LIKE v_search
-    OR LOWER(COALESCE(p.display_name, '')) LIKE v_search
-    OR p.id::TEXT LIKE v_search;
-
-  -- Return results
-  RETURN QUERY
-  SELECT 
-    p.id,
-    p.email,
-    p.display_name,
-    p.account_type,
-    p.subscription_status,
-    p.newsletter_status,
-    p.top_secret_status,
-    p.platform_plan,
-    p.is_banned,
-    p.role,
-    p.created_at,
-    p.last_login_at,
-    v_total as total_count
-  FROM profiles p
-  WHERE 
-    LOWER(p.email) LIKE v_search
-    OR LOWER(COALESCE(p.display_name, '')) LIKE v_search
-    OR p.id::TEXT LIKE v_search
-  ORDER BY p.created_at DESC
-  LIMIT p_limit
-  OFFSET p_offset;
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.5 Admin List Users with Filters
--- סינון משתמשים לפי קריטריונים שונים
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_list_users(JSONB, INTEGER, INTEGER, TEXT, TEXT);
-
-CREATE OR REPLACE FUNCTION admin_list_users(
-  p_filters JSONB DEFAULT '{}',
-  p_limit INTEGER DEFAULT 50,
-  p_offset INTEGER DEFAULT 0,
-  p_sort_by TEXT DEFAULT 'created_at',
-  p_sort_order TEXT DEFAULT 'DESC'
-)
-RETURNS TABLE (
-  id UUID,
-  email TEXT,
-  display_name TEXT,
-  account_type TEXT,
-  subscription_status TEXT,
-  newsletter_status TEXT,
-  top_secret_status TEXT,
-  platform_plan TEXT,
-  is_banned BOOLEAN,
-  role TEXT,
-  created_at TIMESTAMPTZ,
-  last_login_at TIMESTAMPTZ,
-  total_count BIGINT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-  v_total BIGINT;
-  v_where_clauses TEXT[] := ARRAY['1=1'];
-  v_sql TEXT;
-BEGIN
-  -- Check admin
-  SELECT p.role INTO v_admin_role FROM profiles p WHERE p.id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RAISE EXCEPTION 'Unauthorized: Admin access required';
-  END IF;
-
-  -- Build where clauses based on filters
-  IF p_filters->>'account_type' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.account_type = %L', p_filters->>'account_type'));
-  END IF;
-
-  IF p_filters->>'subscription_status' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.subscription_status = %L', p_filters->>'subscription_status'));
-  END IF;
-
-  IF p_filters->>'newsletter_status' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.newsletter_status = %L', p_filters->>'newsletter_status'));
-  END IF;
-
-  IF p_filters->>'top_secret_status' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.top_secret_status = %L', p_filters->>'top_secret_status'));
-  END IF;
-
-  IF p_filters->>'platform_plan' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.platform_plan = %L', p_filters->>'platform_plan'));
-  END IF;
-
-  IF p_filters->>'is_banned' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.is_banned = %L', (p_filters->>'is_banned')::BOOLEAN));
-  END IF;
-
-  IF p_filters->>'role' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.role = %L', p_filters->>'role'));
-  END IF;
-
-  IF p_filters->>'created_after' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.created_at >= %L', (p_filters->>'created_after')::TIMESTAMPTZ));
-  END IF;
-
-  IF p_filters->>'created_before' IS NOT NULL THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      format('p.created_at <= %L', (p_filters->>'created_before')::TIMESTAMPTZ));
-  END IF;
-
-  -- Has any active subscription
-  IF (p_filters->>'has_active_subscription')::BOOLEAN = true THEN
-    v_where_clauses := array_append(v_where_clauses, 
-      '(p.subscription_status = ''active'' OR p.newsletter_status = ''active'' OR p.top_secret_status = ''active'')');
-  END IF;
-
-  -- Get total count
-  EXECUTE format(
-    'SELECT COUNT(*) FROM profiles p WHERE %s',
-    array_to_string(v_where_clauses, ' AND ')
-  ) INTO v_total;
-
-  -- Validate sort column
-  IF p_sort_by NOT IN ('created_at', 'email', 'last_login_at', 'account_type') THEN
-    p_sort_by := 'created_at';
-  END IF;
-  IF p_sort_order NOT IN ('ASC', 'DESC') THEN
-    p_sort_order := 'DESC';
-  END IF;
-
-  -- Return results
-  RETURN QUERY EXECUTE format(
-    'SELECT 
-      p.id,
-      p.email,
-      p.display_name,
-      p.account_type,
-      p.subscription_status,
-      p.newsletter_status,
-      p.top_secret_status,
-      p.platform_plan,
-      p.is_banned,
-      p.role,
-      p.created_at,
-      p.last_login_at,
-      %s::BIGINT as total_count
-    FROM profiles p
-    WHERE %s
-    ORDER BY p.%I %s
-    LIMIT %s OFFSET %s',
-    v_total,
-    array_to_string(v_where_clauses, ' AND '),
-    p_sort_by,
-    p_sort_order,
-    p_limit,
-    p_offset
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.6 Admin Get User History
--- היסטוריית פעולות על משתמש
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_get_user_history(UUID, INTEGER);
-
-CREATE OR REPLACE FUNCTION admin_get_user_history(
-  p_user_id UUID,
-  p_limit INTEGER DEFAULT 100
-)
-RETURNS TABLE (
-  id BIGINT,
-  event_type TEXT,
-  old_plan TEXT,
-  new_plan TEXT,
-  reason TEXT,
-  metadata JSONB,
-  created_at TIMESTAMPTZ
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-BEGIN
-  -- Check admin
-  SELECT role INTO v_admin_role FROM profiles WHERE id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RAISE EXCEPTION 'Unauthorized: Admin access required';
-  END IF;
-
-  RETURN QUERY
-  SELECT 
-    se.id,
-    se.event_type,
-    se.old_plan,
-    se.new_plan,
-    se.reason,
-    se.metadata,
-    se.created_at
-  FROM subscription_events se
-  WHERE se.user_id = p_user_id
-  ORDER BY se.created_at DESC
-  LIMIT p_limit;
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.7 Admin Grant Access
--- מתן גישה ידנית למוצר
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_grant_access(UUID, TEXT, TEXT, INTEGER);
-
-CREATE OR REPLACE FUNCTION admin_grant_access(
-  p_user_id UUID,
-  p_product TEXT,        -- 'journal', 'newsletter', 'top_secret', 'platform'
-  p_plan TEXT,           -- 'basic', 'premium', 'active', 'core', 'pro', etc.
-  p_duration_days INTEGER DEFAULT 30
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_id UUID;
-  v_admin_role TEXT;
-  v_expires_at TIMESTAMPTZ;
-  v_email TEXT;
-BEGIN
-  -- Get admin info
-  SELECT id, role INTO v_admin_id, v_admin_role
-  FROM profiles WHERE id = auth.uid();
-
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  -- Check user exists
-  SELECT email INTO v_email FROM profiles WHERE id = p_user_id;
-  IF v_email IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  -- Calculate expiration
-  v_expires_at := NOW() + (p_duration_days || ' days')::INTERVAL;
-
-  -- Update based on product
-  CASE p_product
-    WHEN 'journal' THEN
-      UPDATE profiles SET
-        account_type = p_plan,
-        subscription_status = 'active',
-        subscription_expires_at = v_expires_at,
-        max_trades = CASE 
-          WHEN p_plan = 'premium' THEN -1 
-          WHEN p_plan = 'basic' THEN 100 
-          ELSE 10 
-        END,
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'newsletter' THEN
-      UPDATE profiles SET
-        newsletter_enabled = true,
-        newsletter_status = 'active',
-        newsletter_expires_at = v_expires_at,
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'top_secret' THEN
-      UPDATE profiles SET
-        top_secret_enabled = true,
-        top_secret_status = 'active',
-        top_secret_expires_at = v_expires_at,
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'platform' THEN
-      UPDATE profiles SET
-        platform_plan = p_plan,
-        platform_subscription_status = 'active',
-        platform_subscription_expires_at = v_expires_at,
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    ELSE
-      RETURN jsonb_build_object('success', false, 'error', 'Invalid product: ' || p_product);
-  END CASE;
-
-  -- Log the action
-  INSERT INTO subscription_events (user_id, event_type, new_plan, metadata)
-  VALUES (
-    p_user_id,
-    'admin_grant_access',
-    p_plan,
-    jsonb_build_object(
-      'granted_by', v_admin_id,
-      'product', p_product,
-      'plan', p_plan,
-      'duration_days', p_duration_days,
-      'expires_at', v_expires_at
-    )
-  );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', p_user_id,
-    'email', v_email,
-    'product', p_product,
-    'plan', p_plan,
-    'expires_at', v_expires_at
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.8 Admin Revoke Access
--- הסרת גישה למוצר
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_revoke_access(UUID, TEXT);
-
-CREATE OR REPLACE FUNCTION admin_revoke_access(
-  p_user_id UUID,
-  p_product TEXT        -- 'journal', 'newsletter', 'top_secret', 'platform', 'all'
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_id UUID;
-  v_admin_role TEXT;
-  v_email TEXT;
-BEGIN
-  -- Get admin info
-  SELECT id, role INTO v_admin_id, v_admin_role
-  FROM profiles WHERE id = auth.uid();
-
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  -- Check user exists
-  SELECT email INTO v_email FROM profiles WHERE id = p_user_id;
-  IF v_email IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  -- Revoke based on product
-  CASE p_product
-    WHEN 'journal' THEN
-      UPDATE profiles SET
-        account_type = 'free',
-        subscription_status = 'cancelled',
-        max_trades = 10,
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'newsletter' THEN
-      UPDATE profiles SET
-        newsletter_enabled = false,
-        newsletter_status = 'cancelled',
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'top_secret' THEN
-      UPDATE profiles SET
-        top_secret_enabled = false,
-        top_secret_status = 'cancelled',
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'platform' THEN
-      UPDATE profiles SET
-        platform_plan = 'free',
-        platform_subscription_status = 'cancelled',
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    WHEN 'all' THEN
-      UPDATE profiles SET
-        account_type = 'free',
-        subscription_status = 'cancelled',
-        max_trades = 10,
-        newsletter_enabled = false,
-        newsletter_status = 'cancelled',
-        top_secret_enabled = false,
-        top_secret_status = 'cancelled',
-        platform_plan = 'free',
-        platform_subscription_status = 'cancelled',
-        updated_at = NOW()
-      WHERE id = p_user_id;
-      
-    ELSE
-      RETURN jsonb_build_object('success', false, 'error', 'Invalid product: ' || p_product);
-  END CASE;
-
-  -- Log the action
-  INSERT INTO subscription_events (user_id, event_type, metadata)
-  VALUES (
-    p_user_id,
-    'admin_revoke_access',
-    jsonb_build_object(
-      'revoked_by', v_admin_id,
-      'product', p_product
-    )
-  );
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'user_id', p_user_id,
-    'email', v_email,
-    'product', p_product,
-    'status', 'revoked'
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.9 Admin Get User Stats
--- סטטיסטיקות על משתמש בודד
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_get_user_stats(UUID);
-
-CREATE OR REPLACE FUNCTION admin_get_user_stats(p_user_id UUID)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-  v_result JSONB;
-  v_trade_count INTEGER;
-  v_open_trades INTEGER;
-  v_closed_trades INTEGER;
-  v_total_pnl DECIMAL;
-  v_win_rate DECIMAL;
-  v_watchlist_count INTEGER;
-  v_notes_count INTEGER;
-  v_event_count INTEGER;
-  v_first_event TIMESTAMPTZ;
-  v_last_event TIMESTAMPTZ;
-BEGIN
-  -- Check admin
-  SELECT role INTO v_admin_role FROM profiles WHERE id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  -- Get trade stats
-  SELECT 
-    COUNT(*),
-    COUNT(*) FILTER (WHERE status = 'open'),
-    COUNT(*) FILTER (WHERE status = 'closed'),
-    COALESCE(SUM(pnl) FILTER (WHERE status = 'closed'), 0),
-    CASE 
-      WHEN COUNT(*) FILTER (WHERE status = 'closed') > 0 
-      THEN ROUND(
-        COUNT(*) FILTER (WHERE status = 'closed' AND pnl > 0)::DECIMAL / 
-        COUNT(*) FILTER (WHERE status = 'closed') * 100, 2
-      )
-      ELSE 0
-    END
-  INTO v_trade_count, v_open_trades, v_closed_trades, v_total_pnl, v_win_rate
-  FROM trades
-  WHERE user_id = p_user_id;
-
-  -- Get watchlist count
-  SELECT COUNT(*) INTO v_watchlist_count
-  FROM watchlist
-  WHERE user_id = p_user_id;
-
-  -- Get notes count
-  SELECT COUNT(*) INTO v_notes_count
-  FROM trading_notes
-  WHERE user_id = p_user_id;
-
-  -- Get subscription event stats
-  SELECT 
-    COUNT(*),
-    MIN(created_at),
-    MAX(created_at)
-  INTO v_event_count, v_first_event, v_last_event
-  FROM subscription_events
-  WHERE user_id = p_user_id;
-
-  -- Build result
-  SELECT jsonb_build_object(
-    'success', true,
-    'user_id', p_user_id,
-    'trading', jsonb_build_object(
-      'total_trades', v_trade_count,
-      'open_trades', v_open_trades,
-      'closed_trades', v_closed_trades,
-      'total_pnl', v_total_pnl,
-      'win_rate', v_win_rate
-    ),
-    'activity', jsonb_build_object(
-      'watchlist_items', v_watchlist_count,
-      'notes_count', v_notes_count,
-      'last_login', p.last_login_at,
-      'account_age_days', EXTRACT(DAY FROM NOW() - p.created_at)::INTEGER
-    ),
-    'subscription', jsonb_build_object(
-      'total_events', v_event_count,
-      'first_event', v_first_event,
-      'last_event', v_last_event
-    )
-  ) INTO v_result
-  FROM profiles p
-  WHERE p.id = p_user_id;
-
-  IF v_result IS NULL THEN
-    RETURN jsonb_build_object('success', false, 'error', 'User not found');
-  END IF;
-
-  RETURN v_result;
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.10 Admin Export Users
--- יצוא משתמשים לפורמט CSV
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_export_users(JSONB);
-
-CREATE OR REPLACE FUNCTION admin_export_users(
-  p_filters JSONB DEFAULT '{}'
-)
-RETURNS TABLE (
-  id TEXT,
-  email TEXT,
-  display_name TEXT,
-  role TEXT,
-  is_banned TEXT,
-  created_at TEXT,
-  last_login_at TEXT,
-  -- Journal
-  journal_plan TEXT,
-  journal_status TEXT,
-  journal_expires TEXT,
-  -- Newsletter
-  newsletter_status TEXT,
-  newsletter_expires TEXT,
-  -- Top Secret
-  top_secret_status TEXT,
-  top_secret_expires TEXT,
-  -- Platform
-  platform_plan TEXT,
-  platform_status TEXT,
-  platform_expires TEXT,
-  -- Stats
-  trade_count TEXT,
-  max_trades TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-BEGIN
-  -- Check admin
-  SELECT p.role INTO v_admin_role FROM profiles p WHERE p.id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RAISE EXCEPTION 'Unauthorized: Admin access required';
-  END IF;
-
-  RETURN QUERY
-  SELECT 
-    p.id::TEXT,
-    p.email::TEXT,
-    COALESCE(p.display_name, '')::TEXT,
-    COALESCE(p.role, 'user')::TEXT,
-    CASE WHEN p.is_banned THEN 'Yes' ELSE 'No' END::TEXT,
-    TO_CHAR(p.created_at, 'YYYY-MM-DD HH24:MI:SS')::TEXT,
-    COALESCE(TO_CHAR(p.last_login_at, 'YYYY-MM-DD HH24:MI:SS'), '')::TEXT,
-    -- Journal
-    COALESCE(p.account_type, 'free')::TEXT,
-    COALESCE(p.subscription_status, 'inactive')::TEXT,
-    COALESCE(TO_CHAR(p.subscription_expires_at, 'YYYY-MM-DD'), '')::TEXT,
-    -- Newsletter
-    COALESCE(p.newsletter_status, 'inactive')::TEXT,
-    COALESCE(TO_CHAR(p.newsletter_expires_at, 'YYYY-MM-DD'), '')::TEXT,
-    -- Top Secret
-    COALESCE(p.top_secret_status, 'inactive')::TEXT,
-    COALESCE(TO_CHAR(p.top_secret_expires_at, 'YYYY-MM-DD'), '')::TEXT,
-    -- Platform
-    COALESCE(p.platform_plan, 'free')::TEXT,
-    COALESCE(p.platform_subscription_status, 'inactive')::TEXT,
-    COALESCE(TO_CHAR(p.platform_subscription_expires_at, 'YYYY-MM-DD'), '')::TEXT,
-    -- Stats
-    COALESCE(p.trade_count, 0)::TEXT,
-    COALESCE(p.max_trades, 10)::TEXT
-  FROM profiles p
-  WHERE 
-    (p_filters->>'account_type' IS NULL OR p.account_type = p_filters->>'account_type')
-    AND (p_filters->>'subscription_status' IS NULL OR p.subscription_status = p_filters->>'subscription_status')
-    AND (p_filters->>'is_banned' IS NULL OR p.is_banned = (p_filters->>'is_banned')::BOOLEAN)
-  ORDER BY p.created_at DESC;
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.11 Admin Dashboard Stats
--- סטטיסטיקות כלליות לדשבורד
--- ----------------------------------------
-
-DROP FUNCTION IF EXISTS admin_get_dashboard_stats();
-
-CREATE OR REPLACE FUNCTION admin_get_dashboard_stats()
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_admin_role TEXT;
-BEGIN
-  -- Check admin
-  SELECT role INTO v_admin_role FROM profiles WHERE id = auth.uid();
-  IF v_admin_role NOT IN ('admin', 'super_admin') THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Unauthorized');
-  END IF;
-
-  RETURN jsonb_build_object(
-    'success', true,
-    'users', jsonb_build_object(
-      'total', (SELECT COUNT(*) FROM profiles),
-      'active_today', (SELECT COUNT(*) FROM profiles WHERE last_login_at > NOW() - INTERVAL '1 day'),
-      'active_week', (SELECT COUNT(*) FROM profiles WHERE last_login_at > NOW() - INTERVAL '7 days'),
-      'banned', (SELECT COUNT(*) FROM profiles WHERE is_banned = true),
-      'new_today', (SELECT COUNT(*) FROM profiles WHERE created_at > NOW() - INTERVAL '1 day'),
-      'new_week', (SELECT COUNT(*) FROM profiles WHERE created_at > NOW() - INTERVAL '7 days')
-    ),
-    'subscriptions', jsonb_build_object(
-      'journal_active', (SELECT COUNT(*) FROM profiles WHERE subscription_status = 'active'),
-      'journal_premium', (SELECT COUNT(*) FROM profiles WHERE account_type = 'premium' AND subscription_status = 'active'),
-      'journal_basic', (SELECT COUNT(*) FROM profiles WHERE account_type = 'basic' AND subscription_status = 'active'),
-      'newsletter_active', (SELECT COUNT(*) FROM profiles WHERE newsletter_status = 'active'),
-      'top_secret_active', (SELECT COUNT(*) FROM profiles WHERE top_secret_status = 'active'),
-      'platform_paid', (SELECT COUNT(*) FROM profiles WHERE platform_plan IN ('core', 'pro', 'enterprise') AND platform_subscription_status = 'active')
-    ),
-    'trading', jsonb_build_object(
-      'total_trades', (SELECT COUNT(*) FROM trades),
-      'trades_today', (SELECT COUNT(*) FROM trades WHERE created_at > NOW() - INTERVAL '1 day'),
-      'open_positions', (SELECT COUNT(*) FROM trades WHERE status = 'open')
-    )
-  );
-END;
-$$;
-
-
--- ----------------------------------------
--- 20.12 GRANTS
--- ----------------------------------------
-
-GRANT EXECUTE ON FUNCTION admin_update_user(UUID, JSONB) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_toggle_ban(UUID, BOOLEAN, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_get_user_details(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_search_users(TEXT, INTEGER, INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_list_users(JSONB, INTEGER, INTEGER, TEXT, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_get_user_history(UUID, INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_grant_access(UUID, TEXT, TEXT, INTEGER) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_revoke_access(UUID, TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_get_user_stats(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_export_users(JSONB) TO authenticated;
-GRANT EXECUTE ON FUNCTION admin_get_dashboard_stats() TO authenticated;
-
-
--- ----------------------------------------
--- 20.13 VERIFICATION
--- ----------------------------------------
-
-SELECT '========== PART 20: ADMIN FUNCTIONS ==========' as section;
-
-SELECT 
-  'CORE FUNCTIONS' as check_type,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_update_user') THEN '✅' ELSE '❌' END as update_user,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_toggle_ban') THEN '✅' ELSE '❌' END as toggle_ban,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_get_user_details') THEN '✅' ELSE '❌' END as get_details;
-
-SELECT 
-  'SEARCH & LIST' as check_type,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_search_users') THEN '✅' ELSE '❌' END as search_users,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_list_users') THEN '✅' ELSE '❌' END as list_users,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_get_user_history') THEN '✅' ELSE '❌' END as get_history;
-
-SELECT 
-  'ACCESS CONTROL' as check_type,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_grant_access') THEN '✅' ELSE '❌' END as grant_access,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_revoke_access') THEN '✅' ELSE '❌' END as revoke_access;
-
-SELECT 
-  'STATS & EXPORT' as check_type,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_get_user_stats') THEN '✅' ELSE '❌' END as user_stats,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_export_users') THEN '✅' ELSE '❌' END as export_users,
-  CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'admin_get_dashboard_stats') THEN '✅' ELSE '❌' END as dashboard_stats;
-
-SELECT '🎉 PART 20 COMPLETE - ALL ADMIN FUNCTIONS READY!' as status;

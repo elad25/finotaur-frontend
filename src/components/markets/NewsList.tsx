@@ -465,7 +465,7 @@ export function NewsList() {
       {/* Footer */}
       <div className="flex items-center justify-center pt-6 border-t border-border/30">
         <p className="text-xs text-muted-foreground/50">
-          Powered by Finnhub & Polygon • Real-time market intelligence
+          Powered by Polygon • Real-time market intelligence
         </p>
       </div>
     </div>

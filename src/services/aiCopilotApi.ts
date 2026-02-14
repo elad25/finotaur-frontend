@@ -1,17 +1,52 @@
 // src/services/aiCopilotApi.ts
 // FINOTAUR AI Copilot - API Service
+// 🔥 FIXED: Auth header now uses correct localStorage key
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { supabase } from '@/lib/supabase';
 
-// Helper to get auth headers
-function getAuthHeaders(): HeadersInit {
-  // Get user ID from localStorage or auth context
-  const user = JSON.parse(localStorage.getItem('supabase.auth.token') || '{}');
-  const userId = user?.currentSession?.user?.id;
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+// 🔥 FIX: Get user ID from Supabase session properly
+async function getAuthHeaders(): Promise<HeadersInit> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id || '';
+    
+    console.log('[AI Copilot API] Auth header - userId:', userId ? userId.substring(0, 8) + '...' : 'MISSING');
+    
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': userId,
+    };
+  } catch (error) {
+    console.error('[AI Copilot API] Failed to get session:', error);
+    return {
+      'Content-Type': 'application/json',
+      'x-user-id': '',
+    };
+  }
+}
+
+// Sync version for backwards compatibility (uses cached session)
+function getAuthHeadersSync(): HeadersInit {
+  // Try to get from the correct localStorage key
+  const authData = localStorage.getItem('finotaur-auth-token');
+  if (authData) {
+    try {
+      const parsed = JSON.parse(authData);
+      const userId = parsed?.user?.id || '';
+      return {
+        'Content-Type': 'application/json',
+        'x-user-id': userId,
+      };
+    } catch (e) {
+      console.warn('[AI Copilot API] Failed to parse auth token');
+    }
+  }
   
   return {
     'Content-Type': 'application/json',
-    'x-user-id': userId || '',
+    'x-user-id': '',
   };
 }
 
@@ -74,9 +109,11 @@ export const aiCopilotApi = {
    * Send a chat message (non-streaming)
    */
   async chat(message: string, conversationId?: string | null): Promise<ChatResponse> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/chat`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify({
         message,
         conversationId,
@@ -106,9 +143,11 @@ export const aiCopilotApi = {
       signal,
     } = options;
     
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify({
         message,
         conversationId,
@@ -182,11 +221,11 @@ export const aiCopilotApi = {
    * List user's conversations
    */
   async listConversations(limit = 20, offset = 0): Promise<ConversationsResponse> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(
       `${API_BASE}/api/ai/conversations?limit=${limit}&offset=${offset}`,
-      {
-        headers: getAuthHeaders(),
-      }
+      { headers }
     );
     
     if (!response.ok) {
@@ -200,8 +239,10 @@ export const aiCopilotApi = {
    * Get a specific conversation with messages
    */
   async getConversation(id: string): Promise<ConversationResponse> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/conversations/${id}`, {
-      headers: getAuthHeaders(),
+      headers,
     });
     
     if (!response.ok) {
@@ -215,9 +256,11 @@ export const aiCopilotApi = {
    * Delete a conversation
    */
   async deleteConversation(id: string): Promise<void> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/conversations/${id}`, {
       method: 'DELETE',
-      headers: getAuthHeaders(),
+      headers,
     });
     
     if (!response.ok) {
@@ -229,9 +272,11 @@ export const aiCopilotApi = {
    * Update a conversation
    */
   async updateConversation(id: string, updates: { title?: string; is_archived?: boolean }): Promise<any> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/conversations/${id}`, {
       method: 'PATCH',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify(updates),
     });
     
@@ -246,8 +291,10 @@ export const aiCopilotApi = {
    * Get user's usage stats
    */
   async getUsage(): Promise<UsageResponse> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/usage`, {
-      headers: getAuthHeaders(),
+      headers,
     });
     
     if (!response.ok) {
@@ -274,9 +321,11 @@ export const aiCopilotApi = {
    * Submit feedback for a message
    */
   async submitFeedback(messageId: string, feedback: 'positive' | 'negative', comment?: string): Promise<void> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/feedback`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify({
         messageId,
         feedback,
@@ -293,9 +342,11 @@ export const aiCopilotApi = {
    * Direct semantic search
    */
   async search(query: string, filters?: { reportType?: string; limit?: number }): Promise<any> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/search`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify({
         query,
         ...filters,
@@ -313,8 +364,10 @@ export const aiCopilotApi = {
    * Get available reports
    */
   async getReports(): Promise<any> {
+    const headers = await getAuthHeaders();
+    
     const response = await fetch(`${API_BASE}/api/ai/reports`, {
-      headers: getAuthHeaders(),
+      headers,
     });
     
     if (!response.ok) {

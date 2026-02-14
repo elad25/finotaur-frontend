@@ -1,178 +1,556 @@
 -- =====================================================
--- 1. ENABLE PGVECTOR EXTENSION
+-- FINOTAUR AI COPILOT - COMPLETE DATABASE MIGRATION
 -- =====================================================
+-- Run this ENTIRE file in Supabase SQL Editor
+-- Prerequisites: Supabase project with existing tables
+-- This file combines all AI Copilot database structures
+-- =====================================================
+
+-- ============================================
+-- 1. ENABLE PGVECTOR EXTENSION
+-- ============================================
+-- This enables vector similarity search
 CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Verify extension is enabled
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    RAISE NOTICE '✅ pgvector extension enabled successfully';
+  ELSE
+    RAISE EXCEPTION '❌ pgvector extension failed to enable';
+  END IF;
+END $$;
 
 -- =====================================================
 -- 2. REPORT EMBEDDINGS TABLE
 -- =====================================================
-CREATE TABLE report_embeddings (
+-- Stores vector embeddings for all report chunks
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS report_embeddings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
-  -- Report Reference
-  report_id TEXT NOT NULL,
-  report_type TEXT NOT NULL,  -- 'ism', 'company', 'crypto', 'weekly', 'daily'
-  report_date DATE NOT NULL,
+-- Report Reference
+report_id TEXT NOT NULL,
+report_type TEXT NOT NULL CHECK (report_type IN ('ism', 'company', 'crypto', 'weekly', 'daily', 'macro')),
+report_date DATE NOT NULL,
   
   -- Chunk Data
   chunk_index INTEGER NOT NULL,
   chunk_text TEXT NOT NULL,
-  chunk_tokens INTEGER,
+  chunk_tokens INTEGER DEFAULT 0,
   
-  -- Vector Embedding (1536 for text-embedding-3-small)
+  -- Vector Embedding (1536 dimensions for text-embedding-3-small)
   embedding vector(1536) NOT NULL,
   
-  -- Metadata
-  metadata JSONB DEFAULT '{}',
-  -- Examples:
-  -- { "section": "trade_ideas", "ticker": "AAPL", "page": 5 }
-  -- { "section": "executive_summary", "sentiment": "bullish" }
+  -- Rich Metadata for filtering
+  metadata JSONB DEFAULT '{}'::jsonb,
+  -- Example metadata:
+  -- {
+  --   "section": "trade_ideas",
+  --   "ticker": "AAPL",
+  --   "page": 5,
+  --   "sentiment": "bullish",
+  --   "keywords": ["technology", "earnings", "guidance"]
+  -- }
+  
+  -- PDF Reference
+  pdf_path TEXT,
+  pdf_url TEXT,
   
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
   
   -- Constraints
-  CONSTRAINT unique_chunk UNIQUE (report_id, chunk_index)
+  CONSTRAINT unique_report_chunk UNIQUE (report_id, chunk_index)
 );
 
--- Indexes for fast search
-CREATE INDEX idx_embeddings_report_type ON report_embeddings(report_type);
-CREATE INDEX idx_embeddings_report_date ON report_embeddings(report_date DESC);
-CREATE INDEX idx_embeddings_metadata ON report_embeddings USING GIN(metadata);
+-- Add columns if table already exists
+DO $$
+BEGIN
+  -- Add pdf_path if not exists
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'report_embeddings' AND column_name = 'pdf_path'
+  ) THEN
+    ALTER TABLE report_embeddings ADD COLUMN pdf_path TEXT;
+  END IF;
+  
+  -- Add pdf_url if not exists
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'report_embeddings' AND column_name = 'pdf_url'
+  ) THEN
+    ALTER TABLE report_embeddings ADD COLUMN pdf_url TEXT;
+  END IF;
+END $$;
 
--- Vector similarity index (IVFFlat for better performance)
+-- Indexes for fast queries
+CREATE INDEX IF NOT EXISTS idx_embeddings_report_id ON report_embeddings(report_id);
+CREATE INDEX IF NOT EXISTS idx_embeddings_report_type ON report_embeddings(report_type);
+CREATE INDEX IF NOT EXISTS idx_embeddings_report_date ON report_embeddings(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_embeddings_metadata ON report_embeddings USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS idx_embeddings_metadata_section ON report_embeddings((metadata->>'section'));
+CREATE INDEX IF NOT EXISTS idx_embeddings_metadata_ticker ON report_embeddings((metadata->>'ticker'));
+
+-- Vector similarity index (IVFFlat - good for 10K-1M vectors)
+-- For smaller datasets, you can use HNSW instead
+DROP INDEX IF EXISTS idx_embeddings_vector;
 CREATE INDEX idx_embeddings_vector ON report_embeddings 
   USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
 
+COMMENT ON TABLE report_embeddings IS 'Stores vector embeddings for semantic search across all report types';
+
 -- =====================================================
--- 3. CHAT CONVERSATIONS TABLE
+-- 3. AI CONVERSATIONS TABLE
 -- =====================================================
-CREATE TABLE ai_conversations (
+-- Stores chat conversation metadata
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
+  -- Conversation metadata
   title TEXT,  -- Auto-generated from first message
   
-  -- Metadata
+  -- Stats
   messages_count INTEGER DEFAULT 0,
-  last_message_at TIMESTAMPTZ,
+  tokens_used INTEGER DEFAULT 0,
+  
+  -- State
+  is_archived BOOLEAN DEFAULT false,
   
   -- Timestamps
+  last_message_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_conversations_user ON ai_conversations(user_id);
-CREATE INDEX idx_conversations_updated ON ai_conversations(updated_at DESC);
+-- Add columns if table already exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_conversations' AND column_name = 'is_archived'
+  ) THEN
+    ALTER TABLE ai_conversations ADD COLUMN is_archived BOOLEAN DEFAULT false;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_conversations' AND column_name = 'tokens_used'
+  ) THEN
+    ALTER TABLE ai_conversations ADD COLUMN tokens_used INTEGER DEFAULT 0;
+  END IF;
+END $$;
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON ai_conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_updated ON ai_conversations(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON ai_conversations(user_id, updated_at DESC);
+
+-- Auto-update updated_at trigger function (create if not exists)
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Auto-update updated_at
+DROP TRIGGER IF EXISTS update_ai_conversations_updated_at ON ai_conversations;
+CREATE TRIGGER update_ai_conversations_updated_at
+  BEFORE UPDATE ON ai_conversations
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE ai_conversations IS 'Stores AI chat conversation metadata per user';
 
 -- =====================================================
--- 4. CHAT MESSAGES TABLE
+-- 4. AI MESSAGES TABLE
 -- =====================================================
-CREATE TABLE ai_messages (
+-- Stores individual chat messages
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS ai_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  conversation_id UUID REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  conversation_id UUID NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
   
-  role TEXT NOT NULL,  -- 'user' | 'assistant'
+  -- Message content
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
   content TEXT NOT NULL,
   
-  -- For assistant messages
-  sources JSONB,  -- Array of { report_id, report_type, chunk_text }
-  tokens_used INTEGER,
-  model TEXT,  -- 'gpt-4', 'gpt-4-turbo'
+  -- For assistant messages - sources used
+  sources JSONB DEFAULT '[]'::jsonb,
+  -- Example sources:
+  -- [
+  --   {
+  --     "report_id": "ism-2026-01",
+  --     "report_type": "ism",
+  --     "chunk_text": "Trade idea: Long XLI...",
+  --     "similarity": 0.89,
+  --     "pdf_url": "https://..."
+  --   }
+  -- ]
+  
+  -- Token tracking
+  prompt_tokens INTEGER DEFAULT 0,
+  completion_tokens INTEGER DEFAULT 0,
+  total_tokens INTEGER DEFAULT 0,
+  tokens_used INTEGER DEFAULT 0,  -- Legacy field for compatibility
+  
+  -- Model info
+  model TEXT DEFAULT 'gpt-4-turbo-preview',
+  
+  -- Feedback
+  feedback TEXT CHECK (feedback IN ('positive', 'negative', NULL)),
+  feedback_comment TEXT,
   
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_messages_conversation ON ai_messages(conversation_id);
+-- Add columns if table already exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_messages' AND column_name = 'feedback'
+  ) THEN
+    ALTER TABLE ai_messages ADD COLUMN feedback TEXT CHECK (feedback IN ('positive', 'negative', NULL));
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_messages' AND column_name = 'feedback_comment'
+  ) THEN
+    ALTER TABLE ai_messages ADD COLUMN feedback_comment TEXT;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_messages' AND column_name = 'prompt_tokens'
+  ) THEN
+    ALTER TABLE ai_messages ADD COLUMN prompt_tokens INTEGER DEFAULT 0;
+    ALTER TABLE ai_messages ADD COLUMN completion_tokens INTEGER DEFAULT 0;
+    ALTER TABLE ai_messages ADD COLUMN total_tokens INTEGER DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'ai_messages' AND column_name = 'tokens_used'
+  ) THEN
+    ALTER TABLE ai_messages ADD COLUMN tokens_used INTEGER DEFAULT 0;
+  END IF;
+END $$;
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON ai_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON ai_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created ON ai_messages(conversation_id, created_at);
+
+COMMENT ON TABLE ai_messages IS 'Stores individual messages within AI conversations';
 
 -- =====================================================
--- 5. USAGE TRACKING TABLE (for tier limits)
+-- 5. AI USAGE TRACKING TABLE
 -- =====================================================
-CREATE TABLE ai_usage (
+-- Tracks daily usage per user for tier limits
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS ai_usage (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   
   -- Daily tracking
   date DATE NOT NULL DEFAULT CURRENT_DATE,
   questions_count INTEGER DEFAULT 0,
   tokens_used INTEGER DEFAULT 0,
   
+  -- Cost tracking (optional)
+  estimated_cost_usd DECIMAL(10, 6) DEFAULT 0,
+  
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
   -- Constraints
   CONSTRAINT unique_user_date UNIQUE (user_id, date)
 );
 
-CREATE INDEX idx_usage_user_date ON ai_usage(user_id, date DESC);
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_usage_user_date ON ai_usage(user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_date ON ai_usage(date DESC);
+
+-- Auto-update updated_at
+DROP TRIGGER IF EXISTS update_ai_usage_updated_at ON ai_usage;
+CREATE TRIGGER update_ai_usage_updated_at
+  BEFORE UPDATE ON ai_usage
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE ai_usage IS 'Tracks daily AI usage per user for tier-based limits';
 
 -- =====================================================
--- 6. EMBEDDING PROCESSING STATUS
+-- 6. EMBEDDING JOBS TABLE
 -- =====================================================
-CREATE TABLE embedding_jobs (
+-- Tracks PDF processing jobs
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS embedding_jobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   
+  -- Report info
   report_id TEXT NOT NULL,
   report_type TEXT NOT NULL,
   pdf_path TEXT NOT NULL,
   
-  status TEXT DEFAULT 'pending',  -- 'pending', 'processing', 'completed', 'failed'
-  chunks_count INTEGER,
-  error_message TEXT,
+  -- Job status
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   
+  -- Results
+  chunks_count INTEGER,
+  tokens_total INTEGER,
+  
+  -- Error handling
+  error_message TEXT,
+  retry_count INTEGER DEFAULT 0,
+  
+  -- Timing
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Prevent duplicate processing
+  CONSTRAINT unique_embedding_job UNIQUE (report_id)
 );
 
-CREATE INDEX idx_embedding_jobs_status ON embedding_jobs(status);
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_embedding_jobs_status ON embedding_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_embedding_jobs_created ON embedding_jobs(created_at DESC);
+
+COMMENT ON TABLE embedding_jobs IS 'Tracks PDF embedding processing jobs';
 
 -- =====================================================
--- 7. RLS POLICIES
+-- 7. ROW LEVEL SECURITY (RLS)
 -- =====================================================
 
--- Enable RLS
+-- Enable RLS on all tables
 ALTER TABLE report_embeddings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE embedding_jobs ENABLE ROW LEVEL SECURITY;
 
--- Embeddings: Everyone can read (public reports)
-CREATE POLICY "Embeddings are public" ON report_embeddings
-  FOR SELECT TO authenticated USING (true);
+-- ============================================
+-- REPORT EMBEDDINGS POLICIES
+-- ============================================
 
--- Service role can manage embeddings
-CREATE POLICY "Service role manages embeddings" ON report_embeddings
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Drop existing policies
+DROP POLICY IF EXISTS "Embeddings are readable by authenticated users" ON report_embeddings;
+DROP POLICY IF EXISTS "Embeddings are public" ON report_embeddings;
+DROP POLICY IF EXISTS "Service role manages embeddings" ON report_embeddings;
 
--- Conversations: Users see only their own
-CREATE POLICY "Users see own conversations" ON ai_conversations
-  FOR ALL TO authenticated
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+-- All authenticated users can read embeddings (public reports)
+CREATE POLICY "Embeddings are readable by authenticated users" 
+ON report_embeddings FOR SELECT 
+TO authenticated 
+USING (true);
 
--- Messages: Users see own conversation messages
-CREATE POLICY "Users see own messages" ON ai_messages
-  FOR ALL TO authenticated
-  USING (
-    conversation_id IN (
-      SELECT id FROM ai_conversations WHERE user_id = auth.uid()
-    )
-  );
+-- Service role can do everything
+CREATE POLICY "Service role manages embeddings" 
+ON report_embeddings FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
 
--- Usage: Users see own usage
-CREATE POLICY "Users see own usage" ON ai_usage
-  FOR SELECT TO authenticated
-  USING (user_id = auth.uid());
+-- ============================================
+-- AI CONVERSATIONS POLICIES
+-- ============================================
 
--- Service role can update usage
-CREATE POLICY "Service manages usage" ON ai_usage
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can view own conversations" ON ai_conversations;
+DROP POLICY IF EXISTS "Users can create own conversations" ON ai_conversations;
+DROP POLICY IF EXISTS "Users can update own conversations" ON ai_conversations;
+DROP POLICY IF EXISTS "Users can delete own conversations" ON ai_conversations;
+DROP POLICY IF EXISTS "Users see own conversations" ON ai_conversations;
+DROP POLICY IF EXISTS "Service role manages conversations" ON ai_conversations;
+
+CREATE POLICY "Users can view own conversations" 
+ON ai_conversations FOR SELECT 
+TO authenticated 
+USING (user_id = auth.uid());
+
+CREATE POLICY "Users can create own conversations" 
+ON ai_conversations FOR INSERT 
+TO authenticated 
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can update own conversations" 
+ON ai_conversations FOR UPDATE 
+TO authenticated 
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "Users can delete own conversations" 
+ON ai_conversations FOR DELETE 
+TO authenticated 
+USING (user_id = auth.uid());
+
+CREATE POLICY "Service role manages conversations" 
+ON ai_conversations FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
+
+-- ============================================
+-- AI MESSAGES POLICIES
+-- ============================================
+
+DROP POLICY IF EXISTS "Users can view own messages" ON ai_messages;
+DROP POLICY IF EXISTS "Users can create messages in own conversations" ON ai_messages;
+DROP POLICY IF EXISTS "Users can update own messages" ON ai_messages;
+DROP POLICY IF EXISTS "Users see own messages" ON ai_messages;
+DROP POLICY IF EXISTS "Service role manages messages" ON ai_messages;
+
+CREATE POLICY "Users can view own messages" 
+ON ai_messages FOR SELECT 
+TO authenticated 
+USING (
+  conversation_id IN (
+    SELECT id FROM ai_conversations WHERE user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Users can create messages in own conversations" 
+ON ai_messages FOR INSERT 
+TO authenticated 
+WITH CHECK (
+  conversation_id IN (
+    SELECT id FROM ai_conversations WHERE user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Users can update own messages" 
+ON ai_messages FOR UPDATE 
+TO authenticated 
+USING (
+  conversation_id IN (
+    SELECT id FROM ai_conversations WHERE user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Service role manages messages" 
+ON ai_messages FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
+
+-- ============================================
+-- AI USAGE POLICIES
+-- ============================================
+
+DROP POLICY IF EXISTS "Users can view own usage" ON ai_usage;
+DROP POLICY IF EXISTS "Users see own usage" ON ai_usage;
+DROP POLICY IF EXISTS "Service role manages usage" ON ai_usage;
+DROP POLICY IF EXISTS "Service manages usage" ON ai_usage;
+
+CREATE POLICY "Users can view own usage" 
+ON ai_usage FOR SELECT 
+TO authenticated 
+USING (user_id = auth.uid());
+
+CREATE POLICY "Service role manages usage" 
+ON ai_usage FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
+
+-- ============================================
+-- EMBEDDING JOBS POLICIES
+-- ============================================
+
+DROP POLICY IF EXISTS "Admins can view embedding jobs" ON embedding_jobs;
+DROP POLICY IF EXISTS "Service role manages embedding jobs" ON embedding_jobs;
+
+-- Only admins can view jobs (optional - based on your admin logic)
+CREATE POLICY "Admins can view embedding jobs" 
+ON embedding_jobs FOR SELECT 
+TO authenticated 
+USING (true);
+
+CREATE POLICY "Service role manages embedding jobs" 
+ON embedding_jobs FOR ALL 
+TO service_role 
+USING (true) 
+WITH CHECK (true);
 
 -- =====================================================
 -- 8. HELPER FUNCTIONS
 -- =====================================================
 
--- Function to search similar embeddings
+-- ============================================
+-- FUNCTION: Search similar embeddings (Full version)
+-- ============================================
+CREATE OR REPLACE FUNCTION search_report_embeddings(
+  query_embedding vector(1536),
+  match_count INT DEFAULT 5,
+  filter_report_type TEXT DEFAULT NULL,
+  filter_section TEXT DEFAULT NULL,
+  filter_ticker TEXT DEFAULT NULL,
+  filter_min_date DATE DEFAULT NULL,
+  similarity_threshold FLOAT DEFAULT 0.7
+)
+RETURNS TABLE (
+  id UUID,
+  report_id TEXT,
+  report_type TEXT,
+  report_date DATE,
+  chunk_index INTEGER,
+  chunk_text TEXT,
+  metadata JSONB,
+  pdf_url TEXT,
+  similarity FLOAT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id,
+    e.report_id,
+    e.report_type,
+    e.report_date,
+    e.chunk_index,
+    e.chunk_text,
+    e.metadata,
+    e.pdf_url,
+    (1 - (e.embedding <=> query_embedding))::FLOAT as similarity
+  FROM report_embeddings e
+  WHERE 
+    -- Type filter
+    (filter_report_type IS NULL OR e.report_type = filter_report_type)
+    -- Section filter (from metadata)
+    AND (filter_section IS NULL OR e.metadata->>'section' = filter_section)
+    -- Ticker filter (from metadata)
+    AND (filter_ticker IS NULL OR e.metadata->>'ticker' = filter_ticker)
+    -- Date filter
+    AND (filter_min_date IS NULL OR e.report_date >= filter_min_date)
+    -- Similarity threshold
+    AND (1 - (e.embedding <=> query_embedding)) >= similarity_threshold
+  ORDER BY e.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+COMMENT ON FUNCTION search_report_embeddings IS 'Searches for similar report chunks using cosine similarity with advanced filters';
+
+-- ============================================
+-- FUNCTION: Search similar embeddings (Simple version for compatibility)
+-- ============================================
 CREATE OR REPLACE FUNCTION search_embeddings(
   query_embedding vector(1536),
   match_count INT DEFAULT 5,
@@ -189,6 +567,7 @@ RETURNS TABLE (
   similarity FLOAT
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
@@ -199,7 +578,7 @@ BEGIN
     e.report_date,
     e.chunk_text,
     e.metadata,
-    1 - (e.embedding <=> query_embedding) as similarity
+    (1 - (e.embedding <=> query_embedding))::FLOAT as similarity
   FROM report_embeddings e
   WHERE 
     (filter_report_type IS NULL OR e.report_type = filter_report_type)
@@ -209,7 +588,69 @@ BEGIN
 END;
 $$;
 
--- Function to check user's daily usage
+COMMENT ON FUNCTION search_embeddings IS 'Simple search for similar report chunks using cosine similarity';
+
+-- ============================================
+-- FUNCTION: Check user AI usage and limits (Full version)
+-- ============================================
+CREATE OR REPLACE FUNCTION check_ai_usage_limit(p_user_id UUID)
+RETURNS TABLE (
+  questions_today INTEGER,
+  tokens_today INTEGER,
+  daily_limit INTEGER,
+  limit_reached BOOLEAN,
+  user_tier TEXT,
+  remaining_questions INTEGER
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_tier TEXT;
+  v_limit INTEGER;
+  v_count INTEGER;
+  v_tokens INTEGER;
+BEGIN
+  -- Get user's tier from profiles
+  SELECT COALESCE(tier, 'FREE') INTO v_tier
+  FROM profiles WHERE id = p_user_id;
+  
+  -- Set limit based on tier
+  v_limit := CASE v_tier
+    WHEN 'PREMIUM' THEN 999999  -- Effectively unlimited
+    WHEN 'BASIC' THEN 20
+    ELSE 5  -- FREE tier
+  END;
+  
+  -- Get today's usage
+  SELECT 
+    COALESCE(questions_count, 0),
+    COALESCE(tokens_used, 0)
+  INTO v_count, v_tokens
+  FROM ai_usage
+  WHERE user_id = p_user_id AND date = CURRENT_DATE;
+  
+  -- Handle case where no usage record exists
+  IF v_count IS NULL THEN
+    v_count := 0;
+    v_tokens := 0;
+  END IF;
+  
+  RETURN QUERY SELECT 
+    v_count,
+    v_tokens,
+    v_limit,
+    v_count >= v_limit,
+    v_tier,
+    GREATEST(0, v_limit - v_count);
+END;
+$$;
+
+COMMENT ON FUNCTION check_ai_usage_limit IS 'Checks if user has reached their daily AI question limit based on tier';
+
+-- ============================================
+-- FUNCTION: Check user AI usage (Simple version for compatibility)
+-- ============================================
 CREATE OR REPLACE FUNCTION check_ai_usage(p_user_id UUID)
 RETURNS TABLE (
   questions_today INT,
@@ -217,6 +658,7 @@ RETURNS TABLE (
   tier TEXT
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
   v_tier TEXT;
@@ -224,7 +666,7 @@ DECLARE
   v_count INT;
 BEGIN
   -- Get user's tier
-  SELECT COALESCE(tier, 'FREE') INTO v_tier
+  SELECT COALESCE(profiles.tier, 'FREE') INTO v_tier
   FROM profiles WHERE id = p_user_id;
   
   -- Set limit based on tier
@@ -239,24 +681,980 @@ BEGIN
   FROM ai_usage
   WHERE user_id = p_user_id AND date = CURRENT_DATE;
   
+  IF v_count IS NULL THEN
+    v_count := 0;
+  END IF;
+  
   RETURN QUERY SELECT v_count, v_count >= v_limit, v_tier;
 END;
 $$;
 
--- Function to increment usage
+COMMENT ON FUNCTION check_ai_usage IS 'Simple check if user has reached their daily AI question limit';
+
+-- ============================================
+-- FUNCTION: Increment AI usage (Full version)
+-- ============================================
 CREATE OR REPLACE FUNCTION increment_ai_usage(
   p_user_id UUID,
-  p_tokens INT DEFAULT 0
+  p_tokens INTEGER DEFAULT 0,
+  p_cost_usd DECIMAL DEFAULT 0
 )
 RETURNS VOID
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 BEGIN
-  INSERT INTO ai_usage (user_id, date, questions_count, tokens_used)
-  VALUES (p_user_id, CURRENT_DATE, 1, p_tokens)
+  INSERT INTO ai_usage (user_id, date, questions_count, tokens_used, estimated_cost_usd)
+  VALUES (p_user_id, CURRENT_DATE, 1, p_tokens, p_cost_usd)
   ON CONFLICT (user_id, date)
   DO UPDATE SET 
     questions_count = ai_usage.questions_count + 1,
-    tokens_used = ai_usage.tokens_used + p_tokens;
+    tokens_used = ai_usage.tokens_used + p_tokens,
+    estimated_cost_usd = ai_usage.estimated_cost_usd + p_cost_usd,
+    updated_at = NOW();
 END;
 $$;
+
+COMMENT ON FUNCTION increment_ai_usage IS 'Increments daily AI usage counter for a user';
+
+-- ============================================
+-- FUNCTION: Get conversation with messages
+-- ============================================
+CREATE OR REPLACE FUNCTION get_conversation_with_messages(
+  p_conversation_id UUID,
+  p_user_id UUID
+)
+RETURNS TABLE (
+  conversation JSONB,
+  messages JSONB
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    to_jsonb(c.*) as conversation,
+    COALESCE(
+      jsonb_agg(
+        to_jsonb(m.*) ORDER BY m.created_at ASC
+      ) FILTER (WHERE m.id IS NOT NULL),
+      '[]'::jsonb
+    ) as messages
+  FROM ai_conversations c
+  LEFT JOIN ai_messages m ON m.conversation_id = c.id
+  WHERE c.id = p_conversation_id AND c.user_id = p_user_id
+  GROUP BY c.id;
+END;
+$$;
+
+COMMENT ON FUNCTION get_conversation_with_messages IS 'Gets a conversation with all its messages for a user';
+
+-- ============================================
+-- FUNCTION: Update conversation stats
+-- ============================================
+CREATE OR REPLACE FUNCTION update_conversation_stats()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Update conversation stats when a message is added
+  UPDATE ai_conversations
+  SET 
+    messages_count = messages_count + 1,
+    tokens_used = tokens_used + COALESCE(NEW.total_tokens, 0),
+    last_message_at = NEW.created_at,
+    updated_at = NOW(),
+    -- Auto-generate title from first user message if not set
+    title = CASE 
+      WHEN title IS NULL AND NEW.role = 'user' 
+      THEN LEFT(NEW.content, 100)
+      ELSE title
+    END
+  WHERE id = NEW.conversation_id;
+  
+  RETURN NEW;
+END;
+$$;
+
+-- Create trigger for auto-updating conversation stats
+DROP TRIGGER IF EXISTS trigger_update_conversation_stats ON ai_messages;
+CREATE TRIGGER trigger_update_conversation_stats
+  AFTER INSERT ON ai_messages
+  FOR EACH ROW
+  EXECUTE FUNCTION update_conversation_stats();
+
+-- ============================================
+-- FUNCTION: Get latest reports for each type
+-- ============================================
+CREATE OR REPLACE FUNCTION get_latest_reports()
+RETURNS TABLE (
+  report_type TEXT,
+  report_id TEXT,
+  report_date DATE,
+  chunks_count BIGINT,
+  pdf_url TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT DISTINCT ON (e.report_type)
+    e.report_type,
+    e.report_id,
+    e.report_date,
+    COUNT(*) OVER (PARTITION BY e.report_id) as chunks_count,
+    e.pdf_url
+  FROM report_embeddings e
+  ORDER BY e.report_type, e.report_date DESC;
+END;
+$$;
+
+COMMENT ON FUNCTION get_latest_reports IS 'Gets the latest report of each type that has embeddings';
+
+-- ============================================
+-- FUNCTION: Delete old embeddings (cleanup)
+-- ============================================
+CREATE OR REPLACE FUNCTION cleanup_old_embeddings(
+  p_report_type TEXT,
+  p_keep_count INTEGER DEFAULT 12  -- Keep last 12 reports per type
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_deleted INTEGER;
+BEGIN
+  WITH reports_to_keep AS (
+    SELECT DISTINCT report_id
+    FROM report_embeddings
+    WHERE report_type = p_report_type
+    ORDER BY report_date DESC
+    LIMIT p_keep_count
+  ),
+  deleted AS (
+    DELETE FROM report_embeddings
+    WHERE report_type = p_report_type
+      AND report_id NOT IN (SELECT report_id FROM reports_to_keep)
+    RETURNING id
+  )
+  SELECT COUNT(*) INTO v_deleted FROM deleted;
+  
+  RETURN v_deleted;
+END;
+$$;
+
+COMMENT ON FUNCTION cleanup_old_embeddings IS 'Removes embeddings for old reports, keeping only the most recent ones';
+
+-- =====================================================
+-- 9. GRANTS
+-- =====================================================
+
+-- Grant permissions to authenticated users
+GRANT SELECT ON report_embeddings TO authenticated;
+GRANT ALL ON ai_conversations TO authenticated;
+GRANT ALL ON ai_messages TO authenticated;
+GRANT SELECT ON ai_usage TO authenticated;
+GRANT SELECT ON embedding_jobs TO authenticated;
+
+-- Grant all to service role
+GRANT ALL ON report_embeddings TO service_role;
+GRANT ALL ON ai_conversations TO service_role;
+GRANT ALL ON ai_messages TO service_role;
+GRANT ALL ON ai_usage TO service_role;
+GRANT ALL ON embedding_jobs TO service_role;
+
+-- Grant execute on functions
+GRANT EXECUTE ON FUNCTION search_report_embeddings TO authenticated;
+GRANT EXECUTE ON FUNCTION search_report_embeddings TO service_role;
+GRANT EXECUTE ON FUNCTION search_embeddings TO authenticated;
+GRANT EXECUTE ON FUNCTION search_embeddings TO service_role;
+GRANT EXECUTE ON FUNCTION check_ai_usage_limit TO authenticated;
+GRANT EXECUTE ON FUNCTION check_ai_usage_limit TO service_role;
+GRANT EXECUTE ON FUNCTION check_ai_usage TO authenticated;
+GRANT EXECUTE ON FUNCTION check_ai_usage TO service_role;
+GRANT EXECUTE ON FUNCTION increment_ai_usage TO service_role;
+GRANT EXECUTE ON FUNCTION get_conversation_with_messages TO authenticated;
+GRANT EXECUTE ON FUNCTION get_latest_reports TO authenticated;
+GRANT EXECUTE ON FUNCTION cleanup_old_embeddings TO service_role;
+
+-- =====================================================
+-- 10. VERIFICATION
+-- =====================================================
+
+DO $$
+DECLARE
+  v_table_count INTEGER;
+  v_function_count INTEGER;
+  v_vector_enabled BOOLEAN;
+BEGIN
+  -- Check pgvector
+  SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') INTO v_vector_enabled;
+  
+  -- Count tables
+  SELECT COUNT(*) INTO v_table_count
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  AND table_name IN ('report_embeddings', 'ai_conversations', 'ai_messages', 'ai_usage', 'embedding_jobs');
+  
+  -- Count functions
+  SELECT COUNT(*) INTO v_function_count
+  FROM information_schema.routines
+  WHERE routine_schema = 'public'
+  AND routine_name IN ('search_report_embeddings', 'search_embeddings', 'check_ai_usage_limit', 
+                       'check_ai_usage', 'increment_ai_usage', 'get_conversation_with_messages', 
+                       'get_latest_reports', 'cleanup_old_embeddings');
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ FINOTAUR AI COPILOT DATABASE MIGRATION COMPLETE!';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE '📊 Results:';
+  RAISE NOTICE '   • pgvector extension: %', CASE WHEN v_vector_enabled THEN '✅ Enabled' ELSE '❌ Failed' END;
+  RAISE NOTICE '   • Tables created: %/5', v_table_count;
+  RAISE NOTICE '   • Functions created: %/8', v_function_count;
+  RAISE NOTICE '';
+  RAISE NOTICE '📁 Tables:';
+  RAISE NOTICE '   • report_embeddings - Vector storage for report chunks';
+  RAISE NOTICE '   • ai_conversations - Chat conversation metadata';
+  RAISE NOTICE '   • ai_messages - Individual chat messages';
+  RAISE NOTICE '   • ai_usage - Daily usage tracking per user';
+  RAISE NOTICE '   • embedding_jobs - PDF processing queue';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔧 Functions:';
+  RAISE NOTICE '   • search_report_embeddings() - Advanced semantic search';
+  RAISE NOTICE '   • search_embeddings() - Simple semantic search';
+  RAISE NOTICE '   • check_ai_usage_limit() - Full tier limit checking';
+  RAISE NOTICE '   • check_ai_usage() - Simple tier limit checking';
+  RAISE NOTICE '   • increment_ai_usage() - Usage tracking';
+  RAISE NOTICE '   • get_conversation_with_messages() - Fetch chat';
+  RAISE NOTICE '   • get_latest_reports() - Report listing';
+  RAISE NOTICE '   • cleanup_old_embeddings() - Cleanup old data';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔐 RLS: Enabled on all tables with proper policies';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- Show table structure summary
+SELECT 
+  t.tablename as table_name,
+  pg_size_pretty(pg_total_relation_size(t.schemaname || '.' || t.tablename)) as size,
+  (SELECT COUNT(*) FROM pg_policies p WHERE p.tablename = t.tablename) as policy_count
+FROM pg_tables t
+WHERE t.schemaname = 'public'
+AND t.tablename IN ('report_embeddings', 'ai_conversations', 'ai_messages', 'ai_usage', 'embedding_jobs')
+ORDER BY t.tablename;
+
+-- =====================================================
+-- 11. MACRO INTELLIGENCE TABLES
+-- =====================================================
+
+-- MACRO DATA TABLE - Stores raw economic indicator data from FRED
+CREATE TABLE IF NOT EXISTS macro_data (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  series_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  importance TEXT CHECK (importance IN ('critical', 'high', 'medium', 'low')),
+  frequency TEXT CHECK (frequency IN ('daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'yearly')),
+  unit TEXT,
+  date DATE NOT NULL,
+  value NUMERIC NOT NULL,
+  previous_value NUMERIC,
+  change NUMERIC,
+  change_percent NUMERIC,
+  yoy_change NUMERIC,
+  yoy_change_percent NUMERIC,
+  history JSONB DEFAULT '[]'::jsonb,
+  is_new_data BOOLEAN DEFAULT false,
+  fetched_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT unique_macro_data UNIQUE (series_id, date)
+);
+
+-- Indexes for macro_data
+CREATE INDEX IF NOT EXISTS idx_macro_data_series ON macro_data(series_id);
+CREATE INDEX IF NOT EXISTS idx_macro_data_date ON macro_data(date DESC);
+CREATE INDEX IF NOT EXISTS idx_macro_data_category ON macro_data(category);
+CREATE INDEX IF NOT EXISTS idx_macro_data_importance ON macro_data(importance);
+
+-- Auto-update trigger for macro_data
+DROP TRIGGER IF EXISTS update_macro_data_updated_at ON macro_data;
+CREATE TRIGGER update_macro_data_updated_at
+  BEFORE UPDATE ON macro_data
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE macro_data IS 'Stores economic indicator data from FRED API';
+
+-- MACRO SNAPSHOTS TABLE - Daily snapshots of all indicators
+CREATE TABLE IF NOT EXISTS macro_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  snapshot_date DATE NOT NULL UNIQUE,
+  data JSONB NOT NULL,
+  new_releases TEXT[] DEFAULT '{}',
+  significant_changes TEXT[] DEFAULT '{}',
+  summary JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_macro_snapshots_date ON macro_snapshots(snapshot_date DESC);
+
+COMMENT ON TABLE macro_snapshots IS 'Daily snapshots of all macro indicators';
+
+-- MACRO ANALYSES TABLE - AI-generated analysis reports
+CREATE TABLE IF NOT EXISTS macro_analyses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  analysis_type TEXT NOT NULL CHECK (analysis_type IN ('comprehensive', 'quick_update', 'weekly_summary', 'topic_analysis')),
+  analysis_date DATE NOT NULL,
+  content TEXT NOT NULL,
+  data_snapshot JSONB,
+  new_releases TEXT[] DEFAULT '{}',
+  topic TEXT,
+  tokens_used INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_macro_analyses_type ON macro_analyses(analysis_type);
+CREATE INDEX IF NOT EXISTS idx_macro_analyses_date ON macro_analyses(analysis_date DESC);
+
+COMMENT ON TABLE macro_analyses IS 'AI-generated macro economic analyses';
+
+-- Enable RLS on macro tables
+ALTER TABLE macro_data ENABLE ROW LEVEL SECURITY;
+ALTER TABLE macro_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE macro_analyses ENABLE ROW LEVEL SECURITY;
+
+-- Service role policies for macro tables
+DROP POLICY IF EXISTS "service_role_macro_data" ON macro_data;
+DROP POLICY IF EXISTS "service_role_macro_snapshots" ON macro_snapshots;
+DROP POLICY IF EXISTS "service_role_macro_analyses" ON macro_analyses;
+DROP POLICY IF EXISTS "authenticated_read_macro_data" ON macro_data;
+DROP POLICY IF EXISTS "authenticated_read_macro_snapshots" ON macro_snapshots;
+DROP POLICY IF EXISTS "authenticated_read_macro_analyses" ON macro_analyses;
+
+CREATE POLICY "service_role_macro_data" ON macro_data FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_macro_snapshots" ON macro_snapshots FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_macro_analyses" ON macro_analyses FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Authenticated read policies for macro tables (Top Secret only)
+CREATE POLICY "authenticated_read_macro_data" ON macro_data
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND (top_secret_enabled = true OR role IN ('admin', 'super_admin'))
+    )
+  );
+
+CREATE POLICY "authenticated_read_macro_snapshots" ON macro_snapshots
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND (top_secret_enabled = true OR role IN ('admin', 'super_admin'))
+    )
+  );
+
+CREATE POLICY "authenticated_read_macro_analyses" ON macro_analyses
+  FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND (top_secret_enabled = true OR role IN ('admin', 'super_admin'))
+    )
+  );
+
+-- Grants for macro tables
+GRANT ALL ON macro_data TO service_role;
+GRANT SELECT ON macro_data TO authenticated;
+GRANT ALL ON macro_snapshots TO service_role;
+GRANT SELECT ON macro_snapshots TO authenticated;
+GRANT ALL ON macro_analyses TO service_role;
+GRANT SELECT ON macro_analyses TO authenticated;
+
+DO $$ BEGIN
+  RAISE NOTICE '✅ Macro Intelligence tables created successfully';
+END $$;
+
+-- =====================================================
+-- 12. COMPANY INTELLIGENCE TABLES
+-- =====================================================
+-- Stores: Fundamentals, SEC Filings, Insider Trading, 13F
+-- =====================================================
+
+-- ============================================
+-- COMPANY FUNDAMENTALS TABLE
+-- Stores current fundamentals from Yahoo Finance + Polygon
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS company_fundamentals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  company_name VARCHAR(255),
+  exchange VARCHAR(50),
+  sector VARCHAR(100),
+  industry VARCHAR(150),
+  
+  -- Market Data (Polygon)
+  current_price NUMERIC(12,4),
+  price_change_1d NUMERIC(8,4),
+  price_change_1d_percent NUMERIC(8,4),
+  volume_today BIGINT,
+  volume_avg_30d BIGINT,
+  relative_volume NUMERIC(8,4),
+  market_cap BIGINT,
+  shares_outstanding BIGINT,
+  
+  -- Valuation Metrics
+  pe_ratio NUMERIC(10,4),
+  forward_pe NUMERIC(10,4),
+  peg_ratio NUMERIC(10,4),
+  ps_ratio NUMERIC(10,4),
+  pb_ratio NUMERIC(10,4),
+  ev_ebitda NUMERIC(10,4),
+  
+  -- Profitability
+  revenue_ttm BIGINT,
+  revenue_growth_yoy NUMERIC(8,4),
+  gross_margin NUMERIC(8,4),
+  operating_margin NUMERIC(8,4),
+  net_margin NUMERIC(8,4),
+  ebitda_ttm BIGINT,
+  net_income_ttm BIGINT,
+  
+  -- Per Share Data
+  eps_ttm NUMERIC(10,4),
+  eps_growth_yoy NUMERIC(8,4),
+  dividend_per_share NUMERIC(10,4),
+  dividend_yield NUMERIC(8,4),
+  book_value_per_share NUMERIC(10,4),
+  
+  -- Balance Sheet
+  total_debt BIGINT,
+  total_equity BIGINT,
+  total_cash BIGINT,
+  debt_to_equity NUMERIC(8,4),
+  current_ratio NUMERIC(8,4),
+  quick_ratio NUMERIC(8,4),
+  
+  -- Efficiency
+  roe NUMERIC(8,4),
+  roa NUMERIC(8,4),
+  roic NUMERIC(8,4),
+  asset_turnover NUMERIC(8,4),
+  
+  -- Cash Flow
+  operating_cash_flow_ttm BIGINT,
+  free_cash_flow_ttm BIGINT,
+  fcf_yield NUMERIC(8,4),
+  capex_ttm BIGINT,
+  
+  -- Technical Levels (from Polygon)
+  sma_50 NUMERIC(12,4),
+  sma_200 NUMERIC(12,4),
+  rsi_14 NUMERIC(8,4),
+  high_52w NUMERIC(12,4),
+  low_52w NUMERIC(12,4),
+  
+  -- Metadata
+  data_source TEXT DEFAULT 'yahoo+polygon',
+  last_updated TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_company_fundamentals UNIQUE (ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fundamentals_ticker ON company_fundamentals(ticker);
+CREATE INDEX IF NOT EXISTS idx_fundamentals_sector ON company_fundamentals(sector);
+CREATE INDEX IF NOT EXISTS idx_fundamentals_market_cap ON company_fundamentals(market_cap DESC);
+CREATE INDEX IF NOT EXISTS idx_fundamentals_pe ON company_fundamentals(pe_ratio);
+CREATE INDEX IF NOT EXISTS idx_fundamentals_updated ON company_fundamentals(last_updated DESC);
+
+DROP TRIGGER IF EXISTS update_fundamentals_timestamp ON company_fundamentals;
+CREATE TRIGGER update_fundamentals_timestamp
+  BEFORE UPDATE ON company_fundamentals
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE company_fundamentals IS 'Current company fundamentals from Yahoo Finance + Polygon';
+
+-- ============================================
+-- SEC FILINGS TABLE
+-- Stores 10-K, 10-Q, 8-K filings from SEC EDGAR
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sec_filings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  cik VARCHAR(10) NOT NULL,
+  
+  filing_type VARCHAR(20) NOT NULL,
+  accession_number VARCHAR(25) NOT NULL,
+  filed_date DATE NOT NULL,
+  accepted_datetime TIMESTAMPTZ,
+  
+  filing_url TEXT,
+  primary_document TEXT,
+  primary_document_url TEXT,
+  
+  form_description TEXT,
+  items_reported TEXT[],
+  
+  ai_summary TEXT,
+  key_highlights JSONB DEFAULT '[]'::jsonb,
+  sentiment TEXT CHECK (sentiment IN ('positive', 'negative', 'neutral', 'mixed')),
+  impact_score INTEGER CHECK (impact_score BETWEEN 1 AND 10),
+  
+  extracted_metrics JSONB DEFAULT '{}'::jsonb,
+  
+  is_processed BOOLEAN DEFAULT false,
+  processed_at TIMESTAMPTZ,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_sec_filing UNIQUE (cik, accession_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_filings_ticker ON sec_filings(ticker);
+CREATE INDEX IF NOT EXISTS idx_filings_cik ON sec_filings(cik);
+CREATE INDEX IF NOT EXISTS idx_filings_type ON sec_filings(filing_type);
+CREATE INDEX IF NOT EXISTS idx_filings_date ON sec_filings(filed_date DESC);
+CREATE INDEX IF NOT EXISTS idx_filings_ticker_type ON sec_filings(ticker, filing_type);
+CREATE INDEX IF NOT EXISTS idx_filings_8k_recent ON sec_filings(filed_date DESC) WHERE filing_type = '8-K';
+
+COMMENT ON TABLE sec_filings IS 'SEC EDGAR filings (10-K, 10-Q, 8-K) with AI analysis';
+
+-- ============================================
+-- INSIDER TRANSACTIONS TABLE
+-- Stores Form 4 insider trading data
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS insider_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  cik VARCHAR(10) NOT NULL,
+  
+  insider_name VARCHAR(255) NOT NULL,
+  insider_cik VARCHAR(10),
+  insider_title VARCHAR(255),
+  is_director BOOLEAN DEFAULT false,
+  is_officer BOOLEAN DEFAULT false,
+  is_ten_percent_owner BOOLEAN DEFAULT false,
+  
+  transaction_type VARCHAR(20) NOT NULL,
+  transaction_code VARCHAR(5),
+  acquisition_disposition VARCHAR(1),
+  
+  shares BIGINT NOT NULL,
+  price_per_share NUMERIC(12,4),
+  total_value NUMERIC(18,4),
+  
+  shares_owned_after BIGINT,
+  ownership_type VARCHAR(10),
+  
+  transaction_date DATE NOT NULL,
+  filed_date DATE NOT NULL,
+  
+  accession_number VARCHAR(25),
+  filing_url TEXT,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_insider_transaction UNIQUE (cik, accession_number, insider_cik, transaction_date, shares)
+);
+
+CREATE INDEX IF NOT EXISTS idx_insider_ticker ON insider_transactions(ticker);
+CREATE INDEX IF NOT EXISTS idx_insider_name ON insider_transactions(insider_name);
+CREATE INDEX IF NOT EXISTS idx_insider_date ON insider_transactions(transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_insider_type ON insider_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_insider_ticker_date ON insider_transactions(ticker, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_insider_buys ON insider_transactions(transaction_date DESC) 
+  WHERE transaction_type = 'P' AND total_value > 100000;
+
+COMMENT ON TABLE insider_transactions IS 'SEC Form 4 insider trading transactions';
+
+-- ============================================
+-- INSTITUTIONAL HOLDERS TABLE (13F)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS institutional_holders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  fund_cik VARCHAR(10) NOT NULL,
+  fund_name VARCHAR(255) NOT NULL,
+  fund_manager VARCHAR(255),
+  
+  report_date DATE NOT NULL,
+  filed_date DATE NOT NULL,
+  accession_number VARCHAR(25) NOT NULL,
+  
+  total_value BIGINT,
+  holdings_count INTEGER,
+  
+  top_holdings JSONB DEFAULT '[]'::jsonb,
+  
+  filing_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_13f_filing UNIQUE (fund_cik, accession_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inst_fund_cik ON institutional_holders(fund_cik);
+CREATE INDEX IF NOT EXISTS idx_inst_fund_name ON institutional_holders(fund_name);
+CREATE INDEX IF NOT EXISTS idx_inst_report_date ON institutional_holders(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_inst_value ON institutional_holders(total_value DESC);
+
+COMMENT ON TABLE institutional_holders IS '13F institutional holder filings';
+
+-- ============================================
+-- FUND POSITIONS TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS fund_positions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  
+  fund_cik VARCHAR(10) NOT NULL,
+  ticker VARCHAR(10) NOT NULL,
+  cusip VARCHAR(9),
+  
+  shares BIGINT NOT NULL,
+  value BIGINT NOT NULL,
+  percent_of_portfolio NUMERIC(8,4),
+  
+  report_date DATE NOT NULL,
+  
+  shares_change BIGINT,
+  shares_change_percent NUMERIC(8,4),
+  is_new_position BOOLEAN DEFAULT false,
+  is_closed_position BOOLEAN DEFAULT false,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_fund_position UNIQUE (fund_cik, ticker, report_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_positions_fund ON fund_positions(fund_cik);
+CREATE INDEX IF NOT EXISTS idx_positions_ticker ON fund_positions(ticker);
+CREATE INDEX IF NOT EXISTS idx_positions_date ON fund_positions(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_positions_value ON fund_positions(value DESC);
+CREATE INDEX IF NOT EXISTS idx_positions_new ON fund_positions(report_date DESC) WHERE is_new_position = true;
+
+COMMENT ON TABLE fund_positions IS 'Individual stock positions from 13F filings';
+
+-- ============================================
+-- STOCK INSTITUTIONAL OWNERSHIP
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS stock_institutional_ownership (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticker VARCHAR(10) NOT NULL,
+  
+  total_institutional_shares BIGINT,
+  institutional_percent NUMERIC(8,4),
+  institutional_value BIGINT,
+  
+  top_holders JSONB DEFAULT '[]'::jsonb,
+  
+  shares_change_qoq BIGINT,
+  shares_change_percent NUMERIC(8,4),
+  buyers_count INTEGER,
+  sellers_count INTEGER,
+  
+  quarter VARCHAR(7) NOT NULL,
+  report_date DATE NOT NULL,
+  
+  last_updated TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  CONSTRAINT unique_stock_inst_ownership UNIQUE (ticker, quarter)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ownership_ticker ON stock_institutional_ownership(ticker);
+CREATE INDEX IF NOT EXISTS idx_ownership_quarter ON stock_institutional_ownership(quarter DESC);
+CREATE INDEX IF NOT EXISTS idx_ownership_percent ON stock_institutional_ownership(institutional_percent DESC);
+
+COMMENT ON TABLE stock_institutional_ownership IS 'Aggregated institutional ownership per stock';
+
+-- ============================================
+-- COMPANY INTEL CACHE TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS company_intel_cache (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cache_key VARCHAR(100) NOT NULL,
+  ticker VARCHAR(10),
+  data_type VARCHAR(50) NOT NULL,
+  
+  cached_data JSONB NOT NULL,
+  
+  fetched_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  is_valid BOOLEAN DEFAULT true,
+  
+  CONSTRAINT unique_cache_key UNIQUE (cache_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_key ON company_intel_cache(cache_key);
+CREATE INDEX IF NOT EXISTS idx_cache_ticker ON company_intel_cache(ticker);
+CREATE INDEX IF NOT EXISTS idx_cache_expires ON company_intel_cache(expires_at);
+
+COMMENT ON TABLE company_intel_cache IS 'Cache for Company Intelligence API responses';
+
+-- ============================================
+-- COMPANY INTELLIGENCE RLS POLICIES
+-- ============================================
+
+ALTER TABLE company_fundamentals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sec_filings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE insider_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE institutional_holders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fund_positions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_institutional_ownership ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_intel_cache ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read company_fundamentals" ON company_fundamentals
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage company_fundamentals" ON company_fundamentals
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read sec_filings" ON sec_filings
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage sec_filings" ON sec_filings
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read insider_transactions" ON insider_transactions
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage insider_transactions" ON insider_transactions
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read institutional_holders" ON institutional_holders
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage institutional_holders" ON institutional_holders
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read fund_positions" ON fund_positions
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage fund_positions" ON fund_positions
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Public read stock_institutional_ownership" ON stock_institutional_ownership
+  FOR SELECT TO authenticated, anon USING (true);
+CREATE POLICY "Service role manage stock_institutional_ownership" ON stock_institutional_ownership
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "Service role manage cache" ON company_intel_cache
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- ============================================
+-- COMPANY INTELLIGENCE GRANTS
+-- ============================================
+
+GRANT SELECT ON company_fundamentals TO authenticated, anon;
+GRANT ALL ON company_fundamentals TO service_role;
+
+GRANT SELECT ON sec_filings TO authenticated, anon;
+GRANT ALL ON sec_filings TO service_role;
+
+GRANT SELECT ON insider_transactions TO authenticated, anon;
+GRANT ALL ON insider_transactions TO service_role;
+
+GRANT SELECT ON institutional_holders TO authenticated, anon;
+GRANT ALL ON institutional_holders TO service_role;
+
+GRANT SELECT ON fund_positions TO authenticated, anon;
+GRANT ALL ON fund_positions TO service_role;
+
+GRANT SELECT ON stock_institutional_ownership TO authenticated, anon;
+GRANT ALL ON stock_institutional_ownership TO service_role;
+
+GRANT ALL ON company_intel_cache TO service_role;
+
+-- ============================================
+-- COMPANY INTELLIGENCE FUNCTIONS
+-- ============================================
+
+CREATE OR REPLACE FUNCTION get_company_snapshot(p_ticker TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'fundamentals', (
+      SELECT to_jsonb(f.*) FROM company_fundamentals f WHERE f.ticker = UPPER(p_ticker)
+    ),
+    'recent_filings', (
+      SELECT COALESCE(jsonb_agg(to_jsonb(s.*) ORDER BY s.filed_date DESC), '[]'::jsonb)
+      FROM (
+        SELECT * FROM sec_filings WHERE ticker = UPPER(p_ticker) ORDER BY filed_date DESC LIMIT 10
+      ) s
+    ),
+    'recent_insider', (
+      SELECT COALESCE(jsonb_agg(to_jsonb(i.*) ORDER BY i.transaction_date DESC), '[]'::jsonb)
+      FROM (
+        SELECT * FROM insider_transactions WHERE ticker = UPPER(p_ticker) ORDER BY transaction_date DESC LIMIT 10
+      ) i
+    ),
+    'institutional_ownership', (
+      SELECT to_jsonb(o.*) FROM stock_institutional_ownership o 
+      WHERE o.ticker = UPPER(p_ticker) ORDER BY o.report_date DESC LIMIT 1
+    )
+  ) INTO v_result;
+  
+  RETURN v_result;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_company_snapshot TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION get_significant_insider_buys(
+  p_min_value NUMERIC DEFAULT 100000,
+  p_days_back INTEGER DEFAULT 30
+)
+RETURNS TABLE (
+  ticker VARCHAR(10),
+  insider_name VARCHAR(255),
+  insider_title VARCHAR(255),
+  shares BIGINT,
+  total_value NUMERIC(18,4),
+  transaction_date DATE,
+  filed_date DATE
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    i.ticker,
+    i.insider_name,
+    i.insider_title,
+    i.shares,
+    i.total_value,
+    i.transaction_date,
+    i.filed_date
+  FROM insider_transactions i
+  WHERE i.transaction_type = 'P'
+    AND i.total_value >= p_min_value
+    AND i.transaction_date >= CURRENT_DATE - p_days_back
+  ORDER BY i.total_value DESC;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_significant_insider_buys TO authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION get_institutional_activity(p_quarter TEXT)
+RETURNS TABLE (
+  ticker VARCHAR(10),
+  buyers_count INTEGER,
+  sellers_count INTEGER,
+  net_shares_change BIGINT,
+  institutional_percent NUMERIC(8,4)
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    o.ticker,
+    o.buyers_count,
+    o.sellers_count,
+    o.shares_change_qoq as net_shares_change,
+    o.institutional_percent
+  FROM stock_institutional_ownership o
+  WHERE o.quarter = p_quarter
+  ORDER BY ABS(o.shares_change_qoq) DESC NULLS LAST;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_institutional_activity TO authenticated, service_role;
+
+DO $$ BEGIN
+  RAISE NOTICE '✅ Company Intelligence tables created successfully';
+END $$;
+
+-- =====================================================
+-- 13. FINAL VERIFICATION
+-- =====================================================
+
+DO $$
+DECLARE
+  v_table_count INTEGER;
+  v_function_count INTEGER;
+  v_vector_enabled BOOLEAN;
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') INTO v_vector_enabled;
+  
+  SELECT COUNT(*) INTO v_table_count
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  AND table_name IN (
+    'report_embeddings', 'ai_conversations', 'ai_messages', 'ai_usage', 'embedding_jobs',
+    'macro_data', 'macro_snapshots', 'macro_analyses',
+    'company_fundamentals', 'sec_filings', 'insider_transactions',
+    'institutional_holders', 'fund_positions', 'stock_institutional_ownership', 'company_intel_cache'
+  );
+  
+  SELECT COUNT(*) INTO v_function_count
+  FROM information_schema.routines
+  WHERE routine_schema = 'public'
+  AND routine_name IN (
+    'search_report_embeddings', 'search_embeddings', 'check_ai_usage_limit', 
+    'check_ai_usage', 'increment_ai_usage', 'get_conversation_with_messages', 
+    'get_latest_reports', 'cleanup_old_embeddings',
+    'get_company_snapshot', 'get_significant_insider_buys', 'get_institutional_activity'
+  );
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ FINOTAUR COMPLETE DATABASE MIGRATION DONE!';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE '📊 Results:';
+  RAISE NOTICE '   • pgvector extension: %', CASE WHEN v_vector_enabled THEN '✅ Enabled' ELSE '❌ Failed' END;
+  RAISE NOTICE '   • Tables created: %/15', v_table_count;
+  RAISE NOTICE '   • Functions created: %/11', v_function_count;
+  RAISE NOTICE '';
+  RAISE NOTICE '📁 AI COPILOT Tables (5):';
+  RAISE NOTICE '   • report_embeddings, ai_conversations, ai_messages';
+  RAISE NOTICE '   • ai_usage, embedding_jobs';
+  RAISE NOTICE '';
+  RAISE NOTICE '📁 MACRO INTELLIGENCE Tables (3):';
+  RAISE NOTICE '   • macro_data, macro_snapshots, macro_analyses';
+  RAISE NOTICE '';
+  RAISE NOTICE '📁 COMPANY INTELLIGENCE Tables (7):';
+  RAISE NOTICE '   • company_fundamentals, sec_filings, insider_transactions';
+  RAISE NOTICE '   • institutional_holders, fund_positions';
+  RAISE NOTICE '   • stock_institutional_ownership, company_intel_cache';
+  RAISE NOTICE '';
+  RAISE NOTICE '🔐 RLS: Enabled on all tables';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+SELECT 
+  t.tablename as table_name,
+  pg_size_pretty(pg_total_relation_size(t.schemaname || '.' || t.tablename)) as size,
+  (SELECT COUNT(*) FROM pg_policies p WHERE p.tablename = t.tablename) as policy_count
+FROM pg_tables t
+WHERE t.schemaname = 'public'
+AND t.tablename IN (
+  'report_embeddings', 'ai_conversations', 'ai_messages', 'ai_usage', 'embedding_jobs',
+  'macro_data', 'macro_snapshots', 'macro_analyses',
+  'company_fundamentals', 'sec_filings', 'insider_transactions',
+  'institutional_holders', 'fund_positions', 'stock_institutional_ownership', 'company_intel_cache'
+)
+ORDER BY t.tablename;
+
+-- =====================================================
+-- END OF MIGRATION
+-- =====================================================

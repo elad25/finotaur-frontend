@@ -130,7 +130,7 @@ interface ComprehensiveStats {
       monthly: { total: number; in_trial: number; paid: number };
       yearly: { total: number; paid: number };
     };
-    pro: {
+    finotaur: {
       total: number;
       monthly: { total: number; in_trial: number; paid: number };
       yearly: { total: number; paid: number };
@@ -708,9 +708,9 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
             monthly: { total: users.filter(u => u.platform_plan === 'core').length, in_trial: 0, paid: users.filter(u => u.platform_plan === 'core' && u.platform_subscription_status === 'active').length },
             yearly: { total: 0, paid: 0 },
           },
-          pro: {
-            total: users.filter(u => u.platform_plan === 'pro').length,
-            monthly: { total: users.filter(u => u.platform_plan === 'pro').length, in_trial: users.filter(u => u.platform_plan === 'pro' && u.platform_is_in_trial).length, paid: users.filter(u => u.platform_plan === 'pro' && u.platform_subscription_status === 'active').length },
+          finotaur: {
+            total: users.filter(u => u.platform_plan === 'finotaur').length,
+            monthly: { total: users.filter(u => u.platform_plan === 'finotaur').length, in_trial: users.filter(u => u.platform_plan === 'finotaur' && u.platform_is_in_trial).length, paid: users.filter(u => u.platform_plan === 'finotaur' && u.platform_subscription_status === 'active').length },
             yearly: { total: 0, paid: 0 },
             trial_eligible: 0,
           },
@@ -2231,7 +2231,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
 
       // Platform MRR
       const platformCorePaid = statsData.platform?.core?.monthly?.paid || 0;
-      const platformProPaid = statsData.platform?.pro?.monthly?.paid || 0;
+      const platformProPaid = statsData.platform?.finotaur?.monthly?.paid || 0;
       const platformEnterprise = statsData.platform?.enterprise?.total || 0;
       const platformMRR = 
         (platformCorePaid * PRICES.platform.core) + 
@@ -3168,7 +3168,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               subValues={[
                 { label: 'Trial', value: stats?.trials?.platform_trial || 0, color: 'text-orange-400' },
                 { label: 'Core', value: stats?.platform.core.total || 0 },
-                { label: 'Pro', value: stats?.platform.pro.total || 0 },
+                { label: 'Finotaur', value: stats?.platform.finotaur.total || 0 },
               ]}
             />
           </div>
@@ -5032,13 +5032,13 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               ]}
             />
             <StatCard
-              title="Pro Plan"
-              value={stats?.platform.pro.total || 0}
+              title="Finotaur Plan"
+              value={stats?.platform.finotaur.total || 0}
               icon={Crown}
               color="purple"
               subValues={[
-                { label: 'Monthly', value: stats?.platform.pro.monthly.total || 0 },
-                { label: 'Yearly', value: stats?.platform.pro.yearly.total || 0 },
+                { label: 'Monthly', value: stats?.platform.finotaur.monthly.total || 0 },
+                { label: 'Yearly', value: stats?.platform.finotaur.yearly.total || 0 },
               ]}
             />
             <StatCard
@@ -5058,11 +5058,11 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
               description="No platform subscription"
             />
             <StatCard
-              title="Pro Trial Eligible"
-              value={stats?.platform.pro.trial_eligible || 0}
+              title="Finotaur Trial Eligible"
+              value={stats?.platform.finotaur.trial_eligible || 0}
               icon={Clock}
               color="orange"
-              description="Haven't used 14-day Pro trial"
+              description="Haven't used 14-day Finotaur trial"
             />
           </div>
 
@@ -5079,10 +5079,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           {/* Pro Breakdown */}
           {stats && (
             <SubscriptionBreakdownCard
-              title="Pro Plan ($69/mo)"
+              title="Finotaur Plan ($69/mo)"
               icon={Crown}
-              monthly={stats.platform.pro.monthly}
-              yearly={stats.platform.pro.yearly}
+              monthly={stats.platform.finotaur.monthly}
+              yearly={stats.platform.finotaur.yearly}
             />
           )}
 

@@ -334,13 +334,21 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     initiateCheckout({ planName: 'platform_core', billingInterval: 'yearly' });
   }, [initiateCheckout]);
 
-  const checkoutPlatformProMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_pro', billingInterval: 'monthly' });
+  const checkoutPlatformFinotaurMonthly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' });
   }, [initiateCheckout]);
 
-  const checkoutPlatformProYearly = useCallback(() => {
-    initiateCheckout({ planName: 'platform_pro', billingInterval: 'yearly' });
+  const checkoutPlatformFinotaurYearly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'yearly' });
   }, [initiateCheckout]);
+
+  const checkoutPlatformEnterpriseMonthly = useCallback(() => {
+    initiateCheckout({ planName: 'platform_enterprise', billingInterval: 'monthly' });
+  }, [initiateCheckout]);
+
+  // Legacy aliases for backward compatibility
+  const checkoutPlatformProMonthly = checkoutPlatformFinotaurMonthly;
+  const checkoutPlatformProYearly = checkoutPlatformFinotaurYearly;
 
   /**
    * 🔥 Contact sales for Enterprise plan
@@ -371,9 +379,13 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
     checkoutPremiumMonthly,
     checkoutPremiumYearly,
     
-    // 🔥 Platform checkout helpers (NEW)
+    // 🔥 Platform checkout helpers
     checkoutPlatformCoreMonthly,
     checkoutPlatformCoreYearly,
+    checkoutPlatformFinotaurMonthly,
+    checkoutPlatformFinotaurYearly,
+    checkoutPlatformEnterpriseMonthly,
+    // Legacy aliases
     checkoutPlatformProMonthly,
     checkoutPlatformProYearly,
     contactEnterpriseSales,
@@ -435,7 +447,7 @@ export function redirectToWhopCheckout(
  * Redirect directly to Platform checkout
  */
 export function redirectToPlatformCheckout(
-  plan: 'core' | 'pro',
+  plan: 'core' | 'finotaur' | 'enterprise',
   billingInterval: BillingInterval,
   userEmail?: string,
   userId?: string,

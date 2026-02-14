@@ -33,7 +33,8 @@ export const ProtectedAppLayout = () => {
       <div className="flex flex-1">
         {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
         <main className="flex-1 overflow-auto">
-          <div className={hideSidebar ? "p-0" : "container max-w-7xl p-4 lg:p-6"}>
+          <div className={hideSidebar ? "p-0" : "w-full"}>
+
             <Outlet />
           </div>
         </main>

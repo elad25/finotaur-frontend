@@ -118,7 +118,6 @@ const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Sup
 const AdminSiteDashboard = lazy(() => import("@/pages/app/all-markets/admin/SiteDashboard"));
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
-
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -200,16 +199,14 @@ const OptionsEarningsIVCrush = lazy(() => import("@/pages/app/options/EarningsIV
 const OptionsShortcuts = lazy(() => import("@/pages/app/options/Shortcuts"));
 
 // AI
-const AIOverview = lazy(() => import("@/pages/app/ai/Overview"));
-const AIMorningBrief = lazy(() => import("@/pages/app/ai/MorningBrief"));
-const AIMarketPulse = lazy(() => import("@/pages/app/ai/MarketPulse"));
 const AIMyPortfolio = lazy(() => import("@/pages/app/ai/MyPortfolio"));
-const AIMacroEarnings = lazy(() => import("@/pages/app/ai/MacroEarnings"));
-const AITradeIdeas = lazy(() => import("@/pages/app/ai/TradeIdeas"));
-const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
-
+const AIStockAnalyzer = lazy(() => import("@/pages/app/ai/StockAnalyzer"));
+const AISectorAnalyzer = lazy(() => import("@/pages/app/ai/SectorAnalyzer"));
+const AIMacroAnalyzer = lazy(() => import("@/pages/app/ai/macro-analyzer/MacroAnalyzer"));
 const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntelligenceAI"));
-const AIMomentumLab = lazy(() => import("@/pages/app/ai/MomentumRegimeLab"));
+const AIFlowScanner = lazy(() => import("@/pages/app/ai/FlowScanner"));
+const AITop5 = lazy(() => import("@/pages/app/ai/Top5"));
+const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
 
 // Copy Trade
 const CopyTradeOverview = lazy(() => import("@/pages/app/copy-trade/Overview"));
@@ -384,15 +381,14 @@ function AppContent() {
           <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
           {/* AI */}
-          <Route path="ai/overview" element={<SuspenseRoute><AIOverview /></SuspenseRoute>} />
-          <Route path="ai/morning-brief" element={<SuspenseRoute><AIMorningBrief /></SuspenseRoute>} />
-          <Route path="ai/market-pulse" element={<SuspenseRoute><AIMarketPulse /></SuspenseRoute>} />
           <Route path="ai/my-portfolio" element={<SuspenseRoute><AIMyPortfolio /></SuspenseRoute>} />
-          <Route path="ai/macro-earnings" element={<SuspenseRoute><AIMacroEarnings /></SuspenseRoute>} />
-          <Route path="ai/trade-ideas" element={<LockedRoute domainId="ai"><AITradeIdeas /></LockedRoute>} />
-          <Route path="ai/assistant" element={<LockedRoute domainId="ai"><AIAssistant /></LockedRoute>} />
-<Route path="ai/options-intelligence" element={<SuspenseRoute><AIOptionsIntelligence /></SuspenseRoute>} />
-<Route path="ai/momentum-lab" element={<SuspenseRoute><AIMomentumLab /></SuspenseRoute>} />
+          <Route path="ai/stock-analyzer" element={<SuspenseRoute><AIStockAnalyzer /></SuspenseRoute>} />
+          <Route path="ai/sector-analyzer" element={<SuspenseRoute><AISectorAnalyzer /></SuspenseRoute>} />
+          <Route path="ai/macro-analyzer" element={<SuspenseRoute><AIMacroAnalyzer /></SuspenseRoute>} />
+          <Route path="ai/options-intelligence" element={<SuspenseRoute><AIOptionsIntelligence /></SuspenseRoute>} />
+          <Route path="ai/flow-scanner" element={<SuspenseRoute><AIFlowScanner /></SuspenseRoute>} />
+          <Route path="ai/top-5" element={<SuspenseRoute><AITop5 /></SuspenseRoute>} />
+          <Route path="ai/assistant" element={<SuspenseRoute><AIAssistant /></SuspenseRoute>} />
           {/* JOURNAL */}
           <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
 <Route path="journal/new" element={<JournalRoute><New /></JournalRoute>} />

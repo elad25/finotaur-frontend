@@ -1737,6 +1737,56 @@ COMMENT ON FUNCTION public.get_my_strategy_stats IS
 
 DROP FUNCTION IF EXISTS public.admin_get_stats() CASCADE;
 
+-- Create alias that maps to existing function
+CREATE OR REPLACE FUNCTION public.admin_get_dashboard_stats()
+RETURNS TABLE (
+  total_users BIGINT,
+  active_users BIGINT,
+  new_users_today BIGINT,
+  new_users_this_week BIGINT,
+  new_users_this_month BIGINT,
+  free_users BIGINT,
+  basic_users BIGINT,
+  premium_users BIGINT,
+  trial_users BIGINT,
+  newsletter_users BIGINT,
+  top_secret_users BIGINT,
+  basic_monthly_users BIGINT,
+  basic_yearly_users BIGINT,
+  premium_monthly_users BIGINT,
+  premium_yearly_users BIGINT,
+  estimated_monthly_revenue NUMERIC,
+  estimated_yearly_revenue NUMERIC,
+  total_trades BIGINT,
+  trades_this_week BIGINT,
+  trades_this_month BIGINT,
+  average_trades_per_user NUMERIC,
+  daily_active_users BIGINT,
+  weekly_active_users BIGINT,
+  monthly_active_users BIGINT,
+  free_to_paying_conversion_rate NUMERIC,
+  trial_to_paying_conversion_rate NUMERIC
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Delegate to existing admin_get_stats
+  RETURN QUERY SELECT * FROM public.admin_get_stats();
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_get_dashboard_stats IS 
+'v10.0.0: Alias for admin_get_stats - matches SITE_DASHBOARD call name.';
+
+GRANT EXECUTE ON FUNCTION public.admin_get_dashboard_stats() TO authenticated;
+
+-- =====================================================
+-- ADMIN STATS - FULL IMPLEMENTATION v9.0.0
+-- =====================================================
+
 CREATE OR REPLACE FUNCTION public.admin_get_stats()
 RETURNS TABLE (
   -- User counts
@@ -1817,13 +1867,18 @@ BEGIN
     AND (is_banned = FALSE OR is_banned IS NULL);
 
   -- ============================================
-  -- 🔥 WHOP VERIFIED = Users who paid via Whop
+  -- 🔥 WHOP VERIFIED = Users who ACTUALLY PAID in last 30 days
+  -- (Not just has membership ID, but real payment > $0)
   -- ============================================
-  SELECT COUNT(*) INTO v_whop_verified
-  FROM profiles 
-  WHERE deleted_at IS NULL 
-    AND (is_banned = FALSE OR is_banned IS NULL)
-    AND whop_membership_id IS NOT NULL;
+  SELECT COUNT(DISTINCT p.id) INTO v_whop_verified
+  FROM profiles p
+  INNER JOIN payment_history ph ON ph.user_id = p.id
+  WHERE p.deleted_at IS NULL 
+    AND (p.is_banned = FALSE OR p.is_banned IS NULL)
+    AND p.whop_membership_id IS NOT NULL
+    AND ph.status = 'completed'
+    AND ph.amount > 0
+    AND ph.created_at >= v_now - INTERVAL '30 days';
 
   -- ============================================
   -- 🔥 FREE USERS = Registered but no Whop payment
@@ -2056,116 +2111,341 @@ GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO service_role;
 
 -- Admin users list RPC (backup method)
-CREATE OR REPLACE FUNCTION public.admin_get_users_list(
+-- =====================================================
+-- admin_list_users - FIXED VERSION with all fields
+-- =====================================================
+DROP FUNCTION IF EXISTS public.admin_list_users(JSONB, INTEGER, INTEGER, TEXT, TEXT) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.admin_list_users(
+  p_filters JSONB DEFAULT '{}',
   p_limit INTEGER DEFAULT 100,
   p_offset INTEGER DEFAULT 0,
-  p_search TEXT DEFAULT NULL,
-  p_account_type TEXT DEFAULT NULL
+  p_sort_by TEXT DEFAULT 'created_at',
+  p_sort_order TEXT DEFAULT 'DESC'
 )
 RETURNS TABLE (
   id UUID,
   email TEXT,
   display_name TEXT,
-  account_type TEXT,
-  role TEXT,
-  subscription_status TEXT,
-  subscription_interval TEXT,
-  subscription_expires_at TIMESTAMPTZ,
-  subscription_cancel_at_period_end BOOLEAN,
-  is_banned BOOLEAN,
-  last_login_at TIMESTAMPTZ,
-  login_count INTEGER,
   created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ,
-  current_portfolio NUMERIC,
-  initial_portfolio NUMERIC,
+  account_type TEXT,
+  subscription_status TEXT,
+  whop_membership_id TEXT,
+  -- 🆕 Journal Trial fields
+  is_in_trial BOOLEAN,
+  trial_ends_at TIMESTAMPTZ,
+  subscription_cancel_at_period_end BOOLEAN,
+  subscription_started_at TIMESTAMPTZ,
+  -- Financial Info
   total_pnl NUMERIC,
-  trade_count INTEGER,
-  risk_settings JSONB,
-  current_month_trades_count INTEGER,
-  max_trades INTEGER,
-  portfolio_size NUMERIC,
+  initial_portfolio NUMERIC,
+  current_portfolio NUMERIC,
+  -- Risk Settings
   risk_mode TEXT,
   risk_percentage NUMERIC,
-  fixed_risk_amount NUMERIC,
-  calculated_one_r NUMERIC,
-  total_closed_trades BIGINT,
-  win_rate NUMERIC,
-  wins BIGINT,
-  losses BIGINT,
-  break_even BIGINT,
-  open_trades BIGINT,
-  last_trade_date TIMESTAMPTZ,
-  avg_r NUMERIC,
-  best_r NUMERIC,
-  worst_r NUMERIC
+  -- Newsletter fields
+  newsletter_status TEXT,
+  newsletter_whop_membership_id TEXT,
+  newsletter_enabled BOOLEAN,
+  newsletter_paid BOOLEAN,                    -- 🆕 NEW
+  newsletter_trial_ends_at TIMESTAMPTZ,       -- 🆕 NEW
+  newsletter_cancel_at_period_end BOOLEAN,    -- 🆕 NEW
+  newsletter_expires_at TIMESTAMPTZ,          -- 🆕 NEW
+  -- Top Secret fields
+  top_secret_status TEXT,
+  top_secret_whop_membership_id TEXT,
+  top_secret_enabled BOOLEAN,
+  top_secret_is_in_trial BOOLEAN,             -- 🆕 NEW
+  top_secret_trial_ends_at TIMESTAMPTZ,       -- 🆕 NEW
+  top_secret_cancel_at_period_end BOOLEAN,    -- 🆕 NEW
+  top_secret_started_at TIMESTAMPTZ,          -- 🆕 NEW
+  top_secret_expires_at TIMESTAMPTZ,          -- 🆕 NEW
+  -- Platform fields
+  platform_plan TEXT,
+  platform_subscription_status TEXT,
+  platform_is_in_trial BOOLEAN,               -- 🆕 NEW
+  platform_trial_ends_at TIMESTAMPTZ,         -- 🆕 NEW
+  platform_cancel_at_period_end BOOLEAN,      -- 🆕 NEW
+  -- Common fields
+  last_login_at TIMESTAMPTZ,
+  trade_count INTEGER,
+  subscription_interval TEXT,
+  subscription_expires_at TIMESTAMPTZ,
+  role TEXT,
+  is_banned BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
+DECLARE
+  v_is_admin BOOLEAN;
+  v_query TEXT;
+  v_where_clauses TEXT[] := ARRAY[]::TEXT[];
+  v_search TEXT;
+  v_account_type TEXT;
+  v_subscription_status TEXT;
+  v_newsletter_status TEXT;
+  v_top_secret_status TEXT;
+  v_platform_plan TEXT;
+  v_is_banned BOOLEAN;
+  v_has_active_subscription BOOLEAN;
 BEGIN
   -- Check if user is admin
-  IF NOT EXISTS (
-    SELECT 1 FROM public.profiles pf
-    WHERE pf.id = auth.uid() 
-    AND pf.role IN ('admin', 'super_admin')
-  ) THEN
+  SELECT p.role IN ('admin', 'super_admin') AND COALESCE(p.is_banned, false) = false
+  INTO v_is_admin
+  FROM public.profiles p
+  WHERE p.id = auth.uid();
+
+  IF NOT COALESCE(v_is_admin, false) THEN
     RAISE EXCEPTION 'Access denied: Admin only';
   END IF;
+
+  -- Extract filters from JSONB
+  v_search := p_filters->>'search';
+  v_account_type := p_filters->>'account_type';
+  v_subscription_status := p_filters->>'subscription_status';
+  v_newsletter_status := p_filters->>'newsletter_status';
+  v_top_secret_status := p_filters->>'top_secret_status';
+  v_platform_plan := p_filters->>'platform_plan';
+  v_is_banned := (p_filters->>'is_banned')::BOOLEAN;
+  v_has_active_subscription := (p_filters->>'has_active_subscription')::BOOLEAN;
+
+  -- Build WHERE clauses
+  IF v_search IS NOT NULL AND v_search != '' THEN
+    v_where_clauses := array_append(v_where_clauses, 
+      format('(email ILIKE %L OR display_name ILIKE %L)', '%' || v_search || '%', '%' || v_search || '%'));
+  END IF;
+
+  IF v_account_type IS NOT NULL AND v_account_type != 'all' THEN
+    IF v_account_type = 'free' THEN
+      v_where_clauses := array_append(v_where_clauses, '(account_type IS NULL OR account_type = ''free'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('account_type = %L', v_account_type));
+    END IF;
+  END IF;
+
+  IF v_subscription_status IS NOT NULL AND v_subscription_status != 'all' THEN
+    v_where_clauses := array_append(v_where_clauses, format('subscription_status = %L', v_subscription_status));
+  END IF;
+
+  IF v_newsletter_status IS NOT NULL AND v_newsletter_status != 'all' THEN
+    IF v_newsletter_status = 'inactive' THEN
+      v_where_clauses := array_append(v_where_clauses, '(newsletter_status IS NULL OR newsletter_status = ''inactive'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('newsletter_status = %L', v_newsletter_status));
+    END IF;
+  END IF;
+
+  IF v_top_secret_status IS NOT NULL AND v_top_secret_status != 'all' THEN
+    IF v_top_secret_status = 'inactive' THEN
+      v_where_clauses := array_append(v_where_clauses, '(top_secret_status IS NULL OR top_secret_status = ''inactive'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('top_secret_status = %L', v_top_secret_status));
+    END IF;
+  END IF;
+
+  IF v_platform_plan IS NOT NULL AND v_platform_plan != 'all' THEN
+    IF v_platform_plan = 'free' THEN
+      v_where_clauses := array_append(v_where_clauses, '(platform_plan IS NULL OR platform_plan = ''free'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('platform_plan = %L', v_platform_plan));
+    END IF;
+  END IF;
+
+  IF v_is_banned IS NOT NULL THEN
+    v_where_clauses := array_append(v_where_clauses, format('is_banned = %L', v_is_banned));
+  END IF;
+
+  IF v_has_active_subscription = true THEN
+    v_where_clauses := array_append(v_where_clauses, 
+      '(whop_membership_id IS NOT NULL OR newsletter_whop_membership_id IS NOT NULL OR top_secret_whop_membership_id IS NOT NULL)');
+  END IF;
+
+  -- Build the final query
+  v_query := '
+    SELECT 
+      p.id,
+      p.email::TEXT,
+      p.display_name::TEXT,
+      p.created_at,
+      p.account_type::TEXT,
+      p.subscription_status::TEXT,
+      p.whop_membership_id::TEXT,
+      -- Journal Trial fields
+      COALESCE(p.is_in_trial, false) AS is_in_trial,
+      p.trial_ends_at,
+      COALESCE(p.subscription_cancel_at_period_end, false) AS subscription_cancel_at_period_end,
+      p.subscription_started_at,
+      -- Financial Info
+      COALESCE(p.total_pnl, 0) AS total_pnl,
+      COALESCE(p.initial_portfolio, 10000) AS initial_portfolio,
+      COALESCE(p.current_portfolio, 10000) AS current_portfolio,
+      -- Risk Settings
+      COALESCE(p.risk_mode, ''percentage'')::TEXT AS risk_mode,
+      COALESCE(p.risk_percentage, 1)::NUMERIC AS risk_percentage,
+      -- Newsletter fields
+      p.newsletter_status::TEXT,
+      p.newsletter_whop_membership_id::TEXT,
+      p.newsletter_enabled,
+      COALESCE(p.newsletter_paid, false) AS newsletter_paid,
+      p.newsletter_trial_ends_at,
+      COALESCE(p.newsletter_cancel_at_period_end, false) AS newsletter_cancel_at_period_end,
+      p.newsletter_expires_at,
+      -- Top Secret fields
+      p.top_secret_status::TEXT,
+      p.top_secret_whop_membership_id::TEXT,
+      p.top_secret_enabled,
+      COALESCE(p.top_secret_is_in_trial, false) AS top_secret_is_in_trial,
+      p.top_secret_trial_ends_at,
+      COALESCE(p.top_secret_cancel_at_period_end, false) AS top_secret_cancel_at_period_end,
+      p.top_secret_started_at,
+      p.top_secret_expires_at,
+      -- Platform fields
+      p.platform_plan::TEXT,
+      p.platform_subscription_status::TEXT,
+      COALESCE(p.platform_is_in_trial, false) AS platform_is_in_trial,
+      p.platform_trial_ends_at,
+      COALESCE(p.platform_cancel_at_period_end, false) AS platform_cancel_at_period_end,
+      -- Common fields
+      p.last_login_at,
+      COALESCE(p.trade_count, 0) AS trade_count,
+      p.subscription_interval::TEXT,
+      p.subscription_expires_at,
+      p.role::TEXT,
+      COALESCE(p.is_banned, false) AS is_banned
+    FROM public.profiles p
+    WHERE p.deleted_at IS NULL';
+
+  -- Add WHERE clauses if any
+  IF array_length(v_where_clauses, 1) > 0 THEN
+    v_query := v_query || ' AND ' || array_to_string(v_where_clauses, ' AND ');
+  END IF;
+
+  -- Add ORDER BY (sanitize sort column)
+  IF p_sort_by NOT IN ('created_at', 'email', 'last_login_at', 'trade_count', 'display_name') THEN
+    p_sort_by := 'created_at';
+  END IF;
   
-  RETURN QUERY
-  SELECT 
-    u.id::UUID,
-    u.email::TEXT,
-    u.display_name::TEXT,
-    u.account_type::TEXT,
-    u.role::TEXT,
-    u.subscription_status::TEXT,
-    u.subscription_interval::TEXT,
-    u.subscription_expires_at::TIMESTAMPTZ,
-    u.subscription_cancel_at_period_end::BOOLEAN,
-    u.is_banned::BOOLEAN,
-    u.last_login_at::TIMESTAMPTZ,
-    u.login_count::INTEGER,
-    u.created_at::TIMESTAMPTZ,
-    u.updated_at::TIMESTAMPTZ,
-    u.current_portfolio::NUMERIC,
-    u.initial_portfolio::NUMERIC,
-    u.total_pnl::NUMERIC,
-    u.trade_count::INTEGER,
-    u.risk_settings::JSONB,
-    u.current_month_trades_count::INTEGER,
-    u.max_trades::INTEGER,
-    u.portfolio_size::NUMERIC,
-    u.risk_mode::TEXT,
-    u.risk_percentage::NUMERIC,
-    u.fixed_risk_amount::NUMERIC,
-    u.calculated_one_r::NUMERIC,
-    u.total_closed_trades::BIGINT,
-    u.win_rate::NUMERIC,
-    u.wins::BIGINT,
-    u.losses::BIGINT,
-    u.break_even::BIGINT,
-    u.open_trades::BIGINT,
-    u.last_trade_date::TIMESTAMPTZ,
-    u.avg_r::NUMERIC,
-    u.best_r::NUMERIC,
-    u.worst_r::NUMERIC
-  FROM public.admin_users_list_view u
-  WHERE u.id IS NOT NULL
-    AND (p_search IS NULL OR 
-         u.email ILIKE '%' || p_search || '%' OR 
-         u.display_name ILIKE '%' || p_search || '%')
-    AND (p_account_type IS NULL OR u.account_type = p_account_type)
-  ORDER BY u.created_at DESC
-  LIMIT p_limit
-  OFFSET p_offset;
+  IF UPPER(p_sort_order) NOT IN ('ASC', 'DESC') THEN
+    p_sort_order := 'DESC';
+  END IF;
+
+  v_query := v_query || format(' ORDER BY %I %s NULLS LAST', p_sort_by, UPPER(p_sort_order));
+
+  -- Add LIMIT and OFFSET
+  v_query := v_query || format(' LIMIT %s OFFSET %s', p_limit, p_offset);
+
+  -- Execute and return
+  RETURN QUERY EXECUTE v_query;
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.admin_get_users_list(INTEGER, INTEGER, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_users(JSONB, INTEGER, INTEGER, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_users(JSONB, INTEGER, INTEGER, TEXT, TEXT) TO service_role;
+
+-- =====================================================
+-- admin_count_users - For pagination
+-- =====================================================
+DROP FUNCTION IF EXISTS public.admin_count_users(JSONB) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.admin_count_users(
+  p_filters JSONB DEFAULT '{}'
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_is_admin BOOLEAN;
+  v_count INTEGER;
+  v_query TEXT;
+  v_where_clauses TEXT[] := ARRAY[]::TEXT[];
+  v_search TEXT;
+  v_account_type TEXT;
+  v_subscription_status TEXT;
+  v_newsletter_status TEXT;
+  v_top_secret_status TEXT;
+  v_platform_plan TEXT;
+BEGIN
+  -- Check if user is admin
+  SELECT p.role IN ('admin', 'super_admin') AND COALESCE(p.is_banned, false) = false
+  INTO v_is_admin
+  FROM public.profiles p
+  WHERE p.id = auth.uid();
+
+  IF NOT COALESCE(v_is_admin, false) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+
+  -- Extract filters
+  v_search := p_filters->>'search';
+  v_account_type := p_filters->>'account_type';
+  v_subscription_status := p_filters->>'subscription_status';
+  v_newsletter_status := p_filters->>'newsletter_status';
+  v_top_secret_status := p_filters->>'top_secret_status';
+  v_platform_plan := p_filters->>'platform_plan';
+
+  -- Build WHERE clauses (same logic as admin_list_users)
+  IF v_search IS NOT NULL AND v_search != '' THEN
+    v_where_clauses := array_append(v_where_clauses, 
+      format('(email ILIKE %L OR display_name ILIKE %L)', '%' || v_search || '%', '%' || v_search || '%'));
+  END IF;
+
+  IF v_account_type IS NOT NULL AND v_account_type != 'all' THEN
+    IF v_account_type = 'free' THEN
+      v_where_clauses := array_append(v_where_clauses, '(account_type IS NULL OR account_type = ''free'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('account_type = %L', v_account_type));
+    END IF;
+  END IF;
+
+  IF v_subscription_status IS NOT NULL AND v_subscription_status != 'all' THEN
+    v_where_clauses := array_append(v_where_clauses, format('subscription_status = %L', v_subscription_status));
+  END IF;
+
+  IF v_newsletter_status IS NOT NULL AND v_newsletter_status != 'all' THEN
+    IF v_newsletter_status = 'inactive' THEN
+      v_where_clauses := array_append(v_where_clauses, '(newsletter_status IS NULL OR newsletter_status = ''inactive'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('newsletter_status = %L', v_newsletter_status));
+    END IF;
+  END IF;
+
+  IF v_top_secret_status IS NOT NULL AND v_top_secret_status != 'all' THEN
+    IF v_top_secret_status = 'inactive' THEN
+      v_where_clauses := array_append(v_where_clauses, '(top_secret_status IS NULL OR top_secret_status = ''inactive'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('top_secret_status = %L', v_top_secret_status));
+    END IF;
+  END IF;
+
+  IF v_platform_plan IS NOT NULL AND v_platform_plan != 'all' THEN
+    IF v_platform_plan = 'free' THEN
+      v_where_clauses := array_append(v_where_clauses, '(platform_plan IS NULL OR platform_plan = ''free'')');
+    ELSE
+      v_where_clauses := array_append(v_where_clauses, format('platform_plan = %L', v_platform_plan));
+    END IF;
+  END IF;
+
+  -- Build query
+  v_query := 'SELECT COUNT(*) FROM public.profiles p WHERE p.deleted_at IS NULL';
+
+  IF array_length(v_where_clauses, 1) > 0 THEN
+    v_query := v_query || ' AND ' || array_to_string(v_where_clauses, ' AND ');
+  END IF;
+
+  EXECUTE v_query INTO v_count;
+  
+  RETURN v_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.admin_count_users(JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_count_users(JSONB) TO service_role;
 
 -- Payment analytics RPC
 CREATE OR REPLACE FUNCTION public.admin_get_payment_analytics()
@@ -2241,6 +2521,563 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.admin_get_subscription_health() TO authenticated;
 
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔥 MISSING RPC FUNCTIONS FOR SITE DASHBOARD
+-- ═══════════════════════════════════════════════════════════════
+-- These 2 functions are called by SiteDashboard.tsx but do NOT
+-- exist in any DB migration file (1-12).
+--
+-- 1. get_comprehensive_subscription_stats  (called at line 593, 1946)
+-- 2. get_users_by_subscription             (called at line 768, 800)
+--
+-- 📁 TARGET FILE: קובץ 4 (Views + Permissions)
+-- 📍 LOCATION: BEFORE the "3.10: VERIFICATION" block (line 2510)
+-- ═══════════════════════════════════════════════════════════════
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- FUNCTION 1: get_comprehensive_subscription_stats
+-- ═══════════════════════════════════════════════════════════════
+-- Returns the EXACT JSON structure that ComprehensiveStats
+-- interface expects in SiteDashboard.tsx (lines 70-155)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_comprehensive_subscription_stats() CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_comprehensive_subscription_stats()
+RETURNS JSON
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+DECLARE
+  v_result JSON;
+  v_now TIMESTAMPTZ := NOW();
+  v_today DATE := CURRENT_DATE;
+  v_week_ago TIMESTAMPTZ := NOW() - INTERVAL '7 days';
+  v_month_ago TIMESTAMPTZ := NOW() - INTERVAL '30 days';
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid()
+    AND pf.role IN ('admin', 'super_admin')
+    AND COALESCE(pf.is_banned, false) = false
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+
+  SELECT json_build_object(
+    'generated_at', v_now,
+
+    -- ===== OVERALL =====
+    'overall', json_build_object(
+      'total_users', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL),
+      'active_today', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND last_login_at >= v_today::TIMESTAMPTZ),
+      'active_this_week', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND last_login_at >= v_week_ago),
+      'active_this_month', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND last_login_at >= v_month_ago),
+      'new_users_today', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND created_at >= v_today::TIMESTAMPTZ),
+      'new_users_this_week', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND created_at >= v_week_ago),
+      'new_users_this_month', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND created_at >= v_month_ago)
+    ),
+
+    -- ===== JOURNAL =====
+    'journal', json_build_object(
+      'basic', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic'),
+        'monthly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_interval = 'monthly'),
+          'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_interval = 'monthly' AND COALESCE(is_in_trial, false) = true),
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_interval = 'monthly' AND COALESCE(is_in_trial, false) = false AND whop_membership_id IS NOT NULL)
+        ),
+        'yearly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_interval = 'yearly'),
+          'in_trial', 0,
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_interval = 'yearly' AND whop_membership_id IS NOT NULL)
+        ),
+        'pending_cancellation', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND subscription_status = 'cancelled')
+      ),
+      'premium', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium'),
+        'monthly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_interval = 'monthly'),
+          'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_interval = 'monthly' AND COALESCE(is_in_trial, false) = true),
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_interval = 'monthly' AND COALESCE(is_in_trial, false) = false AND whop_membership_id IS NOT NULL)
+        ),
+        'yearly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_interval = 'yearly'),
+          'in_trial', 0,
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_interval = 'yearly' AND whop_membership_id IS NOT NULL)
+        ),
+        'pending_cancellation', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND subscription_status = 'cancelled')
+      ),
+      'free', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (account_type IS NULL OR account_type = 'free')),
+      'legacy_no_whop', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type IS NOT NULL AND account_type != 'free' AND whop_membership_id IS NULL),
+      'total_subscribers', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type IS NOT NULL AND account_type != 'free' AND whop_membership_id IS NOT NULL),
+      'total_in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (subscription_status = 'trial' OR COALESCE(is_in_trial, false) = true)),
+      'total_paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND whop_membership_id IS NOT NULL AND COALESCE(is_in_trial, false) = false AND subscription_status = 'active')
+    ),
+
+    -- ===== NEWSLETTER (WAR ZONE) =====
+    'newsletter', json_build_object(
+      'total_subscribers', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (newsletter_status = 'active' OR newsletter_whop_membership_id IS NOT NULL)),
+      'monthly', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_status = 'active'),
+        'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_status = 'trial'),
+        'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_whop_membership_id IS NOT NULL AND newsletter_status = 'active'),
+        'top_secret_discount', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND COALESCE(newsletter_enabled, false) = true AND COALESCE(top_secret_enabled, false) = true)
+      ),
+      'yearly', json_build_object(
+        'total', 0,
+        'paid', 0
+      ),
+      'cancelled', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_status = 'cancelled'),
+      'pending_cancellation', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND COALESCE(newsletter_cancel_at_period_end, false) = true AND newsletter_status = 'active')
+    ),
+
+    -- ===== TOP SECRET =====
+    'top_secret', json_build_object(
+      'total_subscribers', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (top_secret_status = 'active' OR top_secret_whop_membership_id IS NOT NULL)),
+      'monthly', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'active'),
+        'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'trial'),
+        'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_whop_membership_id IS NOT NULL AND top_secret_status = 'active')
+      ),
+      'yearly', json_build_object(
+        'total', 0,
+        'in_trial', 0,
+        'paid', 0
+      ),
+      'journey', json_build_object(
+        'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'trial'),
+        'month_1', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'active' AND top_secret_started_at >= NOW() - INTERVAL '30 days'),
+        'month_2', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'active' AND top_secret_started_at < NOW() - INTERVAL '30 days' AND top_secret_started_at >= NOW() - INTERVAL '60 days'),
+        'month_3_plus', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'active' AND top_secret_started_at < NOW() - INTERVAL '60 days')
+      ),
+      'cancelled', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'cancelled'),
+      'pending_cancellation', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND COALESCE(top_secret_cancel_at_period_end, false) = true AND top_secret_status = 'active')
+    ),
+
+    -- ===== PLATFORM =====
+    'platform', json_build_object(
+      'total_subscribers', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan IS NOT NULL AND platform_plan != 'free'),
+      'free', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (platform_plan IS NULL OR platform_plan = 'free')),
+      'core', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core'),
+        'monthly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core'),
+          'in_trial', 0,
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core' AND platform_subscription_status = 'active')
+        ),
+        'yearly', json_build_object('total', 0, 'paid', 0)
+      ),
+      'pro', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro'),
+        'monthly', json_build_object(
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro'),
+          'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND COALESCE(platform_is_in_trial, false) = true),
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND platform_subscription_status = 'active')
+        ),
+        'yearly', json_build_object('total', 0, 'paid', 0),
+        'trial_eligible', 0
+      ),
+      'enterprise', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'enterprise')
+      ),
+      'pending_cancellation', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND COALESCE(platform_cancel_at_period_end, false) = true)
+    ),
+
+    -- ===== REVENUE (MRR) =====
+    'revenue', json_build_object(
+      'journal_mrr', ROUND((
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND whop_membership_id IS NOT NULL AND COALESCE(is_in_trial, false) = false AND subscription_interval = 'monthly') * 19.99 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'basic' AND whop_membership_id IS NOT NULL AND subscription_interval = 'yearly') * 12.42 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND whop_membership_id IS NOT NULL AND COALESCE(is_in_trial, false) = false AND subscription_interval = 'monthly') * 39.99 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND account_type = 'premium' AND whop_membership_id IS NOT NULL AND subscription_interval = 'yearly') * 24.92
+      )::NUMERIC, 2),
+      'newsletter_mrr', ROUND((
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_whop_membership_id IS NOT NULL AND newsletter_status = 'active' AND COALESCE(top_secret_enabled, false) = false) * 69.99 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_whop_membership_id IS NOT NULL AND newsletter_status = 'active' AND COALESCE(top_secret_enabled, false) = true) * 30
+      )::NUMERIC, 2),
+      'top_secret_mrr', ROUND((
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_whop_membership_id IS NOT NULL AND top_secret_status = 'active' AND COALESCE(newsletter_enabled, false) = false) * 89.99 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_whop_membership_id IS NOT NULL AND top_secret_status = 'active' AND COALESCE(newsletter_enabled, false) = true) * 50
+      )::NUMERIC, 2),
+      'platform_mrr', ROUND((
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core' AND platform_subscription_status = 'active') * 39 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND platform_subscription_status = 'active') * 69 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'enterprise' AND platform_subscription_status = 'active') * 199
+      )::NUMERIC, 2)
+    ),
+
+    -- ===== TRIALS =====
+    'trials', json_build_object(
+      'total_in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (COALESCE(is_in_trial, false) = true OR subscription_status = 'trial' OR newsletter_status = 'trial' OR COALESCE(platform_is_in_trial, false) = true)),
+      'journal_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND (subscription_status = 'trial' OR COALESCE(is_in_trial, false) = true)),
+      'newsletter_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND newsletter_status = 'trial'),
+      'top_secret_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_status = 'trial'),
+      'platform_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND COALESCE(platform_is_in_trial, false) = true)
+    )
+  ) INTO v_result;
+
+  RETURN v_result;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_comprehensive_subscription_stats IS
+'v1.0.0: Returns full subscription statistics JSON matching ComprehensiveStats interface in SiteDashboard.tsx. Admin only.';
+
+GRANT EXECUTE ON FUNCTION public.get_comprehensive_subscription_stats() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_comprehensive_subscription_stats() TO service_role;
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- FUNCTION 2: get_users_by_subscription
+-- ═══════════════════════════════════════════════════════════════
+-- Returns users filtered by product type and status.
+-- Must match UserListItem interface in SiteDashboard.tsx (lines 157-169)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.get_users_by_subscription(TEXT, TEXT) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.get_users_by_subscription(
+  p_product_type TEXT,
+  p_filter TEXT DEFAULT 'all'
+)
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  display_name TEXT,
+  status TEXT,
+  plan TEXT,
+  billing_interval TEXT,
+  is_in_trial BOOLEAN,
+  started_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ,
+  last_login_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  -- Check if user is admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles pf
+    WHERE pf.id = auth.uid()
+    AND pf.role IN ('admin', 'super_admin')
+    AND COALESCE(pf.is_banned, false) = false
+  ) THEN
+    RAISE EXCEPTION 'Access denied: Admin only';
+  END IF;
+
+  -- ===== JOURNAL =====
+  IF p_product_type = 'journal' THEN
+    IF p_filter = 'free' THEN
+      -- Free users: no whop_membership_id and no paid account
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.subscription_status, 'none')::TEXT AS status,
+        COALESCE(p.account_type, 'free')::TEXT AS plan,
+        p.subscription_interval::TEXT AS billing_interval,
+        COALESCE(p.is_in_trial, false) AS is_in_trial,
+        p.subscription_started_at AS started_at,
+        p.subscription_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND p.whop_membership_id IS NULL
+        AND (p.account_type IS NULL OR p.account_type IN ('basic') AND COALESCE(p.is_in_trial, false) = false AND p.subscription_status != 'active')
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'basic' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.subscription_status, 'none')::TEXT AS status,
+        p.account_type::TEXT AS plan,
+        p.subscription_interval::TEXT AS billing_interval,
+        COALESCE(p.is_in_trial, false) AS is_in_trial,
+        p.subscription_started_at AS started_at,
+        p.subscription_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.account_type = 'basic'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'premium' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.subscription_status, 'none')::TEXT AS status,
+        p.account_type::TEXT AS plan,
+        p.subscription_interval::TEXT AS billing_interval,
+        COALESCE(p.is_in_trial, false) AS is_in_trial,
+        p.subscription_started_at AS started_at,
+        p.subscription_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.account_type = 'premium'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'trial' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.subscription_status, 'trial')::TEXT AS status,
+        COALESCE(p.account_type, 'basic')::TEXT AS plan,
+        p.subscription_interval::TEXT AS billing_interval,
+        true AS is_in_trial,
+        p.subscription_started_at AS started_at,
+        p.trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND (p.subscription_status = 'trial' OR COALESCE(p.is_in_trial, false) = true)
+      ORDER BY p.created_at DESC;
+
+    ELSE -- 'all'
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.subscription_status, 'none')::TEXT AS status,
+        COALESCE(p.account_type, 'free')::TEXT AS plan,
+        p.subscription_interval::TEXT AS billing_interval,
+        COALESCE(p.is_in_trial, false) AS is_in_trial,
+        p.subscription_started_at AS started_at,
+        p.subscription_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND p.account_type IN ('basic', 'premium')
+      ORDER BY p.created_at DESC;
+    END IF;
+
+  -- ===== NEWSLETTER (WAR ZONE) =====
+  ELSIF p_product_type = 'newsletter' THEN
+    IF p_filter = 'active' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.newsletter_status, 'inactive')::TEXT AS status,
+        'newsletter'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        false AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.newsletter_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.newsletter_status = 'active'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'trial' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        'trial'::TEXT AS status,
+        'newsletter'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        true AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.newsletter_trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.newsletter_status = 'trial'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'cancelled' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        'cancelled'::TEXT AS status,
+        'newsletter'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        false AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.newsletter_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.newsletter_status = 'cancelled'
+      ORDER BY p.created_at DESC;
+
+    ELSE -- 'all'
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.newsletter_status, 'inactive')::TEXT AS status,
+        'newsletter'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        (p.newsletter_status = 'trial') AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.newsletter_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND (p.newsletter_status IS NOT NULL AND p.newsletter_status != 'inactive')
+      ORDER BY p.created_at DESC;
+    END IF;
+
+  -- ===== TOP SECRET =====
+  ELSIF p_product_type = 'top_secret' THEN
+    IF p_filter = 'active' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.top_secret_status, 'inactive')::TEXT AS status,
+        'top_secret'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        COALESCE(p.top_secret_is_in_trial, false) AS is_in_trial,
+        p.top_secret_started_at AS started_at,
+        p.top_secret_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.top_secret_status = 'active'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'trial' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        'trial'::TEXT AS status,
+        'top_secret'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        true AS is_in_trial,
+        p.top_secret_started_at AS started_at,
+        p.top_secret_trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.top_secret_status = 'trial'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'cancelled' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        'cancelled'::TEXT AS status,
+        'top_secret'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        false AS is_in_trial,
+        p.top_secret_started_at AS started_at,
+        p.top_secret_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.top_secret_status = 'cancelled'
+      ORDER BY p.created_at DESC;
+
+    ELSE -- 'all'
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.top_secret_status, 'inactive')::TEXT AS status,
+        'top_secret'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        COALESCE(p.top_secret_is_in_trial, false) AS is_in_trial,
+        p.top_secret_started_at AS started_at,
+        p.top_secret_expires_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND (p.top_secret_status IS NOT NULL AND p.top_secret_status != 'inactive')
+      ORDER BY p.created_at DESC;
+    END IF;
+
+  -- ===== PLATFORM =====
+  ELSIF p_product_type = 'platform' THEN
+    IF p_filter = 'core' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.platform_subscription_status, 'inactive')::TEXT AS status,
+        'core'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        COALESCE(p.platform_is_in_trial, false) AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.platform_trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.platform_plan = 'core'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'pro' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.platform_subscription_status, 'inactive')::TEXT AS status,
+        'pro'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        COALESCE(p.platform_is_in_trial, false) AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.platform_trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.platform_plan = 'pro'
+      ORDER BY p.created_at DESC;
+
+    ELSIF p_filter = 'enterprise' THEN
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.platform_subscription_status, 'inactive')::TEXT AS status,
+        'enterprise'::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        false AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        NULL::TIMESTAMPTZ AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL AND p.platform_plan = 'enterprise'
+      ORDER BY p.created_at DESC;
+
+    ELSE -- 'all'
+      RETURN QUERY
+      SELECT
+        p.id, p.email, p.display_name,
+        COALESCE(p.platform_subscription_status, 'inactive')::TEXT AS status,
+        COALESCE(p.platform_plan, 'free')::TEXT AS plan,
+        NULL::TEXT AS billing_interval,
+        COALESCE(p.platform_is_in_trial, false) AS is_in_trial,
+        NULL::TIMESTAMPTZ AS started_at,
+        p.platform_trial_ends_at AS expires_at,
+        p.created_at,
+        p.last_login_at
+      FROM public.profiles p
+      WHERE p.deleted_at IS NULL
+        AND p.platform_plan IS NOT NULL AND p.platform_plan != 'free'
+      ORDER BY p.created_at DESC;
+    END IF;
+
+  ELSE
+    RAISE EXCEPTION 'Unknown product type: %. Valid types: journal, newsletter, top_secret, platform', p_product_type;
+  END IF;
+END;
+$$;
+
+COMMENT ON FUNCTION public.get_users_by_subscription IS
+'v1.0.0: Returns users filtered by subscription product and status. Matches UserListItem interface in SiteDashboard.tsx. Admin only.';
+
+GRANT EXECUTE ON FUNCTION public.get_users_by_subscription(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_users_by_subscription(TEXT, TEXT) TO service_role;
 -- ═══════════════════════════════════════════════════════════════
 -- 3.10: VERIFICATION
 -- ═══════════════════════════════════════════════════════════════
@@ -2264,8 +3101,9 @@ BEGIN
   JOIN pg_namespace n ON p.pronamespace = n.oid
   WHERE n.nspname = 'public'
     AND p.proname IN ('get_my_webhook_stats', 'get_my_strategy_stats', 
-                      'admin_get_stats', 'admin_get_users_list', 
-                      'admin_get_payment_analytics', 'admin_get_subscription_health');
+                      'admin_get_stats', 'admin_list_users', 
+                      'admin_get_payment_analytics', 'admin_get_subscription_health',
+                      'get_comprehensive_subscription_stats', 'get_users_by_subscription');
 
   RAISE NOTICE '';
   RAISE NOTICE '═══════════════════════════════════════════════';
@@ -2274,7 +3112,7 @@ BEGIN
   RAISE NOTICE '';
   RAISE NOTICE '📊 Results:';
   RAISE NOTICE '   ├─ Admin views with SELECT grant: % (should be 3)', v_views_with_auth;
-  RAISE NOTICE '   └─ RPC functions created: % (should be 6)', v_functions_created;
+  RAISE NOTICE '   └─ RPC functions created: % (should be 8)', v_functions_created;
   RAISE NOTICE '';
   RAISE NOTICE '🔐 Security Model:';
   RAISE NOTICE '   ├─ Admin Views → Built-in admin check (returns NULL for non-admins)';

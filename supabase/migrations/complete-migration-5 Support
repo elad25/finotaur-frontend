@@ -680,7 +680,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function: Get announcement recipients based on filters
-CREATE OR REPLACE FUNCTION get_announcement_recipients(p_filters JSONB)
+CREATE OR REPLACE FUNCTION public.get_announcement_recipients(p_filters JSONB)
 RETURNS TABLE (
   email TEXT,
   display_name TEXT,

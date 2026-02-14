@@ -344,28 +344,14 @@ export const TopNav = () => {
 
               <DropdownMenuSeparator className="bg-[#C9A646]/10" />
 
-              {/* 🔒 Upgrade - LOCKED (Coming Soon) unless beta */}
-              {hasBetaAccess ? (
-                <DropdownMenuItem 
-                  onClick={() => navigate('/app/settings/billing')}
-                  className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
-                >
-                  <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
-                  <span className="text-white">Upgrade</span>
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem 
-                  className="cursor-not-allowed opacity-50 hover:bg-transparent focus:bg-transparent"
-                  disabled
-                >
-                  <Crown className="mr-2 h-4 w-4 text-[#C9A646]/50" />
-                  <span className="text-white/50">Upgrade</span>
-                  <span className="ml-auto text-[10px] text-[#A0A0A0]/60 flex items-center gap-1">
-                    <Lock className="w-2.5 h-2.5" />
-                    Soon
-                  </span>
-                </DropdownMenuItem>
-              )}
+              {/* ✅ Upgrade - UNLOCKED */}
+              <DropdownMenuItem 
+                onClick={() => navigate('/app/all-markets/pricing')}
+                className="cursor-pointer hover:bg-zinc-800 focus:bg-zinc-800"
+              >
+                <Crown className="mr-2 h-4 w-4 text-[#C9A646]" />
+                <span className="text-white">Upgrade</span>
+              </DropdownMenuItem>
 
               {/* ✅ Settings - UNLOCKED */}
               <DropdownMenuItem 

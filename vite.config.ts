@@ -14,13 +14,13 @@ export default defineConfig({
 
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        secure: false,
-      }
-    },
+proxy: {
+  '/api': {
+    target: 'https://finotaur-server-production.up.railway.app',
+    changeOrigin: true,
+    secure: true,
+  }
+},
     watch: {
       usePolling: false,
     },

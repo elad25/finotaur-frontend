@@ -221,18 +221,17 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
 // ===============================================
-// 🤖 AI INSIGHTS
+// 🤖 AI INSIGHTS - 🔥 UPDATED v2.1
 // ===============================================
 'ai': [
-  { label: 'Overview', path: '/app/ai/overview', icon: LayoutDashboard },
-  { label: 'Morning Brief', path: '/app/ai/morning-brief', icon: Zap },
-  { label: 'Market Pulse', path: '/app/ai/market-pulse', icon: Activity },
   { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
-  { label: 'Macro & Earnings', path: '/app/ai/macro-earnings', icon: Globe },
-  { label: 'Trade Ideas', path: '/app/ai/trade-ideas', icon: Target, locked: false },
+  { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
+  { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
+  { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
   { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
-  { label: 'Momentum Lab', path: '/app/ai/momentum-lab', icon: TrendingUp },
-  { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare, locked: false },
+  { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
+  { label: 'Top 5', path: '/app/ai/top-5', icon: Award },
+  { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
 ],
   // ===============================================
   // 📓 JOURNAL
@@ -509,24 +508,26 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
       {/* 🔥 Gold Toggle Tab */}
       <div
         onClick={handleToggle}
-        className="absolute top-1/2 -translate-y-1/2 -right-[14px] z-50 cursor-pointer group"
+        className="absolute top-1/2 -translate-y-1/2 -right-[16px] z-50 cursor-pointer group"
       >
         <div 
           className={cn(
             "relative flex items-center justify-center",
-            "w-[14px] h-20",
-            "bg-gradient-to-b from-[#D4AF37]/20 via-[#C9A646]/15 to-[#D4AF37]/20",
-            "border border-l-0 border-[#D4AF37]/30",
-            "rounded-r-md",
+            "w-[16px] h-24",
+            "bg-gradient-to-b from-[#1A1A1A] via-[#C9A646]/10 to-[#1A1A1A]",
+            "border border-l-0 border-[#C9A646]/25",
+            "rounded-r-lg",
             "transition-all duration-300",
-            "hover:from-[#D4AF37]/30 hover:via-[#C9A646]/25 hover:to-[#D4AF37]/30",
-            "hover:border-[#D4AF37]/50"
+            "shadow-[0_0_8px_rgba(201,166,70,0.08)]",
+            "hover:via-[#C9A646]/20",
+            "hover:border-[#C9A646]/40",
+            "hover:shadow-[0_0_12px_rgba(201,166,70,0.15)]"
           )}
         >
           {isExpanded ? (
-            <ChevronLeft className="h-3.5 w-3.5 text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors" />
+            <ChevronLeft className="h-3.5 w-3.5 text-[#C9A646]/50 group-hover:text-[#C9A646] transition-colors duration-300" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors" />
+            <ChevronRight className="h-3.5 w-3.5 text-[#C9A646]/50 group-hover:text-[#C9A646] transition-colors duration-300" />
           )}
         </div>
       </div>
