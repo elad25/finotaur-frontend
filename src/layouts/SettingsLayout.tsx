@@ -1174,26 +1174,14 @@ const BillingTab = () => {
           ) : platformIsActive && !isLifetime && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
               {!profile?.platform_cancel_at_period_end && (
-                <>
-                  {profile?.platform_billing_interval === 'monthly' && (
-                    <Button
-                      size="sm"
-                      onClick={() => navigate('/app/all-markets/pricing')}
-                      className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-                    >
-                      <Crown className="w-3.5 h-3.5 mr-1.5" />
-                      Upgrade to Yearly {platformPlan === 'platform_core' ? '(Save 17%)' : '(Save 17%)'}
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    onClick={() => navigate('/app/all-markets/pricing')}
-                    className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-                  >
-                    <Crown className="w-3.5 h-3.5 mr-1.5" />
-                    Upgrade Plan
-                  </Button>
-                </>
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/app/all-markets/pricing')}
+                  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+                >
+                  <Crown className="w-3.5 h-3.5 mr-1.5" />
+                  {profile?.platform_billing_interval === 'monthly' ? 'Upgrade to Yearly (Save 17%)' : 'Upgrade Plan'}
+                </Button>
               )}
               {profile?.platform_cancel_at_period_end ? (
                 <Button

@@ -154,6 +154,7 @@ export default function PlatformPricing() {
   const [loading, setLoading] = useState<PlatformPlanId | null>(null);
   const [checkingSubscription, setCheckingSubscription] = useState(true);
   const [currentPlatformPlan, setCurrentPlatformPlan] = useState<string>('free');
+  const [currentBillingInterval, setCurrentBillingInterval] = useState<string | null>(null);
   const [proTrialUsed, setProTrialUsed] = useState(false);
 
   const { 
@@ -190,7 +191,7 @@ export default function PlatformPricing() {
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at')
+          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -198,6 +199,7 @@ export default function PlatformPricing() {
           // Normalize: strip "platform_" prefix for UI comparison
           const rawPlan = data.platform_plan || 'free';
           setCurrentPlatformPlan(rawPlan.replace('platform_', '') as PlatformPlanId);
+          setCurrentBillingInterval(data.platform_billing_interval || null);
           setProTrialUsed(!!data.platform_pro_trial_used_at);
         }
       } catch (error) {
@@ -374,7 +376,12 @@ export default function PlatformPricing() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
           {plans.map((plan) => {
             const displayPrice = getDisplayPrice(plan);
-            const isCurrentPlan = plan.id === currentPlatformPlan;
+            // Block same plan+same interval, allow upgrade to yearly
+            const isSamePlanSameInterval = plan.id === currentPlatformPlan && 
+              (billingInterval === currentBillingInterval || plan.id === 'free');
+            const isSamePlanUpgradeToYearly = plan.id === currentPlatformPlan && 
+              currentBillingInterval === 'monthly' && billingInterval === 'yearly';
+            const isCurrentPlan = isSamePlanSameInterval && !isSamePlanUpgradeToYearly;
             const isLoadingThis = loading === plan.id;
             
             return (
@@ -519,6 +526,10 @@ export default function PlatformPricing() {
                     </span>
                   ) : isCurrentPlan ? (
                     'Current Plan'
+                  ) : isSamePlanUpgradeToYearly ? (
+                    <span className="flex items-center justify-center gap-2">
+                      Upgrade to Yearly (Save 17%) <span>→</span>
+                    </span>
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       {plan.cta}
