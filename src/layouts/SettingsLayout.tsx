@@ -79,6 +79,7 @@ interface ProfileData {
   platform_is_in_trial: boolean;
   platform_trial_ends_at: string | null;
   platform_cancelled_at: string | null;
+  platform_cancel_at_period_end: boolean;
   
   // Trading Journal subscription (account_type)
   account_type: string | null;
@@ -566,6 +567,9 @@ const BillingTab = () => {
   // 🔥 NEW: Upgrade states
   const [upgradingNewsletter, setUpgradingNewsletter] = useState(false);
   const [upgradingTopSecret, setUpgradingTopSecret] = useState(false);
+  // 🔥 Platform cancel states
+  const [showPlatformCancelDialog, setShowPlatformCancelDialog] = useState(false);
+  const [cancellingPlatform, setCancellingPlatform] = useState(false);
 
   // Platform subscription (main website)
   const platformPlan = profile?.platform_plan || 'free';
@@ -990,6 +994,81 @@ const BillingTab = () => {
   };
 
 
+  // 🔥 Handle Platform subscription cancellation
+  const handleCancelPlatform = async () => {
+    if (!user) return;
+    
+    setCancellingPlatform(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            product: "platform",
+            reason: "User requested cancellation",
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to cancel platform subscription");
+
+      await refreshProfile();
+      setShowPlatformCancelDialog(false);
+      toast.success(data.message || 'Platform subscription will be cancelled at period end');
+    } catch (error) {
+      console.error('Error cancelling platform:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel');
+    } finally {
+      setCancellingPlatform(false);
+    }
+  };
+
+  // 🔥 Handle Platform reactivation
+  const handleReactivatePlatform = async () => {
+    setCancellingPlatform(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not authenticated");
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "reactivate",
+            product: "platform",
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Platform subscription reactivated!');
+        await refreshProfile();
+      } else {
+        toast.error(data.error || 'Failed to reactivate');
+      }
+    } catch (error) {
+      toast.error('Failed to reactivate platform subscription');
+    } finally {
+      setCancellingPlatform(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1028,9 +1107,15 @@ const BillingTab = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-white">{platformInfo.name}</span>
-              <Badge variant="outline" className={platformInfo.color}>
+              <Badge variant="outline" className={cn(
+                profile?.platform_cancel_at_period_end 
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' 
+                  : platformInfo.color
+              )}>
                 {isLifetime ? (
                   <><Crown className="w-3 h-3 mr-1" />Lifetime</>
+                ) : profile?.platform_cancel_at_period_end ? (
+                  <><Clock className="w-3 h-3 mr-1" />Cancelling</>
                 ) : platformIsActive ? (
                   <><CheckCircle2 className="w-3 h-3 mr-1" />{profile?.platform_is_in_trial ? 'Trial' : 'Active'}</>
                 ) : (
@@ -1078,21 +1163,40 @@ const BillingTab = () => {
             </Button>
           ) : platformIsActive && !isLifetime && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
-              <Button
-                size="sm"
-                onClick={() => navigate('/app/all-markets/pricing')}
-                className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-              >
-                <Crown className="w-3.5 h-3.5 mr-1.5" />
-                Upgrade Plan
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
-              >
-                Unsubscribe
-              </Button>
+              {!profile?.platform_cancel_at_period_end && (
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/app/all-markets/pricing')}
+                  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+                >
+                  <Crown className="w-3.5 h-3.5 mr-1.5" />
+                  Upgrade Plan
+                </Button>
+              )}
+              {profile?.platform_cancel_at_period_end ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReactivatePlatform}
+                  disabled={cancellingPlatform}
+                  className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50"
+                >
+                  {cancellingPlatform ? (
+                    <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Restoring...</>
+                  ) : (
+                    <>Undo Cancellation</>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPlatformCancelDialog(true)}
+                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30"
+                >
+                  Unsubscribe
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -2223,6 +2327,82 @@ const BillingTab = () => {
           </div>
         </Card>
       )}
+
+      {/* Platform Cancel Confirmation Dialog */}
+      <Dialog open={showPlatformCancelDialog} onOpenChange={setShowPlatformCancelDialog}>
+        <DialogContent className="sm:max-w-md p-0 gap-0 bg-gradient-to-b from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800/50 shadow-2xl shadow-black/50 overflow-hidden">
+          <div className="relative px-6 pt-6 pb-4">
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="relative">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/20 to-[#C9A646]/20 border border-blue-500/30 flex items-center justify-center mb-4 shadow-lg shadow-blue-500/10">
+                <Zap className="w-6 h-6 text-blue-400" />
+              </div>
+              <DialogTitle className="text-xl font-semibold text-white mb-1">
+                Cancel {platformInfo.name} Plan?
+              </DialogTitle>
+              <DialogDescription className="text-zinc-400 text-sm">
+                You'll lose access to all {platformInfo.name} features at the end of your billing period.
+              </DialogDescription>
+            </div>
+          </div>
+
+          <div className="mx-6 mb-4">
+            <div className="relative p-4 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-red-500/5 border border-amber-500/20">
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  <p className="text-sm font-medium text-amber-300">What you'll lose</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>All premium market analysis tools</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Advanced charts & indicators</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>AI Assistant & Flow Scanner</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                    <span>Priority support access</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6 pt-2 space-y-3">
+            <button
+              onClick={() => setShowPlatformCancelDialog(false)}
+              disabled={cancellingPlatform}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              Keep My {platformInfo.name} Plan
+            </button>
+            
+            <button
+              onClick={handleCancelPlatform}
+              disabled={cancellingPlatform}
+              className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {cancellingPlatform ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /><span>Cancelling...</span></>
+              ) : (
+                <><X className="w-4 h-4" /><span>Yes, Cancel My Subscription</span></>
+              )}
+            </button>
+            
+            <p className="text-center text-xs text-zinc-500">
+              You'll retain access until {formatDate(profile?.platform_subscription_expires_at)}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Info Card */}
       <Card className="p-4 bg-zinc-900/30 border-zinc-800">
@@ -3441,6 +3621,7 @@ export const SettingsLayout = () => {
           platform_is_in_trial,
           platform_trial_ends_at,
           platform_cancelled_at,
+          platform_cancel_at_period_end,
           account_type,
           subscription_status,
           subscription_interval,
