@@ -24,6 +24,37 @@ import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 
 import '@/scripts/migrationRunner';
 
+// =====================================================
+// 🔄 AUTO-RELOAD ON CHUNK LOAD FAILURE (after deploy)
+// =====================================================
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const target = event.target as HTMLElement;
+    if (target?.tagName === 'SCRIPT' || target?.tagName === 'LINK') {
+      const reloadKey = 'chunk_reload_' + window.location.pathname;
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1');
+        window.location.reload();
+      }
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const msg = event.reason?.message || '';
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('error loading dynamically imported module')
+    ) {
+      const reloadKey = 'chunk_reload_' + window.location.pathname;
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1');
+        window.location.reload();
+      }
+    }
+  });
+}
+
 import SupportWidget from "@/components/SupportWidget";
 import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
 
