@@ -62,7 +62,7 @@ const plans: PlanConfig[] = [
       '3 price alerts',
       'Community access',
     ],
-    cta: 'Current Plan',
+    cta: 'Free Plan',
     featured: false,
   },
   {
@@ -217,7 +217,14 @@ export default function PlatformPricing() {
   // ============================================
 
   const handlePlanClick = (planId: PlatformPlanId) => {
-    if (planId === 'free' || planId === currentPlatformPlan) return;
+    if (planId === 'free') return;
+    
+    // Allow same plan only if upgrading from monthly to yearly
+    const isUpgradeToYearly = planId === currentPlatformPlan && 
+      currentBillingInterval === 'monthly' && billingInterval === 'yearly';
+    
+    // Block if same plan + same interval (not an upgrade)
+    if (planId === currentPlatformPlan && !isUpgradeToYearly) return;
     
     setLoading(planId);
     
@@ -505,9 +512,9 @@ export default function PlatformPricing() {
                 {/* CTA Button */}
                 <button 
                   onClick={() => handlePlanClick(plan.id)}
-                  disabled={isCurrentPlan || isLoadingThis || checkoutLoading}
+                  disabled={isCurrentPlan || isLoadingThis || checkoutLoading || (plan.id === 'free' && currentPlatformPlan !== 'free')}
                   className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
-                    isCurrentPlan
+                    isCurrentPlan || (plan.id === 'free' && currentPlatformPlan !== 'free')
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                       : plan.featured 
                       ? 'bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-[length:200%_auto] hover:bg-[position:right_center] text-black hover:scale-[1.02]' 
@@ -525,15 +532,20 @@ export default function PlatformPricing() {
                       Processing...
                     </span>
                   ) : isCurrentPlan ? (
-                    'Current Plan'
+                    <span className="flex items-center justify-center gap-2">
+                      <Check className="w-4 h-4" />
+                      Current Plan
+                    </span>
                   ) : isSamePlanUpgradeToYearly ? (
                     <span className="flex items-center justify-center gap-2">
                       Upgrade to Yearly (Save 17%) <span>→</span>
                     </span>
+                  ) : plan.id === 'free' ? (
+                    <span className="text-zinc-500">Free Plan</span>
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       {plan.cta}
-                      {plan.id !== 'free' && <span>→</span>}
+                      <span>→</span>
                     </span>
                   )}
                 </button>

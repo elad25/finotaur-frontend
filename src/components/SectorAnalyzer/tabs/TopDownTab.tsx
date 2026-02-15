@@ -36,7 +36,8 @@ const decodeQuoteText = (text: string): string => {
       .replace(/&#8212;/g, '\u2014').replace(/&#x27;/g, "'")
       .replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;/g, '').replace(/&lsquo;|&rsquo;/g, "'")
       .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
-      .replace(/^["\u201C\u201D]+|["\u201C\u201D]+$/g, '').trim();
+      .replace(/^["\u201C\u201D]+|["\u201C\u201D]+$/g, '')
+      .replace(/^["'>]+/g, '').trim();
   }
 };
 
