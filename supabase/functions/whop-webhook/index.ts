@@ -206,6 +206,7 @@ interface PlanInfo {
   maxTrades: number;
   isNewsletter: boolean;
   isTopSecret: boolean;
+  isPlatform?: boolean;
 }
 
 interface CommissionConfig {
@@ -1465,7 +1466,13 @@ if (isTopSecretPayment) {
     // ═══════════════════════════════════════════════
 
     if (isPlatform(productId)) {
-      console.log("🖥️ Processing PLATFORM payment...");
+      console.log("🖥️ Processing PLATFORM payment...", {
+        dataId: data.id,
+        membershipId: data.membership?.id,
+        resolvedMembershipId: membershipId,
+        productId,
+        planId: data.plan?.id,
+      });
 
       const planId = data.plan?.id || '';
       const billingInterval = getBillingInterval(planId);
@@ -1488,16 +1495,32 @@ if (isTopSecretPayment) {
         .eq('id', resolvedUserId)
         .single();
 
-      if (currentProfile?.platform_whop_membership_id && 
+      // 🔥 v7.1.0: Enhanced upgrade detection - also check by platform_plan
+      const hasOldMembership = currentProfile?.platform_whop_membership_id && 
           currentProfile.platform_whop_membership_id !== membershipId &&
-          ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '')) {
-        console.log("🔥 Detected Platform plan change/upgrade - cancelling old membership:", currentProfile.platform_whop_membership_id);
+          ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '');
+      
+      // Also detect upgrade even without saved membership ID (e.g. Free→Core was via trial)
+      const isUpgradeFromLowerPlan = !hasOldMembership && 
+          currentProfile?.platform_plan && 
+          currentProfile.platform_plan !== 'free' && 
+          currentProfile.platform_plan !== platformPlan &&
+          ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '');
+
+      if (hasOldMembership) {
+        const oldMembershipId = currentProfile.platform_whop_membership_id;
+        console.log("🔥 Detected Platform plan change/upgrade - cancelling old membership:", oldMembershipId);
         
-        const cancelResult = await cancelMembership(currentProfile.platform_whop_membership_id, 'immediate');
-        if (cancelResult.success) {
-          console.log("✅ Old Platform membership cancelled successfully");
+        // 🔥 v7.1.0: Only cancel if it's a real membership ID (mem_), not a payment ID (pay_)
+        if (oldMembershipId.startsWith('mem_')) {
+          const cancelResult = await cancelMembership(oldMembershipId, 'immediate');
+          if (cancelResult.success) {
+            console.log("✅ Old Platform membership cancelled successfully");
+          } else {
+            console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+          }
         } else {
-          console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+          console.warn("⚠️ Stored membership ID is not a real membership:", oldMembershipId, "- skipping Whop cancel");
         }
       }
 
@@ -1521,13 +1544,13 @@ const { error: updateError } = await supabase
           platform_trial_ends_at: trialEndsAt,
           platform_is_in_trial: isInTrial,
           platform_cancel_at_period_end: false,
-          platform_whop_membership_id: data.id || membershipId,
+          platform_whop_membership_id: membershipId || data.membership?.id || data.id,
           platform_whop_user_id: whopUserId || '',
           platform_whop_product_id: productId || '',
           platform_whop_plan_id: planId,
           platform_whop_customer_email: userEmail || '',
           platform_payment_provider: 'whop',
-          ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+          ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
           // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
           ...(platformPlan === 'platform_finotaur' ? {
@@ -1789,23 +1812,31 @@ async function handleMembershipActivated(
       return { success: false, message: "User not found for Platform activation" };
     }
 
-    // 🔥 v6.1.0: Cancel old Platform membership if switching plans
+    // 🔥 v7.1.0: Enhanced - also fetch platform_plan for better detection
     const { data: currentProfile } = await supabase
       .from('profiles')
-      .select('platform_whop_membership_id, platform_subscription_status')
+      .select('platform_whop_membership_id, platform_subscription_status, platform_plan')
       .eq('id', userResult.id)
       .single();
 
-    if (currentProfile?.platform_whop_membership_id && 
+    const hasOldMembership = currentProfile?.platform_whop_membership_id && 
         currentProfile.platform_whop_membership_id !== data.id &&
-        ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '')) {
+        ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '');
+
+    if (hasOldMembership) {
       console.log("🔥 Cancelling old Platform membership on activation:", currentProfile.platform_whop_membership_id);
       
-      const cancelResult = await cancelMembership(currentProfile.platform_whop_membership_id, 'immediate');
-      if (cancelResult.success) {
-        console.log("✅ Old Platform membership cancelled on activation");
+      // 🔥 v7.1.0: Validate it's a real membership ID before cancelling
+      const oldId = currentProfile.platform_whop_membership_id;
+      if (oldId.startsWith('mem_')) {
+        const cancelResult = await cancelMembership(oldId, 'immediate');
+        if (cancelResult.success) {
+          console.log("✅ Old Platform membership cancelled on activation");
+        } else {
+          console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+        }
       } else {
-        console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+        console.warn("⚠️ Stored membership ID is not a real membership:", oldId, "- skipping Whop cancel");
       }
     }
 
@@ -1826,7 +1857,7 @@ async function handleMembershipActivated(
         platform_whop_plan_id: planId,
         platform_whop_customer_email: data.user?.email || '',
         platform_payment_provider: 'whop',
-        ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+        ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
         // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
         ...(platformPlan === 'platform_finotaur' ? {

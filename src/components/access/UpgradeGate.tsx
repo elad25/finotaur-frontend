@@ -164,7 +164,7 @@ export function UpgradeGate({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="max-w-4xl w-full"
+        className="max-w-6xl w-full"
       >
         {/* ── Header — Always gold ── */}
         <div className="text-center mb-8">
@@ -247,7 +247,7 @@ export function UpgradeGate({
         </div>
 
         {/* ── Plan Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
 
           {/* ─── FREE CARD ─── */}
           <motion.div
@@ -282,16 +282,22 @@ export function UpgradeGate({
                 </div>
               </div>
             )}
-            <div className="p-6 pt-7 flex flex-col flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <Zap className="w-4 h-4 text-zinc-400" />
-                <span className="font-bold text-white">Free</span>
+            {/* Subtle Shine Effect */}
+            <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                 style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)' }} />
+
+            <div className="p-6 pt-7 flex flex-col flex-1 relative">
+              <div className="text-center mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Zap className="w-4 h-4 text-zinc-400" />
+                  <span className="text-lg font-bold text-white">Free</span>
+                </div>
+                <div className="flex items-baseline justify-center gap-1 mb-1">
+                  <span className="text-4xl font-bold text-white">$0</span>
+                  <span className="text-sm text-[#6B6B6B]">/month</span>
+                </div>
+                <p className="text-sm text-[#8B8B8B]">Basic market access</p>
               </div>
-              <div className="mb-1">
-                <span className="text-3xl font-bold text-white">$0</span>
-                <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
-              </div>
-              <p className="text-xs text-[#8B8B8B] mb-4">Basic market access</p>
 
               <ul className="space-y-2.5 flex-1">
                 {[
@@ -302,9 +308,11 @@ export function UpgradeGate({
                   '3 price alerts',
                   'Community access',
                 ].map((feat, fi) => (
-                  <li key={fi} className="flex items-start gap-2.5 text-xs">
-                    <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-zinc-500" />
-                    <span className="text-[#707070]">{feat}</span>
+                  <li key={fi} className="flex items-start gap-2.5">
+                    <div className="w-4 h-4 rounded-full bg-[#C9A646]/10 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.2)' }}>
+                      <Check className="h-2.5 w-2.5 text-zinc-500" />
+                    </div>
+                    <span className="text-sm text-[#707070] leading-tight">{feat}</span>
                   </li>
                 ))}
               </ul>
@@ -352,25 +360,36 @@ export function UpgradeGate({
                   </div>
                 </div>
 
-                <div className="p-6 pt-7 flex flex-col flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <TierIcon className="w-4 h-4" style={{ color: tier.accentFrom }} />
-                    <span className="font-bold text-white">{tier.name}</span>
-                  </div>
-                  <div className="mb-1">
-                    <span className="text-3xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'core' ? '$49' : '$91'}</span>
-                    <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+                {/* Gradient Overlay */}
+                <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl"
+                     style={{ background: 'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.08), transparent 60%)' }} />
+                {/* Subtle Shine Effect */}
+                <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                     style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 100%)' }} />
+
+                <div className="p-6 pt-7 flex flex-col flex-1 relative">
+                  <div className="text-center mb-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <TierIcon className="w-4 h-4" style={{ color: tier.accentFrom }} />
+                      <span className="text-lg font-bold text-white">{tier.name}</span>
+                    </div>
+                    <div className="flex items-baseline justify-center gap-1 mb-1">
+                      <span className="text-4xl font-bold text-white">{billingInterval === 'monthly' ? tier.price : tier.key === 'core' ? '$49' : '$91'}</span>
+                      <span className="text-sm text-[#6B6B6B]">/month</span>
+                    </div>
                     {billingInterval === 'yearly' && (
-                      <span className="text-[10px] text-green-400 ml-2">Billed {tier.key === 'core' ? '$590' : '$1,090'}/yr</span>
+                      <span className="text-xs text-green-400">Billed {tier.key === 'core' ? '$590' : '$1,090'}/yr</span>
                     )}
+                    <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
                   </div>
-                  <p className="text-xs text-[#8B8B8B] mb-4">{tier.description}</p>
 
                   <ul className="space-y-2.5 flex-1">
                     {tier.features.map((feat, fi) => (
-                      <li key={fi} className="flex items-start gap-2.5 text-xs">
-                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: tier.accentFrom }} />
-                        <span className="text-[#A0A0A0]">{feat}</span>
+                      <li key={fi} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-[#C9A646]/20 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
+                          <Check className="h-2.5 w-2.5" style={{ color: tier.accentFrom }} />
+                        </div>
+                        <span className="text-sm text-[#A0A0A0] leading-tight">{feat}</span>
                       </li>
                     ))}
                   </ul>
@@ -412,34 +431,45 @@ export function UpgradeGate({
                   </div>
                 </div>
 
-                <div className="p-6 pt-7 flex flex-col flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <TierIcon className="w-4 h-4" style={{ color: '#C9A646' }} />
-                    <span className="font-bold text-white">{tier.name}</span>
-                  </div>
-                  <div className="mb-1">
-                    <span
-                      className="text-3xl font-bold"
-                      style={{
-                        background: 'linear-gradient(135deg, #C9A646, #F4D97B)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                      }}
-                    >
-                      {billingInterval === 'monthly' ? tier.price : '$91'}
-                    </span>
-                    <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+                {/* Gradient Overlay */}
+                <div className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl"
+                     style={{ background: 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.2), transparent 60%)' }} />
+                {/* Subtle Shine Effect */}
+                <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                     style={{ background: 'linear-gradient(180deg, rgba(244,217,123,0.15) 0%, transparent 100%)' }} />
+
+                <div className="p-6 pt-7 flex flex-col flex-1 relative">
+                  <div className="text-center mb-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <TierIcon className="w-4 h-4" style={{ color: '#C9A646' }} />
+                      <span className="text-lg font-bold text-white">{tier.name}</span>
+                    </div>
+                    <div className="flex items-baseline justify-center gap-1 mb-1">
+                      <span
+                        className="text-4xl font-bold"
+                        style={{
+                          background: 'linear-gradient(135deg, #C9A646, #F4D97B)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                        }}
+                      >
+                        {billingInterval === 'monthly' ? tier.price : '$91'}
+                      </span>
+                      <span className="text-sm text-[#6B6B6B]">/month</span>
+                    </div>
                     {billingInterval === 'yearly' && (
-                      <span className="text-[10px] text-green-400 ml-2">Billed $1,090/yr</span>
+                      <span className="text-xs text-green-400">Billed $1,090/yr</span>
                     )}
+                    <p className="text-sm text-[#8B8B8B] mt-1">{tier.description}</p>
                   </div>
-                  <p className="text-xs text-[#8B8B8B] mb-4">{tier.description}</p>
 
                   <ul className="space-y-2.5 flex-1">
                     {tier.features.map((feat, fi) => (
-                      <li key={fi} className="flex items-start gap-2.5 text-xs">
-                        <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: '#C9A646' }} />
-                        <span className="text-[#D4C9A8]">{feat}</span>
+                      <li key={fi} className="flex items-start gap-2.5">
+                        <div className="w-4 h-4 rounded-full bg-[#C9A646]/30 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.4)' }}>
+                          <Check className="h-2.5 w-2.5 text-[#C9A646]" />
+                        </div>
+                        <span className="text-sm text-[#D4C9A8] leading-tight">{feat}</span>
                       </li>
                     ))}
                   </ul>
@@ -479,19 +509,25 @@ export function UpgradeGate({
               </div>
             </div>
 
-            <div className="p-6 pt-9 flex flex-col flex-1">
+            {/* Subtle Shine Effect */}
+            <div className="absolute top-0 left-0 right-0 h-32 opacity-30 pointer-events-none rounded-t-2xl"
+                 style={{ background: 'linear-gradient(180deg, rgba(212,175,55,0.1) 0%, transparent 100%)' }} />
+
+            <div className="p-6 pt-9 flex flex-col flex-1 relative">
               {/* Header */}
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-4 h-4" style={{ color: '#D4AF37' }} />
-                <span className="font-bold text-white">Enterprise</span>
-              </div>
-              <div className="mb-2">
-                <span className="text-3xl font-bold text-white">$500</span>
-                <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+              <div className="text-center mb-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4" style={{ color: '#D4AF37' }} />
+                  <span className="text-lg font-bold text-white">Enterprise</span>
+                </div>
+                <div className="flex items-baseline justify-center gap-1 mb-1">
+                  <span className="text-4xl font-bold text-white">$500</span>
+                  <span className="text-sm text-[#6B6B6B]">/month</span>
+                </div>
               </div>
 
               {/* Exclusive tagline */}
-              <p className="text-xs text-[#D4AF37]/80 font-medium mb-4 leading-relaxed">
+              <p className="text-sm text-[#D4AF37]/80 font-medium mb-4 leading-relaxed text-center">
                 For serious investors ready to take their portfolio to the next level.
                 Not for everyone — by application only.
               </p>
@@ -507,9 +543,9 @@ export function UpgradeGate({
                         border: '1px solid rgba(212,175,55,0.15)',
                       }}
                     >
-                      <item.icon className="w-3 h-3" style={{ color: '#D4AF37' }} />
+                      <item.icon className="w-3.5 h-3.5" style={{ color: '#D4AF37' }} />
                     </div>
-                    <span className="text-xs text-[#A0A0A0] leading-relaxed">{item.text}</span>
+                    <span className="text-sm text-[#A0A0A0] leading-relaxed">{item.text}</span>
                   </li>
                 ))}
               </ul>
