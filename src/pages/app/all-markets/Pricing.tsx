@@ -396,7 +396,10 @@ export default function PlatformPricing() {
               (billingInterval === currentBillingInterval || plan.id === 'free');
             const isSamePlanUpgradeToYearly = plan.id === currentPlatformPlan && 
               currentBillingInterval === 'monthly' && billingInterval === 'yearly';
-            const isCurrentPlan = isSamePlanSameInterval && !isSamePlanUpgradeToYearly;
+            // 🔥 v6.1.0: If user is on yearly and viewing monthly, still show as "current" (downgrade blocked)
+            const isSamePlanDowngradeToMonthly = plan.id === currentPlatformPlan && 
+              currentBillingInterval === 'yearly' && billingInterval === 'monthly';
+            const isCurrentPlan = (isSamePlanSameInterval || isSamePlanDowngradeToMonthly) && !isSamePlanUpgradeToYearly;
             const isLoadingThis = loading === plan.id;
             
             return (
@@ -546,7 +549,7 @@ export default function PlatformPricing() {
                   ) : isCurrentPlan ? (
                     <span className="flex items-center justify-center gap-2">
                       <Check className="w-4 h-4" />
-                      Current Plan
+                      {isSamePlanDowngradeToMonthly ? 'Current Plan (Yearly)' : 'Current Plan'}
                     </span>
                   ) : isSamePlanUpgradeToYearly ? (
                     <span className="flex items-center justify-center gap-2">
