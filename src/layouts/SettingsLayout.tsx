@@ -1191,7 +1191,7 @@ const BillingTab = () => {
         {journalIsFree && (
           <div className="mt-4">
 <Button 
-  onClick={() => navigate('/app/journal/pricing')}
+  onClick={() => navigate('/app/journal/overview')}
   size="sm" 
   className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
 >

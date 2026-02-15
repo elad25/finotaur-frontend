@@ -16,7 +16,7 @@ import { useAuth } from '@/providers/AuthProvider';
 // ================================================
 
 export type AccountType = 'free' | 'trial' | 'basic' | 'premium' | 'admin' | 'vip';
-export type PlatformPlan = 'free' | 'core' | 'finotaur' | 'enterprise' | null;
+export type PlatformPlan = 'free' | 'core' | 'finotaur' | 'enterprise' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise' | null;
 export type SubscriptionStatus = 'trial' | 'active' | 'expired' | 'cancelled' | 'past_due' | null;
 export type SubscriptionInterval = 'monthly' | 'yearly' | null;
 export type UserRole = 'user' | 'admin' | 'super_admin';
@@ -383,7 +383,11 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     limits?.is_in_trial === true &&
     !!limits.whop_membership_id;
   
-  const hasJournalFromBundle = limits?.platform_bundle_journal_granted === true;
+  const hasJournalFromBundle = 
+    limits?.platform_bundle_journal_granted === true ||
+    (limits?.platform_plan && 
+     ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits.platform_plan) &&
+     ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || ''));
   const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle;
   
   const effectiveJournalPlan = (() => {
@@ -541,28 +545,32 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     warningState,
     markWarningShown: markWarningShownMutation.mutate,
     
-    // Platform fields (defaults)
-    platformPlan: null as PlatformPlan,
-    isPlatformFree: true,
-    isPlatformCore: false,
-    isPlatformFinotaur: false,
-    isPlatformEnterprise: false,
-    isPlatformPaid: false,
-    isPlatformActive: false,
-    isPlatformInTrial: false,
-    platformTrialDaysRemaining: null as number | null,
-    isPlatformTrialExpiringSoon: false,
-    platformDaysUntilExpiry: null as number | null,
-    platformSubscriptionStatus: null as SubscriptionStatus,
-    platformSubscriptionExpiresAt: null as string | null,
-    platformWhopMembershipId: null as string | null,
+    // Platform fields (computed from limits)
+    platformPlan: (limits?.platform_plan || 'free') as PlatformPlan,
+    isPlatformFree: !limits?.platform_plan || limits.platform_plan === 'free',
+    isPlatformCore: limits?.platform_plan === 'core' || limits?.platform_plan === 'platform_core',
+    isPlatformFinotaur: limits?.platform_plan === 'finotaur' || limits?.platform_plan === 'platform_finotaur',
+    isPlatformEnterprise: limits?.platform_plan === 'enterprise' || limits?.platform_plan === 'platform_enterprise',
+    isPlatformPaid: !!limits?.platform_plan && limits.platform_plan !== 'free',
+    isPlatformActive: ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || ''),
+    isPlatformInTrial: safeBool(limits?.platform_is_in_trial, false),
+    platformTrialDaysRemaining: limits?.platform_trial_days_remaining ?? null,
+    isPlatformTrialExpiringSoon: (limits?.platform_trial_days_remaining ?? 99) <= 3 && safeBool(limits?.platform_is_in_trial, false),
+    platformDaysUntilExpiry: (() => {
+      if (!limits?.platform_subscription_expires_at) return null;
+      const exp = new Date(limits.platform_subscription_expires_at);
+      return Math.ceil((exp.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    })(),
+    platformSubscriptionStatus: (limits?.platform_subscription_status || null) as SubscriptionStatus,
+    platformSubscriptionExpiresAt: limits?.platform_subscription_expires_at || null,
+    platformWhopMembershipId: limits?.platform_whop_membership_id || null,
     
-    // Platform features (defaults)
-    hasPlatformAiInsights: isAdmin,
-    hasPlatformApiAccess: isAdmin,
-    hasPlatformAdvancedScreeners: isAdmin,
-    hasPlatformCustomReports: isAdmin,
-    hasPlatformAdvancedCharts: isAdmin,
+    // Platform features (computed)
+    hasPlatformAiInsights: isAdmin || ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits?.platform_plan || ''),
+    hasPlatformApiAccess: isAdmin || ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits?.platform_plan || ''),
+    hasPlatformAdvancedScreeners: isAdmin || ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits?.platform_plan || ''),
+    hasPlatformCustomReports: isAdmin || ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits?.platform_plan || ''),
+    hasPlatformAdvancedCharts: isAdmin || !!limits?.platform_plan && limits.platform_plan !== 'free',
     
     // Pending downgrade
     pendingDowngradePlan: limits?.pending_downgrade_plan ?? null,
