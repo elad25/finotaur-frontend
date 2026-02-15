@@ -245,7 +245,49 @@ export function UpgradeGate({
         </div>
 
         {/* ── Plan Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
+
+          {/* ─── FREE CARD ─── */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="relative rounded-2xl flex flex-col"
+            style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 50%, rgba(0,0,0,0.1) 100%)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)',
+            }}
+          >
+            <div className="p-5 pt-6 flex flex-col flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="w-4 h-4 text-zinc-400" />
+                <span className="font-bold text-white">Free</span>
+              </div>
+              <div className="mb-1">
+                <span className="text-3xl font-bold text-white">$0</span>
+                <span className="text-sm text-[#6B6B6B] ml-1">/month</span>
+              </div>
+              <p className="text-xs text-[#8B8B8B] mb-4">Basic market access</p>
+
+              <ul className="space-y-2.5 flex-1">
+                {[
+                  'All Markets dashboard',
+                  'Stock Analyzer (3/day)',
+                  'Basic market data',
+                  'Limited watchlists (5)',
+                  '3 price alerts',
+                  'Community access',
+                ].map((feat, fi) => (
+                  <li key={fi} className="flex items-start gap-2.5 text-xs">
+                    <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-zinc-500" />
+                    <span className="text-[#707070]">{feat}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </motion.div>
 
           {/* ─── CORE CARD ─── */}
           {(() => {
@@ -256,7 +298,7 @@ export function UpgradeGate({
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="relative rounded-2xl flex flex-col"
+                className="relative rounded-2xl flex flex-col mt-4"
                 style={{
                   background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
                   backdropFilter: 'blur(20px)',
@@ -316,7 +358,7 @@ export function UpgradeGate({
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="relative rounded-2xl flex flex-col lg:scale-[1.02]"
+                className="relative rounded-2xl flex flex-col lg:scale-[1.02] mt-4"
                 style={{
                   background: 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)',
                   backdropFilter: 'blur(20px)',
@@ -381,7 +423,7 @@ export function UpgradeGate({
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="relative rounded-2xl flex flex-col"
+            className="relative rounded-2xl flex flex-col mt-4"
             style={{
               background: 'linear-gradient(180deg, rgba(212,175,55,0.08) 0%, rgba(10,10,10,0.95) 40%, rgba(10,10,10,0.98) 100%)',
               backdropFilter: 'blur(20px)',

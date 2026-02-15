@@ -255,7 +255,7 @@ export default function PlatformPricing() {
       return { price: 'Free', period: 'forever', billedAs: undefined };
     }
     if (plan.id === 'enterprise') {
-      return { price: '$500', period: '/month', billedAs: undefined };
+      return { price: '$499', period: '/month', billedAs: undefined };
     }
     
     if (billingInterval === 'monthly') {
@@ -388,7 +388,7 @@ export default function PlatformPricing() {
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto pt-5">
           {plans.map((plan) => {
             const displayPrice = getDisplayPrice(plan);
             // Block same plan+same interval, allow upgrade to yearly
@@ -451,8 +451,8 @@ export default function PlatformPricing() {
                   </div>
                 )}
 
-                {/* Trial Badge for Core */}
-                {plan.id === 'core' && (
+                {/* Trial Badge for Core - only monthly */}
+                {plan.id === 'core' && billingInterval === 'monthly' && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 bg-blue-500 text-white whitespace-nowrap"
                        style={{ zIndex: 50 }}>
                     <Clock className="w-3 h-3" />
@@ -462,7 +462,7 @@ export default function PlatformPricing() {
 
                 {/* Savings Badge */}
                 {plan.savings && billingInterval === 'yearly' && !plan.featured && plan.id !== 'free' && plan.id !== 'enterprise' && (
-                  <div className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg" style={{ zIndex: 50 }}>
+                  <div className="absolute top-2 right-3 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg" style={{ zIndex: 50 }}>
                     {plan.savings}
                   </div>
                 )}
@@ -567,7 +567,7 @@ export default function PlatformPricing() {
                     </span>
                   ) : (
                     <span className="flex items-center justify-center gap-2">
-                      {plan.cta}
+                      {billingInterval === 'yearly' && plan.trialDays > 0 ? 'Get Yearly Plan' : plan.cta}
                       <span>→</span>
                     </span>
                   )}
