@@ -1,24 +1,14 @@
 // =====================================================
-// FINOTAUR WHOP WEBHOOK HANDLER - v3.12.0
+// FINOTAUR WHOP WEBHOOK HANDLER - v7.0.0
 // =====================================================
 // 
-// 🔥 v3.12.0 - BUNDLE BREAK: CANCEL + RESUBSCRIBE FLOW
-// 
-// Changes from v3.11.0:
-// - REMOVED: Whop API change_plan (not supported by Whop)
-// - NEW: When bundle breaks, BOTH products are cancelled at period end
-// - NEW: When discounted product deactivates, send email with checkout link
-// - Newsletter: User gets email to resubscribe at $69.99 (plan_U6lF2eO5y9469)
-// - Top Secret: User gets email to resubscribe at $89.99 (plan_tUvQbCrEQ4197)
-// - Uses Whop checkout session API to create new subscription link
-// - Sends billing email via Resend
+// 🔥 v7.0.0 - BUNDLE REMOVED: Finotaur Platform replaces Bundle
+// - Finotaur tier (prod_LtP5GbpPfp9bn/prod_CbWpZrn5P7wc9) includes Newsletter + Top Secret + Journal Premium
+// - Removed all bundle-specific logic, cross-discount pricing
+// - Platform check prevents deactivation of Newsletter/Top Secret when Finotaur is active
 // 
 // v3.6.0 - AUTO-CANCEL WAR ZONE WITH TOP SECRET
-// - Added prod_u7QrZi90xiCZA to NEWSLETTER_PRODUCT_IDS (Top Secret member discount)
 // - When Top Secret is deactivated, automatically cancel War Zone subscription
-// - Cancel at period end (user keeps access until billing period ends)
-// - Added cancelWarZoneForTopSecretMember() helper function
-// - Added WHOP_API_KEY environment variable usage for Whop API calls
 // 
 // Deploy: supabase functions deploy whop-webhook
 // =====================================================
@@ -41,26 +31,21 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "
 const NEWSLETTER_PRODUCT_IDS = new Set([
   'prod_qlaV5Uu6LZlYn',  // War Zone Intelligence - Monthly ($69.99/month)
   'prod_8b3VWkZdena4B',  // War Zone Intelligence - Yearly ($699/year)
-  'prod_u7QrZi90xiCZA',  // War Zone Intelligence - Monthly for Top Secret Members ($30/month)
 ]);
 
 // 🔥 Top Secret Product IDs - Synced with whop-config.ts v4.4.0
 const TOP_SECRET_PRODUCT_IDS = new Set([
-  'prod_nl6YXbLp4t5pz',  // Top Secret (regular: monthly $89.99, yearly $899)
-  'prod_e8Er36RubeFXU',  // Top Secret For War Zone Members ($50/month)
-  'prod_aGd9mbl2XUIFO',  // Top Secret Yearly ($899/year) - STANDALONE YEARLY PRODUCT
+  'prod_nl6YXbLp4t5pz',  // Top Secret (regular: monthly $89.99)
+  'prod_aGd9mbl2XUIFO',  // Top Secret Yearly ($899/year)
 ]);
 
-// 🔥 v5.0.0: Bundle Product IDs - War Zone + Top Secret together
-const BUNDLE_PRODUCT_IDS = new Set([
-  'prod_LtP5GbpPfp9bn',  // Bundle Monthly - $109/month with 7-day trial
-  'prod_CbWpZrn5P7wc9',  // Bundle Yearly - $1,090/year (no trial)
-]);
 
 // 🔥 v6.0.0: Platform Product IDs - Core & Enterprise (NOT Bundle/Finotaur - those use BUNDLE)
 const PLATFORM_PRODUCT_IDS = new Set([
   'prod_HDYzeNp6WOJwh',  // Platform Core Monthly - $59/month with 14-day trial
   'prod_YAdXQrHtt72Gd',  // Platform Core Yearly - $590/year
+  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly - $109/month with 14-day trial
+  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly - $1090/year
   'prod_CIKv0J5Rq6aFk',  // Platform Enterprise Monthly - $500/month
 ]);
 
@@ -68,23 +53,7 @@ const PLATFORM_PRODUCT_IDS = new Set([
 const TOP_SECRET_PLAN_IDS = new Set([
   'plan_tUvQbCrEQ4197',  // Top Secret Monthly ($89.99)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899)
-  'plan_7VQxCZ5Kpw6f0',  // Top Secret for War Zone Members ($50)
 ]);
-
-// 🔥 v5.0.0: Bundle Plan IDs
-const BUNDLE_PLAN_IDS = new Set([
-  'plan_ICooR8aqtdXad',  // Bundle Monthly - $109/month
-  'plan_M2zS1EoNXJF10',  // Bundle Yearly - $1,090/year
-]);
-
-// ============================================
-// HELPER: Check if product is Bundle
-// ============================================
-
-function isBundle(productId: string | undefined): boolean {
-  if (!productId) return false;
-  return BUNDLE_PRODUCT_IDS.has(productId);
-}
 
 // ============================================
 // 🔥 v6.0.0: HELPER: Check if product is Platform (Core/Enterprise)
@@ -98,6 +67,7 @@ function isPlatform(productId: string | undefined): boolean {
 // 🔥 v6.0.0: Get platform plan name from product ID
 function getPlatformPlanFromProduct(productId: string): string {
   if (productId === 'prod_HDYzeNp6WOJwh' || productId === 'prod_YAdXQrHtt72Gd') return 'platform_core';
+  if (productId === 'prod_LtP5GbpPfp9bn' || productId === 'prod_CbWpZrn5P7wc9') return 'platform_finotaur';
   if (productId === 'prod_CIKv0J5Rq6aFk') return 'platform_enterprise';
   return 'platform_core'; // fallback
 }
@@ -106,7 +76,6 @@ function getPlatformPlanFromProduct(productId: string): string {
 const NEWSLETTER_PLAN_IDS = new Set([
   'plan_U6lF2eO5y9469',  // War Zone Monthly ($69.99)
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699)
-  'plan_BPJdT6Tyjmzcx',  // War Zone Monthly - Top Secret Member discount ($30)
 ]);
 
 // ============================================
@@ -117,30 +86,9 @@ const NEWSLETTER_PLAN_IDS = new Set([
 const YEARLY_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699/year)
   'plan_PxxbBlSdkyeo7',  // Top Secret Yearly ($899/year)
-  'plan_M2zS1EoNXJF10',  // Bundle Yearly ($1090/year)
-  'plan_6w5KTZsSGp7Ss',  // 🔥 Platform Core Yearly ($590/year)
+  'plan_M2zS1EoNXJF10',  // Finotaur Platform Yearly ($1090/year)
+  'plan_6w5KTZsSGp7Ss',  // Platform Core Yearly ($590/year)
 ]);
-
-// 🔥 v3.8.0: Cross-product discount Plan IDs
-const CROSS_DISCOUNT_PLAN_IDS = {
-  // War Zone for Top Secret members
-  'plan_BPJdT6Tyjmzcx': { product: 'newsletter', discount_for: 'top_secret_member', price: 30 },
-  // Top Secret for War Zone members
-  'plan_7VQxCZ5Kpw6f0': { product: 'top_secret', discount_for: 'warzone_member', price: 50 },
-};
-
-// 🔥 v3.9.0: All Plan IDs - Synced with whop-config.ts v4.4.0
-const NEWSLETTER_PLAN_IDS_MAP = {
-  monthly: 'plan_U6lF2eO5y9469',           // War Zone Monthly $69.99
-  yearly: 'plan_bp2QTGuwfpj0A',            // War Zone Yearly $699
-  top_secret_discount: 'plan_BPJdT6Tyjmzcx',  // War Zone for Top Secret members $30
-};
-
-const TOP_SECRET_PLAN_IDS_MAP = {
-  monthly: 'plan_tUvQbCrEQ4197',       // Top Secret Monthly $89.99
-  yearly: 'plan_PxxbBlSdkyeo7',        // Top Secret Yearly $899
-  warzone_discount: 'plan_7VQxCZ5Kpw6f0',  // Top Secret for War Zone members $50
-};
 
 function getBillingInterval(planId: string): 'monthly' | 'yearly' {
   return YEARLY_PLAN_IDS.has(planId) ? 'yearly' : 'monthly';
@@ -411,13 +359,11 @@ async function getPlanInfo(
     // Newsletter fallback - Synced with WHOP_CONFIG v4.4.0
     "prod_qlaV5Uu6LZlYn": { plan: "newsletter", interval: "monthly", price: 69.99, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     "prod_8b3VWkZdena4B": { plan: "newsletter", interval: "yearly", price: 699.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
-    "prod_u7QrZi90xiCZA": { plan: "newsletter", interval: "monthly", price: 30.00, maxTrades: 0, isNewsletter: true, isTopSecret: false },
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
-    "prod_e8Er36RubeFXU": { plan: "top_secret", interval: "monthly", price: 50.00, maxTrades: 0, isNewsletter: false, isTopSecret: true },  // 🔥 Top Secret For War Zone
-    // 🔥 v5.0.0: Bundle fallback - War Zone + Top Secret
-    "prod_LtP5GbpPfp9bn": { plan: "bundle", interval: "monthly", price: 109.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
-    "prod_CbWpZrn5P7wc9": { plan: "bundle", interval: "yearly", price: 1090.00, maxTrades: 0, isNewsletter: true, isTopSecret: true },
+    // 🔥 v7.0.0: Finotaur Platform
+    "prod_LtP5GbpPfp9bn": { plan: "platform_finotaur", interval: "monthly", price: 109.00, maxTrades: 999999, isPlatform: true },
+    "prod_CbWpZrn5P7wc9": { plan: "platform_finotaur", interval: "yearly", price: 1090.00, maxTrades: 999999, isPlatform: true },
   };
 
   return fallbackMapping[productId] || null;
@@ -1338,10 +1284,7 @@ async function handlePaymentSucceeded(
         }
       }
       
-      // 🔥 v3.12.0: Bundle price change is now handled via membership deactivation
-      // When bundle breaks, the discounted product is cancelled at period end
-      // and user receives email with checkout link to resubscribe at full price
-      // See handleMembershipDeactivated() for the implementation
+      
 
       // Regular newsletter payment (not an upgrade)
       console.log("📰 Calling handle_newsletter_payment RPC...");
@@ -1413,11 +1356,7 @@ async function handlePaymentSucceeded(
 if (isTopSecretPayment) {
       const planId = data.plan?.id || '';
       const billingInterval = getBillingInterval(planId);
-      
-      // 🔥 v3.12.0: Bundle price change is now handled via membership deactivation
-      // When bundle breaks, the discounted product is cancelled at period end
-      // and user receives email with checkout link to resubscribe at full price
-      // See handleMembershipDeactivated() for the implementation
+
       
       // 🔥 v3.14.0: Check if this is an upgrade from monthly to yearly
       // Check for upgrade if user has existing trial/active monthly subscription
@@ -1522,288 +1461,6 @@ if (isTopSecretPayment) {
     }
 
     // ═══════════════════════════════════════════════
-    // 🔥 v5.0.0: BUNDLE PAYMENT (War Zone + Top Secret)
-    // ═══════════════════════════════════════════════
-    
-    const isBundlePayment = isBundle(productId);
-    
-    if (isBundlePayment) {
-      console.log("📦 Processing BUNDLE payment...");
-      const isFirstPayment = data.billing_reason === "subscription_create";
-      
-      const planId = data.plan?.id || '';
-      const billingInterval = getBillingInterval(planId);
-      
-      // 🔥 v5.3.0: Check if this is an upgrade from Bundle Monthly to Bundle Yearly
-      if (billingInterval === 'yearly') {
-        const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
-        
-        if (userResult) {
-          const { data: currentProfile } = await supabase
-            .from('profiles')
-            .select('bundle_interval, bundle_status, bundle_whop_membership_id')
-            .eq('id', userResult.id)
-            .single();
-          
-          // 🔥 Detect upgrade from monthly (including trial!) to yearly
-          if (currentProfile?.bundle_interval === 'monthly' && 
-              ['active', 'trial', 'trialing'].includes(currentProfile?.bundle_status || '')) {
-            console.log("🔥 Detected Bundle UPGRADE from monthly to yearly");
-            
-            // 🔥 Cancel old monthly membership in Whop
-            if (currentProfile.bundle_whop_membership_id && 
-                currentProfile.bundle_whop_membership_id !== membershipId) {
-              console.log("🔥 Cancelling old monthly Bundle membership:", currentProfile.bundle_whop_membership_id);
-              
-              const cancelResult = await cancelMembership(currentProfile.bundle_whop_membership_id, 'immediate');
-              if (cancelResult.success) {
-                console.log("✅ Old monthly Bundle membership cancelled successfully");
-              } else {
-                console.warn("⚠️ Failed to cancel old Bundle membership:", cancelResult.error);
-              }
-            }
-            
-            // Continue with yearly activation - the RPC will update the interval
-            console.log("📦 Proceeding with Bundle yearly upgrade activation...");
-          }
-        }
-      }
-      
-      // Find user
-      let resolvedUserId = finotaurUserId;
-      let resolvedEmail = userEmail;
-      
-      if (!resolvedUserId) {
-        const foundUser = await findUser(supabase, null, whopEmail, 'newsletter', whopUserId);
-        if (foundUser) {
-          resolvedUserId = foundUser.id;
-          resolvedEmail = foundUser.email;
-        }
-      }
-      
-      if (!resolvedUserId) {
-        console.error("❌ User not found for Bundle payment");
-        return { success: false, message: "User not found for Bundle payment" };
-      }
-      
-      // 🔥 v5.4.0: Check if this is an upgrade from monthly to yearly
-      if (billingInterval === 'yearly') {
-        const { data: currentProfile } = await supabase
-          .from('profiles')
-          .select('bundle_interval, bundle_status, bundle_whop_membership_id')
-          .eq('id', resolvedUserId)
-          .single();
-        
-        if (currentProfile?.bundle_interval === 'monthly' && 
-            ['active', 'trial', 'trialing'].includes(currentProfile?.bundle_status || '')) {
-          console.log("🔥 Detected Bundle UPGRADE from monthly to yearly");
-          
-          // Cancel old monthly membership in Whop
-          if (currentProfile.bundle_whop_membership_id && 
-              currentProfile.bundle_whop_membership_id !== membershipId) {
-            console.log("🔥 Cancelling old monthly Bundle membership:", currentProfile.bundle_whop_membership_id);
-            
-            const cancelResult = await cancelMembership(currentProfile.bundle_whop_membership_id, 'immediate');
-            if (cancelResult.success) {
-              console.log("✅ Old monthly Bundle membership cancelled successfully");
-            } else {
-              console.warn("⚠️ Failed to cancel old Bundle membership:", cancelResult.error);
-            }
-          }
-          
-          // Update DB directly for upgrade (bypass regular activation)
-          const expiresAt = new Date();
-          expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-          
-          await supabase
-            .from('profiles')
-            .update({
-              bundle_enabled: true,
-              bundle_interval: 'yearly',
-              bundle_status: 'active',
-              bundle_whop_membership_id: membershipId,
-              bundle_expires_at: expiresAt.toISOString(),
-              bundle_is_in_trial: false,
-              bundle_trial_ends_at: null,
-              bundle_cancel_at_period_end: false,
-              newsletter_enabled: true,
-              newsletter_interval: 'yearly',
-              newsletter_status: 'active',
-              newsletter_expires_at: expiresAt.toISOString(),
-              newsletter_is_in_trial: false,
-              newsletter_trial_ends_at: null,
-              top_secret_enabled: true,
-              top_secret_interval: 'yearly',
-              top_secret_status: 'active',
-              top_secret_expires_at: expiresAt.toISOString(),
-              top_secret_is_in_trial: false,
-              top_secret_trial_ends_at: null,
-              // 🔥 v6.0.0: Also update platform_plan!
-              platform_plan: 'platform_finotaur',
-              platform_subscription_status: 'active',
-              platform_billing_interval: 'yearly',
-              platform_is_in_trial: false,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', resolvedUserId);
-          
-          console.log("✅ Bundle upgraded to yearly for user:", resolvedEmail);
-          
-          return { 
-            success: true, 
-            message: `Bundle UPGRADED to yearly: ${resolvedEmail}` 
-          };
-        }
-      }
-      
-      const isInTrial = data.billing_reason === 'subscription_create' && billingInterval === 'monthly';
-      const trialEndsAt = isInTrial 
-        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() 
-        : null;
-      
-      const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
-        p_user_id: resolvedUserId,
-        p_whop_membership_id: membershipId,
-        p_whop_user_id: whopUserId,
-        p_plan_id: planId,
-        p_billing_interval: billingInterval,
-        p_is_trial: isInTrial,
-        p_trial_ends_at: trialEndsAt,
-        p_renewal_period_end: null,  // Will be set by Whop webhook
-      });
-      
-      if (error) {
-        console.error("❌ activate_bundle_subscription RPC error:", error);
-        return { success: false, message: `Bundle activation failed: ${error.message}` };
-      }
-      
-      console.log("✅ Bundle payment processed:", result);
-
-      // 🔥 v6.0.0: Bundle = Finotaur platform plan — update platform_plan!
-      await supabase
-        .from('profiles')
-        .update({
-          platform_plan: 'platform_finotaur',
-          platform_subscription_status: 'active',
-          platform_billing_interval: billingInterval,
-          platform_is_in_trial: false,
-          platform_cancel_at_period_end: false,
-          platform_payment_provider: 'whop',
-          // 🔥 v6.2.0: Ensure newsletter + top_secret access for Bundle/Finotaur
-          newsletter_enabled: true,
-          newsletter_status: 'active',
-          top_secret_enabled: true,
-          top_secret_status: 'active',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', resolvedUserId);
-      
-      console.log("✅ Platform plan updated to finotaur for Bundle payment (with newsletter + top_secret):", resolvedUserId);
-      
-      // 🔥 v5.2.0: If this is a REAL payment (not trial $0), cancel paused individual subscriptions
-      if (paymentAmount > 0) {
-        console.log("💰 Bundle trial ended with real payment - cancelling paused subscriptions");
-        
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_paused_for_bundle, newsletter_paused_for_bundle')
-          .eq('id', resolvedUserId)
-          .single();
-        
-        if (profile) {
-          // Cancel paused Top Secret subscription
-          if (profile.top_secret_paused_for_bundle && profile.top_secret_whop_membership_id) {
-            console.log("🗑️ Cancelling paused Top Secret subscription:", profile.top_secret_whop_membership_id);
-            const result = await cancelMembership(profile.top_secret_whop_membership_id, 'immediate');
-            console.log(result.success ? "✅ Paused Top Secret cancelled" : "⚠️ Error cancelling paused Top Secret:", result.error);
-          }
-          
-          // Cancel paused Newsletter subscription
-          if (profile.newsletter_paused_for_bundle && profile.newsletter_whop_membership_id) {
-            console.log("🗑️ Cancelling paused Newsletter subscription:", profile.newsletter_whop_membership_id);
-            const result = await cancelMembership(profile.newsletter_whop_membership_id, 'immediate');
-            console.log(result.success ? "✅ Paused Newsletter cancelled" : "⚠️ Error cancelling paused Newsletter:", result.error);
-          }
-          
-          // Clear paused flags
-          await supabase
-            .from('profiles')
-            .update({ 
-              top_secret_paused_for_bundle: false,
-              newsletter_paused_for_bundle: false 
-            })
-            .eq('id', resolvedUserId);
-        }
-      }
-      
-      // 🔥 v5.7.0: Pause existing subscriptions when Bundle is purchased (FIRST PAYMENT)
-      // This logic also exists in handleMembershipActivated, but payment.succeeded often arrives first
-      if (isFirstPayment && billingInterval === 'monthly') {
-        // Check for existing subscriptions to pause
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled')
-          .eq('id', resolvedUserId)
-          .single();
-        
-        if (existingProfile) {
-          const existingTopSecretMembershipId = existingProfile.top_secret_whop_membership_id;
-          const existingNewsletterMembershipId = existingProfile.newsletter_whop_membership_id;
-          const hasExistingTopSecret = existingTopSecretMembershipId && 
-                                        existingTopSecretMembershipId !== membershipId &&
-                                        existingProfile.top_secret_enabled;
-          const hasExistingNewsletter = existingNewsletterMembershipId && 
-                                         existingNewsletterMembershipId !== membershipId &&
-                                         existingProfile.newsletter_enabled;
-          
-          console.log("🔍 [payment.succeeded] Checking for subscriptions to pause:", {
-            hasExistingTopSecret,
-            hasExistingNewsletter,
-          });
-          
-          // Pause Top Secret if exists
-          if (hasExistingTopSecret) {
-            console.log("⏸️ Pausing Top Secret from payment.succeeded:", existingTopSecretMembershipId);
-            const pauseResult = await pauseMembership(existingTopSecretMembershipId);
-            if (pauseResult.success || pauseResult.status === 404 || pauseResult.status === 422) {
-              console.log(pauseResult.success 
-                ? "✅ Top Secret paused from payment.succeeded" 
-                : `⚠️ Top Secret pause returned ${pauseResult.status} - marking as paused in DB anyway`);
-              await supabase
-                .from('profiles')
-                .update({ top_secret_paused_for_bundle: true })
-                .eq('id', resolvedUserId);
-            } else {
-              console.warn("⚠️ Failed to pause Top Secret:", pauseResult.error);
-            }
-          }
-          
-          // Pause Newsletter if exists
-          if (hasExistingNewsletter) {
-            console.log("⏸️ Pausing Newsletter from payment.succeeded:", existingNewsletterMembershipId);
-            const pauseResult = await pauseMembership(existingNewsletterMembershipId);
-            if (pauseResult.success || pauseResult.status === 404 || pauseResult.status === 422) {
-              console.log(pauseResult.success 
-                ? "✅ Newsletter paused from payment.succeeded" 
-                : `⚠️ Newsletter pause returned ${pauseResult.status} - marking as paused in DB anyway`);
-              await supabase
-                .from('profiles')
-                .update({ newsletter_paused_for_bundle: true })
-                .eq('id', resolvedUserId);
-            } else {
-              console.warn("⚠️ Failed to pause Newsletter:", pauseResult.error);
-            }
-          }
-        }
-      }
-      
-      return { 
-        success: true, 
-        message: `Bundle activated for ${resolvedEmail} (${billingInterval})` 
-      };
-    }
-
-    // ═══════════════════════════════════════════════
     // 🔥 v6.0.0: PLATFORM SUBSCRIPTION (Core / Enterprise)
     // ═══════════════════════════════════════════════
 
@@ -1854,26 +1511,45 @@ if (isTopSecretPayment) {
         : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
       // Update profile
-      const { error: updateError } = await supabase
+const { error: updateError } = await supabase
         .from('profiles')
         .update({
           platform_plan: platformPlan,
           platform_subscription_status: isInTrial ? 'trial' : 'active',
           platform_billing_interval: billingInterval,
           platform_subscription_started_at: new Date().toISOString(),
-          platform_subscription_expires_at: isInTrial ? trialEndsAt : expiresAt,
           platform_trial_ends_at: trialEndsAt,
           platform_is_in_trial: isInTrial,
           platform_cancel_at_period_end: false,
-          platform_cancelled_at: null,
-          platform_whop_membership_id: membershipId,
-          platform_whop_user_id: whopUserId,
-          platform_whop_product_id: productId,
+          platform_whop_membership_id: data.id || membershipId,
+          platform_whop_user_id: whopUserId || '',
+          platform_whop_product_id: productId || '',
           platform_whop_plan_id: planId,
-          platform_whop_customer_email: whopEmail,
+          platform_whop_customer_email: userEmail || '',
           platform_payment_provider: 'whop',
           ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
+          // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
+          ...(platformPlan === 'platform_finotaur' ? {
+            account_type: 'premium',
+            max_trades: 999999,
+            subscription_status: 'active',
+            newsletter_enabled: true,
+            newsletter_status: isInTrial ? 'trial' : 'active',
+            top_secret_enabled: true,
+            top_secret_status: isInTrial ? 'trial' : 'active',
+          } : {}),
+          // 🔥 v7.0.0: Enterprise includes everything Finotaur has + AI Portfolio
+          ...(platformPlan === 'platform_enterprise' ? {
+            account_type: 'premium',
+            max_trades: 999999,
+            subscription_status: 'active',
+            newsletter_enabled: true,
+            newsletter_status: isInTrial ? 'trial' : 'active',
+            top_secret_enabled: true,
+            top_secret_status: isInTrial ? 'trial' : 'active',
+            enterprise_ai_portfolio_enabled: true,
+          } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', resolvedUserId);
@@ -2077,216 +1753,6 @@ async function handleMembershipActivated(
       finotaurUserId,
     }, payload);  // 🔥 v3.7.0: Pass payload for plan ID extraction
   }
-
-// ═══════════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE SUBSCRIPTION (War Zone + Top Secret)
-  // ═══════════════════════════════════════════════
-
-  if (isBundle(productId)) {
-    console.log("📦 Processing BUNDLE activation...");
-    
-    const planId = data.plan?.id || '';
-    const billingInterval = getBillingInterval(planId);
-    const isInTrial = data.status === 'trialing';
-    const trialEndsAt = isInTrial && data.renewal_period_end 
-      ? new Date(data.renewal_period_end).toISOString() 
-      : null;
-    
-    // Find user
-    const userResult = await findUser(supabase, finotaurUserId, userEmail, 'newsletter');
-    if (!userResult) {
-      console.error("❌ User not found for Bundle activation");
-      return { success: false, message: "User not found for Bundle activation" };
-    }
-    
-    // 🔥 v6.2.0: READ membership IDs + platform info BEFORE calling RPC
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled, bundle_whop_membership_id, platform_whop_membership_id, platform_subscription_status, platform_plan')
-      .eq('id', userResult.id)
-      .single();
-
-    // 🔥 v6.2.0: Cancel existing Platform (Core) membership when upgrading to Finotaur/Bundle
-    if (existingProfile?.platform_whop_membership_id && 
-        existingProfile.platform_whop_membership_id !== membershipId &&
-        ['active', 'trial', 'trialing'].includes(existingProfile?.platform_subscription_status || '')) {
-      console.log("🔥 Detected Core→Finotaur upgrade - cancelling old Platform membership:", existingProfile.platform_whop_membership_id);
-      
-      const cancelResult = await cancelMembership(existingProfile.platform_whop_membership_id, 'immediate');
-      if (cancelResult.success) {
-        console.log("✅ Old Platform (Core) membership cancelled successfully on Bundle activation");
-      } else {
-        console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
-      }
-    }
-    
-    // Save existing membership IDs for pause/cancel logic BEFORE RPC clears them
-    const existingTopSecretMembershipId = existingProfile?.top_secret_whop_membership_id;
-    const existingNewsletterMembershipId = existingProfile?.newsletter_whop_membership_id;
-    const hasExistingTopSecret = existingTopSecretMembershipId && 
-                                  existingTopSecretMembershipId !== membershipId &&
-                                  existingProfile?.top_secret_enabled;
-    const hasExistingNewsletter = existingNewsletterMembershipId && 
-                                   existingNewsletterMembershipId !== membershipId &&
-                                   existingProfile?.newsletter_enabled;
-    
-    console.log("🔍 Checking for existing subscriptions to pause:", {
-      top_secret_whop_membership_id: existingTopSecretMembershipId,
-      top_secret_enabled: existingProfile?.top_secret_enabled,
-      newsletter_whop_membership_id: existingNewsletterMembershipId,
-      newsletter_enabled: existingProfile?.newsletter_enabled,
-      bundle_membership_id: membershipId,
-    });
-    
-    console.log("🔍 Subscription check results:", {
-      hasExistingTopSecret,
-      hasExistingNewsletter,
-      billingInterval,
-    });
-    
-    // 🔥 v5.8.0: PAUSE existing subscriptions BEFORE calling RPC!
-    // This ensures subscriptions are paused even if RPC fails
-    
-    if (billingInterval === 'monthly') {
-      // 🔥 MONTHLY BUNDLE (with trial): PAUSE subscriptions first
-      console.log("📦 Monthly Bundle - pausing existing subscriptions BEFORE RPC");
-      
-      if (hasExistingNewsletter && existingNewsletterMembershipId) {
-        console.log("⏸️ Pausing existing Newsletter subscription:", existingNewsletterMembershipId);
-        const pauseResult = await pauseMembership(existingNewsletterMembershipId);
-        if (pauseResult.success || pauseResult.status === 404 || pauseResult.status === 422) {
-          console.log(pauseResult.success 
-            ? "✅ Newsletter subscription paused" 
-            : `⚠️ Newsletter pause returned ${pauseResult.status} - marking as paused in DB anyway`);
-          await supabase
-            .from('profiles')
-            .update({ newsletter_paused_for_bundle: true })
-            .eq('id', userResult.id);
-        } else {
-          console.warn("⚠️ Failed to pause Newsletter:", pauseResult.error);
-        }
-      }
-      
-      if (hasExistingTopSecret && existingTopSecretMembershipId) {
-        console.log("⏸️ Pausing existing Top Secret subscription:", existingTopSecretMembershipId);
-        const pauseResult = await pauseMembership(existingTopSecretMembershipId);
-        if (pauseResult.success || pauseResult.status === 404 || pauseResult.status === 422) {
-          console.log(pauseResult.success 
-            ? "✅ Top Secret subscription paused" 
-            : `⚠️ Top Secret pause returned ${pauseResult.status} - marking as paused in DB anyway`);
-          await supabase
-            .from('profiles')
-            .update({ top_secret_paused_for_bundle: true })
-            .eq('id', userResult.id);
-        } else {
-          console.warn("⚠️ Failed to pause Top Secret:", pauseResult.error);
-        }
-      }
-    } else {
-      // 🔥 YEARLY BUNDLE: Cancel subscriptions immediately (no trial)
-      console.log("📦 Yearly Bundle - cancelling existing subscriptions immediately");
-      
-      if (hasExistingNewsletter && existingNewsletterMembershipId) {
-        console.log("🗑️ Cancelling existing Newsletter subscription:", existingNewsletterMembershipId);
-        const cancelResult = await cancelMembership(existingNewsletterMembershipId, 'immediate');
-        if (cancelResult.success) {
-          console.log("✅ Newsletter subscription cancelled immediately");
-        } else {
-          console.warn("⚠️ Failed to cancel Newsletter:", cancelResult.error);
-        }
-      }
-      
-      if (hasExistingTopSecret && existingTopSecretMembershipId) {
-        console.log("🗑️ Cancelling existing Top Secret subscription:", existingTopSecretMembershipId);
-        const cancelResult = await cancelMembership(existingTopSecretMembershipId, 'immediate');
-        if (cancelResult.success) {
-          console.log("✅ Top Secret subscription cancelled immediately");
-        } else {
-          console.warn("⚠️ Failed to cancel Top Secret:", cancelResult.error);
-        }
-      }
-    }
-
-    // 🔥 v6.2.0: Cancel existing Platform (Core) membership when upgrading to Finotaur/Bundle
-      {
-        const { data: platformProfile } = await supabase
-          .from('profiles')
-          .select('platform_whop_membership_id, platform_subscription_status')
-          .eq('id', resolvedUserId)
-          .single();
-        
-        if (platformProfile?.platform_whop_membership_id && 
-            platformProfile.platform_whop_membership_id !== membershipId &&
-            ['active', 'trial', 'trialing'].includes(platformProfile?.platform_subscription_status || '')) {
-          console.log("🔥 Cancelling old Platform (Core) membership on Bundle payment:", platformProfile.platform_whop_membership_id);
-          
-          const cancelResult = await cancelMembership(platformProfile.platform_whop_membership_id, 'immediate');
-          if (cancelResult.success) {
-            console.log("✅ Old Platform (Core) membership cancelled on Bundle payment");
-          } else {
-            console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
-          }
-        }
-      }
-
-      // 🔥 NOW call the RPC after subscriptions are handled
-      const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
-      p_user_id: userResult.id,
-      p_whop_membership_id: membershipId,
-      p_whop_user_id: whopUserId,
-      p_plan_id: planId,
-      p_billing_interval: billingInterval,
-      p_is_trial: isInTrial,
-      p_trial_ends_at: trialEndsAt,
-      p_renewal_period_end: data.renewal_period_end 
-        ? new Date(data.renewal_period_end).toISOString() 
-        : null,
-    });
-
-    if (error) {
-      console.error("❌ activate_bundle_subscription RPC error:", error);
-      return { success: false, message: `Bundle activation failed: ${error.message}` };
-    }
-
-    console.log("✅ Bundle activated:", result);
-
-    // 🔥 v6.0.0: Bundle = Finotaur platform plan — update platform_plan!
-    await supabase
-      .from('profiles')
-      .update({
-        platform_plan: 'platform_finotaur',
-        platform_subscription_status: isInTrial ? 'trial' : 'active',
-        platform_billing_interval: billingInterval,
-        platform_subscription_started_at: new Date().toISOString(),
-        platform_trial_ends_at: trialEndsAt,
-        platform_is_in_trial: isInTrial,
-        platform_cancel_at_period_end: false,
-        platform_whop_membership_id: membershipId,
-        platform_whop_product_id: productId || '',
-        platform_whop_plan_id: planId,
-        platform_payment_provider: 'whop',
-        ...(isInTrial ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
-        // 🔥 v6.2.0: Ensure newsletter + top_secret access for Bundle/Finotaur
-        newsletter_enabled: true,
-        newsletter_status: isInTrial ? 'trial' : 'active',
-        top_secret_enabled: true,
-        top_secret_status: isInTrial ? 'trial' : 'active',
-        bundle_enabled: true,
-        bundle_status: isInTrial ? 'trial' : 'active',
-        bundle_interval: billingInterval,
-        bundle_whop_membership_id: membershipId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userResult.id);
-    
-    console.log("✅ Platform plan updated to finotaur for Bundle user (with newsletter + top_secret):", userResult.id);
-    
-    return { 
-      success: true, 
-      message: `Bundle activated for ${result?.email || userEmail} (${billingInterval})` 
-    };
-  }
-
   // ═══════════════════════════════════════════════
   // 🔥 TOP SECRET SUBSCRIPTION
   // ═══════════════════════════════════════════════
@@ -2362,6 +1828,27 @@ async function handleMembershipActivated(
         platform_payment_provider: 'whop',
         ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
+        // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
+        ...(platformPlan === 'platform_finotaur' ? {
+          account_type: 'premium',
+          max_trades: 999999,
+          subscription_status: 'active',
+          newsletter_enabled: true,
+          newsletter_status: isInTrial ? 'trial' : 'active',
+          top_secret_enabled: true,
+          top_secret_status: isInTrial ? 'trial' : 'active',
+        } : {}),
+        // 🔥 v7.0.0: Enterprise includes everything Finotaur has + AI Portfolio
+        ...(platformPlan === 'platform_enterprise' ? {
+          account_type: 'premium',
+          max_trades: 999999,
+          subscription_status: 'active',
+          newsletter_enabled: true,
+          newsletter_status: isInTrial ? 'trial' : 'active',
+          top_secret_enabled: true,
+          top_secret_status: isInTrial ? 'trial' : 'active',
+          enterprise_ai_portfolio_enabled: true,
+        } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', userResult.id);
@@ -2596,377 +2083,6 @@ async function handleTopSecretActivation(
 }
 
 // ============================================
-// 🔥 v3.12.0: BUNDLE RESUBSCRIBE HELPERS
-// ============================================
-
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") || "";
-
-// Full price plan IDs
-const FULL_PRICE_PLANS = {
-  newsletter: 'plan_U6lF2eO5y9469',  // War Zone Monthly $69.99
-  top_secret: 'plan_tUvQbCrEQ4197',  // Top Secret Monthly $89.99
-};
-
-// Discounted plan IDs (bundle pricing)
-const DISCOUNTED_PLANS = {
-  newsletter: 'plan_BPJdT6Tyjmzcx',  // War Zone for Top Secret members $30
-  top_secret: 'plan_7VQxCZ5Kpw6f0',  // Top Secret for War Zone members $50
-};
-
-/**
- * Create Whop checkout session for resubscription at full price
- */
-async function createResubscribeCheckoutLink(
-  planId: string,
-  userId: string,
-  userEmail: string
-): Promise<{ success: boolean; checkoutUrl?: string; error?: string }> {
-  try {
-    console.log(`🔗 Creating checkout link for plan ${planId}, user ${userEmail}`);
-    
-    const result = await createCheckoutSession({
-      planId,
-      userId,
-      userEmail,
-      redirectUrl: `https://www.finotaur.com/app/settings?tab=billing&resubscribe=success`,
-      metadata: {
-        resubscribe_reason: "bundle_price_change",
-      },
-    });
-
-    if (!result.success || !result.data?.purchase_url) {
-      console.error(`❌ Whop checkout API error: ${result.error}`);
-      return { success: false, error: result.error || "Failed to create checkout" };
-    }
-
-    console.log(`✅ Checkout link created: ${result.data.purchase_url}`);
-    return { success: true, checkoutUrl: result.data.purchase_url };
-
-  } catch (error) {
-    console.error("❌ Error creating checkout link:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-}
-
-/**
- * Send billing email with checkout link for resubscription
- */
-async function sendBillingEmail(
-  userEmail: string,
-  userName: string | null,
-  productName: string,
-  oldPrice: number,
-  newPrice: number,
-  checkoutUrl: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log(`📧 Sending billing email to ${userEmail} for ${productName}`);
-    
-    if (!RESEND_API_KEY) {
-      console.error("❌ RESEND_API_KEY not configured");
-      return { success: false, error: "RESEND_API_KEY not configured" };
-    }
-
-    const displayName = userName || userEmail.split('@')[0];
-    
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Action Required: Your ${productName} Subscription</title>
-</head>
-<body style="margin: 0; padding: 40px 20px; background-color: #000000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-  
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="max-width: 600px; width: 100%; margin: 0 auto; background-color: #0a0a0a; border: 1px solid #333333; border-radius: 16px; overflow: hidden;">
-    
-    <!-- Header with Logo -->
-    <tr>
-      <td style="padding: 40px 40px 20px 40px; text-align: center;">
-        <a href="https://www.finotaur.com" target="_blank" style="text-decoration: none;">
-          <img src="https://www.finotaur.com/logo.png" alt="Finotaur" style="max-width: 160px; height: auto;" />
-        </a>
-      </td>
-    </tr>
-    
-    <!-- Title -->
-    <tr>
-      <td style="padding: 0 40px 10px 40px; text-align: center;">
-        <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #C9A646; letter-spacing: 0.5px;">
-          Action Required
-        </h1>
-      </td>
-    </tr>
-    
-    <!-- Subtitle -->
-    <tr>
-      <td style="padding: 0 40px 30px 40px; text-align: center;">
-        <p style="margin: 0; font-size: 14px; color: #888888;">
-          Your ${productName} Subscription
-        </p>
-      </td>
-    </tr>
-    
-    <!-- Gold Divider -->
-    <tr>
-      <td style="padding: 0 40px;">
-        <div style="height: 1px; background: linear-gradient(to right, transparent, #C9A646, transparent);"></div>
-      </td>
-    </tr>
-    
-    <!-- Content -->
-    <tr>
-      <td style="padding: 30px 40px;">
-        
-        <p style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600; color: #ffffff;">
-          Hello ${displayName},
-        </p>
-        
-        <p style="margin: 0 0 20px 0; font-size: 15px; line-height: 1.7; color: #cccccc;">
-          Your bundle discount has ended because the other product in your bundle was cancelled.
-        </p>
-        
-        <!-- Price Change Box -->
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin-bottom: 25px;">
-          <tr>
-            <td style="background-color: rgba(201, 166, 70, 0.08); border-left: 3px solid #C9A646; border-radius: 0 8px 8px 0; padding: 20px;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #888888;">
-                Previous bundle price:
-              </p>
-              <p style="margin: 0 0 15px 0; font-size: 20px; font-weight: 600; color: #666666; text-decoration: line-through;">
-                $${oldPrice.toFixed(2)}/month
-              </p>
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #888888;">
-                New standalone price:
-              </p>
-              <p style="margin: 0; font-size: 24px; font-weight: 600; color: #C9A646;">
-                $${newPrice.toFixed(2)}/month
-              </p>
-            </td>
-          </tr>
-        </table>
-        
-        <p style="margin: 0 0 25px 0; font-size: 15px; line-height: 1.7; color: #cccccc;">
-          To continue your <strong style="color: #ffffff;">${productName}</strong> access, please resubscribe using the button below:
-        </p>
-        
-        <!-- CTA Button -->
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width: 100%; margin-bottom: 25px;">
-          <tr>
-            <td align="center">
-              <a href="${checkoutUrl}" target="_blank" style="display: inline-block; padding: 16px 48px; background-color: #C9A646; color: #000000; font-size: 16px; font-weight: 600; text-decoration: none; border-radius: 8px;">
-                Resubscribe Now
-              </a>
-            </td>
-          </tr>
-        </table>
-        
-        <p style="margin: 0 0 20px 0; font-size: 13px; color: #666666; text-align: center;">
-          If you don't resubscribe, your ${productName} access will end.
-        </p>
-        
-        <!-- Divider -->
-        <div style="height: 1px; background-color: #333333; margin: 25px 0;"></div>
-        
-        <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #666666;">
-          If you have any questions, please contact us at <a href="mailto:support@finotaur.com" style="color: #C9A646;">support@finotaur.com</a>
-        </p>
-        
-      </td>
-    </tr>
-    
-    <!-- Footer -->
-    <tr>
-      <td style="padding: 25px 40px; border-top: 1px solid #222222; text-align: center;">
-        <p style="margin: 0 0 5px 0; font-size: 13px; color: #888888;">
-          <span style="color: #C9A646; font-weight: 600;">FINOTAUR</span> | Institutional Grade Research
-        </p>
-        <p style="margin: 0; font-size: 11px; color: #555555;">
-          © ${new Date().getFullYear()} Finotaur. All rights reserved.
-        </p>
-      </td>
-    </tr>
-    
-  </table>
-  
-</body>
-</html>
-    `.trim();
-
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Finotaur Billing <billing@finotaur.com>",
-        to: [userEmail],
-        reply_to: "support@finotaur.com",
-        subject: `Action Required: Your ${productName} Subscription`,
-        html: htmlContent,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Resend API error: ${response.status} - ${errorText}`);
-      return { success: false, error: `Resend API error: ${response.status}` };
-    }
-
-    const result = await response.json();
-    console.log(`✅ Billing email sent to ${userEmail}, ID: ${result.id}`);
-    return { success: true };
-
-  } catch (error) {
-    console.error("❌ Error sending billing email:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
-  }
-}
-
-/**
- * Handle bundle break: send checkout link email to user
- */
-async function handleBundleBreakResubscribe(
-  supabase: SupabaseClient,
-  userId: string,
-  userEmail: string,
-  userName: string | null,
-  deactivatedProduct: 'newsletter' | 'top_secret'
-): Promise<{ success: boolean; message: string }> {
-  try {
-    // Determine which product needs resubscribe (the OTHER product)
-    const productToResubscribe = deactivatedProduct === 'newsletter' ? 'top_secret' : 'newsletter';
-    
-    console.log(`🔄 Checking if ${productToResubscribe} needs resubscribe after ${deactivatedProduct} deactivation`);
-    
-    // Check if the other product has pending resubscribe flag
-    const pendingField = productToResubscribe === 'newsletter' 
-      ? 'newsletter_pending_price_change' 
-      : 'top_secret_pending_price_change';
-    const planIdField = productToResubscribe === 'newsletter'
-      ? 'newsletter_whop_plan_id'
-      : 'top_secret_whop_plan_id';
-    
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select(`${pendingField}, ${planIdField}, display_name`)
-      .eq('id', userId)
-      .single();
-    
-    if (!profile) {
-      console.log(`⚠️ Profile not found for user ${userId}`);
-      return { success: false, message: "Profile not found" };
-    }
-    
-    const hasPendingChange = profile[pendingField];
-    const currentPlanId = profile[planIdField];
-    const discountedPlanId = DISCOUNTED_PLANS[productToResubscribe];
-    
-    // Check if this product was on discounted plan AND has pending change
-    if (!hasPendingChange) {
-      console.log(`ℹ️ No pending price change for ${productToResubscribe}`);
-      return { success: true, message: "No pending price change" };
-    }
-    
-    if (currentPlanId !== discountedPlanId) {
-      console.log(`ℹ️ ${productToResubscribe} is not on discounted plan (current: ${currentPlanId})`);
-      // Clear the flag since it's not on discounted plan
-      await supabase
-        .from('profiles')
-        .update({
-          [pendingField]: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
-      return { success: true, message: "Not on discounted plan" };
-    }
-    
-    console.log(`🔥 Bundle break confirmed - ${productToResubscribe} needs to resubscribe at full price`);
-    
-    // Get full price plan
-    const fullPricePlanId = FULL_PRICE_PLANS[productToResubscribe];
-    const productName = productToResubscribe === 'newsletter' ? 'War Zone Newsletter' : 'Top Secret';
-    const oldPrice = productToResubscribe === 'newsletter' ? 30 : 50;
-    const newPrice = productToResubscribe === 'newsletter' ? 69.99 : 89.99;
-    
-    // Step 1: Create checkout link
-    const checkoutResult = await createResubscribeCheckoutLink(fullPricePlanId, userId, userEmail);
-    
-    if (!checkoutResult.success || !checkoutResult.checkoutUrl) {
-      console.error(`❌ Failed to create checkout link: ${checkoutResult.error}`);
-      return { success: false, message: checkoutResult.error || "Failed to create checkout link" };
-    }
-    
-    // Step 2: Send email
-    const emailResult = await sendBillingEmail(
-      userEmail,
-      userName || profile.display_name,
-      productName,
-      oldPrice,
-      newPrice,
-      checkoutResult.checkoutUrl
-    );
-    
-    if (!emailResult.success) {
-      console.error(`❌ Failed to send billing email: ${emailResult.error}`);
-      // Continue anyway - log the checkout link
-    }
-    
-    // Step 3: Update DB - clear pending flag and store checkout info
-    await supabase
-      .from('profiles')
-      .update({
-        [pendingField]: false,
-        [`${productToResubscribe === 'newsletter' ? 'newsletter' : 'top_secret'}_new_price`]: null,
-        [`${productToResubscribe === 'newsletter' ? 'newsletter' : 'top_secret'}_resubscribe_checkout_url`]: checkoutResult.checkoutUrl,
-        [`${productToResubscribe === 'newsletter' ? 'newsletter' : 'top_secret'}_resubscribe_sent_at`]: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-    
-    // Step 4: Log the event
-    await supabase
-      .from('whop_webhook_log')
-      .insert({
-        event_id: `bundle_resubscribe_${userId}_${Date.now()}`,
-        event_type: "bundle_break_resubscribe_email_sent",
-        whop_user_id: null,
-        whop_membership_id: null,
-        whop_product_id: null,
-        payload: {
-          user_id: userId,
-          user_email: userEmail,
-          deactivated_product: deactivatedProduct,
-          resubscribe_product: productToResubscribe,
-          old_price: oldPrice,
-          new_price: newPrice,
-          checkout_url: checkoutResult.checkoutUrl,
-          email_sent: emailResult.success,
-        },
-        processed: true,
-        processing_result: `Resubscribe email ${emailResult.success ? 'sent' : 'failed'} for ${productName}`,
-        metadata: {
-          triggered_by: "bundle_break",
-          checkout_plan_id: fullPricePlanId,
-        },
-      });
-    
-    console.log(`✅ Bundle break handled: ${productName} resubscribe email ${emailResult.success ? 'sent' : 'logged'}`);
-    
-    return { 
-      success: true, 
-      message: `Resubscribe email ${emailResult.success ? 'sent' : 'failed (checkout link logged)'} for ${productName}` 
-    };
-    
-  } catch (error) {
-    console.error("❌ Error handling bundle break resubscribe:", error);
-    return { success: false, message: error instanceof Error ? error.message : "Unknown error" };
-  }
-}
-
-// ============================================
 // MEMBERSHIP DEACTIVATED
 // 🔥 v3.12.0: Now handles bundle break resubscribe flow!
 // ============================================
@@ -3004,41 +2120,24 @@ async function handleMembershipDeactivated(
     // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, newsletter_cancel_at_period_end, newsletter_whop_membership_id, newsletter_status, bundle_enabled, bundle_status, bundle_whop_membership_id')
+      .select('id, email, newsletter_cancel_at_period_end, newsletter_whop_membership_id, newsletter_status')
       .eq('newsletter_whop_membership_id', membershipId)
       .single();
     
-    // 🔥 v5.9.0: If user has an active Bundle, SKIP Newsletter deactivation entirely!
-    if (profile && profile.bundle_enabled && ['active', 'trial', 'trialing'].includes(profile.bundle_status || '')) {
-      console.log(`✅ User has active Bundle (${profile.bundle_status}) - SKIPPING Newsletter deactivation`);
-      console.log(`💡 Bundle membership: ${profile.bundle_whop_membership_id}`);
-      console.log(`💡 Deactivated Newsletter membership: ${membershipId} (old, replaced by bundle)`);
-      
-      await supabase
+// 🔥 v7.0.0: If user has active Finotaur/Enterprise, SKIP standalone deactivation
+    if (profile) {
+      const { data: platformCheck } = await supabase
         .from('profiles')
-        .update({ 
-          newsletter_whop_membership_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id);
+        .select('platform_plan, platform_subscription_status')
+        .eq('id', profile.id)
+        .single();
       
-      await supabase.from('subscription_events').insert({
-        user_id: profile.id,
-        event_type: 'newsletter_deactivation_skipped_bundle_active',
-        old_plan: 'newsletter',
-        new_plan: 'bundle',
-        metadata: {
-          deactivated_membership_id: membershipId,
-          bundle_membership_id: profile.bundle_whop_membership_id,
-          bundle_status: profile.bundle_status,
-          note: 'Old Newsletter membership deactivated by Whop after Bundle purchase - skipped deactivation',
-        }
-      });
-      
-      return { 
-        success: true, 
-        message: `Newsletter deactivation SKIPPED - user has active Bundle. Email: ${profile.email}` 
-      };
+      if (platformCheck && 
+          ['platform_finotaur', 'platform_enterprise'].includes(platformCheck.platform_plan) &&
+          ['active', 'trial', 'trialing'].includes(platformCheck.platform_subscription_status || '')) {
+        console.log(`✅ User has active ${platformCheck.platform_plan} - SKIPPING Newsletter deactivation`);
+        return { success: true, message: `Newsletter deactivation SKIPPED - user has ${platformCheck.platform_plan}` };
+      }
     }
     
     if (profile && profile.newsletter_cancel_at_period_end === false) {
@@ -3082,25 +2181,9 @@ async function handleMembershipDeactivated(
 
     console.log("✅ Newsletter deactivation RPC result:", result);
 
-    // 🔥 v3.12.0: Check if Top Secret needs resubscribe email (bundle break)
-    let resubscribeMessage = '';
-    if (result?.user_id) {
-      const resubscribeResult = await handleBundleBreakResubscribe(
-        supabase,
-        result.user_id,
-        result.email || userEmail,
-        null,
-        'newsletter'  // Newsletter was deactivated, check if Top Secret needs resubscribe
-      );
-      
-      if (resubscribeResult.success && resubscribeResult.message.includes('email')) {
-        resubscribeMessage = ` | Top Secret resubscribe email sent`;
-      }
-    }
-
     return { 
       success: result?.success ?? true, 
-      message: `Newsletter deactivated: ${result?.email || userEmail}${resubscribeMessage}` 
+      message: `Newsletter deactivated: ${result?.email || userEmail}` 
     };
   }
 
@@ -3115,44 +2198,24 @@ async function handleMembershipDeactivated(
     // Since Whop doesn't support uncancel via API, we track reactivation intent in our DB
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, top_secret_cancel_at_period_end, top_secret_whop_membership_id, top_secret_status, bundle_enabled, bundle_status, bundle_whop_membership_id')
+      .select('id, email, top_secret_cancel_at_period_end, top_secret_whop_membership_id, top_secret_status')
       .eq('top_secret_whop_membership_id', membershipId)
       .single();
     
-    // 🔥 v5.9.0: If user has an active Bundle, SKIP Top Secret deactivation entirely!
-    // When user upgrades to Bundle, Whop deactivates the old Top Secret membership.
-    // We must NOT let that deactivation override the Bundle's granted access.
-    if (profile && profile.bundle_enabled && ['active', 'trial', 'trialing'].includes(profile.bundle_status || '')) {
-      console.log(`✅ User has active Bundle (${profile.bundle_status}) - SKIPPING Top Secret deactivation`);
-      console.log(`💡 Bundle membership: ${profile.bundle_whop_membership_id}`);
-      console.log(`💡 Deactivated Top Secret membership: ${membershipId} (old, replaced by bundle)`);
-      
-      // Clear the old Top Secret membership ID so future deactivation webhooks don't match
-      await supabase
+    // 🔥 v7.0.0: If user has active Finotaur/Enterprise, SKIP Top Secret deactivation
+    if (profile) {
+      const { data: platformCheck } = await supabase
         .from('profiles')
-        .update({ 
-          top_secret_whop_membership_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', profile.id);
+        .select('platform_plan, platform_subscription_status')
+        .eq('id', profile.id)
+        .single();
       
-      await supabase.from('subscription_events').insert({
-        user_id: profile.id,
-        event_type: 'top_secret_deactivation_skipped_bundle_active',
-        old_plan: 'top_secret',
-        new_plan: 'bundle',
-        metadata: {
-          deactivated_membership_id: membershipId,
-          bundle_membership_id: profile.bundle_whop_membership_id,
-          bundle_status: profile.bundle_status,
-          note: 'Old Top Secret membership deactivated by Whop after Bundle purchase - skipped deactivation',
-        }
-      });
-      
-      return { 
-        success: true, 
-        message: `Top Secret deactivation SKIPPED - user has active Bundle. Email: ${profile.email}` 
-      };
+      if (platformCheck && 
+          ['platform_finotaur', 'platform_enterprise'].includes(platformCheck.platform_plan) &&
+          ['active', 'trial', 'trialing'].includes(platformCheck.platform_subscription_status || '')) {
+        console.log(`✅ User has active ${platformCheck.platform_plan} - SKIPPING Top Secret deactivation`);
+        return { success: true, message: `Top Secret deactivation SKIPPED - user has ${platformCheck.platform_plan}` };
+      }
     }
     
     if (profile && profile.top_secret_cancel_at_period_end === false) {
@@ -3213,113 +2276,9 @@ async function handleMembershipDeactivated(
       }
     }
 
-    // 🔥 v3.12.0: Check if Newsletter needs resubscribe email (bundle break)
-    let resubscribeMessage = '';
-    if (result?.user_id) {
-      const resubscribeResult = await handleBundleBreakResubscribe(
-        supabase,
-        result.user_id,
-        result.email || userEmail,
-        null,
-        'top_secret'  // Top Secret was deactivated, check if Newsletter needs resubscribe
-      );
-      
-      if (resubscribeResult.success && resubscribeResult.message.includes('email')) {
-        resubscribeMessage = ` | Newsletter resubscribe email sent`;
-      }
-    }
-
     return { 
       success: result?.success ?? true, 
-      message: `Top Secret deactivated: ${result?.email || userEmail}${warZoneMessage}${resubscribeMessage}` 
-    };
-  }
-
-  // ═══════════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE DEACTIVATION
-  // ═══════════════════════════════════════════════
-
-  if (isBundle(productId)) {
-    console.log("📦 Processing BUNDLE deactivation...");
-    
-    const { data: result, error } = await supabase.rpc('deactivate_bundle_subscription', {
-      p_whop_membership_id: membershipId,
-    });
-
-    if (error) {
-      console.error("❌ deactivate_bundle_subscription RPC error:", error);
-      return { success: false, message: `Bundle deactivation failed: ${error.message}` };
-    }
-
-    console.log("✅ Bundle deactivated:", result);
-    
-    // 🔥 v5.2.0: Resume paused individual subscriptions if bundle was cancelled
-    if (result?.user_id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_paused_for_bundle, newsletter_paused_for_bundle')
-        .eq('id', result.user_id)
-        .single();
-      
-      if (profile) {
-        // Resume paused Top Secret subscription
-        if (profile.top_secret_paused_for_bundle && profile.top_secret_whop_membership_id) {
-          console.log("▶️ Resuming paused Top Secret subscription:", profile.top_secret_whop_membership_id);
-          const resumeResult = await resumeMembership(profile.top_secret_whop_membership_id);
-          if (resumeResult.success) {
-            console.log("✅ Top Secret subscription resumed");
-            await supabase
-              .from('profiles')
-              .update({ 
-                top_secret_paused_for_bundle: false,
-                top_secret_enabled: true,
-                top_secret_status: 'active'
-              })
-              .eq('id', result.user_id);
-          } else {
-            console.warn("⚠️ Error resuming Top Secret:", resumeResult.error);
-          }
-        }
-        
-        // Resume paused Newsletter subscription
-        if (profile.newsletter_paused_for_bundle && profile.newsletter_whop_membership_id) {
-          console.log("▶️ Resuming paused Newsletter subscription:", profile.newsletter_whop_membership_id);
-          const resumeResult = await resumeMembership(profile.newsletter_whop_membership_id);
-          if (resumeResult.success) {
-            console.log("✅ Newsletter subscription resumed");
-            await supabase
-              .from('profiles')
-              .update({ 
-                newsletter_paused_for_bundle: false,
-                newsletter_enabled: true,
-                newsletter_status: 'active'
-              })
-              .eq('id', result.user_id);
-          } else {
-            console.warn("⚠️ Error resuming Newsletter:", resumeResult.error);
-          }
-        }
-      }
-    }
-    
-    // 🔥 v6.0.0: Reset platform_plan when Bundle deactivated
-    if (result?.user_id) {
-      await supabase
-        .from('profiles')
-        .update({
-          platform_plan: 'free',
-          platform_subscription_status: 'cancelled',
-          platform_is_in_trial: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', result.user_id);
-      
-      console.log("✅ Platform plan reset to free after Bundle deactivation:", result.user_id);
-    }
-
-    return { 
-      success: result?.success ?? true, 
-      message: `Bundle deactivated: ${result?.email || userEmail}` 
+      message: `Top Secret deactivated: ${result?.email || userEmail}${warZoneMessage}` 
     };
   }
 
@@ -3330,9 +2289,10 @@ async function handleMembershipDeactivated(
   if (isPlatform(productId)) {
     console.log("🖥️ Processing PLATFORM deactivation...");
 
+    // 🔥 v6.5.0: Find user by membership ID OR by email (for stale membership lookups)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, platform_plan')
+      .select('id, email, platform_plan, platform_whop_membership_id, whop_membership_id, subscription_status')
       .eq('platform_whop_membership_id', membershipId)
       .single();
 
@@ -3341,7 +2301,24 @@ async function handleMembershipDeactivated(
       return { success: true, message: `Platform deactivation: no user found for ${membershipId}` };
     }
 
+    // 🔥 v6.5.0: Race condition guard — if user already upgraded to a NEW plan
+    // (e.g. Core → Finotaur), the old membership deactivation should be ignored.
+    // This happens when Bundle/Finotaur payment.succeeded already updated platform_whop_membership_id
+    // to the new membership, but the old Core deactivation webhook arrives later.
+    if (profile.platform_whop_membership_id !== membershipId) {
+      console.log("⚠️ Ignoring stale platform deactivation — membership already replaced:", {
+        deactivatedMembership: membershipId,
+        currentMembership: profile.platform_whop_membership_id,
+        currentPlan: profile.platform_plan,
+      });
+      return { success: true, message: `Platform deactivation ignored (stale): ${profile.email}` };
+    }
+
     const oldPlan = profile.platform_plan;
+    
+    // 🔥 v6.4.0: Check if user has their OWN Journal subscription before downgrading
+    const hasOwnJournalSub = profile.whop_membership_id && 
+      ['active', 'trialing'].includes(profile.subscription_status || '');
 
     const { error: updateError } = await supabase
       .from('profiles')
@@ -3350,6 +2327,25 @@ async function handleMembershipDeactivated(
         platform_subscription_status: 'cancelled',
         platform_is_in_trial: false,
         platform_cancel_at_period_end: false,
+        // 🔥 v7.0.0: Finotaur/Enterprise deactivation — remove all included access
+        ...(oldPlan === 'platform_finotaur' || oldPlan === 'platform_enterprise' ? {
+          newsletter_enabled: false,
+          newsletter_status: 'cancelled',
+          top_secret_enabled: false,
+          top_secret_status: 'cancelled',
+          account_type: 'free',
+          max_trades: 10,
+          subscription_status: 'cancelled',
+          ...(oldPlan === 'platform_enterprise' ? {
+            enterprise_ai_portfolio_enabled: false,
+          } : {}),
+        } : {}),
+        // 🔥 v6.4.0: Downgrade Journal for Core if user doesn't have own sub
+        ...(oldPlan === 'platform_core' && !hasOwnJournalSub ? {
+          account_type: 'free',
+          max_trades: 10,
+          subscription_status: 'cancelled',
+        } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', profile.id);
@@ -3359,11 +2355,12 @@ async function handleMembershipDeactivated(
       return { success: false, message: `Platform deactivation failed: ${updateError.message}` };
     }
 
-    console.log("✅ Platform deactivated:", { userId: profile.id, email: profile.email, oldPlan });
+    console.log("✅ Platform deactivated:", { userId: profile.id, email: profile.email, oldPlan,
+      journalDowngraded: oldPlan === 'platform_finotaur' && !hasOwnJournalSub });
 
     return {
       success: true,
-      message: `Platform deactivated: ${profile.email} (${oldPlan} → free)`
+      message: `Platform deactivated: ${profile.email} (${oldPlan} → free)${oldPlan === 'platform_finotaur' && !hasOwnJournalSub ? ' [Journal also downgraded]' : ''}`
     };
   }
 
@@ -3463,9 +2460,8 @@ async function handleCancelAtPeriodEndChanged(
   // Determine product type
   const isNewsletterProduct = isNewsletter(productId);
   const isTopSecretProduct = isTopSecret(productId);
-  const isBundleProduct = isBundle(productId);
 
-  if (!isNewsletterProduct && !isTopSecretProduct && !isBundleProduct) {
+  if (!isNewsletterProduct && !isTopSecretProduct) {
     return { success: true, message: `Product ${productId} not tracked` };
   }
 
@@ -3539,25 +2535,10 @@ async function handleCancelAtPeriodEndChanged(
     
     console.log(`✅ Top Secret cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
   }
-
-  // 🔥 v5.5.0: Handle Bundle cancel_at_period_end
-  if (isBundleProduct) {
-    updateData.bundle_cancel_at_period_end = cancelAtPeriodEnd;
-    
-    await supabase
-      .from("profiles")
-      .update(updateData)
-      .eq("id", profile.id);
-    
-    console.log(`✅ Bundle cancel_at_period_end set to ${cancelAtPeriodEnd} for ${profile.email}`);
-  }
-
   // Log the event
   const currentStatus = isNewsletterProduct 
     ? profile.newsletter_status 
-    : isTopSecretProduct 
-      ? profile.top_secret_status 
-      : profile.bundle_status;
+    : profile.top_secret_status;
       
   await supabase.from("subscription_events").insert({
     user_id: profile.id,
@@ -3570,12 +2551,12 @@ async function handleCancelAtPeriodEndChanged(
       plan_id: planId,
       cancel_at_period_end: cancelAtPeriodEnd,
       source: "whop_webhook_cancel_at_period_end_changed",
-      product_type: isNewsletterProduct ? 'newsletter' : isTopSecretProduct ? 'top_secret' : 'bundle'
+      product_type: isNewsletterProduct ? 'newsletter' : 'top_secret'
     }
   });
 
   const action = cancelAtPeriodEnd ? "scheduled for cancellation" : "REACTIVATED";
-  const product = isNewsletterProduct ? "Newsletter" : isTopSecretProduct ? "Top Secret" : "Bundle";
+  const product = isNewsletterProduct ? "Newsletter" : "Top Secret";
   
   return { 
     success: true, 

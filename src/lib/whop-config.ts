@@ -1,22 +1,11 @@
 // =====================================================
-// FINOTAUR WHOP CONFIGURATION - v4.4.0
+// FINOTAUR WHOP CONFIGURATION - v7.0.0
 // =====================================================
-// 🔥 v4.4.0 CHANGES (SYNCED WITH DB):
-// - War Zone Monthly: $69.99/month with 7-day trial
-// - War Zone Yearly: $699/year (NO trial) - saves $140.88
-// - Top Secret Monthly: $89.99/month (intro $35 for 2 months)
-// - Top Secret Yearly: $899/year - saves $180.88
-// 
-// 🔥 v4.2.2 CHANGES:
-// - War Zone: UPDATED pricing - $39/mo regular, $19.50/mo intro (was $20/$10)
-// - War Zone: ADDED yearly plan - $329/year (saves $139)
-// - Top Secret: FIXED pricing - $70/mo regular, $35/mo intro (was $35/$17.50)
-// - Top Secret Yearly: $500/year (saves $340)
-// 
-// 🔥 v4.2.0 CHANGES:
-// - Newsletter: 7-day trial + 50% OFF first 2 months
-// - Top Secret: 14-day trial + 50% OFF first 2 months
-// - Updated badges and messaging
+// 🔥 v7.0.0 CHANGES:
+// - REMOVED: Bundle, cross-product discounts, discount products
+// - Finotaur Platform tier replaces Bundle (includes Newsletter + Top Secret + Journal Premium)
+// - Standalone products: Newsletter ($69.99/mo, $699/yr), Top Secret ($89.99/mo, $899/yr)
+// - Platform tiers: Core ($59/mo), Finotaur ($109/mo), Enterprise ($500/mo)
 // =====================================================
 
 // ============================================
@@ -33,7 +22,7 @@ export type JournalPlanName = 'basic' | 'premium';
 export type PlatformPlanName = 'platform_free' | 'platform_core' | 'platform_finotaur' | 'platform_enterprise';
 
 // All plan names
-export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret' | 'top_secret_warzone' | 'newsletter_topsecret' | 'bundle';
+export type PlanName = JournalPlanName | PlatformPlanName | 'newsletter' | 'top_secret';
 
 export type BillingInterval = 'monthly' | 'yearly';
 
@@ -49,18 +38,11 @@ export type PlanId =
   | 'platform_finotaur_monthly'
   | 'platform_finotaur_yearly'
   | 'platform_enterprise_monthly'
-  // Other products
+  // Standalone products
   | 'newsletter_monthly'
   | 'newsletter_yearly'
-  | 'newsletter_monthly_topsecret'
   | 'top_secret_monthly'
-  | 'top_secret_yearly'
-  | 'top_secret_monthly_warzone'
-  | 'top_secret_warzone_monthly'    // 🔥 For checkout flow - War Zone member discount
-  | 'newsletter_topsecret_monthly'  // 🔥 For checkout flow - Top Secret member discount
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret together
-  | 'bundle_monthly'
-  | 'bundle_yearly';
+  | 'top_secret_yearly';
 
 
 export interface PlanConfig {
@@ -81,7 +63,6 @@ export interface PlanConfig {
   trialOnceOnly?: boolean;
   isNewsletter?: boolean;
   isTopSecret?: boolean;
-  isBundle?: boolean;           // 🔥 v5.0.0: Bundle product flag
   discordIncluded?: boolean;
   category: SubscriptionCategory;
   isPlatform?: boolean;
@@ -112,7 +93,7 @@ export const WHOP_PLAN_IDS = {
   platform_core_monthly: 'plan_M4ig2ZhYd2RUE',
   platform_core_yearly: 'plan_6w5KTZsSGp7Ss',
   
-  // 🔥 Platform - Finotaur ($109/month, 14-day trial) = Bundle
+  // 🔥 Platform - Finotaur ($109/month, 14-day trial)
   platform_finotaur_monthly: 'plan_ICooR8aqtdXad',
   platform_finotaur_yearly: 'plan_M2zS1EoNXJF10',
   
@@ -124,22 +105,9 @@ export const WHOP_PLAN_IDS = {
   // ═══════════════════════════════════════════
   newsletter_monthly: 'plan_U6lF2eO5y9469',  // Regular price $69.99/month
   newsletter_yearly: 'plan_bp2QTGuwfpj0A',   // Yearly $699/year
-  newsletter_monthly_topsecret: 'plan_BPJdT6Tyjmzcx',  // 🔥 FIXED: Top Secret member price $30/month
-  
   // Top Secret
   top_secret_monthly: 'plan_tUvQbCrEQ4197',           // Top Secret Monthly - $89.99/month
   top_secret_yearly: 'plan_PxxbBlSdkyeo7',            // Top Secret Yearly - $899/year
-  top_secret_monthly_warzone: 'plan_7VQxCZ5Kpw6f0',   // Top Secret For War Zone - $50/month
-  
-  // 🔥 Discount plan aliases for checkout flow (same IDs, different keys for PlanName lookup)
-  top_secret_warzone_monthly: 'plan_7VQxCZ5Kpw6f0',   // Top Secret for War Zone members - $50/month
-  newsletter_topsecret_monthly: 'plan_BPJdT6Tyjmzcx', // War Zone for Top Secret members - $30/month
-  
-  // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
-  // ═══════════════════════════════════════════
-  bundle_monthly: 'plan_ICooR8aqtdXad',   // Bundle Monthly - $109/month with 14-day trial
-  bundle_yearly: 'plan_M2zS1EoNXJF10',    // Bundle Yearly - $1090/year (no trial)
 } as const;
 
 // 🔥 Product IDs - Used for WEBHOOK identification
@@ -162,18 +130,9 @@ export const WHOP_PRODUCT_IDS = {
   // ═══════════════════════════════════════════
   newsletter_monthly: 'prod_qlaV5Uu6LZlYn',
   newsletter_yearly: 'prod_8b3VWkZdena4B',
-  newsletter_monthly_topsecret: 'prod_u7QrZi90xiCZA',  // 🔥 NEW: Top Secret member discount
-  
   // Top Secret
   top_secret: 'prod_nl6YXbLp4t5pz',
-  top_secret_warzone: 'prod_e8Er36RubeFXU',  // 🔥 NEW: Top Secret for War Zone members
   top_secret_yearly: 'prod_aGd9mbl2XUIFO',   // 🔥 Top Secret Yearly - standalone product
-  
-  // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret
-  // ═══════════════════════════════════════════
-  bundle_monthly: 'prod_LtP5GbpPfp9bn',   // Bundle Monthly Product
-  bundle_yearly: 'prod_CbWpZrn5P7wc9',    // Bundle Yearly Product
   
 } as const;
 
@@ -181,8 +140,8 @@ export const WHOP_PRODUCT_IDS = {
 export const PLATFORM_PRODUCT_IDS = new Set([
   'prod_HDYzeNp6WOJwh',  // Core Monthly
   'prod_YAdXQrHtt72Gd',  // Core Yearly
-  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly (Bundle)
-  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly (Bundle)
+  'prod_LtP5GbpPfp9bn',  // Finotaur Monthly
+  'prod_CbWpZrn5P7wc9',  // Finotaur Yearly
   'prod_CIKv0J5Rq6aFk',  // Enterprise
 ]);
 
@@ -194,8 +153,6 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   isNewsletter?: boolean; 
   isTopSecret?: boolean;
   isPlatform?: boolean;
-  isTopSecretDiscount?: boolean;  // 🔥 NEW: For Top Secret member discounted plans
-  isBundle?: boolean;             // 🔥 v5.0.0: For Bundle products
 }> = {
   // Journal
   'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly', category: 'journal' },
@@ -206,22 +163,17 @@ export const PRODUCT_ID_TO_PLAN: Record<string, {
   // 🔥 Platform - REAL IDs!
   'prod_HDYzeNp6WOJwh': { plan: 'platform_core', interval: 'monthly', category: 'platform', isPlatform: true },
   'prod_YAdXQrHtt72Gd': { plan: 'platform_core', interval: 'yearly', category: 'platform', isPlatform: true },
-  'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true, isBundle: true },
-  'prod_CbWpZrn5P7wc9': { plan: 'platform_finotaur', interval: 'yearly', category: 'platform', isPlatform: true, isBundle: true },
+  'prod_LtP5GbpPfp9bn': { plan: 'platform_finotaur', interval: 'monthly', category: 'platform', isPlatform: true },
+  'prod_CbWpZrn5P7wc9': { plan: 'platform_finotaur', interval: 'yearly', category: 'platform', isPlatform: true },
   'prod_CIKv0J5Rq6aFk': { plan: 'platform_enterprise', interval: 'monthly', category: 'platform', isPlatform: true },
   
 // ═══════════════════════════════════════════
   // 🔥 v4.3.0: Newsletter (War Zone) - All Products
   // ═══════════════════════════════════════════
   'prod_qlaV5Uu6LZlYn': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true },
-  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },
-  'prod_u7QrZi90xiCZA': { plan: 'newsletter', interval: 'monthly', category: 'journal', isNewsletter: true, isTopSecretDiscount: true },  // 🔥 NEW
-  
+  'prod_8b3VWkZdena4B': { plan: 'newsletter', interval: 'yearly', category: 'journal', isNewsletter: true },  
   // Top Secret - Regular
   'prod_nl6YXbLp4t5pz': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
-  
-  // 🔥 Top Secret For War Zone Members - ADDED!
-  'prod_e8Er36RubeFXU': { plan: 'top_secret', interval: 'monthly', category: 'journal', isTopSecret: true },
   
   // 🔥 Top Secret Yearly - STANDALONE PRODUCT
   'prod_aGd9mbl2XUIFO': { plan: 'top_secret', interval: 'yearly', category: 'journal', isTopSecret: true },
@@ -240,9 +192,9 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   'plan_6w5KTZsSGp7Ss': 'platform_core_yearly',
   'prod_HDYzeNp6WOJwh': 'platform_core_monthly',
   'prod_YAdXQrHtt72Gd': 'platform_core_yearly',
-  // 🔥 Finotaur = Bundle (same Whop plan IDs)
-  'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',  // Also used as bundle_monthly
-  'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',   // Also used as bundle_yearly
+  // 🔥 Finotaur Platform
+  'plan_ICooR8aqtdXad': 'platform_finotaur_monthly',
+  'plan_M2zS1EoNXJF10': 'platform_finotaur_yearly',
   'plan_nHveClWPmjJNT': 'platform_enterprise_monthly',
   
   // ═══════════════════════════════════════════
@@ -250,14 +202,9 @@ export const PLAN_ID_TO_NAME: Record<string, string> = {
   // ═══════════════════════════════════════════
   'plan_U6lF2eO5y9469': 'newsletter_monthly',
   'plan_bp2QTGuwfpj0A': 'newsletter_yearly',
-  'plan_BPJdT6Tyjmzcx': 'newsletter_monthly_topsecret',
-  
   // Top Secret - SYNCED with WHOP_PLAN_IDS!
   'plan_tUvQbCrEQ4197': 'top_secret_monthly',
   'plan_PxxbBlSdkyeo7': 'top_secret_yearly',
-  'plan_7VQxCZ5Kpw6f0': 'top_secret_monthly_warzone',
-  
-  // 🔥 Note: Bundle uses same plan IDs as Finotaur (see above)
 };
 
 // ============================================
@@ -457,7 +404,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: '14-Day Free Trial',
     category: 'platform',
     isPlatform: true,
-    isBundle: true,
     includesJournal: 'premium',
     features: [
       '14-day free trial',
@@ -492,7 +438,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: 'Best Value - Save 17%',
     category: 'platform',
     isPlatform: true,
-    isBundle: true,
     includesJournal: 'premium',
     features: [
       'Everything in Core, plus:',
@@ -586,37 +531,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // 🔥 NEW: Top Secret member discounted plan
-  newsletter_monthly_topsecret: {
-    id: 'newsletter_monthly_topsecret',
-    whopPlanId: WHOP_PLAN_IDS.newsletter_monthly_topsecret,  // plan_BPJdT6Tyjmzcx
-    whopProductId: WHOP_PRODUCT_IDS.newsletter_monthly_topsecret,  // prod_u7QrZi90xiCZA
-    name: 'newsletter',
-    displayName: 'War Zone Intelligence (Top Secret Member)',
-    price: 30,  // 🔥 Discounted price for Top Secret members - $30/month
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 7,
-    isNewsletter: true,
-    discordIncluded: true,
-    badge: '🔥 Top Secret Member Discount',
-    category: 'journal',
-    features: [
-      '🎁 7 days FREE trial',
-      '💰 Special Top Secret member price: $30/mo (save $39.99/mo!)',
-      'Daily institutional-grade PDF report (8-14 pages)',
-      'Macro breakdown & market structure analysis',
-      'Unusual Options Activity (UOA) tracking',
-      'Technical outlook (24-72h)',
-      'Earnings & corporate intel',
-      'Private Discord community',
-      'Finotaur Trading Room access',
-      'Real-time alerts',
-      'Chart pack blueprint',
-    ],
-  },
-
   newsletter_yearly: {
     id: 'newsletter_yearly',
     whopPlanId: WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
@@ -682,33 +596,6 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // 🔥 NEW: Top Secret for War Zone members - $50/month
-  top_secret_monthly_warzone: {
-    id: 'top_secret_monthly_warzone',
-    whopPlanId: WHOP_PLAN_IDS.top_secret_monthly_warzone,
-    whopProductId: WHOP_PRODUCT_IDS.top_secret,
-    name: 'top_secret',
-    displayName: 'Top Secret (War Zone Member)',
-    price: 50,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 14,
-    isTopSecret: true,
-    discordIncluded: true,
-    badge: '🔥 War Zone Member Discount',
-    category: 'journal',
-    features: [
-      '🎁 14 days FREE trial',
-      '💰 Special War Zone member price: $50/month (save $39.99/mo!)',
-      'Monthly ISM Manufacturing Report',
-      '2x Company Deep Dive Reports',
-      '2x Crypto Market Reports',
-      'PDF Downloads & Archive Access',
-      'Discord Community Access',
-      'Email Delivery',
-    ],
-  },
   top_secret_yearly: {
     id: 'top_secret_yearly',
     whopPlanId: WHOP_PLAN_IDS.top_secret_yearly,
@@ -737,133 +624,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
   },
 
-  // ═══════════════════════════════════════════
-  // 🔥 CROSS-PRODUCT DISCOUNT PLANS (for checkout flow)
-  // ═══════════════════════════════════════════
-  
-  // Top Secret for War Zone Members - $50/month (checkout flow alias)
-  top_secret_warzone_monthly: {
-    id: 'top_secret_warzone_monthly' as PlanId,
-    whopPlanId: 'plan_7VQxCZ5Kpw6f0',
-    whopProductId: 'prod_nl6YXbLp4t5pz',
-    name: 'top_secret_warzone' as PlanName,
-    displayName: 'Top Secret (War Zone Member Price)',
-    price: 50,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 14,
-    isTopSecret: true,
-    discordIncluded: true,
-    badge: '🔥 War Zone Discount - Save $39.99/mo',
-    category: 'journal',
-    features: [
-      '🎁 14 days FREE trial',
-      '💰 Special War Zone member price: $50/month',
-      'Monthly ISM Manufacturing Report',
-      '2x Company Deep Dive Reports',
-      '2x Crypto Market Reports',
-      'PDF Downloads & Archive Access',
-      'Discord Community Access',
-      'Email Delivery',
-    ],
-  },
-  
-  // War Zone for Top Secret Members - $30/month (checkout flow alias)
-  newsletter_topsecret_monthly: {
-    id: 'newsletter_topsecret_monthly' as PlanId,
-    whopPlanId: 'plan_BPJdT6Tyjmzcx',
-    whopProductId: 'prod_u7QrZi90xiCZA',
-    name: 'newsletter_topsecret' as PlanName,
-    displayName: 'War Zone (Top Secret Member Price)',
-    price: 30,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 7,
-    isNewsletter: true,
-    discordIncluded: true,
-    badge: '🔥 Top Secret Discount - Save $39.99/mo',
-    category: 'journal',
-    features: [
-      '🎁 7 days FREE trial',
-      '💰 Special Top Secret member price: $30/month',
-      'Daily institutional-grade PDF report',
-      'Macro breakdown & market structure analysis',
-      'Private Discord community',
-      'Finotaur Trading Room access',
-      'Real-time alerts',
-    ],
-  },
 
-  // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE - War Zone + Top Secret ($109/mo or $1090
-  // /yr)
-  // BEST VALUE: Save $49.98/month vs buying separately!
-  // ═══════════════════════════════════════════
-  bundle_monthly: {
-    id: 'bundle_monthly' as PlanId,
-    whopPlanId: 'plan_ICooR8aqtdXad',
-    whopProductId: 'prod_LtP5GbpPfp9bn',
-    name: 'bundle' as PlanName,
-    displayName: 'War Zone + Top Secret Bundle',
-    price: 109,
-    period: 'monthly',
-    periodLabel: '/month',
-    maxTrades: 0,
-    trialDays: 14,
-    isNewsletter: true,
-    isTopSecret: true,
-    isBundle: true,
-    discordIncluded: true,
-    popular: true,
-    badge: '🔥 BEST VALUE - 14-Day Free Trial',
-    category: 'journal',
-    features: [
-      '🎁 7 days FREE trial',
-      '💰 Save $49.98/month vs buying separately!',
-      '📰 War Zone Daily Intelligence Report',
-      '🔐 Top Secret Exclusive Research',
-      'All Premium Discord channels',
-      'Trading Room access',
-      'Real-time alerts for both products',
-      'ISM Manufacturing Report',
-      '2x Company Deep Dives monthly',
-      '2x Crypto Market Reports monthly',
-    ],
-  },
-bundle_yearly: {
-    id: 'bundle_yearly' as PlanId,
-    whopPlanId: 'plan_M2zS1EoNXJF10',
-    whopProductId: 'prod_CbWpZrn5P7wc9',
-    name: 'bundle' as PlanName,
-    displayName: 'War Zone + Top Secret Bundle (Annual)',
-    price: 1090,
-    period: 'yearly',
-    periodLabel: '/year',
-    monthlyEquivalent: 90.83,  // $1090/12 = ~$90.83/month
-    maxTrades: 0,
-    trialDays: 0,  // No trial for yearly
-    isNewsletter: true,
-    isTopSecret: true,
-    isBundle: true,
-    discordIncluded: true,
-    popular: true,
-    badge: '💎 ULTIMATE VALUE - Save $218/year',
-    category: 'journal',
-    features: [
-      '💰 Save $218/year vs monthly bundle!',
-      '💰 Save $508.88/year vs separate products!',
-      '📰 War Zone Daily Intelligence Report',
-      '🔐 Top Secret Exclusive Research',
-      'All Premium Discord channels',
-      'Trading Room access',
-      'Real-time alerts for both products',
-      'ISM Manufacturing Report',
-      '2x Company Deep Dives monthly',
-      '2x Crypto Market Reports monthly',
-    ],
-  },
+  
 };
 
 // ============================================
@@ -887,18 +649,6 @@ export function isNewsletterProduct(productId: string): boolean {
 
 export function isTopSecretProduct(productId: string): boolean {
   return productId === WHOP_PRODUCT_IDS.top_secret;
-}
-
-// 🔥 v5.0.0: Check if product is a Bundle
-export function isBundleProduct(productId: string): boolean {
-  return productId === WHOP_PRODUCT_IDS.bundle_monthly || 
-         productId === WHOP_PRODUCT_IDS.bundle_yearly;
-}
-
-// 🔥 v5.0.0: Check if plan is a Bundle plan
-export function isBundlePlan(planId: string): boolean {
-  return planId === WHOP_PLAN_IDS.bundle_monthly || 
-         planId === WHOP_PLAN_IDS.bundle_yearly;
 }
 
 export function isPlatformProduct(productId: string): boolean {
@@ -984,7 +734,6 @@ export function getIntervalFromPlanId(planId: string): 'monthly' | 'yearly' {
     WHOP_PLAN_IDS.platform_finotaur_yearly,
     WHOP_PLAN_IDS.newsletter_yearly,  // plan_bp2QTGuwfpj0A
     WHOP_PLAN_IDS.top_secret_yearly,
-    WHOP_PLAN_IDS.bundle_yearly,      // 🔥 v5.0.0: Bundle Yearly
   ];
   
   return yearlyPlanIds.includes(planId as any) ? 'yearly' : 'monthly';
@@ -1050,9 +799,7 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   
   // Success redirect URL based on product type
   const baseRedirect = redirectUrl || 'https://www.finotaur.com';
-  if (plan.isBundle) {
-    params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop&bundle=true`);
-  } else if (plan.isNewsletter) {
+  if (plan.isNewsletter) {
     params.set('redirect_url', `${baseRedirect}/app/all-markets/warzone?payment=success&source=whop`);
   } else if (plan.isTopSecret) {
     params.set('redirect_url', `${baseRedirect}/app/top-secret?payment=success&source=whop`);
@@ -1190,6 +937,8 @@ platform_finotaur: {
     customIntegrations: true,
     sla: true,
     whiteLabel: true,
+    newsletter: true,
+    topSecret: true,
     // Page access - ALL PAGES
     stockAnalyzer: true,
     sectorAnalyzer: true,
