@@ -1618,6 +1618,7 @@ if (isTopSecretPayment) {
           await supabase
             .from('profiles')
             .update({
+              bundle_enabled: true,
               bundle_interval: 'yearly',
               bundle_status: 'active',
               bundle_whop_membership_id: membershipId,
@@ -1625,11 +1626,13 @@ if (isTopSecretPayment) {
               bundle_is_in_trial: false,
               bundle_trial_ends_at: null,
               bundle_cancel_at_period_end: false,
+              newsletter_enabled: true,
               newsletter_interval: 'yearly',
               newsletter_status: 'active',
               newsletter_expires_at: expiresAt.toISOString(),
               newsletter_is_in_trial: false,
               newsletter_trial_ends_at: null,
+              top_secret_enabled: true,
               top_secret_interval: 'yearly',
               top_secret_status: 'active',
               top_secret_expires_at: expiresAt.toISOString(),
@@ -1686,11 +1689,16 @@ if (isTopSecretPayment) {
           platform_is_in_trial: false,
           platform_cancel_at_period_end: false,
           platform_payment_provider: 'whop',
+          // 🔥 v6.2.0: Ensure newsletter + top_secret access for Bundle/Finotaur
+          newsletter_enabled: true,
+          newsletter_status: 'active',
+          top_secret_enabled: true,
+          top_secret_status: 'active',
           updated_at: new Date().toISOString(),
         })
         .eq('id', resolvedUserId);
       
-      console.log("✅ Platform plan updated to finotaur for Bundle payment:", resolvedUserId);
+      console.log("✅ Platform plan updated to finotaur for Bundle payment (with newsletter + top_secret):", resolvedUserId);
       
       // 🔥 v5.2.0: If this is a REAL payment (not trial $0), cancel paused individual subscriptions
       if (paymentAmount > 0) {
@@ -1865,6 +1873,7 @@ if (isTopSecretPayment) {
           platform_whop_customer_email: whopEmail,
           platform_payment_provider: 'whop',
           ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', resolvedUserId);
@@ -2090,12 +2099,26 @@ async function handleMembershipActivated(
       return { success: false, message: "User not found for Bundle activation" };
     }
     
-    // 🔥 v5.4.0: READ membership IDs BEFORE calling RPC (RPC will clear them!)
+    // 🔥 v6.2.0: READ membership IDs + platform info BEFORE calling RPC
     const { data: existingProfile } = await supabase
       .from('profiles')
-      .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled, bundle_whop_membership_id')
+      .select('top_secret_whop_membership_id, newsletter_whop_membership_id, top_secret_enabled, newsletter_enabled, bundle_whop_membership_id, platform_whop_membership_id, platform_subscription_status, platform_plan')
       .eq('id', userResult.id)
       .single();
+
+    // 🔥 v6.2.0: Cancel existing Platform (Core) membership when upgrading to Finotaur/Bundle
+    if (existingProfile?.platform_whop_membership_id && 
+        existingProfile.platform_whop_membership_id !== membershipId &&
+        ['active', 'trial', 'trialing'].includes(existingProfile?.platform_subscription_status || '')) {
+      console.log("🔥 Detected Core→Finotaur upgrade - cancelling old Platform membership:", existingProfile.platform_whop_membership_id);
+      
+      const cancelResult = await cancelMembership(existingProfile.platform_whop_membership_id, 'immediate');
+      if (cancelResult.success) {
+        console.log("✅ Old Platform (Core) membership cancelled successfully on Bundle activation");
+      } else {
+        console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+      }
+    }
     
     // Save existing membership IDs for pause/cancel logic BEFORE RPC clears them
     const existingTopSecretMembershipId = existingProfile?.top_secret_whop_membership_id;
@@ -2184,8 +2207,30 @@ async function handleMembershipActivated(
       }
     }
 
-    // 🔥 NOW call the RPC after subscriptions are handled
-    const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
+    // 🔥 v6.2.0: Cancel existing Platform (Core) membership when upgrading to Finotaur/Bundle
+      {
+        const { data: platformProfile } = await supabase
+          .from('profiles')
+          .select('platform_whop_membership_id, platform_subscription_status')
+          .eq('id', resolvedUserId)
+          .single();
+        
+        if (platformProfile?.platform_whop_membership_id && 
+            platformProfile.platform_whop_membership_id !== membershipId &&
+            ['active', 'trial', 'trialing'].includes(platformProfile?.platform_subscription_status || '')) {
+          console.log("🔥 Cancelling old Platform (Core) membership on Bundle payment:", platformProfile.platform_whop_membership_id);
+          
+          const cancelResult = await cancelMembership(platformProfile.platform_whop_membership_id, 'immediate');
+          if (cancelResult.success) {
+            console.log("✅ Old Platform (Core) membership cancelled on Bundle payment");
+          } else {
+            console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+          }
+        }
+      }
+
+      // 🔥 NOW call the RPC after subscriptions are handled
+      const { data: result, error } = await supabase.rpc('activate_bundle_subscription', {
       p_user_id: userResult.id,
       p_whop_membership_id: membershipId,
       p_whop_user_id: whopUserId,
@@ -2220,11 +2265,21 @@ async function handleMembershipActivated(
         platform_whop_product_id: productId || '',
         platform_whop_plan_id: planId,
         platform_payment_provider: 'whop',
+        ...(isInTrial ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
+        // 🔥 v6.2.0: Ensure newsletter + top_secret access for Bundle/Finotaur
+        newsletter_enabled: true,
+        newsletter_status: isInTrial ? 'trial' : 'active',
+        top_secret_enabled: true,
+        top_secret_status: isInTrial ? 'trial' : 'active',
+        bundle_enabled: true,
+        bundle_status: isInTrial ? 'trial' : 'active',
+        bundle_interval: billingInterval,
+        bundle_whop_membership_id: membershipId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userResult.id);
     
-    console.log("✅ Platform plan updated to finotaur for Bundle user:", userResult.id);
+    console.log("✅ Platform plan updated to finotaur for Bundle user (with newsletter + top_secret):", userResult.id);
     
     return { 
       success: true, 
@@ -2306,6 +2361,7 @@ async function handleMembershipActivated(
         platform_whop_customer_email: data.user?.email || '',
         platform_payment_provider: 'whop',
         ...(isInTrial && platformPlan === 'core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
+...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', userResult.id);

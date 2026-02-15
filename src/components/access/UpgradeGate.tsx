@@ -247,7 +247,7 @@ export function UpgradeGate({
         </div>
 
         {/* ── Plan Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
 
           {/* ─── FREE CARD ─── */}
           <motion.div
@@ -282,7 +282,7 @@ export function UpgradeGate({
                 </div>
               </div>
             )}
-            <div className="p-5 pt-6 flex flex-col flex-1">
+            <div className="p-6 pt-7 flex flex-col flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="w-4 h-4 text-zinc-400" />
                 <span className="font-bold text-white">Free</span>
@@ -352,7 +352,7 @@ export function UpgradeGate({
                   </div>
                 </div>
 
-                <div className="p-5 pt-6 flex flex-col flex-1">
+                <div className="p-6 pt-7 flex flex-col flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <TierIcon className="w-4 h-4" style={{ color: tier.accentFrom }} />
                     <span className="font-bold text-white">{tier.name}</span>
@@ -412,7 +412,7 @@ export function UpgradeGate({
                   </div>
                 </div>
 
-                <div className="p-5 pt-6 flex flex-col flex-1">
+                <div className="p-6 pt-7 flex flex-col flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <TierIcon className="w-4 h-4" style={{ color: '#C9A646' }} />
                     <span className="font-bold text-white">{tier.name}</span>
@@ -479,7 +479,7 @@ export function UpgradeGate({
               </div>
             </div>
 
-            <div className="p-5 pt-8 flex flex-col flex-1">
+            <div className="p-6 pt-9 flex flex-col flex-1">
               {/* Header */}
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles className="w-4 h-4" style={{ color: '#D4AF37' }} />

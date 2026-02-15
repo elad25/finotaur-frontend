@@ -2609,9 +2609,6 @@ const ReportView = memo(({ report, indicators, fedData, ismIntelligence, ismSect
       {/* ===== ISM INTELLIGENCE SECTIONS ===== */}
       {report.id === 'ism' && ismIntelligence && (
         <>
-          {/* ISM Macro Snapshot — headline numbers */}
-          <ISMRegimeSnapshot intel={ismIntelligence} />
-
           {/* Under-the-Surface Tensions */}
           <LazySection fallbackHeight="h-48">
             <ISMTensions intel={ismIntelligence} />

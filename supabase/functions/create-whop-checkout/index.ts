@@ -293,6 +293,39 @@ const whopRequestBody: Record<string, any> = {
       console.log("✅ Upgrade flow detected - skipping trial");
     }
 
+    // 🔥 v1.6.0: Skip trial if user already used ANY platform trial (Core or Finotaur)
+    // Prevents 14+14 = 28 days free when upgrading Core → Finotaur
+    if (!whopRequestBody.skip_trial && user?.id) {
+      const { data: trialProfile } = await supabase
+        .from('profiles')
+        .select('platform_core_trial_used_at, platform_finotaur_trial_used_at')
+        .eq('id', user.id)
+        .single();
+      
+      if (trialProfile) {
+        const hasUsedAnyPlatformTrial = 
+          trialProfile.platform_core_trial_used_at || 
+          trialProfile.platform_finotaur_trial_used_at;
+        
+        // Check if this is a platform plan
+        const isPlatformPlan = [
+          'plan_M4ig2ZhYd2RUE',  // Core Monthly
+          'plan_6w5KTZsSGp7Ss',  // Core Yearly
+          'plan_ICooR8aqtdXad',  // Finotaur/Bundle Monthly
+          'plan_M2zS1EoNXJF10',  // Finotaur/Bundle Yearly
+          'plan_nHveClWPmjJNT',  // Enterprise Monthly
+        ].includes(plan_id);
+        
+        if (isPlatformPlan && hasUsedAnyPlatformTrial) {
+          whopRequestBody.skip_trial = true;
+          console.log("✅ User already used a platform trial - skipping trial for new plan", {
+            core_trial_used: trialProfile.platform_core_trial_used_at,
+            finotaur_trial_used: trialProfile.platform_finotaur_trial_used_at,
+          });
+        }
+      }
+    }
+
     // 🔥 v1.4.0: Only add affiliate code if NOT applying intro discount
     // (they use the same 'd' parameter in the URL)
     if (!applyIntroDiscount && affiliate_code) {
