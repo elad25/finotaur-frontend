@@ -1816,6 +1816,26 @@ if (isTopSecretPayment) {
       const resolvedUserId = userResult.id;
       const resolvedEmail = userResult.email;
 
+      // 🔥 v6.1.0: Check if this is a plan change or upgrade - cancel old membership
+      const { data: currentProfile } = await supabase
+        .from('profiles')
+        .select('platform_plan, platform_subscription_status, platform_whop_membership_id, platform_billing_interval')
+        .eq('id', resolvedUserId)
+        .single();
+
+      if (currentProfile?.platform_whop_membership_id && 
+          currentProfile.platform_whop_membership_id !== membershipId &&
+          ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '')) {
+        console.log("🔥 Detected Platform plan change/upgrade - cancelling old membership:", currentProfile.platform_whop_membership_id);
+        
+        const cancelResult = await cancelMembership(currentProfile.platform_whop_membership_id, 'immediate');
+        if (cancelResult.success) {
+          console.log("✅ Old Platform membership cancelled successfully");
+        } else {
+          console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+        }
+      }
+
       // Detect trial: payment amount = 0 on first payment
       const isInTrial = isFirstPayment && paymentAmount === 0;
       const trialEndsAt = isInTrial 
@@ -2246,6 +2266,26 @@ async function handleMembershipActivated(
     if (!userResult) {
       console.error("❌ User not found for Platform activation");
       return { success: false, message: "User not found for Platform activation" };
+    }
+
+    // 🔥 v6.1.0: Cancel old Platform membership if switching plans
+    const { data: currentProfile } = await supabase
+      .from('profiles')
+      .select('platform_whop_membership_id, platform_subscription_status')
+      .eq('id', userResult.id)
+      .single();
+
+    if (currentProfile?.platform_whop_membership_id && 
+        currentProfile.platform_whop_membership_id !== data.id &&
+        ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '')) {
+      console.log("🔥 Cancelling old Platform membership on activation:", currentProfile.platform_whop_membership_id);
+      
+      const cancelResult = await cancelMembership(currentProfile.platform_whop_membership_id, 'immediate');
+      if (cancelResult.success) {
+        console.log("✅ Old Platform membership cancelled on activation");
+      } else {
+        console.warn("⚠️ Failed to cancel old Platform membership:", cancelResult.error);
+      }
     }
 
     // Update profile
