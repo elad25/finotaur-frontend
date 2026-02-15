@@ -712,82 +712,6 @@ const TradeStrategyCard = memo<TradeCardProps>(({ idea, index }) => {
 TradeStrategyCard.displayName = 'TradeStrategyCard';
 
 // =====================================================
-// 🏛️ SECTOR VERDICT CARD
-// =====================================================
-
-interface VerdictProps {
-  verdict: CachedSectorAnalysis['sector_verdict'];
-  rotation: CachedSectorAnalysis['rotation_signal'];
-  allocation: CachedSectorAnalysis['allocation_guide'];
-  sectorName: string;
-}
-
-const SectorVerdict = memo<VerdictProps>(({ verdict, rotation, allocation, sectorName }) => {
-  const signalColor = verdict?.signal === 'OVERWEIGHT' ? colors.positive
-    : verdict?.signal === 'UNDERWEIGHT' ? colors.negative
-    : colors.warning;
-
-  return (
-    <Card>
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <Shield className="h-5 w-5 text-[#C9A646]" />
-            <h3 className="text-lg font-bold text-white">Sector Verdict</h3>
-          </div>
-          <span className="text-sm font-bold px-3 py-1.5 rounded-lg"
-                style={{ background: `${signalColor}12`, color: signalColor, border: `1px solid ${signalColor}20` }}>
-            {verdict?.signal || 'NEUTRAL'}
-          </span>
-        </div>
-
-        {/* Rating Ring + Summary */}
-        <div className="flex items-start gap-5 mb-5">
-          <div className="flex-shrink-0 relative w-20 h-20">
-            <svg className="w-20 h-20 transform -rotate-90">
-              <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-              <circle cx="40" cy="40" r="34" fill="none" stroke={signalColor} strokeWidth="5" strokeLinecap="round"
-                      strokeDasharray={`${((verdict?.rating || 50) / 100) * 213.6} 213.6`} />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xl font-bold text-white">{verdict?.rating || 50}</span>
-            </div>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm text-[#B0B0B0] leading-relaxed mb-2">{verdict?.summary}</p>
-            {verdict?.ismImpact && (
-              <p className="text-xs text-[#C9A646] leading-relaxed">
-                <strong>ISM Impact:</strong> {verdict.ismImpact}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Rotation + Allocation */}
-        <div className="grid grid-cols-2 gap-3">
-          {rotation && (
-            <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.06)' }}>
-              <div className="text-[9px] text-[#6B6B6B] uppercase mb-1">Rotation Signal</div>
-              <div className="text-sm font-medium text-white mb-1">{rotation.catalyst}</div>
-              <div className="text-[10px] text-[#8B8B8B]">Strength: {rotation.strength}</div>
-            </div>
-          )}
-          {allocation && (
-            <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.06)' }}>
-              <div className="text-[9px] text-[#6B6B6B] uppercase mb-1">Allocation</div>
-              <div className="text-sm font-medium text-white mb-1">{allocation.recommendedWeight}</div>
-              <div className="text-[10px] text-[#8B8B8B]">Conviction: {allocation.conviction}</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </Card>
-  );
-});
-
-SectorVerdict.displayName = 'SectorVerdict';
-
-// =====================================================
 // 📋 BULL/BEAR CASE
 // =====================================================
 
@@ -946,14 +870,6 @@ export const TopDownTab = memo<TopDownTabProps>(({ sector, cachedAnalysis }) => 
         macro={analysis.macro_regime}
         ism={analysis.ism_context}
         flow={analysis.top_down_flow}
-        sectorName={sector.name}
-      />
-
-      {/* Sector Verdict */}
-      <SectorVerdict
-        verdict={analysis.sector_verdict}
-        rotation={analysis.rotation_signal}
-        allocation={analysis.allocation_guide}
         sectorName={sector.name}
       />
 
