@@ -237,7 +237,7 @@ function SectorAnalyzerContent() {
 }
 
 export default function SectorAnalyzer() {
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('sector_analyzer');
   if (accessLoading) {
     return (
@@ -258,6 +258,7 @@ export default function SectorAnalyzer() {
         upgradePrice={access.upgradePrice}
         currentUsage={access.currentUsage}
         limit={access.limit}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

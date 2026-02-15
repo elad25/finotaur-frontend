@@ -1136,7 +1136,7 @@ function Top5Content() {
 }
 
 export default function Top5() {
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('ai_scanner');
   if (accessLoading) {
     return (
@@ -1155,6 +1155,7 @@ export default function Top5() {
         upgradeTarget={access.upgradeTarget}
         upgradeDisplayName={access.upgradeDisplayName}
         upgradePrice={access.upgradePrice}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

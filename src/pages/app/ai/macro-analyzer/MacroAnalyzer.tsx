@@ -132,7 +132,7 @@ LoadingSkeleton.displayName = 'LoadingSkeleton';
 // =====================================================
 
 export default function MacroAnalyzer() {
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('macro_analyzer');
   
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -165,6 +165,7 @@ export default function MacroAnalyzer() {
         upgradeTarget={access.upgradeTarget}
         upgradeDisplayName={access.upgradeDisplayName}
         upgradePrice={access.upgradePrice}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

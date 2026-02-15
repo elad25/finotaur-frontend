@@ -1152,7 +1152,7 @@ function FlowScannerContent() {
 }
 
 export default function FlowScanner() {
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('flow_scanner');
   if (accessLoading) {
     return (
@@ -1171,6 +1171,7 @@ export default function FlowScanner() {
         upgradeTarget={access.upgradeTarget}
         upgradeDisplayName={access.upgradeDisplayName}
         upgradePrice={access.upgradePrice}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

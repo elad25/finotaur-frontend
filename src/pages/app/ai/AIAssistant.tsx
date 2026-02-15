@@ -21,7 +21,7 @@ export default function AIAssistant() {
   const [searchParams, setSearchParams] = useSearchParams();
   const conversationId = searchParams.get('conversation');
 
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('ai_assistant');
   
   const {
@@ -66,6 +66,7 @@ export default function AIAssistant() {
         upgradeTarget={access.upgradeTarget}
         upgradeDisplayName={access.upgradeDisplayName}
         upgradePrice={access.upgradePrice}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }

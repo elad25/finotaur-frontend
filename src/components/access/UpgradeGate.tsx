@@ -25,6 +25,7 @@ interface UpgradeGateProps {
   upgradePrice?: string;
   currentUsage?: number;
   limit?: number;
+  currentPlan?: 'free' | 'core' | 'finotaur' | 'enterprise';
 }
 
 // ============================================
@@ -119,6 +120,7 @@ export function UpgradeGate({
   upgradeTarget = 'finotaur',
   currentUsage,
   limit,
+  currentPlan = 'free',
 }: UpgradeGateProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -252,14 +254,34 @@ export function UpgradeGate({
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="relative rounded-2xl flex flex-col"
+            className="relative rounded-2xl flex flex-col mt-4"
             style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 50%, rgba(0,0,0,0.1) 100%)',
+              background: currentPlan === 'free'
+                ? 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)'
+                : 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 50%, rgba(0,0,0,0.1) 100%)',
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)',
+              border: currentPlan === 'free' 
+                ? '2px solid rgba(201,166,70,0.5)' 
+                : '1px solid rgba(255,255,255,0.08)',
+              boxShadow: currentPlan === 'free'
+                ? '0 4px 20px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,255,255,0.03)'
+                : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)',
             }}
           >
+            {/* Your Plan Badge */}
+            {currentPlan === 'free' && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <div className="px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646, #F4D97B, #C9A646)',
+                    color: '#000',
+                    boxShadow: '0 4px 12px rgba(201,166,70,0.4)',
+                  }}
+                >
+                  Your Plan
+                </div>
+              </div>
+            )}
             <div className="p-5 pt-6 flex flex-col flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="w-4 h-4 text-zinc-400" />
@@ -300,10 +322,16 @@ export function UpgradeGate({
                 transition={{ delay: 0.1 }}
                 className="relative rounded-2xl flex flex-col mt-4"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
+                  background: currentPlan === 'core'
+                    ? 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(255,255,255,0.04) 50%, rgba(0,0,0,0.1) 100%)'
+                    : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
                   backdropFilter: 'blur(20px)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
+                  border: currentPlan === 'core'
+                    ? '2px solid rgba(201,166,70,0.5)'
+                    : '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: currentPlan === 'core'
+                    ? '0 4px 20px rgba(201,166,70,0.15), inset 0 1px 0 rgba(255,255,255,0.05)'
+                    : '0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
                 }}
               >
                 {/* Badge */}
@@ -311,12 +339,16 @@ export function UpgradeGate({
                   <div
                     className="px-4 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
                     style={{
-                      background: 'linear-gradient(135deg, #3B82F6, #60A5FA)',
-                      color: '#fff',
-                      boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+                      background: currentPlan === 'core'
+                        ? 'linear-gradient(135deg, #C9A646, #F4D97B, #C9A646)'
+                        : 'linear-gradient(135deg, #3B82F6, #60A5FA)',
+                      color: currentPlan === 'core' ? '#000' : '#fff',
+                      boxShadow: currentPlan === 'core'
+                        ? '0 4px 12px rgba(201,166,70,0.4)'
+                        : '0 4px 12px rgba(59,130,246,0.3)',
                     }}
                   >
-                    <Zap className="w-3 h-3" /> 14-Day Free Trial
+                    {currentPlan === 'core' ? 'Your Plan' : <><Zap className="w-3 h-3" /> 14-Day Free Trial</>}
                   </div>
                 </div>
 
@@ -376,7 +408,7 @@ export function UpgradeGate({
                       boxShadow: '0 4px 12px rgba(201,166,70,0.4)',
                     }}
                   >
-                    <TrendingUp className="w-3 h-3" /> Best Value
+                    {currentPlan === 'finotaur' ? 'Your Plan' : <><TrendingUp className="w-3 h-3" /> Best Value</>}
                   </div>
                 </div>
 

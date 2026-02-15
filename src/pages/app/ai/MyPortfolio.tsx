@@ -25,7 +25,7 @@ import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 
 export default function MyPortfolio() {
-  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const { canAccessPage, plan, loading: accessLoading } = usePlatformAccess();
   const access = canAccessPage('my_portfolio');
 
   // ✅ Early return AFTER all hooks (no hooks below in this component, but pattern is consistent)
@@ -46,6 +46,7 @@ export default function MyPortfolio() {
         upgradeTarget={access.upgradeTarget}
         upgradeDisplayName={access.upgradeDisplayName}
         upgradePrice={access.upgradePrice}
+        currentPlan={plan === 'platform_core' ? 'core' : plan === 'platform_finotaur' ? 'finotaur' : plan === 'platform_enterprise' ? 'enterprise' : 'free'}
       />
     );
   }
