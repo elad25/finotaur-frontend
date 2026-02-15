@@ -1147,7 +1147,11 @@ const BillingTab = () => {
             </div>
             <div>
               <p className="text-zinc-500">
-                {profile?.platform_is_in_trial ? 'Trial ends' : 'Next billing'}
+                {profile?.platform_cancel_at_period_end 
+                  ? 'Access ends' 
+                  : profile?.platform_is_in_trial 
+                    ? 'Trial ends' 
+                    : 'Next billing'}
               </p>
               <p className="flex items-center gap-1 text-zinc-300">
                 {isLifetime ? (

@@ -704,10 +704,53 @@ export default function PlatformPricing() {
                 </button>
                 
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     setShowDowngradeDialog(false);
-                    navigate('/app/settings?tab=billing');
-                    toast.info('To cancel your subscription, go to the Billing tab in Settings.');
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session?.access_token) {
+                        navigate('/app/settings?tab=billing');
+                        toast.info('Please cancel from the Billing tab.');
+                        return;
+                      }
+
+                      const response = await fetch(
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Authorization": `Bearer ${session.access_token}`,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            action: "cancel",
+                            product: "platform",
+                            reason: "User downgraded to free from Pricing page",
+                          }),
+                        }
+                      );
+
+                      const data = await response.json();
+                      if (data.success) {
+                        toast.success(data.message || 'Subscription will be cancelled at period end');
+                        // Refresh subscription state
+                        const { data: profileData } = await supabase
+                          .from('profiles')
+                          .select('platform_plan, platform_subscription_status, platform_billing_interval')
+                          .eq('id', user.id)
+                          .maybeSingle();
+                        if (profileData) {
+                          const rawPlan = profileData.platform_plan || 'free';
+                          setCurrentPlatformPlan(rawPlan.replace('platform_', '') as PlatformPlanId);
+                        }
+                      } else {
+                        toast.error(data.error || 'Failed to cancel. Try from Settings.');
+                        navigate('/app/settings?tab=billing');
+                      }
+                    } catch (error) {
+                      toast.error('Failed to cancel. Try from Settings.');
+                      navigate('/app/settings?tab=billing');
+                    }
                   }}
                   className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
                 >
@@ -716,7 +759,7 @@ export default function PlatformPricing() {
                 </button>
                 
                 <p className="text-center text-xs text-zinc-500">
-                  You'll be redirected to Settings to manage your subscription
+                  Your access continues until the end of your billing period
                 </p>
               </div>
             </div>
