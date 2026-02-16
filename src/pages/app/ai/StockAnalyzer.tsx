@@ -56,6 +56,11 @@ export default function StockAnalyzer() {
 
   // Wrap ticker selection with usage tracking
   const handleSelectTicker = async (ticker: string) => {
+    // Admin bypass — no limits
+    if (plan === 'platform_enterprise') {
+      originalHandleSelectTicker(ticker);
+      return;
+    }
     const access = canAccessPage('stock_analyzer');
     if (!access.hasAccess) return;
     const allowed = await recordStockAnalysis();

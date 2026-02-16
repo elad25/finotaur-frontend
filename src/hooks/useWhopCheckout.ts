@@ -227,7 +227,7 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
 
       // Show toast before redirect
       toast.info('Creating secure checkout...', {
-        description: `${plan.displayName} - $${plan.price}${plan.periodLabel}`,
+        description: `${plan.displayName}`,
         duration: 3000,
       });
 
@@ -358,15 +358,15 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
   }, []);
 
   // ═══════════════════════════════════════════
-  // 🔥 v5.0.0: BUNDLE CHECKOUT HELPERS
+  // 🔥 v7.0.0: BUNDLE → FINOTAUR PLATFORM (Legacy aliases)
   // ═══════════════════════════════════════════
 
   const checkoutBundleMonthly = useCallback(() => {
-    initiateCheckout({ planName: 'bundle', billingInterval: 'monthly' });
+    initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' });
   }, [initiateCheckout]);
 
   const checkoutBundleYearly = useCallback(() => {
-    initiateCheckout({ planName: 'bundle', billingInterval: 'yearly' });
+    initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'yearly' });
   }, [initiateCheckout]);
 
   return {

@@ -1222,10 +1222,11 @@ const HeroDesktop = memo(function HeroDesktop({
         </div>
 
         {/* Right Column - Bull */}
-        <div className="w-1/2 relative flex items-center justify-center overflow-hidden bg-[#0a0806]">
+        <div className="w-1/2 relative flex items-center justify-center overflow-hidden bg-[#080604]">
           <div className="absolute inset-0 z-0">
             <ParticleBackground />
           </div>
+          <div className="absolute inset-0 z-[5] bg-[#0a0806]/40" />
           
           <div className="absolute inset-0 z-10">
             <SparkleEffect />
@@ -1257,9 +1258,9 @@ const HeroDesktop = memo(function HeroDesktop({
           </div>
           
           {/* Edge gradients */}
-          <div className="absolute inset-y-0 left-0 w-40 z-30" style={{ background: 'linear-gradient(90deg, #0a0806 0%, rgba(10,8,6,0.8) 30%, transparent 100%)' }} />
-          <div className="absolute inset-x-0 top-0 h-32 z-30" style={{ background: 'linear-gradient(180deg, #0a0806 0%, rgba(10,8,6,0.5) 40%, transparent 100%)' }} />
-          <div className="absolute inset-y-0 right-0 w-40 z-30" style={{ background: 'linear-gradient(270deg, #0a0806 0%, rgba(10,8,6,0.8) 30%, transparent 100%)' }} />
+          <div className="absolute inset-y-0 left-0 w-80 z-30" style={{ background: 'linear-gradient(90deg, #0a0806 0%, #0a0806 20%, rgba(10,8,6,0.95) 40%, rgba(10,8,6,0.6) 70%, transparent 100%)' }} />
+          <div className="absolute inset-x-0 top-0 h-48 z-30" style={{ background: 'linear-gradient(180deg, #0a0806 0%, rgba(10,8,6,0.9) 30%, rgba(10,8,6,0.5) 60%, transparent 100%)' }} />
+          <div className="absolute inset-y-0 right-0 w-56 z-30" style={{ background: 'linear-gradient(270deg, #0a0806 0%, rgba(10,8,6,0.95) 25%, rgba(10,8,6,0.5) 60%, transparent 100%)' }} />
           <div className="absolute inset-x-0 bottom-0 h-32 z-30" style={{ background: 'linear-gradient(0deg, #0a0806 0%, rgba(10,8,6,0.5) 40%, transparent 100%)' }} />
         </div>
       </div>
@@ -1330,7 +1331,7 @@ const LandingView = memo(function LandingView({
         <div className="absolute inset-0 bg-gradient-to-br from-[#080808] via-[#0d0b08] to-[#080808]" />
         
         {/* Animated Orbs */}
-        <div className="absolute top-1/4 left-1/4 w-[700px] h-[700px] bg-[#C9A646]/[0.08] rounded-full blur-[150px] hero-orb"/>
+        <div className="absolute top-[10%] left-[-10%] w-[700px] h-[700px] bg-[#C9A646]/[0.08] rounded-full blur-[150px] hero-orb"/>
         <div className="absolute bottom-1/4 right-1/3 w-[600px] h-[600px] bg-[#D4BF8E]/[0.06] rounded-full blur-[140px] hero-orb" style={{animationDelay:'3s'}}/>
         <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-[#F4D97B]/[0.04] rounded-full blur-[130px] hero-orb" style={{animationDelay:'5s'}}/>
 
@@ -1338,6 +1339,13 @@ const LandingView = memo(function LandingView({
           billingInterval={billingInterval}
           setBillingInterval={setBillingInterval}
           onSubscribe={onSubscribe}
+        />
+        
+        {/* Seam cover - gradient that hides the column boundary */}
+        <div className="hidden lg:block absolute inset-0 z-[35] pointer-events-none"
+          style={{
+            background: 'linear-gradient(90deg, transparent 45%, #0a0806 49%, #0a0806 51%, transparent 55%)',
+          }}
         />
         
         <HeroDesktop 

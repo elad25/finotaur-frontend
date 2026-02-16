@@ -221,7 +221,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     whopProductId: WHOP_PRODUCT_IDS.basic_monthly,
     name: 'basic',
     displayName: 'Basic',
-     price: 30,
+    price: 19.99,
     period: 'monthly',
     periodLabel: '/month',
     maxTrades: 25,
@@ -806,7 +806,7 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   } else if (plan.isPlatform) {
     params.set('redirect_url', `${baseRedirect}/platform-pricing?payment=success&source=whop&plan=${plan.name}`);
   } else {
-    params.set('redirect_url', `${baseRedirect}/app/journal/pricing?payment=success&source=whop`);
+    params.set('redirect_url', `${baseRedirect}/app/journal/overview?payment=success&source=whop`);
   }
   
   const queryString = params.toString();

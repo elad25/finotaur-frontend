@@ -1524,6 +1524,77 @@ if (isTopSecretPayment) {
         }
       }
 
+      // 🔥 v7.2.0: If Finotaur/Enterprise — cancel existing standalone Journal subscription on Whop
+      // Finotaur includes Journal Premium, so the user shouldn't pay for both
+      if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
+        const { data: journalCheck } = await supabase
+          .from('profiles')
+          .select('whop_membership_id, subscription_status, account_type')
+          .eq('id', userResult.id)
+          .single();
+
+        if (journalCheck?.whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(journalCheck.subscription_status || '')) {
+          const journalMembershipId = journalCheck.whop_membership_id;
+          console.log("🔥 v7.2.0: Cancelling existing Journal subscription — included in Finotaur:", {
+            journalMembershipId,
+            currentJournalPlan: journalCheck.account_type,
+          });
+
+          if (journalMembershipId.startsWith('mem_')) {
+            const cancelResult = await cancelMembership(journalMembershipId, 'immediate');
+            if (cancelResult.success) {
+              console.log("✅ Journal subscription cancelled — now included in Finotaur");
+            } else {
+              console.warn("⚠️ Failed to cancel Journal subscription:", cancelResult.error);
+              // Not blocking — DB will still be updated with bundle grant
+            }
+          }
+        }
+      }
+
+      // 🔥 v7.2.0: Cancel ALL standalone subscriptions when Finotaur/Enterprise activates
+      // These products are INCLUDED in Finotaur — user shouldn't pay for both
+      if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
+        const { data: existingSubs } = await supabase
+          .from('profiles')
+          .select('whop_membership_id, subscription_status, account_type, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
+          .eq('id', userResult.id)
+          .single();
+
+        if (existingSubs) {
+          // 1) Cancel standalone Journal (Basic/Premium)
+          if (existingSubs.whop_membership_id && 
+              ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '')) {
+            console.log("🔥 v7.2.0: Cancelling standalone Journal:", existingSubs.whop_membership_id);
+            if (existingSubs.whop_membership_id.startsWith('mem_')) {
+              const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
+              console.log(r.success ? "✅ Journal cancelled" : "⚠️ Journal cancel failed:", r.error);
+            }
+          }
+
+          // 2) Cancel standalone Newsletter (War Zone)
+          if (existingSubs.newsletter_whop_membership_id && 
+              ['active', 'trialing', 'trial'].includes(existingSubs.newsletter_status || '')) {
+            console.log("🔥 v7.2.0: Cancelling standalone Newsletter:", existingSubs.newsletter_whop_membership_id);
+            if (existingSubs.newsletter_whop_membership_id.startsWith('mem_')) {
+              const r = await cancelMembership(existingSubs.newsletter_whop_membership_id, 'immediate');
+              console.log(r.success ? "✅ Newsletter cancelled" : "⚠️ Newsletter cancel failed:", r.error);
+            }
+          }
+
+          // 3) Cancel standalone Top Secret
+          if (existingSubs.top_secret_whop_membership_id && 
+              ['active', 'trialing', 'trial'].includes(existingSubs.top_secret_status || '')) {
+            console.log("🔥 v7.2.0: Cancelling standalone Top Secret:", existingSubs.top_secret_whop_membership_id);
+            if (existingSubs.top_secret_whop_membership_id.startsWith('mem_')) {
+              const r = await cancelMembership(existingSubs.top_secret_whop_membership_id, 'immediate');
+              console.log(r.success ? "✅ Top Secret cancelled" : "⚠️ Top Secret cancel failed:", r.error);
+            }
+          }
+        }
+      }
+
       // Detect trial: payment amount = 0 on first payment
       const isInTrial = isFirstPayment && paymentAmount === 0;
       const trialEndsAt = isInTrial 
@@ -1614,9 +1685,40 @@ const { error: updateError } = await supabase
 
     // ═══════════════════════════════════════════════
     // 🔥 JOURNAL SUBSCRIPTION - Use RPC!
+    // 🔥 v7.3.0: Cancel old membership on upgrade (basic→premium, monthly→yearly)
     // ═══════════════════════════════════════════════
 
     if (isFirstPayment) {
+      // 🔥 v7.3.0: Check if user already has an active Journal subscription (upgrade scenario)
+      const journalUser = await findUser(supabase, finotaurUserId, userEmail, 'journal');
+      if (journalUser) {
+        const { data: currentJournal } = await supabase
+          .from('profiles')
+          .select('whop_membership_id, subscription_status, account_type, subscription_interval')
+          .eq('id', journalUser.id)
+          .single();
+
+        if (currentJournal?.whop_membership_id && 
+            currentJournal.whop_membership_id !== membershipId &&
+            ['active', 'trial', 'trialing'].includes(currentJournal.subscription_status || '')) {
+          console.log("🔥 v7.3.0: Detected Journal upgrade — cancelling old membership:", {
+            oldMembership: currentJournal.whop_membership_id,
+            oldPlan: currentJournal.account_type,
+            oldInterval: currentJournal.subscription_interval,
+            newMembership: membershipId,
+          });
+
+          if (currentJournal.whop_membership_id.startsWith('mem_')) {
+            const cancelResult = await cancelMembership(currentJournal.whop_membership_id, 'immediate');
+            if (cancelResult.success) {
+              console.log("✅ Old Journal membership cancelled successfully");
+            } else {
+              console.warn("⚠️ Failed to cancel old Journal membership:", cancelResult.error);
+            }
+          }
+        }
+      }
+
       // FIRST PAYMENT - Call activate_whop_subscription RPC
       console.log("🆕 Calling activate_whop_subscription RPC (first payment)...");
       
@@ -1853,6 +1955,47 @@ async function handleMembershipActivated(
         }
       } else {
         console.warn("⚠️ Stored membership ID is not a real membership:", oldId, "- skipping Whop cancel");
+      }
+    }
+
+    // 🔥 v7.3.0: Cancel ALL standalone subscriptions when Finotaur/Enterprise activates
+    if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
+      const { data: existingSubs } = await supabase
+        .from('profiles')
+        .select('whop_membership_id, subscription_status, account_type, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
+        .eq('id', userResult.id)
+        .single();
+
+      if (existingSubs) {
+        // 1) Cancel standalone Journal (Basic/Premium)
+        if (existingSubs.whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '')) {
+          console.log("🔥 v7.3.0: Cancelling standalone Journal on activation:", existingSubs.whop_membership_id);
+          if (existingSubs.whop_membership_id.startsWith('mem_')) {
+            const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
+            console.log(r.success ? "✅ Journal cancelled" : "⚠️ Journal cancel failed:", r.error);
+          }
+        }
+
+        // 2) Cancel standalone Newsletter (War Zone)
+        if (existingSubs.newsletter_whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(existingSubs.newsletter_status || '')) {
+          console.log("🔥 v7.3.0: Cancelling standalone Newsletter on activation:", existingSubs.newsletter_whop_membership_id);
+          if (existingSubs.newsletter_whop_membership_id.startsWith('mem_')) {
+            const r = await cancelMembership(existingSubs.newsletter_whop_membership_id, 'immediate');
+            console.log(r.success ? "✅ Newsletter cancelled" : "⚠️ Newsletter cancel failed:", r.error);
+          }
+        }
+
+        // 3) Cancel standalone Top Secret
+        if (existingSubs.top_secret_whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(existingSubs.top_secret_status || '')) {
+          console.log("🔥 v7.3.0: Cancelling standalone Top Secret on activation:", existingSubs.top_secret_whop_membership_id);
+          if (existingSubs.top_secret_whop_membership_id.startsWith('mem_')) {
+            const r = await cancelMembership(existingSubs.top_secret_whop_membership_id, 'immediate');
+            console.log(r.success ? "✅ Top Secret cancelled" : "⚠️ Top Secret cancel failed:", r.error);
+          }
+        }
       }
     }
 

@@ -1,95 +1,171 @@
 // src/components/landing-new/Footer.tsx
 // ================================================
-// 🔥 FINAL CTA SECTION
-// Goal: Capture those who are ready
+// 🔥 FOOTER — Links, Legal, Contact
+// Matches gold/dark luxury aesthetic of the landing page
 // ================================================
 
-import { ArrowRight, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Mail, Shield, ArrowUpRight } from "lucide-react";
+
+const footerLinks = {
+  product: [
+    { label: "Features", href: "#features" },
+    { label: "Pricing", href: "#pricing" },
+    { label: "FAQ", href: "#faq" },
+    { label: "War Zone", href: "/app/all-markets/warzone" },
+    { label: "Top Secret", href: "/app/top-secret" },
+  ],
+  company: [
+    { label: "About", href: "/about" },
+    { label: "Blog", href: "/blog" },
+    { label: "Contact", href: "mailto:support@finotaur.com" },
+    { label: "Careers", href: "/careers" },
+  ],
+  legal: [
+    { label: "Terms of Service", href: "/terms" },
+    { label: "Privacy Policy", href: "/privacy" },
+    { label: "Refund Policy", href: "/refund" },
+    { label: "Disclaimer", href: "/disclaimer" },
+  ],
+};
 
 const Footer = () => {
+  const scrollTo = (href: string) => {
+    if (href.startsWith("#")) {
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   return (
     <footer className="relative overflow-hidden">
-      {/* Final CTA Section */}
-      <section className="py-24 px-4 relative">
-        {/* Luxury Background */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
+      {/* ========== BACKGROUND ========== */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#080706] to-[#050505]" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-[#C9A646]/[0.04] rounded-full blur-[150px]" />
 
-        {/* Gold Border Line at Top */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      {/* Top border */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 
-        {/* Enhanced Gold Glows - More visible */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px] bg-[#C9A646]/[0.12] rounded-full blur-[180px]" />
-        <div className="absolute top-1/3 left-1/4 w-[500px] h-[400px] bg-[#D4AF37]/[0.08] rounded-full blur-[140px]" />
-        <div className="absolute bottom-1/3 right-1/4 w-[450px] h-[350px] bg-[#F4D97B]/[0.06] rounded-full blur-[120px]" />
-
-        <div className="max-w-3xl mx-auto text-center relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            {/* Headline */}
-            <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6">
-              Ready to stop guessing?
-            </h2>
-
-            {/* Sub */}
-            <p className="text-xl text-slate-400 mb-10 leading-relaxed">
-              Join TOP SECRET and think like money moves.
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
+        {/* ========== MAIN FOOTER GRID ========== */}
+        <div className="py-16 grid grid-cols-2 md:grid-cols-4 gap-10">
+          {/* Brand Column */}
+          <div className="col-span-2 md:col-span-1">
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="flex items-center group mb-5"
+            >
+              <span className="text-2xl font-bold tracking-tight">
+                <span className="text-white group-hover:text-slate-300 transition-colors">
+                  FINO
+                </span>
+                <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">
+                  TAUR
+                </span>
+              </span>
+            </button>
+            <p className="text-slate-500 text-sm leading-relaxed mb-6 max-w-xs">
+              Your command center for the stock market. AI-powered tools,
+              institutional-grade intelligence, and a smart trading journal — all
+              in one platform.
             </p>
+            {/* Contact */}
+            <a
+              href="mailto:support@finotaur.com"
+              className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-[#C9A646] transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              support@finotaur.com
+            </a>
+          </div>
 
-            {/* CTA Button */}
-            <Link to="/auth/register">
-              <button
-                className="group inline-flex items-center gap-3 px-10 py-5 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105"
-                style={{
-                  background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                  color: '#000',
-                  boxShadow: '0 8px 40px rgba(201,166,70,0.4), inset 0 2px 0 rgba(255,255,255,0.2)',
-                }}
-              >
-                <Lock className="w-5 h-5" />
-                Join TOP SECRET
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
-            </Link>
+          {/* Product Links */}
+          <div>
+            <h4 className="text-white font-semibold text-sm mb-5 tracking-wide uppercase">
+              Product
+            </h4>
+            <ul className="space-y-3">
+              {footerLinks.product.map((link, i) => (
+                <li key={i}>
+                  {link.href.startsWith("#") ? (
+                    <button
+                      onClick={() => scrollTo(link.href)}
+                      className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1 group"
+                    >
+                      {link.label}
+                    </button>
+                  ) : (
+                    <Link
+                      to={link.href}
+                      className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1 group"
+                    >
+                      {link.label}
+                      <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
 
-            {/* Micro-copy */}
-            <p className="text-slate-500 text-sm mt-6">
-              Instant access. Cancel anytime.
-            </p>
-          </motion.div>
+          {/* Company Links */}
+          <div>
+            <h4 className="text-white font-semibold text-sm mb-5 tracking-wide uppercase">
+              Company
+            </h4>
+            <ul className="space-y-3">
+              {footerLinks.company.map((link, i) => (
+                <li key={i}>
+                  {link.href.startsWith("mailto") ? (
+                    <a
+                      href={link.href}
+                      className="text-slate-400 hover:text-white text-sm transition-colors"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link
+                      to={link.href}
+                      className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1 group"
+                    >
+                      {link.label}
+                      <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
 
-          {/* Soft Journal Intro */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.5, duration: 0.6 }}
-            className="mt-16 pt-8 border-t border-white/5"
-          >
-            <p className="text-slate-500 text-sm italic">
-              Execution matters too.
-              <br />
-              That's why FINOTAUR also includes a{' '}
-              <span className="text-slate-400">professional trading journal</span>.
-            </p>
-          </motion.div>
+          {/* Legal Links */}
+          <div>
+            <h4 className="text-white font-semibold text-sm mb-5 tracking-wide uppercase">
+              Legal
+            </h4>
+            <ul className="space-y-3">
+              {footerLinks.legal.map((link, i) => (
+                <li key={i}>
+                  <Link
+                    to={link.href}
+                    className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1 group"
+                  >
+                    {link.label}
+                    <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </section>
 
-      {/* Footer Bottom */}
-      <div className="border-t border-white/5 py-8 px-4 bg-[#050505]">
-        <div className="max-w-7xl mx-auto text-center">
-          <p className="text-slate-600 mb-2 text-sm">
-            Institutional research. Clear direction. Smarter trading.
+        {/* ========== BOTTOM BAR ========== */}
+        <div className="border-t border-white/[0.06] py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="text-slate-600 text-xs">
+            © {new Date().getFullYear()} Finotaur. All rights reserved.
           </p>
-          <p className="text-xs text-slate-700">
-            © 2025 FINOTAUR — All Rights Reserved.
-          </p>
+          <div className="flex items-center gap-2 text-slate-600 text-xs">
+            <Shield className="w-3.5 h-3.5 text-[#C9A646]/50" />
+            <span>Bank-grade encryption · SOC 2 Compliant</span>
+          </div>
         </div>
       </div>
     </footer>

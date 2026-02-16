@@ -60,11 +60,9 @@ const plans: Plan[] = [
       "Full performance analytics",
       "Strategy builder & tracking",
       "Calendar & trading sessions",
-      "Advanced statistics & metrics",
       "Equity curve & charts",
       "Trade screenshots & notes",
       "Email support",
-      "🔜 Coming Soon: Broker sync"
     ],
     cta: "Start Free Trial",
     featured: false,
@@ -93,8 +91,6 @@ const plans: Plan[] = [
       "Behavioral risk alerts",
       "Backtesting system",
       "Priority support",
-      "Early access to new features",
-      "🔜 Coming Soon: Auto broker sync"
     ],
     cta: "Upgrade to Premium",
     featured: true,
@@ -271,6 +267,7 @@ const UpgradePlanModal = ({
   isOpen, 
   onClose,
   currentPlan,
+  currentBillingInterval,
   onSelectPlan,
   subscriptionExpiresAt,
   subscriptionCancelAtPeriodEnd,
@@ -279,6 +276,7 @@ const UpgradePlanModal = ({
   isOpen: boolean; 
   onClose: () => void;
   currentPlan: string;
+  currentBillingInterval?: string | null;
   onSelectPlan: (planId: PlanId, billingInterval: BillingInterval) => void;
   subscriptionExpiresAt?: string | null;
   subscriptionCancelAtPeriodEnd?: boolean;
@@ -326,6 +324,14 @@ const UpgradePlanModal = ({
     }
     
     if (plan.id === currentPlan) {
+      // Same plan but different interval — allow upgrade to yearly
+      if (currentBillingInterval === 'monthly' && billingInterval === 'yearly') {
+        return { type: 'upgrade', label: `Upgrade to Yearly (Save ${plan.savings || '38%'})` };
+      }
+      // Same plan, yearly viewing monthly — block (no downgrade)
+      if (currentBillingInterval === 'yearly' && billingInterval === 'monthly') {
+        return { type: 'current', label: 'Current Plan (Yearly)' };
+      }
       return { type: 'current', label: 'Current Plan' };
     }
     
@@ -334,10 +340,13 @@ const UpgradePlanModal = ({
     }
     
     return { type: 'downgrade', label: `Downgrade to ${plan.name}` };
-  }, [currentPlan, currentTier, subscriptionCancelAtPeriodEnd, pendingDowngradePlan, needsPlanSelection]);
+  }, [currentPlan, currentTier, currentBillingInterval, billingInterval, subscriptionCancelAtPeriodEnd, pendingDowngradePlan, needsPlanSelection]);
 
   const handlePlanSelect = useCallback(async (planId: PlanId) => {
-    if (planId === currentPlan) {
+    // Allow same plan if upgrading from monthly to yearly
+    const isSamePlanYearlyUpgrade = planId === currentPlan && currentBillingInterval === 'monthly' && billingInterval === 'yearly';
+    
+    if (planId === currentPlan && !isSamePlanYearlyUpgrade) {
       toast.info("This is your current plan");
       return;
     }
@@ -438,7 +447,7 @@ const UpgradePlanModal = ({
             </p>
           </div>
 
-          <div className="p-6 border-t border-zinc-800 flex gap-3">
+          <div className="px-5 py-4 border-t border-zinc-800 flex gap-3">
             <button
               onClick={handleCancelDowngrade}
               disabled={isProcessingDowngrade}
@@ -471,11 +480,11 @@ const UpgradePlanModal = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl w-full max-w-5xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+      <div className="bg-zinc-900/95 border border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl mt-24 mb-4 max-h-[80vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between p-6 border-b border-zinc-800">
+        <div className="sticky top-0 bg-zinc-900/95 backdrop-blur-md z-10 flex items-center justify-between px-5 py-4 border-b border-zinc-800">
           <div>
-            <h3 className="text-2xl font-semibold text-zinc-100">
+            <h3 className="text-lg font-semibold text-zinc-100">
               {needsPlanSelection ? 'Choose Your Plan' : 'Change Your Plan'}
             </h3>
             <p className="text-sm text-zinc-400 mt-1">
@@ -494,7 +503,7 @@ const UpgradePlanModal = ({
         </div>
 
         {/* Content */}
-        <div className="p-8">
+        <div className="px-5 py-3">
           {/* 🔥 Pending Cancellation Notice */}
           {subscriptionCancelAtPeriodEnd && pendingDowngradePlan && (
             <div className="mb-8 max-w-4xl mx-auto">
@@ -519,49 +528,12 @@ const UpgradePlanModal = ({
             </div>
           )}
 
-          {/* Guarantee Box */}
-          <div className="mb-8 max-w-4xl mx-auto">
-            <div className="p-6 rounded-2xl relative overflow-hidden"
-                 style={{
-                   background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.04) 100%)',
-                   backdropFilter: 'blur(12px)',
-                   border: '2px solid rgba(201,166,70,0.4)',
-                   boxShadow: '0 0 40px rgba(201,166,70,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
-                 }}>
-              <div className="absolute inset-0 bg-gradient-to-br from-[#C9A646]/[0.08] via-transparent to-transparent pointer-events-none" />
-              <div className="flex items-start gap-4 relative">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-                     style={{
-                       background: 'rgba(201,166,70,0.2)',
-                       border: '1px solid rgba(201,166,70,0.4)',
-                       boxShadow: '0 4px 16px rgba(201,166,70,0.2)'
-                     }}>
-                  <Shield className="w-6 h-6 text-[#C9A646]" />
-                </div>
-                <div className="text-left flex-1">
-                  <h4 className="text-xl font-semibold text-white mb-2" style={{ letterSpacing: '-0.01em' }}>
-                    {needsPlanSelection 
-                      ? 'Try Basic free for 14 days'
-                      : 'Upgrade anytime, downgrade at cycle end'
-                    }
-                  </h4>
-                  <p className="text-slate-300 text-base leading-relaxed">
-                    {needsPlanSelection 
-                      ? ' Premium requires payment upfront but gives you unlimited access immediately.'
-                      : 'Upgrades take effect immediately. Downgrades will apply at the end of your current billing cycle.'
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Billing Toggle */}
-          <div className="flex justify-center mb-12">
-            <div className="inline-flex items-center gap-3 bg-[#111111] border border-gray-800 rounded-full p-1.5 shadow-xl">
+          <div className="flex justify-center mb-4">
+            <div className="inline-flex items-center gap-2 bg-[#111111] border border-gray-800 rounded-full p-1 shadow-xl">
               <button
                 onClick={() => setBillingInterval('monthly')}
-                className={`px-6 py-2.5 rounded-full font-medium transition-all duration-300 ${
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
                   billingInterval === 'monthly'
                     ? 'bg-[#C9A646] text-black shadow-lg shadow-[#C9A646]/30'
                     : 'text-gray-400 hover:text-white'
@@ -571,7 +543,7 @@ const UpgradePlanModal = ({
               </button>
               <button
                 onClick={() => setBillingInterval('yearly')}
-                className={`px-6 py-2.5 rounded-full font-medium transition-all duration-300 flex items-center gap-2 ${
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2 ${
                   billingInterval === 'yearly'
                     ? 'bg-[#C9A646] text-black shadow-lg shadow-[#C9A646]/30'
                     : 'text-gray-400 hover:text-white'
@@ -586,7 +558,7 @@ const UpgradePlanModal = ({
           </div>
 
           {/* 🔥 v2.0: Only 2 Pricing Cards - Basic & Premium */}
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto">
             {plans.map((plan) => {
               const displayPrice = getDisplayPrice(plan);
               const action = getPlanAction(plan);
@@ -595,12 +567,12 @@ const UpgradePlanModal = ({
               const isDowngrade = action.type === 'downgrade';
               const isPendingDowngrade = action.type === 'pending_downgrade';
               const isSelect = action.type === 'select';
-              const hasTrial = plan.trialDays && plan.trialDays > 0;
+              const hasTrial = plan.trialDays != null && plan.trialDays > 0;
               
               return (
                 <div
                   key={plan.id}
-                  className={`p-6 relative transition-all duration-300 flex flex-col rounded-2xl ${
+                  className={`px-5 py-5 relative transition-all duration-300 flex flex-col rounded-2xl ${
                     plan.featured ? 'md:scale-[1.02]' : ''
                   } ${isCurrentPlan ? 'ring-2 ring-[#C9A646]' : ''} ${isPendingDowngrade ? 'ring-2 ring-amber-500' : ''}`}
                   style={{
@@ -678,14 +650,14 @@ const UpgradePlanModal = ({
                   )}
                   
                   {/* Plan Info */}
-                  <div className="text-center mb-6 mt-2">
-                    <h4 className="text-xl font-bold mb-2 text-white">{plan.name}</h4>
-                    <div className="flex flex-col items-center justify-center gap-1 mb-2">
+                  <div className="text-center mb-3 mt-2">
+                    <h4 className="text-lg font-bold mb-1 text-white">{plan.name}</h4>
+                    <div className="flex flex-col items-center justify-center gap-0.5 mb-1.5">
                       {/* 🔥 Show trial pricing for Basic */}
                       {hasTrial && isSelect ? (
                         <>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-4xl font-bold text-blue-400">$0</span>
+                            <span className="text-3xl font-bold text-blue-400">$0</span>
                             <span className="text-slate-400 text-sm">for {plan.trialDays} days</span>
                           </div>
                           <span className="text-xs text-slate-500">
@@ -695,7 +667,7 @@ const UpgradePlanModal = ({
                       ) : (
                         <>
                           <div className="flex items-baseline gap-1">
-                            <span className={`text-4xl font-bold ${plan.featured ? 'text-[#C9A646]' : 'text-white'}`}>
+                            <span className={`text-3xl font-bold ${plan.featured ? 'text-[#C9A646]' : 'text-white'}`}>
                               {displayPrice.price}
                             </span>
                             <span className="text-slate-400 text-sm">{displayPrice.period}</span>
@@ -710,16 +682,16 @@ const UpgradePlanModal = ({
                   </div>
 
                   {/* Features List */}
-                  <ul className="space-y-2.5 mb-6 flex-1">
+                  <ul className="space-y-1.5 mb-4 flex-1">
                     {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <div className={`w-4 h-4 rounded-full ${
+                      <li key={i} className="flex items-start gap-2">
+                        <div className={`w-3.5 h-3.5 rounded-full ${
                           plan.featured ? 'bg-[#C9A646]/30' : 'bg-[#C9A646]/20'
                         } flex items-center justify-center shrink-0 mt-0.5`}
                              style={{
                                border: '1px solid rgba(201,166,70,0.4)'
                              }}>
-                          <Check className="h-2.5 w-2.5 text-[#C9A646]" />
+                          <Check className="h-2 w-2 text-[#C9A646]" />
                         </div>
                         <span className="text-sm text-slate-300 leading-tight">{feature}</span>
                       </li>
@@ -730,7 +702,7 @@ const UpgradePlanModal = ({
                   <button 
                     onClick={() => handlePlanSelect(plan.id)}
                     disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade}
-                    className={`w-full py-3 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                    className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         : isPendingDowngrade
@@ -776,28 +748,22 @@ const UpgradePlanModal = ({
           </div>
 
           {/* Trust Indicators */}
-          <div className="mt-12 space-y-4 max-w-4xl mx-auto">
-            <div className="flex flex-wrap items-center justify-center gap-6 text-slate-400">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-[#C9A646]" />
-                <span className="text-sm">Bank-grade security</span>
+          <div className="mt-4 max-w-4xl mx-auto">
+            <div className="flex flex-wrap items-center justify-center gap-4 text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Shield className="w-4 h-4 text-[#C9A646]" />
+                <span className="text-xs">Bank-grade security</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600" />
-              <div className="flex items-center gap-2">
-                <Check className="w-5 h-5 text-green-500" />
-                <span className="text-sm">Secure payment via Whop</span>
+              <div className="flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-green-500" />
+                <span className="text-xs">Secure payment via Whop</span>
               </div>
               <div className="w-1 h-1 rounded-full bg-slate-600" />
-              <div className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-[#C9A646]" />
-                <span className="text-sm">Cancel anytime</span>
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-[#C9A646]" />
+                <span className="text-xs">Cancel anytime</span>
               </div>
-            </div>
-
-            <div className="text-center">
-              <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-                Your data stays yours. We never sell your information. Cancel with one click, no questions asked.
-              </p>
             </div>
           </div>
         </div>
@@ -969,16 +935,16 @@ const CancelSubscriptionModal = ({
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
         {/* Header */}
-        <div className="p-6 border-b border-zinc-800">
+        <div className="px-5 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-red-400" />
+            <div className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-white">
+              <h3 className="text-lg font-semibold text-white">
                 {step === 'reason' ? 'Cancel Subscription' : 'Confirm Cancellation'}
               </h3>
-              <p className="text-sm text-zinc-400">
+              <p className="text-xs text-zinc-400">
                 {step === 'reason' ? 'We\'re sorry to see you go' : 'This action cannot be undone'}
               </p>
             </div>
@@ -986,20 +952,20 @@ const CancelSubscriptionModal = ({
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="px-5 py-4">
           {step === 'reason' ? (
-            <div className="space-y-5">
+            <div className="space-y-3">
               <p className="text-sm text-zinc-300 font-medium">
                 Help us improve by telling us why you're cancelling:
               </p>
 
               {/* Reason Selection */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {CANCEL_REASONS.map((reason) => (
                   <button
                     key={reason.id}
                     onClick={() => setSelectedReason(reason.id)}
-                    className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                    className={`w-full p-2.5 rounded-lg border text-left transition-all flex items-center justify-between ${
                       selectedReason === reason.id
                         ? 'border-red-500/50 bg-red-500/10'
                         : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600 hover:bg-zinc-800'
@@ -1818,6 +1784,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
         onClose={() => setIsUpgradeModalOpen(false)}
         currentPlan={profile?.account_type || ''}
         onSelectPlan={handleSelectPlan}
+        currentBillingInterval={profile?.subscription_interval}
         subscriptionExpiresAt={profile?.subscription_expires_at}
         subscriptionCancelAtPeriodEnd={profile?.subscription_cancel_at_period_end}
         pendingDowngradePlan={profile?.pending_downgrade_plan}

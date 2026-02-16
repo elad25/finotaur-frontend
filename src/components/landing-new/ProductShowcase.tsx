@@ -1,146 +1,205 @@
 // src/components/landing-new/ProductShowcase.tsx
 // ================================================
-// 🔥 PROOF SECTION (Process Proof)
-// Goal: Show you know what you're doing without promising profits
+// 🔥 TRADING JOURNAL — "The best traders measure. Do you?"
+// Hormozi: "The tool that stops your losing streak"
+// Layout: Text left + Calendar hero image right
 // ================================================
 
 import { motion } from "framer-motion";
-import { TrendingUp, Building2, Globe, Eye } from "lucide-react";
+import { BookOpen, Link2, Brain, BarChart3, Target, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
-const proofExamples = [
+const journalFeatures = [
   {
-    icon: TrendingUp,
-    category: "Economic Signal",
-    title: "What the data actually changed",
-    description: "Top-line data looked weak, but internal demand signals hinted at an early turn. Positioning shifted ahead of consensus.",
-    accent: "#F59E0B",
+    icon: Link2,
+    title: "12,000+ Broker Sync",
+    description: "Auto-import every trade. No manual entry.",
+    stat: "12K+",
+    statLabel: "brokers",
   },
   {
-    icon: Building2,
-    category: "Company Deep Dive",
-    title: "Why the headline was wrong",
-    description: "Media called it a 'miss' on earnings. The actual story: margin expansion + guide raise buried in footnotes. Stock up 23% in 2 weeks.",
-    accent: "#A855F7",
+    icon: Brain,
+    title: "AI Pattern Detection",
+    description: "Identifies costly mistakes you'd never spot.",
+    stat: "AI",
+    statLabel: "insights",
   },
   {
-    icon: Globe,
-    category: "Macro Outlook",
-    title: "How bias shifted before price reacted",
-    description: "Fed minutes suggested pivot. Market priced it in 3 days later. TOP SECRET readers were positioned before the move.",
-    accent: "#06B6D4",
+    icon: BarChart3,
+    title: "Bloomberg-Level Analytics",
+    description: "Equity curves and metrics at institutional level.",
+    stat: "Pro",
+    statLabel: "analytics",
+  },
+  {
+    icon: Target,
+    title: "Strategy Tracking",
+    description: "Know what works and what doesn't. Data, not guesswork.",
+    stat: "100%",
+    statLabel: "clarity",
   },
 ];
 
 const ProductShowcase = () => {
   return (
-    <section className="py-24 px-4 relative overflow-hidden">
-      {/* Luxury Background with Rich Gold */}
+    <section className="py-28 px-4 relative overflow-hidden">
+      {/* ========== BACKGROUND ========== */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
 
-      {/* Stronger Gold Border Lines */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
+      {/* Gold atmosphere */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-[#C9A646]/[0.10] rounded-full blur-[170px]" />
+      <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.07] rounded-full blur-[130px]" />
 
-      {/* Intense Gold Glows */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[800px] bg-[#C9A646]/[0.12] rounded-full blur-[180px]" />
-      <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.09] rounded-full blur-[140px]" />
-      <div className="absolute bottom-1/3 right-1/4 w-[450px] h-[450px] bg-[#F4D97B]/[0.07] rounded-full blur-[120px]" />
+      {/* Borders */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
 
-      <div className="max-w-6xl mx-auto relative z-10">
-        {/* Section Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
-        >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-full mb-6">
-            <Eye className="w-4 h-4 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-semibold text-sm">Process, Not Promises</span>
-          </div>
+      <div className="max-w-7xl mx-auto relative z-10">
+        {/* ========== TWO-COLUMN HERO: TEXT LEFT + IMAGE RIGHT ========== */}
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
 
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            See what others miss.
-          </h2>
-        </motion.div>
+          {/* ===== LEFT — TEXT + MINI FEATURES ===== */}
+          <div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-full mb-6">
+                <BookOpen className="w-4 h-4 text-[#C9A646]" />
+                <span className="text-[#C9A646] font-semibold text-sm">Smart Trading Journal</span>
+              </div>
 
-        {/* Proof Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="grid md:grid-cols-3 gap-6 mb-12"
-        >
-          {proofExamples.map((example, index) => {
-            const Icon = example.icon;
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.3 + index * 0.15 }}
-                className="group"
-              >
-                <div
-                  className="h-full rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]"
-                  style={{
-                    background: 'linear-gradient(180deg, #151515 0%, #0A0A0A 100%)',
-                    border: `1px solid ${example.accent}30`,
-                    boxShadow: `0 0 40px ${example.accent}10`,
-                  }}
-                >
-                  {/* Top Bar */}
-                  <div
-                    className="h-1 w-16 rounded-full mb-6"
-                    style={{ background: example.accent }}
-                  />
+              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+                <span className="text-white">The best traders</span>
+                <br />
+                <span className="text-white">measure. </span>
+                <span className="text-[#C9A646]">Do you?</span>
+              </h2>
+              <p className="text-lg text-slate-400 leading-relaxed mb-10 max-w-lg">
+                The tool that stops your losing streak. Track every trade, understand every pattern,
+                and let AI show you exactly where you're leaving money on the table.
+              </p>
+            </motion.div>
 
-                  {/* Icon */}
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+            {/* Mini feature grid — 2x2 compact */}
+            <div className="grid grid-cols-2 gap-4">
+              {journalFeatures.map((feature, index) => {
+                const Icon = feature.icon;
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.2 + index * 0.08 }}
+                    className="group flex items-start gap-3 p-4 rounded-xl transition-all duration-300 hover:bg-[#C9A646]/[0.04]"
                     style={{
-                      background: `${example.accent}20`,
-                      border: `1px solid ${example.accent}40`,
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid rgba(201,166,70,0.1)',
                     }}
                   >
-                    <Icon className="w-6 h-6" style={{ color: example.accent }} />
-                  </div>
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(201,166,70,0.18), rgba(201,166,70,0.05))',
+                        border: '1px solid rgba(201,166,70,0.25)',
+                      }}
+                    >
+                      <Icon className="h-5 w-5 text-[#C9A646]" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-semibold text-sm mb-0.5 group-hover:text-[#C9A646] transition-colors">
+                        {feature.title}
+                      </h4>
+                      <p className="text-slate-500 text-xs leading-relaxed">{feature.description}</p>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
 
-                  {/* Category */}
-                  <p className="text-sm font-semibold mb-2" style={{ color: example.accent }}>
-                    {example.category}
-                  </p>
+            {/* CTA */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.5 }}
+              className="mt-8"
+            >
+              <Link to="/auth/register">
+                <button
+                  className="group inline-flex items-center gap-2 px-8 py-4 text-base font-bold rounded-xl transition-all duration-300 hover:scale-105"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                    color: '#000',
+                    boxShadow: '0 6px 30px rgba(201,166,70,0.35), inset 0 2px 0 rgba(255,255,255,0.2)',
+                  }}
+                >
+                  Try the Journal — 14 Days Free
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+              </Link>
+            </motion.div>
+          </div>
 
-                  {/* Title */}
-                  <h3 className="text-xl font-bold text-white mb-3">
-                    {example.title}
-                  </h3>
+          {/* ===== RIGHT — CALENDAR IMAGE MOCKUP ===== */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, x: 30 }}
+            whileInView={{ opacity: 1, scale: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.9, delay: 0.2 }}
+            className="relative hidden lg:block"
+          >
+            {/* Glow behind */}
+            <div className="absolute -inset-8 bg-gradient-to-r from-[#C9A646]/25 via-[#D4AF37]/15 to-transparent rounded-3xl blur-3xl opacity-50 pointer-events-none" />
 
-                  {/* Description */}
-                  <p className="text-slate-400 text-sm leading-relaxed">
-                    {example.description}
-                  </p>
+            <div
+              className="relative rounded-2xl overflow-hidden"
+              style={{
+                border: '1px solid rgba(201,166,70,0.3)',
+                boxShadow: '0 25px 60px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.12)',
+              }}
+            >
+              {/* Browser chrome bar */}
+              <div
+                className="flex items-center gap-2 px-5 py-3"
+                style={{
+                  background: 'linear-gradient(180deg, #151515 0%, #0f0f0f 100%)',
+                  borderBottom: '1px solid rgba(201,166,70,0.15)',
+                }}
+              >
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/60" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/60" />
                 </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+                <div className="flex-1 flex justify-center">
+                  <div className="px-4 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06]">
+                    <span className="text-[11px] text-slate-500 font-mono">finotaur.com/app/journal/calendar</span>
+                  </div>
+                </div>
+                <div className="w-12" />
+              </div>
 
-        {/* Caption */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.8 }}
-          className="text-center"
-        >
-          <p className="text-slate-500 italic">
-            This is how I personally build my market bias.
-          </p>
-        </motion.div>
+              {/* Calendar image — update src to match your actual file path */}
+              <img
+                src="/assets/finotaur-calendar.png"
+                alt="Finotaur Trading Journal — Calendar View with P&L tracking"
+                className="w-full h-auto block"
+                style={{ pointerEvents: 'none' }}
+                draggable={false}
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  if (target.src.includes('/assets/')) {
+                    target.src = '/finotaur-calendar.png';
+                  }
+                }}
+              />
+            </div>
+          </motion.div>
+        </div>
       </div>
     </section>
   );

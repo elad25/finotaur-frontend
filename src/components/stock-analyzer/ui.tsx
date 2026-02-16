@@ -296,6 +296,7 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
   viewBox={`0 0 ${W} 115`}
   className="relative"
   preserveAspectRatio="xMidYMid meet"
+  style={{ overflow: 'hidden' }}
 >
           <defs>
             {/* Clip to viewBox bounds */}
@@ -327,8 +328,8 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
             </linearGradient>
 
             {/* Glow filter */}
-            <filter id={glowId} x="-10%" y="-10%" width="120%" height="120%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+            <filter id={glowId} x="0%" y="0%" width="100%" height="100%">
+              <feGaussianBlur stdDeviation="2" result="blur" />
               <feFlood floodColor={statusColor} floodOpacity="0.4" />
               <feComposite in2="blur" operator="in" />
               <feMerge>
@@ -390,18 +391,30 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
             strokeLinecap="round"
           />
 
-          {/* Layer 5: VALUE ARC — gradient + glow (clipped to bounds) */}
+          {/* Layer 5: VALUE ARC — gradient + soft glow behind */}
           <g clipPath={`url(#roc-clip-${label})`}>
             {valPath && (
-              <path
-                d={valPath}
-                fill="none"
-                stroke={`url(#${gradId})`}
-                strokeWidth={SW}
-                strokeLinecap="round"
-                filter={`url(#${glowId})`}
-                style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-              />
+              <>
+                {/* Soft glow behind (no filter, just thicker transparent stroke) */}
+                <path
+                  d={valPath}
+                  fill="none"
+                  stroke={statusColor}
+                  strokeWidth={SW + 8}
+                  strokeLinecap="round"
+                  opacity={0.15}
+                  style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                />
+                {/* Main arc */}
+                <path
+                  d={valPath}
+                  fill="none"
+                  stroke={`url(#${gradId})`}
+                  strokeWidth={SW}
+                  strokeLinecap="round"
+                  style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
+                />
+              </>
             )}
           </g>
 
@@ -430,7 +443,7 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
           {hasValue && pct > 0.1 && (
             <g clipPath={`url(#roc-clip-${label})`} style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
               <circle cx={valEnd.x} cy={valEnd.y} r="7" fill="none" stroke={statusColor} strokeWidth="1" opacity={0.2} />
-              <circle cx={valEnd.x} cy={valEnd.y} r="4.5" fill="#0d0b08" stroke={statusColor} strokeWidth="2" filter={`url(#${glowId})`} />
+              <circle cx={valEnd.x} cy={valEnd.y} r="4.5" fill="#0d0b08" stroke={statusColor} strokeWidth="2" />
               <circle cx={valEnd.x} cy={valEnd.y} r="1.5" fill={statusColor} opacity={0.6} />
             </g>
           )}
