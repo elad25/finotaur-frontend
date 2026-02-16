@@ -16,6 +16,7 @@ import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { lazy, Suspense, memo } from "react";
 import { JournalRoute } from "@/components/routes/JournalRoute";
+import JournalPublicPage from "@/pages/JournalPublicPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -70,6 +71,7 @@ import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
 import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, RefundPolicy, DMCA } from "@/components/legal";
+import ScrollToTop from "@/components/ScrollToTop";
 
 // LAZY LOADED PAGES
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
@@ -297,6 +299,7 @@ function AppContent() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/affiliate" element={<AffiliatePage />} />
+        <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
         <Route path="/legal/privacy" element={<PrivacyPolicy />} />
@@ -529,6 +532,7 @@ export const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollToTop />
           <AuthProvider>
             <TimezoneProvider>
               <RiskSettingsRealtimeProvider>

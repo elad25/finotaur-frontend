@@ -1,18 +1,19 @@
 // src/pages/landing/Navbar.tsx
 // ================================================
-// 🔥 NAVBAR — Updated for new landing page
-// Uses cn() utility, matches old page quality
+// 🔥 NAVBAR — Updated with Journal, Affiliate, About
 // ================================================
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isHome = location.pathname === '/';
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 50);
@@ -23,12 +24,31 @@ const Navbar = () => {
   const navLinks = [
     { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
+    { href: "/journal", label: "Journal", isRoute: true },
     { href: "#faq", label: "FAQ" },
+    { href: "/affiliate", label: "Become an Affiliate", isRoute: true },
+    { href: "/about", label: "About", isRoute: true },
   ];
 
-  const scrollTo = (href: string) => {
-    document.querySelector(href)?.scrollIntoView({ behavior: 'smooth' });
+  const handleNavClick = (link: typeof navLinks[0]) => {
+    if (link.isRoute) {
+      navigate(link.href);
+    } else if (isHome) {
+      // On landing page — just scroll
+      document.querySelector(link.href)?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // On another page — navigate to landing page with hash
+      navigate('/' + link.href);
+    }
     setIsMobileMenuOpen(false);
+  };
+
+  const handleLogoClick = () => {
+    if (isHome) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      navigate('/');
+    }
   };
 
   return (
@@ -44,21 +64,21 @@ const Navbar = () => {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center group">
-            <span className="text-2xl md:text-3xl font-bold tracking-tight">
+          <button onClick={handleLogoClick} className="flex items-center group">
+            <span className="text-xl md:text-2xl font-bold tracking-tight">
               <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
               <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
             </span>
           </button>
 
           {/* Desktop Nav Links */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden lg:flex items-center space-x-6">
             {navLinks.map((link, index) => (
               <button
                 key={index}
-                onClick={() => scrollTo(link.href)}
+                onClick={() => handleNavClick(link)}
                 className="text-slate-300 hover:text-white transition-colors text-sm font-medium relative group"
               >
                 {link.label}
@@ -68,7 +88,7 @@ const Navbar = () => {
           </div>
 
           {/* Auth Buttons — Desktop */}
-          <div className="hidden md:flex items-center space-x-3">
+          <div className="hidden lg:flex items-center space-x-3">
             <button
               onClick={() => navigate('/auth/login')}
               className="text-slate-300 hover:text-white px-4 py-2 transition-colors text-sm font-medium hover:bg-white/5 rounded-lg"
@@ -77,7 +97,7 @@ const Navbar = () => {
             </button>
             <button
               onClick={() => navigate('/auth/register')}
-              className="px-6 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 hover:scale-105"
+              className="px-5 py-2 rounded-xl font-semibold text-sm transition-all duration-300 hover:scale-105"
               style={{
                 background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
                 color: '#000',
@@ -91,7 +111,7 @@ const Navbar = () => {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-slate-300 hover:text-white transition-colors"
+            className="lg:hidden p-2 text-slate-300 hover:text-white transition-colors"
           >
             {isMobileMenuOpen ? (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -110,13 +130,13 @@ const Navbar = () => {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="md:hidden bg-black/95 backdrop-blur-xl border-t border-white/[0.08]"
+            className="lg:hidden bg-black/95 backdrop-blur-xl border-t border-white/[0.08]"
           >
             <div className="px-4 py-6 space-y-4">
               {navLinks.map((link, index) => (
                 <button
                   key={index}
-                  onClick={() => scrollTo(link.href)}
+                  onClick={() => handleNavClick(link)}
                   className="block w-full text-left text-slate-300 hover:text-white transition-colors text-base font-medium py-2"
                 >
                   {link.label}

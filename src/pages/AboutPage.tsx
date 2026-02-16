@@ -1,25 +1,16 @@
 // src/pages/AboutPage.tsx
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Target, Users, Zap, Shield, TrendingUp, Award } from 'lucide-react';
+import { Target, Users, Zap, Shield, TrendingUp, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import Navbar from '@/components/landing-new/Navbar';
 
 const AboutPage = () => {
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border">
-        <div className="container mx-auto px-4 py-6">
-          <Link to="/">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Back to Home
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <Navbar />
 
       {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16 max-w-6xl">
+      <div className="container mx-auto px-4 pt-28 pb-16 max-w-6xl">
         <div className="text-center space-y-6 mb-16">
           <h1 className="text-5xl md:text-6xl font-bold bg-gradient-to-r from-primary via-yellow-500 to-primary bg-clip-text text-transparent">
             About Finotaur

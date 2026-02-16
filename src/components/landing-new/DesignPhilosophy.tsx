@@ -1,6 +1,6 @@
 // src/components/landing-new/DesignPhilosophy.tsx
 // ================================================
-// 🔥 BEFORE / AFTER — Transformation Table
+// 🔥 BEFORE / AFTER — Transformation Table — COMPACT
 // Hormozi: Perceived Likelihood + Dream Outcome (visual)
 // ================================================
 
@@ -32,111 +32,101 @@ const comparisons = [
 
 const DesignPhilosophy = () => {
   return (
-    <section className="py-28 px-4 relative overflow-hidden">
-      {/* ========== BACKGROUND ========== */}
+    <section className="py-16 px-4 relative overflow-hidden">
+      {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#0C0C0E] via-[#1A1713] to-[#0C0C0E]" />
-
-      {/* Gold Glows */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-[#C9A646]/[0.10] rounded-full blur-[170px]" />
-      <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-[#D4AF37]/[0.06] rounded-full blur-[120px]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#C9A646]/[0.08] rounded-full blur-[150px]" />
 
       {/* Borders */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
 
-      <div className="max-w-5xl mx-auto relative z-10">
-        {/* ========== HEADER ========== */}
+      <div className="max-w-4xl mx-auto relative z-10">
+        {/* Header — compact */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-14"
+          transition={{ duration: 0.5 }}
+          className="text-center mb-8"
         >
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-            <span className="text-white">Before &amp; After </span>
+          <h2 className="text-3xl md:text-4xl font-bold mb-2">
+            <span className="text-white">Before & After </span>
             <span className="text-[#C9A646]">Finotaur</span>
           </h2>
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+          <p className="text-sm text-slate-400">
             The transformation is real. Here's what changes on day one.
           </p>
         </motion.div>
 
-        {/* ========== TABLE ========== */}
+        {/* Table */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.7, delay: 0.1 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
         >
           {/* Column Headers */}
-          <div className="grid grid-cols-[1fr_40px_1fr] gap-0 mb-5 px-4">
+          <div className="grid grid-cols-[1fr_32px_1fr] gap-0 mb-3 px-3">
             <div className="text-center">
-              <span className="inline-flex items-center gap-2 text-red-400 font-bold text-lg">
-                <X className="w-5 h-5" />
+              <span className="inline-flex items-center gap-1.5 text-red-400 font-bold text-sm">
+                <X className="w-4 h-4" />
                 Before Finotaur
               </span>
             </div>
-            <div /> {/* spacer for arrow */}
+            <div />
             <div className="text-center">
-              <span className="inline-flex items-center gap-2 text-emerald-400 font-bold text-lg">
-                <Check className="w-5 h-5" />
+              <span className="inline-flex items-center gap-1.5 text-emerald-400 font-bold text-sm">
+                <Check className="w-4 h-4" />
                 After Finotaur
               </span>
             </div>
           </div>
 
-          {/* Rows */}
-          <div className="space-y-3">
+          {/* Rows — tight */}
+          <div className="space-y-2">
             {comparisons.map((comp, index) => (
               <motion.div
                 key={index}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 12 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ delay: 0.2 + index * 0.08 }}
-                className="grid grid-cols-[1fr_40px_1fr] gap-0 items-stretch group"
+                transition={{ delay: 0.15 + index * 0.06 }}
+                className="grid grid-cols-[1fr_32px_1fr] gap-0 items-stretch group"
               >
                 {/* Before */}
                 <div
-                  className="flex items-center gap-3 p-5 rounded-l-xl transition-all duration-300 group-hover:bg-red-500/[0.06]"
+                  className="flex items-center gap-2.5 px-4 py-3 rounded-l-lg transition-all duration-300 group-hover:bg-red-500/[0.06]"
                   style={{
                     background: 'rgba(239,68,68,0.04)',
-                    border: '1px solid rgba(239,68,68,0.1)',
+                    border: '1px solid rgba(239,68,68,0.08)',
                     borderRight: 'none',
                   }}
                 >
-                  <div className="w-7 h-7 rounded-full bg-red-500/15 flex items-center justify-center shrink-0">
-                    <X className="w-4 h-4 text-red-400" />
+                  <div className="w-5.5 h-5.5 rounded-full bg-red-500/12 flex items-center justify-center shrink-0">
+                    <X className="w-3 h-3 text-red-400" />
                   </div>
-                  <p className="text-slate-400 text-sm md:text-base leading-snug">{comp.before}</p>
+                  <p className="text-slate-400 text-sm leading-snug">{comp.before}</p>
                 </div>
 
-                {/* Arrow connector */}
-                <div className="flex items-center justify-center" style={{ background: 'rgba(201,166,70,0.04)' }}>
-                  <motion.div
-                    initial={{ scale: 0.8 }}
-                    whileInView={{ scale: 1 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.3 + index * 0.08 }}
-                  >
-                    <ArrowRight className="w-4 h-4 text-[#C9A646]/60" />
-                  </motion.div>
+                {/* Arrow */}
+                <div className="flex items-center justify-center" style={{ background: 'rgba(201,166,70,0.03)' }}>
+                  <ArrowRight className="w-3.5 h-3.5 text-[#C9A646]/50" />
                 </div>
 
                 {/* After */}
                 <div
-                  className="flex items-center gap-3 p-5 rounded-r-xl transition-all duration-300 group-hover:bg-emerald-500/[0.06]"
+                  className="flex items-center gap-2.5 px-4 py-3 rounded-r-lg transition-all duration-300 group-hover:bg-emerald-500/[0.06]"
                   style={{
                     background: 'rgba(16,185,129,0.04)',
-                    border: '1px solid rgba(16,185,129,0.1)',
+                    border: '1px solid rgba(16,185,129,0.08)',
                     borderLeft: 'none',
                   }}
                 >
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                    <Check className="w-4 h-4 text-emerald-400" />
+                  <div className="w-5.5 h-5.5 rounded-full bg-emerald-500/12 flex items-center justify-center shrink-0">
+                    <Check className="w-3 h-3 text-emerald-400" />
                   </div>
-                  <p className="text-white text-sm md:text-base leading-snug font-medium">{comp.after}</p>
+                  <p className="text-white text-sm leading-snug font-medium">{comp.after}</p>
                 </div>
               </motion.div>
             ))}

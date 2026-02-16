@@ -65,11 +65,10 @@ const ContactPage = () => {
               <div className="flex-1">
                 <h3 className="text-2xl font-semibold mb-4">Our Location</h3>
                 <p className="text-muted-foreground mb-4">
-                  Finotaur is proudly based in Israel, serving traders worldwide.
+                  Finotaur is proudly based in the United States, serving traders worldwide.
                 </p>
                 <div className="text-foreground">
-                  <p className="font-medium">Finotaur Ltd.</p>
-                  <p className="text-muted-foreground">Israel</p>
+
                 </div>
               </div>
             </div>

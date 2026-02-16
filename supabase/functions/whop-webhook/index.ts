@@ -363,8 +363,8 @@ async function getPlanInfo(
     // Top Secret fallback
     "prod_nl6YXbLp4t5pz": { plan: "top_secret", interval: "monthly", price: 89.99, maxTrades: 0, isNewsletter: false, isTopSecret: true },
     // 🔥 v7.0.0: Finotaur Platform
-    "prod_LtP5GbpPfp9bn": { plan: "platform_finotaur", interval: "monthly", price: 109.00, maxTrades: 999999, isPlatform: true },
-    "prod_CbWpZrn5P7wc9": { plan: "platform_finotaur", interval: "yearly", price: 1090.00, maxTrades: 999999, isPlatform: true },
+    "prod_LtP5GbpPfp9bn": { plan: "platform_finotaur", interval: "monthly", price: 109.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
+    "prod_CbWpZrn5P7wc9": { plan: "platform_finotaur", interval: "yearly", price: 1090.00, maxTrades: 999999, isNewsletter: false, isTopSecret: false, isPlatform: true },
   };
 
   return fallbackMapping[productId] || null;
