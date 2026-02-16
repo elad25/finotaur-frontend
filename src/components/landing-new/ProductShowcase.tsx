@@ -183,19 +183,13 @@ const ProductShowcase = () => {
                 <div className="w-12" />
               </div>
 
-              {/* Calendar image — update src to match your actual file path */}
+              {/* Calendar image */}
               <img
-                src="/assets/finotaur-calendar.png"
+                src="/assets/finotaur-calender.png"
                 alt="Finotaur Trading Journal — Calendar View with P&L tracking"
                 className="w-full h-auto block"
                 style={{ pointerEvents: 'none' }}
                 draggable={false}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (target.src.includes('/assets/')) {
-                    target.src = '/finotaur-calendar.png';
-                  }
-                }}
               />
             </div>
           </motion.div>
