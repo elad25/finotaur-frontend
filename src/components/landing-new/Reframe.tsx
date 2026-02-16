@@ -1,7 +1,7 @@
 // src/components/landing-new/Reframe.tsx
 // ================================================
-// 🔥 THE SOLUTION / REFRAME — "Finotaur Changed the Rules"
-// Bridge from problem → solution with 3 pillar columns
+// 🔥 THE SOLUTION / REFRAME — COMPACT
+// Bridge from problem → solution with 3 pillars
 // ================================================
 
 import { motion } from "framer-motion";
@@ -27,100 +27,95 @@ const pillars = [
 
 const Reframe = () => {
   return (
-    <section className="py-24 px-4 relative overflow-hidden">
+    <section className="py-18 px-4 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#110d08] to-[#0a0a0a]" />
-
-      {/* Gold Glows */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-[#C9A646]/[0.15] rounded-full blur-[160px]" />
-      <div className="absolute top-1/3 right-1/4 w-[500px] h-[400px] bg-[#D4AF37]/[0.10] rounded-full blur-[120px]" />
-      <div className="absolute bottom-1/3 left-1/4 w-[450px] h-[350px] bg-[#F4D97B]/[0.07] rounded-full blur-[100px]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-[#C9A646]/[0.10] rounded-full blur-[150px]" />
 
       {/* Borders */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/50 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
 
-      <div className="max-w-6xl mx-auto relative z-10">
-        {/* Icon */}
+      <div className="max-w-5xl mx-auto relative z-10">
+        {/* Icon — smaller */}
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="flex justify-center mb-8"
+          transition={{ duration: 0.4 }}
+          className="flex justify-center mb-5"
         >
           <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+            className="w-14 h-14 rounded-xl flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.05) 100%)',
-              border: '1px solid rgba(201,166,70,0.3)',
-              boxShadow: '0 0 60px rgba(201,166,70,0.2)',
+              background: 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.04) 100%)',
+              border: '1px solid rgba(201,166,70,0.25)',
+              boxShadow: '0 0 40px rgba(201,166,70,0.15)',
             }}
           >
-            <Lightbulb className="w-10 h-10 text-[#C9A646]" />
+            <Lightbulb className="w-7 h-7 text-[#C9A646]" />
           </div>
         </motion.div>
 
-        {/* Headline */}
+        {/* Headline — smaller */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="text-center mb-6"
+          transition={{ duration: 0.5, delay: 0.05 }}
+          className="text-center mb-4"
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight">
             <span className="text-white">What if you had a team of analysts,</span>
             <br />
-            <span className="text-white">AI &amp; a journal — </span>
+            <span className="text-white">AI & a journal — </span>
             <span className="text-[#C9A646]">all in one click?</span>
           </h2>
         </motion.div>
 
         {/* Subtext */}
         <motion.p
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="text-center text-lg text-slate-400 leading-relaxed max-w-3xl mx-auto mb-16"
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="text-center text-base text-slate-400 leading-relaxed max-w-2xl mx-auto mb-10"
         >
           Finotaur isn't another app. It's a complete command center built to give retail traders the same edge institutions have — without the institutional price tag.
         </motion.p>
 
-        {/* 3 Pillars */}
-        <div className="grid md:grid-cols-3 gap-6">
+        {/* 3 Pillars — compact */}
+        <div className="grid md:grid-cols-3 gap-4">
           {pillars.map((pillar, index) => {
             const Icon = pillar.icon;
             return (
               <motion.div
                 key={index}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.3 + index * 0.15 }}
-                className="group relative text-center p-8 rounded-2xl transition-all duration-300"
+                transition={{ duration: 0.5, delay: 0.15 + index * 0.1 }}
+                className="group relative text-center p-6 rounded-xl transition-all duration-300"
                 style={{
-                  background: 'linear-gradient(180deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.02) 100%)',
-                  border: '1px solid rgba(201,166,70,0.15)',
+                  background: 'linear-gradient(180deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.01) 100%)',
+                  border: '1px solid rgba(201,166,70,0.12)',
                 }}
               >
-                {/* Hover glow */}
-                <div className="absolute inset-0 bg-gradient-to-br from-[#C9A646]/[0.06] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-2xl pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-br from-[#C9A646]/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-xl pointer-events-none" />
 
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5 relative group-hover:scale-110 transition-transform"
+                  className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4 relative group-hover:scale-110 transition-transform"
                   style={{
-                    background: 'rgba(201,166,70,0.15)',
-                    border: '1px solid rgba(201,166,70,0.3)',
+                    background: 'rgba(201,166,70,0.12)',
+                    border: '1px solid rgba(201,166,70,0.25)',
                   }}
                 >
-                  <Icon className="w-8 h-8 text-[#C9A646]" />
+                  <Icon className="w-6 h-6 text-[#C9A646]" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-3 group-hover:text-[#C9A646] transition-colors">
+                <h3 className="text-base font-bold text-white mb-2 group-hover:text-[#C9A646] transition-colors">
                   {pillar.title}
                 </h3>
-                <p className="text-slate-400 leading-relaxed relative">{pillar.description}</p>
+                <p className="text-slate-400 text-sm leading-relaxed relative">{pillar.description}</p>
               </motion.div>
             );
           })}
