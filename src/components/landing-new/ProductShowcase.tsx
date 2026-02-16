@@ -2,7 +2,7 @@
 // ================================================
 // 🔥 TRADING JOURNAL — "The best traders measure. Do you?"
 // Hormozi: "The tool that stops your losing streak"
-// Layout: Text left + Calendar hero image right
+// Layout: Text left + Calendar hero image right (overflows right)
 // ================================================
 
 import { motion } from "framer-motion";
@@ -14,29 +14,21 @@ const journalFeatures = [
     icon: Link2,
     title: "12,000+ Broker Sync",
     description: "Auto-import every trade. No manual entry.",
-    stat: "12K+",
-    statLabel: "brokers",
   },
   {
     icon: Brain,
     title: "AI Pattern Detection",
     description: "Identifies costly mistakes you'd never spot.",
-    stat: "AI",
-    statLabel: "insights",
   },
   {
     icon: BarChart3,
     title: "Bloomberg-Level Analytics",
     description: "Equity curves and metrics at institutional level.",
-    stat: "Pro",
-    statLabel: "analytics",
   },
   {
     icon: Target,
     title: "Strategy Tracking",
     description: "Know what works and what doesn't. Data, not guesswork.",
-    stat: "100%",
-    statLabel: "clarity",
   },
 ];
 
@@ -55,8 +47,8 @@ const ProductShowcase = () => {
       <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
 
       <div className="max-w-7xl mx-auto relative z-10">
-        {/* ========== TWO-COLUMN HERO: TEXT LEFT + IMAGE RIGHT ========== */}
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+        {/* ========== TWO-COLUMN: TEXT LEFT + OVERSIZED IMAGE RIGHT ========== */}
+        <div className="grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-8 items-center">
 
           {/* ===== LEFT — TEXT + MINI FEATURES ===== */}
           <div>
@@ -144,22 +136,26 @@ const ProductShowcase = () => {
             </motion.div>
           </div>
 
-          {/* ===== RIGHT — CALENDAR IMAGE MOCKUP ===== */}
+          {/* ===== RIGHT — OVERSIZED CALENDAR IMAGE (overflows right edge) ===== */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, x: 30 }}
+            initial={{ opacity: 0, scale: 0.95, x: 40 }}
             whileInView={{ opacity: 1, scale: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.9, delay: 0.2 }}
             className="relative hidden lg:block"
+            style={{
+              /* Push image wider to the right — overflows the section but stays clipped */
+              marginRight: '-12vw',
+            }}
           >
             {/* Glow behind */}
-            <div className="absolute -inset-8 bg-gradient-to-r from-[#C9A646]/25 via-[#D4AF37]/15 to-transparent rounded-3xl blur-3xl opacity-50 pointer-events-none" />
+            <div className="absolute -inset-8 bg-gradient-to-r from-[#C9A646]/20 via-[#D4AF37]/12 to-transparent rounded-3xl blur-3xl opacity-50 pointer-events-none" />
 
             <div
               className="relative rounded-2xl overflow-hidden"
               style={{
                 border: '1px solid rgba(201,166,70,0.3)',
-                boxShadow: '0 25px 60px -12px rgba(0,0,0,0.8), 0 0 60px rgba(201,166,70,0.12)',
+                boxShadow: '0 30px 80px -12px rgba(0,0,0,0.8), 0 0 80px rgba(201,166,70,0.12)',
               }}
             >
               {/* Browser chrome bar */}
@@ -192,6 +188,14 @@ const ProductShowcase = () => {
                 draggable={false}
               />
             </div>
+
+            {/* Fade-out on right edge for smooth overflow */}
+            <div
+              className="absolute top-0 right-0 bottom-0 w-24 pointer-events-none z-10"
+              style={{
+                background: 'linear-gradient(to right, transparent, rgba(10,10,10,0.8))',
+              }}
+            />
           </motion.div>
         </div>
       </div>
