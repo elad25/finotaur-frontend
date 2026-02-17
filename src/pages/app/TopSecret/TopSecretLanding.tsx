@@ -65,12 +65,12 @@ interface ReportType {
 
 const WARZONE_MEMBER_PRICE = 50;
 
-// Bundle Pricing (War Zone + Top Secret)
-const BUNDLE_PRICES = {
+// Finotaur Platform Pricing (War Zone + Top Secret + Journal Premium + Full Platform)
+const FINOTAUR_PRICES = {
   monthly: 109,
   yearly: 1090,
   monthlyEquivalent: 90.83,
-  savings: 50.98, // vs buying separately monthly ($159.98 - $109)
+  savings: 90.98, // vs buying separately monthly ($199.98 - $109)
 };
 
 // Top Secret Only Pricing (for non-War Zone members)
@@ -591,11 +591,11 @@ const MonthlyPricingCard = memo(function MonthlyPricingCard({
             {/* Bundle Price */}
             <div className="mb-4">
               <div className="flex items-baseline justify-start gap-2 mb-1">
-                <span className="text-5xl font-bold text-white">${BUNDLE_PRICES.monthly}</span>
+                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.yearly}</span>
                 <span className="text-xl text-slate-400">/month</span>
               </div>
               <p className="text-emerald-400 text-base font-semibold">
-                Save ${BUNDLE_PRICES.savings}/month! 🎉
+                Save ${FINOTAUR_PRICES.savings}/month! 🎉
               </p>
             </div>
 
@@ -791,14 +791,14 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
                    border: '1px solid rgba(201,166,70,0.4)'
                  }}>
               <Zap className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] text-sm font-semibold">Bundle Annual</span>
+              <span className="text-[#C9A646] text-sm font-semibold">Finotaur Annual</span>
             </div>
 
             <h3 className="text-xl font-bold text-white mb-2">
-              War Zone + Top Secret
+              Finotaur Platform
             </h3>
             <p className="text-sm text-slate-400 mb-4">
-              Full year access to both products
+              Full year access to the complete trading ecosystem
             </p>
 
             {/* Price Comparison */}
@@ -812,11 +812,11 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
             {/* Bundle Yearly Price */}
             <div className="mb-4">
               <div className="flex items-baseline justify-start gap-2 mb-1">
-                <span className="text-5xl font-bold text-white">${BUNDLE_PRICES.yearly}</span>
+                <span className="text-5xl font-bold text-white">${FINOTAUR_PRICES.yearly}</span>
                 <span className="text-xl text-slate-400">/year</span>
               </div>
               <p className="text-emerald-400 text-base font-semibold">
-                Just ${BUNDLE_PRICES.monthlyEquivalent}/month — Save $218!
+                Just ${FINOTAUR_PRICES.monthlyEquivalent}/month — Save $218!
               </p>
             </div>
 
@@ -832,7 +832,11 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                <span className="text-sm text-slate-300 font-medium">Priority Access to new features</span>
+                <span className="text-sm text-slate-300 font-medium">🎁 Journal Premium INCLUDED</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                <span className="text-sm text-slate-300 font-medium">Full Platform + AI Tools</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
@@ -858,7 +862,7 @@ const YearlyPricingCard = memo(function YearlyPricingCard({
                 </div>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  GET BUNDLE ANNUAL
+                  GET FINOTAUR ANNUAL
                   <ArrowRight className="w-5 h-5" />
                 </span>
               )}
@@ -1131,7 +1135,7 @@ export default function TopSecretLanding() {
           user_id: user.id,
           user_email: user.email,
           checkout_token: checkoutToken,
-          product_type: 'bundle',
+          product_type: 'platform_finotaur',
           billing_interval: 'monthly',
           expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         });
@@ -1141,9 +1145,9 @@ export default function TopSecretLanding() {
       }
     }
     
-    // Redirect to Bundle checkout ($109/month)
+    // Redirect to Finotaur Platform checkout ($109/month)
     initiateCheckout({
-      planName: 'bundle' as any,
+      planName: 'platform_finotaur',
       billingInterval: 'monthly',
     });
   }, [user, initiateCheckout]);
@@ -1160,7 +1164,7 @@ export default function TopSecretLanding() {
           user_id: user.id,
           user_email: user.email,
           checkout_token: checkoutToken,
-          product_type: 'bundle',
+          product_type: 'platform_finotaur',
           billing_interval: 'yearly',
           expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         });
@@ -1170,9 +1174,9 @@ export default function TopSecretLanding() {
       }
     }
     
-    // Redirect to Bundle Yearly checkout ($1090/year)
+    // Redirect to Finotaur Platform Yearly checkout ($1090/year)
     initiateCheckout({
-      planName: 'bundle' as any,
+      planName: 'platform_finotaur',
       billingInterval: 'yearly',
     });
   }, [user, initiateCheckout]);
@@ -1185,7 +1189,7 @@ export default function TopSecretLanding() {
       setShowBundlePopup(false);
       setSelectedPlan('yearly');
       initiateCheckout({
-        planName: 'bundle' as any,
+        planName: 'platform_finotaur',
         billingInterval: 'yearly',
       });
     };

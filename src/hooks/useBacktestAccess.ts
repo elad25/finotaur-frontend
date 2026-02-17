@@ -20,7 +20,7 @@ export const useBacktestAccess = () => {
           .from('profiles')
           .select('account_type')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
 

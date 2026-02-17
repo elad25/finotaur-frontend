@@ -129,11 +129,16 @@ export function useUnifiedUserStatus(): UnifiedUserStatus {
           email
         `)
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
       
       if (profileError) {
         console.error('[useUnifiedUserStatus] Profile query error:', profileError);
         throw profileError;
+      }
+      
+      if (!profile) {
+        console.warn('[useUnifiedUserStatus] No profile found for user:', user.id);
+        return null;
       }
       
       // Map to expected format

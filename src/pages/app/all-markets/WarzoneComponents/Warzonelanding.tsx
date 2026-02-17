@@ -671,14 +671,14 @@ const PricingSection = memo(function PricingSection({
                        border: '1px solid rgba(201,166,70,0.4)'
                      }}>
                   <Crown className="w-4 h-4 text-[#C9A646]" />
-                  <span className="text-[#C9A646] text-sm font-semibold">Ultimate Bundle</span>
+                  <span className="text-[#C9A646] text-sm font-semibold">Finotaur Platform</span>
                 </div>
                 
                 <h3 className="text-xl font-bold text-white mb-2">
-                  War Zone + Top Secret
+                  Complete Trading Ecosystem
                 </h3>
                 <p className="text-slate-400 text-sm mb-4">
-                  Get both products for one low price!
+                  War Zone + Top Secret + Journal Premium + Full Platform
                 </p>
 
                 {/* Price Comparison */}
@@ -691,10 +691,14 @@ const PricingSection = memo(function PricingSection({
                     <span className="text-slate-400">Top Secret Reports</span>
                     <span className="text-slate-300 line-through">$89.99</span>
                   </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Journal Premium</span>
+                    <span className="text-slate-300 line-through">$40.00</span>
+                  </div>
                   <div className="border-t border-slate-700 my-2" />
                   <div className="flex justify-between">
                     <span className="text-slate-300">Separately:</span>
-                    <span className="text-slate-200 line-through">$159.98/mo</span>
+                    <span className="text-slate-200 line-through">$199.98/mo</span>
                   </div>
                 </div>
 
@@ -705,7 +709,7 @@ const PricingSection = memo(function PricingSection({
                     <span className="text-xl text-slate-400">/month</span>
                   </div>
                   <p className="text-emerald-400 text-base font-semibold">
-                    Save $50.98/month! 🎉
+                    Save $90.98/month! 🎉
                   </p>
                 </div>
 
@@ -716,7 +720,7 @@ const PricingSection = memo(function PricingSection({
                        border: '1px solid rgba(16,185,129,0.3)'
                      }}>
                   <Clock className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400 text-sm font-semibold">7-Day Free Trial</span>
+                  <span className="text-emerald-400 text-sm font-semibold">14-Day Free Trial</span>
                 </div>
 
                 {/* Bundle CTA */}
@@ -750,7 +754,11 @@ const PricingSection = memo(function PricingSection({
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                    <span className="text-sm text-slate-300">Private Discord + Trading Room</span>
+                    <span className="text-sm text-slate-300">🎁 Journal Premium INCLUDED</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                    <span className="text-sm text-slate-300">Full Platform + AI Tools</span>
                   </div>
                 </div>
               </div>
@@ -785,14 +793,14 @@ const PricingSection = memo(function PricingSection({
                        border: '1px solid rgba(201,166,70,0.4)'
                      }}>
                   <Zap className="w-4 h-4 text-[#C9A646]" />
-                  <span className="text-[#C9A646] text-sm font-semibold">Bundle Annual</span>
+                  <span className="text-[#C9A646] text-sm font-semibold">Finotaur Annual</span>
                 </div>
 
                 <h3 className="text-xl font-bold text-white mb-2">
-                  War Zone + Top Secret
+                  Finotaur Platform
                 </h3>
                 <p className="text-sm text-slate-400 mb-4">
-                  Full year access to both products
+                  Full year access to the complete trading ecosystem
                 </p>
 
                 {/* Price Comparison */}
@@ -826,7 +834,11 @@ const PricingSection = memo(function PricingSection({
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
-                    <span className="text-sm text-slate-300 font-medium">Priority Access to new features</span>
+                    <span className="text-sm text-slate-300 font-medium">🎁 Journal Premium INCLUDED</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
+                    <span className="text-sm text-slate-300 font-medium">Full Platform + AI Tools</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Check className="w-5 h-5 text-[#C9A646] flex-shrink-0" />
@@ -1492,28 +1504,28 @@ function Warzonelanding({ previewMode = null }: WarzonelandingProps) {
         user_id: user.id,
         user_email: user.email,
         checkout_token: checkoutToken,
-        product_type: 'bundle',
+        product_type: 'platform_finotaur',
         billing_interval: 'monthly',
         expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
-      console.log('✅ Pending checkout saved for Bundle');
+      console.log('✅ Pending checkout saved for Finotaur Platform');
       
       // Get access token
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
       
-// Bundle plan ID - $109/month with 7-day trial
-const bundlePlanId = 'plan_ICooR8aqtdXad';
+// Finotaur Platform plan ID - $109/month with 14-day trial
+const finotaurPlanId = 'plan_ICooR8aqtdXad';
       
       // Try Edge Function first
       if (accessToken) {
         try {
           const response = await supabase.functions.invoke('create-whop-checkout', {
             body: {
-              plan_id: bundlePlanId,
+              plan_id: finotaurPlanId,
               email: user.email,
               user_id: user.id,
-              subscription_category: 'bundle',
+              subscription_category: 'platform',
             },
           });
           
@@ -1528,15 +1540,16 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
       }
       
       // Fallback: Direct URL
-      const checkoutBaseUrl = `https://whop.com/checkout/${bundlePlanId}`;
+      const checkoutBaseUrl = `https://whop.com/checkout/${finotaurPlanId}`;
       const params = new URLSearchParams();
       params.set('email', user.email);
       params.set('lock_email', 'true');
       params.set('metadata[finotaur_user_id]', user.id);
       params.set('metadata[finotaur_email]', user.email);
       params.set('metadata[checkout_token]', checkoutToken);
-      params.set('metadata[product_type]', 'bundle');
-      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success&bundle=true`);
+      params.set('metadata[product_type]', 'platform_finotaur');
+      params.set('metadata[subscription_category]', 'platform');
+      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success&plan=platform_finotaur`);
       
       window.location.href = `${checkoutBaseUrl}?${params.toString()}`;
     } catch (e) {
@@ -1565,25 +1578,25 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
         user_id: user.id,
         user_email: user.email,
         checkout_token: checkoutToken,
-        product_type: 'bundle',
+        product_type: 'platform_finotaur',
         billing_interval: 'yearly',
         expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       });
-      console.log('✅ Pending checkout saved for Bundle Yearly');
+      console.log('✅ Pending checkout saved for Finotaur Platform Yearly');
       
       // Get access token
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
       
-      // Bundle Yearly plan ID - $1090/year (no trial)
-      const bundleYearlyPlanId = 'plan_M2zS1EoNXJF10';
+      // Finotaur Platform Yearly plan ID - $1090/year (no trial)
+      const finotaurYearlyPlanId = 'plan_M2zS1EoNXJF10';
       
       // Try Edge Function first
       if (accessToken) {
         try {
           const response = await supabase.functions.invoke('create-whop-checkout', {
             body: {
-              plan_id: bundleYearlyPlanId,
+              plan_id: finotaurYearlyPlanId,
               email: user.email,
               user_id: user.id,
               subscription_category: 'bundle',
@@ -1601,16 +1614,17 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
       }
       
       // Fallback: Direct URL
-      const checkoutBaseUrl = `https://whop.com/checkout/${bundleYearlyPlanId}`;
+      const checkoutBaseUrl = `https://whop.com/checkout/${finotaurYearlyPlanId}`;
       const params = new URLSearchParams();
       params.set('email', user.email);
       params.set('lock_email', 'true');
       params.set('metadata[finotaur_user_id]', user.id);
       params.set('metadata[finotaur_email]', user.email);
       params.set('metadata[checkout_token]', checkoutToken);
-      params.set('metadata[product_type]', 'bundle');
+      params.set('metadata[product_type]', 'platform_finotaur');
+      params.set('metadata[subscription_category]', 'platform');
       params.set('metadata[billing_interval]', 'yearly');
-      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success&bundle=true`);
+      params.set('redirect_url', `${CONFIG.REDIRECT_URL}?payment=success&plan=platform_finotaur`);
       
       window.location.href = `${checkoutBaseUrl}?${params.toString()}`;
     } catch (e) {
@@ -1804,11 +1818,11 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-4"
                  style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
               <Sparkles className="w-4 h-4 text-[#C9A646]" />
-              <span className="text-[#C9A646] text-sm font-semibold">Special Offer for Top Secret Members</span>
+              <span className="text-[#C9A646] text-sm font-semibold">🚀 Upgrade to Finotaur Platform</span>
             </div>
-            <h3 className="text-2xl font-bold text-white mb-2">Upgrade to Bundle</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">Get the Complete Trading Ecosystem</h3>
             <p className="text-slate-400 text-sm">
-              Get <span className="text-white font-semibold">War Zone + Top Secret</span> together
+              <span className="text-white font-semibold">War Zone + Top Secret + Journal Premium + Full Platform</span> — all included
             </p>
           </div>
 
@@ -1951,19 +1965,27 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
             <div className="grid grid-cols-2 gap-3">
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>War Zone Daily Intel</span>
+                <span>War Zone Daily Intelligence</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>Top Secret (10/mo)</span>
+                <span>Top Secret Reports (10/mo)</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>Private Discord</span>
+                <span>🎁 Journal Premium INCLUDED</span>
               </div>
               <div className="flex items-center gap-2 text-slate-300 text-sm">
                 <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                <span>{bundleTab === 'monthly' ? '7-Day Free Trial' : 'Full Year Access'}</span>
+                <span>Full Platform Access</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>AI Scanner & Options Flow</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-300 text-sm">
+                <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span>{bundleTab === 'monthly' ? '14-Day Free Trial' : 'Full Year Access'}</span>
               </div>
               {bundleTab === 'yearly' && (
                 <>
@@ -1997,7 +2019,7 @@ const bundlePlanId = 'plan_ICooR8aqtdXad';
               ) : (
                 <>
                   <Crown className="w-5 h-5" />
-                  {bundleTab === 'monthly' ? 'Start Free Trial — $109/mo' : 'Get Yearly Bundle — $1,090/yr'}
+                  {bundleTab === 'monthly' ? 'Start 14-Day Free Trial — $109/mo' : 'Get Finotaur Yearly — $1,090/yr'}
                 </>
               )}
             </button>

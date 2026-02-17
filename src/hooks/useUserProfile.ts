@@ -61,11 +61,16 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       current_month_trades_count
     `)
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('❌ Profile fetch error:', error);
     throw error;
+  }
+  
+  if (!profile) {
+    console.warn('⚠️ No profile found for user:', userId);
+    return null;
   }
   
   // 🔥 Debug log - remove in production if needed
