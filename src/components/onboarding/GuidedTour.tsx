@@ -95,6 +95,15 @@ function getNavBottomY(): number {
   // If we found something, add a small padding
   if (maxBottom > 0) return maxBottom + 4;
 
+  // Fallback: look for the main top navbar (usually a <nav> or <header>)
+  const navEl = document.querySelector('nav, header, [data-navbar]');
+  if (navEl) {
+    const navRect = (navEl as HTMLElement).getBoundingClientRect();
+    if (navRect.top < 100 && navRect.bottom > 0) {
+      return navRect.bottom + 4;
+    }
+  }
+
   // Last resort: estimate based on typical nav heights
   // Top nav (~64px) + sub nav (~48px) + some padding
   return 120;
@@ -151,8 +160,8 @@ export default function GuidedTour() {
       left = tabCenterX - tooltipWidth / 2;
       left = Math.max(12, Math.min(left, window.innerWidth - tooltipWidth - 12));
 
-      // Arrow offset: distance from tooltip left edge to tab center
-      const arrowLeft = Math.max(14, Math.min(tabCenterX - left, tooltipWidth - 14));
+      // Arrow offset: always point to tab center regardless of tooltip clamping
+      const arrowLeft = tabCenterX - left;
 
       // Position tooltip below the nav area (not just below the tab)
       // Use whichever is lower: tab bottom or nav bottom
