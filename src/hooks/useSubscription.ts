@@ -177,15 +177,12 @@ export function useSubscription() {
       
       try {
         // ═══════════════════════════════════════════════════════════════
-        // 🔥🔥🔥 CRITICAL FIX v8.4.2:
-        // The parameter name MUST be 'user_id_param' NOT 'p_user_id'!
-        // 
-        // Error was:
-        // "Could not find the function public.get_user_subscription_status(p_user_id)"
-        // "hint: Perhaps you meant to call ...get_user_subscription_status(user_id_param)"
+        // 🔥 CRITICAL: Parameter name MUST match DB_WHOP function signature
+        // DB_WHOP defines: get_user_subscription_status(p_user_id UUID)
+        // This is the ONLY definition (DB_3 and DB_4 copies removed)
         // ═══════════════════════════════════════════════════════════════
 const { data, error: rpcError } = await supabase.rpc('get_user_subscription_status', {
-  user_id_param: effectiveUserId
+  p_user_id: effectiveUserId
 });
         
         if (rpcError) {
