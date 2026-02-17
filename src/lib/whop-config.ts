@@ -345,6 +345,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: '14-Day Free Trial',
     category: 'platform',
     isPlatform: true,
+    includesJournal: 'basic',
     features: [
       '14-day free trial',
       'Full market dashboard',
@@ -355,6 +356,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Basic screeners',
       'Daily market briefing',
       'Priority email support',
+      '🎁 Journal Basic INCLUDED (25 trades/mo)',
     ],
   },
   platform_core_yearly: {
@@ -372,6 +374,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     badge: 'Save 17%',
     category: 'platform',
     isPlatform: true,
+    includesJournal: 'basic',
     features: [
       'Full market dashboard',
       'Real-time market data',
@@ -381,6 +384,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
       'Basic screeners',
       'Daily market briefing',
       'Priority email support',
+      '🎁 Journal Basic INCLUDED (25 trades/mo)',
       '1 month FREE!',
     ],
   },
@@ -791,6 +795,9 @@ export function buildWhopCheckoutUrl(options: CheckoutOptions): string {
   // Apply intro discount coupon for eligible plans
   if (plan.hasIntroDiscount) {
     params.set('d', 'FINOTAUR50');
+  } else if (affiliateCode) {
+    // 🔥 v7.1.0: Apply promo/affiliate code for plans without intro discount
+    params.set('d', affiliateCode);
   }
   
   if (clickId) {
@@ -873,6 +880,12 @@ export const PLAN_FEATURES = {
     aiScanner: false,
     stockAnalysisPerDay: 3,
     sectorAnalysisPerMonth: 0,
+    // Journal access for FREE tier
+    journalAccess: true,
+    journalMaxTrades: 15,
+    journalTradesLifetime: true,
+    journalMaxPortfolios: 1,
+    journalBacktest: false,
   },
   platform_core: {
     dashboardAccess: true,
@@ -896,13 +909,19 @@ export const PLAN_FEATURES = {
     aiScanner: false,
     stockAnalysisPerDay: 5,
     sectorAnalysisPerMonth: 3,
+    // Journal access for Core tier
+    journalAccess: true,
+    journalMaxTrades: 25,
+    journalTradesLifetime: false,
+    journalMaxPortfolios: 1,
+    journalBacktest: false,
   },
 platform_finotaur: {
     dashboardAccess: true,
     marketData: true,
     advancedCharts: true,
     customWatchlists: true,
-    priceAlerts: Infinity,
+    priceAlerts: 999999,
     aiInsights: true,
     advancedScreeners: true,
     apiAccess: true,
@@ -920,14 +939,20 @@ platform_finotaur: {
     myPortfolio: false,       // Enterprise only
     aiScanner: true,
     stockAnalysisPerDay: 7,
-    sectorAnalysisPerMonth: Infinity,
+    sectorAnalysisPerMonth: 999999,
+    // Journal access for Finotaur tier
+    journalAccess: true,
+    journalMaxTrades: 999999,
+    journalTradesLifetime: false,
+    journalMaxPortfolios: 40,
+    journalBacktest: true,
   },
-  platform_enterprise: {
+ platform_enterprise: {
     dashboardAccess: true,
     marketData: true,
     advancedCharts: true,
     customWatchlists: true,
-    priceAlerts: Infinity,
+    priceAlerts: 999999,
     aiInsights: true,
     advancedScreeners: true,
     apiAccess: true,
@@ -948,8 +973,14 @@ platform_finotaur: {
     macroAnalyzer: true,
     myPortfolio: true,        // Enterprise exclusive
     aiScanner: true,
-    stockAnalysisPerDay: Infinity,
-    sectorAnalysisPerMonth: Infinity,
+    stockAnalysisPerDay: 999999,
+    sectorAnalysisPerMonth: 999999,
+    // Journal access for Enterprise tier
+    journalAccess: true,
+    journalMaxTrades: 999999,
+    journalTradesLifetime: false,
+    journalMaxPortfolios: 40,
+        journalBacktest: true,
   },
   newsletter: {
     maxTrades: 0,

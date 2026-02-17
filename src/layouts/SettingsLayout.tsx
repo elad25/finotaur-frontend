@@ -1180,11 +1180,19 @@ const BillingTab = () => {
           {/* Trade limits info */}
           <div className="mt-4 pt-4 border-t border-zinc-700/50">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-zinc-500">Monthly trades used</span>
+              <span className="text-zinc-500">
+                {profile?.account_type === 'free' ? 'Lifetime trades used' : 'Monthly trades used'}
+              </span>
               <span className="text-zinc-300">
-                {profile?.current_month_trades_count || 0} / {profile?.max_trades === 999999 ? '∞' : profile?.max_trades || 10}
+                {profile?.account_type === 'free' 
+                  ? `${profile?.trade_count || 0} / 15`
+                  : `${profile?.current_month_trades_count || 0} / ${profile?.max_trades === 999999 ? '∞' : profile?.max_trades || 15}`
+                }
               </span>
             </div>
+            {profile?.account_type === 'free' && (
+              <p className="text-xs text-zinc-500 mt-1">Free tier: 15 trades total (never resets)</p>
+            )}
           </div>
         </div>
 

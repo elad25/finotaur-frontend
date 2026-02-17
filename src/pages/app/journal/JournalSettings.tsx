@@ -1683,6 +1683,59 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                 </span>
               </div>
             )}
+
+            {/* 🔥 v8.5.0: Trade Limits Display */}
+            <div className="flex items-center justify-between py-4 border-t border-zinc-800">
+              <div>
+                <label className="text-sm font-medium text-zinc-300">
+                  {profile?.account_type === 'free' || !profile?.account_type ? 'Lifetime trades used' : 'Monthly trades used'}
+                </label>
+                <p className="text-xs text-zinc-500 mt-1">
+                  {profile?.account_type === 'free' || !profile?.account_type
+                    ? 'Free tier: 15 trades total (never resets)'
+                    : profile?.max_trades === 999999 
+                      ? 'Unlimited trades with your plan'
+                      : 'Resets each billing cycle'
+                  }
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-zinc-300">
+                  {profile?.account_type === 'free' || !profile?.account_type
+                    ? `${profile?.trade_count || 0} / 15`
+                    : `${profile?.current_month_trades_count || 0} / ${profile?.max_trades === 999999 ? '∞' : profile?.max_trades || 15}`
+                  }
+                </span>
+                {/* Progress indicator */}
+                <div className="w-24 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all ${
+                      (() => {
+                        const used = profile?.account_type === 'free' || !profile?.account_type
+                          ? (profile?.trade_count || 0)
+                          : (profile?.current_month_trades_count || 0);
+                        const max = profile?.account_type === 'free' || !profile?.account_type
+                          ? 15
+                          : (profile?.max_trades === 999999 ? 100 : (profile?.max_trades || 15));
+                        const pct = max > 0 ? (used / max) * 100 : 0;
+                        return pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+                      })()
+                    }`}
+                    style={{ 
+                      width: `${Math.min(100, (() => {
+                        const used = profile?.account_type === 'free' || !profile?.account_type
+                          ? (profile?.trade_count || 0)
+                          : (profile?.current_month_trades_count || 0);
+                        const max = profile?.account_type === 'free' || !profile?.account_type
+                          ? 15
+                          : (profile?.max_trades === 999999 ? 100 : (profile?.max_trades || 15));
+                        return max > 0 ? (used / max) * 100 : 0;
+                      })())}%` 
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

@@ -63,6 +63,8 @@ const PLAN_TIERS: PlanTier[] = [
       'Advanced charts & indicators',
       'Unlimited watchlists',
       '50 price alerts',
+      '🎁 Journal Basic INCLUDED',
+      '25 trades/month + 1 portfolio',
     ],
   },
   {
@@ -82,6 +84,8 @@ const PLAN_TIERS: PlanTier[] = [
       'Macro Analyzer',
       'AI Scanner',
       '🎁 Journal Premium INCLUDED',
+      'Unlimited trades + Backtesting',
+      'Up to 40 portfolios',
       '🎁 War Zone + Top Secret Reports',
       'Priority 24h support',
     ],
@@ -307,6 +311,7 @@ export function UpgradeGate({
                   'Limited watchlists (5)',
                   '3 price alerts',
                   'Community access',
+                  '📓 Trading Journal (15 lifetime trades)',
                 ].map((feat, fi) => (
                   <li key={fi} className="flex items-start gap-2.5">
                     <div className="w-4 h-4 rounded-full bg-[#C9A646]/10 flex items-center justify-center shrink-0 mt-0.5" style={{ border: '1px solid rgba(201,166,70,0.2)' }}>

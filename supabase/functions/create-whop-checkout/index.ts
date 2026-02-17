@@ -77,6 +77,7 @@ interface CheckoutRequest {
   subscription_category?: string;
   email?: string;       // Email for prefill
   user_id?: string;     // User ID from client (backup)
+  discount_code?: string; // 🔥 v1.8.0: Welcome offer / promo code from client
 }
 
 interface WhopCheckoutResponse {
@@ -94,10 +95,10 @@ interface WhopCheckoutResponse {
 
  const PLAN_REDIRECT_PATHS: Record<string, string> = {
   // Journal plans
-  'plan_2hIXaJbGP1tYN': '/app/journal/pricing?payment=success&source=whop',
-  'plan_x0jTFLe9qNv8i': '/app/journal/pricing?payment=success&source=whop',
-  'plan_v7QKxkvKIZooe': '/app/journal/pricing?payment=success&source=whop',
-  'plan_gBG436aeJxaHU': '/app/journal/pricing?payment=success&source=whop',
+  'plan_2hIXaJbGP1tYN': '/app/journal/overview?payment=success&source=whop',
+  'plan_x0jTFLe9qNv8i': '/app/journal/overview?payment=success&source=whop',
+  'plan_v7QKxkvKIZooe': '/app/journal/overview?payment=success&source=whop',
+  'plan_gBG436aeJxaHU': '/app/journal/overview?payment=success&source=whop',
   // Newsletter (War Zone) - ALL PLAN IDS
    'plan_U6lF2eO5y9469': '/app/all-markets/warzone?payment=success&source=whop',  // War Zone Monthly ($69.99)
   'plan_bp2QTGuwfpj0A': '/app/settings?tab=billing&upgrade=newsletter_yearly_success',  // War Zone Yearly ($699) - upgrade redirect
@@ -192,6 +193,7 @@ serve(async (req: Request) => {
       redirect_url,
       subscription_category,
       email: clientEmail,
+      discount_code,
     } = body;
 
     if (!plan_id) {
@@ -332,6 +334,9 @@ const whopRequestBody: Record<string, any> = {
       whopRequestBody.affiliate_code = affiliate_code;
     }
 
+    // 🔥 v1.7.0: Store promo code to apply via URL (separate from affiliate)
+    const promoCodeToApply = applyIntroDiscount ? INTRO_DISCOUNT_COUPON : affiliate_code || null;
+
     console.log("📤 Whop API request:", JSON.stringify(whopRequestBody, null, 2));
     console.log("📤 Whop API URL:", WHOP_API_URL);
 
@@ -390,9 +395,17 @@ const whopRequestBody: Record<string, any> = {
         }
         
         // 🔥 v1.4.0: Add intro discount coupon
+        // 🔥 v1.7.0: Also apply welcome promo codes via 'd' parameter
+        // 🔥 v1.8.0: Support client-sent discount_code (Welcome Offer)
         if (applyIntroDiscount) {
           urlObj.searchParams.set('d', INTRO_DISCOUNT_COUPON);
           console.log(`✅ Intro discount coupon '${INTRO_DISCOUNT_COUPON}' added to checkout URL`);
+        } else if (discount_code) {
+          urlObj.searchParams.set('d', discount_code);
+          console.log(`✅ Client discount code '${discount_code}' added to checkout URL`);
+        } else if (affiliate_code) {
+          urlObj.searchParams.set('d', affiliate_code);
+          console.log(`✅ Promo/affiliate code '${affiliate_code}' added to checkout URL`);
         }
         
         checkoutUrl = urlObj.toString();

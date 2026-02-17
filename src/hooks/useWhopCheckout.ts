@@ -120,15 +120,16 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
    * 🔥 v4.1.0: Create checkout session via Edge Function
    * Now includes email for Whop prefill!
    */
-  const createCheckoutSession = useCallback(async (params: {
+const createCheckoutSession = useCallback(async (params: {
     planId: string;
     affiliateCode?: string;
     clickId?: string;
     subscriptionCategory?: SubscriptionCategory;
-    email?: string;      // 🔥 v4.1: Add email for prefill
-    userId?: string;     // 🔥 v4.1: Add userId for metadata
+    email?: string;
+    userId?: string;
+    discountCode?: string;
   }): Promise<{ checkout_url: string } | null> => {
-    const { planId, affiliateCode, clickId, subscriptionCategory, email, userId } = params;
+    const { planId, affiliateCode, clickId, subscriptionCategory, email, userId, discountCode } = params;
 
     try {
       console.log('🔐 Creating checkout session via Edge Function...', { email, userId });
@@ -147,8 +148,9 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
           affiliate_code: affiliateCode,
           click_id: clickId,
           subscription_category: subscriptionCategory,
-          email: email,           // 🔥 v4.1: Pass email for Whop prefill
-          user_id: userId,        // 🔥 v4.1: Pass userId for metadata
+          email: email,
+          user_id: userId,
+          discount_code: discountCode,
         },
       });
 
@@ -207,8 +209,8 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
       // Get stored affiliate data
       const { code: storedCode, clickId } = getStoredAffiliateData();
       
-      // Use provided discount code OR stored affiliate code
-      const affiliateCode = discountCode || storedCode;
+      // Separate discount code from affiliate code
+      const affiliateCode = storedCode;
 
       console.log('🛒 Initiating Whop checkout:', {
         planId,
@@ -254,13 +256,14 @@ export function useWhopCheckout(options: UseWhopCheckoutOptions = {}) {
       }
 
       // 🔥 v4.1: TRY EDGE FUNCTION FIRST (now with email!)
-      const checkoutSession = await createCheckoutSession({
+const checkoutSession = await createCheckoutSession({
         planId: whopPlanId,
         affiliateCode: affiliateCode || undefined,
         clickId: clickId || undefined,
         subscriptionCategory: plan.category,
-        email: user?.email || undefined,    // 🔥 v4.1: Pass email!
-        userId: user?.id || undefined,      // 🔥 v4.1: Pass userId!
+        email: user?.email || undefined,
+        userId: user?.id || undefined,
+        discountCode: discountCode || undefined,
       });
 
       let checkoutUrl: string;

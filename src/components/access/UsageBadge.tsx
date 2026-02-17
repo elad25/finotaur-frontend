@@ -6,12 +6,16 @@ interface UsageBadgeProps {
   used: number;
   limit: number;
   label?: string;
+  isLifetime?: boolean;
 }
 
-export function UsageBadge({ used, limit, label = 'analyses today' }: UsageBadgeProps) {
+export function UsageBadge({ used, limit, label = 'analyses today', isLifetime = false }: UsageBadgeProps) {
   const remaining = Math.max(0, limit - used);
   const isLow = remaining <= 1;
   const isOut = remaining === 0;
+
+  // 🔥 v8.5.0: Adjust label for lifetime trades
+  const displayLabel = isLifetime ? 'lifetime trades remaining' : label;
 
   return (
     <div
@@ -32,7 +36,7 @@ export function UsageBadge({ used, limit, label = 'analyses today' }: UsageBadge
         style={{ color: isOut ? '#EF4444' : isLow ? '#F59E0B' : '#C9A646' }}
       />
       <span style={{ color: isOut ? '#EF4444' : isLow ? '#F59E0B' : '#C9A646' }}>
-        {remaining}/{limit} {label}
+        {remaining}/{limit} {displayLabel}
       </span>
     </div>
   );

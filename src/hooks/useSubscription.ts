@@ -388,15 +388,31 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     (limits?.platform_plan && 
      ['finotaur', 'enterprise', 'platform_finotaur', 'platform_enterprise'].includes(limits.platform_plan) &&
      ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || ''));
-  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle;
+
+  // 🔥 v8.5.0: Core users get Journal Basic access
+  const hasJournalFromCore = 
+    !isAdmin &&
+    limits?.platform_plan && 
+    ['core', 'platform_core'].includes(limits.platform_plan) &&
+    ['active', 'trial', 'trialing'].includes(limits?.platform_subscription_status || '');
+
+  // 🔥 v8.5.0: FREE platform users get 15 lifetime trades in Journal
+  const hasJournalFromFree = 
+    !isAdmin && !isLifetimeUser &&
+    !hasDirectJournalSubscription && !hasJournalTrial && !hasJournalFromBundle && !hasJournalFromCore;
+
+  // 🔥 v8.5.0: All users now have journal access (FREE gets 15 lifetime trades)
+  const hasJournalAccess = isAdmin || isLifetimeUser || hasDirectJournalSubscription || hasJournalTrial || hasJournalFromBundle || hasJournalFromCore || hasJournalFromFree;
   
   const effectiveJournalPlan = (() => {
     if (isAdmin) return 'premium';
     if (isLifetimeUser) return 'premium';
     if (hasJournalFromBundle) return 'premium';
     if (hasDirectJournalSubscription) return limits?.account_type as AccountType;
+    if (hasJournalFromCore) return 'basic';
     if (hasJournalTrial) return 'trial';
-    return null;
+    if (hasJournalFromFree) return 'free';
+    return 'free';
   })();
   
   // ═══════════════════════════════════════════
@@ -404,23 +420,28 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   // ═══════════════════════════════════════════
   
   const isTrial = !isAdmin && !isLifetimeUser && hasJournalTrial;
-  const isBasic = !isAdmin && !isLifetimeUser && effectiveJournalPlan === 'basic';
+  const isBasic = !isAdmin && !isLifetimeUser && (effectiveJournalPlan === 'basic' || hasJournalFromCore);
+  const isFreeJournal = !isAdmin && !isLifetimeUser && hasJournalFromFree;
   const isPremium = isAdmin || isLifetimeUser || effectiveJournalPlan === 'premium';
-  const isLegacyFreeUser = !isAdmin && limits?.account_type === 'free';
+  const isLegacyFreeUser = false; // 🔥 v8.5.0: No more legacy free - all FREE users get journal access
   const isUnlimitedUser = isAdmin || isLifetimeUser || isPremium;
   const isPaidUser = hasJournalAccess && (isBasic || isPremium || isTrial);
   
+  // 🔥 v8.5.0: FREE users use lifetime trade count (trade_count), not monthly (remaining)
   const tradesRemaining = isAdmin || isLifetimeUser
     ? Infinity 
     : isUnlimitedUser 
       ? Infinity 
-      : !hasJournalAccess 
-        ? 0 
+      : isFreeJournal
+        ? Math.max(0, 15 - (limits?.trade_count ?? 0))
         : limits?.remaining ?? 0;
   
-  const canAddTrade = isAdmin || isLifetimeUser || (hasJournalAccess && (isUnlimitedUser || (limits?.remaining ?? 0) > 0));
+  const canAddTrade = isAdmin || isLifetimeUser || (isUnlimitedUser) || 
+    (isFreeJournal && (limits?.trade_count ?? 0) < 15) ||
+    (hasJournalAccess && !isFreeJournal && (limits?.remaining ?? 0) > 0);
   
-  const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser && (!hasJournalAccess || (limits?.remaining ?? 0) <= 0);
+  const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser && 
+    (isFreeJournal ? (limits?.trade_count ?? 0) >= 15 : (limits?.remaining ?? 0) <= 0);
   
   const canUseSnapTrade = isAdmin || isLifetimeUser || (hasJournalAccess && (isTrial || isBasic || isPremium));
   
@@ -472,7 +493,8 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   const isCancelledButActive = !isAdmin && !isLifetimeUser && limits?.subscription_cancel_at_period_end && 
     (limits?.subscription_status === 'active' || limits?.subscription_status === 'trial');
 
-  const needsJournalPlanSelection = !isAdmin && !isLifetimeUser && !hasJournalAccess && !isLoading;
+  // 🔥 v8.5.0: All users have journal access now, no plan selection needed for journal
+  const needsJournalPlanSelection = false;
 
   return {
     // Main data
@@ -491,10 +513,13 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     hasDirectJournalSubscription,
     hasJournalTrial,
     hasJournalFromPlatformBundle: limits?.platform_bundle_journal_granted === true,
+    hasJournalFromCore,
+    hasJournalFromFree,
     
     // Account type checks
     isTrial,
     isBasic,
+    isFreeJournal,
     isPremium,
     isPaidUser,
     isUnlimitedUser,
@@ -506,7 +531,7 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     tradesRemaining,
     canAddTrade,
     isLimitReached,
-    isLifetimeLimit: false,
+    isLifetimeLimit: isFreeJournal,
     
     // Feature access
     canUseSnapTrade,

@@ -1623,6 +1623,18 @@ const { error: updateError } = await supabase
           platform_payment_provider: 'whop',
           ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
+          // 🔥 v8.5.0: Core includes Journal Basic (25 trades/month, 1 portfolio, no backtest)
+          ...(platformPlan === 'platform_core' ? {
+            account_type: 'basic',
+            max_trades: 25,
+            subscription_status: isInTrial ? 'trial' : 'active',
+            subscription_interval: billingInterval,
+            subscription_expires_at: expiresAt,
+            subscription_started_at: new Date().toISOString(),
+            is_in_trial: isInTrial,
+            trial_ends_at: trialEndsAt,
+            platform_bundle_journal_granted: true,
+          } : {}),
           // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
           ...(platformPlan === 'platform_finotaur' ? {
             account_type: 'premium',
@@ -2018,6 +2030,20 @@ async function handleMembershipActivated(
         platform_payment_provider: 'whop',
         ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
+        // 🔥 v8.5.0: Core includes Journal Basic (25 trades/month, 1 portfolio, no backtest)
+        ...(platformPlan === 'platform_core' ? {
+          account_type: 'basic',
+          max_trades: 25,
+          subscription_status: isInTrial ? 'trial' : 'active',
+          subscription_interval: billingInterval,
+          subscription_expires_at: billingInterval === 'yearly'
+            ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          subscription_started_at: new Date().toISOString(),
+          is_in_trial: isInTrial,
+          trial_ends_at: trialEndsAt,
+          platform_bundle_journal_granted: true,
+        } : {}),
         // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
         ...(platformPlan === 'platform_finotaur' ? {
           account_type: 'premium',
@@ -2531,26 +2557,27 @@ async function handleMembershipDeactivated(
         platform_subscription_status: 'cancelled',
         platform_is_in_trial: false,
         platform_cancel_at_period_end: false,
-        // 🔥 v7.0.0: Finotaur/Enterprise deactivation — remove all included access
+        // 🔥 v8.5.0: Finotaur/Enterprise deactivation — remove all included access, back to FREE 15 lifetime
         ...(oldPlan === 'platform_finotaur' || oldPlan === 'platform_enterprise' ? {
           newsletter_enabled: false,
           newsletter_status: 'cancelled',
           top_secret_enabled: false,
           top_secret_status: 'cancelled',
           account_type: 'free',
-          max_trades: 10,
-          subscription_status: 'cancelled',
+          max_trades: 15,
+          subscription_status: 'inactive',
           platform_bundle_journal_granted: false,
           platform_bundle_newsletter_granted: false,
           ...(oldPlan === 'platform_enterprise' ? {
             enterprise_ai_portfolio_enabled: false,
           } : {}),
         } : {}),
-        // 🔥 v6.4.0: Downgrade Journal for Core if user doesn't have own sub
+        // 🔥 v8.5.0: Downgrade Journal for Core if user doesn't have own sub
         ...(oldPlan === 'platform_core' && !hasOwnJournalSub ? {
           account_type: 'free',
-          max_trades: 10,
-          subscription_status: 'cancelled',
+          max_trades: 15,
+          subscription_status: 'inactive',
+          platform_bundle_journal_granted: false,
         } : {}),
         updated_at: new Date().toISOString(),
       })

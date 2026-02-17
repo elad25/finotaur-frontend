@@ -322,6 +322,13 @@ const isTabActive = useCallback((itemPath: string): boolean => {
                 key={item.path}
                 onClick={() => handleNavigation(item.path, itemLocked)}
                 disabled={locked}
+                data-tour={
+                  item.path.includes('top-secret') && !item.path.includes('admin') ? 'top-secret' :
+                  item.path.includes('warzone') ? 'warzone' :
+                  item.path === '/app/journal/overview' || item.path === '/app/journal' ? 'journal' :
+                  item.path.includes('/ai/') ? 'ai' :
+                  undefined
+                }
                 className={`relative flex-shrink-0 rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
                   locked
                     ? 'cursor-not-allowed opacity-40 text-[#A0A0A0] hover:bg-[#1A1A1A]/50'

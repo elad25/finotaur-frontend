@@ -23,6 +23,10 @@ import JournalPublicPage from "@/pages/JournalPublicPage";
 import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
 
+// 🎯 Guided Tour
+import GuidedTour from "@/components/onboarding/GuidedTour";
+import WelcomeOffer from "@/components/onboarding/WelcomeOffer";
+
 import '@/scripts/migrationRunner';
 
 // =====================================================
@@ -285,6 +289,9 @@ function AppContent() {
   return (
     <>
       <AffiliateTracker />
+      {/* 🎯 Guided Tour Overlay - renders on top of everything */}
+      <GuidedTour />
+      <WelcomeOffer />
       <Routes>
         {/* PUBLIC ROUTES */}
         <Route path="/" element={<LandingPage />} />
@@ -309,7 +316,7 @@ function AppContent() {
         <Route path="/legal/risk-disclosure" element={<RiskDisclosure />} />
         <Route path="/legal/refund" element={<RefundPolicy />} />
         <Route path="/legal/dmca" element={<DMCA />} />
-        <Route path="/pricing-selection" element={<PricingSelection />} />
+        <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
         
         {/* PROTECTED ROUTES */}
         <Route path="/app" element={<ProtectedRoute><ProtectedAppLayout /></ProtectedRoute>}>

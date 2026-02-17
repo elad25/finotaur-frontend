@@ -1,5 +1,6 @@
 // src/pages/auth/Register.tsx
 // 📝 REGISTRATION PAGE WITH TERMS ACCEPTANCE CHECKBOX + MODAL POPUP
+// 🎯 UPDATED: After registration → Guided Tour (War Zone → Top Secret → Journal → AI)
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
@@ -12,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
+import { startGuidedTour, isGuidedTourActive } from '@/components/onboarding/GuidedTour';
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
@@ -122,11 +124,22 @@ export default function Register() {
         }
 
         if (data?.onboarding_completed && data?.account_type) {
+          // 🎯 If guided tour is active, go to the first tour stop
+          if (isGuidedTourActive()) {
+            navigate('/app/top-secret', { replace: true });
+            return;
+          }
           navigate('/app/journal/overview', { replace: true });
           return;
         }
 
-        navigate('/pricing-selection', { replace: true });
+        // 🎯 If guided tour is active (new registration), skip onboarding and go to tour
+        if (isGuidedTourActive()) {
+          navigate('/app/top-secret', { replace: true });
+          return;
+        }
+
+        navigate('/app/top-secret', { replace: true });
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
@@ -185,7 +198,11 @@ export default function Register() {
 
     setLoading(true);
     try {
+      // 🎯 Start guided tour BEFORE register so it's ready when checkUserStatus runs
+      startGuidedTour();
+      
       await register(email, password, name);
+      
       toast.success('Account created successfully!');
       
       // ✅ Save terms acceptance after successful registration
@@ -233,6 +250,9 @@ export default function Register() {
       // ✅ Store terms acceptance in localStorage for Google OAuth flow
       localStorage.setItem('pending_terms_accepted_at', new Date().toISOString());
       localStorage.setItem('pending_terms_version', CURRENT_TERMS_VERSION);
+      
+      // 🎯 Start guided tour BEFORE signIn so it's ready when checkUserStatus runs
+      startGuidedTour();
       
       await signInWithGoogle();
     } catch (error: any) {

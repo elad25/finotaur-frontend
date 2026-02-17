@@ -37,6 +37,9 @@ export interface UserProfile {
   pending_downgrade_plan?: 'basic' | 'cancel' | null;
   // 🔥 v8.7.0: Trade limits for display
   max_trades?: number;
+  // 🔥 v8.5.0: Trade usage tracking
+  trade_count?: number;
+  current_month_trades_count?: number;
 }
 
 // ============================================
@@ -53,7 +56,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       subscription_expires_at,
       subscription_cancel_at_period_end,
       pending_downgrade_plan,
-      max_trades
+      max_trades,
+      trade_count,
+      current_month_trades_count
     `)
     .eq('id', userId)
     .single();
