@@ -40,6 +40,10 @@ export interface UserProfile {
   // 🔥 v8.5.0: Trade usage tracking
   trade_count?: number;
   current_month_trades_count?: number;
+  // 🔥 v8.8.0: Platform fields for Core/Finotaur journal access detection
+  platform_plan?: string | null;
+  platform_subscription_status?: string | null;
+  platform_bundle_journal_granted?: boolean;
 }
 
 // ============================================
@@ -58,7 +62,10 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       pending_downgrade_plan,
       max_trades,
       trade_count,
-      current_month_trades_count
+      current_month_trades_count,
+      platform_plan,
+      platform_subscription_status,
+      platform_bundle_journal_granted
     `)
     .eq('id', userId)
     .maybeSingle();
@@ -166,6 +173,13 @@ export function hasActiveSubscription(profile: UserProfile | null | undefined): 
     return true;
   }
   
+  // 🔥 v8.8.0: Platform users (Core/Finotaur/Enterprise) have active journal via platform
+  if (profile.platform_plan && 
+      ['core', 'platform_core', 'finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan) &&
+      ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '')) {
+    return true;
+  }
+  
   return false;
 }
 
@@ -183,6 +197,18 @@ export function getPlanDisplay(profile: UserProfile | null | undefined): {
   // 🔥 v8.7.0: Check role first, then account_type
   if (role === 'admin' || role === 'super_admin' || account_type === 'admin' || account_type === 'vip') {
     return { name: 'Premium (Admin)', badge: 'admin' };
+  }
+
+  // 🔥 v8.8.0: Core platform users get Journal Basic even if account_type is still 'free'
+  if ((account_type === 'free' || account_type === 'trial') && profile.platform_plan) {
+    const activePlatform = ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '');
+    if (activePlatform && ['core', 'platform_core'].includes(profile.platform_plan)) {
+      const intervalText = profile.subscription_interval === 'yearly' ? 'Yearly' : 'Monthly';
+      return { name: `Basic (${intervalText}) — via Core`, badge: 'basic' };
+    }
+    if (activePlatform && ['finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan)) {
+      return { name: 'Premium — via Platform', badge: 'premium' };
+    }
   }
 
   // 🔥 v8.6.0: Handle 'trial' as legacy/no-plan
@@ -204,9 +230,15 @@ export function getPlanDisplay(profile: UserProfile | null | undefined): {
 }
 
 export function getNextBillingDate(profile: UserProfile | null | undefined): string {
-  // No profile or free users
-  if (!profile || profile.account_type === 'free' || profile.account_type === 'trial') {
-    return 'N/A';
+  // No profile or free users (but check platform plan first)
+  if (!profile) return 'N/A';
+  
+  if ((profile.account_type === 'free' || profile.account_type === 'trial')) {
+    // 🔥 v8.8.0: Core/Finotaur users have billing even if account_type is free
+    const activePlatform = ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '');
+    if (!activePlatform || !profile.platform_plan || profile.platform_plan === 'free') {
+      return 'N/A';
+    }
   }
 
   // 🔥 v8.7.0: Admin/VIP show "Lifetime" - check both role and account_type

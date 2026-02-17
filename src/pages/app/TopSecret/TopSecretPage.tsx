@@ -113,7 +113,7 @@ export default function TopSecretPage() {
         .from('profiles')
         .select('role, top_secret_enabled, top_secret_status, top_secret_expires_at')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
 

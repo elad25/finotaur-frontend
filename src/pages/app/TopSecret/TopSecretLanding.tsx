@@ -1203,7 +1203,7 @@ export default function TopSecretLanding() {
     };
     
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-20">
         {/* Backdrop */}
         <div 
           className="absolute inset-0 bg-black/80 backdrop-blur-sm"
@@ -1239,25 +1239,29 @@ export default function TopSecretLanding() {
             </button>
             
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-3"
-                 style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <Gift className="w-4 h-4 text-emerald-400" />
-              <span className="text-emerald-400 text-sm font-semibold">
-                {isWarZoneMember ? 'Special Offer for War Zone Members' : 'Ultimate Bundle Deal'}
+                 style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}>
+              <Crown className="w-4 h-4 text-[#C9A646]" />
+              <span className="text-[#C9A646] text-sm font-semibold">
+                Complete Trading Ecosystem
               </span>
             </div>
-            <h3 className="text-2xl font-bold text-white">War Zone + Top Secret Bundle</h3>
-            <p className="text-slate-400 text-sm mt-1">Get both products for one low price!</p>
+            <h3 className="text-2xl font-bold text-white">Get Finotaur — Includes Everything</h3>
+            <p className="text-slate-400 text-sm mt-1">Top Secret + War Zone + Journal Premium + Full Platform for one price!</p>
           </div>
           
           {/* Body - Two Column Layout */}
           <div className="px-6 py-6">
             {/* Price Comparison Banner */}
             <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
+              <span className="text-slate-500 line-through">Top Secret $89.99</span>
+              <span className="text-slate-600">+</span>
               <span className="text-slate-500 line-through">War Zone $69.99</span>
               <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">Top Secret $89.99</span>
+              <span className="text-slate-500 line-through">Journal $29.99</span>
+              <span className="text-slate-600">+</span>
+              <span className="text-slate-500 line-through">Platform $59</span>
               <span className="text-slate-600">=</span>
-              <span className="text-slate-500 line-through">$159.98/mo</span>
+              <span className="text-slate-500 line-through">$248.97/mo</span>
             </div>
 
             {/* Two Pricing Cards */}
@@ -1279,12 +1283,12 @@ export default function TopSecretLanding() {
                       boxShadow: '0 4px 12px rgba(16,185,129,0.4)'
                     }}
                   >
-                    7-DAY FREE TRIAL
+                    14-DAY FREE TRIAL
                   </div>
                 </div>
 
                 <div className="pt-4">
-                  <h4 className="text-lg font-bold text-white mb-1">Monthly Bundle</h4>
+                  <h4 className="text-lg font-bold text-white mb-1">Finotaur Monthly</h4>
                   
                   {/* Price */}
                   <div className="mb-4">
@@ -1293,33 +1297,37 @@ export default function TopSecretLanding() {
                       <span className="text-slate-500">/month</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Save $50.98/month vs separate!
+                      Save $139+/month vs separate!
                     </p>
                   </div>
 
                   {/* Features */}
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>War Zone Daily Intelligence</span>
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                      <span>🔒 Top Secret Reports INCLUDED</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                      <span>📡 War Zone Newsletter INCLUDED</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
+                      <span>📓 Journal Premium INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>Top Secret Reports (10/mo)</span>
+                      <span>Full Platform (7 AI tools)</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>Private Discord Access</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-300 text-sm">
-                      <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>7-Day Free Trial</span>
+                      <span>14-Day Free Trial</span>
                     </div>
                   </div>
 
                   {/* CTA Button */}
                   <Button
-                    onClick={handleBundleCheckout}
+                    onClick={() => { setShowBundlePopup(false); initiateCheckout({ planName: 'platform_finotaur', billingInterval: 'monthly' }); }}
                     disabled={isLoading && selectedPlan === 'monthly'}
                     className="w-full py-3 font-bold rounded-xl transition-all duration-300 hover:scale-[1.02]"
                     style={{
@@ -1370,7 +1378,7 @@ export default function TopSecretLanding() {
                       WebkitTextFillColor: 'transparent'
                     }}
                   >
-                    Yearly Bundle
+                    Finotaur Yearly
                   </h4>
                   
                   {/* Price */}
@@ -1380,7 +1388,7 @@ export default function TopSecretLanding() {
                       <span className="text-slate-500">/year</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Just $90.83/mo — Save $218/year!
+                      Just $91/mo — Save 17%!
                     </p>
                   </div>
 
@@ -1396,7 +1404,7 @@ export default function TopSecretLanding() {
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Priority support access</span>
+                      <span>Priority 24h support</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -1420,7 +1428,7 @@ export default function TopSecretLanding() {
                     ) : (
                       <span className="flex items-center justify-center gap-2">
                         <Crown className="w-4 h-4" />
-                        Get Yearly Bundle
+                        Get Finotaur Yearly
                       </span>
                     )}
                   </Button>
@@ -1428,15 +1436,13 @@ export default function TopSecretLanding() {
               </div>
             </div>
             
-            {/* Skip Button - Only show if user is NOT a War Zone member */}
-            {!isWarZoneMember && (
-              <button
-                onClick={handleTopSecretOnlyCheckout}
-                className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
-              >
-                No thanks, just Top Secret for $89.99/month →
-              </button>
-            )}
+            {/* Skip Button - Always show */}
+            <button
+              onClick={handleTopSecretOnlyCheckout}
+              className="w-full py-2 text-slate-500 hover:text-slate-400 transition-colors text-sm"
+            >
+              No thanks, just Top Secret for $89.99/month →
+            </button>
           </div>
         </motion.div>
       </div>

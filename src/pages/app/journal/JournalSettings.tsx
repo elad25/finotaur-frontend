@@ -1311,8 +1311,12 @@ const portfolioValues = useMemo(() => {
     }
   }, [trades]);
 
-  // 🔥 v2.0: Check if user needs to select a plan
-  const needsPlanSelection = !profile?.account_type || profile?.account_type === 'free' || profile?.account_type === 'trial';
+  // 🔥 v8.8.0: Check if user needs to select a plan (Core/Finotaur users already have journal)
+  const hasJournalFromPlatform = profile?.platform_plan && 
+    ['core', 'platform_core', 'finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise'].includes(profile.platform_plan) &&
+    ['active', 'trial', 'trialing'].includes(profile?.platform_subscription_status || '');
+  
+  const needsPlanSelection = !hasJournalFromPlatform && (!profile?.account_type || profile?.account_type === 'free' || profile?.account_type === 'trial');
 
   return (
     <div className="min-h-screen flex justify-center p-6">

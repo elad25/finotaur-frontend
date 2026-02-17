@@ -35,7 +35,7 @@ export function useTimezoneSettings() {
           .from('profiles')
           .select('preferred_timezone')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
 
