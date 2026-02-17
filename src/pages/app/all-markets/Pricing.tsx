@@ -58,6 +58,7 @@ const plans: PlanConfig[] = [
     features: [
       'All Markets dashboard',
       'Stock Analyzer (3 analyses/day)',
+      'Trading Journal — 15 trades free',
       'Basic market data',
       'Limited watchlists (5 items)',
       '3 price alerts',
@@ -81,6 +82,7 @@ const plans: PlanConfig[] = [
       'Sector Analyzer (3 sectors/month)',
       'Flow Scanner',
       'AI Assistant',
+      '🎁 Journal Basic (25 trades/month)',
       'Real-time market data',
       'Advanced charts & indicators',
       'Unlimited watchlists',
@@ -638,6 +640,10 @@ export default function PlatformPricing() {
                           <div className="flex items-center gap-2.5 text-sm text-zinc-300">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
                             <span>Unlimited watchlists & 50 price alerts</span>
+                          </div>
+                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
+                            <span className="text-[#C9A646] font-medium">🎁 Journal Basic — 25 trades/month (INCLUDED)</span>
                           </div>
                           <div className="flex items-center gap-2.5 text-sm text-zinc-300">
                             <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
