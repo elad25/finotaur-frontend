@@ -112,19 +112,15 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
               <Gift className="w-4 h-4 text-emerald-400" />
               <span className="text-emerald-400 text-sm font-semibold">Special Offer for Top Secret Members</span>
             </div>
-            <h3 className="text-2xl font-bold text-white">War Zone + Top Secret Bundle</h3>
-            <p className="text-slate-400 text-sm mt-1">Get both products for one low price!</p>
+            <h3 className="text-2xl font-bold text-white">Upgrade to Finotaur</h3>
+            <p className="text-slate-400 text-sm mt-1">The complete trading ecosystem — all tools included!</p>
           </div>
           
           {/* Body — Two Column Layout */}
           <div className="px-6 py-6">
-            {/* Price Comparison Banner */}
+            {/* Finotaur Includes Banner */}
             <div className="flex flex-wrap justify-center gap-2 mb-6 text-sm">
-              <span className="text-slate-500 line-through">War Zone $69.99</span>
-              <span className="text-slate-600">+</span>
-              <span className="text-slate-500 line-through">Top Secret $89.99</span>
-              <span className="text-slate-600">=</span>
-              <span className="text-slate-500 line-through">$159.98/mo</span>
+              <span className="text-emerald-400 font-medium">Includes: War Zone + Top Secret + Journal Premium + All AI Tools</span>
             </div>
 
             {/* Two Pricing Cards — Side by Side */}
@@ -151,7 +147,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                 </div>
 
                 <div className="pt-4">
-                  <h4 className="text-lg font-bold text-white mb-1">Monthly Bundle</h4>
+                  <h4 className="text-lg font-bold text-white mb-1">Finotaur Monthly</h4>
                   
                   {/* Price */}
                   <div className="mb-4">
@@ -160,7 +156,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                       <span className="text-slate-500">/month</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Save $50.98/month vs separate!
+                      14-Day Free Trial included
                     </p>
                   </div>
 
@@ -168,19 +164,19 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>War Zone Daily Intelligence</span>
+                      <span>🎁 War Zone + Top Secret Reports</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>Top Secret Reports (10/mo)</span>
+                      <span>🎁 Journal Premium INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>Private Discord Access</span>
+                      <span>Options Intelligence AI & Macro Analyzer</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>7-Day Free Trial</span>
+                      <span>AI Scanner & Priority 24h Support</span>
                     </div>
                   </div>
 
@@ -243,7 +239,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                       WebkitTextFillColor: 'transparent'
                     }}
                   >
-                    Yearly Bundle
+                    Finotaur Yearly
                   </h4>
                   
                   {/* Price */}
@@ -261,7 +257,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Everything in Monthly</span>
+                      <span>Everything in Finotaur Monthly</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -269,7 +265,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
-                      <span>Priority support access</span>
+                      <span>1 month FREE (save 17%)</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-4 h-4 text-[#C9A646] flex-shrink-0" />
@@ -299,7 +295,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     ) : (
                       <>
                         <Crown className="w-4 h-4" />
-                        Get Yearly Bundle
+                        Get Finotaur Yearly
                       </>
                     )}
                   </button>
@@ -443,7 +439,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   {showBothOptions ? 'Choose Your Plan' : 'WAR ZONE'}
                 </h2>
                 <p className="text-[#8B8175] text-sm mt-0.5">
-                  {showBothOptions ? 'Save more with the Ultimate Bundle!' : 'Start your 7-day free trial'}
+                  {showBothOptions ? 'Upgrade to Finotaur — the complete trading ecosystem!' : 'Start your 7-day free trial'}
                 </p>
               </div>
               
@@ -574,17 +570,16 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                       }}
                     >
                       <Gift className="w-3 h-3" />
-                      ULTIMATE BUNDLE
+                      FINOTAUR
                     </span>
                   </div>
 
                   {/* Title */}
-                  <h3 className="text-lg font-bold text-white mb-3">War Zone + Top Secret</h3>
+                  <h3 className="text-lg font-bold text-white mb-3">Finotaur</h3>
 
                   {/* Price */}
                   <div className="mb-4">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-sm text-slate-500 line-through">$159.98</span>
                       <span 
                         className="text-3xl font-bold"
                         style={{ 
@@ -598,7 +593,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                       <span className="text-slate-500 text-sm">/mo</span>
                     </div>
                     <p className="text-emerald-400 text-xs font-semibold mt-1">
-                      Save $50.98/month!
+                      14-Day Free Trial
                     </p>
                   </div>
 
@@ -606,19 +601,23 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                   <div className="space-y-2 mb-4 flex-grow">
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span>War Zone Newsletter (Daily)</span>
+                      <span>🎁 War Zone + Top Secret Reports</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span>Top Secret Reports (10 Monthly)</span>
+                      <span>🎁 Journal Premium INCLUDED</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span>Private Discord + Trading Room</span>
+                      <span>Options Intelligence AI & Macro Analyzer</span>
                     </div>
                     <div className="flex items-center gap-2 text-slate-300 text-sm">
                       <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span>7-Day Free Trial</span>
+                      <span>AI Scanner & Priority 24h Support</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300 text-sm">
+                      <Check className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      <span>14-Day Free Trial</span>
                     </div>
                   </div>
 
@@ -644,7 +643,7 @@ const DisclaimerPopup = memo(function DisclaimerPopup({
                     ) : (
                       <Crown className="w-4 h-4" />
                     )}
-                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Bundle for $109/mo'}
+                    {isProcessing && selectedOption === 'bundle' ? 'Processing...' : 'Get Finotaur for $109/mo'}
                   </button>
                 </div>
               )}
