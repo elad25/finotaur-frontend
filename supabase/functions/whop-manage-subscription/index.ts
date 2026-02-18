@@ -821,29 +821,34 @@ async function handleCancel(
         },
       });
 
-      const expiresDate = productStatus.expiresAt 
-        ? new Date(productStatus.expiresAt).toLocaleDateString('en-US', {
+      // 🔥 v2.5.0: If user is in trial, show trial end date - not billing date
+      const correctExpiresAt1 = (productStatus.isTrial && productStatus.trialEndsAt)
+        ? productStatus.trialEndsAt
+        : productStatus.expiresAt;
+
+      const expiresDate = correctExpiresAt1
+        ? new Date(correctExpiresAt1).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long', 
             day: 'numeric'
           })
         : 'the end of your billing period';
 
-console.log(`✅ Subscription scheduled for cancellation`);
+      console.log(`✅ Subscription scheduled for cancellation`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Your ${productName} subscription has been scheduled for cancellation. You'll continue to have access until ${expiresDate}.`,
-        subscription: {
-          product,
-          status: productStatus.status,
-          cancelAtPeriodEnd: true,
-          expiresAt: productStatus.expiresAt,
-        },
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Your ${productName} subscription has been scheduled for cancellation. You'll continue to have access until ${expiresDate}.`,
+          subscription: {
+            product,
+            status: productStatus.status,
+            cancelAtPeriodEnd: true,
+            expiresAt: correctExpiresAt1,
+          },
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Other Whop errors - return the error
@@ -904,8 +909,13 @@ console.log(`✅ Subscription scheduled for cancellation`);
   // STEP 4: Return success response
   // ============================================
 
-  const expiresDate = productStatus.expiresAt 
-    ? new Date(productStatus.expiresAt).toLocaleDateString('en-US', {
+  // 🔥 v2.5.0: If user is in trial, show trial end date - not billing date
+  const correctExpiresAt2 = (productStatus.isTrial && productStatus.trialEndsAt)
+    ? productStatus.trialEndsAt
+    : productStatus.expiresAt;
+
+  const expiresDate = correctExpiresAt2
+    ? new Date(correctExpiresAt2).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long', 
         day: 'numeric'
@@ -922,7 +932,7 @@ console.log(`✅ Subscription scheduled for cancellation`);
         product,
         status: productStatus.status,
         cancelAtPeriodEnd: true,
-        expiresAt: productStatus.expiresAt,
+        expiresAt: correctExpiresAt2,
       },
     }),
     { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

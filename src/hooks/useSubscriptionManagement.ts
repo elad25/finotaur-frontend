@@ -302,7 +302,8 @@ export function useSubscriptionManagement() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'undo_cancel',
+          action: 'reactivate',
+          product: 'journal',  // 🔥 v2.5.0: Required field - journal is the default product here
         }),
       });
 

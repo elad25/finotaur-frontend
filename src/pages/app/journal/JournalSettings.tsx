@@ -1411,7 +1411,12 @@ const portfolioValues = useMemo(() => {
                   <p className="text-amber-200/80 text-sm leading-relaxed">
                     Your <span className="font-semibold">{profile.account_type?.charAt(0).toUpperCase() + profile.account_type?.slice(1)}</span> subscription 
 will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'cancel' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)}`} on{' '}                    <span className="font-semibold">
-                      {new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+                      {new Date(
+                        // 🔥 If still in trial, show trial end date (not full month billing date)
+                        (profile?.is_in_trial && profile?.trial_ends_at)
+                          ? profile.trial_ends_at
+                          : profile.subscription_expires_at
+                      ).toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'long',
                         day: 'numeric'
@@ -1548,8 +1553,13 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                       ? 'text-amber-400 font-medium' 
                       : 'text-zinc-400'
                   }`}>
-                    {profile?.subscription_cancel_at_period_end && profile?.subscription_expires_at
-                      ? new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
+                    {profile?.subscription_cancel_at_period_end
+                      ? new Date(
+                          // 🔥 If still in trial, show trial end date (not full month billing date)
+                          (profile?.is_in_trial && profile?.trial_ends_at)
+                            ? profile.trial_ends_at
+                            : profile?.subscription_expires_at || ''
+                        ).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
@@ -1562,7 +1572,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
             )}
 
             {/* Subscription Status */}
-            {profile && !needsPlanSelection && (
+            {profile && !needsPlanSelection && !hasJournalFromPlatform && (
               <div className="flex items-center justify-between py-4">
                 <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>

@@ -1491,7 +1491,7 @@ if (isTopSecretPayment) {
       // 🔥 v6.1.0: Check if this is a plan change or upgrade - cancel old membership
       const { data: currentProfile } = await supabase
         .from('profiles')
-        .select('platform_plan, platform_subscription_status, platform_whop_membership_id, platform_billing_interval')
+        .select('platform_plan, platform_subscription_status, platform_whop_membership_id, platform_billing_interval, platform_subscription_expires_at, platform_core_trial_used_at, platform_finotaur_trial_used_at, trial_used')
         .eq('id', resolvedUserId)
         .single();
 
@@ -1499,19 +1499,23 @@ if (isTopSecretPayment) {
       const hasOldMembership = currentProfile?.platform_whop_membership_id && 
           currentProfile.platform_whop_membership_id !== membershipId &&
           ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '');
-      
-      // Also detect upgrade even without saved membership ID (e.g. Free→Core was via trial)
-      const isUpgradeFromLowerPlan = !hasOldMembership && 
-          currentProfile?.platform_plan && 
-          currentProfile.platform_plan !== 'free' && 
-          currentProfile.platform_plan !== platformPlan &&
-          ['active', 'trial', 'trialing'].includes(currentProfile?.platform_subscription_status || '');
 
-      if (hasOldMembership) {
+      // 🔥 v8.0.0: DOWNGRADE DETECTION
+      // Plan hierarchy: enterprise > finotaur > core
+      const PLAN_RANK: Record<string, number> = {
+        platform_enterprise: 3,
+        platform_finotaur: 2,
+        platform_core: 1,
+      };
+      const oldPlanRank = PLAN_RANK[currentProfile?.platform_plan || ''] ?? 0;
+      const newPlanRank = PLAN_RANK[platformPlan] ?? 0;
+      const isDowngrade = hasOldMembership && newPlanRank < oldPlanRank;
+
+      if (hasOldMembership && !isDowngrade) {
+        // UPGRADE or same-tier switch — cancel old membership immediately
         const oldMembershipId = currentProfile.platform_whop_membership_id;
-        console.log("🔥 Detected Platform plan change/upgrade - cancelling old membership:", oldMembershipId);
+        console.log("🔥 Detected Platform UPGRADE - cancelling old membership immediately:", oldMembershipId);
         
-        // 🔥 v7.1.0: Only cancel if it's a real membership ID (mem_), not a payment ID (pay_)
         if (oldMembershipId.startsWith('mem_')) {
           const cancelResult = await cancelMembership(oldMembershipId, 'immediate');
           if (cancelResult.success) {
@@ -1522,6 +1526,33 @@ if (isTopSecretPayment) {
         } else {
           console.warn("⚠️ Stored membership ID is not a real membership:", oldMembershipId, "- skipping Whop cancel");
         }
+      }
+
+      if (isDowngrade) {
+        // DOWNGRADE — Keep old plan access until old billing period ends
+        // New (lower) membership is active in Whop but we hold its activation in our DB
+        const oldMembershipId = currentProfile.platform_whop_membership_id;
+        const oldExpiresAt = currentProfile.platform_subscription_expires_at;
+        console.log("🔻 Detected Platform DOWNGRADE — keeping old plan access until:", oldExpiresAt);
+
+        // Store the pending downgrade info but DON'T switch plan yet
+        await supabase.from('profiles').update({
+          platform_pending_downgrade_plan: platformPlan,
+          platform_pending_downgrade_membership_id: membershipId,
+          platform_cancel_at_period_end: true,
+          updated_at: new Date().toISOString(),
+        }).eq('id', resolvedUserId);
+
+        // Cancel old membership in Whop at period end (not immediately)
+        if (oldMembershipId && oldMembershipId.startsWith('mem_')) {
+          await cancelMembership(oldMembershipId, 'at_period_end');
+          console.log("✅ Old membership scheduled for cancellation at period end");
+        }
+
+        return {
+          success: true,
+          message: `Platform DOWNGRADE to ${platformPlan} scheduled. User keeps ${currentProfile.platform_plan} until ${oldExpiresAt}.`
+        };
       }
 
       // 🔥 v8.6.0: If Core/Finotaur/Enterprise — handle existing Journal subscription
@@ -1600,13 +1631,20 @@ if (isTopSecretPayment) {
       }
 
       // Detect trial: payment amount = 0 on first payment
-      const isInTrial = isFirstPayment && paymentAmount === 0;
+      // 🔥 v8.0.0: NO trial if this is a downgrade situation
+      const isInTrial = isFirstPayment && paymentAmount === 0 && !isDowngrade;
       const trialEndsAt = isInTrial 
         ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
         : null;
-      const expiresAt = billingInterval === 'yearly'
-        ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      // 🔥 v8.0.0: On downgrade, use old plan's billing date as new expiry
+      // This ensures the user is billed on the same date they would have been on the old plan
+      const oldExpiresAt = currentProfile?.platform_subscription_expires_at;
+      const expiresAt = (isDowngrade && oldExpiresAt)
+        ? oldExpiresAt  // Keep original billing date
+        : billingInterval === 'yearly'
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
       // Update profile
 const { error: updateError } = await supabase
@@ -1651,11 +1689,14 @@ const { error: updateError } = await supabase
             trial_ends_at: trialEndsAt,
             newsletter_enabled: true,
             newsletter_status: isInTrial ? 'trial' : 'active',
+            newsletter_paid: true,
             top_secret_enabled: true,
             top_secret_status: isInTrial ? 'trial' : 'active',
             top_secret_interval: 'monthly',
             platform_bundle_journal_granted: true,
             platform_bundle_newsletter_granted: true,
+            // 🔥 v8.1.0: Ensure platform_subscription_expires_at is always set
+            platform_subscription_expires_at: expiresAt,
           } : {}),
           // 🔥 v7.0.0: Enterprise includes everything Finotaur has + AI Portfolio
           ...(platformPlan === 'platform_enterprise' ? {
@@ -1669,12 +1710,15 @@ const { error: updateError } = await supabase
             trial_ends_at: trialEndsAt,
             newsletter_enabled: true,
             newsletter_status: isInTrial ? 'trial' : 'active',
+            newsletter_paid: true,
             top_secret_enabled: true,
             top_secret_status: isInTrial ? 'trial' : 'active',
             top_secret_interval: 'monthly',
             enterprise_ai_portfolio_enabled: true,
             platform_bundle_journal_granted: true,
             platform_bundle_newsletter_granted: true,
+            // 🔥 v8.1.0: Ensure platform_subscription_expires_at is always set
+            platform_subscription_expires_at: expiresAt,
           } : {}),
           updated_at: new Date().toISOString(),
         })
@@ -2103,11 +2147,14 @@ async function handleMembershipActivated(
           trial_ends_at: trialEndsAt,
           newsletter_enabled: true,
           newsletter_status: isInTrial ? 'trial' : 'active',
+          newsletter_paid: true,
           top_secret_enabled: true,
           top_secret_status: isInTrial ? 'trial' : 'active',
           top_secret_interval: 'monthly',
           platform_bundle_journal_granted: true,
           platform_bundle_newsletter_granted: true,
+          // 🔥 v8.1.0: Ensure platform fields are set on activation (covers Trial period)
+          platform_subscription_expires_at: trialEndsAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         } : {}),
         // 🔥 v7.0.0: Enterprise includes everything Finotaur has + AI Portfolio
         ...(platformPlan === 'platform_enterprise' ? {
@@ -2120,12 +2167,15 @@ async function handleMembershipActivated(
           trial_ends_at: trialEndsAt,
           newsletter_enabled: true,
           newsletter_status: isInTrial ? 'trial' : 'active',
+          newsletter_paid: true,
           top_secret_enabled: true,
           top_secret_status: isInTrial ? 'trial' : 'active',
           top_secret_interval: 'monthly',
           enterprise_ai_portfolio_enabled: true,
           platform_bundle_journal_granted: true,
           platform_bundle_newsletter_granted: true,
+          // 🔥 v8.1.0: Ensure platform fields are set on activation (covers Trial period)
+          platform_subscription_expires_at: trialEndsAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         } : {}),
         updated_at: new Date().toISOString(),
       })
@@ -2361,6 +2411,77 @@ async function handleTopSecretActivation(
 }
 
 // ============================================
+// 🔥 v8.0.0: ACTIVATE PENDING DOWNGRADE
+// Called when old membership expires and new lower plan should kick in
+// ============================================
+
+async function activatePendingDowngrade(
+  supabase: SupabaseClient,
+  profile: any,
+  newMembershipId: string
+): Promise<{ success: boolean; message: string }> {
+  const newPlan = profile.platform_pending_downgrade_plan;
+  const userId = profile.id;
+  const userEmail = profile.email;
+
+  console.log(`🔻 activatePendingDowngrade: ${profile.platform_plan} → ${newPlan} for ${userEmail}`);
+
+  // Determine account_type and permissions for new plan
+  const PLAN_RANK: Record<string, number> = {
+    platform_enterprise: 3,
+    platform_finotaur: 2,
+    platform_core: 1,
+  };
+
+  const isOldPlanHigher = (PLAN_RANK[profile.platform_plan] ?? 0) > (PLAN_RANK[newPlan] ?? 0);
+
+  // Build update payload for the new lower plan
+  const updatePayload: Record<string, any> = {
+    platform_plan: newPlan,
+    platform_subscription_status: 'active',
+    platform_whop_membership_id: newMembershipId,
+    platform_is_in_trial: false,        // NO trial on downgrade
+    platform_cancel_at_period_end: false,
+    platform_pending_downgrade_plan: null,
+    platform_pending_downgrade_membership_id: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Remove higher-tier perms if downgrading FROM finotaur/enterprise
+  if (profile.platform_plan === 'platform_finotaur' || profile.platform_plan === 'platform_enterprise') {
+    if (newPlan === 'platform_core') {
+      // Core: basic journal only, no newsletter/top_secret
+      updatePayload.account_type = 'basic';
+      updatePayload.max_trades = 25;
+      updatePayload.newsletter_enabled = false;
+      updatePayload.newsletter_status = 'cancelled';
+      updatePayload.top_secret_enabled = false;
+      updatePayload.top_secret_status = 'cancelled';
+      updatePayload.platform_bundle_newsletter_granted = false;
+      if (profile.platform_plan === 'platform_enterprise') {
+        updatePayload.enterprise_ai_portfolio_enabled = false;
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update(updatePayload)
+    .eq('id', userId);
+
+  if (error) {
+    console.error("❌ activatePendingDowngrade error:", error);
+    return { success: false, message: `Pending downgrade activation failed: ${error.message}` };
+  }
+
+  console.log(`✅ Downgrade activated: ${profile.platform_plan} → ${newPlan} for ${userEmail}`);
+  return {
+    success: true,
+    message: `Platform downgrade activated: ${userEmail} (${profile.platform_plan} → ${newPlan})`
+  };
+}
+
+// ============================================
 // MEMBERSHIP DEACTIVATED
 // 🔥 v3.12.0: Now handles bundle break resubscribe flow!
 // ============================================
@@ -2570,19 +2691,58 @@ async function handleMembershipDeactivated(
     // 🔥 v6.5.0: Find user by membership ID OR by email (for stale membership lookups)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, platform_plan, platform_whop_membership_id, whop_membership_id, subscription_status')
+      .select('id, email, platform_plan, platform_whop_membership_id, whop_membership_id, subscription_status, platform_pending_downgrade_plan, platform_pending_downgrade_membership_id, platform_subscription_expires_at')
       .eq('platform_whop_membership_id', membershipId)
       .single();
 
     if (!profile) {
+      // 🔥 v8.0.0: Also check if this is the OLD membership of a pending downgrade
+      // (user has already stored a pending_downgrade and the old membership is now expiring)
+      const { data: pendingDowngradeProfile } = await supabase
+        .from('profiles')
+        .select('id, email, platform_plan, platform_whop_membership_id, platform_pending_downgrade_plan, platform_pending_downgrade_membership_id, platform_subscription_expires_at, whop_membership_id, subscription_status')
+        .eq('platform_pending_downgrade_membership_id', membershipId)
+        .maybeSingle();
+
+      if (pendingDowngradeProfile?.platform_pending_downgrade_plan) {
+        // This is the NEW (lower) membership being activated — old plan is expiring
+        // Now we switch the user to the lower plan
+        console.log("🔻 Activating pending downgrade:", {
+          oldPlan: pendingDowngradeProfile.platform_plan,
+          newPlan: pendingDowngradeProfile.platform_pending_downgrade_plan,
+          newMembershipId: membershipId,
+        });
+        return await activatePendingDowngrade(supabase, pendingDowngradeProfile, membershipId);
+      }
+
       console.warn("⚠️ No user found for platform deactivation, membership:", membershipId);
       return { success: true, message: `Platform deactivation: no user found for ${membershipId}` };
+    }
+
+    // 🔥 v8.0.0: Check if this deactivation is the OLD membership expiring due to a pending downgrade
+    if (profile.platform_pending_downgrade_plan && profile.platform_pending_downgrade_membership_id) {
+      console.log("🔻 Old membership expired — activating pending downgrade now:", {
+        oldPlan: profile.platform_plan,
+        newPlan: profile.platform_pending_downgrade_plan,
+        newMembershipId: profile.platform_pending_downgrade_membership_id,
+      });
+      return await activatePendingDowngrade(supabase, profile, profile.platform_pending_downgrade_membership_id);
     }
 
     // 🔥 v6.5.0: Race condition guard — if user already upgraded to a NEW plan
     // (e.g. Core → Finotaur), the old membership deactivation should be ignored.
     // This happens when Bundle/Finotaur payment.succeeded already updated platform_whop_membership_id
     // to the new membership, but the old Core deactivation webhook arrives later.
+    // 🔥 v8.1.0: Safety check - if user already upgraded to higher plan, ignore deactivation of lower tier
+    if (['platform_finotaur', 'platform_enterprise'].includes(profile.platform_plan || '') &&
+        ['active', 'trial', 'trialing'].includes(profile.platform_subscription_status || '')) {
+      console.log(`⚠️ Ignoring deactivation — user already on ${profile.platform_plan} (higher plan):`, {
+        deactivatedMembership: membershipId,
+        currentPlan: profile.platform_plan,
+      });
+      return { success: true, message: `Platform deactivation ignored — user has active ${profile.platform_plan}` };
+    }
+
     if (profile.platform_whop_membership_id !== membershipId) {
       console.log("⚠️ Ignoring stale platform deactivation — membership already replaced:", {
         deactivatedMembership: membershipId,
@@ -2605,6 +2765,8 @@ async function handleMembershipDeactivated(
         platform_subscription_status: 'cancelled',
         platform_is_in_trial: false,
         platform_cancel_at_period_end: false,
+        platform_pending_downgrade_plan: null,
+        platform_pending_downgrade_membership_id: null,
         // 🔥 v8.5.0: Finotaur/Enterprise deactivation — remove all included access, back to FREE 15 lifetime
         ...(oldPlan === 'platform_finotaur' || oldPlan === 'platform_enterprise' ? {
           newsletter_enabled: false,
