@@ -1123,8 +1123,11 @@ export default function TopSecretLanding() {
     });
   }, [initiateCheckout]);
 
-  // 🔥 Handler for Bundle Monthly checkout
-  const handleBundleCheckout = useCallback(async () => {
+  const [showPlatformWarning, setShowPlatformWarning] = useState(false);
+  const [pendingPlatformInterval, setPendingPlatformInterval] = useState<'monthly' | 'yearly'>('monthly');
+
+  // 🔥 Actual checkout execution (after user confirmed warning)
+  const executeBundleCheckout = useCallback(async (interval: 'monthly' | 'yearly') => {
     setShowBundlePopup(false);
     
     // Save pending checkout BEFORE redirecting
@@ -1145,41 +1148,33 @@ export default function TopSecretLanding() {
       }
     }
     
-    // Redirect to Finotaur Platform checkout ($109/month)
+    // Redirect to Finotaur Platform checkout
     initiateCheckout({
       planName: 'platform_finotaur',
-      billingInterval: 'monthly',
+      billingInterval: interval,
     });
   }, [user, initiateCheckout]);
 
-  // 🔥 Handler for Bundle Yearly checkout
+  // 🔥 Handler for Bundle Monthly checkout - shows warning if user has War Zone
+  const handleBundleCheckout = useCallback(async () => {
+    if (isWarZoneMember) {
+      setPendingPlatformInterval('monthly');
+      setShowPlatformWarning(true);
+      return;
+    }
+    executeBundleCheckout('monthly');
+  }, [isWarZoneMember, executeBundleCheckout]);
+
+  // 🔥 Handler for Bundle Yearly checkout - shows warning if user has War Zone
   const handleBundleYearlyCheckout = useCallback(async () => {
     setSelectedPlan('yearly');
-    
-    // Save pending checkout BEFORE redirecting
-    if (user?.id && user?.email) {
-      const checkoutToken = crypto.randomUUID();
-      try {
-        await supabase.from('pending_checkouts').insert({
-          user_id: user.id,
-          user_email: user.email,
-          checkout_token: checkoutToken,
-          product_type: 'platform_finotaur',
-          billing_interval: 'yearly',
-          expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-        });
-        console.log('✅ Pending checkout saved for Bundle Yearly');
-      } catch (err) {
-        console.warn('⚠️ Failed to save pending checkout:', err);
-      }
+    if (isWarZoneMember) {
+      setPendingPlatformInterval('yearly');
+      setShowPlatformWarning(true);
+      return;
     }
-    
-    // Redirect to Finotaur Platform Yearly checkout ($1090/year)
-    initiateCheckout({
-      planName: 'platform_finotaur',
-      billingInterval: 'yearly',
-    });
-  }, [user, initiateCheckout]);
+    executeBundleCheckout('yearly');
+  }, [isWarZoneMember, executeBundleCheckout]);
 
   // 🔥 Bundle Upgrade Popup Component - v2.0 with Monthly + Yearly options
   const BundleUpgradePopup = () => {
@@ -1582,6 +1577,54 @@ export default function TopSecretLanding() {
       
       {/* 🔥 Bundle Upgrade Popup */}
       <BundleUpgradePopup />
+
+      {/* 🔥 Platform Cancel Warning */}
+      {showPlatformWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowPlatformWarning(false)}
+          />
+          <div
+            className="relative w-full max-w-sm rounded-2xl p-6 z-10"
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)',
+              border: '1px solid rgba(201,166,70,0.35)',
+              boxShadow: '0 0 40px rgba(201,166,70,0.1)',
+            }}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
+                <span className="text-lg">⚠️</span>
+              </div>
+              <h3 className="text-white font-semibold text-base">Your War Zone will be cancelled</h3>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed mb-5">
+              Subscribing to the Finotaur Platform will{' '}
+              <span className="text-amber-400 font-medium">automatically cancel</span> your existing{' '}
+              <span className="text-white font-medium">War Zone</span> subscription — it's already included in the Platform at no extra charge.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowPlatformWarning(false)}
+                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  setShowPlatformWarning(false);
+                  executeBundleCheckout(pendingPlatformInterval);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
+              >
+                Got it, continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

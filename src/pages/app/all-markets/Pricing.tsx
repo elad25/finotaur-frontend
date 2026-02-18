@@ -228,6 +228,25 @@ export default function PlatformPricing() {
   // HANDLERS
   // ============================================
 
+  const [showUpgradeWarning, setShowUpgradeWarning] = useState(false);
+  const [pendingPlanId, setPendingPlanId] = useState<PlatformPlanId | null>(null);
+
+  const proceedToCheckout = (planId: PlatformPlanId) => {
+    setLoading(planId);
+    try {
+      if (planId === 'core') {
+        billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
+      } else if (planId === 'finotaur') {
+        billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
+      } else if (planId === 'enterprise') {
+        checkoutPlatformEnterpriseMonthly();
+      }
+    } catch (error) {
+      toast.error('Failed to start checkout');
+      setLoading(null);
+    }
+  };
+
   const handlePlanClick = (planId: PlatformPlanId) => {
     // Free = open downgrade confirmation dialog
     if (planId === 'free') {
@@ -243,21 +262,18 @@ export default function PlatformPricing() {
     
     // Block if same plan + same interval (not an upgrade)
     if (planId === currentPlatformPlan && !isUpgradeToYearly) return;
-    
-    setLoading(planId);
-    
-    try {
-      if (planId === 'core') {
-        billingInterval === 'monthly' ? checkoutPlatformCoreMonthly() : checkoutPlatformCoreYearly();
-      } else if (planId === 'finotaur') {
-        billingInterval === 'monthly' ? checkoutPlatformFinotaurMonthly() : checkoutPlatformFinotaurYearly();
-      } else if (planId === 'enterprise') {
-        checkoutPlatformEnterpriseMonthly();
-      }
-    } catch (error) {
-      toast.error('Failed to start checkout');
-      setLoading(null);
+
+    // 🔥 Show cancellation warning if user has existing paid subscriptions
+    const hasExistingSubscriptions = currentPlatformPlan !== 'free';
+    if (hasExistingSubscriptions || (planId === 'finotaur' || planId === 'enterprise')) {
+      // Check if this is an upgrade that will cancel War Zone / Top Secret / Journal
+      // Finotaur/Enterprise include all these, so warn user
+      setPendingPlanId(planId);
+      setShowUpgradeWarning(true);
+      return;
     }
+    
+    proceedToCheckout(planId);
   };
 
   const getDisplayPrice = (plan: PlanConfig) => {
@@ -856,6 +872,46 @@ export default function PlatformPricing() {
           </div>
         </div>
       </div>
+
+      {/* 🔥 Upgrade Warning Popup */}
+      {showUpgradeWarning && pendingPlanId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowUpgradeWarning(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl p-6 z-10"
+            style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)', border: '1px solid rgba(201,166,70,0.3)' }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <span className="text-amber-400 text-lg">⚠️</span>
+              </div>
+              <h3 className="text-white font-semibold text-base">Heads up before you continue</h3>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed mb-5">
+              Subscribing to a Platform plan will <span className="text-amber-400 font-medium">automatically cancel</span> any existing War Zone, Top Secret, or Journal subscriptions you have — they're all included in your new plan.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowUpgradeWarning(false)}
+                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  setShowUpgradeWarning(false);
+                  proceedToCheckout(pendingPlanId);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

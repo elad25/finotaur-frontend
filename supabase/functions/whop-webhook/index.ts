@@ -1524,69 +1524,60 @@ if (isTopSecretPayment) {
         }
       }
 
-      // 🔥 v7.2.0: If Finotaur/Enterprise — cancel existing standalone Journal subscription on Whop
-      // Finotaur includes Journal Premium, so the user shouldn't pay for both
-      if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
-        const { data: journalCheck } = await supabase
-          .from('profiles')
-          .select('whop_membership_id, subscription_status, account_type')
-          .eq('id', userResult.id)
-          .single();
-
-        if (journalCheck?.whop_membership_id && 
-            ['active', 'trialing', 'trial'].includes(journalCheck.subscription_status || '')) {
-          const journalMembershipId = journalCheck.whop_membership_id;
-          console.log("🔥 v7.2.0: Cancelling existing Journal subscription — included in Finotaur:", {
-            journalMembershipId,
-            currentJournalPlan: journalCheck.account_type,
-          });
-
-          if (journalMembershipId.startsWith('mem_')) {
-            const cancelResult = await cancelMembership(journalMembershipId, 'immediate');
-            if (cancelResult.success) {
-              console.log("✅ Journal subscription cancelled — now included in Finotaur");
-            } else {
-              console.warn("⚠️ Failed to cancel Journal subscription:", cancelResult.error);
-              // Not blocking — DB will still be updated with bundle grant
-            }
-          }
-        }
-      }
-
-      // 🔥 v7.2.0: Cancel ALL standalone subscriptions when Finotaur/Enterprise activates
-      // These products are INCLUDED in Finotaur — user shouldn't pay for both
+      // 🔥 v7.4.0: If Finotaur/Enterprise — handle existing Journal subscription
+      // EXCEPTION: Yearly Journal → cancel at_period_end only, Platform permissions take precedence
       if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
         const { data: existingSubs } = await supabase
           .from('profiles')
-          .select('whop_membership_id, subscription_status, account_type, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
+          .select('whop_membership_id, subscription_status, account_type, subscription_interval, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
           .eq('id', userResult.id)
           .single();
 
         if (existingSubs) {
           // 1) Cancel standalone Journal (Basic/Premium)
+          // 🔥 v7.4.0: Yearly Journal → at_period_end (keeps running, permissions covered by Platform)
           if (existingSubs.whop_membership_id && 
               ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '')) {
-            console.log("🔥 v7.2.0: Cancelling standalone Journal:", existingSubs.whop_membership_id);
+            
+            const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
+            console.log(`🔥 v7.4.0: Handling standalone Journal (${isYearlyJournal ? 'yearly→at_period_end' : 'monthly→immediate'}):`, existingSubs.whop_membership_id);
+            
             if (existingSubs.whop_membership_id.startsWith('mem_')) {
-              const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
-              console.log(r.success ? "✅ Journal cancelled" : "⚠️ Journal cancel failed:", r.error);
+              if (isYearlyJournal) {
+                // Yearly: schedule cancellation at period end, don't revoke access
+                // Platform already grants premium access — user just won't be double-charged
+                const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
+                if (r.success) {
+                  console.log("✅ Yearly Journal scheduled for cancellation at period end — Platform grants Premium access");
+                  await supabase.from('profiles').update({
+                    subscription_cancel_at_period_end: true,
+                    updated_at: new Date().toISOString(),
+                  }).eq('id', userResult.id);
+                } else {
+                  console.warn("⚠️ Failed to schedule Yearly Journal cancellation:", r.error);
+                }
+              } else {
+                // Monthly: cancel immediately
+                const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
+                console.log(r.success ? "✅ Monthly Journal cancelled" : "⚠️ Monthly Journal cancel failed:", r.error);
+              }
             }
           }
 
-          // 2) Cancel standalone Newsletter (War Zone)
+          // 2) Cancel standalone Newsletter (War Zone) — always immediate
           if (existingSubs.newsletter_whop_membership_id && 
               ['active', 'trialing', 'trial'].includes(existingSubs.newsletter_status || '')) {
-            console.log("🔥 v7.2.0: Cancelling standalone Newsletter:", existingSubs.newsletter_whop_membership_id);
+            console.log("🔥 v7.4.0: Cancelling standalone Newsletter:", existingSubs.newsletter_whop_membership_id);
             if (existingSubs.newsletter_whop_membership_id.startsWith('mem_')) {
               const r = await cancelMembership(existingSubs.newsletter_whop_membership_id, 'immediate');
               console.log(r.success ? "✅ Newsletter cancelled" : "⚠️ Newsletter cancel failed:", r.error);
             }
           }
 
-          // 3) Cancel standalone Top Secret
+          // 3) Cancel standalone Top Secret — always immediate
           if (existingSubs.top_secret_whop_membership_id && 
               ['active', 'trialing', 'trial'].includes(existingSubs.top_secret_status || '')) {
-            console.log("🔥 v7.2.0: Cancelling standalone Top Secret:", existingSubs.top_secret_whop_membership_id);
+            console.log("🔥 v7.4.0: Cancelling standalone Top Secret:", existingSubs.top_secret_whop_membership_id);
             if (existingSubs.top_secret_whop_membership_id.startsWith('mem_')) {
               const r = await cancelMembership(existingSubs.top_secret_whop_membership_id, 'immediate');
               console.log(r.success ? "✅ Top Secret cancelled" : "⚠️ Top Secret cancel failed:", r.error);
@@ -1970,39 +1961,61 @@ async function handleMembershipActivated(
       }
     }
 
-    // 🔥 v7.3.0: Cancel ALL standalone subscriptions when Finotaur/Enterprise activates
+    // 🔥 v7.4.0: Cancel ALL standalone subscriptions when Finotaur/Enterprise activates
+    // EXCEPTION: Yearly Journal keeps running until period end, but permissions = Platform level
     if (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
       const { data: existingSubs } = await supabase
         .from('profiles')
-        .select('whop_membership_id, subscription_status, account_type, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
+        .select('whop_membership_id, subscription_status, account_type, subscription_interval, subscription_expires_at, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
         .eq('id', userResult.id)
         .single();
 
       if (existingSubs) {
         // 1) Cancel standalone Journal (Basic/Premium)
+        // 🔥 v7.4.0: If yearly → cancel at_period_end (not immediately), keep higher permissions
         if (existingSubs.whop_membership_id && 
             ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '')) {
-          console.log("🔥 v7.3.0: Cancelling standalone Journal on activation:", existingSubs.whop_membership_id);
-          if (existingSubs.whop_membership_id.startsWith('mem_')) {
-            const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
-            console.log(r.success ? "✅ Journal cancelled" : "⚠️ Journal cancel failed:", r.error);
+          
+          const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
+          
+          if (isYearlyJournal) {
+            // Yearly Journal: cancel at period end, don't revoke immediately
+            // Permissions are already covered by Platform (premium), so no downgrade needed
+            console.log("🔥 v7.4.0: Yearly Journal — scheduling at_period_end cancel (keeping until expiry):", existingSubs.whop_membership_id);
+            if (existingSubs.whop_membership_id.startsWith('mem_')) {
+              const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
+              console.log(r.success ? "✅ Yearly Journal scheduled for cancellation at period end" : "⚠️ Yearly Journal cancel failed:", r.error);
+            }
+            // Mark in DB as scheduled for cancellation but DON'T downgrade account_type
+            // Platform already gives premium access
+            await supabase.from('profiles').update({
+              subscription_cancel_at_period_end: true,
+              updated_at: new Date().toISOString(),
+            }).eq('id', userResult.id);
+          } else {
+            // Monthly Journal: cancel immediately
+            console.log("🔥 v7.4.0: Monthly Journal — cancelling immediately:", existingSubs.whop_membership_id);
+            if (existingSubs.whop_membership_id.startsWith('mem_')) {
+              const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
+              console.log(r.success ? "✅ Journal cancelled" : "⚠️ Journal cancel failed:", r.error);
+            }
           }
         }
 
-        // 2) Cancel standalone Newsletter (War Zone)
+        // 2) Cancel standalone Newsletter (War Zone) — always immediate
         if (existingSubs.newsletter_whop_membership_id && 
             ['active', 'trialing', 'trial'].includes(existingSubs.newsletter_status || '')) {
-          console.log("🔥 v7.3.0: Cancelling standalone Newsletter on activation:", existingSubs.newsletter_whop_membership_id);
+          console.log("🔥 v7.4.0: Cancelling standalone Newsletter on activation:", existingSubs.newsletter_whop_membership_id);
           if (existingSubs.newsletter_whop_membership_id.startsWith('mem_')) {
             const r = await cancelMembership(existingSubs.newsletter_whop_membership_id, 'immediate');
             console.log(r.success ? "✅ Newsletter cancelled" : "⚠️ Newsletter cancel failed:", r.error);
           }
         }
 
-        // 3) Cancel standalone Top Secret
+        // 3) Cancel standalone Top Secret — always immediate
         if (existingSubs.top_secret_whop_membership_id && 
             ['active', 'trialing', 'trial'].includes(existingSubs.top_secret_status || '')) {
-          console.log("🔥 v7.3.0: Cancelling standalone Top Secret on activation:", existingSubs.top_secret_whop_membership_id);
+          console.log("🔥 v7.4.0: Cancelling standalone Top Secret on activation:", existingSubs.top_secret_whop_membership_id);
           if (existingSubs.top_secret_whop_membership_id.startsWith('mem_')) {
             const r = await cancelMembership(existingSubs.top_secret_whop_membership_id, 'immediate');
             console.log(r.success ? "✅ Top Secret cancelled" : "⚠️ Top Secret cancel failed:", r.error);
@@ -2599,7 +2612,36 @@ async function handleMembershipDeactivated(
 
   // ═══════════════════════════════════════════════
   // 🔥 JOURNAL SUBSCRIPTION - Use RPC!
+  // 🔥 v7.4.0: If user has active Platform — keep permissions, only clean up membership fields
   // ═══════════════════════════════════════════════
+
+  // Check if user has active Platform that already covers Journal access
+  const { data: profileForJournal } = await supabase
+    .from('profiles')
+    .select('id, platform_plan, platform_subscription_status, account_type')
+    .eq('whop_membership_id', membershipId)
+    .maybeSingle();
+
+  if (profileForJournal?.platform_plan && 
+      ['active', 'trial', 'trialing'].includes(profileForJournal.platform_subscription_status || '')) {
+    console.log("🔥 v7.4.0: Journal deactivated but Platform is active — keeping permissions:", {
+      userId: profileForJournal.id,
+      platformPlan: profileForJournal.platform_plan,
+      currentAccountType: profileForJournal.account_type,
+    });
+    // Only clear Journal membership fields — don't touch account_type or max_trades
+    await supabase.from('profiles').update({
+      whop_membership_id: null,
+      subscription_status: 'inactive',
+      subscription_cancel_at_period_end: false,
+      updated_at: new Date().toISOString(),
+    }).eq('id', profileForJournal.id);
+    
+    return { 
+      success: true, 
+      message: `Journal deactivated but permissions kept via active Platform (${profileForJournal.platform_plan}): ${profileForJournal.id}` 
+    };
+  }
 
   console.log("📦 Calling deactivate_whop_subscription RPC...");
   
