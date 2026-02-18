@@ -137,7 +137,8 @@ export function useSubscriptionManagement() {
    * Cancel subscription (always at period end - user keeps access until cycle ends)
    */
   const cancelSubscription = useCallback(async (
-    cancellationData?: string | CancellationReason
+    cancellationData?: string | CancellationReason,
+    product: string = 'journal'
   ): Promise<ManageSubscriptionResult | null> => {
     if (!user) {
       toast.error('Please log in to manage your subscription');
@@ -163,6 +164,7 @@ export function useSubscriptionManagement() {
         },
         body: JSON.stringify({
           action: 'cancel',
+          product,
           ...(typeof cancellationData === 'string' 
             ? { reason: cancellationData }
             : cancellationData 

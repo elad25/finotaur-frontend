@@ -1143,7 +1143,7 @@ const portfolioValues = useMemo(() => {
 
 // 🔥 Handle subscription cancellation with feedback
   const handleCancelSubscription = useCallback(async (data: { reason_id: string; reason_label: string; feedback?: string }) => {
-    const result = await cancelSubscription(data);
+    const result = await cancelSubscription(data, 'journal');
     // Return result to modal - don't close here, let success screen show
     return result;
   }, [cancelSubscription]);
