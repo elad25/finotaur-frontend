@@ -282,12 +282,13 @@ function getProductStatus(profile: any, product: ProductType): {
         isPaid: profile.platform_subscription_status === "active" && !profile.platform_is_in_trial,
       };
     case "journal":
+      const journalIsTrial = profile.is_in_trial ?? profile.subscription_status === "trial";
       return {
         enabled: !!profile.account_type && !['free', 'admin', 'vip'].includes(profile.account_type),
         status: profile.subscription_status ?? "inactive",
         cancelAtPeriodEnd: profile.subscription_cancel_at_period_end ?? false,
-        expiresAt: profile.subscription_expires_at,
-        isTrial: profile.is_in_trial ?? profile.subscription_status === "trial",
+        expiresAt: journalIsTrial && profile.trial_ends_at ? profile.trial_ends_at : profile.subscription_expires_at,
+        isTrial: journalIsTrial,
         trialEndsAt: profile.trial_ends_at,
         isPaid: profile.subscription_status === "active" && !profile.is_in_trial,
       };

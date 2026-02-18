@@ -1783,7 +1783,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
         onConfirm={handleCancelSubscription}
         isLoading={isSubscriptionLoading}
         currentPlan={profile?.account_type || ''}
-        expiresAt={profile?.subscription_expires_at}
+        expiresAt={profile?.is_in_trial && profile?.trial_ends_at ? profile.trial_ends_at : profile?.subscription_expires_at}
       />
 
       {/* 🔥 Payment Popup - Same as PricingSelection */}

@@ -31,6 +31,9 @@ export interface UserProfile {
   subscription_interval: 'monthly' | 'yearly' | null;
   subscription_status: 'active' | 'trial' | 'inactive' | 'cancelled' | 'expired' | null;
   subscription_expires_at: string | null;
+  // 🔥 Trial fields
+  is_in_trial?: boolean;
+  trial_ends_at?: string | null;
   // 🔥 Cancellation fields
   subscription_cancel_at_period_end?: boolean;
   // 🔥 v8.6.0: Changed from 'free' | 'basic' to 'basic' | 'cancel'
