@@ -160,6 +160,10 @@ export default function PlatformPricing() {
   const [currentBillingInterval, setCurrentBillingInterval] = useState<string | null>(null);
   const [proTrialUsed, setProTrialUsed] = useState(false);
   const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState<string | null>(null);
+  const [isInTrial, setIsInTrial] = useState(false);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
 
   const { 
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
@@ -195,7 +199,7 @@ export default function PlatformPricing() {
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval')
+          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -205,6 +209,10 @@ export default function PlatformPricing() {
           setCurrentPlatformPlan(rawPlan.replace('platform_', '') as PlatformPlanId);
           setCurrentBillingInterval(data.platform_billing_interval || null);
           setProTrialUsed(!!data.platform_pro_trial_used_at);
+          setSubscriptionExpiresAt(data.platform_subscription_expires_at || null);
+          setIsInTrial(!!data.platform_is_in_trial);
+          setTrialEndsAt(data.platform_trial_ends_at || null);
+          setCancelAtPeriodEnd(!!data.platform_cancel_at_period_end);
         }
       } catch (error) {
         console.error('Error checking subscription:', error);
@@ -411,14 +419,20 @@ export default function PlatformPricing() {
                   plan.featured ? 'lg:scale-[1.02]' : ''
                 }`}
                 style={{
-                  background: plan.featured 
+                  background: isCurrentPlan && plan.id !== 'free'
+                    ? 'linear-gradient(135deg, rgba(201,166,70,0.15) 0%, rgba(201,166,70,0.06) 40%, rgba(0,0,0,0.4) 100%)'
+                    : plan.featured 
                     ? 'linear-gradient(135deg, rgba(201,166,70,0.18) 0%, rgba(201,166,70,0.08) 40%, rgba(244,217,123,0.04) 70%, rgba(0,0,0,0.4) 100%)'
                     : 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.1) 100%)',
                   backdropFilter: 'blur(20px)',
-                  border: plan.featured 
+                  border: isCurrentPlan && plan.id !== 'free'
+                    ? '2px solid rgba(201,166,70,0.7)'
+                    : plan.featured 
                     ? '2px solid rgba(201,166,70,0.6)' 
                     : '1px solid rgba(255,255,255,0.12)',
-                  boxShadow: plan.featured
+                  boxShadow: isCurrentPlan && plan.id !== 'free'
+                    ? '0 12px 50px rgba(201,166,70,0.3), 0 4px 20px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.1)'
+                    : plan.featured
                     ? '0 12px 50px rgba(201,166,70,0.5), 0 4px 20px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.15)'
                     : '0 6px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.08)'
                 }}
@@ -453,8 +467,22 @@ export default function PlatformPricing() {
                   </div>
                 )}
 
-                {/* Trial Badge for Core - only monthly */}
-                {plan.id === 'core' && billingInterval === 'monthly' && (
+                {/* Current Plan Badge */}
+                {isCurrentPlan && plan.id !== 'free' && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+                       style={{
+                         background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                         boxShadow: '0 4px 20px rgba(201,166,70,0.6), inset 0 1px 0 rgba(255,255,255,0.4)',
+                         color: '#000',
+                         zIndex: 50,
+                       }}>
+                    <Crown className="w-3.5 h-3.5" />
+                    Your Plan {currentBillingInterval === 'yearly' ? '(Yearly)' : currentBillingInterval === 'monthly' ? '(Monthly)' : ''}
+                  </div>
+                )}
+
+                {/* Trial Badge for Core - only monthly, only if NOT current plan */}
+                {plan.id === 'core' && billingInterval === 'monthly' && !isCurrentPlan && (
                   <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 bg-blue-500 text-white whitespace-nowrap"
                        style={{ zIndex: 50 }}>
                     <Clock className="w-3 h-3" />
@@ -574,6 +602,33 @@ export default function PlatformPricing() {
                     </span>
                   )}
                 </button>
+
+                {/* Subscription Info for Current Plan */}
+                {isCurrentPlan && plan.id !== 'free' && (
+                  <div className="mt-3 pt-3 border-t border-zinc-700/30 space-y-1.5">
+                    {isInTrial && trialEndsAt && (
+                      <p className="text-xs text-blue-400 flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        Trial ends {new Date(trialEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
+                    {cancelAtPeriodEnd && subscriptionExpiresAt && (
+                      <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3 h-3" />
+                        Access until {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
+                    {!isInTrial && !cancelAtPeriodEnd && subscriptionExpiresAt && (
+                      <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        Next billing {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
+                    {cancelAtPeriodEnd && (
+                      <p className="text-xs text-amber-400/80">Cancellation pending</p>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
