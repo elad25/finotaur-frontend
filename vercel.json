@@ -1,6 +1,12 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://finotaur-server-production.up.railway.app/api/:path*" },
-    { "source": "/(.*)", "destination": "/" }
+    { 
+      "source": "/api/:path*", 
+      "destination": "https://finotaur-server-production.up.railway.app/api/:path*" 
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": "/" 
+    }
   ]
 }
