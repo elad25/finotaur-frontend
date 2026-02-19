@@ -803,134 +803,103 @@ export default function PlatformPricing() {
 
         {/* Downgrade Confirmation Dialog */}
         {showDowngradeDialog && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden"
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden"
                  style={{
                    background: 'linear-gradient(135deg, rgba(24,24,27,0.98) 0%, rgba(9,9,11,0.98) 100%)',
                    border: '1px solid rgba(63,63,70,0.5)',
-                   boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                   boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
                  }}>
               {/* Header */}
-              <div className="relative px-6 pt-6 pb-4">
-                <div className="absolute -top-20 -right-20 w-40 h-40 bg-red-500/10 rounded-full blur-3xl" />
-                <div className="absolute -top-10 -left-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
-                <div className="relative">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500/20 to-amber-500/20 border border-red-500/30 flex items-center justify-center mb-4 shadow-lg shadow-red-500/10">
-                    <AlertTriangle className="w-6 h-6 text-red-400" />
+              <div className="relative px-5 pt-5 pb-3">
+                <div className="absolute -top-16 -right-16 w-32 h-32 bg-red-500/10 rounded-full blur-3xl" />
+                <div className="relative flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-500/20 to-amber-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
                   </div>
-                  <h3 className="text-xl font-semibold text-white mb-1">
-                    Downgrade to Free?
-                  </h3>
-                  <p className="text-zinc-400 text-sm">
-                    You'll lose access to all premium features at the end of your billing period.
-                  </p>
+                  <div>
+                    <h3 className="text-base font-semibold text-white">Downgrade to Free?</h3>
+                    <p className="text-zinc-500 text-xs mt-0.5">You'll lose access at the end of your billing period.</p>
+                  </div>
                 </div>
               </div>
 
-              {/* What you'll lose - Dynamic based on current plan */}
-              <div className="mx-6 mb-4">
-                <div className="relative p-4 rounded-xl bg-gradient-to-r from-amber-500/5 via-red-500/5 to-amber-500/5 border border-amber-500/20">
-                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent rounded-xl" />
-                  <div className="relative">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      <p className="text-sm font-medium text-amber-300">What you'll lose</p>
-                    </div>
-                    <div className="space-y-2">
-                      {currentPlatformPlan === 'core' && (
-                        <>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Stock Analyzer (5 analyses/day → 3)</span>
+              {/* What you'll lose */}
+              <div className="mx-5 mb-3">
+                <div className="relative p-3 rounded-xl bg-gradient-to-r from-amber-500/5 via-red-500/5 to-amber-500/5 border border-amber-500/20">
+                  <p className="text-xs font-medium text-amber-300 mb-2 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3 h-3" /> What you'll lose
+                  </p>
+                  <div className="space-y-1.5">
+                    {currentPlatformPlan === 'core' && (
+                      <>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Stock Analyzer (5/day → 3)</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Sector Analyzer & Flow Scanner</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>AI Assistant & real-time data</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Unlimited watchlists & 50 alerts</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
+                          <span className="text-[#C9A646] font-medium">🎁 Journal Basic (INCLUDED)</span>
+                        </div>
+                      </>
+                    )}
+                    {(currentPlatformPlan === 'finotaur' || currentPlatformPlan === 'enterprise') && (
+                      <>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Stock Analyzer ({currentPlatformPlan === 'enterprise' ? 'unlimited' : '7/day'} → 3)</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Sector Analyzer, Flow Scanner & AI tools</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-zinc-300">
+                          <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                          <span>Options Intelligence AI & Macro Analyzer</span>
+                        </div>
+                        {currentPlatformPlan === 'enterprise' && (
+                          <div className="flex items-center gap-2 text-xs text-zinc-300">
+                            <div className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                            <span>My Portfolio & account manager</span>
                           </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Sector Analyzer access</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Flow Scanner & AI Assistant</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Real-time market data</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Advanced charts & indicators</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Unlimited watchlists & 50 price alerts</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
-                            <span className="text-[#C9A646] font-medium">🎁 Journal Basic — 25 trades/month (INCLUDED)</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Priority email support</span>
-                          </div>
-                        </>
-                      )}
-                      {(currentPlatformPlan === 'finotaur' || currentPlatformPlan === 'enterprise') && (
-                        <>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Stock Analyzer ({currentPlatformPlan === 'enterprise' ? 'unlimited' : '7/day'} → 3)</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Sector Analyzer (unlimited access)</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Options Intelligence AI & Macro Analyzer</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>AI Scanner & AI Assistant</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Flow Scanner & Advanced charts</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
-                            <span className="text-[#C9A646] font-medium">🎁 War Zone Newsletter (INCLUDED)</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
-                            <span className="text-[#C9A646] font-medium">🎁 Top Secret Reports (INCLUDED)</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
-                            <span className="text-[#C9A646] font-medium">🎁 Journal Premium (INCLUDED)</span>
-                          </div>
-                          {currentPlatformPlan === 'enterprise' && (
-                            <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                              <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                              <span>My Portfolio & dedicated account manager</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2.5 text-sm text-zinc-300">
-                            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                            <span>Priority 24h support</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                        )}
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
+                          <span className="text-[#C9A646] font-medium">🎁 War Zone Newsletter (INCLUDED)</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
+                          <span className="text-[#C9A646] font-medium">🎁 Top Secret Reports (INCLUDED)</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="w-1 h-1 rounded-full bg-[#C9A646] shrink-0" />
+                          <span className="text-[#C9A646] font-medium">🎁 Journal Premium (INCLUDED)</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="p-6 pt-2 space-y-3">
+              <div className="px-5 pb-5 space-y-2">
                 <button
                   onClick={() => setShowDowngradeDialog(false)}
-                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
-                  <Crown className="w-4 h-4" />
+                  <Crown className="w-3.5 h-3.5" />
                   Keep My {currentPlatformPlan === 'core' ? 'Core' : currentPlatformPlan === 'finotaur' ? 'Finotaur' : 'Enterprise'} Plan
                 </button>
                 
@@ -964,7 +933,6 @@ export default function PlatformPricing() {
                       const data = await response.json();
                       if (data.success) {
                         toast.success(data.message || 'Subscription will be cancelled at period end');
-                        // Refresh subscription state
                         const { data: profileData } = await supabase
                           .from('profiles')
                           .select('platform_plan, platform_subscription_status, platform_billing_interval')
@@ -983,14 +951,14 @@ export default function PlatformPricing() {
                       navigate('/app/settings?tab=billing');
                     }
                   }}
-                  className="w-full group py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
+                  className="w-full py-2.5 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all duration-200 flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400 text-sm"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                   Yes, I Want to Downgrade
                 </button>
                 
-                <p className="text-center text-xs text-zinc-500">
-                  Your access continues until the end of your billing period
+                <p className="text-center text-xs text-zinc-600">
+                  {isInTrial ? 'Your free trial ends — no charge will be made' : 'Access continues until end of billing period'}
                 </p>
               </div>
             </div>
@@ -1018,10 +986,15 @@ export default function PlatformPricing() {
                   <span className="text-white font-medium capitalize">{currentPlatformPlan}</span> plan
                   is active until{' '}
                   <span className="text-[#C9A646] font-medium">
-                    {subscriptionExpiresAt
-                      ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                    {(isInTrial && trialEndsAt ? trialEndsAt : subscriptionExpiresAt)
+                      ? new Date(isInTrial && trialEndsAt ? trialEndsAt : subscriptionExpiresAt!).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
                       : 'the end of your billing period'}
                   </span>.
+                  {isInTrial && (
+                    <span className="block mt-1 text-xs text-blue-400">
+                      (Your 14-day free trial ends on this date — no charge will be made)
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -1089,7 +1062,9 @@ export default function PlatformPricing() {
                 </button>
 
                 <p className="text-center text-xs text-zinc-500">
-                  Your access continues until the end of your billing period
+                  {isInTrial
+                    ? 'Your free trial ends on this date — you will not be charged'
+                    : 'Your access continues until the end of your billing period'}
                 </p>
               </div>
             </div>
