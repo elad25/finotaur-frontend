@@ -1576,18 +1576,21 @@ if (isTopSecretPayment) {
           const shouldCancelJournal = existingSubs.whop_membership_id && 
             ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '') &&
             (
-              // Core: cancel only if existing is Basic (Core covers Basic)
-              (platformPlan === 'platform_core' && existingAccountType === 'basic') ||
+              // Core: cancel Basic OR Premium at_period_end (Core grants Basic access)
+              (platformPlan === 'platform_core' && ['basic', 'premium'].includes(existingAccountType || '')) ||
               // Finotaur/Enterprise: cancel any (they cover Premium)
               (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise')
             );
 
           if (shouldCancelJournal) {
+            // Premium cancelled by Core → always at_period_end (user keeps access until billing date)
+            const isPremiumCancelledByCore = platformPlan === 'platform_core' && existingAccountType === 'premium';
             const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
+            const useAtPeriodEnd = isYearlyJournal || isPremiumCancelledByCore;
             console.log(`🔥 v8.6.0: Handling standalone Journal (${isYearlyJournal ? 'yearly→at_period_end' : 'monthly→immediate'}):`, existingSubs.whop_membership_id);
             
                         if (existingSubs.whop_membership_id.startsWith('mem_')) {
-              if (isYearlyJournal) {
+              if (useAtPeriodEnd) {
                 // Yearly: schedule cancellation at period end, don't revoke access
                 // Platform already grants higher/equal access — user just won't be double-charged
                 const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
@@ -1690,9 +1693,11 @@ const { error: updateError } = await supabase
             newsletter_enabled: true,
             newsletter_status: isInTrial ? 'trial' : 'active',
             newsletter_paid: true,
+            newsletter_whop_membership_id: null,
             top_secret_enabled: true,
             top_secret_status: isInTrial ? 'trial' : 'active',
             top_secret_interval: 'monthly',
+            top_secret_whop_membership_id: null,
             platform_bundle_journal_granted: true,
             platform_bundle_newsletter_granted: true,
             // 🔥 v8.1.0: Ensure platform_subscription_expires_at is always set
@@ -1711,9 +1716,11 @@ const { error: updateError } = await supabase
             newsletter_enabled: true,
             newsletter_status: isInTrial ? 'trial' : 'active',
             newsletter_paid: true,
+            newsletter_whop_membership_id: null,
             top_secret_enabled: true,
             top_secret_status: isInTrial ? 'trial' : 'active',
             top_secret_interval: 'monthly',
+            top_secret_whop_membership_id: null,
             enterprise_ai_portfolio_enabled: true,
             platform_bundle_journal_granted: true,
             platform_bundle_newsletter_granted: true,
@@ -2050,14 +2057,16 @@ async function handleMembershipActivated(
         const shouldCancelJournal = existingSubs.whop_membership_id &&
           ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '') &&
           (
-            (platformPlan === 'platform_core' && existingAccountType === 'basic') ||
+            (platformPlan === 'platform_core' && ['basic', 'premium'].includes(existingAccountType || '')) ||
             (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise')
           );
 
         if (shouldCancelJournal) {
+          const isPremiumCancelledByCore = platformPlan === 'platform_core' && existingAccountType === 'premium';
           const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
+          const useAtPeriodEnd = isYearlyJournal || isPremiumCancelledByCore;
 
-          if (isYearlyJournal) {
+          if (useAtPeriodEnd) {
             // Yearly Journal: cancel at period end, don't revoke immediately
             // Platform already grants equal/higher access
             console.log(`🔥 v8.6.0: Yearly Journal (${existingAccountType}) — scheduling at_period_end cancel:`, existingSubs.whop_membership_id);

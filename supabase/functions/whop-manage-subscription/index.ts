@@ -80,7 +80,13 @@ interface StatusRequest {
   product: ProductType;
 }
 
-type RequestBody = CancelRequest | ReactivateRequest | StatusRequest | UpgradeCheckRequest;
+interface DowngradeRequest {
+  action: "downgrade";
+  product: "journal";
+  targetPlan: "basic";
+}
+
+type RequestBody = CancelRequest | ReactivateRequest | StatusRequest | UpgradeCheckRequest | DowngradeRequest;
 
 interface WhopMembership {
   id: string;
@@ -287,10 +293,10 @@ function getProductStatus(profile: any, product: ProductType): {
         enabled: !!profile.account_type && !['free', 'admin', 'vip'].includes(profile.account_type),
         status: profile.subscription_status ?? "inactive",
         cancelAtPeriodEnd: profile.subscription_cancel_at_period_end ?? false,
-        expiresAt: journalIsTrial && profile.trial_ends_at ? profile.trial_ends_at : profile.subscription_expires_at,
+        expiresAt: profile.subscription_expires_at,
         isTrial: journalIsTrial,
         trialEndsAt: profile.trial_ends_at,
-        isPaid: profile.subscription_status === "active" && !profile.is_in_trial,
+        isPaid: (profile.subscription_status === "active" || profile.subscription_status === "trial") && profile.whop_membership_id,
       };
     default:
       return { 
@@ -322,6 +328,105 @@ function getProductDisplayName(product: ProductType): string {
     default:
       return product;
   }
+}
+
+// ============================================
+// 🔥 DOWNGRADE HANDLER - Premium → Basic (journal)
+// Cancels current premium membership at_period_end,
+// stores pending_downgrade_plan = 'basic' in DB.
+// Webhook deactivation will then activate basic.
+// ============================================
+
+async function handleDowngrade(
+  supabase: any,
+  profile: any,
+  targetPlan: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  console.log(`🔻 handleDowngrade: ${profile.account_type} → ${targetPlan}`);
+
+  if (targetPlan !== 'basic') {
+    return new Response(
+      JSON.stringify({ error: "Only downgrade to 'basic' is supported" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const membershipId = profile.whop_membership_id;
+  // 🔥 For trial: use trial_ends_at. For paid: use subscription_expires_at
+  const isTrial = profile.is_in_trial ?? profile.subscription_status === 'trial';
+  const expiresAt = (isTrial && profile.trial_ends_at)
+    ? profile.trial_ends_at
+    : profile.subscription_expires_at;
+
+  if (!membershipId) {
+    return new Response(
+      JSON.stringify({ error: "No active journal membership found" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // 1) Cancel premium membership at_period_end via Whop
+  const cancelResult = await cancelWhopMembership(membershipId, "at_period_end");
+  if (!cancelResult.success && !cancelResult.skipWhop) {
+    console.warn(`⚠️ Whop cancel failed: ${cancelResult.error} — continuing with DB update`);
+  }
+  // 🔥 Use real end date from Whop response if available
+  const realExpiresAt = cancelResult.data?.renewal_period_end || expiresAt;
+
+  // 2) Mark in DB: cancel_at_period_end + pending_downgrade_plan
+  const { error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      subscription_cancel_at_period_end: true,
+      pending_downgrade_plan: "basic",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
+
+  if (updateError) {
+    console.error("❌ DB update error:", updateError);
+    return new Response(
+      JSON.stringify({ error: "Failed to schedule downgrade" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  // 3) Log event
+  await logSubscriptionEvent(supabase, {
+    user_id: profile.id,
+    event_type: "downgrade_scheduled",
+    old_plan: profile.account_type,
+    new_plan: "basic",
+    scheduled_at: realExpiresAt || undefined,
+    metadata: {
+      whop_membership_id: membershipId,
+      target_plan: "basic",
+      is_trial: isTrial,
+      scheduled_at: realExpiresAt,
+    },
+  });
+
+  const expiresFormatted = realExpiresAt
+    ? new Date(realExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : 'the end of your billing period';
+
+  console.log(`✅ Downgrade scheduled: premium → basic, access until ${expiresFormatted} (isTrial: ${isTrial})`);
+
+  return new Response(
+    JSON.stringify({
+      success: true,
+      message: `Your plan will be downgraded to Basic on ${expiresFormatted}. You'll keep ${isTrial ? 'trial' : 'Premium'} access until then.`,
+      subscription: {
+        product: "journal",
+        status: profile.subscription_status,
+        cancelAtPeriodEnd: true,
+        expiresAt: realExpiresAt,
+        pendingDowngradePlan: "basic",
+      },
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 }
 
 // ============================================
@@ -406,7 +511,13 @@ serve(async (req: Request) => {
 
     // Parse request body
     const body: RequestBody = await req.json();
-    const { product } = body;
+
+    // 🔥 downgrade action doesn't require product field in the same way
+    if (body.action === "downgrade") {
+      return handleDowngrade(supabase, profile, (body as DowngradeRequest).targetPlan, corsHeaders);
+    }
+
+    const { product } = body as Exclude<RequestBody, DowngradeRequest>;
 
     if (!product || !["newsletter", "top_secret", "platform", "journal"].includes(product)) {
       return new Response(
@@ -450,7 +561,7 @@ serve(async (req: Request) => {
 
       default:
         return new Response(
-          JSON.stringify({ error: "Invalid action. Must be 'cancel', 'reactivate', 'status', or 'check_upgrade'" }),
+          JSON.stringify({ error: "Invalid action. Must be 'cancel', 'reactivate', 'status', 'check_upgrade', or 'downgrade'" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
@@ -648,18 +759,22 @@ async function handleCancel(
     console.log(`📝 Scheduling FREE/TRIAL cancellation at period end (isTrial: ${productStatus.isTrial}, isPaid: ${productStatus.isPaid})`);
 
     // 🔥 v2.4.0: Even trial users have Whop memberships - cancel them too!
+    let whopRenewalPeriodEnd: string | null = null;
     if (membershipId && WHOP_API_KEY) {
       console.log(`🔄 Also canceling trial via Whop API (membership: ${membershipId})`);
       const cancelResult = await cancelWhopMembership(membershipId, "at_period_end");
       if (cancelResult.success) {
         console.log(`✅ Whop membership cancelled at period end`);
+        // 🔥 Take the real end date from Whop's response
+        whopRenewalPeriodEnd = cancelResult.data?.renewal_period_end || null;
+        console.log(`📅 Whop renewal_period_end: ${whopRenewalPeriodEnd}`);
       } else {
         console.warn(`⚠️ Whop cancel failed: ${cancelResult.error} - continuing with DB update`);
       }
     }
 
-    // Determine when access ends
-    const accessEndsAt = productStatus.trialEndsAt || productStatus.expiresAt || null;
+    // Determine when access ends - 🔥 Prefer Whop's real date over DB value
+    const accessEndsAt = whopRenewalPeriodEnd || productStatus.trialEndsAt || productStatus.expiresAt || null;
 
     let updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -910,9 +1025,8 @@ async function handleCancel(
   // ============================================
 
   // 🔥 v2.5.0: If user is in trial, show trial end date - not billing date
-  const correctExpiresAt2 = (productStatus.isTrial && productStatus.trialEndsAt)
-    ? productStatus.trialEndsAt
-    : productStatus.expiresAt;
+  // 🔥 FIX: Always prefer trialEndsAt over expiresAt when available
+  const correctExpiresAt2 = productStatus.trialEndsAt || productStatus.expiresAt;
 
   const expiresDate = correctExpiresAt2
     ? new Date(correctExpiresAt2).toLocaleDateString('en-US', {

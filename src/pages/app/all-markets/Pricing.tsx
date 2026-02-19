@@ -164,6 +164,8 @@ export default function PlatformPricing() {
   const [isInTrial, setIsInTrial] = useState(false);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
+  const [hasActiveJournalSubscription, setHasActiveJournalSubscription] = useState(false);
+  const [existingJournalPlan, setExistingJournalPlan] = useState<string | null>(null);
 
   const { 
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
@@ -213,6 +215,19 @@ export default function PlatformPricing() {
           setIsInTrial(!!data.platform_is_in_trial);
           setTrialEndsAt(data.platform_trial_ends_at || null);
           setCancelAtPeriodEnd(!!data.platform_cancel_at_period_end);
+        }
+
+        // 🔥 Check existing Journal subscription
+        const { data: journalData } = await supabase
+          .from('profiles')
+          .select('account_type, subscription_status, whop_membership_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (journalData?.whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(journalData.subscription_status || '')) {
+          setHasActiveJournalSubscription(true);
+          setExistingJournalPlan(journalData.account_type || null);
         }
       } catch (error) {
         console.error('Error checking subscription:', error);
@@ -563,6 +578,17 @@ export default function PlatformPricing() {
                       <Gift className="w-3.5 h-3.5" />
                       +Newsletter Choice
                     </span>
+                  </div>
+                )}
+
+                {/* 🔥 Core Warning: cancels existing Journal */}
+                {plan.id === 'core' && hasActiveJournalSubscription && (
+                  <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-300 leading-relaxed">
+                      <strong>Note:</strong> Subscribing to Core will cancel your existing Journal {existingJournalPlan === 'premium' ? 'Premium' : 'Basic'} subscription. 
+                      You'll keep access until your current billing period ends, and Core includes Journal Basic.
+                    </p>
                   </div>
                 )}
 

@@ -1572,7 +1572,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
             )}
 
             {/* Subscription Status */}
-            {profile && !needsPlanSelection && !hasJournalFromPlatform && (
+            {profile && !needsPlanSelection && !hasJournalFromPlatform && !profile?.subscription_cancel_at_period_end && (
               <div className="flex items-center justify-between py-4">
                 <div>
                   <label className="text-sm font-medium text-zinc-300">Status</label>
@@ -1793,7 +1793,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
         onConfirm={handleCancelSubscription}
         isLoading={isSubscriptionLoading}
         currentPlan={profile?.account_type || ''}
-        expiresAt={profile?.is_in_trial && profile?.trial_ends_at ? profile.trial_ends_at : profile?.subscription_expires_at}
+        expiresAt={profile?.trial_ends_at || profile?.subscription_expires_at}
       />
 
       {/* 🔥 Payment Popup - Same as PricingSelection */}
