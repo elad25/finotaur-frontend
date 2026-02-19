@@ -326,7 +326,7 @@ const UpgradePlanModal = ({
     if (plan.id === currentPlan) {
       // Same plan but different interval — allow upgrade to yearly
       if (currentBillingInterval === 'monthly' && billingInterval === 'yearly') {
-        return { type: 'upgrade', label: `Upgrade to Yearly (Save ${plan.savings || '38%'})` };
+        return { type: 'upgrade', label: `Upgrade to Yearly (Save ${(plan.savings || '38%').replace(/^Save\s*/i, '')})` };
       }
       // Same plan, yearly viewing monthly — block (no downgrade)
       if (currentBillingInterval === 'yearly' && billingInterval === 'monthly') {
@@ -597,7 +597,7 @@ const UpgradePlanModal = ({
                   )}
 
                   {/* 🔥 Trial Badge for Basic */}
-                  {hasTrial && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
+                  {hasTrial && billingInterval === 'monthly' && !plan.featured && !isCurrentPlan && !isPendingDowngrade && (
                     <div className="absolute -top-3 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {plan.trialDays}-Day Free Trial

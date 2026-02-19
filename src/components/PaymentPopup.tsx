@@ -82,7 +82,7 @@ export default function PaymentPopup({
   });
 
   const plan = planDetails[planId];
-  const hasTrial = plan.trialDays > 0;
+  const hasTrial = plan.trialDays > 0 && (billingInterval as string) === 'monthly';
   
   // ============================================
   // PRICE CALCULATION

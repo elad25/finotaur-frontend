@@ -1781,6 +1781,7 @@ const { error: updateError } = await supabase
           const oldPlan = currentJournal.account_type; // 'basic' or 'premium'
           const newPlanInfo = PRODUCT_ID_TO_PLAN_JOURNAL[productId] || null;
           const newPlan = newPlanInfo?.plan || null;
+          const newInterval = newPlanInfo?.interval || 'monthly';
           const oldInterval = currentJournal.subscription_interval;
 
           // 🔥 v8.8.0: Detect downgrade (e.g. premium → basic/core)
@@ -1790,9 +1791,9 @@ const { error: updateError } = await supabase
           const isJournalDowngrade = newTier < oldTier;
           const isPremiumDowngradedByCore = oldPlan === 'premium' && newPlan === 'basic';
 
-          // 🔥 Downgrade OR yearly→monthly: at_period_end (keep Premium access until billing date)
-          // 🔥 Upgrade (basic→premium) OR monthly→yearly: immediate
-          const useAtPeriodEnd = isJournalDowngrade || (oldInterval === 'yearly' && newPlan === oldPlan);
+          // 🔥 Premium Yearly → always immediate cancel of old subscription
+          const isPremiumYearlyUpgrade = newPlan === 'premium' && newInterval === 'yearly';
+          const useAtPeriodEnd = !isPremiumYearlyUpgrade && (isJournalDowngrade || (oldInterval === 'yearly' && newPlan === oldPlan));
 
           console.log(`🔥 v8.8.0: Journal transition — ${oldPlan}(${oldInterval}) → ${newPlan}, useAtPeriodEnd=${useAtPeriodEnd}`);
 

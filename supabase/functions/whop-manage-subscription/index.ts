@@ -294,9 +294,9 @@ function getProductStatus(profile: any, product: ProductType): {
         status: profile.subscription_status ?? "inactive",
         cancelAtPeriodEnd: profile.subscription_cancel_at_period_end ?? false,
         expiresAt: profile.subscription_expires_at,
-        isTrial: journalIsTrial,
+        isTrial: journalIsTrial && !profile.subscription_interval?.includes('yearly'),
         trialEndsAt: profile.trial_ends_at,
-        isPaid: (profile.subscription_status === "active" || profile.subscription_status === "trial") && profile.whop_membership_id,
+        isPaid: !!(profile.subscription_status === "active" || profile.subscription_status === "trialing") && !!profile.whop_membership_id,
       };
     default:
       return { 
