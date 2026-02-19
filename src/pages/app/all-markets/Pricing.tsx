@@ -166,6 +166,9 @@ export default function PlatformPricing() {
   const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState(false);
   const [hasActiveJournalSubscription, setHasActiveJournalSubscription] = useState(false);
   const [existingJournalPlan, setExistingJournalPlan] = useState<string | null>(null);
+  const [hasNewsletterMonthly, setHasNewsletterMonthly] = useState(false);
+  const [hasTopSecretMonthly, setHasTopSecretMonthly] = useState(false);
+  const [hasJournalPremiumMonthly, setHasJournalPremiumMonthly] = useState(false);
 
   const { 
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
@@ -201,7 +204,7 @@ export default function PlatformPricing() {
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end')
+          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end, newsletter_enabled, newsletter_status, newsletter_interval, top_secret_enabled, top_secret_status, top_secret_interval, account_type, subscription_status, whop_membership_id')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -218,17 +221,28 @@ export default function PlatformPricing() {
         }
 
         // 🔥 Check existing Journal subscription
-        const { data: journalData } = await supabase
-          .from('profiles')
-          .select('account_type, subscription_status, whop_membership_id')
-          .eq('id', user.id)
-          .maybeSingle();
-
-        if (journalData?.whop_membership_id && 
-            ['active', 'trialing', 'trial'].includes(journalData.subscription_status || '')) {
+        if (data?.whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(data.subscription_status || '')) {
           setHasActiveJournalSubscription(true);
-          setExistingJournalPlan(journalData.account_type || null);
+          setExistingJournalPlan(data.account_type || null);
         }
+
+        // 🔥 Check standalone monthly subscriptions (relevant for Core upsell warning)
+        const newsletterIsMonthly = 
+          (data?.newsletter_status === 'active' || data?.newsletter_status === 'trial') &&
+          (data?.newsletter_interval === 'monthly' || !data?.newsletter_interval);
+        const topSecretIsMonthly = 
+          data?.top_secret_enabled &&
+          (data?.top_secret_status === 'active' || data?.top_secret_status === 'trial') &&
+          (data?.top_secret_interval === 'monthly' || !data?.top_secret_interval);
+        const journalPremiumIsMonthly = 
+          data?.account_type === 'premium' &&
+          data?.whop_membership_id &&
+          ['active', 'trial'].includes(data?.subscription_status || '');
+
+        setHasNewsletterMonthly(!!newsletterIsMonthly);
+        setHasTopSecretMonthly(!!topSecretIsMonthly);
+        setHasJournalPremiumMonthly(!!journalPremiumIsMonthly);
       } catch (error) {
         console.error('Error checking subscription:', error);
       } finally {
@@ -266,6 +280,19 @@ export default function PlatformPricing() {
 
   // 🔥 Plan tier for downgrade detection
   const PLAN_TIER: Record<string, number> = { free: 0, core: 1, finotaur: 2, enterprise: 3 };
+
+  // 🔥 Calculate monthly spending on standalone products vs platform plans
+  const standaloneMonthlyTotal = (() => {
+    let total = 0;
+    if (hasNewsletterMonthly) total += 69.99;
+    if (hasTopSecretMonthly) total += 89.99;
+    if (hasJournalPremiumMonthly) total += 29.99; // journal premium monthly price
+    return total;
+  })();
+  
+  const hasExpensiveStandalones = standaloneMonthlyTotal >= 59 && currentPlatformPlan === 'free';
+  const wouldSaveWithFinotaur = standaloneMonthlyTotal >= 109 || 
+    (hasNewsletterMonthly && hasTopSecretMonthly);
 
   const handlePlanClick = (planId: PlatformPlanId) => {
     // Free = open downgrade confirmation dialog
@@ -326,6 +353,69 @@ export default function PlatformPricing() {
         billedAs: `Billed ${plan.yearlyPrice}/year`
       };
     }
+  };
+
+  // ============================================
+  // SMART BANNER: shown above Core card when user has expensive standalones
+  // ============================================
+
+  const CoreUpsellBanner = () => {
+    if (!hasExpensiveStandalones) return null;
+
+    const products: string[] = [];
+    if (hasNewsletterMonthly) products.push('War Zone ($69.99)');
+    if (hasTopSecretMonthly) products.push('Top Secret ($89.99)');
+    if (hasJournalPremiumMonthly) products.push('Journal Premium');
+
+    return (
+      <div
+        className="mb-4 rounded-xl p-4 relative overflow-hidden"
+        style={{
+          background: 'linear-gradient(135deg, rgba(201,166,70,0.12) 0%, rgba(201,166,70,0.05) 100%)',
+          border: '1px solid rgba(201,166,70,0.35)',
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 text-lg">💡</div>
+          <div className="flex-1">
+            <p className="text-[#C9A646] font-semibold text-sm mb-1">
+              {wouldSaveWithFinotaur
+                ? 'You\'d get more value from Finotaur!'
+                : 'Heads up before you subscribe to Core'}
+            </p>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              You currently pay{' '}
+              <span className="text-white font-medium">${standaloneMonthlyTotal.toFixed(2)}/mo</span>
+              {' '}for: {products.join(', ')}.{' '}
+              {wouldSaveWithFinotaur ? (
+                <>
+                  <span className="text-emerald-400 font-medium">Finotaur at $109/mo</span>{' '}
+                  includes all of that <span className="text-white">plus</span> the full platform — a better deal overall.
+                </>
+              ) : (
+                <>
+                  Core doesn't include War Zone or Top Secret. Consider{' '}
+                  <span className="text-emerald-400 font-medium">Finotaur ($109/mo)</span>{' '}
+                  which bundles everything together.
+                </>
+              )}
+            </p>
+            {wouldSaveWithFinotaur && (
+              <button
+                onClick={() => handlePlanClick('finotaur')}
+                className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646, #F4D97B)',
+                  color: '#000',
+                }}
+              >
+                Switch to Finotaur instead →
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // ============================================
@@ -445,6 +535,7 @@ export default function PlatformPricing() {
         {/* Pricing Cards */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto pt-5">
           {plans.map((plan) => {
+  const showCoreUpsellBanner = plan.id === 'core' && hasExpensiveStandalones;
             const displayPrice = getDisplayPrice(plan);
             // Block same plan+same interval, allow upgrade to yearly
             const isSamePlanSameInterval = plan.id === currentPlatformPlan && 
