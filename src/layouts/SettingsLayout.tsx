@@ -1238,7 +1238,7 @@ const BillingTab = () => {
               </p>
               <p className="flex items-center gap-1 text-zinc-300">
                 {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') ? (
-                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.trial_ends_at || profile?.subscription_expires_at)}</>
+                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.trial_ends_at)}</>
                 ) : (
                   <><Calendar className="w-3 h-3" />{formatDate(profile?.subscription_expires_at)}</>
                 )}

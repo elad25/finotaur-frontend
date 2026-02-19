@@ -1525,11 +1525,17 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
               <div className="flex items-center justify-between py-4 border-b border-zinc-800">
                 <div>
                   <label className="text-sm font-medium text-zinc-300">
-                    {profile?.subscription_cancel_at_period_end ? 'Access Until' : 'Billing Date'}
+                    {profile?.subscription_cancel_at_period_end 
+                      ? 'Access Until' 
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      ? 'Trial Ends'
+                      : 'Billing Date'}
                   </label>
                   <p className="text-xs text-zinc-500 mt-1">
                     {profile?.subscription_cancel_at_period_end 
-                      ? 'Your subscription ends on this date' 
+                      ? 'Your subscription ends on this date'
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      ? 'First charge after trial ends'
                       : 'Next billing cycle'
                     }
                   </p>
@@ -1539,16 +1545,23 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                 ) : (
                   <span className={`text-sm ${
                     profile?.subscription_cancel_at_period_end 
-                      ? 'text-amber-400 font-medium' 
+                      ? 'text-amber-400 font-medium'
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      ? 'text-blue-400 font-medium'
                       : 'text-zinc-400'
                   }`}>
                     {profile?.subscription_cancel_at_period_end
                       ? new Date(
-                          // 🔥 If still in trial, show trial end date (not full month billing date)
                           (profile?.is_in_trial && profile?.trial_ends_at)
                             ? profile.trial_ends_at
                             : profile?.subscription_expires_at || ''
                         ).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial') && profile?.trial_ends_at
+                      ? new Date(profile.trial_ends_at).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric'
