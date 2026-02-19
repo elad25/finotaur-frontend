@@ -270,7 +270,7 @@ async function callAI(
   useWebSearch: boolean,
   signal?: AbortSignal
 ): Promise<{ content: string; searchUsed: boolean }> {
-  const response = await fetch('/api/ai-proxy/chat', {
+  const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/ai-proxy/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,

@@ -17,7 +17,7 @@
 import type { StockData, NewsItem } from '@/types/stock-analyzer.types';
 import { stockCache, getNextEarningsDate } from './stock-analyzer.cache';
 
-const API_BASE = '/api/market-data';
+const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/market-data`;
 
 // =====================================================
 // SAFE FETCH
@@ -44,8 +44,8 @@ export async function saveToServerCache(
   earningsDate?: string | null
 ) {
   try {
-    await fetch(`/api/stock-cache/${ticker}/${type}`, {
-      method: 'POST',
+    const BASE = import.meta.env.VITE_API_URL || '';
+await fetch(`${BASE}/api/stock-cache/${ticker}/${type}`, {      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data, earningsDate: earningsDate || null }),
     });
