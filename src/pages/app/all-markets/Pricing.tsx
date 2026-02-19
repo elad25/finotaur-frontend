@@ -261,6 +261,7 @@ export default function PlatformPricing() {
   const [pendingPlanId, setPendingPlanId] = useState<PlatformPlanId | null>(null);
   const [showDowngradeTierDialog, setShowDowngradeTierDialog] = useState(false);
   const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<PlatformPlanId | null>(null);
+  const [showCoreValueWarning, setShowCoreValueWarning] = useState(false);
 
   const proceedToCheckout = (planId: PlatformPlanId) => {
     setLoading(planId);
@@ -318,6 +319,12 @@ export default function PlatformPricing() {
     if (isDowngrade) {
       setPendingDowngradePlanId(planId);
       setShowDowngradeTierDialog(true);
+      return;
+    }
+
+    // 🔥 Core value warning: user pays more on standalones than Core+Finotaur is worth
+    if (planId === 'core' && hasExpensiveStandalones && currentPlatformPlan === 'free') {
+      setShowCoreValueWarning(true);
       return;
     }
 
@@ -1115,6 +1122,123 @@ export default function PlatformPricing() {
           </div>
         </div>
       </div>
+
+      {/* 🔥 Core Value Warning Popup */}
+      {showCoreValueWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowCoreValueWarning(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl z-10 overflow-hidden"
+            style={{
+              background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)',
+              border: '1px solid rgba(201,166,70,0.4)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+            }}>
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-lg">Wait — Core might not be worth it</h3>
+                  <p className="text-zinc-500 text-xs mt-0.5">Based on your current subscriptions</p>
+                </div>
+              </div>
+
+              {/* Current spending breakdown */}
+              <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 mb-4">
+                <p className="text-xs text-zinc-400 font-medium mb-2 uppercase tracking-wide">You currently pay</p>
+                <div className="space-y-1.5">
+                  {hasNewsletterMonthly && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-300">War Zone Newsletter</span>
+                      <span className="text-white font-medium">$69.99/mo</span>
+                    </div>
+                  )}
+                  {hasTopSecretMonthly && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-300">Top Secret Reports</span>
+                      <span className="text-white font-medium">$89.99/mo</span>
+                    </div>
+                  )}
+                  {hasJournalPremiumMonthly && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-300">Journal Premium</span>
+                      <span className="text-white font-medium">$29.99/mo</span>
+                    </div>
+                  )}
+                  <div className="pt-2 mt-2 border-t border-zinc-700 flex justify-between text-sm font-semibold">
+                    <span className="text-zinc-200">Total standalones</span>
+                    <span className="text-red-400">${standaloneMonthlyTotal.toFixed(2)}/mo</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comparison */}
+              <div className="p-4 rounded-xl border border-amber-500/25 mb-2"
+                style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)' }}>
+                <p className="text-xs text-amber-400/70 font-medium mb-2 uppercase tracking-wide">The smarter choice</p>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-zinc-300">Core plan</span>
+                  <span className="text-white font-medium">$59/mo</span>
+                </div>
+                <p className="text-xs text-zinc-500 mb-3">
+                  ⚠️ Core does <span className="text-red-400 font-medium">not</span> include War Zone or Top Secret — you'd lose those.
+                </p>
+                <div className="h-px bg-zinc-700/50 mb-3" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-[#C9A646] font-semibold">Finotaur plan</span>
+                  <span className="text-[#C9A646] font-semibold">$109/mo</span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-1">
+                  ✅ Includes <span className="text-white">everything</span> — War Zone, Top Secret, Journal Premium + full platform.
+                  {standaloneMonthlyTotal > 109 && (
+                    <span className="text-emerald-400 font-medium"> Save ${(standaloneMonthlyTotal - 109).toFixed(2)}/mo vs standalones.</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="px-6 pb-6 space-y-2.5">
+              {wouldSaveWithFinotaur && (
+                <button
+                  onClick={() => {
+                    setShowCoreValueWarning(false);
+                    proceedToCheckout('finotaur');
+                  }}
+                  className="w-full py-3 rounded-xl text-sm font-bold transition-all hover:scale-[1.02]"
+                  style={{
+                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                    color: '#000',
+                    boxShadow: '0 6px 30px rgba(201,166,70,0.4)',
+                  }}
+                >
+                  Switch to Finotaur — Better Value →
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setShowCoreValueWarning(false);
+                  proceedToCheckout('core');
+                }}
+                className="w-full py-2.5 rounded-xl border border-zinc-700 hover:border-zinc-500 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 text-sm font-medium transition-all"
+              >
+                Continue with Core anyway
+              </button>
+              <button
+                onClick={() => setShowCoreValueWarning(false)}
+                className="w-full py-2 text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 🔥 Upgrade Warning Popup */}
       {showUpgradeWarning && pendingPlanId && (
