@@ -773,23 +773,28 @@ export default function PlatformPricing() {
                 {/* Subscription Info for Current Plan */}
                 {isCurrentPlan && plan.id !== 'free' && (
                   <div className="mt-3 pt-3 border-t border-zinc-700/30 space-y-1.5">
-                    {isInTrial && trialEndsAt && (
+                    {isInTrial && trialEndsAt ? (
+                      // בטריאל — מציג רק את תאריך סוף הטריאל
                       <p className="text-xs text-blue-400 flex items-center gap-1.5">
                         <Clock className="w-3 h-3" />
-                        Trial ends {new Date(trialEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {cancelAtPeriodEnd ? 'Trial ends' : 'Trial ends'} {new Date(trialEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
-                    )}
-                    {cancelAtPeriodEnd && subscriptionExpiresAt && (
-                      <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3 h-3" />
-                        Access until {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
-                    )}
-                    {!isInTrial && !cancelAtPeriodEnd && subscriptionExpiresAt && (
-                      <p className="text-xs text-zinc-500 flex items-center gap-1.5">
-                        <Clock className="w-3 h-3" />
-                        Next billing {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </p>
+                    ) : (
+                      // לא בטריאל — מציג Access until או Next billing
+                      <>
+                        {cancelAtPeriodEnd && subscriptionExpiresAt && (
+                          <p className="text-xs text-amber-400 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3 h-3" />
+                            Access until {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        )}
+                        {!cancelAtPeriodEnd && subscriptionExpiresAt && (
+                          <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+                            <Clock className="w-3 h-3" />
+                            Next billing {new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        )}
+                      </>
                     )}
                     {cancelAtPeriodEnd && (
                       <p className="text-xs text-amber-400/80">Cancellation pending</p>
