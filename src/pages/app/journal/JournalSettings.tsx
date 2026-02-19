@@ -780,7 +780,7 @@ const CancelSubscriptionModal = ({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: CancellationData) => Promise<{ success?: boolean; subscription?: { expiresAt?: string } } | null>;
+  onConfirm: (data: CancellationData) => Promise<{ success?: boolean; subscription?: { expiresAt?: string; trialEndsAt?: string } } | null>;
   isLoading: boolean;
   currentPlan: string;
   expiresAt?: string | null;
@@ -818,7 +818,13 @@ const CancelSubscriptionModal = ({
     });
     
     if (result?.success) {
-      setFinalExpiresAt(result.subscription?.expiresAt || expiresAt || null);
+      // 🔥 FIX: Use trial end date if returned (not full billing period)
+      setFinalExpiresAt(
+        result.subscription?.trialEndsAt ||
+        result.subscription?.expiresAt || 
+        expiresAt || 
+        null
+      );
       setStep('success');
     }
   }, [selectedReason, feedback, onConfirm, expiresAt]);
@@ -1122,9 +1128,14 @@ const portfolioValues = useMemo(() => {
 // 🔥 Handle subscription cancellation with feedback
   const handleCancelSubscription = useCallback(async (data: { reason_id: string; reason_label: string; feedback?: string }) => {
     const result = await cancelSubscription(data, 'journal');
-    // Return result to modal - don't close here, let success screen show
+    if (!result) return null;
+    // 🔥 FIX: If user was in trial, inject trialEndsAt so modal shows correct date
+    if (result.subscription && profile?.is_in_trial && profile?.trial_ends_at) {
+      result.subscription.isInTrial = true;
+      result.subscription.trialEndsAt = profile.trial_ends_at;
+    }
     return result;
-  }, [cancelSubscription]);
+  }, [cancelSubscription, profile?.is_in_trial, profile?.trial_ends_at]);
 
   // 🔥 Handle subscription reactivation (undo cancellation)
   const handleReactivateSubscription = useCallback(async () => {

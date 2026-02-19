@@ -245,6 +245,8 @@ export default function PlatformPricing() {
 
   const [showUpgradeWarning, setShowUpgradeWarning] = useState(false);
   const [pendingPlanId, setPendingPlanId] = useState<PlatformPlanId | null>(null);
+  const [showDowngradeTierDialog, setShowDowngradeTierDialog] = useState(false);
+  const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<PlatformPlanId | null>(null);
 
   const proceedToCheckout = (planId: PlatformPlanId) => {
     setLoading(planId);
@@ -262,6 +264,9 @@ export default function PlatformPricing() {
     }
   };
 
+  // 🔥 Plan tier for downgrade detection
+  const PLAN_TIER: Record<string, number> = { free: 0, core: 1, finotaur: 2, enterprise: 3 };
+
   const handlePlanClick = (planId: PlatformPlanId) => {
     // Free = open downgrade confirmation dialog
     if (planId === 'free') {
@@ -278,11 +283,20 @@ export default function PlatformPricing() {
     // Block if same plan + same interval (not an upgrade)
     if (planId === currentPlatformPlan && !isUpgradeToYearly) return;
 
-    // 🔥 Show cancellation warning if user has existing paid subscriptions
+    // 🔥 Detect downgrade to lower tier (e.g. Finotaur → Core)
+    const currentTier = PLAN_TIER[currentPlatformPlan] ?? 0;
+    const targetTier = PLAN_TIER[planId] ?? 0;
+    const isDowngrade = targetTier < currentTier;
+
+    if (isDowngrade) {
+      setPendingDowngradePlanId(planId);
+      setShowDowngradeTierDialog(true);
+      return;
+    }
+
+    // Upgrade — show warning about cancelling existing subscriptions
     const hasExistingSubscriptions = currentPlatformPlan !== 'free';
     if (hasExistingSubscriptions || (planId === 'finotaur' || planId === 'enterprise')) {
-      // Check if this is an upgrade that will cancel War Zone / Top Secret / Journal
-      // Finotaur/Enterprise include all these, so warn user
       setPendingPlanId(planId);
       setShowUpgradeWarning(true);
       return;
@@ -593,6 +607,11 @@ export default function PlatformPricing() {
                 )}
 
                 {/* CTA Button */}
+                {(() => {
+                  const currentTier = PLAN_TIER[currentPlatformPlan] ?? 0;
+                  const planTier = PLAN_TIER[plan.id] ?? 0;
+                  const isDowngradeTier = planTier < currentTier && plan.id !== 'free' && currentPlatformPlan !== 'free';
+                  return (
                 <button 
                   onClick={() => handlePlanClick(plan.id)}
                   disabled={(isCurrentPlan && plan.id !== 'free') || isLoadingThis || checkoutLoading}
@@ -601,6 +620,8 @@ export default function PlatformPricing() {
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                       : plan.id === 'free' && currentPlatformPlan !== 'free'
                       ? 'border border-zinc-700 hover:border-red-500/40 hover:bg-red-500/5 text-zinc-400 hover:text-red-400'
+                      : isDowngradeTier
+                      ? 'border border-zinc-600 hover:border-amber-500/40 hover:bg-amber-500/5 text-zinc-400 hover:text-amber-400'
                       : isCurrentPlan
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                       : plan.featured 
@@ -637,6 +658,10 @@ export default function PlatformPricing() {
                       <Check className="w-4 h-4" />
                       Current Plan
                     </span>
+                  ) : isDowngradeTier ? (
+                    <span className="flex items-center justify-center gap-2">
+                      ↓ Downgrade to {plan.name}
+                    </span>
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       {billingInterval === 'yearly' && plan.trialDays > 0 ? 'Get Yearly Plan' : plan.cta}
@@ -644,6 +669,8 @@ export default function PlatformPricing() {
                     </span>
                   )}
                 </button>
+                  );
+                })()}
 
                 {/* Subscription Info for Current Plan */}
                 {isCurrentPlan && plan.id !== 'free' && (
@@ -864,6 +891,105 @@ export default function PlatformPricing() {
                   Yes, I Want to Downgrade
                 </button>
                 
+                <p className="text-center text-xs text-zinc-500">
+                  Your access continues until the end of your billing period
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔥 Downgrade Tier Dialog (e.g. Finotaur → Core) */}
+        {showDowngradeTierDialog && pendingDowngradePlanId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="relative w-full max-w-md mx-4 rounded-2xl overflow-hidden"
+                 style={{
+                   background: 'linear-gradient(135deg, rgba(24,24,27,0.98) 0%, rgba(9,9,11,0.98) 100%)',
+                   border: '1px solid rgba(201,166,70,0.3)',
+                   boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                 }}>
+              <div className="px-6 pt-6 pb-4">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4">
+                  <AlertTriangle className="w-6 h-6 text-amber-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-1">
+                  Downgrade to {pendingDowngradePlanId.charAt(0).toUpperCase() + pendingDowngradePlanId.slice(1)}?
+                </h3>
+                <p className="text-zinc-400 text-sm leading-relaxed">
+                  Downgrading mid-cycle isn't possible. Your current{' '}
+                  <span className="text-white font-medium capitalize">{currentPlatformPlan}</span> plan
+                  is active until{' '}
+                  <span className="text-[#C9A646] font-medium">
+                    {subscriptionExpiresAt
+                      ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                      : 'the end of your billing period'}
+                  </span>.
+                </p>
+              </div>
+
+              <div className="mx-6 mb-4 p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50">
+                <p className="text-sm text-zinc-300 font-medium mb-1">What to do instead:</p>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  Cancel your current plan now — you'll keep full access until your billing period ends.
+                  Then subscribe to{' '}
+                  <span className="text-white font-medium capitalize">{pendingDowngradePlanId}</span>{' '}
+                  when it expires.
+                </p>
+              </div>
+
+              <div className="px-6 pb-6 space-y-3">
+                <button
+                  onClick={() => setShowDowngradeTierDialog(false)}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#D4BF8E] text-black font-medium transition-all flex items-center justify-center gap-2 hover:opacity-90"
+                >
+                  <Crown className="w-4 h-4" />
+                  Keep My {currentPlatformPlan.charAt(0).toUpperCase() + currentPlatformPlan.slice(1)} Plan
+                </button>
+
+                <button
+                  onClick={async () => {
+                    setShowDowngradeTierDialog(false);
+                    try {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session?.access_token) {
+                        navigate('/app/settings?tab=billing');
+                        toast.info('Please cancel from the Billing tab.');
+                        return;
+                      }
+                      const response = await fetch(
+                        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whop-manage-subscription`,
+                        {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${session.access_token}`,
+                            'Content-Type': 'application/json',
+                          },
+                          body: JSON.stringify({
+                            action: 'cancel',
+                            product: 'platform',
+                            reason: `User downgrading from ${currentPlatformPlan} to ${pendingDowngradePlanId}`,
+                          }),
+                        }
+                      );
+                      const data = await response.json();
+                      if (data.success) {
+                        toast.success('Subscription cancelled — you keep access until your billing period ends.');
+                        setCancelAtPeriodEnd(true);
+                      } else {
+                        toast.error(data.error || 'Failed to cancel. Try from Settings.');
+                        navigate('/app/settings?tab=billing');
+                      }
+                    } catch {
+                      toast.error('Failed to cancel. Try from Settings.');
+                      navigate('/app/settings?tab=billing');
+                    }
+                  }}
+                  className="w-full py-3 px-4 rounded-xl border border-zinc-700/50 hover:border-red-500/40 bg-zinc-800/30 hover:bg-red-500/5 transition-all flex items-center justify-center gap-2 text-zinc-400 hover:text-red-400"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel Current Plan & Downgrade Later
+                </button>
+
                 <p className="text-center text-xs text-zinc-500">
                   Your access continues until the end of your billing period
                 </p>

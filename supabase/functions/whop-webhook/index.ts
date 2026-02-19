@@ -78,6 +78,14 @@ const NEWSLETTER_PLAN_IDS = new Set([
   'plan_bp2QTGuwfpj0A',  // War Zone Yearly ($699)
 ]);
 
+// 🔥 v8.8.0: Journal Product ID → plan info (for downgrade detection)
+const PRODUCT_ID_TO_PLAN_JOURNAL: Record<string, { plan: string; interval: string }> = {
+  'prod_ZaDN418HLst3r': { plan: 'basic', interval: 'monthly' },
+  'prod_bPwSoYGedsbyh': { plan: 'basic', interval: 'yearly' },
+  'prod_Kq2pmLT1JyGsU': { plan: 'premium', interval: 'monthly' },
+  'prod_vON7zlda6iuII': { plan: 'premium', interval: 'yearly' },
+};
+
 // ============================================
 // HELPER: Get billing interval from plan ID
 // ============================================
@@ -1769,19 +1777,45 @@ const { error: updateError } = await supabase
         if (currentJournal?.whop_membership_id && 
             currentJournal.whop_membership_id !== membershipId &&
             ['active', 'trial', 'trialing'].includes(currentJournal.subscription_status || '')) {
-          console.log("🔥 v7.3.0: Detected Journal upgrade — cancelling old membership:", {
-            oldMembership: currentJournal.whop_membership_id,
-            oldPlan: currentJournal.account_type,
-            oldInterval: currentJournal.subscription_interval,
-            newMembership: membershipId,
-          });
+          
+          const oldPlan = currentJournal.account_type; // 'basic' or 'premium'
+          const newPlanInfo = PRODUCT_ID_TO_PLAN_JOURNAL[productId] || null;
+          const newPlan = newPlanInfo?.plan || null;
+          const oldInterval = currentJournal.subscription_interval;
+
+          // 🔥 v8.8.0: Detect downgrade (e.g. premium → basic/core)
+          const PLAN_TIER: Record<string, number> = { basic: 1, premium: 2 };
+          const oldTier = PLAN_TIER[oldPlan || ''] ?? 0;
+          const newTier = PLAN_TIER[newPlan || ''] ?? 0;
+          const isJournalDowngrade = newTier < oldTier;
+          const isPremiumDowngradedByCore = oldPlan === 'premium' && newPlan === 'basic';
+
+          // 🔥 Downgrade OR yearly→monthly: at_period_end (keep Premium access until billing date)
+          // 🔥 Upgrade (basic→premium) OR monthly→yearly: immediate
+          const useAtPeriodEnd = isJournalDowngrade || (oldInterval === 'yearly' && newPlan === oldPlan);
+
+          console.log(`🔥 v8.8.0: Journal transition — ${oldPlan}(${oldInterval}) → ${newPlan}, useAtPeriodEnd=${useAtPeriodEnd}`);
 
           if (currentJournal.whop_membership_id.startsWith('mem_')) {
-            const cancelResult = await cancelMembership(currentJournal.whop_membership_id, 'immediate');
-            if (cancelResult.success) {
-              console.log("✅ Old Journal membership cancelled successfully");
+            if (useAtPeriodEnd) {
+              const cancelResult = await cancelMembership(currentJournal.whop_membership_id, 'at_period_end');
+              if (cancelResult.success) {
+                console.log(`✅ Old Journal (${oldPlan}) scheduled for cancellation at period end — user keeps access`);
+                // Mark in DB: premium stays active until period end
+                await supabase.from('profiles').update({
+                  subscription_cancel_at_period_end: true,
+                  updated_at: new Date().toISOString(),
+                }).eq('id', journalUser.id);
+              } else {
+                console.warn("⚠️ Failed to schedule Journal cancellation at period end:", cancelResult.error);
+              }
             } else {
-              console.warn("⚠️ Failed to cancel old Journal membership:", cancelResult.error);
+              const cancelResult = await cancelMembership(currentJournal.whop_membership_id, 'immediate');
+              if (cancelResult.success) {
+                console.log("✅ Old Journal membership cancelled immediately (upgrade)");
+              } else {
+                console.warn("⚠️ Failed to cancel old Journal membership:", cancelResult.error);
+              }
             }
           }
         }

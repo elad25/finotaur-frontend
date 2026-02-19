@@ -1218,7 +1218,11 @@ const BillingTab = () => {
                 )}
               </Badge>
             </div>
-            <span className="text-lg font-semibold text-white">{journalInfo.price}</span>
+            <span className="text-lg font-semibold text-white">
+              {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') 
+                ? 'Free Trial' 
+                : journalInfo.price}
+            </span>
           </div>
           
           <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1230,11 +1234,11 @@ const BillingTab = () => {
             </div>
             <div>
               <p className="text-zinc-500">
-                {profile?.is_in_trial ? 'Trial ends' : 'Next billing'}
+                {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') ? 'Trial ends' : 'Next billing'}
               </p>
               <p className="flex items-center gap-1 text-zinc-300">
-                {profile?.is_in_trial ? (
-                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.trial_ends_at)}</>
+                {(profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') ? (
+                  <><Clock className="w-3 h-3 text-amber-400" />{formatDate(profile?.trial_ends_at || profile?.subscription_expires_at)}</>
                 ) : (
                   <><Calendar className="w-3 h-3" />{formatDate(profile?.subscription_expires_at)}</>
                 )}
@@ -1384,10 +1388,7 @@ const BillingTab = () => {
                     <span className="text-xl font-bold text-white">$69.99/mo</span>
                   )
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-zinc-500 line-through text-sm">$69.99</span>
-                    <span className="text-xl font-bold text-white">$44.99/mo</span>
-                  </div>
+                  <span className="text-xl font-bold text-white">$69.99/mo</span>
                 )}
               </div>
             </div>
@@ -1449,7 +1450,7 @@ const BillingTab = () => {
                     {newsletterPricing.isInTrial ? (
                       <div className="flex items-center gap-2 text-xs">
                         <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 text-[10px]">7-Day Trial</Badge>
-                        <span className="text-zinc-400">→ Then $44.99/mo for 2 months → $69.99/mo after</span>
+                        <span className="text-zinc-400">→ Then $69.99/mo after trial</span>
                       </div>
                     ) : newsletterPricing.isInIntro ? (
                       <div className="flex items-center gap-2 text-xs">
@@ -1557,7 +1558,7 @@ const BillingTab = () => {
               <div className="pt-4 border-t border-zinc-700/50">
                 <div className="mb-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                   <p className="text-xs text-emerald-400 text-center font-medium">
-                    🔥 Limited: 7-day FREE trial → $44.99/mo for 2 months → $69.99/mo
+                    🔥 Limited: 7-day FREE trial → $69.99/mo
                   </p>
                 </div>
                 <Button
