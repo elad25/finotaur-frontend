@@ -68,7 +68,9 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
       current_month_trades_count,
       platform_plan,
       platform_subscription_status,
-      platform_bundle_journal_granted
+      platform_bundle_journal_granted,
+      is_in_trial,
+      trial_ends_at
     `)
     .eq('id', userId)
     .maybeSingle();
@@ -249,7 +251,16 @@ export function getNextBillingDate(profile: UserProfile | null | undefined): str
     return 'Lifetime';
   }
 
-  // Regular subscribers - show expiration date
+  // 🔥 Trial users: show trial end date (14 days), not billing date
+  if ((profile.is_in_trial || profile.subscription_status === 'trial') && profile.trial_ends_at) {
+    return new Date(profile.trial_ends_at).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  // Regular subscribers - show expiration date (renews every 30 days)
   if (profile.subscription_expires_at) {
     return new Date(profile.subscription_expires_at).toLocaleDateString('en-US', {
       month: 'short',

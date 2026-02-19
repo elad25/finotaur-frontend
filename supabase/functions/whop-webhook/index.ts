@@ -1567,12 +1567,13 @@ if (isTopSecretPayment) {
       // Core includes Basic → cancel Basic if user had standalone Basic
       // Finotaur/Enterprise includes Premium → cancel Basic OR Premium
       // EXCEPTION: Yearly Journal → cancel at_period_end only, Platform permissions take precedence
-      if (platformPlan === 'platform_core' || platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
-        const { data: existingSubs } = await supabase
-          .from('profiles')
-          .select('whop_membership_id, subscription_status, account_type, subscription_interval, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
-          .eq('id', userResult.id)
-          .single();
+let existingSubs: any = null;
+    if (platformPlan === 'platform_core' || platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
+      ({ data: existingSubs } = await supabase
+        .from('profiles')
+        .select('whop_membership_id, subscription_status, account_type, subscription_interval, subscription_expires_at, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
+        .eq('id', userResult.id)
+        .single());
 
         if (existingSubs) {
           // 1) Cancel standalone Journal (Basic/Premium)
@@ -1595,7 +1596,7 @@ if (isTopSecretPayment) {
             const isPremiumCancelledByCore = platformPlan === 'platform_core' && existingAccountType === 'premium';
             const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
             const useAtPeriodEnd = isYearlyJournal || isPremiumCancelledByCore;
-            console.log(`🔥 v8.6.0: Handling standalone Journal (${isYearlyJournal ? 'yearly→at_period_end' : 'monthly→immediate'}):`, existingSubs.whop_membership_id);
+            console.log(`🔥 v8.6.0: Handling standalone Journal (${isYearlyJournal ? 'yearly→at_period_end' : isPremiumCancelledByCore ? 'premium+core→at_period_end' : 'monthly→immediate'}):`, existingSubs.whop_membership_id);
             
                         if (existingSubs.whop_membership_id.startsWith('mem_')) {
               if (useAtPeriodEnd) {
@@ -1677,17 +1678,28 @@ const { error: updateError } = await supabase
           ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
           // 🔥 v8.5.0: Core includes Journal Basic (25 trades/month, 1 portfolio, no backtest)
-          ...(platformPlan === 'platform_core' ? {
-            account_type: 'basic',
-            max_trades: 25,
-            subscription_status: isInTrial ? 'trial' : 'active',
-            subscription_interval: billingInterval,
-            subscription_expires_at: expiresAt,
-            subscription_started_at: new Date().toISOString(),
-            is_in_trial: isInTrial,
-            trial_ends_at: trialEndsAt,
-            platform_bundle_journal_granted: true,
-          } : {}),
+          // 🔥 v8.9.0: If user had Premium (yearly or at_period_end), keep Premium access until it expires
+          ...(platformPlan === 'platform_core' ? (() => {
+            const coreExistingSubs = existingSubs ?? null;
+            const hadPremiumAtPeriodEnd = coreExistingSubs?.account_type === 'premium' && 
+              (coreExistingSubs?.subscription_interval === 'yearly' || coreExistingSubs?.subscription_cancel_at_period_end === true);
+            // 🔥 v8.9.1: If yearly Premium — keep Premium access until original expiry date
+            const premiumExpiresAt = hadPremiumAtPeriodEnd 
+              ? (coreExistingSubs?.subscription_expires_at ?? expiresAt)
+              : expiresAt;
+            return {
+              account_type: hadPremiumAtPeriodEnd ? 'premium' : 'basic',
+              max_trades: hadPremiumAtPeriodEnd ? 999999 : 25,
+              subscription_status: hadPremiumAtPeriodEnd ? 'active' : (isInTrial ? 'trial' : 'active'),
+              subscription_interval: hadPremiumAtPeriodEnd ? (coreExistingSubs?.subscription_interval ?? billingInterval) : billingInterval,
+              subscription_expires_at: premiumExpiresAt,
+              subscription_cancel_at_period_end: hadPremiumAtPeriodEnd ? true : false,
+              subscription_started_at: new Date().toISOString(),
+              is_in_trial: hadPremiumAtPeriodEnd ? false : isInTrial,
+              trial_ends_at: hadPremiumAtPeriodEnd ? null : trialEndsAt,
+              platform_bundle_journal_granted: true,
+            };
+          })() : {}),
           // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
           ...(platformPlan === 'platform_finotaur' ? {
             account_type: 'premium',
@@ -2077,12 +2089,13 @@ async function handleMembershipActivated(
     // - Core: cancel Basic only (Core includes Basic, not Premium)
     // - Finotaur/Enterprise: cancel any tier (they include Premium)
     // EXCEPTION: Yearly Journal → cancel at_period_end, Platform permissions take precedence
+    let existingSubs: any = null;
     if (platformPlan === 'platform_core' || platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise') {
-      const { data: existingSubs } = await supabase
+      ({ data: existingSubs } = await supabase
         .from('profiles')
         .select('whop_membership_id, subscription_status, account_type, subscription_interval, subscription_expires_at, newsletter_whop_membership_id, newsletter_status, top_secret_whop_membership_id, top_secret_status')
         .eq('id', userResult.id)
-        .single();
+        .single());
 
       if (existingSubs) {
         // 1) Cancel standalone Journal (Basic/Premium)
@@ -2169,19 +2182,31 @@ async function handleMembershipActivated(
         ...(isInTrial && platformPlan === 'platform_core' ? { platform_core_trial_used_at: new Date().toISOString() } : {}),
 ...(isInTrial && platformPlan === 'platform_finotaur' ? { platform_finotaur_trial_used_at: new Date().toISOString() } : {}),
         // 🔥 v8.5.0: Core includes Journal Basic (25 trades/month, 1 portfolio, no backtest)
-        ...(platformPlan === 'platform_core' ? {
-          account_type: 'basic',
-          max_trades: 25,
-          subscription_status: isInTrial ? 'trial' : 'active',
-          subscription_interval: billingInterval,
-          subscription_expires_at: billingInterval === 'yearly'
+        // 🔥 v8.9.0: If user had Premium (yearly or at_period_end), keep Premium access until it expires
+        ...(platformPlan === 'platform_core' ? (() => {
+          const coreExistingSubs = existingSubs ?? null;
+          const hadPremiumAtPeriodEnd = coreExistingSubs?.account_type === 'premium' && 
+            (coreExistingSubs?.subscription_interval === 'yearly' || coreExistingSubs?.subscription_cancel_at_period_end === true);
+          const defaultExpiry = billingInterval === 'yearly'
             ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          subscription_started_at: new Date().toISOString(),
-          is_in_trial: isInTrial,
-          trial_ends_at: trialEndsAt,
-          platform_bundle_journal_granted: true,
-        } : {}),
+            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          // 🔥 v8.9.1: If yearly Premium — keep Premium access until original expiry date
+          const premiumExpiresAt = hadPremiumAtPeriodEnd
+            ? (coreExistingSubs?.subscription_expires_at ?? defaultExpiry)
+            : defaultExpiry;
+          return {
+            account_type: hadPremiumAtPeriodEnd ? 'premium' : 'basic',
+            max_trades: hadPremiumAtPeriodEnd ? 999999 : 25,
+            subscription_status: hadPremiumAtPeriodEnd ? 'active' : (isInTrial ? 'trial' : 'active'),
+            subscription_interval: hadPremiumAtPeriodEnd ? (coreExistingSubs?.subscription_interval ?? billingInterval) : billingInterval,
+            subscription_expires_at: premiumExpiresAt,
+            subscription_cancel_at_period_end: hadPremiumAtPeriodEnd ? true : false,
+            subscription_started_at: new Date().toISOString(),
+            is_in_trial: hadPremiumAtPeriodEnd ? false : isInTrial,
+            trial_ends_at: hadPremiumAtPeriodEnd ? null : trialEndsAt,
+            platform_bundle_journal_granted: true,
+          };
+        })() : {}),
         // 🔥 v7.0.0: Finotaur includes Journal Premium + Newsletter + Top Secret
         ...(platformPlan === 'platform_finotaur' ? {
           account_type: 'premium',

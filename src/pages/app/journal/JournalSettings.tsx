@@ -1556,15 +1556,15 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                     {profile?.subscription_cancel_at_period_end 
                       ? 'Access Until' 
                       : (profile?.is_in_trial || profile?.subscription_status === 'trial')
-                      ? 'Trial Ends'
+                      ? 'Trial Ends (14 days)'
                       : 'Billing Date'}
                   </label>
                   <p className="text-xs text-zinc-500 mt-1">
                     {profile?.subscription_cancel_at_period_end 
                       ? 'Your subscription ends on this date'
                       : (profile?.is_in_trial || profile?.subscription_status === 'trial')
-                      ? 'First charge after trial ends'
-                      : 'Next billing cycle'
+                      ? 'First charge after 14-day trial ends'
+                      : 'Renews every 30 days'
                     }
                   </p>
                 </div>
