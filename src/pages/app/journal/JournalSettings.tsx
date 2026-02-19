@@ -309,7 +309,7 @@ const UpgradePlanModal = ({
     }
   }, [billingInterval]);
 
-  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade' | 'select'; label: string } => {
+  const getPlanAction = useCallback((plan: Plan): { type: 'current' | 'upgrade' | 'downgrade' | 'pending_downgrade' | 'select' | 'blocked_interval'; label: string } => {
     // 🔥 v2.0: For users without a plan, show "Select" or "Start Trial"
     if (needsPlanSelection) {
       return { 
@@ -336,6 +336,10 @@ const UpgradePlanModal = ({
     }
     
     if (plan.tier > currentTier) {
+      // 🔥 גישה C: Basic Yearly → Premium Monthly = חסום, הצע Yearly במקום
+      if (currentBillingInterval === 'yearly' && billingInterval === 'monthly') {
+        return { type: 'blocked_interval', label: 'Switch to Yearly to Upgrade' };
+      }
       return { type: 'upgrade', label: `Upgrade to ${plan.name}` };
     }
     
@@ -348,6 +352,14 @@ const UpgradePlanModal = ({
     
     if (planId === currentPlan && !isSamePlanYearlyUpgrade) {
       toast.info("This is your current plan");
+      return;
+    }
+
+    // 🔥 גישה C: חסום Basic Yearly → Premium Monthly
+    const selectedPlanData = plans.find(p => p.id === planId);
+    if (selectedPlanData && selectedPlanData.tier > currentTier && currentBillingInterval === 'yearly' && billingInterval === 'monthly') {
+      toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
+      setBillingInterval('yearly');
       return;
     }
 
@@ -545,6 +557,7 @@ const UpgradePlanModal = ({
               const isDowngrade = action.type === 'downgrade';
               const isPendingDowngrade = action.type === 'pending_downgrade';
               const isSelect = action.type === 'select';
+              const isBlockedInterval = action.type === 'blocked_interval';
               const hasTrial = plan.trialDays != null && plan.trialDays > 0;
               
               return (
@@ -677,13 +690,24 @@ const UpgradePlanModal = ({
                   </ul>
 
                   {/* CTA Button */}
+                  {/* 🔥 גישה C: הודעת חסימה ל-Basic Yearly → Premium Monthly */}
+                  {action.type === 'blocked_interval' && (
+                    <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
+                      <p className="text-amber-300 text-xs leading-relaxed">
+                        You're on <strong>Basic Yearly</strong>. To upgrade, switch to <strong>Yearly billing</strong> above — or wait until your current cycle ends.
+                      </p>
+                    </div>
+                  )}
+
                   <button 
                     onClick={() => handlePlanSelect(plan.id)}
-                    disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade}
+                    disabled={isCurrentPlan || isProcessingDowngrade || isPendingDowngrade || action.type === 'blocked_interval'}
                     className={`w-full py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                         : isPendingDowngrade
+                        ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
+                        : action.type === 'blocked_interval'
                         ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
                         : isSelect && hasTrial
                         ? 'bg-blue-500 hover:bg-blue-400 text-white hover:scale-[1.02]'
@@ -1129,13 +1153,17 @@ const portfolioValues = useMemo(() => {
   const handleCancelSubscription = useCallback(async (data: { reason_id: string; reason_label: string; feedback?: string }) => {
     const result = await cancelSubscription(data, 'journal');
     if (!result) return null;
-    // 🔥 FIX: If user was in trial, inject trialEndsAt so modal shows correct date
-    if (result.subscription && profile?.is_in_trial && profile?.trial_ends_at) {
-      result.subscription.isInTrial = true;
-      result.subscription.trialEndsAt = profile.trial_ends_at;
+    // 🔥 FIX: Inject correct end date based on trial status
+    if (result.subscription) {
+      const isInTrial = profile?.is_in_trial || profile?.subscription_status === 'trial';
+      const trialEndsAt = profile?.trial_ends_at;
+      if (isInTrial && trialEndsAt) {
+        result.subscription.trialEndsAt = trialEndsAt;
+        result.subscription.expiresAt = trialEndsAt; // ← override expiresAt גם כן
+      }
     }
     return result;
-  }, [cancelSubscription, profile?.is_in_trial, profile?.trial_ends_at]);
+  }, [cancelSubscription, profile?.is_in_trial, profile?.trial_ends_at, profile?.subscription_status]);
 
   // 🔥 Handle subscription reactivation (undo cancellation)
   const handleReactivateSubscription = useCallback(async () => {

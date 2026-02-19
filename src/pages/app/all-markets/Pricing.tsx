@@ -262,6 +262,7 @@ export default function PlatformPricing() {
   const [showDowngradeTierDialog, setShowDowngradeTierDialog] = useState(false);
   const [pendingDowngradePlanId, setPendingDowngradePlanId] = useState<PlatformPlanId | null>(null);
   const [showCoreValueWarning, setShowCoreValueWarning] = useState(false);
+  const [showEnterpriseYearlyWarning, setShowEnterpriseYearlyWarning] = useState(false);
 
   const proceedToCheckout = (planId: PlatformPlanId) => {
     setLoading(planId);
@@ -322,15 +323,36 @@ export default function PlatformPricing() {
       return;
     }
 
+    // 🔥 גישה C: חסום Yearly → Monthly upgrade
+    // Enterprise מותר תמיד (אין לו yearly) — אבל מציג popup מיוחד
+    if (currentBillingInterval === 'yearly' && billingInterval === 'monthly' && targetTier > currentTier && planId !== 'enterprise') {
+      setBillingInterval('yearly');
+      toast.info("You're on a yearly plan — switch to Yearly billing above to upgrade.");
+      return;
+    }
+
+    // 🔥 Enterprise מ-Yearly: אפשרי אבל מציג אזהרה על ביטול המנוי הנוכחי
+    if (currentBillingInterval === 'yearly' && planId === 'enterprise') {
+      setShowEnterpriseYearlyWarning(true);
+      return;
+    }
+
     // 🔥 Core value warning: user pays more on standalones than Core+Finotaur is worth
     if (planId === 'core' && hasExpensiveStandalones && currentPlatformPlan === 'free') {
       setShowCoreValueWarning(true);
       return;
     }
 
-    // Upgrade — show warning about cancelling existing subscriptions
-    const hasExistingSubscriptions = currentPlatformPlan !== 'free';
-    if (hasExistingSubscriptions || (planId === 'finotaur' || planId === 'enterprise')) {
+    // Monthly → Yearly של אותו plan: checkout ישיר, בלי popup
+    if (isUpgradeToYearly) {
+      proceedToCheckout(planId);
+      return;
+    }
+
+    // הצג אזהרה רק אם יש מנויים קיימים שיבוטלו
+    const hasStandaloneSubscriptions = hasNewsletterMonthly || hasTopSecretMonthly || hasJournalPremiumMonthly || hasActiveJournalSubscription;
+    const hasExistingPlatform = currentPlatformPlan !== 'free';
+    if (hasExistingPlatform || hasStandaloneSubscriptions) {
       setPendingPlanId(planId);
       setShowUpgradeWarning(true);
       return;
@@ -554,6 +576,16 @@ export default function PlatformPricing() {
               currentBillingInterval === 'yearly' && billingInterval === 'monthly';
             const isCurrentPlan = (isSamePlanSameInterval || isSamePlanDowngradeToMonthly) && !isSamePlanUpgradeToYearly;
             const isLoadingThis = loading === plan.id;
+
+            // 🔥 גישה C: חסום Yearly → Monthly upgrade
+            const planTierVal = PLAN_TIER[plan.id] ?? 0;
+            const currentTierVal = PLAN_TIER[currentPlatformPlan] ?? 0;
+            const isBlockedYearlyToMonthly = 
+              currentBillingInterval === 'yearly' && 
+              billingInterval === 'monthly' && 
+              planTierVal > currentTierVal && 
+              plan.id !== 'enterprise' &&
+              !isCurrentPlan;
             
             return (
               <div
@@ -704,6 +736,15 @@ export default function PlatformPricing() {
                   </div>
                 )}
 
+                {/* 🔥 גישה C: הודעת חסימה ל-Yearly → Monthly upgrade */}
+                {isBlockedYearlyToMonthly && (
+                  <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-center">
+                    <p className="text-amber-300 text-xs leading-relaxed">
+                      You're on a <strong>Yearly plan</strong>. Switch to <strong>Yearly billing</strong> above to upgrade — or wait until your current cycle ends.
+                    </p>
+                  </div>
+                )}
+
                 {/* CTA Button */}
                 {(() => {
                   const currentTier = PLAN_TIER[currentPlatformPlan] ?? 0;
@@ -712,9 +753,11 @@ export default function PlatformPricing() {
                   return (
                 <button 
                   onClick={() => handlePlanClick(plan.id)}
-                  disabled={(isCurrentPlan && plan.id !== 'free') || isLoadingThis || checkoutLoading}
+                  disabled={(isCurrentPlan && plan.id !== 'free') || isLoadingThis || checkoutLoading || isBlockedYearlyToMonthly}
                   className={`w-full py-2.5 rounded-lg text-sm font-bold transition-all ${
-                    isCurrentPlan && plan.id === 'free'
+                    isBlockedYearlyToMonthly
+                      ? 'bg-amber-500/20 text-amber-400 cursor-not-allowed border border-amber-500/30'
+                      : isCurrentPlan && plan.id === 'free'
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                       : plan.id === 'free' && currentPlatformPlan !== 'free'
                       ? 'border border-zinc-700 hover:border-red-500/40 hover:bg-red-500/5 text-zinc-400 hover:text-red-400'
@@ -736,6 +779,10 @@ export default function PlatformPricing() {
                     <span className="flex items-center justify-center gap-2">
                       <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       Processing...
+                    </span>
+                  ) : isBlockedYearlyToMonthly ? (
+                    <span className="flex items-center justify-center gap-2">
+                      Switch to Yearly to Upgrade
                     </span>
                   ) : isCurrentPlan ? (
                     <span className="flex items-center justify-center gap-2">
@@ -1214,6 +1261,57 @@ export default function PlatformPricing() {
                 className="w-full py-2 text-zinc-500 hover:text-zinc-300 text-xs transition-colors"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 Enterprise from Yearly Warning */}
+      {showEnterpriseYearlyWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowEnterpriseYearlyWarning(false)}
+          />
+          <div className="relative w-full max-w-sm rounded-2xl p-6 z-10"
+            style={{ background: 'linear-gradient(135deg, #1a1a1a 0%, #111 100%)', border: '1px solid rgba(201,166,70,0.3)' }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              </div>
+              <h3 className="text-white font-semibold text-base">Heads up about your Yearly plan</h3>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed mb-4">
+              You're currently on a <span className="text-white font-medium capitalize">{currentPlatformPlan} Yearly</span> plan.
+              Subscribing to Enterprise will <span className="text-amber-400 font-medium">cancel your current plan at the end of your billing period</span> — you'll keep full access until then.
+            </p>
+            <div className="p-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 mb-5">
+              <p className="text-xs text-zinc-400">
+                📅 Your current plan remains active until:{' '}
+                <span className="text-white font-medium">
+                  {subscriptionExpiresAt
+                    ? new Date(subscriptionExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                    : 'end of billing period'}
+                </span>
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowEnterpriseYearlyWarning(false)}
+                className="flex-1 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  setShowEnterpriseYearlyWarning(false);
+                  proceedToCheckout('enterprise');
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+                style={{ background: 'linear-gradient(135deg, #C9A646, #D4BF8E)', color: '#000' }}
+              >
+                Continue to Enterprise
               </button>
             </div>
           </div>
