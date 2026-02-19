@@ -5,7 +5,7 @@
       "destination": "https://finotaur-server-production.up.railway.app/api/:path*" 
     },
     { 
-      "source": "/(.*)", 
+      "source": "/((?!api).*)", 
       "destination": "/" 
     }
   ]
