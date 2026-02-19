@@ -2053,42 +2053,44 @@ async function handleMembershipActivated(
         // 1) Cancel standalone Journal (Basic/Premium)
         // For Core: cancel only if existing is Basic (Core covers Basic, not Premium)
         // For Finotaur/Enterprise: cancel any tier
-        const existingAccountType = existingSubs.account_type;
-        const shouldCancelJournal = existingSubs.whop_membership_id &&
-          ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '') &&
-          (
-            (platformPlan === 'platform_core' && ['basic', 'premium'].includes(existingAccountType || '')) ||
-            (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise')
-          );
+        const existingAccountType = existingSubs.account_type; // 'basic' or 'premium'
+          const shouldCancelJournal = existingSubs.whop_membership_id && 
+            ['active', 'trialing', 'trial'].includes(existingSubs.subscription_status || '') &&
+            (
+              // Core: cancel Basic OR Premium (Basic=immediate, Premium=at_period_end)
+              (platformPlan === 'platform_core' && ['basic', 'premium'].includes(existingAccountType || '')) ||
+              // Finotaur/Enterprise: cancel any (they cover Premium)
+              (platformPlan === 'platform_finotaur' || platformPlan === 'platform_enterprise')
+            );
 
-        if (shouldCancelJournal) {
-          const isPremiumCancelledByCore = platformPlan === 'platform_core' && existingAccountType === 'premium';
-          const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
-          const useAtPeriodEnd = isYearlyJournal || isPremiumCancelledByCore;
+          if (shouldCancelJournal) {
+            // 🔥 v8.7.0: Core + Premium → at_period_end (user keeps Premium access until billing date)
+            // Core + Basic → immediate (Core already covers Basic access)
+            const isPremiumCancelledByCore = platformPlan === 'platform_core' && existingAccountType === 'premium';
+            const isYearlyJournal = existingSubs.subscription_interval === 'yearly';
+            const useAtPeriodEnd = isYearlyJournal || isPremiumCancelledByCore;
+            console.log(`🔥 v8.7.0: Handling standalone Journal (${isYearlyJournal ? 'yearly→at_period_end' : isPremiumCancelledByCore ? 'premium+core→at_period_end' : 'monthly→immediate'}):`, existingSubs.whop_membership_id);
 
-          if (useAtPeriodEnd) {
-            // Yearly Journal: cancel at period end, don't revoke immediately
-            // Platform already grants equal/higher access
-            console.log(`🔥 v8.6.0: Yearly Journal (${existingAccountType}) — scheduling at_period_end cancel:`, existingSubs.whop_membership_id);
             if (existingSubs.whop_membership_id.startsWith('mem_')) {
-              const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
-              console.log(r.success ? `✅ Yearly Journal (${existingAccountType}) scheduled for cancellation at period end` : "⚠️ Yearly Journal cancel failed:", r.error);
-            }
-            // Mark in DB as scheduled for cancellation but DON'T downgrade account_type
-            // Platform already gives equal/higher access
-            await supabase.from('profiles').update({
-              subscription_cancel_at_period_end: true,
-              updated_at: new Date().toISOString(),
-            }).eq('id', userResult.id);
-          } else {
-            // Monthly Journal: cancel immediately
-            console.log(`🔥 v8.6.0: Monthly Journal (${existingAccountType}) — cancelling immediately:`, existingSubs.whop_membership_id);
-            if (existingSubs.whop_membership_id.startsWith('mem_')) {
-              const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
-              console.log(r.success ? `✅ Monthly Journal (${existingAccountType}) cancelled` : "⚠️ Monthly Journal cancel failed:", r.error);
+              if (useAtPeriodEnd) {
+                // at_period_end: keep Premium access until billing date
+                const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
+                if (r.success) {
+                  console.log(`✅ Journal (${existingAccountType}) scheduled for cancellation at period end — user keeps Premium access`);
+                  await supabase.from('profiles').update({
+                    subscription_cancel_at_period_end: true,
+                    updated_at: new Date().toISOString(),
+                  }).eq('id', userResult.id);
+                } else {
+                  console.warn("⚠️ Failed to schedule Journal cancellation at period end:", r.error);
+                }
+              } else {
+                // Immediate: Core+Basic or Finotaur/Enterprise+any
+                const r = await cancelMembership(existingSubs.whop_membership_id, 'immediate');
+                console.log(r.success ? `✅ Journal (${existingAccountType}) cancelled immediately` : "⚠️ Journal immediate cancel failed:", r.error);
+              }
             }
           }
-        }
 
         // 2) Cancel standalone Newsletter (War Zone) — always immediate
         if (existingSubs.newsletter_whop_membership_id && 

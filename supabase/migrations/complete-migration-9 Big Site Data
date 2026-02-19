@@ -168,3 +168,2018 @@ CREATE POLICY "yield_snapshots_update_service" ON yield_snapshots
 -- ============================================================
 -- MIGRATION COMPLETE
 -- ============================================================
+-- =====================================================
+-- PART 13: EARNINGS ANALYSIS CACHE TABLE
+-- =====================================================
+-- Stores AI-generated earnings analysis per ticker
+-- Strategy:
+--   • One row per ticker (latest earnings only)
+--   • Invalidated when next_earnings_date passes
+--   • First user search triggers AI → saved for all users
+--   • Subsequent users get instant data from DB
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS earnings_analysis (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  company_name TEXT,
+  quarter TEXT,
+  quarter_range TEXT,
+  report_date TEXT,
+  analysis_data JSONB NOT NULL,
+  next_earnings_date DATE,
+  generated_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  ai_model TEXT DEFAULT 'openai',
+  generation_time_ms INTEGER,
+  search_used BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT earnings_analysis_ticker_unique UNIQUE (ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_earnings_analysis_ticker ON earnings_analysis(ticker);
+CREATE INDEX IF NOT EXISTS idx_earnings_analysis_expires ON earnings_analysis(expires_at);
+
+-- RLS
+ALTER TABLE earnings_analysis ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "earnings_analysis_service_all" ON earnings_analysis;
+CREATE POLICY "earnings_analysis_service_all" ON earnings_analysis
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "earnings_analysis_read" ON earnings_analysis;
+CREATE POLICY "earnings_analysis_read" ON earnings_analysis
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "earnings_analysis_anon_read" ON earnings_analysis;
+CREATE POLICY "earnings_analysis_anon_read" ON earnings_analysis
+  FOR SELECT TO anon
+  USING (true);
+
+-- Grants
+GRANT SELECT ON earnings_analysis TO authenticated;
+GRANT SELECT ON earnings_analysis TO anon;
+GRANT ALL ON earnings_analysis TO service_role;
+
+-- Auto-update updated_at
+DROP TRIGGER IF EXISTS earnings_analysis_updated_at ON earnings_analysis;
+CREATE TRIGGER earnings_analysis_updated_at
+  BEFORE UPDATE ON earnings_analysis
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 13: EARNINGS ANALYSIS CACHE TABLE CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'One row per ticker, invalidates on next earnings date';
+  RAISE NOTICE 'First search triggers AI, all users share cached result';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 14: OPTIONS AI CACHE TABLE (L2)
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS options_ai_cache (
+  key TEXT PRIMARY KEY,
+  data JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_options_ai_cache_updated 
+  ON options_ai_cache (updated_at);
+
+ALTER TABLE options_ai_cache ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "options_ai_cache_service_all" ON options_ai_cache;
+CREATE POLICY "options_ai_cache_service_all" ON options_ai_cache
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+GRANT ALL ON options_ai_cache TO service_role;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 14: OPTIONS AI CACHE TABLE CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'L2 persistent cache for Options AI dashboard';
+  RAISE NOTICE 'TTL managed by application (1 hour)';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 15: STOCK ANALYZER CACHE TABLE (10K Scale)
+-- =====================================================
+-- Persistent cache layer for StockAnalyzer
+-- Survives server restart/redeploy on Railway
+-- Strategy:
+--   • In-memory LRU (hot) → Supabase (warm) → API/AI (cold)
+--   • All users share the same cached data per ticker
+--   • Earnings-based invalidation for fundamental data
+--   • TTL-based invalidation for quote/analyst
+--   • Server warms cache from Supabase on startup
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS stock_analyzer_cache (
+  id BIGSERIAL PRIMARY KEY,
+  ticker TEXT NOT NULL,
+  cache_type TEXT NOT NULL,
+  data JSONB NOT NULL,
+  earnings_date TEXT,
+  ttl_seconds INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  UNIQUE(ticker, cache_type)
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_sac_ticker_type 
+  ON stock_analyzer_cache(ticker, cache_type);
+
+CREATE INDEX IF NOT EXISTS idx_sac_expires 
+  ON stock_analyzer_cache(expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_sac_ticker 
+  ON stock_analyzer_cache(ticker);
+
+-- RLS: Backend-only access via service role
+ALTER TABLE stock_analyzer_cache ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sac_service_all" ON stock_analyzer_cache;
+CREATE POLICY "sac_service_all" ON stock_analyzer_cache
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+-- Grants
+GRANT ALL ON stock_analyzer_cache TO service_role;
+
+-- Stats view for monitoring
+CREATE OR REPLACE VIEW stock_cache_stats AS
+SELECT
+  cache_type,
+  COUNT(*) as total_entries,
+  COUNT(*) FILTER (WHERE expires_at > NOW()) as valid_entries,
+  COUNT(*) FILTER (WHERE expires_at <= NOW()) as expired_entries,
+  MIN(created_at) as oldest_entry,
+  MAX(created_at) as newest_entry,
+  pg_size_pretty(SUM(pg_column_size(data))) as total_data_size
+FROM stock_analyzer_cache
+GROUP BY cache_type
+ORDER BY cache_type;
+
+GRANT SELECT ON stock_cache_stats TO service_role;
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 15: STOCK ANALYZER CACHE TABLE CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Cache types: brief, valuation, data, analyst, quote';
+  RAISE NOTICE 'Persistence: Supabase (survives Railway restart)';
+  RAISE NOTICE 'Hot layer: In-memory LRU on server';
+  RAISE NOTICE 'Invalidation: Earnings-based + TTL-based';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Monitor: SELECT * FROM stock_cache_stats;';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 16: TOP 5 SCANNER v3 — Earnings Intelligence
+-- =====================================================
+-- FULL earnings intelligence database:
+--   • Every earnings report logged with AI-extracted insights
+--   • Trade type classification (short/swing/long)
+--   • Sector impact & spillover companies
+--   • Investor profile matching (risk/style)
+--   • Strategy shifts, restructuring, guidance changes
+--   • Key quotes, surprises, catalysts
+-- =====================================================
+
+-- ═══════════════════════════════════════
+-- 16.1 SCANS — Daily scan metadata
+-- ═══════════════════════════════════════
+CREATE TABLE IF NOT EXISTS top5_scans (
+  id TEXT PRIMARY KEY,
+  scan_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  total_candidates_scanned INTEGER DEFAULT 0,
+  total_reports_logged INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ═══════════════════════════════════════
+-- 16.2 PICKS — Top 5 per scan (for frontend)
+-- ═══════════════════════════════════════
+CREATE TABLE IF NOT EXISTS top5_picks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  scan_id TEXT REFERENCES top5_scans(id) ON DELETE CASCADE,
+  rank INTEGER NOT NULL,
+  ticker TEXT NOT NULL,
+  name TEXT NOT NULL,
+  price NUMERIC(12,2),
+  change NUMERIC(8,2),
+  overall_score INTEGER,
+  direction TEXT,
+  inflection_stage TEXT,
+  catalyst TEXT,
+  why_this_stock TEXT,
+  supply_chain_role TEXT,
+  lite_parallel TEXT,
+  scanner_signals JSONB DEFAULT '{}',
+  lite_signals JSONB DEFAULT '{}',
+  key_levels JSONB DEFAULT '{}',
+  avg_volume TEXT,
+  market_cap TEXT,
+  sector TEXT,
+  earnings_report_id UUID,
+  perplexity_citations JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ═══════════════════════════════════════
+-- 16.3 EARNINGS REPORTS — COMPREHENSIVE LOG
+-- ═══════════════════════════════════════
+CREATE TABLE IF NOT EXISTS earnings_reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  -- ── Identity ─────────────────────────
+  ticker TEXT NOT NULL,
+  company_name TEXT,
+  sector TEXT,
+  industry TEXT,
+  market_cap BIGINT,
+
+  -- ── Timing ───────────────────────────
+  report_date DATE NOT NULL,
+  filing_date DATE,
+  quarter TEXT,
+  fiscal_year TEXT,
+  report_time TEXT,
+
+  -- ── Price Context ────────────────────
+  price_at_report NUMERIC(12,2),
+  change_at_report NUMERIC(8,2),
+  price_1d_after NUMERIC(12,2),
+  price_5d_after NUMERIC(12,2),
+  price_30d_after NUMERIC(12,2),
+  volume_at_report BIGINT,
+  avg_volume BIGINT,
+  volume_ratio NUMERIC(6,2),
+
+  -- ── Earnings Numbers ────────────────
+  eps_actual NUMERIC(10,4),
+  eps_estimate NUMERIC(10,4),
+  eps_surprise_pct NUMERIC(8,2),
+  revenue_actual BIGINT,
+  revenue_estimate BIGINT,
+  revenue_surprise_pct NUMERIC(8,2),
+  revenue_growth_yoy NUMERIC(8,2),
+  revenue_growth_qoq NUMERIC(8,2),
+  gross_margin NUMERIC(8,2),
+  gross_margin_change_bps INTEGER,
+  operating_margin NUMERIC(8,2),
+  net_margin NUMERIC(8,2),
+  free_cash_flow BIGINT,
+
+  -- ═══ LITE PATTERN SCORES (0-100) ═══
+  overall_score INTEGER,
+  guidance_tone_score INTEGER,
+  earnings_inflection_score INTEGER,
+  supply_chain_score INTEGER,
+  direction TEXT CHECK (direction IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+  inflection_stage TEXT CHECK (inflection_stage IN ('EARLY', 'ACCELERATING', 'CONFIRMED', 'N/A')),
+
+  -- ═══ TRADE CLASSIFICATION ═══════════
+  trade_type TEXT CHECK (trade_type IN (
+    'day_trade', 'swing_trade', 'position_trade', 'long_term_hold', 'sector_rotation'
+  )),
+  trade_timeframe TEXT,
+  trade_thesis TEXT,
+  entry_zone_low NUMERIC(12,2),
+  entry_zone_high NUMERIC(12,2),
+  stop_loss NUMERIC(12,2),
+  target_1 NUMERIC(12,2),
+  target_2 NUMERIC(12,2),
+  target_3 NUMERIC(12,2),
+  risk_reward_ratio NUMERIC(6,2),
+
+  -- ═══ INVESTOR PROFILE MATCHING ══════
+  risk_level INTEGER CHECK (risk_level BETWEEN 1 AND 5),
+  suitable_for_growth BOOLEAN DEFAULT FALSE,
+  suitable_for_value BOOLEAN DEFAULT FALSE,
+  suitable_for_momentum BOOLEAN DEFAULT FALSE,
+  suitable_for_income BOOLEAN DEFAULT FALSE,
+  suitable_for_contrarian BOOLEAN DEFAULT FALSE,
+  suitable_for_swing_trader BOOLEAN DEFAULT FALSE,
+  suitable_for_day_trader BOOLEAN DEFAULT FALSE,
+  investor_profile_notes TEXT,
+
+  -- ═══ GUIDANCE ANALYSIS ══════════════
+  guidance_direction TEXT CHECK (guidance_direction IN ('raised', 'lowered', 'maintained', 'initiated', 'withdrawn', 'N/A')),
+  guidance_revenue_new TEXT,
+  guidance_revenue_old TEXT,
+  guidance_eps_new TEXT,
+  guidance_eps_old TEXT,
+  guidance_vs_consensus TEXT,
+  guidance_magnitude TEXT,
+  guidance_key_quote TEXT,
+  guidance_confidence TEXT,
+  bullish_keyword_count INTEGER,
+  bearish_keyword_count INTEGER,
+
+  -- ═══ STRATEGY & RESTRUCTURING ═══════
+  has_strategy_shift BOOLEAN DEFAULT FALSE,
+  strategy_shift_type TEXT,
+  strategy_shift_detail TEXT,
+  has_restructuring BOOLEAN DEFAULT FALSE,
+  restructuring_type TEXT,
+  restructuring_detail TEXT,
+  restructuring_savings TEXT,
+  has_leadership_change BOOLEAN DEFAULT FALSE,
+  leadership_change_detail TEXT,
+  has_new_product BOOLEAN DEFAULT FALSE,
+  new_product_detail TEXT,
+  has_ma_activity BOOLEAN DEFAULT FALSE,
+  ma_detail TEXT,
+
+  -- ═══ SECTOR IMPACT ══════════════════
+  sector_impact_level TEXT CHECK (sector_impact_level IN ('none', 'low', 'medium', 'high', 'transformative')),
+  sector_impact_detail TEXT,
+  sector_impact_direction TEXT,
+
+  -- ═══ SPILLOVER — AFFECTED COMPANIES ═
+  spillover_companies JSONB DEFAULT '[]',
+
+  -- ═══ KEY PARTNERSHIPS & CUSTOMERS ════
+  key_partnerships JSONB DEFAULT '[]',
+
+  -- ═══ AI-EXTRACTED HIGHLIGHTS ═════════
+  highlight_1 TEXT,
+  highlight_2 TEXT,
+  highlight_3 TEXT,
+  highlight_4 TEXT,
+  highlight_5 TEXT,
+
+  -- ═══ SUPPLY CHAIN DEEP DIVE ══════════
+  supply_chain_role TEXT,
+  is_sole_source BOOLEAN DEFAULT FALSE,
+  demand_exceeds_supply BOOLEAN DEFAULT FALSE,
+  backlog_size TEXT,
+  backlog_growth TEXT,
+  capacity_expansion TEXT,
+  customer_wins TEXT,
+
+  -- ═══ COMPETITIVE MOAT ════════════════
+  moat_type TEXT,
+  moat_detail TEXT,
+  competitive_advantage TEXT,
+
+  -- ═══ RISK FACTORS ════════════════════
+  risk_factors JSONB DEFAULT '[]',
+
+  -- ═══ DRASTIC MOVE POTENTIAL ══════════
+  drastic_move_potential INTEGER CHECK (drastic_move_potential BETWEEN 0 AND 100),
+  drastic_move_catalysts JSONB DEFAULT '[]',
+
+  -- ═══ EARNINGS CALL TONE ══════════════
+  overall_tone TEXT,
+  tone_vs_prior_quarter TEXT,
+  management_credibility TEXT,
+  key_quotes JSONB DEFAULT '[]',
+
+  -- ═══ ACCELERATION PATTERN ════════════
+  revenue_trend_4q TEXT,
+  eps_trend_4q TEXT,
+  margin_trend_4q TEXT,
+  is_inflection_point BOOLEAN DEFAULT FALSE,
+  inflection_detail TEXT,
+
+  -- ═══ RAW DATA & METADATA ═════════════
+  all_signals JSONB DEFAULT '{}',
+  perplexity_research TEXT,
+  perplexity_citations JSONB DEFAULT '[]',
+  options_flow JSONB DEFAULT '{}',
+  scan_id TEXT REFERENCES top5_scans(id) ON DELETE SET NULL,
+  data_quality_score INTEGER,
+  processed_at TIMESTAMPTZ DEFAULT NOW(),
+
+  UNIQUE(ticker, report_date)
+);
+
+-- ═══════════════════════════════════════
+-- 16.4 INDEXES
+-- ═══════════════════════════════════════
+
+CREATE INDEX IF NOT EXISTS idx_scans_date ON top5_scans(scan_date DESC);
+CREATE INDEX IF NOT EXISTS idx_picks_scan ON top5_picks(scan_id);
+
+-- Earnings: primary lookups
+CREATE INDEX IF NOT EXISTS idx_er_ticker ON earnings_reports(ticker);
+CREATE INDEX IF NOT EXISTS idx_er_date ON earnings_reports(report_date DESC);
+CREATE INDEX IF NOT EXISTS idx_er_score ON earnings_reports(overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_er_sector ON earnings_reports(sector);
+
+-- Earnings: trade & investor queries
+CREATE INDEX IF NOT EXISTS idx_er_trade_type ON earnings_reports(trade_type);
+CREATE INDEX IF NOT EXISTS idx_er_risk ON earnings_reports(risk_level);
+CREATE INDEX IF NOT EXISTS idx_er_drastic ON earnings_reports(drastic_move_potential DESC);
+CREATE INDEX IF NOT EXISTS idx_er_guidance ON earnings_reports(guidance_direction);
+CREATE INDEX IF NOT EXISTS idx_er_inflection ON earnings_reports(is_inflection_point) WHERE is_inflection_point = TRUE;
+CREATE INDEX IF NOT EXISTS idx_er_strategy ON earnings_reports(has_strategy_shift) WHERE has_strategy_shift = TRUE;
+CREATE INDEX IF NOT EXISTS idx_er_restructuring ON earnings_reports(has_restructuring) WHERE has_restructuring = TRUE;
+CREATE INDEX IF NOT EXISTS idx_er_sector_impact ON earnings_reports(sector_impact_level);
+
+-- GIN indexes for JSONB search
+CREATE INDEX IF NOT EXISTS idx_er_spillover ON earnings_reports USING GIN(spillover_companies);
+CREATE INDEX IF NOT EXISTS idx_er_partnerships ON earnings_reports USING GIN(key_partnerships);
+CREATE INDEX IF NOT EXISTS idx_er_risks ON earnings_reports USING GIN(risk_factors);
+
+-- ═══════════════════════════════════════
+-- 16.5 RLS
+-- ═══════════════════════════════════════
+ALTER TABLE top5_scans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE top5_picks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE earnings_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "read_scans" ON top5_scans;
+DROP POLICY IF EXISTS "read_picks" ON top5_picks;
+DROP POLICY IF EXISTS "read_earnings" ON earnings_reports;
+DROP POLICY IF EXISTS "write_scans" ON top5_scans;
+DROP POLICY IF EXISTS "write_picks" ON top5_picks;
+DROP POLICY IF EXISTS "write_earnings" ON earnings_reports;
+DROP POLICY IF EXISTS "update_scans" ON top5_scans;
+DROP POLICY IF EXISTS "update_earnings" ON earnings_reports;
+DROP POLICY IF EXISTS "top5_scans_service_all" ON top5_scans;
+DROP POLICY IF EXISTS "top5_picks_service_all" ON top5_picks;
+DROP POLICY IF EXISTS "earnings_reports_service_all" ON earnings_reports;
+
+-- Service role full access
+CREATE POLICY "top5_scans_service_all" ON top5_scans
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "top5_picks_service_all" ON top5_picks
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "earnings_reports_service_all" ON earnings_reports
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Authenticated read
+CREATE POLICY "read_scans" ON top5_scans FOR SELECT TO authenticated USING (true);
+CREATE POLICY "read_picks" ON top5_picks FOR SELECT TO authenticated USING (true);
+CREATE POLICY "read_earnings" ON earnings_reports FOR SELECT TO authenticated USING (true);
+
+-- Authenticated write
+CREATE POLICY "write_scans" ON top5_scans FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "write_picks" ON top5_picks FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "write_earnings" ON earnings_reports FOR INSERT TO authenticated WITH CHECK (true);
+
+-- Authenticated update
+CREATE POLICY "update_scans" ON top5_scans FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "update_earnings" ON earnings_reports FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+-- ═══════════════════════════════════════
+-- 16.5b UPGRADE v3 → v4: Scanner columns
+-- ═══════════════════════════════════════
+-- top5_picks: columns needed by scanner v4
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS lite_pattern_score INTEGER DEFAULT 0;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS trade_type TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS trade_timeframe TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS risk_level INTEGER;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]';
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS guidance_direction TEXT;
+
+-- earnings_reports: columns needed by scanner v4
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_pattern_score INTEGER DEFAULT 0;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_pattern_detail TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS catalyst TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS why_this_stock TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_parallel TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS is_growth_accelerating BOOLEAN DEFAULT false;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'sec_edgar';
+
+-- Indexes for LITE pattern queries
+CREATE INDEX IF NOT EXISTS idx_er_lite_score ON earnings_reports(lite_pattern_score DESC);
+CREATE INDEX IF NOT EXISTS idx_picks_lite_score ON top5_picks(lite_pattern_score DESC);
+
+-- ═══════════════════════════════════════
+-- 16.6 VIEWS
+-- ═══════════════════════════════════════
+
+-- High potential: LITE-pattern candidates
+CREATE OR REPLACE VIEW v_lite_candidates AS
+SELECT ticker, company_name, report_date, quarter, overall_score,
+  guidance_tone_score, earnings_inflection_score, supply_chain_score,
+  direction, inflection_stage, trade_type, trade_timeframe,
+  highlight_1 as catalyst, highlight_1, drastic_move_potential,
+  price_at_report, sector
+FROM earnings_reports
+WHERE overall_score >= 70
+ORDER BY overall_score DESC, report_date DESC;
+
+-- Day/Swing trade opportunities
+CREATE OR REPLACE VIEW v_short_term_trades AS
+SELECT ticker, company_name, report_date, overall_score,
+  trade_type, trade_timeframe, entry_zone_low, entry_zone_high,
+  stop_loss, target_1, target_2, risk_reward_ratio,
+  highlight_1 as catalyst, drastic_move_potential, risk_level
+FROM earnings_reports
+WHERE trade_type IN ('day_trade', 'swing_trade')
+  AND overall_score >= 60
+ORDER BY report_date DESC;
+
+-- Long term plays
+CREATE OR REPLACE VIEW v_long_term_holds AS
+SELECT ticker, company_name, report_date, overall_score,
+  trade_type, trade_timeframe, trade_thesis,
+  has_strategy_shift, strategy_shift_detail,
+  moat_type, competitive_advantage,
+  guidance_direction, guidance_magnitude,
+  risk_level, investor_profile_notes
+FROM earnings_reports
+WHERE trade_type IN ('position_trade', 'long_term_hold')
+  AND overall_score >= 60
+ORDER BY overall_score DESC;
+
+-- Sector movers
+CREATE OR REPLACE VIEW v_sector_movers AS
+SELECT ticker, company_name, sector, report_date,
+  sector_impact_level, sector_impact_detail, sector_impact_direction,
+  spillover_companies, overall_score, highlight_1 as catalyst
+FROM earnings_reports
+WHERE sector_impact_level IN ('high', 'transformative')
+ORDER BY report_date DESC;
+
+-- Strategy shifts & restructuring
+CREATE OR REPLACE VIEW v_strategy_changes AS
+SELECT ticker, company_name, report_date, quarter,
+  strategy_shift_type, strategy_shift_detail,
+  restructuring_type, restructuring_detail, restructuring_savings,
+  has_leadership_change, leadership_change_detail,
+  has_ma_activity, ma_detail,
+  overall_score, trade_type
+FROM earnings_reports
+WHERE has_strategy_shift = TRUE OR has_restructuring = TRUE
+   OR has_leadership_change = TRUE OR has_ma_activity = TRUE
+ORDER BY report_date DESC;
+
+-- Drastic move potential
+CREATE OR REPLACE VIEW v_drastic_movers AS
+SELECT ticker, company_name, report_date, overall_score,
+  drastic_move_potential, drastic_move_catalysts,
+  trade_type, direction, risk_level,
+  highlight_1 as catalyst, highlight_1, highlight_2
+FROM earnings_reports
+WHERE drastic_move_potential >= 70
+ORDER BY drastic_move_potential DESC;
+
+-- For investor profiling: growth investors
+CREATE OR REPLACE VIEW v_growth_picks AS
+SELECT * FROM earnings_reports
+WHERE suitable_for_growth = TRUE AND overall_score >= 60
+ORDER BY overall_score DESC;
+
+-- For investor profiling: value investors
+CREATE OR REPLACE VIEW v_value_picks AS
+SELECT * FROM earnings_reports
+WHERE suitable_for_value = TRUE AND overall_score >= 60
+ORDER BY overall_score DESC;
+
+-- For investor profiling: momentum traders
+CREATE OR REPLACE VIEW v_momentum_picks AS
+SELECT * FROM earnings_reports
+WHERE suitable_for_momentum = TRUE AND overall_score >= 60
+ORDER BY drastic_move_potential DESC;
+
+-- ═══════════════════════════════════════
+-- 16.7 GRANTS
+-- ═══════════════════════════════════════
+GRANT SELECT, INSERT, UPDATE ON top5_scans TO authenticated;
+GRANT SELECT, INSERT ON top5_picks TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON earnings_reports TO authenticated;
+
+GRANT ALL ON top5_scans TO service_role;
+GRANT ALL ON top5_picks TO service_role;
+GRANT ALL ON earnings_reports TO service_role;
+
+-- View grants
+GRANT SELECT ON v_lite_candidates TO authenticated;
+GRANT SELECT ON v_short_term_trades TO authenticated;
+GRANT SELECT ON v_long_term_holds TO authenticated;
+GRANT SELECT ON v_sector_movers TO authenticated;
+GRANT SELECT ON v_strategy_changes TO authenticated;
+GRANT SELECT ON v_drastic_movers TO authenticated;
+GRANT SELECT ON v_growth_picks TO authenticated;
+GRANT SELECT ON v_value_picks TO authenticated;
+GRANT SELECT ON v_momentum_picks TO authenticated;
+
+-- ═══════════════════════════════════════
+-- 16.8 CLEANUP FUNCTION
+-- ═══════════════════════════════════════
+CREATE OR REPLACE FUNCTION cleanup_top5_old_data()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM top5_scans WHERE scan_date < NOW() - INTERVAL '30 days';
+  DELETE FROM earnings_reports WHERE processed_at < NOW() - INTERVAL '365 days';
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION cleanup_top5_old_data() TO service_role;
+
+-- ═══════════════════════════════════════
+-- 16.9 VERIFICATION
+-- ═══════════════════════════════════════
+DO $$
+DECLARE
+  v_tables INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_tables
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  AND table_name IN ('top5_scans', 'top5_picks', 'earnings_reports');
+
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 16: TOP 5 SCANNER v3 COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Tables created: %/3', v_tables;
+  RAISE NOTICE '  • top5_scans - Daily scan metadata';
+  RAISE NOTICE '  • top5_picks - Top 5 picks per scan';
+  RAISE NOTICE '  • earnings_reports - Comprehensive earnings log';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Views: v_lite_candidates, v_short_term_trades,';
+  RAISE NOTICE '       v_long_term_holds, v_sector_movers,';
+  RAISE NOTICE '       v_strategy_changes, v_drastic_movers,';
+  RAISE NOTICE '       v_growth_picks, v_value_picks, v_momentum_picks';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 17: SCANNER v5 UPGRADE — Finotaur Score + Catalyst Scanner
+-- =====================================================
+-- 17.1: Fix earnings_reports missing columns (logEarnings silent failures)
+-- 17.2: Add finotaur_score (rename from lite_pattern_score)
+-- 17.3: Catalyst Scanner tables (catalyst_scans, catalyst_picks)
+-- =====================================================
+
+-- ═══════════════════════════════════════════════════════
+-- 17.1 FIX: earnings_reports — columns code writes but schema lacks
+-- ═══════════════════════════════════════════════════════
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS news_headline TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS guidance_surprise_vs_consensus TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS tone_shift_from_prior_q TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS demand_supply_gap TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS switching_cost TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS growth_engines JSONB DEFAULT '[]';
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS superlative_count INTEGER DEFAULT 0;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS competitive_advantage TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS overall_tone TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS tone_vs_prior_quarter TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS management_credibility TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS margin_trend_4q TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_pattern_score INTEGER DEFAULT 0;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_pattern_detail TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS catalyst TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS why_this_stock TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS lite_parallel TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS is_growth_accelerating BOOLEAN DEFAULT false;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'sec_edgar';
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS risk_factors JSONB DEFAULT '[]';
+
+-- ═══════════════════════════════════════════════════════
+-- 17.2 ADD: finotaur_score (both tables)
+-- ═══════════════════════════════════════════════════════
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS finotaur_score INTEGER DEFAULT 0;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS finotaur_score INTEGER DEFAULT 0;
+
+-- Copy existing lite_pattern_score data into finotaur_score
+UPDATE top5_picks SET finotaur_score = COALESCE(lite_pattern_score, 0) WHERE finotaur_score = 0 AND lite_pattern_score > 0;
+UPDATE earnings_reports SET finotaur_score = COALESCE(lite_pattern_score, 0) WHERE finotaur_score = 0 AND lite_pattern_score > 0;
+
+CREATE INDEX IF NOT EXISTS idx_picks_finotaur_score ON top5_picks(finotaur_score DESC);
+CREATE INDEX IF NOT EXISTS idx_er_finotaur_score ON earnings_reports(finotaur_score DESC);
+
+-- ═══════════════════════════════════════════════════════
+-- 17.3 CATALYST SCANNER TABLES
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS catalyst_scans (
+  id TEXT PRIMARY KEY,
+  scan_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  total_candidates_scanned INTEGER DEFAULT 0,
+  total_picks INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS catalyst_picks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  scan_id TEXT REFERENCES catalyst_scans(id) ON DELETE CASCADE,
+  rank INTEGER NOT NULL,
+  ticker TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sector TEXT,
+  industry TEXT,
+  market_cap TEXT,
+  price NUMERIC(12,2),
+  change NUMERIC(8,2),
+  catalyst_type TEXT NOT NULL,
+  catalyst_headline TEXT NOT NULL,
+  catalyst_date TEXT,
+  catalyst_detail TEXT,
+  overall_score INTEGER DEFAULT 0,
+  finotaur_score INTEGER DEFAULT 0,
+  direction TEXT CHECK (direction IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+  inflection_stage TEXT CHECK (inflection_stage IN ('EARLY', 'ACCELERATING', 'CONFIRMED', 'N/A')),
+  why_this_stock TEXT,
+  catalyst_impact TEXT,
+  trade_type TEXT,
+  trade_timeframe TEXT,
+  risk_level INTEGER CHECK (risk_level BETWEEN 1 AND 5),
+  entry_zone_low NUMERIC(12,2),
+  entry_zone_high NUMERIC(12,2),
+  stop_loss NUMERIC(12,2),
+  target_1 NUMERIC(12,2),
+  target_2 NUMERIC(12,2),
+  risk_reward_ratio NUMERIC(6,2),
+  guidance_direction TEXT,
+  guidance_magnitude TEXT,
+  highlights JSONB DEFAULT '[]',
+  analyst_actions JSONB DEFAULT '[]',
+  supply_chain_role TEXT,
+  moat_type TEXT,
+  moat_detail TEXT,
+  spillover_companies JSONB DEFAULT '[]',
+  perplexity_research TEXT,
+  perplexity_citations JSONB DEFAULT '[]',
+  scanner_signals JSONB DEFAULT '{}',
+  all_signals JSONB DEFAULT '{}',
+  data_quality_score INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_cat_scans_date ON catalyst_scans(scan_date DESC);
+CREATE INDEX IF NOT EXISTS idx_cat_picks_scan ON catalyst_picks(scan_id);
+CREATE INDEX IF NOT EXISTS idx_cat_picks_score ON catalyst_picks(overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_cat_picks_finotaur ON catalyst_picks(finotaur_score DESC);
+CREATE INDEX IF NOT EXISTS idx_cat_picks_ticker ON catalyst_picks(ticker);
+CREATE INDEX IF NOT EXISTS idx_cat_picks_type ON catalyst_picks(catalyst_type);
+
+-- RLS
+ALTER TABLE catalyst_scans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE catalyst_picks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "catalyst_scans_service_all" ON catalyst_scans;
+DROP POLICY IF EXISTS "catalyst_picks_service_all" ON catalyst_picks;
+CREATE POLICY "catalyst_scans_service_all" ON catalyst_scans
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "catalyst_picks_service_all" ON catalyst_picks
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "read_cat_scans" ON catalyst_scans;
+DROP POLICY IF EXISTS "read_cat_picks" ON catalyst_picks;
+CREATE POLICY "read_cat_scans" ON catalyst_scans FOR SELECT TO authenticated USING (true);
+CREATE POLICY "read_cat_picks" ON catalyst_picks FOR SELECT TO authenticated USING (true);
+
+-- Verification
+DO $$ DECLARE v_tables INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO v_tables
+  FROM information_schema.tables
+  WHERE table_schema = 'public'
+  AND table_name IN ('catalyst_scans', 'catalyst_picks');
+  RAISE NOTICE '✅ PART 17: Scanner v5 Upgrade COMPLETE';
+  RAISE NOTICE 'Catalyst tables created: %/2', v_tables;
+END $$;
+
+-- =====================================================
+-- PART 18: STOCK ANALYSIS CACHE — Zero AI on page load
+-- =====================================================
+-- Populated by scanners after each run.
+-- Endpoint /stock/:ticker/analysis reads from here.
+-- NEVER calls AI in response to user request.
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS stock_analysis_cache (
+  ticker VARCHAR(10) PRIMARY KEY,
+  investment_story TEXT,
+  current_price NUMERIC(12,2),
+  market_cap_raw BIGINT,
+  finotaur_score INTEGER DEFAULT 0,
+  inflection_signals JSONB DEFAULT '{}',
+  growth_trajectory TEXT,
+  risk_summary TEXT,
+  last_scan_id TEXT,
+  data_freshness TIMESTAMPTZ DEFAULT NOW(),
+  source TEXT DEFAULT 'scanner',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sac_finotaur ON stock_analysis_cache(finotaur_score DESC);
+CREATE INDEX IF NOT EXISTS idx_sac_freshness ON stock_analysis_cache(data_freshness DESC);
+
+ALTER TABLE stock_analysis_cache ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sac_service_all" ON stock_analysis_cache;
+CREATE POLICY "sac_service_all" ON stock_analysis_cache
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "sac_read" ON stock_analysis_cache;
+CREATE POLICY "sac_read" ON stock_analysis_cache
+  FOR SELECT TO authenticated USING (true);
+
+GRANT ALL ON stock_analysis_cache TO service_role;
+GRANT SELECT ON stock_analysis_cache TO authenticated;
+
+DROP TRIGGER IF EXISTS update_sac_updated_at ON stock_analysis_cache;
+CREATE TRIGGER update_sac_updated_at
+  BEFORE UPDATE ON stock_analysis_cache
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ PART 18: Stock Analysis Cache COMPLETE';
+  RAISE NOTICE 'Populated by scanners, read by /stock/:ticker/analysis';
+END $$;
+
+-- =====================================================
+-- PART 16: SECTOR ANALYZER TABLES (10K Scale)
+-- =====================================================
+-- Pre-computed sector data for Sector Analyzer dashboard
+-- Strategy:
+--   • Cron job runs 4x/day (8:30, 10:30, 12:00, 16:30 ET)
+--   • Fetches prices + computes metrics + generates AI
+--   • UPSERTs into sector_snapshots (11 rows)
+--   • UPSERTs into sector_holdings_live (~110 rows)
+--   • ALL 10,000 users read from cache — ZERO per-user API calls
+-- =====================================================
+
+-- ============================================
+-- TABLE: sector_snapshots
+-- One row per sector, UPSERT on each refresh
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sector_snapshots (
+  id TEXT PRIMARY KEY,                    -- 'technology', 'healthcare', etc.
+  sector_name TEXT NOT NULL,
+  ticker TEXT NOT NULL,                   -- 'XLK', 'XLV', etc.
+  
+  -- Core Price Data (from API)
+  price NUMERIC(10,2),
+  change_percent NUMERIC(6,2),
+  week_change NUMERIC(6,2),
+  month_change NUMERIC(6,2),
+  ytd_change NUMERIC(6,2),
+  
+  -- Computed Metrics
+  momentum INTEGER,                       -- 0-100
+  relative_strength INTEGER,              -- 0-100
+  sentiment TEXT,                          -- 'bullish'|'bearish'|'neutral'
+  beta NUMERIC(4,2),
+  market_cap TEXT,
+  sp_weight NUMERIC(4,1),
+  
+  -- Holdings (JSON array of SectorHolding[])
+  top_holdings JSONB NOT NULL DEFAULT '[]',
+  
+  -- Sub-sectors
+  sub_sectors JSONB DEFAULT '[]',
+  
+  -- Verdict
+  verdict JSONB,                          -- {rating, signal, summary}
+  
+  -- Vs Market Performance
+  vs_market JSONB DEFAULT '[]',
+  
+  -- Fundamentals
+  fundamentals JSONB,
+  
+  -- Money Flow
+  money_flow JSONB,
+  
+  -- Correlations
+  correlations JSONB DEFAULT '[]',
+  correlation_breakers JSONB DEFAULT '[]',
+  pairs_trades JSONB DEFAULT '[]',
+  intra_sector_correlation JSONB,
+  
+  -- Macro
+  macro_sensitivity JSONB DEFAULT '[]',
+  
+  -- Risks
+  risks JSONB DEFAULT '[]',
+  
+  -- Breakout
+  breakout_candidate JSONB,
+  
+  -- Trade Ideas
+  trade_ideas JSONB DEFAULT '[]',
+  
+  -- AI Commentary (pre-computed by cron)
+  ai_commentary TEXT,
+  
+  -- Refresh metadata
+  refresh_session TEXT,                    -- '2026-02-10_pre_market'
+  refresh_type TEXT,                       -- 'pre_market'|'mid_morning'|'midday'|'post_close'
+  data_timestamp TIMESTAMPTZ,
+  ai_generated_at TIMESTAMPTZ,
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_sector_snapshots_updated 
+  ON sector_snapshots(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sector_snapshots_weight 
+  ON sector_snapshots(sp_weight DESC);
+
+-- Trigger
+DROP TRIGGER IF EXISTS sector_snapshots_updated_at ON sector_snapshots;
+CREATE TRIGGER sector_snapshots_updated_at
+  BEFORE UPDATE ON sector_snapshots
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- TABLE: sector_holdings_live
+-- Individual stock data per sector (~10 per sector)
+-- Used for HeatMap tab
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sector_holdings_live (
+  id TEXT PRIMARY KEY,                    -- 'technology_NVDA'
+  sector_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  
+  -- Price
+  price NUMERIC(10,2),
+  change_percent NUMERIC(6,2),
+  volume BIGINT,
+  avg_volume BIGINT,
+  volume_vs_avg NUMERIC(4,1),
+  
+  -- Weight & Metrics
+  sector_weight NUMERIC(5,2),
+  finotaur_score INTEGER,
+  pe_ratio NUMERIC(8,2),
+  pe_vs_sector NUMERIC(6,1),
+  
+  -- Signals
+  signal TEXT,                            -- 'BUY'|'HOLD'|'WATCH'|'AVOID'
+  insider_activity TEXT DEFAULT 'none',
+  sentiment TEXT,
+  
+  -- Technical (optional)
+  rsi_14 INTEGER,
+  sma_20 NUMERIC(10,2),
+  sma_50 NUMERIC(10,2),
+  beta NUMERIC(4,2),
+  
+  -- Metadata
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_sector_holdings_sector 
+  ON sector_holdings_live(sector_id);
+CREATE INDEX IF NOT EXISTS idx_sector_holdings_ticker 
+  ON sector_holdings_live(ticker);
+CREATE INDEX IF NOT EXISTS idx_sector_holdings_score 
+  ON sector_holdings_live(finotaur_score DESC);
+
+-- ============================================
+-- TABLE: sector_refresh_log
+-- Track every refresh cycle for monitoring
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sector_refresh_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id TEXT NOT NULL,               -- '2026-02-10_pre_market'
+  refresh_type TEXT NOT NULL,
+  
+  -- Status
+  status TEXT DEFAULT 'running',
+  
+  -- Metrics
+  sectors_updated INTEGER DEFAULT 0,
+  holdings_updated INTEGER DEFAULT 0,
+  api_calls_made INTEGER DEFAULT 0,
+  ai_calls_made INTEGER DEFAULT 0,
+  total_duration_ms INTEGER,
+  
+  -- Errors
+  errors JSONB DEFAULT NULL,
+  
+  -- Cost tracking
+  estimated_cost_usd NUMERIC(6,4),
+  
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_refresh_log_session 
+  ON sector_refresh_log(session_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_log_started 
+  ON sector_refresh_log(started_at DESC);
+
+-- ============================================
+-- RLS FOR sector_snapshots
+-- ============================================
+ALTER TABLE sector_snapshots ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sector_snapshots_read" ON sector_snapshots;
+CREATE POLICY "sector_snapshots_read" ON sector_snapshots
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "sector_snapshots_anon_read" ON sector_snapshots;
+CREATE POLICY "sector_snapshots_anon_read" ON sector_snapshots
+  FOR SELECT TO anon USING (true);
+
+DROP POLICY IF EXISTS "sector_snapshots_service_all" ON sector_snapshots;
+CREATE POLICY "sector_snapshots_service_all" ON sector_snapshots
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Grants
+GRANT SELECT ON sector_snapshots TO authenticated;
+GRANT SELECT ON sector_snapshots TO anon;
+GRANT ALL ON sector_snapshots TO service_role;
+
+-- ============================================
+-- RLS FOR sector_holdings_live
+-- ============================================
+ALTER TABLE sector_holdings_live ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "holdings_read" ON sector_holdings_live;
+CREATE POLICY "holdings_read" ON sector_holdings_live
+  FOR SELECT TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "holdings_anon_read" ON sector_holdings_live;
+CREATE POLICY "holdings_anon_read" ON sector_holdings_live
+  FOR SELECT TO anon USING (true);
+
+DROP POLICY IF EXISTS "holdings_service_all" ON sector_holdings_live;
+CREATE POLICY "holdings_service_all" ON sector_holdings_live
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+-- Grants
+GRANT SELECT ON sector_holdings_live TO authenticated;
+GRANT SELECT ON sector_holdings_live TO anon;
+GRANT ALL ON sector_holdings_live TO service_role;
+
+-- ============================================
+-- RLS FOR sector_refresh_log
+-- ============================================
+ALTER TABLE sector_refresh_log ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "refresh_log_service_all" ON sector_refresh_log;
+CREATE POLICY "refresh_log_service_all" ON sector_refresh_log
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "refresh_log_read" ON sector_refresh_log;
+CREATE POLICY "refresh_log_read" ON sector_refresh_log
+  FOR SELECT TO authenticated USING (true);
+
+-- Grants
+GRANT SELECT ON sector_refresh_log TO authenticated;
+GRANT ALL ON sector_refresh_log TO service_role;
+
+-- ============================================
+-- MONITORING VIEW
+-- ============================================
+CREATE OR REPLACE VIEW sector_refresh_stats AS
+SELECT
+  refresh_type,
+  COUNT(*) as total_runs,
+  COUNT(*) FILTER (WHERE status = 'completed') as successful_runs,
+  COUNT(*) FILTER (WHERE status = 'failed') as failed_runs,
+  AVG(total_duration_ms)::INTEGER as avg_duration_ms,
+  SUM(estimated_cost_usd) as total_cost_usd,
+  MAX(completed_at) as last_run,
+  AVG(sectors_updated)::INTEGER as avg_sectors_per_run,
+  AVG(ai_calls_made)::INTEGER as avg_ai_calls_per_run
+FROM sector_refresh_log
+WHERE started_at > NOW() - INTERVAL '30 days'
+GROUP BY refresh_type
+ORDER BY refresh_type;
+
+GRANT SELECT ON sector_refresh_stats TO service_role;
+GRANT SELECT ON sector_refresh_stats TO authenticated;
+
+-- ============================================
+-- TABLE: top_down_macro_snapshot
+-- Global macro context, generated once per cron run
+-- Shared across all 11 sectors
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS top_down_macro_snapshot (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  
+  -- Macro Regime
+  regime TEXT NOT NULL,                  -- 'expansion', 'late_cycle', 'contraction', 'recovery'
+  regime_label TEXT,                     -- 'Late Cycle Weakness'
+  risk_level TEXT DEFAULT 'moderate',    -- 'low', 'moderate', 'elevated', 'high'
+  
+  -- Fed & Rates
+  fed_policy TEXT,                       -- 'hawkish', 'neutral', 'dovish'
+  fed_funds_rate DECIMAL(5,2),
+  rate_direction TEXT,                   -- 'rising', 'stable', 'falling'
+  
+  -- Economy
+  gdp_outlook TEXT,
+  inflation_trend TEXT,
+  employment_outlook TEXT,
+  
+  -- ISM Integration
+  ism_pmi DECIMAL(5,1),
+  ism_direction TEXT,                    -- 'expansion' | 'contraction'
+  ism_key_signals JSONB DEFAULT '[]',    -- ['prices elevated', 'employment weak']
+  ism_report_month TEXT,
+  
+  -- Market Positioning
+  favored_sectors JSONB DEFAULT '[]',    -- ['Technology', 'Consumer Staples']
+  avoid_sectors JSONB DEFAULT '[]',      -- ['Energy', 'Utilities']
+  rotation_theme TEXT,                   -- 'Defensive Rotation', 'Risk-On Rally'
+  
+  -- AI Narrative
+  ai_macro_narrative TEXT,               -- 3-4 sentence market overview
+  
+  -- Metadata
+  refresh_session TEXT,                  -- Links to sector_refresh_log
+  generated_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tdms_generated 
+  ON top_down_macro_snapshot(generated_at DESC);
+
+-- RLS
+ALTER TABLE top_down_macro_snapshot ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "tdms_read_all" ON top_down_macro_snapshot;
+CREATE POLICY "tdms_read_all" ON top_down_macro_snapshot
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "tdms_service_all" ON top_down_macro_snapshot;
+CREATE POLICY "tdms_service_all" ON top_down_macro_snapshot
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+GRANT SELECT ON top_down_macro_snapshot TO authenticated, anon;
+GRANT ALL ON top_down_macro_snapshot TO service_role;
+
+-- ============================================
+-- ALTER: sector_snapshots — add ISM fields
+-- ============================================
+
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ism_context JSONB DEFAULT '{}';
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ism_impact_score NUMERIC(4,1);
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ism_industry TEXT;
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS macro_snapshot_id UUID;
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS top_down_flow JSONB DEFAULT '{}';
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS rotation_signal JSONB DEFAULT '{}';
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS allocation_guide JSONB DEFAULT '{}';
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ai_bull_case TEXT;
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ai_bear_case TEXT;
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS ai_key_trade TEXT;
+ALTER TABLE sector_snapshots ADD COLUMN IF NOT EXISTS macro_regime JSONB DEFAULT '{}';
+-- ============================================
+-- VERIFICATION
+-- ============================================
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 16: SECTOR ANALYZER TABLES CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Tables:';
+  RAISE NOTICE '  • sector_snapshots         (11 rows, one per sector)';
+  RAISE NOTICE '  • sector_holdings_live      (~110 rows, 10 per sector)';
+  RAISE NOTICE '  • sector_refresh_log        (tracking/monitoring)';
+  RAISE NOTICE '  • top_down_macro_snapshot   (global macro + ISM)';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Views:';
+  RAISE NOTICE '  • sector_refresh_stats      (30-day monitoring)';
+  RAISE NOTICE '';
+  RAISE NOTICE 'ISM Fields added to sector_snapshots:';
+  RAISE NOTICE '  • ism_context, ism_impact_score, ism_industry';
+  RAISE NOTICE '  • top_down_flow, rotation_signal, allocation_guide';
+  RAISE NOTICE '  • ai_bull_case, ai_bear_case, ai_key_trade';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Refresh: 4x/day (8:30, 10:30, 12:00, 16:30 ET)';
+  RAISE NOTICE 'Cost:    ~$25/month for 10,000 users';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Monitor: SELECT * FROM sector_refresh_stats;';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+
+-- ============================================================
+-- PART 19: PERFORMANCE TRACKER v6 — AI Learning Loop
+-- ============================================================
+-- 4 Tables + 2 Views + Default Weights
+-- pick_tracking:        60-day price monitoring for all picks
+-- performance_insights: AI evaluation results (weekly)
+-- scanner_config:       Dynamic signal weights
+-- optimization_history: Monthly AI optimization log
+-- ============================================================
+
+
+-- ────────────────────────────────────────────────
+-- TABLE 1: pick_tracking
+-- 60-day performance tracking for every scanner pick
+-- Updated by priceTrackerCron (Polygon only, zero AI)
+-- ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS pick_tracking (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  -- Source info
+  source TEXT NOT NULL CHECK (source IN ('earnings_scanner', 'catalyst_scanner')),
+  source_scan_id TEXT,
+  source_pick_id TEXT,
+
+  -- Stock info
+  ticker TEXT NOT NULL,
+  company_name TEXT,
+  sector TEXT,
+
+  -- Pick snapshot (frozen at pick time)
+  pick_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  pick_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+  overall_score INTEGER DEFAULT 0,
+  finotaur_score INTEGER DEFAULT 0,
+  direction TEXT DEFAULT 'BULLISH',
+  inflection_stage TEXT,
+  trade_type TEXT,
+  trade_timeframe TEXT,
+  risk_level INTEGER,
+  catalyst TEXT,
+  catalyst_type TEXT,
+  why_this_stock TEXT,
+
+  -- Predicted levels (frozen)
+  predicted_entry_low NUMERIC(12,2),
+  predicted_entry_high NUMERIC(12,2),
+  predicted_stop_loss NUMERIC(12,2),
+  predicted_target_1 NUMERIC(12,2),
+  predicted_target_2 NUMERIC(12,2),
+
+  -- Original signals (full JSON snapshot for evaluator)
+  original_signals JSONB DEFAULT '{}',
+
+  -- Live tracking (updated by priceTracker)
+  current_price NUMERIC(12,2),
+  current_return_pct NUMERIC(8,2) DEFAULT 0,
+  tracking_days INTEGER DEFAULT 0,
+
+  -- Return snapshots
+  return_1d NUMERIC(8,2),
+  return_5d NUMERIC(8,2),
+  return_7d NUMERIC(8,2),
+  return_14d NUMERIC(8,2),
+  return_30d NUMERIC(8,2),
+  return_60d NUMERIC(8,2),
+
+  -- High/low watermarks
+  max_price NUMERIC(12,2),
+  min_price NUMERIC(12,2),
+  max_return_pct NUMERIC(8,2) DEFAULT 0,
+  min_return_pct NUMERIC(8,2) DEFAULT 0,
+
+  -- Milestone hits
+  hit_target_1 BOOLEAN DEFAULT FALSE,
+  hit_target_1_date DATE,
+  hit_target_1_days INTEGER,
+  hit_target_2 BOOLEAN DEFAULT FALSE,
+  hit_target_2_date DATE,
+  hit_target_2_days INTEGER,
+  hit_stop_loss BOOLEAN DEFAULT FALSE,
+  hit_stop_loss_date DATE,
+  hit_stop_loss_days INTEGER,
+
+  -- Status
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'completed', 'stopped', 'expired', 'hit_target_1', 'hit_target_2', 'stopped_out')),
+  closed_reason TEXT,
+  closed_at TIMESTAMPTZ,
+
+  -- AI evaluation (filled by performanceEvaluatorCron)
+  ai_performance_grade TEXT CHECK (ai_performance_grade IN ('A', 'B', 'C', 'D', 'F') OR ai_performance_grade IS NULL),
+  ai_performance_analysis TEXT,
+  ai_what_worked JSONB DEFAULT '[]',
+  ai_what_failed JSONB DEFAULT '[]',
+  ai_signal_accuracy JSONB DEFAULT '{}',
+  ai_pattern_category TEXT,
+  ai_move_driver TEXT,
+  evaluated_at TIMESTAMPTZ,
+
+  -- Admin controls
+  is_highlighted BOOLEAN DEFAULT FALSE,
+  admin_notes TEXT,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pt_ticker ON pick_tracking(ticker);
+CREATE INDEX IF NOT EXISTS idx_pt_status ON pick_tracking(status);
+CREATE INDEX IF NOT EXISTS idx_pt_pick_date ON pick_tracking(pick_date DESC);
+CREATE INDEX IF NOT EXISTS idx_pt_source ON pick_tracking(source);
+CREATE INDEX IF NOT EXISTS idx_pt_catalyst_type ON pick_tracking(catalyst_type);
+CREATE INDEX IF NOT EXISTS idx_pt_grade ON pick_tracking(ai_performance_grade);
+CREATE INDEX IF NOT EXISTS idx_pt_source_scan ON pick_tracking(source_scan_id);
+CREATE INDEX IF NOT EXISTS idx_pt_score ON pick_tracking(overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_pt_active ON pick_tracking(status) WHERE status = 'active';
+
+ALTER TABLE pick_tracking ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "pt_service_all" ON pick_tracking;
+CREATE POLICY "pt_service_all" ON pick_tracking
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "pt_read_authenticated" ON pick_tracking;
+CREATE POLICY "pt_read_authenticated" ON pick_tracking
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "pt_read_anon" ON pick_tracking;
+CREATE POLICY "pt_read_anon" ON pick_tracking
+  FOR SELECT TO anon
+  USING (true);
+
+GRANT SELECT ON pick_tracking TO authenticated, anon;
+GRANT ALL ON pick_tracking TO service_role;
+
+
+-- ────────────────────────────────────────────────
+-- TABLE 2: performance_insights
+-- AI-generated evaluation results from weekly Evaluator
+-- One row per evaluated pick
+-- ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS performance_insights (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  pick_tracking_id UUID REFERENCES pick_tracking(id) ON DELETE SET NULL,
+  ticker TEXT NOT NULL,
+  source TEXT,
+
+  overall_score INTEGER,
+  finotaur_score INTEGER,
+  direction TEXT,
+  trade_type TEXT,
+  catalyst TEXT,
+  catalyst_type TEXT,
+
+  actual_return_1d NUMERIC(8,2),
+  actual_return_5d NUMERIC(8,2),
+  actual_return_14d NUMERIC(8,2),
+  actual_return_30d NUMERIC(8,2),
+  actual_return_60d NUMERIC(8,2),
+  max_return NUMERIC(8,2),
+  max_drawdown NUMERIC(8,2),
+
+  hit_target_1 BOOLEAN DEFAULT FALSE,
+  hit_target_2 BOOLEAN DEFAULT FALSE,
+  hit_stop_loss BOOLEAN DEFAULT FALSE,
+
+  grade TEXT CHECK (grade IN ('A', 'B', 'C', 'D', 'F')),
+  direction_correct BOOLEAN,
+  signal_accuracy JSONB DEFAULT '{}',
+  what_worked JSONB DEFAULT '[]',
+  what_failed JSONB DEFAULT '[]',
+  key_lesson TEXT,
+  pattern_category TEXT,
+  move_driver TEXT,
+  move_driver_confidence NUMERIC(3,2),
+
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pi_ticker ON performance_insights(ticker);
+CREATE INDEX IF NOT EXISTS idx_pi_catalyst_type ON performance_insights(catalyst_type);
+CREATE INDEX IF NOT EXISTS idx_pi_grade ON performance_insights(grade);
+CREATE INDEX IF NOT EXISTS idx_pi_pattern ON performance_insights(pattern_category);
+CREATE INDEX IF NOT EXISTS idx_pi_driver ON performance_insights(move_driver);
+CREATE INDEX IF NOT EXISTS idx_pi_created ON performance_insights(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pi_pick_tracking ON performance_insights(pick_tracking_id);
+
+ALTER TABLE performance_insights ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "pi_service_all" ON performance_insights;
+CREATE POLICY "pi_service_all" ON performance_insights
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "pi_read_authenticated" ON performance_insights;
+CREATE POLICY "pi_read_authenticated" ON performance_insights
+  FOR SELECT TO authenticated
+  USING (true);
+
+GRANT SELECT ON performance_insights TO authenticated;
+GRANT ALL ON performance_insights TO service_role;
+
+
+-- ────────────────────────────────────────────────
+-- TABLE 3: scanner_config
+-- Dynamic signal weights + catalyst type multipliers
+-- Read by weightLoader.js (1-hour TTL cache)
+-- Written by signalOptimizerCron (monthly, admin-approved)
+-- ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS scanner_config (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  config_key TEXT UNIQUE NOT NULL,
+  config_value JSONB NOT NULL,
+  description TEXT,
+  updated_by TEXT DEFAULT 'system',
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sc_key ON scanner_config(config_key);
+
+ALTER TABLE scanner_config ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "sc_service_all" ON scanner_config;
+CREATE POLICY "sc_service_all" ON scanner_config
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "sc_read_authenticated" ON scanner_config;
+CREATE POLICY "sc_read_authenticated" ON scanner_config
+  FOR SELECT TO authenticated
+  USING (true);
+
+GRANT SELECT ON scanner_config TO authenticated;
+GRANT ALL ON scanner_config TO service_role;
+
+-- Default weights
+INSERT INTO scanner_config (config_key, config_value, description) VALUES
+  ('earnings_weights', '{
+    "guidanceTone": 0.18,
+    "earningsInflection": 0.16,
+    "supplyChain": 0.12,
+    "growthAcceleration": 0.08,
+    "bottleneckSupplier": 0.07,
+    "volume": 0.08,
+    "options": 0.06,
+    "news": 0.06,
+    "analystRevisions": 0.07,
+    "shortInterest": 0.04,
+    "technical": 0.04,
+    "macroTailwind": 0.04
+  }'::jsonb, 'Signal weights for earnings scanner — 12 signals (must sum to 1.00)')
+ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW();
+
+INSERT INTO scanner_config (config_key, config_value, description) VALUES
+  ('catalyst_weights', '{
+    "catalystMagnitude": 0.20,
+    "earningsImpact": 0.15,
+    "competitivePosition": 0.11,
+    "guidanceTone": 0.10,
+    "analystRevisions": 0.08,
+    "growthAcceleration": 0.07,
+    "bottleneckSupplier": 0.06,
+    "marginExpansion": 0.06,
+    "supplyChain": 0.05,
+    "shortSqueeze": 0.05,
+    "tamExpansion": 0.04,
+    "macroTailwind": 0.03
+  }'::jsonb, 'Signal weights for catalyst scanner — 12 signals (must sum to 1.00)')
+ON CONFLICT (config_key) DO UPDATE SET config_value = EXCLUDED.config_value, updated_at = NOW();
+
+INSERT INTO scanner_config (config_key, config_value, description) VALUES
+  ('catalyst_type_weights', '{
+    "guidance_shock": 1.0,
+    "earnings_inflection": 1.0,
+    "bottleneck_supplier": 1.0,
+    "contract_win": 1.0,
+    "analyst_cascade": 1.0,
+    "product_breakthrough": 1.0,
+    "restructuring": 1.0,
+    "ma_activity": 1.0,
+    "sector_rotation": 1.0,
+    "macro_tailwind": 1.0,
+    "sentiment_shift": 1.0,
+    "catalyst_event": 1.0
+  }'::jsonb, 'Catalyst type multipliers (0.5=penalize, 1.0=neutral, 2.0=boost)')
+ON CONFLICT (config_key) DO NOTHING;
+
+
+-- ────────────────────────────────────────────────
+-- TABLE 4: optimization_history
+-- Monthly AI weight optimization proposals
+-- applied=false means pending admin approval
+-- ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS optimization_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  optimization_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  picks_analyzed INTEGER DEFAULT 0,
+
+  performance_stats JSONB DEFAULT '{}',
+
+  old_weights JSONB DEFAULT '{}',
+  new_weights JSONB DEFAULT '{}',
+  weight_changes JSONB DEFAULT '[]',
+
+  catalyst_type_adjustments JSONB DEFAULT '[]',
+
+  winning_patterns JSONB DEFAULT '[]',
+  losing_patterns JSONB DEFAULT '[]',
+
+  summary TEXT,
+  performance_score INTEGER DEFAULT 0,
+
+  applied BOOLEAN DEFAULT FALSE,
+  applied_at TIMESTAMPTZ,
+  applied_by TEXT,
+  rejected BOOLEAN DEFAULT FALSE,
+  rejected_at TIMESTAMPTZ,
+  rejected_reason TEXT,
+
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_oh_date ON optimization_history(optimization_date DESC);
+CREATE INDEX IF NOT EXISTS idx_oh_applied ON optimization_history(applied);
+
+ALTER TABLE optimization_history ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "oh_service_all" ON optimization_history;
+CREATE POLICY "oh_service_all" ON optimization_history
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "oh_read_authenticated" ON optimization_history;
+CREATE POLICY "oh_read_authenticated" ON optimization_history
+  FOR SELECT TO authenticated
+  USING (true);
+
+GRANT SELECT ON optimization_history TO authenticated;
+GRANT ALL ON optimization_history TO service_role;
+
+
+-- ────────────────────────────────────────────────
+-- VIEW 1: v_catalyst_type_performance
+-- Win rates by catalyst type for admin dashboard
+-- ────────────────────────────────────────────────
+
+CREATE OR REPLACE VIEW v_catalyst_type_performance AS
+SELECT
+  catalyst_type,
+  COUNT(*) AS total_picks,
+  COUNT(*) FILTER (WHERE current_return_pct > 0) AS winning_picks,
+  ROUND(
+    (COUNT(*) FILTER (WHERE current_return_pct > 0)::NUMERIC / NULLIF(COUNT(*), 0)) * 100, 1
+  ) AS win_rate,
+  ROUND(AVG(current_return_pct)::NUMERIC, 2) AS avg_return,
+  ROUND(AVG(max_return_pct)::NUMERIC, 2) AS avg_max_return,
+  ROUND(AVG(min_return_pct)::NUMERIC, 2) AS avg_max_drawdown,
+  ROUND(AVG(overall_score)::NUMERIC, 1) AS avg_score,
+  ROUND(AVG(finotaur_score)::NUMERIC, 1) AS avg_finotaur_score,
+  COUNT(*) FILTER (WHERE hit_target_1) AS target_1_hits,
+  COUNT(*) FILTER (WHERE hit_target_2) AS target_2_hits,
+  COUNT(*) FILTER (WHERE hit_stop_loss) AS stop_loss_hits,
+  MODE() WITHIN GROUP (ORDER BY ai_performance_grade) AS most_common_grade,
+  MAX(pick_date) AS latest_pick_date
+FROM pick_tracking
+WHERE catalyst_type IS NOT NULL
+  AND status != 'active'
+GROUP BY catalyst_type
+ORDER BY win_rate DESC NULLS LAST, total_picks DESC;
+
+GRANT SELECT ON v_catalyst_type_performance TO service_role, authenticated;
+
+
+-- ────────────────────────────────────────────────
+-- VIEW 2: v_score_vs_performance
+-- Score brackets vs actual returns
+-- ────────────────────────────────────────────────
+
+CREATE OR REPLACE VIEW v_score_vs_performance AS
+SELECT
+  CASE
+    WHEN overall_score >= 90 THEN '90-100'
+    WHEN overall_score >= 80 THEN '80-89'
+    WHEN overall_score >= 70 THEN '70-79'
+    WHEN overall_score >= 60 THEN '60-69'
+    ELSE 'Below 60'
+  END AS score_range,
+  COUNT(*) AS total_picks,
+  COUNT(*) FILTER (WHERE current_return_pct > 0) AS winning_picks,
+  ROUND(
+    (COUNT(*) FILTER (WHERE current_return_pct > 0)::NUMERIC / NULLIF(COUNT(*), 0)) * 100, 1
+  ) AS win_rate,
+  ROUND(AVG(current_return_pct)::NUMERIC, 2) AS avg_return,
+  ROUND(AVG(max_return_pct)::NUMERIC, 2) AS avg_max_return,
+  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY current_return_pct)::NUMERIC, 2) AS median_return,
+  ROUND(AVG(finotaur_score)::NUMERIC, 1) AS avg_finotaur_score,
+  COUNT(*) FILTER (WHERE hit_target_1) AS target_1_hits,
+  COUNT(*) FILTER (WHERE hit_target_2) AS target_2_hits
+FROM pick_tracking
+WHERE status != 'active'
+GROUP BY score_range
+ORDER BY score_range DESC;
+
+GRANT SELECT ON v_score_vs_performance TO service_role, authenticated;
+
+
+-- ────────────────────────────────────────────────
+-- Auto-update updated_at trigger
+-- ────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION update_pick_tracking_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_pick_tracking_updated ON pick_tracking;
+CREATE TRIGGER trg_pick_tracking_updated
+  BEFORE UPDATE ON pick_tracking
+  FOR EACH ROW
+  EXECUTE FUNCTION update_pick_tracking_timestamp();
+
+
+-- ────────────────────────────────────────────────
+-- VERIFICATION
+-- ────────────────────────────────────────────────
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 19: PERFORMANCE TRACKER v6 COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Tables:';
+  RAISE NOTICE '  • pick_tracking         — 60-day price monitoring';
+  RAISE NOTICE '  • performance_insights  — AI evaluation results';
+  RAISE NOTICE '  • scanner_config        — Dynamic signal weights';
+  RAISE NOTICE '  • optimization_history  — Monthly optimization log';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Views:';
+  RAISE NOTICE '  • v_catalyst_type_performance — Win rates by type';
+  RAISE NOTICE '  • v_score_vs_performance      — Score vs returns';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Default weights in scanner_config:';
+  RAISE NOTICE '  • earnings_weights      (10 signals, sum=1.00)';
+  RAISE NOTICE '  • catalyst_weights      (10 signals, sum=1.00)';
+  RAISE NOTICE '  • catalyst_type_weights (12 types, all=1.0)';
+  RAISE NOTICE '';
+  RAISE NOTICE 'Crons that use these tables:';
+  RAISE NOTICE '  • priceTrackerCron      — 4:30 PM + 10 AM + 6:30 PM ET';
+  RAISE NOTICE '  • performanceEvaluator  — Saturday 11 PM ET';
+  RAISE NOTICE '  • signalOptimizer       — 1st of month 3 AM ET';
+  RAISE NOTICE '=====================================================';
+
+END $$;
+
+-- =====================================================
+-- PART 20: CATALYST REPORTS — Log ALL scanned candidates
+-- =====================================================
+-- Same philosophy as earnings_reports: save EVERYTHING for analysis.
+-- catalyst_picks stores only top 5, catalyst_reports stores ALL.
+-- Enables future AI learning + pattern discovery across all candidates.
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS catalyst_reports (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  -- Identity
+  ticker TEXT NOT NULL,
+  company_name TEXT,
+  sector TEXT,
+  industry TEXT,
+  market_cap BIGINT,
+
+  -- Catalyst event
+  catalyst_type TEXT,
+  catalyst_headline TEXT,
+  catalyst_date TEXT,
+  catalyst_detail TEXT,
+  why_significant TEXT,
+  stock_move TEXT,
+
+  -- Price at scan
+  price_at_scan NUMERIC(12,2),
+  change_at_scan NUMERIC(8,2),
+
+  -- AI Scores
+  overall_score INTEGER,
+  finotaur_score INTEGER DEFAULT 0,
+  finotaur_detail TEXT,
+  direction TEXT CHECK (direction IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+  inflection_stage TEXT,
+
+  -- Trade recommendation
+  trade_type TEXT,
+  trade_timeframe TEXT,
+  risk_level INTEGER,
+  entry_zone_low NUMERIC(12,2),
+  entry_zone_high NUMERIC(12,2),
+  stop_loss NUMERIC(12,2),
+  target_1 NUMERIC(12,2),
+  target_2 NUMERIC(12,2),
+  risk_reward_ratio NUMERIC(6,2),
+
+  -- Analysis
+  why_this_stock TEXT,
+  catalyst_impact TEXT,
+  guidance_direction TEXT,
+  guidance_magnitude TEXT,
+  highlights JSONB DEFAULT '[]',
+  analyst_actions JSONB DEFAULT '[]',
+  supply_chain_role TEXT,
+  moat_type TEXT,
+  moat_detail TEXT,
+  spillover_companies JSONB DEFAULT '[]',
+  key_quotes JSONB DEFAULT '[]',
+
+  -- Raw data
+  scanner_signals JSONB DEFAULT '{}',
+  perplexity_research TEXT,
+  perplexity_citations JSONB DEFAULT '[]',
+  data_quality_score INTEGER DEFAULT 0,
+  scan_id TEXT,
+
+  -- Tracking
+  processed_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(ticker, scan_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cr_ticker ON catalyst_reports(ticker);
+CREATE INDEX IF NOT EXISTS idx_cr_type ON catalyst_reports(catalyst_type);
+CREATE INDEX IF NOT EXISTS idx_cr_score ON catalyst_reports(overall_score DESC);
+CREATE INDEX IF NOT EXISTS idx_cr_finotaur ON catalyst_reports(finotaur_score DESC);
+CREATE INDEX IF NOT EXISTS idx_cr_date ON catalyst_reports(processed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cr_scan ON catalyst_reports(scan_id);
+
+ALTER TABLE catalyst_reports ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "cr_service_all" ON catalyst_reports;
+CREATE POLICY "cr_service_all" ON catalyst_reports
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "cr_read_auth" ON catalyst_reports;
+CREATE POLICY "cr_read_auth" ON catalyst_reports
+  FOR SELECT TO authenticated USING (true);
+
+GRANT SELECT ON catalyst_reports TO authenticated;
+GRANT ALL ON catalyst_reports TO service_role;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 20: CATALYST REPORTS TABLE CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Stores ALL scanned catalyst candidates (not just top 5)';
+  RAISE NOTICE 'Enables pattern analysis + AI learning loop';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 21: Compact Analysis v2 — New narrative fields
+-- =====================================================
+-- 6 new TEXT columns on 4 tables
+-- Old columns NOT dropped (backward compat with historical data)
+-- =====================================================
+
+-- catalyst_picks (top 5 per scan)
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS what_happened TEXT;
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS why_significant TEXT;
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS before_state TEXT;
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS bull_case TEXT;
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS bear_case TEXT;
+ALTER TABLE catalyst_picks ADD COLUMN IF NOT EXISTS earnings_impact_text TEXT;
+
+-- catalyst_reports (ALL scanned candidates)
+ALTER TABLE catalyst_reports ADD COLUMN IF NOT EXISTS what_happened TEXT;
+ALTER TABLE catalyst_reports ADD COLUMN IF NOT EXISTS before_state TEXT;
+ALTER TABLE catalyst_reports ADD COLUMN IF NOT EXISTS bull_case TEXT;
+ALTER TABLE catalyst_reports ADD COLUMN IF NOT EXISTS bear_case TEXT;
+ALTER TABLE catalyst_reports ADD COLUMN IF NOT EXISTS earnings_impact_text TEXT;
+-- NOTE: why_significant already exists in catalyst_reports (from discovery step)
+
+-- top5_picks (earnings top 5 per scan)
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS what_happened TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS why_significant TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS before_state TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS bull_case TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS bear_case TEXT;
+ALTER TABLE top5_picks ADD COLUMN IF NOT EXISTS earnings_impact_text TEXT;
+
+-- earnings_reports (ALL scanned earnings)
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS what_happened TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS why_significant TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS before_state TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS bull_case TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS bear_case TEXT;
+ALTER TABLE earnings_reports ADD COLUMN IF NOT EXISTS earnings_impact_text TEXT;
+
+-- Verification
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 21: Compact Analysis v2 COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '23 new columns across 4 tables';
+  RAISE NOTICE '  catalyst_reports: 5 new (why_significant already existed)';
+  RAISE NOTICE '  catalyst_picks: 6 new';
+  RAISE NOTICE '  top5_picks: 6 new';
+  RAISE NOTICE '  earnings_reports: 6 new';
+  RAISE NOTICE 'Old columns preserved for historical data';
+  RAISE NOTICE '=====================================================';
+END $$;
+-- =====================================================
+-- PART 22: SECTOR SNAPSHOTS — Add earnings_calendar
+-- =====================================================
+
+ALTER TABLE sector_snapshots 
+  ADD COLUMN IF NOT EXISTS earnings_calendar JSONB DEFAULT '[]';
+
+-- =====================================================
+-- PART 24: SECTOR SNAPSHOTS — Risk Analysis (JSONB)
+-- =====================================================
+-- Stores AI-generated risk analysis per sector
+-- Generated by cron job alongside other sector analysis
+-- Zero additional AI calls — integrated into existing prompt
+-- Served to 10K users from cache
+-- =====================================================
+
+ALTER TABLE sector_snapshots 
+  ADD COLUMN IF NOT EXISTS risk_analysis JSONB DEFAULT '{}';
+
+-- Index for querying risk levels across sectors
+CREATE INDEX IF NOT EXISTS idx_sector_risk_level 
+  ON sector_snapshots ((risk_analysis->>'overallRiskScore'));
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 24: RISK ANALYSIS COLUMN ADDED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Column: risk_analysis (JSONB)';
+  RAISE NOTICE 'Contains: macro risks, sector risks, leader risks,';
+  RAISE NOTICE '          trend changes, exit triggers, hedging ideas';
+  RAISE NOTICE 'Generated: by cron (4x/day), zero extra AI cost';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- Fix pick_tracking status CHECK constraint
+ALTER TABLE pick_tracking DROP CONSTRAINT IF EXISTS pick_tracking_status_check;
+
+ALTER TABLE pick_tracking ADD CONSTRAINT pick_tracking_status_check
+  CHECK (status IN ('active', 'hit_target_1', 'hit_target_2', 'stopped_out', 'expired', 'closed', 'completed', 'stopped'));
+
+ALTER TABLE pick_tracking ADD COLUMN IF NOT EXISTS completion_reason TEXT;
+ALTER TABLE pick_tracking ADD COLUMN IF NOT EXISTS last_price_update TIMESTAMPTZ;
+ALTER TABLE pick_tracking ADD COLUMN IF NOT EXISTS predicted_risk_reward NUMERIC(6,2);
+
+-- =====================================================
+-- PART 26: FIX ISM_QUOTES COLUMN MISMATCH
+-- =====================================================
+ALTER TABLE ism_quotes ADD COLUMN IF NOT EXISTS quote_text TEXT;
+ALTER TABLE ism_quotes ADD COLUMN IF NOT EXISTS comment TEXT;
+
+UPDATE ism_quotes 
+SET quote_text = comment 
+WHERE (quote_text IS NULL OR quote_text = '') 
+  AND comment IS NOT NULL AND comment != '';
+
+UPDATE ism_quotes 
+SET comment = quote_text 
+WHERE (comment IS NULL OR comment = '') 
+  AND quote_text IS NOT NULL AND quote_text != '';
+
+CREATE INDEX IF NOT EXISTS idx_ism_quotes_month ON ism_quotes(report_month);
+CREATE INDEX IF NOT EXISTS idx_ism_quotes_sector ON ism_quotes(sector);
+
+-- ════════════════════════════════════════════════
+-- FIX: Convert UUID columns to TEXT on existing tables
+-- CREATE TABLE IF NOT EXISTS won't alter existing columns
+-- These ALTERs ensure correct types even if table pre-existed
+-- ════════════════════════════════════════════════
+ALTER TABLE pick_tracking ALTER COLUMN source_scan_id TYPE TEXT USING source_scan_id::TEXT;
+ALTER TABLE pick_tracking ALTER COLUMN source_pick_id TYPE TEXT USING source_pick_id::TEXT;
+
+-- ════════════════════════════════════════════════
+-- ANALYTICS VIEWS — Zero AI, pure SQL aggregations
+-- ════════════════════════════════════════════════
+
+-- View 1: Signal Accuracy — איזה סיגנל הכי מדויק
+CREATE OR REPLACE VIEW v_signal_accuracy AS
+SELECT
+  key as signal_name,
+  COUNT(*) as total_evaluations,
+  COUNT(*) FILTER (WHERE (value->>'accurate')::boolean = true) as accurate_count,
+  ROUND(
+    100.0 * COUNT(*) FILTER (WHERE (value->>'accurate')::boolean = true) 
+    / NULLIF(COUNT(*), 0), 1
+  ) as accuracy_pct,
+  ROUND(AVG((value->>'predicted')::numeric), 1) as avg_predicted_score
+FROM performance_insights,
+  jsonb_each(signal_accuracy) as x(key, value)
+WHERE signal_accuracy != '{}'::jsonb
+GROUP BY key
+ORDER BY accuracy_pct DESC;
+
+GRANT SELECT ON v_signal_accuracy TO service_role, authenticated;
+
+-- View 2: Finotaur Score Calibration — האם הציון מנבא תשואה
+CREATE OR REPLACE VIEW v_finotaur_calibration AS
+SELECT
+  CASE
+    WHEN finotaur_score >= 90 THEN '90-100'
+    WHEN finotaur_score >= 75 THEN '75-89'
+    WHEN finotaur_score >= 60 THEN '60-74'
+    WHEN finotaur_score >= 40 THEN '40-59'
+    ELSE '0-39'
+  END as score_bucket,
+  COUNT(*) as total,
+  ROUND(AVG(current_return_pct)::numeric, 2) as avg_return,
+  ROUND(AVG(max_return_pct)::numeric, 2) as avg_max_gain,
+  ROUND(AVG(min_return_pct)::numeric, 2) as avg_max_dd,
+  ROUND(
+    100.0 * COUNT(*) FILTER (WHERE current_return_pct > 0) 
+    / NULLIF(COUNT(*), 0), 1
+  ) as win_rate,
+  ROUND(
+    100.0 * COUNT(*) FILTER (WHERE hit_target_1) 
+    / NULLIF(COUNT(*), 0), 1
+  ) as target_1_hit_rate
+FROM pick_tracking
+WHERE tracking_days >= 14
+GROUP BY score_bucket
+ORDER BY score_bucket DESC;
+
+GRANT SELECT ON v_finotaur_calibration TO service_role, authenticated;
+
+-- View 3: Pattern Matrix — שילובי inflection + catalyst
+CREATE OR REPLACE VIEW v_pattern_matrix AS
+SELECT
+  COALESCE(inflection_stage, 'N/A') as inflection_stage,
+  COALESCE(catalyst_type, 'unknown') as catalyst_type,
+  COUNT(*) as total,
+  ROUND(AVG(current_return_pct)::numeric, 2) as avg_return,
+  ROUND(
+    100.0 * COUNT(*) FILTER (WHERE current_return_pct > 0) 
+    / NULLIF(COUNT(*), 0), 1
+  ) as win_rate,
+  COUNT(*) FILTER (WHERE current_return_pct > 10) as big_wins,
+  ROUND(AVG(max_return_pct)::numeric, 2) as avg_max_gain
+FROM pick_tracking
+WHERE tracking_days >= 5
+GROUP BY inflection_stage, catalyst_type
+HAVING COUNT(*) >= 2
+ORDER BY avg_return DESC;
+
+GRANT SELECT ON v_pattern_matrix TO service_role, authenticated;
+
+-- =====================================================
+-- PART 25: DASHBOARD CACHE — DB persistence for 10K users
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS dashboard_cache (
+  id TEXT PRIMARY KEY DEFAULT 'main',
+  data JSONB NOT NULL,
+  computed_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE dashboard_cache ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "dc_service_all" ON dashboard_cache;
+CREATE POLICY "dc_service_all" ON dashboard_cache
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "dc_read_auth" ON dashboard_cache;
+CREATE POLICY "dc_read_auth" ON dashboard_cache
+  FOR SELECT TO authenticated USING (true);
+
+GRANT SELECT ON dashboard_cache TO authenticated;
+GRANT ALL ON dashboard_cache TO service_role;

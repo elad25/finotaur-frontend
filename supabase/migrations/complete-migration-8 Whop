@@ -164,7 +164,18 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_cancel_at_period_end') THEN
     ALTER TABLE profiles ADD COLUMN platform_cancel_at_period_end BOOLEAN DEFAULT FALSE;
   END IF;
-  
+
+  -- 🔥 v8.0.0: Platform Downgrade Support
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_pending_downgrade_plan') THEN
+    ALTER TABLE profiles ADD COLUMN platform_pending_downgrade_plan TEXT;
+    COMMENT ON COLUMN profiles.platform_pending_downgrade_plan IS 'v8.0.0: Target plan for pending downgrade (e.g. platform_core). NULL = no pending downgrade.';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_pending_downgrade_membership_id') THEN
+    ALTER TABLE profiles ADD COLUMN platform_pending_downgrade_membership_id TEXT;
+    COMMENT ON COLUMN profiles.platform_pending_downgrade_membership_id IS 'v8.0.0: New Whop membership ID for the lower plan, waiting to be activated at period end.';
+  END IF;
+
   -- Platform Whop integration
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'platform_whop_user_id') THEN
     ALTER TABLE profiles ADD COLUMN platform_whop_user_id TEXT;
@@ -213,7 +224,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check
 -- Platform constraints
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_plan_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_plan_check 
-  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'core', 'finotaur', 'enterprise'));
+  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'core', 'finotaur', 'enterprise', 'platform_core', 'platform_finotaur', 'platform_enterprise'));
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_subscription_status_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_subscription_status_check 
@@ -413,8 +424,7 @@ UPDATE platform_plan_mapping SET finotaur_plan = 'finotaur' WHERE finotaur_plan 
 
 -- Now add constraint (all rows are already valid)
 ALTER TABLE platform_plan_mapping ADD CONSTRAINT platform_plan_mapping_finotaur_plan_check 
-  CHECK (finotaur_plan IN ('core', 'finotaur', 'enterprise'));
-
+  CHECK (finotaur_plan IN ('core', 'finotaur', 'enterprise', 'platform_core', 'platform_finotaur', 'platform_enterprise'));
 -- Insert platform plan mappings (UPDATE WITH REAL WHOP IDs!)
 INSERT INTO platform_plan_mapping (
   whop_plan_id, whop_product_id, finotaur_plan, billing_interval, 
@@ -450,12 +460,6 @@ CREATE TABLE IF NOT EXISTS platform_bundle_benefits (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(platform_plan, benefit_type)
 );
-
--- Drop old constraint, fix data, add updated constraint
-ALTER TABLE platform_bundle_benefits DROP CONSTRAINT IF EXISTS platform_bundle_benefits_platform_plan_check;
-UPDATE platform_bundle_benefits SET platform_plan = 'finotaur' WHERE platform_plan = 'pro';
-ALTER TABLE platform_bundle_benefits ADD CONSTRAINT platform_bundle_benefits_platform_plan_check
-  CHECK (platform_plan IN ('core', 'finotaur', 'enterprise'));
 
 INSERT INTO platform_bundle_benefits (platform_plan, benefit_type, benefit_value) VALUES
   ('finotaur', 'journal_plan', 'premium'),
@@ -1708,13 +1712,13 @@ BEGIN
     p.cancellation_reason::TEXT,
     COALESCE(p.is_lifetime, FALSE),
     
-    -- Trade limits
-    COALESCE(p.max_trades, 10),
+    -- Trade limits (v8.5.0: FREE=15 lifetime)
+    COALESCE(p.max_trades, 15),
     COALESCE(p.current_month_trades_count, 0),
     COALESCE(p.trade_count, 0),
     
-    -- Computed trade fields
-    GREATEST(0, COALESCE(p.max_trades, 10) - COALESCE(p.current_month_trades_count, 0))::INTEGER,
+    -- Computed trade fields (v8.5.0: default 15 for FREE tier)
+    GREATEST(0, COALESCE(p.max_trades, 15) - COALESCE(p.current_month_trades_count, 0))::INTEGER,
     COALESCE(p.current_month_trades_count, 0)::INTEGER,
     COALESCE(p.account_type, 'free')::TEXT,
     (COALESCE(p.billing_cycle_start, DATE_TRUNC('month', NOW())::DATE) + INTERVAL '1 month')::DATE,
@@ -3212,6 +3216,13 @@ END $$;
 
 -- Add constraints
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_top_secret_status_check;
+
+-- Fix any invalid top_secret_status values before adding constraint
+UPDATE profiles 
+SET top_secret_status = 'inactive'
+WHERE top_secret_status IS NOT NULL 
+  AND top_secret_status NOT IN ('inactive', 'active', 'cancelled');
+
 ALTER TABLE profiles ADD CONSTRAINT profiles_top_secret_status_check 
   CHECK (top_secret_status IS NULL OR top_secret_status IN ('inactive', 'active', 'cancelled'));
 
@@ -5025,6 +5036,11 @@ $$;
 
 CREATE INDEX IF NOT EXISTS idx_newsletter_config_key 
 ON newsletter_config(config_key);
+
+-- 🔥 v8.0.0: Index for pending downgrade lookup
+CREATE INDEX IF NOT EXISTS idx_profiles_pending_downgrade_membership 
+  ON public.profiles(platform_pending_downgrade_membership_id) 
+  WHERE platform_pending_downgrade_membership_id IS NOT NULL;
 
 
 -- ============================================

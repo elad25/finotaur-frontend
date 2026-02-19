@@ -350,7 +350,7 @@ WHERE account_type IS NULL
 -- ✅ זה כבר נכון! אין 'free' ב-constraint
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_account_type_check 
-CHECK (account_type IN ('basic', 'premium', 'admin', 'vip'));
+CHECK (account_type IS NULL OR account_type IN ('free', 'platform_free', 'basic', 'premium', 'trial', 'admin', 'vip', 'newsletter', 'top_secret', 'top_secret_bundle'));
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_subscription_interval_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_subscription_interval_check 
@@ -358,7 +358,7 @@ ALTER TABLE public.profiles ADD CONSTRAINT profiles_subscription_interval_check
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_subscription_status_check;
 ALTER TABLE public.profiles ADD CONSTRAINT profiles_subscription_status_check 
-  CHECK (subscription_status IN ('trial', 'active', 'expired', 'cancelled'));
+  CHECK (subscription_status IS NULL OR subscription_status IN ('trial', 'active', 'expired', 'cancelled', 'inactive', 'trialing', 'past_due'));
 
 -- 🔥 FIX: Clean invalid subscription_interval values BEFORE adding constraint
 -- Free users should have NULL interval
@@ -373,13 +373,9 @@ SET subscription_interval = 'monthly'
 WHERE account_type IN ('basic', 'premium') 
   AND subscription_interval IS NULL;
 
+-- 🔥 REMOVED: check_paid_has_interval causes webhook failures
+-- The webhook correctly manages subscription_interval on its own
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS check_paid_has_interval;
-ALTER TABLE public.profiles ADD CONSTRAINT check_paid_has_interval 
-  CHECK (
-    (account_type IN ('basic', 'premium') AND subscription_interval IS NOT NULL) OR
-    (account_type IN ('trial', 'admin', 'vip')) OR
-    (account_type IS NULL)  -- New users without subscription
-  );
 
 -- 💰 v9.4.4: FIX existing invalid payment_provider values BEFORE adding constraint
 UPDATE public.profiles 
@@ -1239,7 +1235,7 @@ CREATE TABLE IF NOT EXISTS public.payment_history (
   amount DECIMAL(10, 2) NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
   status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
-  plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
+  plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium', 'newsletter', 'top_secret', 'platform_core', 'platform_finotaur', 'platform_enterprise')),
   whop_transaction_id TEXT,
   invoice_url TEXT,
   payment_method TEXT,
@@ -1297,7 +1293,7 @@ COMMENT ON COLUMN public.payment_history.metadata IS 'v9.4.3: Additional payment
 CREATE TABLE IF NOT EXISTS public.subscription_periods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium')),
+  plan TEXT NOT NULL CHECK (plan IN ('basic', 'premium', 'newsletter', 'top_secret', 'platform_core', 'platform_finotaur', 'platform_enterprise')),
   whop_transaction_id TEXT,
   period_start TIMESTAMPTZ NOT NULL,
   period_end TIMESTAMPTZ NOT NULL,
@@ -2218,7 +2214,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   id = auth.uid()
-  AND (account_type IS NULL OR account_type IN ('platform_free', 'basic', 'trial'))
+  AND (account_type IS NULL OR account_type IN ('free', 'platform_free', 'basic', 'trial'))
 );
 
 -- UPDATE Policy for own profile
@@ -2472,6 +2468,135 @@ USING (
     AND role IN ('admin', 'super_admin')
   )
 );
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 v9.4.4: RLS FOR ADDITIONAL TABLES (Supabase Linter Fix)
+-- user_subscriptions, monthly_usage_tracking,
+-- user_notifications, usage_tracking
+-- ═══════════════════════════════════════════════════════════════
+
+-- 1. user_subscriptions
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'user_subscriptions'
+  ) THEN
+    ALTER TABLE public.user_subscriptions ENABLE ROW LEVEL SECURITY;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_subscriptions' AND policyname = 'users_read_own_subscriptions') THEN
+      CREATE POLICY "users_read_own_subscriptions"
+        ON public.user_subscriptions FOR SELECT
+        TO authenticated
+        USING (user_id = auth.uid());
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_subscriptions' AND policyname = 'service_role_all_subscriptions') THEN
+      CREATE POLICY "service_role_all_subscriptions"
+        ON public.user_subscriptions FOR ALL
+        TO service_role
+        USING (true) WITH CHECK (true);
+    END IF;
+    
+    RAISE NOTICE '✅ RLS enabled: user_subscriptions';
+  ELSE
+    RAISE NOTICE '⏭️  Skipped: user_subscriptions (table not found)';
+  END IF;
+END $$;
+
+-- 2. monthly_usage_tracking
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'monthly_usage_tracking'
+  ) THEN
+    ALTER TABLE public.monthly_usage_tracking ENABLE ROW LEVEL SECURITY;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'monthly_usage_tracking' AND policyname = 'users_read_own_monthly_usage') THEN
+      CREATE POLICY "users_read_own_monthly_usage"
+        ON public.monthly_usage_tracking FOR SELECT
+        TO authenticated
+        USING (user_id = auth.uid());
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'monthly_usage_tracking' AND policyname = 'service_role_all_monthly_usage') THEN
+      CREATE POLICY "service_role_all_monthly_usage"
+        ON public.monthly_usage_tracking FOR ALL
+        TO service_role
+        USING (true) WITH CHECK (true);
+    END IF;
+    
+    RAISE NOTICE '✅ RLS enabled: monthly_usage_tracking';
+  ELSE
+    RAISE NOTICE '⏭️  Skipped: monthly_usage_tracking (table not found)';
+  END IF;
+END $$;
+
+-- 3. user_notifications
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'user_notifications'
+  ) THEN
+    ALTER TABLE public.user_notifications ENABLE ROW LEVEL SECURITY;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_notifications' AND policyname = 'users_read_own_notifications') THEN
+      CREATE POLICY "users_read_own_notifications"
+        ON public.user_notifications FOR SELECT
+        TO authenticated
+        USING (user_id = auth.uid());
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_notifications' AND policyname = 'users_update_own_notifications') THEN
+      CREATE POLICY "users_update_own_notifications"
+        ON public.user_notifications FOR UPDATE
+        TO authenticated
+        USING (user_id = auth.uid());
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'user_notifications' AND policyname = 'service_role_all_notifications') THEN
+      CREATE POLICY "service_role_all_notifications"
+        ON public.user_notifications FOR ALL
+        TO service_role
+        USING (true) WITH CHECK (true);
+    END IF;
+    
+    RAISE NOTICE '✅ RLS enabled: user_notifications';
+  ELSE
+    RAISE NOTICE '⏭️  Skipped: user_notifications (table not found)';
+  END IF;
+END $$;
+
+-- 4. usage_tracking
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'usage_tracking'
+  ) THEN
+    ALTER TABLE public.usage_tracking ENABLE ROW LEVEL SECURITY;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'usage_tracking' AND policyname = 'users_read_own_tracking') THEN
+      CREATE POLICY "users_read_own_tracking"
+        ON public.usage_tracking FOR SELECT
+        TO authenticated
+        USING (user_id = auth.uid());
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'usage_tracking' AND policyname = 'service_role_all_tracking') THEN
+      CREATE POLICY "service_role_all_tracking"
+        ON public.usage_tracking FOR ALL
+        TO service_role
+        USING (true) WITH CHECK (true);
+    END IF;
+    
+    RAISE NOTICE '✅ RLS enabled: usage_tracking';
+  ELSE
+    RAISE NOTICE '⏭️  Skipped: usage_tracking (table not found)';
+  END IF;
+END $$;
 
 -- ═══════════════════════════════════════════════════════════════
 -- 📸 STORAGE POLICIES

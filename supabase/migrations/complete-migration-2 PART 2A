@@ -366,11 +366,12 @@ BEGIN
 -- Set correct max_trades based on account type
 IF NEW.max_trades IS NULL OR NEW.max_trades = 0 THEN
   NEW.max_trades := CASE NEW.account_type
+    WHEN 'free' THEN 15
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
     WHEN 'vip' THEN 999999
-    ELSE 25  -- Default = basic
+    ELSE 15  -- Default = free (15 lifetime)
   END;
 END IF;
   
@@ -1021,24 +1022,22 @@ LANGUAGE plpgsql
 IMMUTABLE
 AS $$
 BEGIN
-  RETURN CASE LOWER(COALESCE(plan_type, 'basic'))
+  RETURN CASE LOWER(COALESCE(plan_type, 'free'))
+    WHEN 'free' THEN 15
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
     WHEN 'vip' THEN 999999
-    ELSE 25  -- Default = basic
+    ELSE 15  -- Default = free (15 lifetime)
   END;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_trade_limit IS 
-'v6.3.0: basic=25, premium/admin/vip=unlimited, free=0. Trial is STATUS not account_type!';
+'v8.5.0: FREE=15 lifetime, BASIC=25/month, PREMIUM/ADMIN/VIP=unlimited';
 
 GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO service_role;
-
-COMMENT ON FUNCTION public.get_trade_limit IS 
-'v9.4.4: Returns trade limit based on account type. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 🔒 can_create_trade - Checks if user is under their trade limit
@@ -1063,7 +1062,10 @@ BEGIN
     trial_ends_at,
     subscription_expires_at,
     max_trades,
-    COALESCE(current_month_trades_count, 0) as monthly_trades
+    COALESCE(current_month_trades_count, 0) as monthly_trades,
+    COALESCE(trade_count, 0) as lifetime_trades,
+    platform_plan,
+    platform_subscription_status
   INTO v_profile
   FROM public.profiles
   WHERE id = user_id_param;
@@ -1097,6 +1099,32 @@ BEGIN
     RETURN TRUE;
   END IF;
   
+  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
+  IF v_profile.account_type = 'free' 
+     AND v_profile.platform_plan IN ('core', 'platform_core')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN v_profile.monthly_trades < 25;
+  END IF;
+
+  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
+  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN TRUE;
+  END IF;
+
+  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
+  IF v_profile.account_type = 'free' 
+     AND v_profile.platform_plan IN ('core', 'platform_core')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN v_profile.monthly_trades < 25;
+  END IF;
+
+  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
+  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN TRUE;
+  END IF;
+
   -- ✅ Basic users - check subscription status AND limits
   IF v_profile.account_type = 'basic' THEN
     -- ✅ Check if subscription expired (must pay)
@@ -1125,24 +1153,21 @@ BEGIN
     RETURN v_trades_used < v_limit;
   END IF;
   
-  -- ❌ FREE בוטל - Legacy FREE users יקבלו Trial
-  -- IF v_profile.account_type = 'free' THEN
-  --   RETURN FALSE;
-  -- END IF;
+  -- 🔥 v8.5.0: FREE users get 15 LIFETIME trades (not monthly)
+  IF v_profile.account_type = 'free' OR v_profile.account_type IS NULL THEN
+    RETURN v_profile.lifetime_trades < 15;
+  END IF;
   
-  -- ✅ Default: treat unknown as basic trial
-  RETURN v_profile.monthly_trades < 25;
+  -- ✅ Default: treat unknown as free (15 lifetime trades)
+  RETURN v_profile.lifetime_trades < 15;
 END;
 $$;
 
 COMMENT ON FUNCTION public.can_create_trade IS 
-'v6.3.0: Checks subscription_status, trial_ends_at, and monthly limits. Free users cannot create trades.';
+'v8.5.0: Checks plan limits. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited. Platform Core/Finotaur supported.';
 
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
-
-COMMENT ON FUNCTION public.can_create_trade IS 
-'v9.4.4-SECURE: Checks if user can create a trade based on their plan limits. Used by RLS policy for INSERT enforcement.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 📊 get_remaining_trades - Returns remaining trades info
@@ -1734,11 +1759,11 @@ DECLARE
 BEGIN
   -- Calculate max_trades based on account type
   v_max_trades := CASE p_account_type
-    WHEN 'free' THEN 10
+    WHEN 'free' THEN 15
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'trial' THEN 25
-    ELSE 10
+    ELSE 15
   END;
   
   -- Update profile

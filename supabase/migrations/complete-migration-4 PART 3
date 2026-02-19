@@ -20,6 +20,47 @@
 
 BEGIN;
 
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 FIX: Convert remaining SECURITY DEFINER views → SECURITY INVOKER
+-- These views were flagged by Supabase linter
+-- ═══════════════════════════════════════════════════════════════
+DO $$
+DECLARE
+  v_view TEXT;
+  v_views TEXT[] := ARRAY[
+    'v_ism_economic_environment_latest','current_year_holidays','v_long_term_holds',
+    'affiliate_applications_queue','v_score_vs_performance','v_finotaur_calibration',
+    'v_pattern_matrix','admin_audit_logs_enriched','sector_refresh_stats',
+    'affiliate_pending_payments','v_ism_sector_outlook_latest','upcoming_holidays',
+    'v_sector_rankings_latest','affiliate_monthly_performance','v_growth_picks',
+    'v_ism_trade_ideas_latest','v_value_picks','v_signal_accuracy',
+    'v_ism_sector_rankings_latest','trade_volume_daily','admin_pricing_overview',
+    'v_short_term_trades','affiliate_dashboard_summary','beta_users_view',
+    'v_catalyst_type_performance','v_current_macro_guidance','v_report_interaction_counts',
+    'v_ism_stock_tailwinds_latest','session_performance_view','v_momentum_picks',
+    'v_ticker_selections_latest','v_strategy_changes','admin_coupons_summary',
+    'user_growth_daily','affiliate_leaderboard','v_drastic_movers',
+    'affiliate_cron_history','stock_cache_stats','v_sector_movers',
+    'affiliate_pending_verifications','v_lite_candidates','subscription_breakdown_view'
+  ];
+  v_def TEXT;
+BEGIN
+  FOREACH v_view IN ARRAY v_views LOOP
+    SELECT definition INTO v_def FROM pg_views
+    WHERE schemaname = 'public' AND viewname = v_view;
+    
+    IF FOUND THEN
+      EXECUTE format(
+        'CREATE OR REPLACE VIEW public.%I WITH (security_invoker = true) AS %s',
+        v_view, v_def
+      );
+      RAISE NOTICE '✅ Fixed: %', v_view;
+    ELSE
+      RAISE NOTICE '⏭️  Skipped (not found): %', v_view;
+    END IF;
+  END LOOP;
+END $$;
+
 DO $$
 BEGIN
   RAISE NOTICE '';
@@ -1018,7 +1059,7 @@ GRANT EXECUTE ON FUNCTION public.permanent_delete_from_archive(UUID, UUID) TO au
 -- ============================================
 DO $$
 BEGIN
-  -- Add whop columns if missing
+  -- Basic Whop columns
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'profiles' AND column_name = 'whop_user_id') THEN
     ALTER TABLE public.profiles ADD COLUMN whop_user_id TEXT;
@@ -1048,226 +1089,193 @@ BEGIN
     WHERE table_name = 'profiles' AND column_name = 'pending_downgrade_plan') THEN
     ALTER TABLE public.profiles ADD COLUMN pending_downgrade_plan TEXT;
   END IF;
+
+  -- Newsletter columns
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_enabled') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_enabled BOOLEAN DEFAULT FALSE;
+  END IF;
   
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_status') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_status TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_paid') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_paid BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_whop_membership_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_subscription_expires_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_subscription_expires_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_cancel_at_period_end') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_cancel_at_period_end BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'newsletter_trial_ends_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN newsletter_trial_ends_at TIMESTAMPTZ;
+  END IF;
+
+  -- Top Secret columns
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_enabled') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_enabled BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_status') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_status TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_whop_membership_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_interval') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_interval TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_expires_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_expires_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_cancel_at_period_end') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_cancel_at_period_end BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_is_in_trial') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_is_in_trial BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_trial_ends_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_trial_ends_at TIMESTAMPTZ;
+  END IF;
+
+  -- Platform columns
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_plan') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_plan TEXT DEFAULT 'free';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_subscription_status') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_subscription_status TEXT DEFAULT 'inactive';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_billing_interval') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_billing_interval TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_subscription_started_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_subscription_started_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_subscription_expires_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_subscription_expires_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_whop_membership_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_whop_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_whop_user_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_whop_user_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_whop_product_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_whop_product_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_whop_plan_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_whop_plan_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_whop_customer_email') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_whop_customer_email TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_cancel_at_period_end') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_cancel_at_period_end BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_is_in_trial') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_is_in_trial BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_trial_ends_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_trial_ends_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_core_trial_used_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_core_trial_used_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_finotaur_trial_used_at') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_finotaur_trial_used_at TIMESTAMPTZ;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_pending_downgrade_plan') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_pending_downgrade_plan TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_pending_downgrade_membership_id') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_pending_downgrade_membership_id TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_bundle_journal_granted') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_bundle_journal_granted BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_bundle_newsletter_granted') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_bundle_newsletter_granted BOOLEAN DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'platform_payment_provider') THEN
+    ALTER TABLE public.profiles ADD COLUMN platform_payment_provider TEXT;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'enterprise_ai_portfolio_enabled') THEN
+    ALTER TABLE public.profiles ADD COLUMN enterprise_ai_portfolio_enabled BOOLEAN DEFAULT FALSE;
+  END IF;
+
   RAISE NOTICE '✅ Verified all Whop columns exist in profiles';
 END $$;
--- ===============================================
--- 🆕 3.1: UNIFIED get_user_subscription_status v6.0.0
--- ===============================================
--- Returns ALL 31 fields required by frontend including Whop integration
--- ===============================================
 
-DO $$
-BEGIN
-  RAISE NOTICE '[3.1/10] 🔧 Creating UNIFIED get_user_subscription_status v6.0.0...';
-END $$;
-
-DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.get_user_subscription_status(user_id_param UUID)
-RETURNS TABLE (
-  -- Core trade limits
-  remaining INTEGER,
-  used INTEGER,
-  max_trades INTEGER,
-  plan TEXT,
-  reset_date TEXT,
-  
-  -- Account info
-  account_type TEXT,
-  role TEXT,
-  
-  -- Subscription details
-  subscription_interval TEXT,
-  subscription_status TEXT,
-  subscription_expires_at TIMESTAMPTZ,
-  subscription_cancel_at_period_end BOOLEAN,
-  subscription_started_at TIMESTAMPTZ,
-  
-  -- Portfolio & Risk
-  initial_portfolio NUMERIC,
-  current_portfolio NUMERIC,
-  portfolio_size NUMERIC,
-  total_pnl NUMERIC,
-  risk_mode TEXT,
-  risk_percentage NUMERIC,
-  fixed_risk_amount NUMERIC,
-  
-  -- Trade counts
-  trade_count INTEGER,
-  current_month_trades_count INTEGER,
-  current_month_active_days INTEGER,
-  billing_cycle_start TEXT,
-  
-  -- Flags
-  is_lifetime BOOLEAN,
-  
-  -- Whop integration (CRITICAL!)
-  payment_provider TEXT,
-  whop_user_id TEXT,
-  whop_membership_id TEXT,
-  whop_product_id TEXT,
-  whop_plan_id TEXT,
-  whop_customer_email TEXT,
-  
-  -- Subscription management
-  pending_downgrade_plan TEXT
-)
-LANGUAGE plpgsql
-STABLE
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_profile RECORD;
-  v_trades_used INT;
-  v_reset_date DATE;
-  v_is_lifetime BOOLEAN;
-BEGIN
-  -- Fetch all profile data in one query
-  SELECT 
-    p.account_type,
-    p.max_trades,
-    p.subscription_interval,
-    p.subscription_status,
-    p.subscription_expires_at,
-    p.subscription_cancel_at_period_end,
-    p.subscription_started_at,
-    COALESCE(p.billing_cycle_start, CURRENT_DATE) as billing_cycle_start,
-    COALESCE(p.role, 'user') as role,
-    COALESCE(p.current_month_trades_count, 0) as monthly_count,
-    COALESCE(p.trade_count, 0) as lifetime_count,
-    COALESCE(p.current_month_active_days, 0) as active_days,
-    COALESCE(p.initial_portfolio, 10000) as initial_portfolio,
-    COALESCE(p.current_portfolio, p.initial_portfolio, 10000) as current_portfolio,
-    COALESCE(p.portfolio_size, p.current_portfolio, 10000) as portfolio_size,
-    COALESCE(p.total_pnl, 0) as total_pnl,
-    COALESCE(p.risk_mode, 'percentage') as risk_mode,
-    p.risk_percentage,
-    p.fixed_risk_amount,
-    p.payment_provider,
-    p.whop_user_id,
-    p.whop_membership_id,
-    p.whop_product_id,
-    p.whop_plan_id,
-    p.whop_customer_email,
-    p.pending_downgrade_plan
-  INTO v_profile
-  FROM public.profiles p
-  WHERE p.id = user_id_param;
-  
--- Handle user not found
-  IF NOT FOUND THEN
-    RETURN QUERY SELECT 
-      25::INTEGER, 0::INTEGER, 25::INTEGER, 'Basic Plan (Trial)'::TEXT, NULL::TEXT,
-      'basic'::TEXT, 'user'::TEXT, 
-      NULL::TEXT, 'trial'::TEXT, NULL::TIMESTAMPTZ, FALSE, NULL::TIMESTAMPTZ,
-      10000::NUMERIC, 10000::NUMERIC, 10000::NUMERIC, 0::NUMERIC, 
-      'percentage'::TEXT, 1::NUMERIC, NULL::NUMERIC,
-      0::INTEGER, 0::INTEGER, 0::INTEGER, NULL::TEXT, TRUE,
-      NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
-    RETURN;
-  END IF;
-  
-  -- Determine if lifetime limit (FREE users only)
- v_is_lifetime := FALSE;
-  
-  -- Calculate reset date (only for non-FREE users)
-  IF NOT v_is_lifetime THEN
-    v_reset_date := (DATE_TRUNC('month', v_profile.billing_cycle_start) + INTERVAL '1 month')::DATE;
-  END IF;
-  
-  -- Determine which trade counter to use
-  v_trades_used := CASE WHEN v_is_lifetime THEN v_profile.lifetime_count ELSE v_profile.monthly_count END;
-  
--- Handle unlimited users (premium/admin/vip/beta)
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
-    RETURN QUERY SELECT
-      999999::INTEGER,
-      v_trades_used::INTEGER,
-      999999::INTEGER,
-      CASE v_profile.account_type 
-        WHEN 'premium' THEN 'Premium Plan' 
-        WHEN 'vip' THEN 'VIP Plan' 
-        ELSE 'Admin' 
-      END::TEXT,
-      v_reset_date::TEXT,
-      v_profile.account_type::TEXT,
-      v_profile.role::TEXT,
-      v_profile.subscription_interval::TEXT,
-      v_profile.subscription_status::TEXT,
-      v_profile.subscription_expires_at::TIMESTAMPTZ,
-      COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
-      v_profile.subscription_started_at::TIMESTAMPTZ,
-      v_profile.initial_portfolio::NUMERIC,
-      v_profile.current_portfolio::NUMERIC,
-      v_profile.portfolio_size::NUMERIC,
-      v_profile.total_pnl::NUMERIC,
-      v_profile.risk_mode::TEXT,
-      v_profile.risk_percentage::NUMERIC,
-      v_profile.fixed_risk_amount::NUMERIC,
-      v_profile.lifetime_count::INTEGER,
-      v_profile.monthly_count::INTEGER,
-      v_profile.active_days::INTEGER,
-      v_profile.billing_cycle_start::TEXT,
-      FALSE,
-      v_profile.payment_provider::TEXT,
-      v_profile.whop_user_id::TEXT,
-      v_profile.whop_membership_id::TEXT,
-      v_profile.whop_product_id::TEXT,
-      v_profile.whop_plan_id::TEXT,
-      v_profile.whop_customer_email::TEXT,
-      v_profile.pending_downgrade_plan::TEXT;
-    RETURN;
-  END IF;
-  
-  -- Regular users (free/basic/trial)
-  RETURN QUERY SELECT
-    GREATEST(0, v_profile.max_trades - v_trades_used)::INTEGER,
-    v_trades_used::INTEGER,
-    v_profile.max_trades::INTEGER,
-    CASE v_profile.account_type 
-      WHEN 'free' THEN 'Free Plan' 
-      WHEN 'basic' THEN 'Basic Plan' 
-      WHEN 'trial' THEN 'Trial' 
-      ELSE 'Free Plan' 
-    END::TEXT,
-    v_reset_date::TEXT,
-    v_profile.account_type::TEXT,
-    v_profile.role::TEXT,
-    v_profile.subscription_interval::TEXT,
-    v_profile.subscription_status::TEXT,
-    v_profile.subscription_expires_at::TIMESTAMPTZ,
-    COALESCE(v_profile.subscription_cancel_at_period_end, FALSE),
-    v_profile.subscription_started_at::TIMESTAMPTZ,
-    v_profile.initial_portfolio::NUMERIC,
-    v_profile.current_portfolio::NUMERIC,
-    v_profile.portfolio_size::NUMERIC,
-    v_profile.total_pnl::NUMERIC,
-    v_profile.risk_mode::TEXT,
-    v_profile.risk_percentage::NUMERIC,
-    v_profile.fixed_risk_amount::NUMERIC,
-    v_profile.lifetime_count::INTEGER,
-    v_profile.monthly_count::INTEGER,
-    v_profile.active_days::INTEGER,
-    v_profile.billing_cycle_start::TEXT,
-    v_is_lifetime,
-    v_profile.payment_provider::TEXT,
-    v_profile.whop_user_id::TEXT,
-    v_profile.whop_membership_id::TEXT,
-    v_profile.whop_product_id::TEXT,
-    v_profile.whop_plan_id::TEXT,
-    v_profile.whop_customer_email::TEXT,
-    v_profile.pending_downgrade_plan::TEXT;
-END;
-$$;
-
-COMMENT ON FUNCTION public.get_user_subscription_status IS 
-'v6.0.0 UNIFIED: Returns ALL 31 fields including Whop integration.
-FREE = lifetime limit (no reset), BASIC/TRIAL = monthly reset, PREMIUM = unlimited.';
-
-GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO anon;
 
 -- ===============================================
 -- SECTION 3: VIEW PERMISSIONS - FIXED VERSION
@@ -2673,12 +2681,12 @@ BEGIN
         ),
         'yearly', json_build_object('total', 0, 'paid', 0)
       ),
-      'pro', json_build_object(
-        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro'),
+      'finotaur', json_build_object(
+        'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'finotaur'),
         'monthly', json_build_object(
-          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro'),
-          'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND COALESCE(platform_is_in_trial, false) = true),
-          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND platform_subscription_status = 'active')
+          'total', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'finotaur'),
+          'in_trial', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'finotaur' AND COALESCE(platform_is_in_trial, false) = true),
+          'paid', (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'finotaur' AND platform_subscription_status = 'active')
         ),
         'yearly', json_build_object('total', 0, 'paid', 0),
         'trial_eligible', 0
@@ -2706,9 +2714,9 @@ BEGIN
         (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND top_secret_whop_membership_id IS NOT NULL AND top_secret_status = 'active' AND COALESCE(newsletter_enabled, false) = true) * 50
       )::NUMERIC, 2),
       'platform_mrr', ROUND((
-        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core' AND platform_subscription_status = 'active') * 39 +
-        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'pro' AND platform_subscription_status = 'active') * 69 +
-        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'enterprise' AND platform_subscription_status = 'active') * 199
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'core' AND platform_subscription_status = 'active') * 59 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'finotaur' AND platform_subscription_status = 'active') * 109 +
+        (SELECT COUNT(*) FROM public.profiles WHERE deleted_at IS NULL AND platform_plan = 'enterprise' AND platform_subscription_status = 'active') * 500
       )::NUMERIC, 2)
     ),
 
@@ -3017,12 +3025,12 @@ BEGIN
       WHERE p.deleted_at IS NULL AND p.platform_plan = 'core'
       ORDER BY p.created_at DESC;
 
-    ELSIF p_filter = 'pro' THEN
+    ELSIF p_filter = 'finotaur' THEN
       RETURN QUERY
       SELECT
         p.id, p.email, p.display_name,
         COALESCE(p.platform_subscription_status, 'inactive')::TEXT AS status,
-        'pro'::TEXT AS plan,
+        'finotaur'::TEXT AS plan,
         NULL::TEXT AS billing_interval,
         COALESCE(p.platform_is_in_trial, false) AS is_in_trial,
         NULL::TIMESTAMPTZ AS started_at,
@@ -3030,7 +3038,7 @@ BEGIN
         p.created_at,
         p.last_login_at
       FROM public.profiles p
-      WHERE p.deleted_at IS NULL AND p.platform_plan = 'pro'
+      WHERE p.deleted_at IS NULL AND p.platform_plan = 'finotaur'
       ORDER BY p.created_at DESC;
 
     ELSIF p_filter = 'enterprise' THEN
@@ -3940,6 +3948,9 @@ BEGIN
     trial_ends_at,
     max_trades,
     current_month_trades_count,
+    COALESCE(trade_count, 0) as lifetime_trades,
+    platform_plan,
+    platform_subscription_status,
     role
   INTO v_profile
   FROM public.profiles
@@ -3959,6 +3970,19 @@ BEGIN
   IF v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
     RETURN TRUE;
   END IF;
+
+  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
+  IF v_profile.account_type = 'free' 
+     AND v_profile.platform_plan IN ('core', 'platform_core')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN COALESCE(v_profile.current_month_trades_count, 0) < 25;
+  END IF;
+
+  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
+  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
+     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+    RETURN TRUE;
+  END IF;
   
   -- Check trial expiration
   IF v_profile.subscription_status = 'trial' OR COALESCE(v_profile.is_in_trial, FALSE) THEN
@@ -3971,14 +3995,24 @@ BEGIN
   IF v_profile.subscription_status = 'expired' THEN
     RETURN FALSE;  -- Must renew
   END IF;
+
+  -- ✅ Basic users - check monthly limit
+  IF v_profile.account_type = 'basic' THEN
+    RETURN COALESCE(v_profile.current_month_trades_count, 0) < COALESCE(v_profile.max_trades, 25);
+  END IF;
+
+  -- 🔥 v8.5.0: FREE users get 15 LIFETIME trades
+  IF v_profile.account_type = 'free' OR v_profile.account_type IS NULL THEN
+    RETURN v_profile.lifetime_trades < 15;
+  END IF;
   
-  -- Check monthly limit (basic = 25)
-  RETURN COALESCE(v_profile.current_month_trades_count, 0) < COALESCE(v_profile.max_trades, 25);
+  -- Default: treat unknown as free (15 lifetime)
+  RETURN v_profile.lifetime_trades < 15;
 END;
 $$;
 
 COMMENT ON FUNCTION public.can_create_trade(UUID) IS 
-'v2.0: Checks if user can create trade. Includes trial expiration check.';
+'v8.5.0: Checks plan limits. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited. Platform Core/Finotaur supported.';
 
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
 
@@ -4048,19 +4082,20 @@ LANGUAGE plpgsql
 IMMUTABLE
 AS $$
 BEGIN
-  RETURN CASE LOWER(COALESCE(p_account_type, 'basic'))
+  RETURN CASE LOWER(COALESCE(p_account_type, 'free'))
+    WHEN 'free' THEN 15
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
     WHEN 'vip' THEN 999999
     WHEN 'beta' THEN 999999
-    ELSE 25
+    ELSE 15  -- Default = free (15 lifetime)
   END;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_trade_limit(TEXT) IS 
-'v2.0: Returns trade limit per account type. No FREE tier - default is 25 (basic).';
+'v8.5.0: FREE=15 lifetime, BASIC=25/month, PREMIUM/ADMIN/VIP=unlimited.';
 
 GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
 
@@ -4226,7 +4261,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE account_type = 'free') THEN
       ALTER TABLE public.profiles 
       ADD CONSTRAINT profiles_account_type_check 
-CHECK (account_type IN ('basic', 'premium', 'admin', 'vip', 'beta'));
+CHECK (account_type IS NULL OR account_type IN ('free', 'basic', 'premium', 'trial', 'admin', 'vip', 'beta', 'newsletter', 'top_secret', 'top_secret_bundle'));
       RAISE NOTICE '✅ Added constraint: profiles_account_type_check';
     ELSE
       RAISE WARNING '⚠️  Skipping constraint - FREE users still exist';

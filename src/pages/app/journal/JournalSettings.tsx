@@ -373,24 +373,18 @@ const UpgradePlanModal = ({
       onSelectPlan(planId as PlanId, billingInterval);
       onClose();
     } else if (action.type === 'downgrade') {
-      // Show confirmation for downgrade
+      // 🔥 v3.0: Downgrade is NOT allowed — show info popup instead
       setPendingDowngrade(planId);
       setShowCancelConfirm(true);
     }
   }, [currentPlan, billingInterval, getPlanAction, onSelectPlan, onClose, subscriptionCancelAtPeriodEnd, pendingDowngradePlan]);
 
-  const handleConfirmDowngrade = useCallback(async () => {
-    if (!pendingDowngrade) return;
-    
-    // 🔥 v2.0: Only 'basic' is valid for downgrade now
-    const result = await downgradeSubscription(pendingDowngrade as 'basic');
-    
-    if (result?.success) {
-      setShowCancelConfirm(false);
-      setPendingDowngrade(null);
-      onClose();
-    }
-  }, [pendingDowngrade, downgradeSubscription, onClose]);
+  // 🔥 v3.0: No longer performs downgrade — just closes the popup
+  const handleConfirmDowngrade = useCallback(() => {
+    setShowCancelConfirm(false);
+    setPendingDowngrade(null);
+    onClose();
+  }, [onClose]);
 
   const handleCancelDowngrade = useCallback(() => {
     setShowCancelConfirm(false);
@@ -399,7 +393,7 @@ const UpgradePlanModal = ({
 
   if (!isOpen) return null;
 
-  // 🔥 Confirmation dialog for downgrade
+  // 🔥 v3.0: "Downgrade not possible" info popup — no action taken
   if (showCancelConfirm && pendingDowngrade) {
     const targetPlan = plans.find(p => p.id === pendingDowngrade);
     const expiresDate = subscriptionExpiresAt 
@@ -415,62 +409,46 @@ const UpgradePlanModal = ({
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
           <div className="p-6 border-b border-zinc-800">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                <Shield className="w-6 h-6 text-blue-400" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-zinc-100">Confirm Downgrade</h3>
+                <h3 className="text-xl font-semibold text-zinc-100">Plan Change Not Available</h3>
                 <p className="text-sm text-zinc-400">
-                  Downgrade to {targetPlan?.name}
+                  Switching to {targetPlan?.name}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="p-6 space-y-4">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
-              <p className="text-amber-200 text-sm leading-relaxed">
-                {/* 🔥 v2.0: Only downgrade to Basic is possible now */}
-                Your subscription will be downgraded to <strong>Basic</strong> on <strong>{expiresDate}</strong>.
-                <br /><br />
-                You'll lose access to:
-                <ul className="list-disc ml-5 mt-2 space-y-1">
-                  <li>Unlimited trades (limited to 25/month)</li>
-                  <li>AI-powered insights & coach</li>
-                  <li>Priority support</li>
-                </ul>
+            <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+              <p className="text-blue-200 text-sm leading-relaxed">
+                Downgrading mid-cycle isn't supported. You've already paid for your current {currentPlan === 'premium' ? 'Premium' : 'Basic'} plan through <strong>{expiresDate}</strong>.
               </p>
             </div>
 
-            <p className="text-zinc-400 text-sm">
-              You can continue using your current plan features until {expiresDate}.
-            </p>
+            <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 space-y-2">
+              <p className="text-zinc-300 text-sm font-medium">What you can do instead:</p>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Keep using your current plan until <strong className="text-zinc-200">{expiresDate}</strong>, then subscribe to <strong className="text-zinc-200">{targetPlan?.name}</strong> from the pricing page when your cycle ends.
+              </p>
+            </div>
           </div>
 
           <div className="px-5 py-4 border-t border-zinc-800 flex gap-3">
             <button
               onClick={handleCancelDowngrade}
-              disabled={isProcessingDowngrade}
               className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
             >
-              Keep Current Plan
+              Stay on Current Plan
             </button>
             <button
               onClick={handleConfirmDowngrade}
-              disabled={isProcessingDowngrade}
-              className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
-              {isProcessingDowngrade ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <ArrowDown className="w-4 h-4" />
-                  Confirm Downgrade
-                </>
-              )}
+              <Check className="w-4 h-4" />
+              Got It
             </button>
           </div>
         </div>

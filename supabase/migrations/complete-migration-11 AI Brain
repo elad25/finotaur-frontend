@@ -94,12 +94,12 @@ CREATE INDEX IF NOT EXISTS idx_embeddings_metadata ON report_embeddings USING GI
 CREATE INDEX IF NOT EXISTS idx_embeddings_metadata_section ON report_embeddings((metadata->>'section'));
 CREATE INDEX IF NOT EXISTS idx_embeddings_metadata_ticker ON report_embeddings((metadata->>'ticker'));
 
--- Vector similarity index (IVFFlat - good for 10K-1M vectors)
--- For smaller datasets, you can use HNSW instead
+-- Vector similarity index (IVFFlat)
+-- NOTE: Create this index AFTER inserting data to avoid memory issues
+-- Run separately: CREATE INDEX idx_embeddings_vector ON report_embeddings 
+--   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10);
 DROP INDEX IF EXISTS idx_embeddings_vector;
-CREATE INDEX idx_embeddings_vector ON report_embeddings 
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
+-- Index will be created later when data exists
 
 COMMENT ON TABLE report_embeddings IS 'Stores vector embeddings for semantic search across all report types';
 
@@ -1654,6 +1654,77 @@ AND t.tablename IN (
   'institutional_holders', 'fund_positions', 'stock_institutional_ownership', 'company_intel_cache'
 )
 ORDER BY t.tablename;
+
+-- =====================================================
+-- 14. PROFILES TIER COLUMN MIGRATION
+-- =====================================================
+-- Required for AI Copilot tier-based usage limits
+-- Syncs with existing account_type column
+-- =====================================================
+
+-- Step 1: Add tier column to profiles
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
+
+-- Step 2: Sync tier from existing account_type values
+UPDATE profiles 
+SET tier = COALESCE(
+  CASE 
+    WHEN account_type IS NULL THEN 'free'
+    WHEN account_type = '' THEN 'free'
+    ELSE LOWER(account_type)
+  END,
+  'free'
+)
+WHERE tier IS NULL OR tier = '' OR tier = 'free';
+
+-- Step 3: Create sync function
+CREATE OR REPLACE FUNCTION sync_tier_from_account_type()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.tier := COALESCE(
+    CASE 
+      WHEN NEW.account_type IS NULL THEN 'free'
+      WHEN NEW.account_type = '' THEN 'free'
+      ELSE LOWER(NEW.account_type)
+    END,
+    'free'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 4: Create trigger for auto-sync
+DROP TRIGGER IF EXISTS trigger_sync_tier ON profiles;
+CREATE TRIGGER trigger_sync_tier
+  BEFORE INSERT OR UPDATE OF account_type ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION sync_tier_from_account_type();
+
+-- Step 5: Verification
+DO $$
+DECLARE
+  tier_count INTEGER;
+  free_count INTEGER;
+  basic_count INTEGER;
+  premium_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO tier_count FROM profiles WHERE tier IS NOT NULL;
+  SELECT COUNT(*) INTO free_count FROM profiles WHERE tier = 'free';
+  SELECT COUNT(*) INTO basic_count FROM profiles WHERE tier = 'basic';
+  SELECT COUNT(*) INTO premium_count FROM profiles WHERE tier IN ('premium', 'pro');
+  
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PROFILES TIER COLUMN MIGRATION COMPLETE';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Total profiles with tier: %', tier_count;
+  RAISE NOTICE '  - Free tier: %', free_count;
+  RAISE NOTICE '  - Basic tier: %', basic_count;
+  RAISE NOTICE '  - Premium/Pro tier: %', premium_count;
+  RAISE NOTICE '';
+  RAISE NOTICE 'Trigger active: sync_tier_from_account_type';
+  RAISE NOTICE '=====================================================';
+END $$;
 
 -- =====================================================
 -- END OF MIGRATION

@@ -539,6 +539,7 @@ const BillingTab = () => {
   // 🔥 Platform cancel states
   const [showPlatformCancelDialog, setShowPlatformCancelDialog] = useState(false);
   const [cancellingPlatform, setCancellingPlatform] = useState(false);
+  const [showPlatformDowngradeInfoDialog, setShowPlatformDowngradeInfoDialog] = useState(false);
 
   // Platform subscription (main website)
   const platformPlan = profile?.platform_plan || 'free';
@@ -1086,14 +1087,24 @@ const BillingTab = () => {
           ) : platformIsActive && !isLifetime && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-zinc-700/50">
               {!profile?.platform_cancel_at_period_end && (
-                <Button
-                  size="sm"
-                  onClick={() => navigate('/app/all-markets/pricing')}
-                  className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
-                >
-                  <Crown className="w-3.5 h-3.5 mr-1.5" />
-                  {profile?.platform_billing_interval === 'monthly' ? 'Upgrade to Yearly (Save 17%)' : 'Upgrade Plan'}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate('/app/all-markets/pricing')}
+                    className="bg-gradient-to-r from-[#C9A646] via-[#E5C76B] to-[#C9A646] hover:from-[#D4B04F] hover:via-[#F0D87A] hover:to-[#D4B04F] text-black font-semibold shadow-lg shadow-[#C9A646]/30 border border-[#C9A646]/50 transition-all duration-300 hover:shadow-[#C9A646]/50 hover:scale-[1.02]"
+                  >
+                    <Crown className="w-3.5 h-3.5 mr-1.5" />
+                    {profile?.platform_billing_interval === 'monthly' ? 'Upgrade to Yearly (Save 17%)' : 'Upgrade Plan'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowPlatformDowngradeInfoDialog(true)}
+                    className="text-zinc-400 hover:text-zinc-300 hover:bg-zinc-700/50 border border-zinc-700/50"
+                  >
+                    Change Plan
+                  </Button>
+                </>
               )}
               {profile?.platform_cancel_at_period_end ? (
                 <Button
@@ -1119,6 +1130,60 @@ const BillingTab = () => {
                   Unsubscribe
                 </Button>
               )}
+            </div>
+          )}
+
+          {/* 🔥 Platform Downgrade Info Dialog */}
+          {showPlatformDowngradeInfoDialog && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl">
+                <div className="p-6 border-b border-zinc-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                      <Shield className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-zinc-100">Plan Change Not Available</h3>
+                      <p className="text-sm text-zinc-400">Mid-cycle plan changes</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-blue-200 text-sm leading-relaxed">
+                      Downgrading mid-cycle isn't supported. You've already paid for your current{' '}
+                      <strong>{profile?.platform_plan?.replace('platform_', '')?.charAt(0).toUpperCase() + (profile?.platform_plan?.replace('platform_', '')?.slice(1) || '')}</strong>{' '}
+                      plan through{' '}
+                      <strong>
+                        {profile?.platform_subscription_expires_at
+                          ? new Date(profile.platform_subscription_expires_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                          : 'the end of your billing period'}
+                      </strong>.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl bg-zinc-800/60 border border-zinc-700/50 space-y-2">
+                    <p className="text-zinc-300 text-sm font-medium">What you can do instead:</p>
+                    <p className="text-zinc-400 text-sm leading-relaxed">
+                      Keep your current plan until it expires, then choose a different plan from the pricing page when your cycle ends.
+                    </p>
+                  </div>
+                </div>
+                <div className="px-5 py-4 border-t border-zinc-800 flex gap-3">
+                  <button
+                    onClick={() => setShowPlatformDowngradeInfoDialog(false)}
+                    className="flex-1 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Stay on Current Plan
+                  </button>
+                  <button
+                    onClick={() => { setShowPlatformDowngradeInfoDialog(false); navigate('/app/all-markets/pricing'); }}
+                    className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    View Plans
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

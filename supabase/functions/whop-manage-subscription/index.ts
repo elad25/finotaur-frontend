@@ -773,8 +773,9 @@ async function handleCancel(
       }
     }
 
-    // Determine when access ends - 🔥 Prefer Whop's real date over DB value
-    const accessEndsAt = whopRenewalPeriodEnd || productStatus.trialEndsAt || productStatus.expiresAt || null;
+    // Determine when access ends - 🔥 For trials, prefer DB trialEndsAt (accurate 14-day trial)
+    // whopRenewalPeriodEnd may reflect billing cycle (30 days) rather than trial end (14 days)
+    const accessEndsAt = productStatus.trialEndsAt || whopRenewalPeriodEnd || productStatus.expiresAt || null;
 
     let updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),

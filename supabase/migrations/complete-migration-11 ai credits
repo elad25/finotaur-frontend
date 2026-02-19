@@ -128,6 +128,176 @@ ON CONFLICT (action_name) DO UPDATE SET
 
 
 -- ============================================
+-- PART 2.5: AI CREDITS PURCHASES TABLE
+-- ============================================
+-- Tracks individual credit pack purchases
+-- Supports expiration and multiple purchases per user
+-- ============================================
+
+-- Drop and recreate to ensure correct schema
+DROP TABLE IF EXISTS ai_credits CASCADE;
+
+CREATE TABLE ai_credits (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  
+  -- Purchase details
+  credits_purchased INTEGER NOT NULL,
+  credits_remaining INTEGER NOT NULL,
+  
+  -- Pricing info
+  pack_type TEXT,
+  price_paid NUMERIC(10,2),
+  
+  -- Timestamps
+  purchased_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ DEFAULT NULL,
+  
+  -- Payment tracking
+  payment_provider TEXT DEFAULT 'whop',
+  payment_id TEXT,
+  
+  -- Status
+  status TEXT DEFAULT 'active',
+  
+  -- Metadata
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Constraints (defined after columns)
+  CONSTRAINT ai_credits_payment_provider_check CHECK (payment_provider IN ('whop', 'stripe', 'manual', 'bonus')),
+  CONSTRAINT ai_credits_status_check CHECK (status IN ('active', 'exhausted', 'expired', 'refunded'))
+);
+
+-- Indexes for fast lookups (no IF NOT EXISTS since table is fresh)
+CREATE INDEX idx_ai_credits_user ON ai_credits(user_id);
+CREATE INDEX idx_ai_credits_user_active ON ai_credits(user_id, status) WHERE status = 'active';
+CREATE INDEX idx_ai_credits_expires ON ai_credits(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX idx_ai_credits_payment ON ai_credits(payment_id) WHERE payment_id IS NOT NULL;
+
+-- Auto-update updated_at
+DROP TRIGGER IF EXISTS update_ai_credits_updated_at ON ai_credits;
+CREATE TRIGGER update_ai_credits_updated_at
+  BEFORE UPDATE ON ai_credits
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- RLS
+ALTER TABLE ai_credits ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users see own credits" ON ai_credits;
+CREATE POLICY "Users see own credits" ON ai_credits 
+  FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Service role full access credits" ON ai_credits;
+CREATE POLICY "Service role full access credits" ON ai_credits 
+  FOR ALL USING (TRUE);
+
+GRANT SELECT ON ai_credits TO authenticated;
+GRANT ALL ON ai_credits TO service_role;
+
+COMMENT ON TABLE ai_credits IS 'Tracks individual credit pack purchases with expiration support';
+
+
+-- ============================================
+-- FUNCTION: Get user total available credits
+-- ============================================
+CREATE OR REPLACE FUNCTION get_user_available_credits(p_user_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_purchased_credits INTEGER := 0;
+  v_profile_credits INTEGER := 0;
+BEGIN
+  -- Sum from ai_credits table (active, non-expired)
+  SELECT COALESCE(SUM(credits_remaining), 0) INTO v_purchased_credits
+  FROM ai_credits
+  WHERE user_id = p_user_id 
+    AND status = 'active'
+    AND (expires_at IS NULL OR expires_at > NOW());
+  
+  -- Add from profiles table
+  SELECT COALESCE(credits_balance, 0) + COALESCE(credits_purchased, 0) + COALESCE(credits_rollover, 0)
+  INTO v_profile_credits
+  FROM profiles
+  WHERE id = p_user_id;
+  
+  RETURN COALESCE(v_purchased_credits, 0) + COALESCE(v_profile_credits, 0);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_user_available_credits(UUID) TO authenticated, service_role;
+
+
+-- ============================================
+-- FUNCTION: Deduct credits (FIFO from purchases)
+-- ============================================
+CREATE OR REPLACE FUNCTION deduct_purchased_credits(
+  p_user_id UUID,
+  p_amount INTEGER
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_remaining INTEGER := p_amount;
+  v_credit_record RECORD;
+  v_deducted_total INTEGER := 0;
+BEGIN
+  -- Deduct from oldest non-expired purchases first (FIFO)
+  FOR v_credit_record IN 
+    SELECT id, credits_remaining
+    FROM ai_credits
+    WHERE user_id = p_user_id 
+      AND status = 'active'
+      AND credits_remaining > 0
+      AND (expires_at IS NULL OR expires_at > NOW())
+    ORDER BY purchased_at ASC
+  LOOP
+    IF v_remaining <= 0 THEN
+      EXIT;
+    END IF;
+    
+    IF v_credit_record.credits_remaining >= v_remaining THEN
+      -- This record covers the remaining amount
+      UPDATE ai_credits 
+      SET credits_remaining = credits_remaining - v_remaining,
+          status = CASE WHEN credits_remaining - v_remaining = 0 THEN 'exhausted' ELSE 'active' END,
+          updated_at = NOW()
+      WHERE id = v_credit_record.id;
+      
+      v_deducted_total := v_deducted_total + v_remaining;
+      v_remaining := 0;
+    ELSE
+      -- Use all remaining credits from this record
+      v_deducted_total := v_deducted_total + v_credit_record.credits_remaining;
+      v_remaining := v_remaining - v_credit_record.credits_remaining;
+      
+      UPDATE ai_credits 
+      SET credits_remaining = 0,
+          status = 'exhausted',
+          updated_at = NOW()
+      WHERE id = v_credit_record.id;
+    END IF;
+  END LOOP;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'deducted', v_deducted_total,
+    'remaining_to_deduct', v_remaining
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION deduct_purchased_credits(UUID, INTEGER) TO service_role;
+
+
+-- ============================================
 -- PART 3: DAILY USAGE TRACKING TABLE
 -- ============================================
 
@@ -196,13 +366,39 @@ BEGIN
     COALESCE(platform_plan, 'free') as platform_plan,
     COALESCE(credits_balance, 30) as credits_balance,
     COALESCE(credits_purchased, 0) as credits_purchased,
-    COALESCE(credits_rollover, 0) as credits_rollover
+    COALESCE(credits_rollover, 0) as credits_rollover,
+    COALESCE(role, 'user') as user_role
   INTO v_profile
   FROM profiles
   WHERE id = p_user_id;
   
   IF v_profile IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- ========================================
+  -- STEP 2.5: ADMIN UNLIMITED ACCESS
+  -- ========================================
+  IF v_profile.user_role IN ('admin', 'super_admin', 'owner') THEN
+    -- Log action but don't charge
+    INSERT INTO ai_daily_usage (user_id, usage_date, action_name, usage_count, credits_spent)
+    VALUES (p_user_id, CURRENT_DATE, p_action_name, 1, 0)
+    ON CONFLICT (user_id, usage_date, action_name) DO UPDATE SET
+      usage_count = ai_daily_usage.usage_count + 1,
+      updated_at = NOW();
+    
+    RETURN jsonb_build_object(
+      'success', true,
+      'credits_spent', 0,
+      'credits_remaining', 999999,
+      'was_soft_cap', false,
+      'multiplier', 1.0,
+      'source', 'admin_unlimited',
+      'action_type', v_action.action_type,
+      'daily_usage', 0,
+      'daily_cap', NULL,
+      'is_admin', true
+    );
   END IF;
 
   -- ========================================
