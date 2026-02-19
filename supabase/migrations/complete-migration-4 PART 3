@@ -3143,8 +3143,10 @@ END $$;
 -- Fix profiles defaults
 UPDATE public.profiles SET role = 'user' WHERE role IS NULL;
 UPDATE public.profiles SET account_type = 'basic' 
-WHERE account_type IS NULL OR account_type NOT IN ('basic', 'premium', 'admin', 'vip');
-UPDATE public.profiles SET subscription_status = 'active' WHERE subscription_status IS NULL;
+WHERE account_type IS NULL OR account_type NOT IN ('basic', 'premium', 'admin', 'vip', 'beta', 'newsletter', 'top_secret', 'top_secret_bundle');
+UPDATE public.profiles SET subscription_status = 'active' 
+WHERE subscription_status IS NULL 
+  AND account_type IN ('basic', 'premium', 'trial');
 
 -- ✅ FIXED: Set correct trade limits per account type
 -- ✅ FIXED: Set correct trade limits per account type

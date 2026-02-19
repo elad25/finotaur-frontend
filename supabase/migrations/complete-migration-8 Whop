@@ -219,7 +219,7 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_account_type_check
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_payment_provider_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check 
-  CHECK (payment_provider IS NULL OR payment_provider IN ('payplus', 'stripe', 'paypal', 'whop', 'admin_granted', 'manual'));
+  CHECK (payment_provider IS NULL OR payment_provider IN ('whop', 'stripe', 'paypal', 'admin_granted', 'manual'));
 
 -- Platform constraints
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_plan_check;
@@ -1222,7 +1222,11 @@ BEGIN
   -- Update profile
   UPDATE profiles SET
     account_type = v_new_plan,
-    subscription_status = CASE WHEN v_new_plan = 'free' THEN 'cancelled' ELSE 'pending_resubscribe' END,
+    subscription_status = CASE 
+      WHEN v_new_plan = 'free' THEN 'cancelled'
+      WHEN v_new_plan = 'basic' THEN 'expired'
+      ELSE 'expired'
+    END,
     subscription_cancel_at_period_end = FALSE,
     pending_downgrade_plan = NULL,
     cancellation_reason = NULL,
@@ -3224,7 +3228,7 @@ WHERE top_secret_status IS NOT NULL
   AND top_secret_status NOT IN ('inactive', 'active', 'cancelled');
 
 ALTER TABLE profiles ADD CONSTRAINT profiles_top_secret_status_check 
-  CHECK (top_secret_status IS NULL OR top_secret_status IN ('inactive', 'active', 'cancelled'));
+  CHECK (top_secret_status IS NULL OR top_secret_status IN ('inactive', 'active', 'trial', 'cancelled'));
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_top_secret_interval_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_top_secret_interval_check 

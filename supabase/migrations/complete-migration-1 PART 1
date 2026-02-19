@@ -345,7 +345,7 @@ SET
   account_type = 'basic',
   subscription_status = 'expired'
 WHERE account_type IS NULL 
-   OR account_type NOT IN ('basic', 'premium', 'admin', 'vip');
+   OR account_type NOT IN ('basic', 'premium', 'admin', 'vip', 'beta', 'newsletter', 'top_secret', 'top_secret_bundle');
 
 -- ✅ זה כבר נכון! אין 'free' ב-constraint
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_account_type_check;
@@ -2214,7 +2214,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
   id = auth.uid()
-  AND (account_type IS NULL OR account_type IN ('free', 'platform_free', 'basic', 'trial'))
+  AND (account_type IS NULL OR account_type IN ('free', 'platform_free', 'basic', 'trial', 'beta', 'newsletter', 'top_secret'))
 );
 
 -- UPDATE Policy for own profile
