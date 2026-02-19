@@ -309,7 +309,7 @@ export const TopNav = () => {
                 {planBadgeClass && (
                   <span className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${planBadgeClass}`}>
                     <Crown className="w-3 h-3" />
-                    {platformPlan?.charAt(0).toUpperCase() + platformPlan?.slice(1)}
+                    {platformPlan?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                   </span>
                 )}
                 
@@ -334,7 +334,7 @@ export const TopNav = () => {
                   ) : platformPlan && platformPlan !== 'free' ? (
                     <p className="text-xs text-[#C9A646] flex items-center gap-1">
                       <Crown className="w-3 h-3" />
-                      {platformPlan.charAt(0).toUpperCase() + platformPlan.slice(1)} Plan
+                      {platformPlan.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} Plan
                     </p>
                   ) : (
                     <p className="text-xs text-zinc-500">Free Plan</p>
