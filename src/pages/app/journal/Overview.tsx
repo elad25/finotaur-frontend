@@ -798,15 +798,15 @@ function JournalOverviewContent() {
   const { limits, loading: subscriptionLoading, canUseSnapTrade } = useSubscription();
   const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(DAYS_MAP[range], userId);
   
-  // 🔥 FIX: Listen for trade cache invalidation → refetch dashboard stats
-  // This ensures Overview updates whenever a trade is created/edited/deleted
+  // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
+  // Covers: create, edit, delete from MyTrades + NewTrade page
   React.useEffect(() => {
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (
-        event.type === 'updated' &&
-        event.query.queryKey[0] === 'trades' &&
-        event.query.state.status === 'success'
-      ) {
+      if (event.type !== 'updated') return;
+      if (event.query.queryKey[0] !== 'trades') return;
+      
+      // Trigger when trades data successfully updated (after create/edit/delete)
+      if (event.query.state.status === 'success') {
         refetchStats();
       }
     });

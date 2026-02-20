@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useState, useMemo, useCallback, memo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
@@ -492,6 +493,7 @@ TradeRow.displayName = 'TradeRow';
 export default function MyTrades() {
   // ✅ 1. ALL HOOKS MUST BE AT THE TOP (Rules of Hooks!)
   const navigate = useNavigate();
+  const queryClient = useQueryClient(); // 🔥 ADD: for cross-page cache invalidation
   
   // 🔥 FIXED: Now using useEffectiveUser for admin impersonation support
   const { id: userId, isImpersonating } = useEffectiveUser();
@@ -504,7 +506,7 @@ export default function MyTrades() {
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
-  const { data: trades = [], isLoading, error, refetch } = useTrades(userId);
+  const { data: trades = [], isLoading, error } = useTrades(userId);
   
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
@@ -630,7 +632,6 @@ const stats = useMemo<Stats>(() => {
     if (!tradeToDelete) return;
 
     try {
-      // 🔥 Using centralized deleteTrade function
       const result = await deleteTrade(tradeToDelete);
 
       if (result.success) {
@@ -639,8 +640,8 @@ const stats = useMemo<Stats>(() => {
         setDeleteDialogOpen(false);
         setTradeToDelete(null);
         
-        // Refetch trades to update the list
-        refetch();
+        // 🔥 FIX: invalidateQueries triggers Overview to refetch stats automatically
+        await queryClient.invalidateQueries({ queryKey: ['trades'] });
       } else {
         toast.error(result.error || "Failed to delete trade");
       }
@@ -648,17 +649,17 @@ const stats = useMemo<Stats>(() => {
       console.error('Delete trade error:', error);
       toast.error(error?.message || "Failed to delete trade");
     }
-  }, [tradeToDelete, refetch]);
+  }, [tradeToDelete, queryClient]);
 
   // 🔥 NEW: Quick update handler (for future inline edits)
   const handleQuickUpdate = useCallback(async (tradeId: string, updates: Partial<Trade>) => {
     try {
-      // 🔥 Using centralized updateTrade function
       const result = await updateTrade(tradeId, updates);
 
       if (result.success) {
         toast.success("Trade updated successfully");
-        refetch();
+        // 🔥 FIX: invalidateQueries triggers Overview to refetch stats automatically
+        await queryClient.invalidateQueries({ queryKey: ['trades'] });
       } else {
         toast.error(result.error || "Failed to update trade");
       }
@@ -666,7 +667,7 @@ const stats = useMemo<Stats>(() => {
       console.error('Update trade error:', error);
       toast.error(error?.message || "Failed to update trade");
     }
-  }, [refetch]);
+  }, [queryClient]);
 
   const exportTrades = useCallback(() => {
     if (filteredTrades.length === 0) {
@@ -733,7 +734,7 @@ const stats = useMemo<Stats>(() => {
 
   // ✅ 8. Main render
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full pl-3">
       {/* Header with Coming Soon Banner */}
 <div className="flex items-center px-6 py-4">
   <h1 className="text-2xl font-bold text-white">My Trades</h1>
