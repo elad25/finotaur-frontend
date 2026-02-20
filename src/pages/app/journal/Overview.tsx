@@ -630,76 +630,92 @@ Shortcut.displayName = 'Shortcut';
 
 const BestWorstTrades = React.memo(({ stats, timezone }: { stats: DashboardStats; timezone: string }) => {
   if (!stats.bestTrade || !stats.worstTrade) return null;
-  
+
+  const cardBase = {
+    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+    backdropFilter: 'blur(12px)',
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div 
-        className="rounded-[20px] border p-5 shadow-[0_0_30px_rgba(74,210,149,0.08)] animate-fadeIn"
-        style={{ 
-          borderColor: 'rgba(74, 210, 149, 0.2)',
-          background: 'rgba(74, 210, 149, 0.05)'
-        }}
+      {/* BEST TRADE */}
+      <div
+        className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
+        style={{ ...cardBase, border: '1px solid rgba(74,210,149,0.2)' }}
       >
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp className="w-4 h-4 text-[#4AD295]" />
-          <span className="text-[10px] text-[#4AD295] font-semibold uppercase tracking-[0.12em]">
-            Best Trade
-          </span>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-[#4AD295]">
-            {formatCurrency(stats.bestTrade.pnl)}
-          </span>
-          {stats.bestTrade.rr && (
-            <span className="text-sm text-[#4AD295]/70 font-light">
-              ({stats.bestTrade.rr.toFixed(1)}R)
+        <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+          style={{ background: 'rgba(74,210,149,0.12)', filter: 'blur(28px)' }} />
+        <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+          style={{ background: 'linear-gradient(90deg, transparent, #4AD295, transparent)' }} />
+
+        <div className="relative p-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <TrendingUp className="w-4 h-4 text-[#4AD295]" />
+            <span className="text-[10px] text-[#4AD295] font-semibold uppercase tracking-widest">
+              Best Trade
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-2">
-          {stats.bestTrade.session && (
-            <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.bestTrade.session)}`}>
-              {formatSessionDisplay(stats.bestTrade.session)}
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-bold tracking-tight text-[#4AD295]" style={{ letterSpacing: '-0.02em' }}>
+              {formatCurrency(stats.bestTrade.pnl)}
             </span>
-          )}
-          <span className="text-xs text-[#A0A0A0] font-light">
-            {stats.bestTrade.symbol} • {formatTradeDate(stats.bestTrade.open_at, timezone)}
-          </span>
+            {stats.bestTrade.rr && (
+              <span className="text-sm text-[#4AD295]/70 font-light">
+                ({stats.bestTrade.rr.toFixed(1)}R)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {stats.bestTrade.session && (
+              <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.bestTrade.session)}`}>
+                {formatSessionDisplay(stats.bestTrade.session)}
+              </span>
+            )}
+            <span className="text-[10px] font-medium" style={{ color: '#5A5A5A' }}>
+              {stats.bestTrade.symbol} • {formatTradeDate(stats.bestTrade.open_at, timezone)}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div 
-        className="rounded-[20px] border p-5 shadow-[0_0_30px_rgba(227,99,99,0.08)] animate-fadeIn"
-        style={{ 
-          borderColor: 'rgba(227, 99, 99, 0.2)',
-          background: 'rgba(227, 99, 99, 0.05)'
-        }}
+      {/* WORST TRADE */}
+      <div
+        className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
+        style={{ ...cardBase, border: '1px solid rgba(227,99,99,0.2)' }}
       >
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingDown className="w-4 h-4 text-[#E36363]" />
-          <span className="text-[10px] text-[#E36363] font-semibold uppercase tracking-[0.12em]">
-            Worst Trade
-          </span>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-semibold text-[#E36363]">
-            {formatCurrency(stats.worstTrade.pnl)}
-          </span>
-          {stats.worstTrade.rr && (
-            <span className="text-sm text-[#E36363]/70 font-light">
-              ({stats.worstTrade.rr.toFixed(1)}R)
+        <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+          style={{ background: 'rgba(227,99,99,0.12)', filter: 'blur(28px)' }} />
+        <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+          style={{ background: 'linear-gradient(90deg, transparent, #E36363, transparent)' }} />
+
+        <div className="relative p-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <TrendingDown className="w-4 h-4 text-[#E36363]" />
+            <span className="text-[10px] text-[#E36363] font-semibold uppercase tracking-widest">
+              Worst Trade
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-2">
-          {stats.worstTrade.session && (
-            <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.worstTrade.session)}`}>
-              {formatSessionDisplay(stats.worstTrade.session)}
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="text-3xl font-bold tracking-tight text-[#E36363]" style={{ letterSpacing: '-0.02em' }}>
+              {formatCurrency(stats.worstTrade.pnl)}
             </span>
-          )}
-          <span className="text-xs text-[#A0A0A0] font-light">
-            {stats.worstTrade.symbol} • {formatTradeDate(stats.worstTrade.open_at, timezone)}
-          </span>
+            {stats.worstTrade.rr && (
+              <span className="text-sm text-[#E36363]/70 font-light">
+                ({stats.worstTrade.rr.toFixed(1)}R)
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {stats.worstTrade.session && (
+              <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.worstTrade.session)}`}>
+                {formatSessionDisplay(stats.worstTrade.session)}
+              </span>
+            )}
+            <span className="text-[10px] font-medium" style={{ color: '#5A5A5A' }}>
+              {stats.worstTrade.symbol} • {formatTradeDate(stats.worstTrade.open_at, timezone)}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -1015,6 +1031,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 color={getPnLColor(stats.netPnl)}
                 hint={`${stats.closedTrades} closed trades`}
                 tooltip="Total profit or loss from all closed trades"
+                accentBg="linear-gradient(135deg, rgba(0,196,108,0.08) 0%, rgba(0,196,108,0.03) 100%)"
               />
               
               <DashboardKpiCard 
@@ -1023,6 +1040,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
                 color="text-[#C9A646]"
                 tooltip="Percentage of winning trades vs total trades"
+                accentBg="linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)"
                 showGauge={true}
                 gaugeData={{ 
                   wins: stats.wins, 
@@ -1044,6 +1062,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                   "text-[#E36363]"
                 }
                 tooltip="Gross profit divided by gross loss. >1 means profitable"
+                accentBg="linear-gradient(135deg, rgba(74,210,149,0.08) 0%, rgba(74,210,149,0.03) 100%)"
               />
               
               <DashboardKpiCard 
@@ -1056,6 +1075,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 hint={`${formatCurrency(stats.avgWin || 0)} / ${formatCurrency(stats.avgLoss || 0)}`}
                 color="text-[#C9A646]"
                 tooltip="Average size of winning trades vs losing trades"
+                accentBg="linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.03) 100%)"
                 showGauge={true}
                 gaugeData={{ 
                   avgWin: stats.avgWin || 0, 
@@ -1096,72 +1116,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <Shortcut 
-                to="/app/journal/new" 
-                title="Add Trade" 
-                subtitle="Create a new trade" 
-                Icon={PlusSquare} 
-              />
-              <Shortcut 
-                to="/app/journal/my-trades" 
-                title="My Trades" 
-                subtitle="View & edit your trades" 
-                Icon={FileText}
-                onPrefetch={prefetchTrades}
-              />
-              <Shortcut 
-                to="/app/journal/strategies" 
-                title="Strategies" 
-                subtitle="Build your playbook" 
-                Icon={Layers}
-                onPrefetch={prefetchStrategies}
-              />
-              <Shortcut 
-                to="/app/journal/analytics" 
-                title="Analytics" 
-                subtitle="KPIs & performance metrics" 
-                Icon={BarChart3}
-                onPrefetch={prefetchAnalytics}
-              />
-              <Shortcut 
-                to="/app/journal/calendar" 
-                title="Calendar" 
-                subtitle="Track entries & exits" 
-                Icon={CalendarIcon} 
-              />
-              <Shortcut 
-                to="/app/journal/ai-review" 
-                title="AI Chat" 
-                subtitle="Get trading insights" 
-                Icon={MessageSquare} 
-              />
-              <Shortcut 
-                to="/app/journal/scenarios" 
-                title="Scenarios" 
-                subtitle="Pre-market planning" 
-                Icon={ListChecks} 
-              />
-              <Shortcut 
-                to="/app/journal/community" 
-                title="Community" 
-                subtitle="Tips & updates" 
-                Icon={Users} 
-              />
-              <Shortcut 
-                to="/app/journal/academy" 
-                title="Academy" 
-                subtitle="Learning resources" 
-                Icon={GraduationCap} 
-              />
-              <Shortcut 
-                to="/app/journal/settings" 
-                title="Settings" 
-                subtitle="Preferences & billing" 
-                Icon={SettingsIcon}
-                onPrefetch={prefetchSettingsData}
-              />
-            </div>
+            
           </>
         )}
       </div>

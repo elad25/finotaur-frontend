@@ -1539,36 +1539,58 @@ function StatBoxCompact({
 }) {
   return (
     <div 
-      className="space-y-2 p-3 rounded-lg transition-all hover:scale-[1.02] hover:shadow-lg group relative"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group"
       style={{
-        background: 'rgba(20,20,20,0.4)',
-        border: '1px solid rgba(255,255,255,0.05)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          {icon && <div style={{ color }}>{icon}</div>}
-          <p className="text-xs font-semibold" style={{ color: '#9A9A9A' }}>
-            {label}
-          </p>
-        </div>
-        {trend && change !== undefined && (
-          <div className="flex items-center gap-1" style={{ color }}>
-            {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <span className="text-xs font-semibold">{Math.abs(change).toFixed(1)}</span>
+      {/* Ambient glow */}
+      <div 
+        className="absolute -top-6 -left-6 w-20 h-20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: `${color}22`, filter: 'blur(20px)' }}
+      />
+      {/* Bottom glow line */}
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-30"
+        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }}
+      />
+
+      <div className="relative p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-1.5">
+            {icon && (
+              <div 
+                className="inline-flex items-center justify-center w-7 h-7 rounded-lg"
+                style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+              >
+                <div style={{ color }}>{icon}</div>
+              </div>
+            )}
+            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6A6A6A' }}>
+              {label}
+            </p>
           </div>
+          {trend && change !== undefined && (
+            <div className="flex items-center gap-1" style={{ color }}>
+              {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              <span className="text-xs font-semibold">{Math.abs(change).toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+        
+        <p className="text-3xl font-bold tracking-tight" style={{ color }}>
+          {value}
+        </p>
+        
+        {sublabel && (
+          <p className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
+            {sublabel}
+          </p>
         )}
       </div>
-      
-      <p className="text-2xl font-bold" style={{ color }}>
-        {value}
-      </p>
-      
-      {sublabel && (
-        <p className="text-xs" style={{ color: '#606060' }}>
-          {sublabel}
-        </p>
-      )}
     </div>
   );
 }
@@ -1590,34 +1612,49 @@ function MetricCardCompact({
 }) {
   return (
     <div 
-      className="p-4 rounded-lg hover:scale-[1.02] transition-all"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group"
       style={{
-        background: 'rgba(20,20,20,0.6)',
-        border: '1px solid rgba(255,255,255,0.05)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        border: `1px solid ${color}22`,
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <h4 className="text-xs font-semibold mb-1" style={{ color: '#EAEAEA' }}>
-        {label}
-      </h4>
-      <p className="text-3xl font-bold mb-2" style={{ color }}>
-        {value}
-      </p>
-      <p className="text-xs mb-2" style={{ color: '#9A9A9A' }}>
-        {description}
-      </p>
-      <div className="flex items-center justify-between gap-2">
-        <div 
-          className="text-xs px-2 py-1 rounded inline-block font-medium" 
-          style={{
-            background: 'rgba(201,166,70,0.1)',
-            color: '#C9A646',
-            border: '1px solid rgba(201,166,70,0.2)',
-          }}
-        >
-          {benchmark}
+      {/* Ambient glow */}
+      <div 
+        className="absolute -top-8 -left-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: `${color}18`, filter: 'blur(24px)' }}
+      />
+      {/* Bottom accent line */}
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-40"
+        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }}
+      />
+
+      <div className="relative p-4">
+        <div className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6A6A6A' }}>
+          {label}
         </div>
-        <div className="text-xs font-semibold" style={{ color }}>
-          {percentile}
+        <p className="text-3xl font-bold tracking-tight mb-2" style={{ color }}>
+          {value}
+        </p>
+        <p className="text-xs mb-3" style={{ color: '#6A6A6A' }}>
+          {description}
+        </p>
+        <div className="flex items-center justify-between gap-2">
+          <div 
+            className="text-xs px-2 py-1 rounded-lg inline-block font-medium" 
+            style={{
+              background: `${color}15`,
+              color: color,
+              border: `1px solid ${color}30`,
+            }}
+          >
+            {benchmark}
+          </div>
+          <div className="text-xs font-semibold" style={{ color }}>
+            {percentile}
+          </div>
         </div>
       </div>
     </div>
@@ -1635,26 +1672,41 @@ function BestWorstCard({ title, trade, r, date, type }: {
   
   return (
     <div 
-      className="rounded-lg p-4"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.01] group"
       style={{
-        background: 'rgba(20,20,20,0.6)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
         border: `1px solid ${type === 'best' ? 'rgba(0,196,108,0.2)' : 'rgba(228,69,69,0.2)'}`,
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <h4 className="text-xs font-semibold mb-3" style={{ color: '#9A9A9A' }}>
-        {title}
-      </h4>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-bold" style={{ color: '#EAEAEA' }}>
-          {trade.symbol}
-        </span>
-        <span className="text-2xl font-bold" style={{ color }}>
-          {r >= 0 ? '+' : ''}{r.toFixed(2)}R
-        </span>
-      </div>
-      <div className="flex items-center justify-between text-xs" style={{ color: '#606060' }}>
-        <span>{trade.side}</span>
-        <span>{date}</span>
+      {/* Ambient glow */}
+      <div 
+        className="absolute -top-8 -left-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: `${color}18`, filter: 'blur(24px)' }}
+      />
+      {/* Bottom line */}
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-40"
+        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }}
+      />
+
+      <div className="relative p-4">
+        <h4 className="text-[10px] font-semibold uppercase tracking-widest mb-4" style={{ color: '#6A6A6A' }}>
+          {title}
+        </h4>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-base font-bold" style={{ color: '#EAEAEA' }}>
+            {trade.symbol}
+          </span>
+          <span className="text-2xl font-bold" style={{ color }}>
+            {r >= 0 ? '+' : ''}{r.toFixed(2)}R
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs" style={{ color: '#6A6A6A' }}>
+          <span>{trade.side}</span>
+          <span>{date}</span>
+        </div>
       </div>
     </div>
   );
@@ -1663,32 +1715,47 @@ function BestWorstCard({ title, trade, r, date, type }: {
 function MomentumCard({ momentum }: { momentum: { score: number; label: string; color: string } }) {
   return (
     <div 
-      className="rounded-lg p-4"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.01] group"
       style={{
-        background: 'rgba(20,20,20,0.6)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
         border: `1px solid ${momentum.color}33`,
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <h4 className="text-xs font-semibold mb-3 flex items-center gap-1" style={{ color: '#9A9A9A' }}>
-        <Flame className="w-3 h-3" />
-        Momentum Indicator
-      </h4>
-      <div className="mb-2">
-        <div className="text-3xl font-bold" style={{ color: momentum.color }}>
-          {momentum.score}
+      {/* Ambient glow */}
+      <div 
+        className="absolute -top-8 -left-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: `${momentum.color}18`, filter: 'blur(24px)' }}
+      />
+      {/* Bottom line */}
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-40"
+        style={{ background: `linear-gradient(90deg, transparent, ${momentum.color}, transparent)` }}
+      />
+
+      <div className="relative p-4">
+        <h4 className="text-[10px] font-semibold uppercase tracking-widest mb-4 flex items-center gap-1" style={{ color: '#6A6A6A' }}>
+          <Flame className="w-3 h-3" />
+          Momentum Indicator
+        </h4>
+        <div className="mb-3">
+          <div className="text-3xl font-bold tracking-tight" style={{ color: momentum.color }}>
+            {momentum.score}
+          </div>
+          <div className="text-sm font-medium mt-0.5" style={{ color: momentum.color }}>
+            {momentum.label}
+          </div>
         </div>
-        <div className="text-sm font-medium" style={{ color: momentum.color }}>
-          {momentum.label}
+        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+          <div 
+            className="h-full rounded-full transition-all duration-700"
+            style={{ 
+              width: `${momentum.score}%`,
+              background: `linear-gradient(90deg, ${momentum.color}, ${momentum.color}88)`
+            }}
+          />
         </div>
-      </div>
-      <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }}>
-        <div 
-          className="h-full rounded-full transition-all"
-          style={{ 
-            width: `${momentum.score}%`,
-            background: momentum.color
-          }}
-        />
       </div>
     </div>
   );
@@ -2002,29 +2069,44 @@ function EfficiencyCard({
 }) {
   return (
     <div 
-      className="rounded-lg p-4"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group"
       style={{
-        background: 'rgba(20,20,20,0.6)',
-        border: `1px solid ${warning ? 'rgba(255,193,7,0.2)' : 'rgba(255,255,255,0.05)'}`,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        border: `1px solid ${warning ? 'rgba(255,193,7,0.25)' : `${color}22`}`,
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <h4 className="text-xs font-semibold mb-2 flex items-center gap-1" style={{ color: '#9A9A9A' }}>
-        {label}
-        {warning && <AlertTriangle className="w-3 h-3" style={{ color: '#FFC107' }} />}
-      </h4>
-      <div className="text-3xl font-bold mb-1" style={{ color }}>
-        {value}
+      {/* Ambient glow */}
+      <div 
+        className="absolute -top-8 -left-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: warning ? 'rgba(255,193,7,0.12)' : `${color}18`, filter: 'blur(24px)' }}
+      />
+      {/* Bottom accent line */}
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-40"
+        style={{ background: `linear-gradient(90deg, transparent, ${warning ? '#FFC107' : color}, transparent)` }}
+      />
+
+      <div className="relative p-4">
+        <h4 className="text-[10px] font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5" style={{ color: '#6A6A6A' }}>
+          {label}
+          {warning && <AlertTriangle className="w-3 h-3" style={{ color: '#FFC107' }} />}
+        </h4>
+        <div className="text-3xl font-bold tracking-tight mb-1" style={{ color }}>
+          {value}
+        </div>
+        {count !== undefined && total !== undefined && (
+          <div className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
+            {count} out of {total} trades
+          </div>
+        )}
+        {sublabel && (
+          <div className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
+            {sublabel}
+          </div>
+        )}
       </div>
-      {count !== undefined && total !== undefined && (
-        <div className="text-xs" style={{ color: '#606060' }}>
-          {count} out of {total} trades
-        </div>
-      )}
-      {sublabel && (
-        <div className="text-xs" style={{ color: '#606060' }}>
-          {sublabel}
-        </div>
-      )}
     </div>
   );
 }

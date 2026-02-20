@@ -1634,137 +1634,163 @@ const StrategyCard = memo(({ strategy, stats, onView, onEdit, onDelete }: Strate
 
   return (
     <div 
-      className="rounded-xl p-5 transition-all duration-300 cursor-pointer group relative"
+      className="rounded-2xl transition-all duration-300 cursor-pointer group relative overflow-hidden"
       style={{
-        background: 'rgba(20,20,20,0.8)',
-        border: '1px solid rgba(42,42,42,0.4)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = '0 8px 32px rgba(201,166,70,0.2)';
-        e.currentTarget.style.borderColor = 'rgba(201,166,70,0.4)';
-        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.transform = 'translateY(-3px) scale(1.01)';
+        e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,166,70,0.2), inset 0 1px 0 rgba(255,255,255,0.08)';
+        e.currentTarget.style.borderColor = 'rgba(201,166,70,0.25)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = 'none';
-        e.currentTarget.style.borderColor = 'rgba(42,42,42,0.4)';
-        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        e.currentTarget.style.boxShadow = '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)';
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
       }}
       onClick={onView}
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex-1">
-          <h3 className="text-base font-bold mb-1" style={{ color: '#EAEAEA' }}>
-            {strategy.name}
-          </h3>
-          <p className="text-xs line-clamp-1" style={{ color: '#9A9A9A' }}>
-            {strategy.description || 'No description'}
-          </p>
-        </div>
-        
-        <div className="relative">
-          <button
-            onClick={handleMenuClick}
-            className="p-2 rounded-lg hover:bg-white/5 transition-all"
-          >
-            <Settings className="w-4 h-4" style={{ color: '#C9A646' }} />
-          </button>
+      {/* Ambient glow top-left */}
+      <div 
+        className="absolute -top-8 -left-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+        style={{ background: 'rgba(201,166,70,0.12)', filter: 'blur(24px)' }}
+      />
 
-          {showMenu && (
-            <div
-              className="absolute right-0 top-full mt-1 w-40 rounded-lg py-1 z-10"
-              style={{
-                background: 'rgba(20,20,20,0.98)',
-                border: '1px solid rgba(201,166,70,0.3)',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={handleEdit}
-                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
-                style={{ color: '#EAEAEA' }}
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={handleDelete}
-                className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
-                style={{ color: '#E44545' }}
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Bottom border glow */}
+      <div 
+        className="absolute bottom-0 left-6 right-6 h-px opacity-30"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.8), transparent)' }}
+      />
 
-      {stats.totalTrades > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm flex items-center gap-1" style={{ color: '#9A9A9A' }}>
-              <Percent className="w-3 h-3" /> WR:
-            </span>
-            <span 
-              className="text-lg font-bold"
-              style={{ color: stats.winRate >= 50 ? '#00C46C' : '#E44545' }}
-            >
-              {stats.winRate.toFixed(0)}%
-            </span>
-            <span className="text-sm flex items-center gap-1" style={{ color: '#9A9A9A' }}>
-              <TrendingUp className="w-3 h-3" /> R:
-            </span>
-            <span 
-              className="text-lg font-bold"
-              style={{ color: stats.totalR >= 0 ? '#00C46C' : '#E44545' }}
-            >
-              {stats.totalR >= 0 ? '+' : ''}{stats.totalR.toFixed(1)}R
-            </span>
+      <div className="relative p-5">
+        {/* Header row */}
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex-1">
+            <h3 className="text-base font-bold mb-1" style={{ color: '#EAEAEA' }}>
+              {strategy.name}
+            </h3>
+            <p className="text-xs line-clamp-1" style={{ color: '#6A6A6A' }}>
+              {strategy.description || 'No description'}
+            </p>
           </div>
           
-          <div className="flex items-center justify-between text-sm" style={{ color: '#9A9A9A' }}>
-            <span>Trades: <span style={{ color: '#EAEAEA' }}>{stats.totalTrades}</span></span>
-            <span>Exp: <span style={{ color: stats.expectancy >= 0 ? '#00C46C' : '#E44545' }}>
-              {stats.expectancy >= 0 ? '+' : ''}{stats.expectancy.toFixed(2)}R
-            </span></span>
-          </div>
+          <div className="relative">
+            <button
+              onClick={handleMenuClick}
+              className="p-2 rounded-lg transition-all"
+              style={{ background: 'rgba(201,166,70,0.08)', border: '1px solid rgba(201,166,70,0.15)' }}
+            >
+              <Settings className="w-4 h-4" style={{ color: '#C9A646' }} />
+            </button>
 
-          <div className="pt-2">
-            <div className="flex items-center justify-between text-xs mb-1" style={{ color: '#9A9A9A' }}>
-              <span>Profit Factor</span>
-              <span style={{ color: '#EAEAEA' }}>{stats.profitFactor.toFixed(2)}</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            {showMenu && (
               <div
-                className="h-full rounded-full transition-all duration-500"
+                className="absolute right-0 top-full mt-1 w-40 rounded-xl py-1 z-10"
                 style={{
-                  width: `${Math.min((stats.profitFactor / 3) * 100, 100)}%`,
-                  background: stats.profitFactor >= 1.5 
-                    ? 'linear-gradient(90deg, rgba(0,196,108,0.8), rgba(0,196,108,0.4))'
-                    : stats.profitFactor >= 1
-                    ? 'linear-gradient(90deg, rgba(201,166,70,0.8), rgba(201,166,70,0.4))'
-                    : 'linear-gradient(90deg, rgba(228,69,69,0.8), rgba(228,69,69,0.4))',
+                  background: 'rgba(14,14,14,0.98)',
+                  border: '1px solid rgba(201,166,70,0.2)',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                  backdropFilter: 'blur(12px)',
                 }}
-              />
-            </div>
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={handleEdit}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
+                  style={{ color: '#EAEAEA' }}
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5"
+                  style={{ color: '#E44545' }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      ) : (
-        <div className="py-8 text-center" style={{ color: '#9A9A9A' }}>
-          <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No trades yet</p>
-        </div>
-      )}
 
-      <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs" style={{ borderColor: 'rgba(255,255,255,0.05)', color: '#9A9A9A' }}>
-        <span>{strategy.category || 'Uncategorized'}</span>
-        {stats.totalTrades > 0 && (
-          <span className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {stats.totalTrades} trades
-          </span>
+        {stats.totalTrades > 0 ? (
+          <div className="space-y-4">
+            {/* WR + R — big numbers */}
+            <div className="grid grid-cols-2 gap-3">
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: '#6A6A6A' }}>
+                  % WR
+                </div>
+                <div className="text-2xl font-bold" style={{ color: stats.winRate >= 50 ? '#00C46C' : '#E44545' }}>
+                  {stats.winRate.toFixed(0)}%
+                </div>
+              </div>
+              <div
+                className="rounded-xl p-3"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-widest mb-1 flex items-center gap-1" style={{ color: '#6A6A6A' }}>
+                  <TrendingUp className="w-3 h-3" /> R
+                </div>
+                <div className="text-2xl font-bold" style={{ color: stats.totalR >= 0 ? '#00C46C' : '#E44545' }}>
+                  {stats.totalR >= 0 ? '+' : ''}{stats.totalR.toFixed(1)}R
+                </div>
+              </div>
+            </div>
+
+            {/* Trades + Expectancy */}
+            <div className="flex items-center justify-between text-sm" style={{ color: '#6A6A6A' }}>
+              <span>Trades: <span style={{ color: '#EAEAEA' }}>{stats.totalTrades}</span></span>
+              <span>Exp: <span style={{ color: stats.expectancy >= 0 ? '#00C46C' : '#E44545' }}>
+                {stats.expectancy >= 0 ? '+' : ''}{stats.expectancy.toFixed(2)}R
+              </span></span>
+            </div>
+
+            {/* Profit Factor bar */}
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1.5" style={{ color: '#6A6A6A' }}>
+                <span>Profit Factor</span>
+                <span style={{ color: '#EAEAEA', fontWeight: 600 }}>{stats.profitFactor.toFixed(2)}</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min((stats.profitFactor / 3) * 100, 100)}%`,
+                    background: stats.profitFactor >= 1.5 
+                      ? 'linear-gradient(90deg, #00C46C, rgba(0,196,108,0.4))'
+                      : stats.profitFactor >= 1
+                      ? 'linear-gradient(90deg, #C9A646, rgba(201,166,70,0.4))'
+                      : 'linear-gradient(90deg, #E44545, rgba(228,69,69,0.4))',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center" style={{ color: '#6A6A6A' }}>
+            <BarChart3 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No trades yet</p>
+          </div>
         )}
+
+        <div className="mt-4 pt-3 border-t flex items-center justify-between text-xs" style={{ borderColor: 'rgba(255,255,255,0.04)', color: '#6A6A6A' }}>
+          <span>{strategy.category || 'Uncategorized'}</span>
+          {stats.totalTrades > 0 && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {stats.totalTrades} trades
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

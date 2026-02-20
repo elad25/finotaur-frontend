@@ -229,47 +229,54 @@ const StatsCard = memo(({
   valueColor?: string;
 }) => (
   <div 
-    className="group relative overflow-hidden rounded-lg p-3.5 transition-all duration-300"
+    className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02]"
     style={{
-      background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(15,15,15,0.95) 100%)',
-      border: `1px solid ${color}`,
-      boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      boxShadow: `0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`,
+      backdropFilter: 'blur(12px)',
     }}
   >
+    {/* Top glow from icon color */}
     <div 
-      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-      style={{
-        background: `radial-gradient(circle at top right, ${color.replace('0.1', '0.02')} 0%, transparent 70%)`,
-      }}
+      className="absolute -top-10 -left-10 w-32 h-32 rounded-full opacity-20 group-hover:opacity-30 transition-opacity duration-300"
+      style={{ background: color.replace('0.1', '0.8'), filter: 'blur(32px)' }}
     />
-    
-    <div className="relative flex items-center gap-3">
-      <div 
-        className="flex-shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-300 group-hover:scale-105"
-        style={{
-          background: color.replace('0.1', '0.05'),
-          border: `1px solid ${color}`,
-        }}
-      >
-        <Icon className="w-5 h-5" strokeWidth={1.5} />
-      </div>
 
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-1.5">
+    <div className="relative p-5">
+      {/* Title row */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-[0.15em]">
           {title}
         </div>
-
-        <div className={`text-2xl font-bold mb-1 tracking-tight ${valueColor || 'text-white'}`}>
-          {value}
+        <div 
+          className="inline-flex items-center justify-center w-8 h-8 rounded-xl transition-transform duration-300 group-hover:scale-110"
+          style={{
+            background: color.replace('0.1', '0.15'),
+            border: `1px solid ${color.replace('0.1', '0.3')}`,
+          }}
+        >
+          <Icon className="w-4 h-4" style={{ color: color.replace('0.1', '1') }} strokeWidth={1.8} />
         </div>
-
-        {subtitle && (
-          <div className="text-[11px] text-zinc-600 font-medium">
-            {subtitle}
-          </div>
-        )}
       </div>
+
+      {/* Value — large and dominant */}
+      <div className={`text-3xl font-bold tracking-tight leading-none mb-2 ${valueColor || 'text-white'}`}>
+        {value}
+      </div>
+
+      {subtitle && (
+        <div className="text-xs text-zinc-600 font-medium">
+          {subtitle}
+        </div>
+      )}
     </div>
+
+    {/* Subtle bottom border glow */}
+    <div 
+      className="absolute bottom-0 left-4 right-4 h-px opacity-40"
+      style={{ background: `linear-gradient(90deg, transparent, ${color.replace('0.1', '0.8')}, transparent)` }}
+    />
   </div>
 ));
 

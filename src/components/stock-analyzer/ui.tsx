@@ -233,8 +233,9 @@ useEffect(() => {
 
 const pct = displayPct;
 
-  // SVG geometry — extra left padding to prevent glow bleed
+  // SVG geometry
   const W = 200;
+  const PAD = 14;
   const cx = W / 2;
   const cy = 92;
   const R = 68;
@@ -272,8 +273,8 @@ const pct = displayPct;
   const goldGradId = `roc-gold-${label}`;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[200px]">
-      <div className="relative w-full" style={{ maxWidth: W, height: 115 }}>
+    <div className="flex flex-col items-center w-full">
+      <div className="relative w-full" style={{ maxWidth: W, height: 95 }}>
 
         {/* Ambient radial glow — only when there's a value */}
         {hasValue && (
@@ -293,16 +294,16 @@ const pct = displayPct;
 
 <svg
   width="100%"
-  height={115}
-  viewBox={`0 0 ${W} 115`}
+  height={95}
+  viewBox={`${-PAD} -8 ${W + PAD * 2} 108`}
   className="relative"
   preserveAspectRatio="xMidYMid meet"
-  style={{ overflow: 'hidden' }}
+  style={{ overflow: 'visible' }}
 >
           <defs>
             {/* Clip to viewBox bounds */}
             <clipPath id={`roc-clip-${label}`}>
-              <rect x="0" y="0" width={W} height="115" />
+              <rect x={-PAD} y="-8" width={W + PAD * 2} height="108" />
             </clipPath>
             {/* Value arc gradient */}
             <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -449,11 +450,11 @@ const pct = displayPct;
         </svg>
 
         {/* Center value display */}
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 8, textAlign: 'center' }}>
+        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 4, textAlign: 'center' }}>
           <span
             className="font-mono font-black leading-none"
             style={{
-              fontSize: 24,
+              fontSize: 20,
               color: hasValue ? statusColor : '#4A4A4A',
               textShadow: hasValue
                 ? `0 0 20px ${statusColor}35, 0 0 40px ${statusColor}15`
