@@ -26,6 +26,7 @@ import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader, MetricBox } from '../ui';
 import { fmtPct, fmtBig, isValid, fmt } from '@/utils/stock-analyzer.utils';
 import { saveToServerCache } from '@/services/stock-analyzer.api';
+import { WhoShouldOwnThis } from './WhoShouldOwnThis';
 
 // =====================================================
 // TYPES
@@ -74,7 +75,7 @@ interface ROICAnalysis {
   spreadTrend: string;        // "expanding" | "contracting" | "stable"
   interpretation: string;
   companyInsight: string;
-  historicalSpread: { year: string; spread: number }[];
+  historicalSpread: { period: string; spread: number }[];
 }
 
 interface ValuationAIData {
@@ -424,8 +425,10 @@ const safe = strip(parsed);
     safe.roicAnalysis.spread = Number(safe.roicAnalysis.spread) || 0;
     if (Array.isArray(safe.roicAnalysis.historicalSpread)) {
       safe.roicAnalysis.historicalSpread = safe.roicAnalysis.historicalSpread.map((h: any) => ({
-        ...h,
+        period: h.period || h.year || '',
         spread: Number(h.spread) || 0,
+        roic:   h.roic  != null ? Number(h.roic)  : undefined,
+        wacc:   h.wacc  != null ? Number(h.wacc)  : undefined,
       }));
     }
   }
@@ -488,6 +491,41 @@ const InsightBlock = memo(({ whatItIs, whatItMeans, label }: { whatItIs: string;
 });
 InsightBlock.displayName = 'InsightBlock';
 
+// --- Inline Insight (icon-only, for compact rows) ---
+const InsightInline = memo(({ whatItIs, whatItMeans, label }: { whatItIs: string; whatItMeans: string; label?: string }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setExpanded(p => !p)}
+        className="text-[#C9A646]/40 hover:text-[#C9A646] transition-colors"
+        title="What does this mean?"
+      >
+        <Info className="w-3 h-3" />
+      </button>
+      {expanded && (
+        <div className="absolute right-0 top-6 z-50 w-72 space-y-2 shadow-2xl"
+          style={{ filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.6))' }}>
+          <div className="p-3 rounded-lg" style={{ background: '#141414', border: '1px solid rgba(201,166,70,0.15)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#C9A646]">{label || 'Definition'}</p>
+              <button onClick={() => setExpanded(false)} className="text-[#555] hover:text-white">
+                <ChevronUp className="w-3 h-3" />
+              </button>
+            </div>
+            <p className="text-[11px] text-[#8B8B8B] leading-[1.7] mb-2">{whatItIs}</p>
+            <div className="pt-2 border-t border-white/[0.06]">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#22C55E] mb-1">Company Insight</p>
+              <p className="text-[11px] text-[#A0A0A0] leading-[1.7]">{whatItMeans}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+InsightInline.displayName = 'InsightInline';
+
 // --- Health Score Gauge ---
 const HealthGauge = memo(({ score }: { score: HealthScore }) => {
   const pct = Math.min((score.value / score.maxValue) * 100, 100);
@@ -522,16 +560,16 @@ HealthGauge.displayName = 'HealthGauge';
 // --- Quality Metric Card ---
 const QualityCard = memo(({ metric }: { metric: QualityMetric }) => {
   const color = metric.status === 'good' ? '#22C55E' : metric.status === 'bad' ? '#EF4444' : '#F59E0B';
-  const icon = metric.status === 'good' ? <ArrowUpRight className="w-3.5 h-3.5" /> : metric.status === 'bad' ? <ArrowDownRight className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />;
+  const icon = metric.status === 'good' ? <ArrowUpRight className="w-3 h-3" /> : metric.status === 'bad' ? <ArrowDownRight className="w-3 h-3" /> : <Minus className="w-3 h-3" />;
 
   return (
-    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-      <div className="flex items-center justify-between mb-1">
-        <p className="text-xs text-[#8B8B8B]">{metric.name}</p>
-        <div className="flex items-center gap-1" style={{ color }}>{icon}</div>
+    <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+      <p className="text-xs text-[#8B8B8B]">{metric.name}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-bold" style={{ color }}>{metric.value}</p>
+        <div style={{ color }}>{icon}</div>
+        <InsightInline whatItIs={metric.whatItIs} whatItMeans={metric.whatItMeans} label={metric.name} />
       </div>
-      <p className="text-lg font-bold" style={{ color }}>{metric.value}</p>
-      <InsightBlock whatItIs={metric.whatItIs} whatItMeans={metric.whatItMeans} label={metric.name} />
     </div>
   );
 });
@@ -575,7 +613,7 @@ const DCFBar = memo(({ scenario, currentPrice }: { scenario: DCFScenario; curren
 DCFBar.displayName = 'DCFBar';
 
 // --- ROIC Spread Chart (SVG) ---
-const ROICChart = memo(({ data }: { data: { year: string; spread: number }[] }) => {
+const ROICChart = memo(({ data }: { data: { period: string; spread: number; roic?: number; wacc?: number }[] }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   if (!data || data.length < 2) return null;
 
@@ -672,7 +710,7 @@ const ROICChart = memo(({ data }: { data: { year: string; spread: number }[] }) 
             )}
             {/* Year labels always visible */}
             <text x={p.x} y={H - 5} textAnchor="middle" fill={isHovered ? '#C9A646' : '#6B6B6B'} fontSize="8" fontWeight={isHovered ? '700' : '400'}>
-              {data[i].year}
+              {data[i].period}
             </text>
           </g>
         );
@@ -699,7 +737,7 @@ const ROICChart = memo(({ data }: { data: { year: string; spread: number }[] }) 
             />
             {/* Year header */}
             <text x={tx + 8} y={ty + 14} fill="#C9A646" fontSize="9" fontWeight="700" letterSpacing="0.04em">
-              {data[hoverIdx].year}
+              {data[hoverIdx].period}
             </text>
             {/* Spread value */}
             <text x={tx + ttW - 8} y={ty + 14} textAnchor="end" fill={spread >= 0 ? '#22C55E' : '#EF4444'} fontSize="10" fontWeight="700">
@@ -1119,31 +1157,18 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
       )}
 
       {/* ============================================= */}
-      {/* 8. Earnings Quality */}
+      {/* 8+9. Earnings & Capital Quality (merged)     */}
       {/* ============================================= */}
-      {aiData?.earningsQuality && aiData.earningsQuality.length > 0 && (
+      {(aiData?.earningsQuality?.length || aiData?.cashConversion || aiData?.capexQuality) && (
         <Card>
-          <div className="p-6">
-            <SectionHeader icon={Sparkles} title="Earnings Quality" subtitle="Are the reported profits real and sustainable?" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {aiData.earningsQuality.map((m, i) => (
+          <div className="p-5">
+            <SectionHeader icon={Sparkles} title="Earnings & Capital Quality" />
+            <div className="space-y-1.5 mt-4">
+              {aiData?.earningsQuality?.map((m, i) => (
                 <QualityCard key={i} metric={m} />
               ))}
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* ============================================= */}
-      {/* 9. Cash & Capex Quality */}
-      {/* ============================================= */}
-      {(aiData?.cashConversion || aiData?.capexQuality) && (
-        <Card>
-          <div className="p-6">
-            <SectionHeader icon={Zap} title="Cash & Capital Efficiency" subtitle="How efficiently does the company convert earnings to cash?" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {aiData.cashConversion && <QualityCard metric={aiData.cashConversion} />}
-              {aiData.capexQuality && <QualityCard metric={aiData.capexQuality} />}
+              {aiData?.cashConversion && <QualityCard metric={aiData.cashConversion} />}
+              {aiData?.capexQuality && <QualityCard metric={aiData.capexQuality} />}
             </div>
           </div>
         </Card>
@@ -1254,17 +1279,12 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
         </Card>
       )}
 
-      {/* Regenerate */}
-      {aiData && (
-        <div className="flex justify-center pt-2">
-          <button onClick={() => generate(true)} disabled={isLoading}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all hover:scale-[1.02]"
-            style={{ background: 'rgba(201,166,70,0.08)', border: '1px solid rgba(201,166,70,0.15)', color: '#8B8B8B' }}>
-            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {isLoading ? 'Regenerating...' : 'Regenerate Deep Valuation'}
-          </button>
-        </div>
-      )}
+      {/* ============================================= */}
+      {/* 13. Who Should Own This Stock               */}
+      {/* ============================================= */}
+      <WhoShouldOwnThis data={data} />
+
+      
     </div>
   );
 });

@@ -241,7 +241,7 @@ const AIStockAnalyzer = lazy(() => import("@/pages/app/ai/StockAnalyzer"));
 const AISectorAnalyzer = lazy(() => import("@/pages/app/ai/SectorAnalyzer"));
 const AIMacroAnalyzer = lazy(() => import("@/pages/app/ai/macro-analyzer/MacroAnalyzer"));
 const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntelligenceAI"));
-const AIFlowScanner = lazy(() => import("@/pages/app/ai/FlowScanner"));
+const AIFlowScanner = lazy(() => import("@/pages/app/ai/flow-scanner"));
 const AITop5 = lazy(() => import("@/pages/app/ai/Top5"));
 const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
 

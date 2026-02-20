@@ -548,10 +548,11 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
   const [grantDialog, setGrantDialog] = useState<{
     open: boolean;
     userId: string | null;
-    product: string;
+    userEmail: string | null;
     plan: string;
-    days: number;
-  }>({ open: false, userId: null, product: 'journal', plan: 'premium', days: 30 });
+    days: number | null;
+    noExpiry: boolean;
+  }>({ open: false, userId: null, userEmail: null, plan: 'finotaur', days: 30, noExpiry: false });
 
   // User Stats
   const [userStats, setUserStats] = useState<any>(null);
@@ -1310,25 +1311,31 @@ const handleDeleteUsers = async (userIds: string[]) => {
     if (!grantDialog.userId) return;
     
     try {
+      const durationDays = grantDialog.noExpiry ? 36500 : (grantDialog.days ?? 30);
+      
       const { data, error } = await supabase.rpc('admin_grant_access', {
         p_user_id: grantDialog.userId,
-        p_product: grantDialog.product,
+        p_product: 'platform',
         p_plan: grantDialog.plan,
-        p_duration_days: grantDialog.days
+        p_duration_days: durationDays,
       });
 
       if (error) throw error;
       
       if (data && !data.success) {
-        throw new Error(data.error);
+        throw new Error(data.error || 'Grant failed');
       }
 
-      alert(`Access granted! Expires: ${new Date(data.expires_at).toLocaleDateString()}`);
+      const expiryText = grantDialog.noExpiry 
+        ? 'No expiry (permanent)' 
+        : `Expires: ${new Date(data.expires_at).toLocaleDateString('en-US')}`;
+
+      showToast(`✅ Access granted to ${grantDialog.userEmail}! ${expiryText}`, 'success');
       fetchAllUsers();
-      setGrantDialog({ open: false, userId: null, product: 'journal', plan: 'premium', days: 30 });
+      setGrantDialog({ open: false, userId: null, userEmail: null, plan: 'finotaur', days: 30, noExpiry: false });
     } catch (err) {
       console.error('Grant access error:', err);
-      alert(`Failed to grant access: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      showToast(`❌ Failed to grant access: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -4011,7 +4018,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                                   </DropdownMenuItem>
 
                                   <DropdownMenuItem 
-                                    onClick={() => setGrantDialog({ ...grantDialog, open: true, userId: user.id })}
+                                    onClick={() => setGrantDialog({ ...grantDialog, open: true, userId: user.id, userEmail: user.email })}
                                     className="text-emerald-400 hover:bg-[#2A2A2A] cursor-pointer"
                                   >
                                     <Gift className="h-4 w-4 mr-2" />
@@ -6388,82 +6395,131 @@ You can use these variables:
       </Dialog>
 
       {/* =====================================================
-          GRANT ACCESS DIALOG
+          GRANT PLATFORM ACCESS DIALOG
       ===================================================== */}
-      <Dialog open={grantDialog.open} onOpenChange={(open) => !open && setGrantDialog({ ...grantDialog, open: false })}>
-        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A]">
+      <Dialog open={grantDialog.open} onOpenChange={(open) => !open && setGrantDialog({ open: false, userId: null, userEmail: null, plan: 'finotaur', days: 30, noExpiry: false })}>
+        <DialogContent className="bg-[#0F0F0F] border-[#2A2A2A] max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#F4F4F4]">Grant Access</DialogTitle>
+            <DialogTitle className="text-[#F4F4F4] flex items-center gap-2">
+              <Gift className="h-5 w-5 text-emerald-400" />
+              Grant Platform Access
+            </DialogTitle>
             <DialogDescription className="text-[#808080]">
-              Manually grant product access to this user
+              {grantDialog.userEmail && (
+                <span className="text-emerald-400 font-mono text-sm">{grantDialog.userEmail}</span>
+              )}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
+          <div className="space-y-5 py-4">
+            {/* Plan Selection */}
             <div className="space-y-2">
-              <Label className="text-[#A0A0A0]">Product</Label>
-              <Select 
-                value={grantDialog.product} 
-                onValueChange={(v) => setGrantDialog({ ...grantDialog, product: v })}
-              >
-                <SelectTrigger className="bg-[#1A1A1A] border-[#2A2A2A] text-[#F4F4F4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1A1A1A] border-[#2A2A2A]">
-                  <SelectItem value="journal">Journal</SelectItem>
-                  <SelectItem value="newsletter">Newsletter (War Zone)</SelectItem>
-                  <SelectItem value="top_secret">Top Secret</SelectItem>
-                  <SelectItem value="platform">Platform</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-[#A0A0A0] text-xs uppercase tracking-wider">Plan</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'core', label: 'Core', desc: 'Base plan', color: '#3B82F6' },
+                  { value: 'finotaur', label: 'Finotaur', desc: 'Full platform', color: '#C9A646' },
+                  { value: 'enterprise', label: 'Enterprise', desc: 'Full access', color: '#A855F7' },
+                ].map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => setGrantDialog({ ...grantDialog, plan: p.value })}
+                    className="rounded-xl border p-3 text-center transition-all"
+                    style={{
+                      background: grantDialog.plan === p.value ? `${p.color}15` : 'rgba(255,255,255,0.02)',
+                      borderColor: grantDialog.plan === p.value ? p.color : 'rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <div className="text-[13px] font-bold" style={{ color: grantDialog.plan === p.value ? p.color : 'rgba(255,255,255,0.5)' }}>
+                      {p.label}
+                    </div>
+                    <div className="text-[10px] mt-0.5" style={{ color: 'rgba(139,139,139,0.5)' }}>{p.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
-            
+
+            {/* Duration */}
             <div className="space-y-2">
-              <Label className="text-[#A0A0A0]">Plan</Label>
-              <Select 
-                value={grantDialog.plan} 
-                onValueChange={(v) => setGrantDialog({ ...grantDialog, plan: v })}
-              >
-                <SelectTrigger className="bg-[#1A1A1A] border-[#2A2A2A] text-[#F4F4F4]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1A1A1A] border-[#2A2A2A]">
-                  {grantDialog.product === 'journal' && (
-                    <>
-                      <SelectItem value="basic">Basic</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                    </>
-                  )}
-                  {grantDialog.product === 'newsletter' && (
-                    <SelectItem value="active">Active</SelectItem>
-                  )}
-                  {grantDialog.product === 'top_secret' && (
-                    <SelectItem value="active">Active</SelectItem>
-                  )}
-                  {grantDialog.product === 'platform' && (
-                    <>
-                      <SelectItem value="core">Core</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="enterprise">Enterprise</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label className="text-[#A0A0A0] text-xs uppercase tracking-wider">Duration</Label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-xs text-[#808080]">No expiry</span>
+                  <div
+                    onClick={() => setGrantDialog({ ...grantDialog, noExpiry: !grantDialog.noExpiry })}
+                    className="relative w-10 h-5 rounded-full cursor-pointer transition-colors"
+                    style={{ background: grantDialog.noExpiry ? '#22C55E' : 'rgba(255,255,255,0.1)' }}
+                  >
+                    <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
+                      style={{ left: grantDialog.noExpiry ? '22px' : '2px' }} />
+                  </div>
+                </label>
+              </div>
+              
+              {!grantDialog.noExpiry && (
+                <>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { label: '7 days', days: 7 },
+                      { label: '30 days', days: 30 },
+                      { label: '3 months', days: 90 },
+                      { label: '1 year', days: 365 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.days}
+                        onClick={() => setGrantDialog({ ...grantDialog, days: preset.days })}
+                        className="rounded-lg border py-1.5 text-[11px] font-medium transition-all"
+                        style={{
+                          background: grantDialog.days === preset.days ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.02)',
+                          borderColor: grantDialog.days === preset.days ? '#22C55E' : 'rgba(255,255,255,0.06)',
+                          color: grantDialog.days === preset.days ? '#22C55E' : 'rgba(139,139,139,0.5)',
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={grantDialog.days ?? ''}
+                      onChange={(e) => setGrantDialog({ ...grantDialog, days: parseInt(e.target.value) || 30 })}
+                      className="bg-[#1A1A1A] border-[#2A2A2A] text-[#F4F4F4] text-sm h-9"
+                      placeholder="Custom days"
+                    />
+                    <span className="text-[#808080] text-sm whitespace-nowrap">days</span>
+                  </div>
+                </>
+              )}
+
+              {grantDialog.noExpiry && (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
+                  <span className="text-emerald-400 text-sm font-medium">♾️ Permanent access — no expiry date</span>
+                </div>
+              )}
             </div>
-            
-            <div className="space-y-2">
-              <Label className="text-[#A0A0A0]">Duration (days)</Label>
-              <Input
-                type="number"
-                value={grantDialog.days}
-                onChange={(e) => setGrantDialog({ ...grantDialog, days: parseInt(e.target.value) || 30 })}
-                className="bg-[#1A1A1A] border-[#2A2A2A] text-[#F4F4F4]"
-              />
+
+            {/* Summary */}
+            <div className="rounded-xl border border-[#2A2A2A] bg-[#0A0A0A] p-3">
+              <p className="text-[11px] text-[#808080] mb-1">Summary</p>
+              <p className="text-sm text-[#F4F4F4]">
+                Plan <span className="text-yellow-400 font-bold capitalize">{grantDialog.plan}</span>{' '}
+                {grantDialog.noExpiry 
+                  ? <span className="text-emerald-400">with no time limit</span>
+                  : <span>for <span className="text-blue-400 font-bold">{grantDialog.days} days</span></span>
+                }
+              </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setGrantDialog({ ...grantDialog, open: false })} className="border-[#2A2A2A]">
+            <Button 
+              variant="outline" 
+              onClick={() => setGrantDialog({ open: false, userId: null, userEmail: null, plan: 'finotaur', days: 30, noExpiry: false })} 
+              className="border-[#2A2A2A] text-[#808080]"
+            >
               Cancel
             </Button>
             <Button onClick={handleGrantAccess} className="bg-emerald-500 hover:bg-emerald-600 text-white">

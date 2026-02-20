@@ -24,7 +24,8 @@ export type FeaturePage =
   | 'ai_assistant'
   | 'macro_analyzer'
   | 'my_portfolio'
-  | 'ai_scanner';
+  | 'ai_scanner'
+  | 'options_tab';
 
 interface UsageStatus {
   stockAnalysisToday: number;
@@ -50,7 +51,8 @@ export interface AccessResult {
 
 const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
   free: {
-    stock_analyzer: true,         // limited 3/day
+    stock_analyzer: true,
+    options_tab: false,         // ❌ Core and above only
     sector_analyzer: false,
     flow_scanner: false,
     options_intelligence: false,
@@ -68,6 +70,7 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
     macro_analyzer: false,
     my_portfolio: false,
     ai_scanner: false,
+    options_tab: true,            // ✅ unlocked at Core
   },
   platform_finotaur: {
     stock_analyzer: true,         // limited 7/day
@@ -78,6 +81,7 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
     macro_analyzer: true,
     my_portfolio: false,          // ❌ Enterprise only
     ai_scanner: true,
+    options_tab: true,
   },
   platform_enterprise: {
     stock_analyzer: true,         // unlimited
@@ -88,6 +92,7 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
     macro_analyzer: true,
     my_portfolio: true,           // ✅ Enterprise exclusive
     ai_scanner: true,
+    options_tab: true,
   },
 };
 
@@ -98,6 +103,7 @@ const PAGE_ACCESS: Record<PlatformPlan, Record<FeaturePage, boolean>> = {
 
 const MINIMUM_PLAN_FOR_FEATURE: Record<FeaturePage, PlatformPlan> = {
   stock_analyzer: 'free',
+  options_tab: 'platform_core',
   sector_analyzer: 'platform_core',
   flow_scanner: 'platform_core',
   ai_assistant: 'platform_core',
@@ -174,6 +180,7 @@ const FEATURE_DISPLAY_NAMES: Record<FeaturePage, string> = {
   macro_analyzer: 'Macro Analyzer',
   my_portfolio: 'My Portfolio',
   ai_scanner: 'AI Scanner',
+  options_tab: 'Options Analysis',
 };
 
 // ============================================
@@ -289,6 +296,10 @@ export function usePlatformAccess() {
   const recordStockAnalysis = useCallback(async (): Promise<boolean> => {
     if (!user?.id) return false;
 
+    const currentCount = usage.stockAnalysisToday;
+    const limit = usage.stockAnalysisLimit;
+    if (currentCount >= limit) return false;
+
     const { data, error } = await supabase.rpc('increment_daily_usage', {
       p_user_id: user.id,
       p_feature: 'stock_analysis',
@@ -297,10 +308,10 @@ export function usePlatformAccess() {
     if (!error && data && data.length > 0) {
       const result = data[0];
       setUsage(prev => ({ ...prev, stockAnalysisToday: result.current_count }));
-      return result.allowed;
+      return true;
     }
     return false;
-  }, [user?.id]);
+  }, [user?.id, usage.stockAnalysisToday, usage.stockAnalysisLimit]);
 
   // ── Record sector usage ──
   const recordSectorAnalysis = useCallback(async (): Promise<boolean> => {

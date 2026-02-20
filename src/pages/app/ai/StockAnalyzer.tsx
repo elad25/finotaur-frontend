@@ -6,7 +6,8 @@
 // =====================================================
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, XCircle } from 'lucide-react';
+import { Search, XCircle, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { useStockAnalyzer } from '@/hooks/useStockAnalyzer';
 import { POPULAR_TICKERS } from '@/constants/stock-analyzer.constants';
@@ -31,6 +32,7 @@ import {
 } from '@/components/stock-analyzer/tabs';
 
 export default function StockAnalyzer() {
+  const navigate = useNavigate();
   const {
     searchQuery,
     setSearchQuery,
@@ -220,9 +222,39 @@ export default function StockAnalyzer() {
                 {activeTab === 'earnings' && (
                   <EarningsTab data={stockData} />
                 )}
-                {activeTab === 'options' && (
-                  <OptionsTab data={stockData} />
-                )}
+                {activeTab === 'options' && (() => {
+                  const optionsAccess = canAccessPage('options_tab');
+                  if (!optionsAccess.hasAccess) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-24 gap-4">
+                        <div
+                          className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                          style={{
+                            background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
+                            border: '1px solid rgba(201,166,70,0.3)',
+                          }}
+                        >
+                          <Lock className="w-8 h-8" style={{ color: '#C9A646' }} />
+                        </div>
+                        <h3 className="text-xl font-bold text-white">Options Analysis</h3>
+                        <p className="text-[#8B8B8B] text-sm text-center max-w-xs">
+                          Available from the <span style={{ color: '#C9A646', fontWeight: 600 }}>Core</span> plan and above
+                        </p>
+                        <button
+                          onClick={() => navigate('/app/all-markets/pricing')}
+                          className="px-6 py-2.5 rounded-xl text-sm font-semibold text-black mt-2"
+                          style={{
+                            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                            boxShadow: '0 4px 20px rgba(201,166,70,0.3)',
+                          }}
+                        >
+                          Upgrade to Core
+                        </button>
+                      </div>
+                    );
+                  }
+                  return <OptionsTab data={stockData} />;
+                })()}
               </div>
             </motion.div>
           )}
