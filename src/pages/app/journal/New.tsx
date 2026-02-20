@@ -733,6 +733,7 @@ const {
   isPremium, 
   isUnlimitedUser,
   isLegacyFreeUser,
+  isLoading: subscriptionLoading,
   warningState,
   markWarningShown 
 } = useSubscription();
@@ -1236,13 +1237,18 @@ const {
       st.setStrategy(undefined);
     }
     
-    // Check subscription limits (non-blocking)
-    if (!isEditMode && limits && !canAddTrade) {
-      // Check if BASIC user (25 trades limit) or FREE user (10 trades)
+    // Check subscription limits BEFORE submit
+    if (!isEditMode && !canAddTrade) {
+      // If limits not loaded yet, block optimistically
+      if (!limits) {
+        toast.error("Loading subscription info, please try again");
+        return;
+      }
+      // BASIC = 25/month, FREE = 15 lifetime
       if (limits.max_trades === 25) {
-        setShowBasicLimitModal(true);  // Show dedicated Basic modal
+        setShowBasicLimitModal(true);
       } else {
-        setShowLimitModal(true);  // Show Free modal
+        setShowLimitModal(true);
       }
       return;
     }
@@ -1685,7 +1691,9 @@ if (hasResult && directRiskUSD > 0) {
       console.error("Submit error:", error);
       
       if (error?.message?.includes('limit') || error?.message?.includes('policy') || error?.message?.includes('row-level security')) {
-        if (limits?.max_trades === 25) {
+        // Determine plan from limits or fallback to isPremium check
+        const isBasicPlan = limits?.max_trades === 25 || (!isPremium && !isUnlimitedUser && limits?.max_trades !== 15);
+        if (isBasicPlan) {
           setShowBasicLimitModal(true);
         } else {
           setShowLimitModal(true);
@@ -2881,7 +2889,7 @@ if (hasResult && directRiskUSD > 0) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!isValid || loading}
+              disabled={!isValid || loading || subscriptionLoading}
               className="px-16 py-3 rounded-xl text-sm font-bold text-black transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-[0_10px_40px_rgba(201,166,70,0.3)]"
               style={{ 
                 background: isValid 
