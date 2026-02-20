@@ -143,7 +143,12 @@ function useQuarterlyData(ticker: string, prefetchedData?: any) {
     try {
       // Fetch 16 quarters from Polygon via backend
       const res = await fetch(`/api/market-data/quarterly-financials/${ticker}`);
-      if (!res.ok) throw new Error(`Failed to fetch quarterly data: ${res.status}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('[FinancialsTab] Non-JSON response:', res.status, text.slice(0, 200));
+        throw new Error(`Failed to fetch quarterly data: ${res.status}`);
+      }
       const json = await res.json();
 
       if (!json.results?.length) {

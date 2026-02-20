@@ -204,11 +204,8 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
   // The old -20 minimum caused low values like 1.3% to appear inflated
   // because ((1.3 - (-20)) / 70) = 30.4% of arc, when it should be ~2.6%.
   const scaleMin = 0;
-  const scaleMax = Math.max(
-    benchmark * 2.5,
-    Math.abs(v) * 1.3,
-    50
-  );
+  // Cap scale at benchmark * 3 so extreme values (e.g. ROE 159%) pin the arc to 100%
+  const scaleMax = Math.max(benchmark * 3, 50);
   const range = scaleMax - scaleMin;
 
   // Value percentage (0–100) along the arc
