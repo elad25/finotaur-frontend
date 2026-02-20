@@ -1690,9 +1690,9 @@ if (hasResult && directRiskUSD > 0) {
     } catch (error: any) {
       console.error("Submit error:", error);
       
-      if (error?.message?.includes('limit') || error?.message?.includes('policy') || error?.message?.includes('row-level security')) {
+      if (error?.message?.includes('limit') || error?.message?.includes('policy') || error?.message?.includes('row-level security') || error?.code === '42501') {
         // Determine plan from limits or fallback to isPremium check
-        const isBasicPlan = limits?.max_trades === 25 || (!isPremium && !isUnlimitedUser && limits?.max_trades !== 15);
+        const isBasicPlan = limits?.max_trades === 50 || (!isPremium && !isUnlimitedUser && limits?.max_trades !== 15);
         if (isBasicPlan) {
           setShowBasicLimitModal(true);
         } else {
@@ -2971,14 +2971,14 @@ if (hasResult && directRiskUSD > 0) {
         open={showLimitModal}
         onClose={() => setShowLimitModal(false)}
         planType="free"
-        tradesUsed={limits?.used || 0}
-        maxTrades={limits?.max_trades || 15}
+        tradesUsed={limits?.trade_count ?? 0}
+        maxTrades={15}
       />
       <TradeLimitModal
         open={showBasicLimitModal}
         onClose={() => setShowBasicLimitModal(false)}
         planType="basic"
-        tradesUsed={limits?.used || 25}
+        tradesUsed={limits?.used ?? 0}
         maxTrades={25}
       />
       {/* Usage Warning Modal */}
