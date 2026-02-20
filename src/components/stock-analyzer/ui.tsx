@@ -188,7 +188,7 @@ const polar = (cx: number, cy: number, r: number, angle: number) => ({
 });
 
 export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
-  const [animated, setAnimated] = useState(false);
+  const [displayPct, setDisplayPct] = useState(0);
   const hasValue = value != null && isFinite(value);
   const v = hasValue ? value! : 0;
 
@@ -221,13 +221,17 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
   // Benchmark position (always positive scale)
   const benchmarkPct = Math.max(0, Math.min(100, ((benchmark - scaleMin) / range) * 100));
 
-  useEffect(() => {
-    const t = setTimeout(() => setAnimated(true), 100);
-    return () => clearTimeout(t);
-  }, []);
+  // ── KEY FIX: Re-trigger animation whenever the value changes ──
+// Using value as dependency ensures the gauge always ends at the correct position,
+// even if data arrives after mount or the stock changes.
+useEffect(() => {
+  setDisplayPct(0); // reset to zero first
+  if (!hasValue) return;
+  const t = setTimeout(() => setDisplayPct(valuePct), 50);
+  return () => clearTimeout(t);
+}, [value, benchmark]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── FIX: Only animate when we have a value ──
-  const pct = hasValue && animated ? valuePct : 0;
+const pct = displayPct;
 
   // SVG geometry — extra left padding to prevent glow bleed
   const W = 200;
@@ -394,23 +398,21 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
               <>
                 {/* Soft glow behind (no filter, just thicker transparent stroke) */}
                 <path
-                  d={valPath}
-                  fill="none"
-                  stroke={statusColor}
-                  strokeWidth={SW + 8}
-                  strokeLinecap="round"
-                  opacity={0.15}
-                  style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                />
-                {/* Main arc */}
-                <path
-                  d={valPath}
-                  fill="none"
-                  stroke={`url(#${gradId})`}
-                  strokeWidth={SW}
-                  strokeLinecap="round"
-                  style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
-                />
+  d={valPath}
+  fill="none"
+  stroke={statusColor}
+  strokeWidth={SW + 8}
+  strokeLinecap="round"
+  opacity={0.15}
+/>
+{/* Main arc */}
+<path
+  d={valPath}
+  fill="none"
+  stroke={`url(#${gradId})`}
+  strokeWidth={SW}
+  strokeLinecap="round"
+/>
               </>
             )}
           </g>
@@ -438,7 +440,7 @@ export const ROCCircle = memo<ROCCircleProps>(({ label, value, benchmark }) => {
 
           {/* Layer 7: Endpoint dot — triple ring (only with valid value) */}
           {hasValue && pct > 0.1 && (
-            <g clipPath={`url(#roc-clip-${label})`} style={{ transition: 'all 1.1s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
+            <g clipPath={`url(#roc-clip-${label})`}>
               <circle cx={valEnd.x} cy={valEnd.y} r="7" fill="none" stroke={statusColor} strokeWidth="1" opacity={0.2} />
               <circle cx={valEnd.x} cy={valEnd.y} r="4.5" fill="#0d0b08" stroke={statusColor} strokeWidth="2" />
               <circle cx={valEnd.x} cy={valEnd.y} r="1.5" fill={statusColor} opacity={0.6} />

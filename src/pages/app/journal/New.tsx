@@ -37,14 +37,12 @@ import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
 import { useSubscription } from '@/hooks/useSubscription';
-import { LimitReachedModal } from '@/components/subscription/LimitReachedModal';
 import { UsageWarningModal } from '@/components/subscription/UsageWarningModal';
 import { useRiskSettings } from '@/hooks/useRiskSettings';
 import { useCommissions } from '@/hooks/useRiskSettings';
 import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
 import { supabase } from '@/lib/supabase';
-import { BasicLimitReachedModal } from '@/components/subscription/BasicLimitReachedModal';
 import { useTimezone } from '@/contexts/TimezoneContext';
 import { formatTradeDate, formatForInput } from '@/utils/dateFormatter';
 import { 
@@ -156,6 +154,127 @@ function generateExitId(): string {
   return `exit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// ================================================================
+// 🔥 COMPACT TRADE LIMIT MODAL - v2.0 (replaces both Free & Basic modals)
+// ================================================================
+function TradeLimitModal({
+  open,
+  onClose,
+  planType,
+  tradesUsed,
+  maxTrades,
+}: {
+  open: boolean;
+  onClose: () => void;
+  planType: 'free' | 'basic';
+  tradesUsed: number;
+  maxTrades: number;
+}) {
+  if (!open) return null;
+
+  const isFree = planType === 'free';
+  const resetDays = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1);
+  const daysLeft = Math.ceil((resetDays.getTime() - Date.now()) / 86400000);
+  const progress = Math.min((tradesUsed / maxTrades) * 100, 100);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(145deg, #111111 0%, #0d0d0d 100%)',
+          border: '1px solid rgba(201,166,70,0.2)',
+          boxShadow: '0 0 40px rgba(201,166,70,0.08), 0 20px 60px rgba(0,0,0,0.6)',
+        }}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all z-10"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="px-5 pt-5 pb-3 text-center">
+          <div className="text-2xl mb-1">🔥</div>
+          <h3 className="text-base font-bold text-white">
+            {isFree ? "Free Limit Reached" : "Monthly Limit Reached"}
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            {isFree
+              ? `You've used all ${maxTrades} lifetime trades on the Free plan`
+              : `You've used all ${maxTrades} trades this month`}
+          </p>
+        </div>
+
+        <div className="px-5 pb-3">
+          <div className="flex justify-between items-center mb-1.5">
+            <span className="text-[11px] text-zinc-500">Trades {isFree ? 'lifetime' : 'this month'}</span>
+            <span className="text-[11px] font-semibold text-white">{tradesUsed} / {maxTrades}</span>
+          </div>
+          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all"
+              style={{
+                width: `${progress}%`,
+                background: 'linear-gradient(90deg, #C9A646, #E85D5D)',
+              }}
+            />
+          </div>
+          {!isFree && (
+            <p className="text-[10px] text-zinc-600 mt-1 text-right">Resets in {daysLeft} days</p>
+          )}
+        </div>
+
+        <div className="mx-5 mb-4 rounded-xl p-3.5" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.15)' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="w-3.5 h-3.5 text-yellow-400" />
+            <span className="text-xs font-semibold text-yellow-300">
+              {isFree ? 'Upgrade to Basic or Premium' : 'Upgrade to Premium'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-400">
+            {!isFree ? (
+              <>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">∞</span> Unlimited trades</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">↗</span> Advanced analytics</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">✦</span> AI insights</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">⚡</span> Priority support</span>
+              </>
+            ) : (
+              <>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">📅</span> 25 trades/month</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">∞</span> Unlimited (Premium)</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">↗</span> Analytics</span>
+                <span className="flex items-center gap-1"><span className="text-yellow-400">✦</span> AI insights</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 pb-5 flex flex-col gap-2">
+          <button
+            onClick={() => { onClose(); window.location.href = '/settings?tab=billing'; }}
+            className="w-full py-2.5 rounded-xl text-sm font-bold text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{ background: 'linear-gradient(135deg, #C9A646, #B48C2C)' }}
+          >
+            Upgrade Now
+          </button>
+          {!isFree && (
+            <button
+              onClick={onClose}
+              className="w-full py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              I'll wait {daysLeft} days for reset
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 function calculateWeightedAverageExit(exits: ExitPoint[]): number {
   const totalQuantity = exits.reduce((sum, e) => sum + (e.quantity || 0), 0);
   if (totalQuantity === 0) return 0;
@@ -1565,8 +1684,12 @@ if (hasResult && directRiskUSD > 0) {
     } catch (error: any) {
       console.error("Submit error:", error);
       
-      if (error?.message?.includes('limit') || error?.message?.includes('policy')) {
-        setShowLimitModal(true);
+      if (error?.message?.includes('limit') || error?.message?.includes('policy') || error?.message?.includes('row-level security')) {
+        if (limits?.max_trades === 25) {
+          setShowBasicLimitModal(true);
+        } else {
+          setShowLimitModal(true);
+        }
       } else if (error?.message?.includes('session')) {
         toast.error("Session error - please try again");
       } else if (error?.message?.includes('violates check constraint')) {
@@ -2835,18 +2958,20 @@ if (hasResult && directRiskUSD > 0) {
         />
       )}
 
-      {/* Limit Reached Modal */}
-      <LimitReachedModal
+      {/* 🔥 Compact Trade Limit Modal (Free & Basic) */}
+      <TradeLimitModal
         open={showLimitModal}
         onClose={() => setShowLimitModal(false)}
+        planType="free"
         tradesUsed={limits?.used || 0}
-        maxTrades={limits?.max_trades || 10}
+        maxTrades={limits?.max_trades || 15}
       />
-      {/* Basic Limit Reached Modal - Dedicated for Basic users */}
-      <BasicLimitReachedModal
+      <TradeLimitModal
         open={showBasicLimitModal}
         onClose={() => setShowBasicLimitModal(false)}
+        planType="basic"
         tradesUsed={limits?.used || 25}
+        maxTrades={25}
       />
       {/* Usage Warning Modal */}
       {showUsageWarning && warningState && (
