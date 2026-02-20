@@ -13,8 +13,9 @@
 // ✅ Production ready for 5000+ users
 // ================================================
 
-import React, { useState, lazy, Suspense, useMemo, useCallback } from "react";
+import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import PageTitle from "@/components/PageTitle";
 import dayjs from "dayjs";
 import {
@@ -792,9 +793,25 @@ function JournalOverviewContent() {
   const [showImportPopup, setShowImportPopup] = useState(false);
   
   const { id: userId, isImpersonating } = useEffectiveUser();
+  const queryClient = useQueryClient();
   
   const { limits, loading: subscriptionLoading, canUseSnapTrade } = useSubscription();
   const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(DAYS_MAP[range], userId);
+  
+  // 🔥 FIX: Listen for trade cache invalidation → refetch dashboard stats
+  // This ensures Overview updates whenever a trade is created/edited/deleted
+  React.useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (
+        event.type === 'updated' &&
+        event.query.queryKey[0] === 'trades' &&
+        event.query.state.status === 'success'
+      ) {
+        refetchStats();
+      }
+    });
+    return unsubscribe;
+  }, [queryClient, refetchStats]);
   const { data: connections, isLoading: connectionsLoading } = useSnapTradeConnections(userId);
   const { importTrades: saveToSupabase } = useImportTrades();
 

@@ -1176,7 +1176,8 @@ const StrategyModal = memo(({ isOpen, onClose, onSave, editingStrategy }: Strate
     if (isEditMode) {
       strategyData.id = editingStrategy!.id;
     } else {
-      strategyData.id = `strat-${Date.now()}`;
+      // 🔥 FIX: Don't set id for new strategies - let DB generate UUID
+      delete strategyData.id;
       strategyData.createdAt = new Date().toISOString();
     }
     
@@ -1993,15 +1994,19 @@ const strategiesWithStats = useMemo(() => {
     });
 
     try {
-      if (strategyData.id && editingStrategy) {
+      if (editingStrategy) {
+        // 🔥 FIX: Use editingStrategy presence as source of truth for edit mode
         await updateStrategyMutation.mutateAsync({
           ...strategyData,
+          id: editingStrategy.id, // ensure correct UUID
           user_id: userId,
         });
         toast.success('Strategy updated successfully!');
       } else {
+        // 🔥 FIX: For new strategy - don't pass id, let DB generate UUID
+        const { id: _ignored, ...createPayload } = strategyData;
         await createStrategyMutation.mutateAsync({
-          ...strategyData,
+          ...createPayload,
           user_id: userId,
         });
         toast.success('Strategy created successfully!');

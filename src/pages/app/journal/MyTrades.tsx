@@ -368,10 +368,16 @@ const TradeRow = memo(({
         )}
       </TableCell>
       
-      {/* Exit - 🔥 Show Target for Risk-Only mode */}
+      {/* Exit - 🔥 Show Result (if closed) or Target (if open) for Risk-Only mode */}
       <TableCell className="text-zinc-300">
         {isRiskOnlyMode ? (
-          rewardUSD > 0 ? (
+          isClosed ? (
+            // 🔥 FIX: Trade is CLOSED - show actual P&L result, not target
+            <span className={`text-sm font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {pnl >= 0 ? '+' : ''}${formatNumber(Math.abs(pnl), 0)} <span className="text-zinc-500 text-xs">result</span>
+            </span>
+          ) : rewardUSD > 0 ? (
+            // Open trade - show target
             <span className="text-emerald-400 text-sm">
               ${formatNumber(rewardUSD, 0)} <span className="text-zinc-500 text-xs">target</span>
             </span>
