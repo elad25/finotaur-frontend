@@ -22,6 +22,7 @@ import { useEffect, useState, useMemo, useCallback, memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade } from "@/hooks/useTradesData";
@@ -541,12 +542,9 @@ export default function MyTrades() {
   // 🔥 v10.2.0: Sync trade count on mount (fixes desync when trigger installed after trades)
   useEffect(() => {
     if (!userId) return;
-    supabase.rpc('sync_trade_count_for_user', { p_user_id: userId })
+    void supabase.rpc('sync_trade_count_for_user', { p_user_id: userId })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ['subscription'] });
-      })
-      .catch(() => {
-        // Silent fail - sync is best effort
       });
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
