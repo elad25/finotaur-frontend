@@ -23,6 +23,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query"; // 🔥 ADD
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -700,6 +701,7 @@ function PartialExitsPopup({
 
 export default function New() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const editTradeId = searchParams.get('edit');
   const dateParam = searchParams.get('date');
@@ -1612,6 +1614,8 @@ if (hasResult && directRiskUSD > 0) {
         if (result.success) {
           toast.success("Trade updated successfully! 🎉");
           st.clearDraft();
+          // 🔥 FIX: Invalidate React Query cache so MyTrades shows updated data
+          await queryClient.invalidateQueries({ queryKey: ['trades'] });
           setTimeout(() => navigate("/app/journal/my-trades"), 300);
         } else {
           throw new Error(result.error || "Failed to update trade");
