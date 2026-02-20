@@ -538,6 +538,18 @@ export default function MyTrades() {
     };
   }, []);
 
+  // 🔥 v10.2.0: Sync trade count on mount (fixes desync when trigger installed after trades)
+  useEffect(() => {
+    if (!userId) return;
+    supabase.rpc('sync_trade_count_for_user', { p_user_id: userId })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['subscription'] });
+      })
+      .catch(() => {
+        // Silent fail - sync is best effort
+      });
+  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ✅ 4. 🚀 OPTIMIZED: Stats calculation - single pass, memoized
 const stats = useMemo<Stats>(() => {
   // 🔥 Support both modes for closed trades detection
@@ -642,6 +654,8 @@ const stats = useMemo<Stats>(() => {
         
         // 🔥 FIX: invalidateQueries triggers Overview to refetch stats automatically
         await queryClient.invalidateQueries({ queryKey: ['trades'] });
+        // 🔥 v10.2.0: Refresh subscription limits (count doesn't decrease but UI should update)
+        await queryClient.invalidateQueries({ queryKey: ['subscription'] });
       } else {
         toast.error(result.error || "Failed to delete trade");
       }
