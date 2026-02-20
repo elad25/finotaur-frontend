@@ -19,7 +19,7 @@ export interface QuoteUpdate {
   lastUpdated: string;
 }
 
-const API_BASE = '/api/market-data';
+const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/market-data`;
 
 /**
  * Fetch ONLY quote/price data for a ticker.
