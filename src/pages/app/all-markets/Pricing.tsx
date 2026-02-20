@@ -169,6 +169,10 @@ export default function PlatformPricing() {
   const [hasNewsletterMonthly, setHasNewsletterMonthly] = useState(false);
   const [hasTopSecretMonthly, setHasTopSecretMonthly] = useState(false);
   const [hasJournalPremiumMonthly, setHasJournalPremiumMonthly] = useState(false);
+const [journalYearlyExpiresAt, setJournalYearlyExpiresAt] = useState<string | null>(null);
+const [journalYearlyPlan, setJournalYearlyPlan] = useState<string | null>(null);
+const [platformYearlyExpiresAt, setPlatformYearlyExpiresAt] = useState<string | null>(null);
+const [platformYearlyPlan, setPlatformYearlyPlan] = useState<string | null>(null);
 
   const { 
     checkoutPlatformCoreMonthly, checkoutPlatformCoreYearly,
@@ -204,7 +208,7 @@ export default function PlatformPricing() {
 
         const { data, error } = await supabase
           .from('profiles')
-          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end, newsletter_enabled, newsletter_status, newsletter_interval, top_secret_enabled, top_secret_status, top_secret_interval, account_type, subscription_status, whop_membership_id')
+          .select('platform_plan, platform_subscription_status, platform_pro_trial_used_at, platform_billing_interval, platform_subscription_expires_at, platform_is_in_trial, platform_trial_ends_at, platform_cancel_at_period_end, newsletter_enabled, newsletter_status, newsletter_interval, top_secret_enabled, top_secret_status, top_secret_interval, account_type, subscription_status, whop_membership_id, subscription_interval, subscription_expires_at, journal_yearly_expires_at, journal_yearly_plan, platform_yearly_expires_at, platform_yearly_plan')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -219,6 +223,12 @@ export default function PlatformPricing() {
           setTrialEndsAt(data.platform_trial_ends_at || null);
           setCancelAtPeriodEnd(!!data.platform_cancel_at_period_end);
         }
+
+        // 🔥 v8.9.0: Yearly fallback protection
+          setJournalYearlyExpiresAt(data.journal_yearly_expires_at || null);
+          setJournalYearlyPlan(data.journal_yearly_plan || null);
+          setPlatformYearlyExpiresAt(data.platform_yearly_expires_at || null);
+          setPlatformYearlyPlan(data.platform_yearly_plan || null);
 
         // 🔥 Check existing Journal subscription
         if (data?.whop_membership_id && 
@@ -521,6 +531,42 @@ export default function PlatformPricing() {
           </div>
         </div>
 
+        {/* 🔥 v8.9.0: Yearly Protection Banner */}
+        {(journalYearlyExpiresAt || platformYearlyExpiresAt) && (
+          <div className="mb-6 max-w-4xl mx-auto">
+            <div className="p-4 rounded-2xl flex items-start gap-3"
+              style={{
+                background: 'linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(16,185,129,0.04) 100%)',
+                border: '1px solid rgba(16,185,129,0.35)',
+              }}>
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                <Shield className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-emerald-400 font-semibold text-sm mb-1">
+                  🔒 Your yearly subscription is protected
+                </p>
+                {journalYearlyExpiresAt && (
+                  <p className="text-zinc-400 text-xs leading-relaxed">
+                    You have an active <span className="text-white font-medium capitalize">{journalYearlyPlan} Journal</span> yearly plan valid until{' '}
+                    <span className="text-white font-medium">
+                      {new Date(journalYearlyExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </span>. If you cancel your Platform plan, your Journal access will automatically restore until that date.
+                  </p>
+                )}
+                {platformYearlyExpiresAt && (
+                  <p className="text-zinc-400 text-xs leading-relaxed mt-1">
+                    You have an active <span className="text-white font-medium capitalize">{platformYearlyPlan?.replace('platform_', '')} Platform</span> yearly plan valid until{' '}
+                    <span className="text-white font-medium">
+                      {new Date(platformYearlyExpiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </span>. If you cancel your current plan, access will automatically restore to that tier.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pro Trial Warning */}
         {proTrialUsed && (
           <div className="mb-6 max-w-md mx-auto">
@@ -732,6 +778,9 @@ export default function PlatformPricing() {
                     <p className="text-xs text-amber-300 leading-relaxed">
                       <strong>Note:</strong> Subscribing to Core will cancel your existing Journal {existingJournalPlan === 'premium' ? 'Premium' : 'Basic'} subscription. 
                       You'll keep access until your current billing period ends, and Core includes Journal Basic.
+                      {journalYearlyExpiresAt && (
+                        <span className="text-emerald-400"> Your yearly access is protected until {new Date(journalYearlyExpiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</span>
+                      )}
                     </p>
                   </div>
                 )}

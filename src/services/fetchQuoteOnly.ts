@@ -19,8 +19,7 @@ export interface QuoteUpdate {
   lastUpdated: string;
 }
 
-const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/market-data`;
-
+const API_BASE = `${import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app'}/api/market-data`;
 /**
  * Fetch ONLY quote/price data for a ticker.
  * Lightweight — no company profile, no financials, no analyst data.

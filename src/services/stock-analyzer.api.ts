@@ -17,8 +17,7 @@
 import type { StockData, NewsItem } from '@/types/stock-analyzer.types';
 import { stockCache, getNextEarningsDate } from './stock-analyzer.cache';
 
-const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api/market-data`;
-
+const API_BASE = `${import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app'}/api/market-data`;
 // =====================================================
 // SAFE FETCH
 // =====================================================

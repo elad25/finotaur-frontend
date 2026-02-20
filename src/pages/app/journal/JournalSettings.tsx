@@ -1155,7 +1155,7 @@ const portfolioValues = useMemo(() => {
     if (!result) return null;
     // 🔥 FIX: Inject correct end date based on trial status
     if (result.subscription) {
-      const isInTrial = profile?.is_in_trial || profile?.subscription_status === 'trial';
+      const isInTrial = profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing';
       const trialEndsAt = profile?.trial_ends_at;
       if (isInTrial && trialEndsAt) {
         result.subscription.trialEndsAt = trialEndsAt;
@@ -1430,7 +1430,7 @@ const portfolioValues = useMemo(() => {
 will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'cancel' ? 'be cancelled' : `downgrade to ${profile.pending_downgrade_plan.charAt(0).toUpperCase() + profile.pending_downgrade_plan.slice(1)}`} on{' '}                    <span className="font-semibold">
                       {new Date(
                         // 🔥 If still in trial, show trial end date (not full month billing date)
-                        (profile?.is_in_trial && profile?.trial_ends_at)
+                        ((profile?.is_in_trial || profile?.subscription_status === 'trialing') && profile?.trial_ends_at)
                           ? profile.trial_ends_at
                           : profile.subscription_expires_at
                       ).toLocaleDateString('en-US', {
@@ -1555,14 +1555,14 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                   <label className="text-sm font-medium text-zinc-300">
                     {profile?.subscription_cancel_at_period_end 
                       ? 'Access Until' 
-                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing')
                       ? 'Trial Ends (14 days)'
                       : 'Billing Date'}
                   </label>
                   <p className="text-xs text-zinc-500 mt-1">
                     {profile?.subscription_cancel_at_period_end 
                       ? 'Your subscription ends on this date'
-                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing')
                       ? 'First charge after 14-day trial ends'
                       : 'Renews every 30 days'
                     }
@@ -1574,13 +1574,13 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                   <span className={`text-sm ${
                     profile?.subscription_cancel_at_period_end 
                       ? 'text-amber-400 font-medium'
-                      : (profile?.is_in_trial || profile?.subscription_status === 'trial')
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing')
                       ? 'text-blue-400 font-medium'
                       : 'text-zinc-400'
                   }`}>
                     {profile?.subscription_cancel_at_period_end
                       ? new Date(
-                          (profile?.is_in_trial && profile?.trial_ends_at)
+                          ((profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') && profile?.trial_ends_at)
                             ? profile.trial_ends_at
                             : profile?.subscription_expires_at || ''
                         ).toLocaleDateString('en-US', {
@@ -1588,7 +1588,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                           month: 'long',
                           day: 'numeric'
                         })
-                      : (profile?.is_in_trial || profile?.subscription_status === 'trial') && profile?.trial_ends_at
+                      : (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') && profile?.trial_ends_at
                       ? new Date(profile.trial_ends_at).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'long',
@@ -1614,7 +1614,7 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
                       ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                       : profile.subscription_status === 'active'
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                      : profile.subscription_status === 'trial'
+                      : (profile.subscription_status === 'trial' || profile.subscription_status === 'trialing')
                       ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                       : 'bg-red-500/20 text-red-400 border border-red-500/30'
                   }`}>
@@ -1811,7 +1811,11 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
         currentPlan={profile?.account_type || ''}
         onSelectPlan={handleSelectPlan}
         currentBillingInterval={profile?.subscription_interval}
-        subscriptionExpiresAt={profile?.subscription_expires_at}
+        subscriptionExpiresAt={
+  (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') && profile?.trial_ends_at
+    ? profile.trial_ends_at
+    : profile?.subscription_expires_at
+}
         subscriptionCancelAtPeriodEnd={profile?.subscription_cancel_at_period_end}
         pendingDowngradePlan={profile?.pending_downgrade_plan}
       />
@@ -1823,7 +1827,11 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
         onConfirm={handleCancelSubscription}
         isLoading={isSubscriptionLoading}
         currentPlan={profile?.account_type || ''}
-        expiresAt={profile?.trial_ends_at || profile?.subscription_expires_at}
+        expiresAt={
+          (profile?.is_in_trial || profile?.subscription_status === 'trial' || profile?.subscription_status === 'trialing') && profile?.trial_ends_at
+            ? profile.trial_ends_at
+            : profile?.subscription_expires_at
+        }
       />
 
       {/* 🔥 Payment Popup - Same as PricingSelection */}

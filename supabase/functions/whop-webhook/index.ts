@@ -1607,6 +1607,9 @@ let existingSubs: any = null;
                   console.log(`✅ Yearly Journal (${existingAccountType}) scheduled for cancellation at period end — Platform grants access`);
                   await supabase.from('profiles').update({
                     subscription_cancel_at_period_end: true,
+                    // 🔥 v8.9.0: Save yearly expiry AND plan so Platform cancel can restore access
+                    journal_yearly_expires_at: existingSubs.subscription_expires_at,
+                    journal_yearly_plan: existingAccountType, // 'basic' or 'premium'
                     updated_at: new Date().toISOString(),
                   }).eq('id', userResult.id);
                 } else {
@@ -2074,6 +2077,26 @@ async function handleMembershipActivated(
       // 🔥 v7.1.0: Validate it's a real membership ID before cancelling
       const oldId = currentProfile.platform_whop_membership_id;
       if (oldId.startsWith('mem_')) {
+        // 🔥 v8.9.0: If old Platform was yearly, save expiry before cancelling
+        // so that if new Platform is later cancelled, we can restore lower-tier access
+        const { data: oldPlatformProfile } = await supabase
+          .from('profiles')
+          .select('platform_billing_interval, platform_subscription_expires_at, platform_plan')
+          .eq('id', userResult.id)
+          .single();
+
+        const isOldPlatformYearly = oldPlatformProfile?.platform_billing_interval === 'yearly';
+        const oldPlatformExpiresAt = oldPlatformProfile?.platform_subscription_expires_at;
+        const oldPlatformPlanName = oldPlatformProfile?.platform_plan;
+
+        if (isOldPlatformYearly && oldPlatformExpiresAt) {
+          await supabase.from('profiles').update({
+            platform_yearly_expires_at: oldPlatformExpiresAt,
+            platform_yearly_plan: oldPlatformPlanName,
+          }).eq('id', userResult.id);
+          console.log(`🔥 v8.9.0: Saved old yearly Platform expiry: ${oldPlatformPlanName} until ${oldPlatformExpiresAt}`);
+        }
+
         const cancelResult = await cancelMembership(oldId, 'immediate');
         if (cancelResult.success) {
           console.log("✅ Old Platform membership cancelled on activation");
@@ -2084,7 +2107,6 @@ async function handleMembershipActivated(
         console.warn("⚠️ Stored membership ID is not a real membership:", oldId, "- skipping Whop cancel");
       }
     }
-
     // 🔥 v8.6.0: Cancel standalone Journal when platform activates:
     // - Core: cancel Basic only (Core includes Basic, not Premium)
     // - Finotaur/Enterprise: cancel any tier (they include Premium)
@@ -2125,8 +2147,11 @@ async function handleMembershipActivated(
                 const r = await cancelMembership(existingSubs.whop_membership_id, 'at_period_end');
                 if (r.success) {
                   console.log(`✅ Journal (${existingAccountType}) scheduled for cancellation at period end — user keeps Premium access`);
-                  await supabase.from('profiles').update({
+                 await supabase.from('profiles').update({
                     subscription_cancel_at_period_end: true,
+                    // 🔥 v8.9.0: Save yearly expiry AND plan so Platform cancel can restore access
+                    journal_yearly_expires_at: existingSubs.subscription_expires_at,
+                    journal_yearly_plan: existingAccountType, // 'basic' or 'premium'
                     updated_at: new Date().toISOString(),
                   }).eq('id', userResult.id);
                 } else {
@@ -2762,7 +2787,7 @@ async function handleMembershipDeactivated(
     // 🔥 v6.5.0: Find user by membership ID OR by email (for stale membership lookups)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, email, platform_plan, platform_whop_membership_id, whop_membership_id, subscription_status, platform_pending_downgrade_plan, platform_pending_downgrade_membership_id, platform_subscription_expires_at')
+      .select('id, email, platform_plan, platform_subscription_status, platform_whop_membership_id, whop_membership_id, subscription_status, platform_pending_downgrade_plan, platform_pending_downgrade_membership_id, platform_subscription_expires_at, journal_yearly_expires_at, journal_yearly_plan, platform_yearly_expires_at, platform_yearly_plan')
       .eq('platform_whop_membership_id', membershipId)
       .single();
 
@@ -2823,11 +2848,21 @@ async function handleMembershipDeactivated(
       return { success: true, message: `Platform deactivation ignored (stale): ${profile.email}` };
     }
 
-    const oldPlan = profile.platform_plan;
+const oldPlan = profile.platform_plan;
     
-    // 🔥 v6.4.0: Check if user has their OWN Journal subscription before downgrading
-    const hasOwnJournalSub = profile.whop_membership_id && 
-      ['active', 'trialing'].includes(profile.subscription_status || '');
+    // 🔥 v8.9.0: Check active membership AND unexpired yearly subscriptions
+    const now = new Date();
+    const journalYearlyExpiresAt = profile.journal_yearly_expires_at;
+    const journalYearlyStillValid = journalYearlyExpiresAt && new Date(journalYearlyExpiresAt) > now;
+    const journalYearlyPlan = profile.journal_yearly_plan; // 'basic' or 'premium'
+
+    const platformYearlyExpiresAt = profile.platform_yearly_expires_at;
+    const platformYearlyStillValid = platformYearlyExpiresAt && new Date(platformYearlyExpiresAt) > now;
+    const platformYearlyPlan = profile.platform_yearly_plan; // e.g. 'platform_core'
+
+    const hasOwnJournalSub = (profile.whop_membership_id && 
+      ['active', 'trialing'].includes(profile.subscription_status || '')) ||
+      !!journalYearlyStillValid;
 
     const { error: updateError } = await supabase
       .from('profiles')
@@ -2838,28 +2873,66 @@ async function handleMembershipDeactivated(
         platform_cancel_at_period_end: false,
         platform_pending_downgrade_plan: null,
         platform_pending_downgrade_membership_id: null,
-        // 🔥 v8.5.0: Finotaur/Enterprise deactivation — remove all included access, back to FREE 15 lifetime
-        ...(oldPlan === 'platform_finotaur' || oldPlan === 'platform_enterprise' ? {
-          newsletter_enabled: false,
-          newsletter_status: 'cancelled',
-          top_secret_enabled: false,
-          top_secret_status: 'cancelled',
-          account_type: 'free',
-          max_trades: 15,
-          subscription_status: 'inactive',
-          platform_bundle_journal_granted: false,
-          platform_bundle_newsletter_granted: false,
-          ...(oldPlan === 'platform_enterprise' ? {
-            enterprise_ai_portfolio_enabled: false,
-          } : {}),
-        } : {}),
-        // 🔥 v8.5.0: Downgrade Journal for Core if user doesn't have own sub
-        ...(oldPlan === 'platform_core' && !hasOwnJournalSub ? {
-          account_type: 'free',
-          max_trades: 15,
-          subscription_status: 'inactive',
-          platform_bundle_journal_granted: false,
-        } : {}),
+        // 🔥 v8.9.0: Finotaur/Enterprise deactivation — check for yearly Platform fallback
+        ...(oldPlan === 'platform_finotaur' || oldPlan === 'platform_enterprise' ? (() => {
+          const base = {
+            newsletter_enabled: false,
+            newsletter_status: 'cancelled',
+            top_secret_enabled: false,
+            top_secret_status: 'cancelled',
+            platform_bundle_newsletter_granted: false,
+            ...(oldPlan === 'platform_enterprise' ? { enterprise_ai_portfolio_enabled: false } : {}),
+          };
+          if (platformYearlyStillValid && platformYearlyPlan) {
+            console.log(`🔥 v8.9.0: Restoring yearly Platform access: ${platformYearlyPlan} until ${platformYearlyExpiresAt}`);
+            return {
+              ...base,
+              platform_plan: platformYearlyPlan,
+              platform_subscription_status: 'active',
+              platform_subscription_expires_at: platformYearlyExpiresAt,
+              platform_cancel_at_period_end: false,
+              platform_yearly_expires_at: null,
+              platform_yearly_plan: null,
+              account_type: 'basic',
+              max_trades: 25,
+              subscription_status: 'active',
+              platform_bundle_journal_granted: true,
+            };
+          }
+          return {
+            ...base,
+            account_type: 'free',
+            max_trades: 15,
+            subscription_status: 'inactive',
+            platform_bundle_journal_granted: false,
+          };
+        })() : {}),
+        // 🔥 v8.9.0: Core deactivation — restore yearly Journal if still valid
+        ...(oldPlan === 'platform_core' ? (() => {
+          if (journalYearlyStillValid && journalYearlyPlan) {
+            const maxTrades = journalYearlyPlan === 'premium' ? 999999 : 25;
+            console.log(`🔥 v8.9.0: Restoring yearly Journal access: ${journalYearlyPlan} until ${journalYearlyExpiresAt}`);
+            return {
+              account_type: journalYearlyPlan,
+              max_trades: maxTrades,
+              subscription_status: 'active',
+              subscription_expires_at: journalYearlyExpiresAt,
+              subscription_cancel_at_period_end: false,
+              platform_bundle_journal_granted: false,
+              journal_yearly_expires_at: null,
+              journal_yearly_plan: null,
+            };
+          }
+          if (!hasOwnJournalSub) {
+            return {
+              account_type: 'free',
+              max_trades: 15,
+              subscription_status: 'inactive',
+              platform_bundle_journal_granted: false,
+            };
+          }
+          return {};
+        })() : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', profile.id);

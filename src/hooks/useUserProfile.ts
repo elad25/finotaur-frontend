@@ -29,7 +29,7 @@ export interface UserProfile {
   // 🔥 v8.6.1: Added 'admin' and 'vip' for special accounts
   account_type: 'free' | 'basic' | 'premium' | 'trial' | 'admin' | 'vip';
   subscription_interval: 'monthly' | 'yearly' | null;
-  subscription_status: 'active' | 'trial' | 'inactive' | 'cancelled' | 'expired' | null;
+  subscription_status: 'active' | 'trial' | 'trialing' | 'inactive' | 'cancelled' | 'expired' | null;
   subscription_expires_at: string | null;
   // 🔥 Trial fields
   is_in_trial?: boolean;
