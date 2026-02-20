@@ -40,7 +40,7 @@ interface UseWarZoneSubscriptionReturn {
   undoCancellation: () => Promise<{ success: boolean; message: string }>;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
 export function useWarZoneSubscription(): UseWarZoneSubscriptionReturn {
   const [subscription, setSubscription] = useState<WarZoneSubscription | null>(null);

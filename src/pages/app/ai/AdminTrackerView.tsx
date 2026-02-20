@@ -45,7 +45,7 @@ const PURPLE = { solid: '#A855F7', dim: 'rgba(168,85,247,' };
 const BLUE = { solid: '#3B82F6', dim: 'rgba(59,130,246,' };
 const CYAN = { solid: '#06B6D4', dim: 'rgba(6,182,212,' };
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
 // ── Types ────────────────────────────────────────
 interface Recommendation {

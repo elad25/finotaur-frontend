@@ -225,7 +225,7 @@ async function fetchEarningsData(
   data: StockData,
   signal?: AbortSignal
 ): Promise<EarningsData> {
-  const API_BASE = import.meta.env.VITE_API_URL || '';
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
   const response = await fetch(`${API_BASE}/api/earnings-analysis/${data.ticker}`, {
     method: 'GET',
@@ -904,7 +904,7 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
       return;
     }
 
-    const API_BASE = import.meta.env.VITE_API_URL || '';
+    const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
     let cancelled = false;
 
     (async () => {

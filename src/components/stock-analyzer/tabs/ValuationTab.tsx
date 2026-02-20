@@ -316,7 +316,7 @@ CRITICAL INSTRUCTIONS:
 // =====================================================
 
 async function fetchValuationData(data: StockData, signal?: AbortSignal): Promise<ValuationAIData> {
-  const API_BASE = import.meta.env.VITE_API_URL || '';
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
   const response = await fetch(`${API_BASE}/api/ai-proxy/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

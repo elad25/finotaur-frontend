@@ -63,7 +63,7 @@ let cachedResult: { data: BlockTrade[]; meta: BackendBlockResponse['meta']; summ
 const FRONTEND_CACHE_TTL = 2 * 60 * 1000; // 2 min
 
 // ── API Base ──
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
 // ── Fetch with retry ──
 async function fetchWithRetry<T>(path: string, signal?: AbortSignal, retries = 2): Promise<T> {

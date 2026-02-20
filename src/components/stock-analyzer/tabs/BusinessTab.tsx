@@ -217,7 +217,7 @@ async function fetchCompetitorsAI(data: StockData, signal?: AbortSignal): Promis
     return cached.data;
   }
 
-  const API_BASE = import.meta.env.VITE_API_URL || '';
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
   const prompt = `Identify the top 3 real competitors for ${data.name} (${data.ticker}) in the ${data.industry} industry.
 
 Market Cap: ${data.marketCap ? '$' + (data.marketCap / 1e9).toFixed(0) + 'B' : 'N/A'}
@@ -422,7 +422,7 @@ function useCompetitorLogo(ticker: string): { logoUrl: string | null; loading: b
     }
 
     let cancelled = false;
-    const API_BASE = import.meta.env.VITE_API_URL || '';
+    const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
     (async () => {
       try {
