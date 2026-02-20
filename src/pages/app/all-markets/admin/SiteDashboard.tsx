@@ -3833,8 +3833,16 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                                 }`}>
                                   {user.account_type || 'free'}
                                 </Badge>
-                                {user.has_whop && (
-                                  <span className="text-[10px] text-emerald-400">✓ Whop</span>
+                                {user.has_whop && user.subscription_status === 'active' && !user.is_in_trial && (
+                                  <Badge className="text-[10px] bg-emerald-500/30 text-emerald-300 border border-emerald-500/50 px-2 py-0.5">
+                                    ✓ Paid
+                                  </Badge>
+                                )}
+                                {user.has_whop && user.is_in_trial && (
+                                  <span className="text-[10px] text-orange-400">✓ Whop Trial</span>
+                                )}
+                                {user.has_whop && user.subscription_status !== 'active' && !user.is_in_trial && (
+                                  <span className="text-[10px] text-gray-500">✓ Whop (inactive)</span>
                                 )}
                               </div>
                             </td>
