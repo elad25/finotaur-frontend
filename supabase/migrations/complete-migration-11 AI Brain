@@ -611,15 +611,18 @@ DECLARE
   v_count INTEGER;
   v_tokens INTEGER;
 BEGIN
-  -- Get user's tier from profiles
-  SELECT COALESCE(tier, 'FREE') INTO v_tier
+  -- Get user's platform_plan from profiles
+  SELECT COALESCE(platform_plan, account_type, 'free') INTO v_tier
   FROM profiles WHERE id = p_user_id;
-  
-  -- Set limit based on tier
+
+  IF v_tier IS NULL THEN v_tier := 'free'; END IF;
+
+  -- Set limit based on platform_plan
   v_limit := CASE v_tier
-    WHEN 'PREMIUM' THEN 999999  -- Effectively unlimited
-    WHEN 'BASIC' THEN 20
-    ELSE 5  -- FREE tier
+    WHEN 'platform_enterprise' THEN 999999
+    WHEN 'platform_finotaur'   THEN 15
+    WHEN 'platform_core'       THEN 7
+    ELSE 3  -- free tier
   END;
   
   -- Get today's usage
@@ -646,7 +649,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION check_ai_usage_limit IS 'Checks if user has reached their daily AI question limit based on tier';
+COMMENT ON FUNCTION check_ai_usage_limit IS 'free=3 | platform_core=7 | platform_finotaur=15 | platform_enterprise=unlimited';
 
 -- ============================================
 -- FUNCTION: Check user AI usage (Simple version for compatibility)
@@ -665,15 +668,18 @@ DECLARE
   v_limit INT;
   v_count INT;
 BEGIN
-  -- Get user's tier
-  SELECT COALESCE(profiles.tier, 'FREE') INTO v_tier
+  -- Get user's platform_plan
+  SELECT COALESCE(platform_plan, account_type, 'free') INTO v_tier
   FROM profiles WHERE id = p_user_id;
-  
-  -- Set limit based on tier
+
+  IF v_tier IS NULL THEN v_tier := 'free'; END IF;
+
+  -- Set limit based on platform_plan
   v_limit := CASE v_tier
-    WHEN 'PREMIUM' THEN 999999  -- Unlimited
-    WHEN 'BASIC' THEN 20
-    ELSE 5  -- FREE
+    WHEN 'platform_enterprise' THEN 999999
+    WHEN 'platform_finotaur'   THEN 15
+    WHEN 'platform_core'       THEN 7
+    ELSE 3  -- free
   END;
   
   -- Get today's count
@@ -689,7 +695,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION check_ai_usage IS 'Simple check if user has reached their daily AI question limit';
+COMMENT ON FUNCTION check_ai_usage IS 'Simple check if user has reached their daily AI question limit based on platform_plan';
 
 -- ============================================
 -- FUNCTION: Increment AI usage (Full version)
@@ -1662,20 +1668,19 @@ ORDER BY t.tablename;
 -- Syncs with existing account_type column
 -- =====================================================
 
--- Step 1: Add tier column to profiles
+-- Step 1: Add tier + platform_plan columns to profiles
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'free';
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS platform_plan TEXT DEFAULT 'free';
 
--- Step 2: Sync tier from existing account_type values
+-- Step 2: Sync platform_plan from existing account_type values
 UPDATE profiles 
-SET tier = COALESCE(
-  CASE 
-    WHEN account_type IS NULL THEN 'free'
-    WHEN account_type = '' THEN 'free'
-    ELSE LOWER(account_type)
-  END,
-  'free'
-)
-WHERE tier IS NULL OR tier = '' OR tier = 'free';
+SET platform_plan = CASE
+  WHEN account_type IN ('platform_enterprise', 'enterprise') THEN 'platform_enterprise'
+  WHEN account_type IN ('platform_finotaur',   'finotaur')   THEN 'platform_finotaur'
+  WHEN account_type IN ('platform_core',        'core')       THEN 'platform_core'
+  ELSE 'free'
+END
+WHERE platform_plan IS NULL OR platform_plan = 'free';
 
 -- Step 3: Create sync function
 CREATE OR REPLACE FUNCTION sync_tier_from_account_type()
@@ -1689,6 +1694,12 @@ BEGIN
     END,
     'free'
   );
+  NEW.platform_plan := CASE
+    WHEN NEW.account_type IN ('platform_enterprise', 'enterprise') THEN 'platform_enterprise'
+    WHEN NEW.account_type IN ('platform_finotaur',   'finotaur')   THEN 'platform_finotaur'
+    WHEN NEW.account_type IN ('platform_core',        'core')       THEN 'platform_core'
+    ELSE 'free'
+  END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -1705,22 +1716,25 @@ DO $$
 DECLARE
   tier_count INTEGER;
   free_count INTEGER;
-  basic_count INTEGER;
-  premium_count INTEGER;
+  core_count INTEGER;
+  finotaur_count INTEGER;
+  enterprise_count INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO tier_count FROM profiles WHERE tier IS NOT NULL;
-  SELECT COUNT(*) INTO free_count FROM profiles WHERE tier = 'free';
-  SELECT COUNT(*) INTO basic_count FROM profiles WHERE tier = 'basic';
-  SELECT COUNT(*) INTO premium_count FROM profiles WHERE tier IN ('premium', 'pro');
+  SELECT COUNT(*) INTO tier_count       FROM profiles WHERE platform_plan IS NOT NULL;
+  SELECT COUNT(*) INTO free_count       FROM profiles WHERE platform_plan = 'free';
+  SELECT COUNT(*) INTO core_count       FROM profiles WHERE platform_plan = 'platform_core';
+  SELECT COUNT(*) INTO finotaur_count   FROM profiles WHERE platform_plan = 'platform_finotaur';
+  SELECT COUNT(*) INTO enterprise_count FROM profiles WHERE platform_plan = 'platform_enterprise';
   
   RAISE NOTICE '';
   RAISE NOTICE '=====================================================';
-  RAISE NOTICE '✅ PROFILES TIER COLUMN MIGRATION COMPLETE';
+  RAISE NOTICE '✅ PROFILES PLATFORM_PLAN MIGRATION COMPLETE';
   RAISE NOTICE '=====================================================';
-  RAISE NOTICE 'Total profiles with tier: %', tier_count;
-  RAISE NOTICE '  - Free tier: %', free_count;
-  RAISE NOTICE '  - Basic tier: %', basic_count;
-  RAISE NOTICE '  - Premium/Pro tier: %', premium_count;
+  RAISE NOTICE 'Total profiles with platform_plan: %', tier_count;
+  RAISE NOTICE '  - free:                %', free_count;
+  RAISE NOTICE '  - platform_core:       %', core_count;
+  RAISE NOTICE '  - platform_finotaur:   %', finotaur_count;
+  RAISE NOTICE '  - platform_enterprise: %', enterprise_count;
   RAISE NOTICE '';
   RAISE NOTICE 'Trigger active: sync_tier_from_account_type';
   RAISE NOTICE '=====================================================';

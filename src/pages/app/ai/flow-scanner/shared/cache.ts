@@ -1,15 +1,10 @@
 // =====================================================
-// ⚡ FLOW SCANNER - Client-Side Cache Manager
-// Optimized for 10,000 concurrent users
+// ⚡ FLOW SCANNER — Cache Manager v2
 // Strategy: stale-while-revalidate + request deduplication
 // =====================================================
 
 import { CacheEntry, FlowItem, SectorFlow, FlowStats } from './types';
 import { CACHE_TTL } from './constants';
-
-// =====================================================
-// Generic Cache Store
-// =====================================================
 
 class CacheStore<T> {
   private cache = new Map<string, CacheEntry<T>>();
@@ -23,11 +18,7 @@ class CacheStore<T> {
     const isStale = age > entry.ttl;
     const isExpired = age > entry.ttl + CACHE_TTL.STALE_WHILE_REVALIDATE;
 
-    if (isExpired) {
-      this.cache.delete(key);
-      return null;
-    }
-
+    if (isExpired) { this.cache.delete(key); return null; }
     return { data: entry.data, isStale };
   }
 
@@ -35,34 +26,20 @@ class CacheStore<T> {
     this.cache.set(key, { data, timestamp: Date.now(), ttl });
   }
 
-  // Deduplicate concurrent requests - critical for 10k users
   async dedupe(key: string, fetcher: () => Promise<T>): Promise<T> {
-    if (this.inFlight.has(key)) {
-      return this.inFlight.get(key)!;
-    }
+    if (this.inFlight.has(key)) return this.inFlight.get(key)!;
     const promise = fetcher().finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, promise);
     return promise;
   }
 
-  invalidate(key: string): void {
-    this.cache.delete(key);
-  }
-
-  clear(): void {
-    this.cache.clear();
-    this.inFlight.clear();
-  }
+  invalidate(key: string): void { this.cache.delete(key); }
+  clear(): void { this.cache.clear(); this.inFlight.clear(); }
 }
 
-// Singleton stores — shared across all component instances on the same client
-export const flowCache    = new CacheStore<FlowItem[]>();
-export const sectorCache  = new CacheStore<SectorFlow[]>();
-export const statsCache   = new CacheStore<FlowStats>();
-
-// =====================================================
-// Cache Keys
-// =====================================================
+export const flowCache   = new CacheStore<FlowItem[]>();
+export const sectorCache = new CacheStore<SectorFlow[]>();
+export const statsCache  = new CacheStore<FlowStats>();
 
 export const CACHE_KEYS = {
   FLOW_DATA:   'flow:data',

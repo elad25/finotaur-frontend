@@ -367,6 +367,7 @@ BEGIN
 IF NEW.max_trades IS NULL OR NEW.max_trades = 0 THEN
   NEW.max_trades := CASE NEW.account_type
     WHEN 'free' THEN 15
+    WHEN 'platform_free' THEN 0  -- נקבע ע"י platform_plan בזמן runtime
     WHEN 'basic' THEN 25
     WHEN 'premium' THEN 999999
     WHEN 'admin' THEN 999999
@@ -933,7 +934,7 @@ BEGIN
     NEW.pnl := NULL;
     NEW.actual_r := NULL;
   END IF;
-  -- ═══════════════════════════════════════
+-- ═══════════════════════════════════════
   -- STEP 7: Increment Trade Count (only on INSERT)
   -- ═══════════════════════════════════════
   
@@ -941,6 +942,12 @@ BEGIN
     SELECT account_type INTO v_account_type
     FROM public.profiles
     WHERE id = NEW.user_id;
+    
+    -- 🔥 CRITICAL: platform_free blocked by RLS.
+    -- BEFORE trigger runs BEFORE RLS - skip to prevent count inflation on failed inserts.
+    IF v_account_type = 'platform_free' THEN
+      RETURN NEW;
+    END IF;
     
     UPDATE public.profiles
     SET 
@@ -973,10 +980,12 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
 -- Create unified trigger
+-- 🔥 v10.3.0: AFTER trigger ensures count only increments on SUCCESSFUL INSERT
+-- BEFORE trigger ran before RLS check - caused count inflation on blocked inserts
+DROP TRIGGER IF EXISTS handle_trade_changes_unified_trigger ON public.trades;
 CREATE TRIGGER handle_trade_changes_unified_trigger
-  BEFORE INSERT OR UPDATE ON public.trades
+  AFTER INSERT OR UPDATE ON public.trades
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_trade_changes_unified();
 
@@ -985,6 +994,105 @@ COMMENT ON FUNCTION public.handle_trade_changes_unified IS
 Now correctly uses user_risk_r for both open and closed trades.
 - OPEN trades: user_risk_r = risk in R, user_reward_r = potential reward in R
 - CLOSED trades: user_risk_r = actual result in R, user_reward_r = NULL';
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔥 v10.2.0: SYNC TRADE COUNT FUNCTIONS
+-- Fixes desync when trigger was installed after trades were created
+-- IMMUTABLE: count can only go UP, never down (deletes don't reduce count)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.sync_trade_count_for_user(UUID) CASCADE;
+DROP FUNCTION IF EXISTS public.sync_all_trade_counts() CASCADE;
+
+CREATE OR REPLACE FUNCTION public.sync_trade_count_for_user(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_monthly_count INTEGER;
+  v_total_count INTEGER;
+  v_billing_start DATE;
+BEGIN
+  -- Get billing start
+  SELECT COALESCE(billing_cycle_start, DATE_TRUNC('month', NOW())::DATE)
+  INTO v_billing_start
+  FROM public.profiles WHERE id = p_user_id;
+  
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'User not found');
+  END IF;
+  
+  -- Count actual non-deleted trades this month (by creation date)
+  SELECT COUNT(*)::INTEGER INTO v_monthly_count
+  FROM public.trades
+  WHERE user_id = p_user_id
+    AND deleted_at IS NULL
+    AND created_at >= GREATEST(v_billing_start, DATE_TRUNC('month', NOW())::DATE);
+  
+  -- Count all non-deleted trades lifetime
+  SELECT COUNT(*)::INTEGER INTO v_total_count
+  FROM public.trades
+  WHERE user_id = p_user_id AND deleted_at IS NULL;
+  
+  -- 🔥 IMMUTABLE: Use GREATEST - count can only go up, never down
+  UPDATE public.profiles
+  SET 
+    current_month_trades_count = GREATEST(COALESCE(current_month_trades_count, 0), v_monthly_count),
+    trade_count = GREATEST(COALESCE(trade_count, 0), v_total_count),
+    updated_at = NOW()
+  WHERE id = p_user_id;
+  
+  RETURN jsonb_build_object(
+    'success', true,
+    'user_id', p_user_id,
+    'monthly_synced_to', GREATEST(0, v_monthly_count),
+    'total_synced_to', GREATEST(0, v_total_count)
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.sync_all_trade_counts()
+RETURNS TABLE(user_id UUID, monthly_synced INTEGER, total_synced INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Admin only';
+  END IF;
+
+  RETURN QUERY
+  UPDATE public.profiles pr
+  SET 
+    current_month_trades_count = GREATEST(
+      COALESCE(pr.current_month_trades_count, 0),
+      (SELECT COUNT(*)::INTEGER FROM public.trades t 
+       WHERE t.user_id = pr.id AND t.deleted_at IS NULL
+       AND t.created_at >= GREATEST(
+         COALESCE(pr.billing_cycle_start, DATE_TRUNC('month', NOW())::DATE),
+         DATE_TRUNC('month', NOW())::DATE
+       ))
+    ),
+    trade_count = GREATEST(
+      COALESCE(pr.trade_count, 0),
+      (SELECT COUNT(*)::INTEGER FROM public.trades t WHERE t.user_id = pr.id AND t.deleted_at IS NULL)
+    ),
+    updated_at = NOW()
+  WHERE pr.account_type IN ('basic', 'trial', 'premium', 'free')
+  RETURNING pr.id, pr.current_month_trades_count, pr.trade_count;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.sync_trade_count_for_user(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.sync_all_trade_counts() TO authenticated;
+
+COMMENT ON FUNCTION public.sync_trade_count_for_user IS 
+'v10.2.0: Syncs trade counters to actual DB count. IMMUTABLE - never decreases. Call when count seems wrong.';
+COMMENT ON FUNCTION public.sync_all_trade_counts IS 
+'v10.2.0: Admin bulk sync. Fixes all users historical desync.';
 
 DO $$
 BEGIN
@@ -1012,244 +1120,136 @@ BEGIN
   RAISE NOTICE '      ✅ get_remaining_trades() - returns remaining trades info';
 END $$;
 
--- ═══════════════════════════════════════════════════════════════
--- 📊 get_trade_limit - Returns trade limit based on account type
--- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION public.get_trade_limit(plan_type TEXT)
-RETURNS INTEGER
-LANGUAGE plpgsql
-IMMUTABLE
-AS $$
-BEGIN
-  RETURN CASE LOWER(COALESCE(plan_type, 'free'))
-    WHEN 'free' THEN 15
-    WHEN 'basic' THEN 25
-    WHEN 'premium' THEN 999999
-    WHEN 'admin' THEN 999999
-    WHEN 'vip' THEN 999999
-    ELSE 15  -- Default = free (15 lifetime)
-  END;
-END;
-$$;
-
-COMMENT ON FUNCTION public.get_trade_limit IS 
-'v8.5.0: FREE=15 lifetime, BASIC=25/month, PREMIUM/ADMIN/VIP=unlimited';
-
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO service_role;
 
 -- ═══════════════════════════════════════════════════════════════
 -- 🔒 can_create_trade - Checks if user is under their trade limit
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION public.can_create_trade(user_id_param UUID)
-RETURNS BOOLEAN 
+DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.can_create_trade(p_user_id UUID)
+RETURNS BOOLEAN
 LANGUAGE plpgsql
 SECURITY DEFINER
 STABLE
-SET search_path = public
+SET search_path TO 'public'
 AS $$
 DECLARE
-  v_profile RECORD;
-  v_limit INTEGER;
-  v_trades_used INTEGER;
+  v_account_type         TEXT;
+  v_role                 TEXT;
+  v_subscription_status  TEXT;
+  v_is_in_trial          BOOLEAN;
+  v_trial_ends_at        TIMESTAMPTZ;
+  v_subscription_expires TIMESTAMPTZ;
+  v_max_trades           INTEGER;
+  v_monthly_count        INTEGER;
+  v_lifetime_trades      BIGINT;
+  v_platform_plan        TEXT := NULL;
+  v_platform_status      TEXT := NULL;
+  v_has_platform_cols    BOOLEAN;
 BEGIN
+  -- ✅ Check if platform columns exist (added by WHOP_DB which runs later)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'profiles' 
+      AND column_name = 'platform_plan'
+  ) INTO v_has_platform_cols;
+
+  -- ✅ Always select base columns (always exist from DB_1)
   SELECT 
-    account_type, role,
+    account_type,
+    role,
     subscription_status,
-    COALESCE(is_in_trial, FALSE) as is_in_trial,
+    is_in_trial,
     trial_ends_at,
     subscription_expires_at,
     max_trades,
-    COALESCE(current_month_trades_count, 0) as monthly_trades,
-    COALESCE(trade_count, 0) as lifetime_trades,
-    platform_plan,
-    platform_subscription_status
-  INTO v_profile
+    current_month_trades_count
+  INTO 
+    v_account_type, v_role, v_subscription_status,
+    v_is_in_trial, v_trial_ends_at, v_subscription_expires,
+    v_max_trades, v_monthly_count
   FROM public.profiles
-  WHERE id = user_id_param;
-  
+  WHERE id = p_user_id;
+
   IF NOT FOUND THEN
     RETURN FALSE;
   END IF;
-  
-  -- ✅ Admins = unlimited (by role)
-  IF v_profile.role IN ('admin', 'super_admin') THEN
+
+  -- ✅ Lifetime trades count
+  SELECT COUNT(*) INTO v_lifetime_trades
+  FROM public.trades
+  WHERE user_id = p_user_id AND deleted_at IS NULL;
+
+  -- ✅ Platform columns (only if they exist — WHOP_DB adds them)
+  IF v_has_platform_cols THEN
+    EXECUTE format(
+      'SELECT platform_plan, platform_subscription_status FROM public.profiles WHERE id = %L',
+      p_user_id
+    ) INTO v_platform_plan, v_platform_status;
+  END IF;
+
+  -- Admins = unlimited
+  IF v_role IN ('admin', 'super_admin') THEN
     RETURN TRUE;
   END IF;
-  
-  -- ✅ Admin/VIP = unlimited (by account_type)
-  IF v_profile.account_type IN ('admin', 'vip') THEN
+
+  -- Premium/VIP/Beta/Admin/Trial account_type = unlimited
+  IF v_account_type IN ('premium', 'admin', 'vip', 'beta', 'trial') THEN
     RETURN TRUE;
   END IF;
-  
-  -- ✅ Premium = unlimited (if subscription active)
-  IF v_profile.account_type = 'premium' THEN
-    IF v_profile.subscription_status IN ('active', 'trial') THEN
-      RETURN TRUE;
-    END IF;
-    IF v_profile.subscription_status IN ('expired', 'cancelled') THEN
-      IF v_profile.subscription_expires_at IS NOT NULL 
-         AND v_profile.subscription_expires_at > NOW() THEN
-        RETURN TRUE;
-      END IF;
+
+  -- Platform Finotaur/Enterprise = unlimited
+  IF v_platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
+     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Platform Core = 50/month
+  IF v_platform_plan IN ('core', 'platform_core')
+     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
+    RETURN COALESCE(v_monthly_count, 0) < 50;
+  END IF;
+
+  -- Free / platform_free / NULL = 15 lifetime
+  IF v_account_type IN ('free', 'platform_free') OR v_account_type IS NULL THEN
+    RETURN COALESCE(v_lifetime_trades, 0) < 15;
+  END IF;
+
+  -- Basic — בדיקת תוקף לפני מגבלה חודשית
+  IF v_account_type = 'basic' THEN
+    -- Trial פג
+    IF (v_subscription_status = 'trial' OR COALESCE(v_is_in_trial, FALSE))
+       AND v_trial_ends_at IS NOT NULL
+       AND v_trial_ends_at < NOW() THEN
       RETURN FALSE;
     END IF;
-    RETURN TRUE;
-  END IF;
-  
-  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
-  IF v_profile.account_type = 'free' 
-     AND v_profile.platform_plan IN ('core', 'platform_core')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
-    RETURN v_profile.monthly_trades < 25;
-  END IF;
-
-  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
-  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
-    RETURN TRUE;
-  END IF;
-
-  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
-  IF v_profile.account_type = 'free' 
-     AND v_profile.platform_plan IN ('core', 'platform_core')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
-    RETURN v_profile.monthly_trades < 25;
-  END IF;
-
-  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
-  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
-    RETURN TRUE;
-  END IF;
-
-  -- ✅ Basic users - check subscription status AND limits
-  IF v_profile.account_type = 'basic' THEN
-    -- ✅ Check if subscription expired (must pay)
-    IF v_profile.subscription_status = 'expired' THEN
+    -- Subscription פגה
+    IF v_subscription_status = 'expired' THEN
       RETURN FALSE;
     END IF;
-    
-    -- ✅ Check if trial expired (must pay)
-    IF v_profile.subscription_status = 'trial' OR v_profile.is_in_trial THEN
-      IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
-        RETURN FALSE;
-      END IF;
+    -- Cancelled וגרייס פיריוד נגמר
+    IF v_subscription_status = 'cancelled'
+       AND (v_subscription_expires IS NULL
+            OR v_subscription_expires < NOW()) THEN
+      RETURN FALSE;
     END IF;
-    
-    -- ✅ Check cancelled subscription
-    IF v_profile.subscription_status = 'cancelled' THEN
-      IF v_profile.subscription_expires_at IS NULL 
-         OR v_profile.subscription_expires_at < NOW() THEN
-        RETURN FALSE;
-      END IF;
-    END IF;
-    
-    -- ✅ Check monthly trade limit
-    v_limit := 25;
-    v_trades_used := v_profile.monthly_trades;
-    RETURN v_trades_used < v_limit;
+    -- ✅ NULL status = משתמש חדש, webhook לא ירה עדיין — מאפשרים
+    RETURN COALESCE(v_monthly_count, 0) < COALESCE(v_max_trades, 25);
   END IF;
-  
-  -- 🔥 v8.5.0: FREE users get 15 LIFETIME trades (not monthly)
-  IF v_profile.account_type = 'free' OR v_profile.account_type IS NULL THEN
-    RETURN v_profile.lifetime_trades < 15;
-  END IF;
-  
-  -- ✅ Default: treat unknown as free (15 lifetime trades)
-  RETURN v_profile.lifetime_trades < 15;
+
+  RETURN FALSE;
 END;
 $$;
 
-COMMENT ON FUNCTION public.can_create_trade IS 
-'v8.5.0: Checks plan limits. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited. Platform Core/Finotaur supported.';
+COMMENT ON FUNCTION public.can_create_trade(UUID) IS
+'v10.1.0-SAFE: עובד גם לפני WHOP_DB. platform_plan נבדק דינמית. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited.';
 
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
 
--- ═══════════════════════════════════════════════════════════════
--- 📊 get_remaining_trades - Returns remaining trades info
--- ═══════════════════════════════════════════════════════════════
-
-DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.get_remaining_trades(user_id_param UUID)
-RETURNS TABLE (
-  remaining INTEGER,
-  used INTEGER,
-  max_limit INTEGER,
-  can_create BOOLEAN,
-  account_type TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-DECLARE
-  v_profile RECORD;
-  v_limit INTEGER;
-  v_trades_used INTEGER;
-BEGIN
-  -- Get user profile
-  SELECT 
-    p.account_type,
-    p.role,
-    COALESCE(p.current_month_trades_count, 0) as monthly_trades,
-    COALESCE(p.trade_count, 0) as lifetime_trades
-  INTO v_profile
-  FROM public.profiles p
-  WHERE p.id = user_id_param;
-  
-  -- User not found
-  IF NOT FOUND THEN
-    RETURN QUERY SELECT 
-      0::INTEGER as remaining,
-      0::INTEGER as used,
-      10::INTEGER as max_limit,
-      FALSE as can_create,
-      'free'::TEXT as account_type;
-    RETURN;
-  END IF;
-  
-  -- Get limit
-  v_limit := public.get_trade_limit(v_profile.account_type);
-  
-  -- Determine trades used
-  IF v_profile.account_type = 'free' THEN
-    v_trades_used := v_profile.lifetime_trades;
-  ELSE
-    v_trades_used := v_profile.monthly_trades;
-  END IF;
-  
-  -- Admins/Premium = show as unlimited
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type = 'premium' THEN
-    RETURN QUERY SELECT 
-      999999::INTEGER as remaining,
-      v_trades_used::INTEGER as used,
-      999999::INTEGER as max_limit,
-      TRUE as can_create,
-      v_profile.account_type::TEXT;
-    RETURN;
-  END IF;
-  
-  -- Normal users
-  RETURN QUERY SELECT 
-    GREATEST(0, v_limit - v_trades_used)::INTEGER as remaining,
-    v_trades_used::INTEGER as used,
-    v_limit::INTEGER as max_limit,
-    (v_trades_used < v_limit) as can_create,
-    v_profile.account_type::TEXT;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO service_role;
-
-COMMENT ON FUNCTION public.get_remaining_trades IS 
-'v9.4.4: Returns detailed trade limit info for a user including remaining, used, max, and can_create flag.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- ✅ VERIFY FUNCTIONS EXIST

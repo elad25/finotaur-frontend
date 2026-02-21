@@ -232,6 +232,17 @@ export function usePlatformAccess() {
     fetchAccessStatus();
   }, [fetchAccessStatus]);
 
+  // Auto-refetch when tab becomes visible (handles admin grants without re-login)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.id) {
+        fetchAccessStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchAccessStatus, user?.id]);
+
   // ── Check page access ──
   const canAccessPage = useCallback((page: FeaturePage): AccessResult => {
     const accessMap = PAGE_ACCESS[plan] || PAGE_ACCESS.free;

@@ -2183,3 +2183,125 @@ CREATE POLICY "dc_read_auth" ON dashboard_cache
 
 GRANT SELECT ON dashboard_cache TO authenticated;
 GRANT ALL ON dashboard_cache TO service_role;
+
+-- =====================================================
+-- PART 27: INVESTOR PROFILE CACHE
+-- =====================================================
+-- Stored in the EXISTING stock_analyzer_cache table
+-- cache_type = 'investor-profile'
+-- TTL: Until next earnings (same as brief/valuation)
+-- No new table needed — reuses PART 15 infrastructure
+-- =====================================================
+
+DO $$
+BEGIN
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 27: INVESTOR PROFILE CACHE — READY';
+  RAISE NOTICE 'Uses: stock_analyzer_cache (ticker, cache_type=investor-profile)';
+  RAISE NOTICE 'TTL: Until next earnings date';
+  RAISE NOTICE '=====================================================';
+END $$;
+
+-- =====================================================
+-- PART 28: FLOW SCANNER CACHE
+-- =====================================================
+CREATE TABLE IF NOT EXISTS flow_scanner_cache (
+  id              TEXT PRIMARY KEY,
+  ticker          TEXT NOT NULL,
+  company         TEXT,
+  type            TEXT NOT NULL CHECK (type IN ('unusual_volume','institutional','insider','dark_pool','accumulation')),
+  direction       TEXT NOT NULL CHECK (direction IN ('bullish','bearish','neutral')),
+  volume          BIGINT,
+  avg_volume      BIGINT,
+  volume_ratio    NUMERIC(8,2),
+  price           NUMERIC(12,2),
+  change_amount   NUMERIC(10,4),
+  change_percent  NUMERIC(8,4),
+  value           TEXT,
+  signal          TEXT,
+  source          TEXT DEFAULT 'polygon',
+  event_time      TEXT,
+  event_timestamp TIMESTAMPTZ,
+  extra_data      JSONB DEFAULT '{}',
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fsc_ticker    ON flow_scanner_cache(ticker);
+CREATE INDEX IF NOT EXISTS idx_fsc_type      ON flow_scanner_cache(type);
+CREATE INDEX IF NOT EXISTS idx_fsc_direction ON flow_scanner_cache(direction);
+CREATE INDEX IF NOT EXISTS idx_fsc_timestamp ON flow_scanner_cache(event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_fsc_vol_ratio ON flow_scanner_cache(volume_ratio DESC);
+
+CREATE TABLE IF NOT EXISTS flow_scanner_stats_cache (
+  id                    TEXT PRIMARY KEY DEFAULT 'current',
+  unusual_volume_count  INTEGER DEFAULT 0,
+  institutional_count   INTEGER DEFAULT 0,
+  insider_trades_count  INTEGER DEFAULT 0,
+  net_flow              TEXT DEFAULT '—',
+  bullish_count         INTEGER DEFAULT 0,
+  bearish_count         INTEGER DEFAULT 0,
+  neutral_count         INTEGER DEFAULT 0,
+  total_items           INTEGER DEFAULT 0,
+  market_status         TEXT DEFAULT 'closed',
+  computed_at           TIMESTAMPTZ DEFAULT NOW(),
+  data_source           TEXT DEFAULT 'polygon_starter+sec_edgar'
+);
+
+INSERT INTO flow_scanner_stats_cache (id) VALUES ('current')
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS flow_scanner_refresh_log (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  run_at        TIMESTAMPTZ DEFAULT NOW(),
+  status        TEXT DEFAULT 'success' CHECK (status IN ('success','partial','failed')),
+  items_fetched INTEGER DEFAULT 0,
+  items_stored  INTEGER DEFAULT 0,
+  api_calls     INTEGER DEFAULT 0,
+  duration_ms   INTEGER,
+  error_message TEXT,
+  data_source   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_fsr_run_at ON flow_scanner_refresh_log(run_at DESC);
+
+ALTER TABLE flow_scanner_cache        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flow_scanner_stats_cache  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flow_scanner_refresh_log  ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "fsc_service_all"  ON flow_scanner_cache        FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "fssc_service_all" ON flow_scanner_stats_cache  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "fsrl_service_all" ON flow_scanner_refresh_log  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+CREATE POLICY "fsc_read_auth"  ON flow_scanner_cache        FOR SELECT TO authenticated USING (true);
+CREATE POLICY "fssc_read_auth" ON flow_scanner_stats_cache  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "fsrl_read_auth" ON flow_scanner_refresh_log  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "fsc_read_anon"  ON flow_scanner_cache        FOR SELECT TO anon USING (true);
+CREATE POLICY "fssc_read_anon" ON flow_scanner_stats_cache  FOR SELECT TO anon USING (true);
+
+GRANT SELECT ON flow_scanner_cache        TO authenticated, anon;
+GRANT SELECT ON flow_scanner_stats_cache  TO authenticated, anon;
+GRANT SELECT ON flow_scanner_refresh_log  TO authenticated;
+GRANT ALL    ON flow_scanner_cache        TO service_role;
+GRANT ALL    ON flow_scanner_stats_cache  TO service_role;
+GRANT ALL    ON flow_scanner_refresh_log  TO service_role;
+
+CREATE OR REPLACE VIEW flow_scanner_health AS
+SELECT
+  (SELECT COUNT(*) FROM flow_scanner_cache) AS total_cached_items,
+  (SELECT COUNT(*) FROM flow_scanner_cache WHERE event_timestamp > NOW() - INTERVAL '1 hour') AS items_last_hour,
+  (SELECT computed_at FROM flow_scanner_stats_cache WHERE id = 'current') AS last_stats_update,
+  (SELECT status FROM flow_scanner_refresh_log ORDER BY run_at DESC LIMIT 1) AS last_cron_status,
+  (SELECT run_at FROM flow_scanner_refresh_log ORDER BY run_at DESC LIMIT 1) AS last_cron_run;
+
+GRANT SELECT ON flow_scanner_health TO service_role, authenticated;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ PART 28: FLOW SCANNER CACHE COMPLETE';
+  RAISE NOTICE '  • flow_scanner_cache — 24h rolling events';
+  RAISE NOTICE '  • flow_scanner_stats_cache — pre-computed stats';
+  RAISE NOTICE '  • flow_scanner_refresh_log — cron monitoring';
+  RAISE NOTICE 'Monitor: SELECT * FROM flow_scanner_health;';
+END $$;

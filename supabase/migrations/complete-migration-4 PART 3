@@ -3928,7 +3928,7 @@ BEGIN
 END $$;
 
 -- ===============================================
--- 11.1: can_create_trade - עם בדיקת Trial
+-- 11.1: can_create_trade - גרסה סופית (DB_4 בלבד)
 -- ===============================================
 
 DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
@@ -3941,82 +3941,107 @@ STABLE
 SET search_path TO 'public'
 AS $$
 DECLARE
-  v_profile RECORD;
+  v_account_type         TEXT;
+  v_role                 TEXT;
+  v_subscription_status  TEXT;
+  v_is_in_trial          BOOLEAN;
+  v_trial_ends_at        TIMESTAMPTZ;
+  v_subscription_expires TIMESTAMPTZ;
+  v_max_trades           INTEGER;
+  v_monthly_count        INTEGER;
+  v_lifetime_trades      BIGINT;
+  v_platform_plan        TEXT := NULL;
+  v_platform_status      TEXT := NULL;
+  v_has_platform_cols    BOOLEAN;
 BEGIN
+  -- ✅ Check if platform columns exist (added by WHOP_DB)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+      AND table_name = 'profiles' 
+      AND column_name = 'platform_plan'
+  ) INTO v_has_platform_cols;
+
   SELECT 
-    account_type,
-    subscription_status,
-    is_in_trial,
-    trial_ends_at,
-    max_trades,
-    current_month_trades_count,
-    COALESCE(trade_count, 0) as lifetime_trades,
-    platform_plan,
-    platform_subscription_status,
-    role
-  INTO v_profile
+    account_type, role, subscription_status,
+    is_in_trial, trial_ends_at, subscription_expires_at,
+    max_trades, current_month_trades_count
+  INTO 
+    v_account_type, v_role, v_subscription_status,
+    v_is_in_trial, v_trial_ends_at, v_subscription_expires,
+    v_max_trades, v_monthly_count
   FROM public.profiles
   WHERE id = p_user_id;
-  
-  -- User not found
+
   IF NOT FOUND THEN
     RETURN FALSE;
   END IF;
-  
-  -- Admins always can
-  IF v_profile.role IN ('admin', 'super_admin') THEN
-    RETURN TRUE;
+
+  SELECT COUNT(*) INTO v_lifetime_trades
+  FROM public.trades
+  WHERE user_id = p_user_id AND deleted_at IS NULL;
+
+  IF v_has_platform_cols THEN
+    EXECUTE format(
+      'SELECT platform_plan, platform_subscription_status FROM public.profiles WHERE id = %L',
+      p_user_id
+    ) INTO v_platform_plan, v_platform_status;
   END IF;
-  
--- Premium/VIP/Beta always can
-  IF v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
+
+  -- Admins = unlimited
+  IF v_role IN ('admin', 'super_admin') THEN
     RETURN TRUE;
   END IF;
 
-  -- ✅ v8.5.0: Core platform users get Journal Basic (25 trades/month)
-  IF v_profile.account_type = 'free' 
-     AND v_profile.platform_plan IN ('core', 'platform_core')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
-    RETURN COALESCE(v_profile.current_month_trades_count, 0) < 25;
-  END IF;
-
-  -- ✅ v8.5.0: Finotaur/Enterprise platform users get unlimited
-  IF v_profile.platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
-     AND v_profile.platform_subscription_status IN ('active', 'trial', 'trialing') THEN
+  -- Premium/VIP/Beta/Admin/Trial = unlimited
+  IF v_account_type IN ('premium', 'admin', 'vip', 'beta', 'trial') THEN
     RETURN TRUE;
   END IF;
-  
-  -- Check trial expiration
-  IF v_profile.subscription_status = 'trial' OR COALESCE(v_profile.is_in_trial, FALSE) THEN
-    IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
-      RETURN FALSE;  -- Trial expired, must pay
+
+  -- Platform Finotaur/Enterprise = unlimited
+  IF v_platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
+     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
+    RETURN TRUE;
+  END IF;
+
+  -- Platform Core = 50/month
+  IF v_platform_plan IN ('core', 'platform_core')
+     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
+    RETURN COALESCE(v_monthly_count, 0) < 50;
+  END IF;
+
+  -- Free / platform_free / NULL = 15 lifetime
+  IF v_account_type IN ('free', 'platform_free') OR v_account_type IS NULL THEN
+    RETURN COALESCE(v_lifetime_trades, 0) < 15;
+  END IF;
+
+  -- Basic
+  IF v_account_type = 'basic' THEN
+    IF (v_subscription_status = 'trial' OR COALESCE(v_is_in_trial, FALSE))
+       AND v_trial_ends_at IS NOT NULL
+       AND v_trial_ends_at < NOW() THEN
+      RETURN FALSE;
     END IF;
-  END IF;
-  
-  -- Check subscription expiration
-  IF v_profile.subscription_status = 'expired' THEN
-    RETURN FALSE;  -- Must renew
+    IF v_subscription_status = 'expired' THEN
+      RETURN FALSE;
+    END IF;
+    IF v_subscription_status = 'cancelled'
+       AND (v_subscription_expires IS NULL
+            OR v_subscription_expires < NOW()) THEN
+      RETURN FALSE;
+    END IF;
+    RETURN COALESCE(v_monthly_count, 0) < COALESCE(v_max_trades, 25);
   END IF;
 
-  -- ✅ Basic users - check monthly limit
-  IF v_profile.account_type = 'basic' THEN
-    RETURN COALESCE(v_profile.current_month_trades_count, 0) < COALESCE(v_profile.max_trades, 25);
-  END IF;
-
-  -- 🔥 v8.5.0: FREE users get 15 LIFETIME trades
-  IF v_profile.account_type = 'free' OR v_profile.account_type IS NULL THEN
-    RETURN v_profile.lifetime_trades < 15;
-  END IF;
-  
-  -- Default: treat unknown as free (15 lifetime)
-  RETURN v_profile.lifetime_trades < 15;
+  RETURN FALSE;
 END;
 $$;
 
-COMMENT ON FUNCTION public.can_create_trade(UUID) IS 
-'v8.5.0: Checks plan limits. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited. Platform Core/Finotaur supported.';
+COMMENT ON FUNCTION public.can_create_trade(UUID) IS
+'v10.1.0-SAFE: עובד גם לפני WHOP_DB. platform_plan נבדק דינמית. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited.';
 
 GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
 
 -- ===============================================
 -- 11.2: process_expired_trials - מעבד trials שפגו
@@ -4115,8 +4140,8 @@ RETURNS TABLE(
   account_type TEXT,
   can_create BOOLEAN,
   is_in_trial BOOLEAN,
-  trial_ends_at TIMESTAMPTZ,
-  trial_days_remaining INTEGER
+  trial_days_remaining INTEGER,
+  needs_subscription BOOLEAN
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -4125,11 +4150,13 @@ SET search_path TO 'public'
 AS $$
 DECLARE
   v_profile RECORD;
+  v_is_free BOOLEAN;
 BEGIN
   SELECT 
     p.account_type,
     p.max_trades,
     p.current_month_trades_count,
+    p.trade_count,
     p.subscription_status,
     p.is_in_trial,
     p.trial_ends_at,
@@ -4138,38 +4165,68 @@ BEGIN
   FROM public.profiles p
   WHERE p.id = p_user_id;
   
-  -- User not found - return basic defaults
+  -- User not found - return free defaults
   IF NOT FOUND THEN
     RETURN QUERY SELECT 
-      25::INTEGER,
-      0::INTEGER,
-      25::INTEGER,
-      'basic'::TEXT,
-      TRUE::BOOLEAN,
-      FALSE::BOOLEAN,
-      NULL::TIMESTAMPTZ,
-      0::INTEGER;
+      15::INTEGER, 0::INTEGER, 15::INTEGER,
+      'free'::TEXT, FALSE::BOOLEAN, FALSE::BOOLEAN,
+      0::INTEGER, TRUE::BOOLEAN;
     RETURN;
   END IF;
   
-  RETURN QUERY SELECT 
+  -- Admin/Premium/VIP/Beta = unlimited
+  IF v_profile.role IN ('admin', 'super_admin') OR 
+     v_profile.account_type IN ('premium', 'admin', 'vip', 'beta') THEN
+    RETURN QUERY SELECT 
+      999999::INTEGER,
+      COALESCE(v_profile.current_month_trades_count, 0)::INTEGER,
+      999999::INTEGER,
+      v_profile.account_type::TEXT,
+      TRUE::BOOLEAN,
+      COALESCE(v_profile.is_in_trial, FALSE)::BOOLEAN,
+      0::INTEGER,
+      FALSE::BOOLEAN;
+    RETURN;
+  END IF;
+  
+  -- FREE users: lifetime trade_count (never resets)
+  v_is_free := v_profile.account_type IN ('free', 'platform_free') 
+    OR v_profile.account_type IS NULL;
+  
+  IF v_is_free THEN
+    RETURN QUERY SELECT 
+      GREATEST(0, 15 - COALESCE(v_profile.trade_count, 0))::INTEGER,
+      COALESCE(v_profile.trade_count, 0)::INTEGER,
+      15::INTEGER,
+      COALESCE(v_profile.account_type, 'free')::TEXT,
+      (COALESCE(v_profile.trade_count, 0) < 15)::BOOLEAN,
+      FALSE::BOOLEAN,
+      0::INTEGER,
+      FALSE::BOOLEAN;
+    RETURN;
+  END IF;
+  
+  -- Basic/Trial: monthly current_month_trades_count
+  RETURN QUERY SELECT
     GREATEST(0, COALESCE(v_profile.max_trades, 25) - COALESCE(v_profile.current_month_trades_count, 0))::INTEGER,
     COALESCE(v_profile.current_month_trades_count, 0)::INTEGER,
     COALESCE(v_profile.max_trades, 25)::INTEGER,
-    COALESCE(v_profile.account_type, 'basic')::TEXT,
+    v_profile.account_type::TEXT,
     public.can_create_trade(p_user_id)::BOOLEAN,
     COALESCE(v_profile.is_in_trial, FALSE)::BOOLEAN,
-    v_profile.trial_ends_at::TIMESTAMPTZ,
-    CASE 
-      WHEN v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW()
+    CASE WHEN v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at > NOW()
       THEN EXTRACT(DAY FROM (v_profile.trial_ends_at - NOW()))::INTEGER
-      ELSE 0
-    END::INTEGER;
+      ELSE 0 END::INTEGER,
+    (v_profile.subscription_status IS NULL OR 
+     v_profile.subscription_status IN ('expired', 'cancelled'))::BOOLEAN;
 END;
 $$;
 
 COMMENT ON FUNCTION public.get_remaining_trades(UUID) IS 
-'v2.0: Returns remaining trades with trial info. Default is basic (25 trades), not free.';
+'v10.3.0-CANONICAL: Single source of truth. FREE uses trade_count (lifetime, never resets). BASIC uses current_month_trades_count (monthly). Returns needs_subscription flag.';
+
+GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO service_role;
 
 GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
 

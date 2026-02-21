@@ -1097,9 +1097,7 @@ BEGIN
     COALESCE(p.current_month_trades_count, 0)::INTEGER as monthly_trades,
     COALESCE(p.max_trades, public.get_trade_limit(p.account_type))::INTEGER as max_limit,
     CASE 
-      WHEN COALESCE(p.max_trades, 10) = 0 THEN 0
-      WHEN p.account_type = 'free' THEN 
-        ROUND((COALESCE(p.trade_count, 0)::NUMERIC / COALESCE(p.max_trades, 10)) * 100, 1)
+      WHEN COALESCE(p.max_trades, 25) = 0 THEN 0
       ELSE 
         ROUND((COALESCE(p.current_month_trades_count, 0)::NUMERIC / COALESCE(p.max_trades, 25)) * 100, 1)
     END as usage_percent,
@@ -2717,21 +2715,17 @@ END $$;
 DROP POLICY IF EXISTS "trades_insert_own" ON public.trades;
 DROP POLICY IF EXISTS "trades_insert_with_limits" ON public.trades;
 
--- Create new policy with limit enforcement
+-- Create new policy - simple ownership check only
 CREATE POLICY "trades_insert_with_limits"
 ON public.trades
 FOR INSERT
 TO authenticated
 WITH CHECK (
-  -- Must insert own trade
   user_id = auth.uid()
-  AND
-  -- Must be under limit (uses can_create_trade function)
-  (SELECT public.can_create_trade(auth.uid())) = TRUE
 );
 
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
-'v8.5.10: Enforces ownership AND limits. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited';
+'v10.1.0: Simple ownership check only. Trade limits enforced via trigger.';
 
 
 -- ===============================================

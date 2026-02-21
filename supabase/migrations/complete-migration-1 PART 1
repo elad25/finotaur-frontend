@@ -1811,12 +1811,14 @@ LANGUAGE plpgsql
 IMMUTABLE
 AS $$
 BEGIN
-RETURN CASE LOWER(COALESCE(plan_type, 'basic'))
+RETURN CASE LOWER(COALESCE(plan_type, 'free'))
+  WHEN 'free' THEN 15
   WHEN 'basic' THEN 25
   WHEN 'premium' THEN 999999
   WHEN 'admin' THEN 999999
   WHEN 'vip' THEN 999999
-  ELSE 25  -- Default = basic
+  WHEN 'beta' THEN 999999
+  ELSE 15
   END;
 END;
 $$;
@@ -1828,103 +1830,7 @@ COMMENT ON FUNCTION public.get_trade_limit IS
 'v9.4.3: Returns trade limit based on account type. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited.';
 
 -- ═══════════════════════════════════════════════════════════════
--- 🔒 can_create_trade - Checks if user is under their trade limit
--- ═══════════════════════════════════════════════════════════════
 
-DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
-
-
-CREATE OR REPLACE FUNCTION public.can_create_trade(user_id_param UUID)
-RETURNS BOOLEAN 
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-DECLARE
-  v_profile RECORD;
-  v_limit INTEGER;
-  v_trades_used INTEGER;
-BEGIN
-  SELECT 
-    account_type,
-    role,
-    subscription_status,
-    COALESCE(is_in_trial, FALSE) as is_in_trial,
-    trial_ends_at,
-    subscription_expires_at,
-    COALESCE(current_month_trades_count, 0) as monthly_trades
-  INTO v_profile
-  FROM public.profiles
-  WHERE id = user_id_param;
-  
-  IF NOT FOUND THEN
-    RETURN FALSE;
-  END IF;
-  
-  -- Admins = unlimited (by role)
-  IF v_profile.role IN ('admin', 'super_admin') THEN
-    RETURN TRUE;
-  END IF;
-  
-  -- Admin/VIP = unlimited (by account_type)
-  IF v_profile.account_type IN ('admin', 'vip') THEN
-    RETURN TRUE;
-  END IF;
-  
-  -- Premium = unlimited (if subscription active)
-  IF v_profile.account_type = 'premium' THEN
-    IF v_profile.subscription_status IN ('active', 'trial') THEN
-      RETURN TRUE;
-    END IF;
-    IF v_profile.subscription_status IN ('expired', 'cancelled') THEN
-      IF v_profile.subscription_expires_at IS NOT NULL 
-         AND v_profile.subscription_expires_at > NOW() THEN
-        RETURN TRUE;
-      END IF;
-      RETURN FALSE;
-    END IF;
-    RETURN TRUE;
-  END IF;
-  
-  -- Basic users - check subscription status AND limits
-  IF v_profile.account_type = 'basic' THEN
-    -- Check if subscription expired (must pay)
-    IF v_profile.subscription_status = 'expired' THEN
-      RETURN FALSE;
-    END IF;
-    
-    -- Check if trial expired (must pay)
-    IF v_profile.subscription_status = 'trial' OR v_profile.is_in_trial THEN
-      IF v_profile.trial_ends_at IS NOT NULL AND v_profile.trial_ends_at < NOW() THEN
-        RETURN FALSE;
-      END IF;
-    END IF;
-    
-    -- Check cancelled subscription
-    IF v_profile.subscription_status = 'cancelled' THEN
-      IF v_profile.subscription_expires_at IS NULL 
-         OR v_profile.subscription_expires_at < NOW() THEN
-        RETURN FALSE;
-      END IF;
-    END IF;
-    
-    -- Check monthly trade limit
-    v_limit := 25;
-    v_trades_used := v_profile.monthly_trades;
-    RETURN v_trades_used < v_limit;
-  END IF;
-  
-  -- Default: treat unknown as basic trial
-  RETURN v_profile.monthly_trades < 25;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
-
-COMMENT ON FUNCTION public.can_create_trade IS 
-'v9.4.3-SECURE: Checks if user can create a trade based on their plan limits. Used by RLS policy for INSERT enforcement.';
 
 -- ═══════════════════════════════════════════════════════════════
 -- 📊 get_remaining_trades - Returns remaining trades info
@@ -2268,18 +2174,18 @@ USING (
   OR (public.rls_check_admin() AND public.rls_check_admin_mode())
 );
 
--- 🔧 v9.4.3: Uses can_create_trade() which is defined in Section 9.5
+-- 🔧 v10.1.0: Simple ownership check only - limits enforced via trigger in DB2
+-- 🔧 v10.1.0: Simple ownership check - limits enforced via trigger in DB2
 CREATE POLICY "trades_insert_with_limits"
 ON public.trades
 FOR INSERT
 TO authenticated
 WITH CHECK (
   user_id = auth.uid()
-  AND (SELECT public.can_create_trade(auth.uid())) = TRUE
 );
 
 COMMENT ON POLICY "trades_insert_with_limits" ON public.trades IS 
-'v9.4.3: Enforces trade limits via can_create_trade() function. FREE=10 lifetime, BASIC=25/month, PREMIUM=unlimited.';
+'v10.1.0: Simple ownership check only. Trade limits enforced via trigger.';
 
 CREATE POLICY "trades_insert_service_role"
 ON public.trades

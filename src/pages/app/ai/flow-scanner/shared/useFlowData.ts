@@ -1,6 +1,5 @@
 // =====================================================
-// 🔁 FLOW SCANNER - useFlowData Hook
-// Handles: initial load, auto-refresh, cache, stale states
+// 🔁 FLOW SCANNER — useFlowData Hook v2
 // =====================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -28,45 +27,34 @@ const DEFAULT_STATE: FlowDataState = {
   error: null,
 };
 
-/**
- * useFlowData
- * - Loads all data in one parallel batch on mount
- * - Auto-refreshes every 30s (CACHE_TTL.FLOW_DATA)
- * - Uses client-side cache to skip redundant server hits
- * - Exposes manual refresh for the Refresh button
- */
 export function useFlowData() {
   const [state, setState] = useState<FlowDataState>(DEFAULT_STATE);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mountedRef = useRef(true);
+  const mountedRef  = useRef(true);
 
   const load = useCallback(async (isRefresh = false) => {
     if (!mountedRef.current) return;
-
     setState(prev => ({
       ...prev,
-      isLoading: !isRefresh && prev.flowData.length === 0,
+      isLoading:    !isRefresh && prev.flowData.length === 0,
       isRefreshing: isRefresh,
       error: null,
     }));
-
     try {
       const result = await fetchAllFlowData();
       if (!mountedRef.current) return;
       setState(prev => ({
         ...prev,
-        flowData: result.flowData,
-        sectorData: result.sectorData,
-        stats: result.stats,
-        isLoading: false,
+        ...result,
+        isLoading:    false,
         isRefreshing: false,
-        lastUpdated: new Date(),
+        lastUpdated:  new Date(),
       }));
-    } catch (err) {
+    } catch {
       if (!mountedRef.current) return;
       setState(prev => ({
         ...prev,
-        isLoading: false,
+        isLoading:    false,
         isRefreshing: false,
         error: 'Failed to load flow data',
       }));
@@ -78,14 +66,10 @@ export function useFlowData() {
     load(true);
   }, [load]);
 
-  // Initial load
   useEffect(() => {
     mountedRef.current = true;
     load(false);
-
-    // Auto-refresh every 30s — cache handles deduplication across tabs
     intervalRef.current = setInterval(() => load(true), CACHE_TTL.FLOW_DATA);
-
     return () => {
       mountedRef.current = false;
       if (intervalRef.current) clearInterval(intervalRef.current);
