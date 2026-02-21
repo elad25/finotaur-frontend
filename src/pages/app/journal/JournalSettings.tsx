@@ -9,6 +9,7 @@ import { formatNumber } from "@/utils/smartCalc";
 
 // 🔥 OPTIMIZED HOOKS
 import { useUserProfile, getPlanDisplay, getNextBillingDate } from "@/hooks/useUserProfile";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useRiskSettings } from "@/hooks/useRiskSettings";
 import { useCommissionSettings } from "@/hooks/useCommissionSettings";
 import { useTrades, useTradeStats } from "@/hooks/useTradesData";
@@ -1075,6 +1076,8 @@ export default function JournalSettings() {
   
   // 🚀 OPTIMIZED HOOKS - All using React Query
   const { profile, isLoading: profileLoading } = useUserProfile();
+  // 🔥 SYNC FIX: Use subscription for live trade counts (updates after each trade)
+  const { limits, isFreeJournal, isUnlimitedUser } = useSubscription();
   const { settings: riskSettings, oneR, loading: riskLoading } = useRiskSettings();
   const { commissions, updateCommission, updateCommissionType, saveSettings: saveCommissionsSettings } = useCommissionSettings();
   const { data: trades = [] } = useTrades(); // Pre-cached for export
@@ -1657,16 +1660,16 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
               </div>
             )}
 
-            {/* 🔥 v8.5.0: Trade Limits Display */}
+            {/* 🔥 v10.3.0: Trade Limits Display - uses live subscription data */}
             <div className="flex items-center justify-between py-4 border-t border-zinc-800">
               <div>
                 <label className="text-sm font-medium text-zinc-300">
-                  {profile?.account_type === 'free' || !profile?.account_type ? 'Lifetime trades used' : 'Monthly trades used'}
+                  {isFreeJournal ? 'Lifetime trades used' : 'Monthly trades used'}
                 </label>
                 <p className="text-xs text-zinc-500 mt-1">
-                  {profile?.account_type === 'free' || !profile?.account_type
+                  {isFreeJournal
                     ? 'Free tier: 15 trades total (never resets)'
-                    : profile?.max_trades === 999999 
+                    : isUnlimitedUser
                       ? 'Unlimited trades with your plan'
                       : 'Resets each billing cycle'
                   }
@@ -1674,36 +1677,33 @@ will {!profile.pending_downgrade_plan || profile.pending_downgrade_plan === 'can
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-zinc-300">
-                  {profile?.account_type === 'free' || !profile?.account_type
-                    ? `${profile?.trade_count || 0} / 15`
-                    : `${profile?.current_month_trades_count || 0} / ${profile?.max_trades === 999999 ? '∞' : profile?.max_trades || 15}`
+                  {isFreeJournal
+                    ? `${limits?.trade_count || 0} / 15`
+                    : isUnlimitedUser
+                      ? '∞ / ∞'
+                      : `${limits?.current_month_trades_count || 0} / ${limits?.max_trades || 25}`
                   }
                 </span>
                 {/* Progress indicator */}
                 <div className="w-24 h-2 rounded-full bg-zinc-800 overflow-hidden">
                   <div 
-                    className={`h-full rounded-full transition-all ${
-                      (() => {
-                        const used = profile?.account_type === 'free' || !profile?.account_type
-                          ? (profile?.trade_count || 0)
-                          : (profile?.current_month_trades_count || 0);
-                        const max = profile?.account_type === 'free' || !profile?.account_type
-                          ? 15
-                          : (profile?.max_trades === 999999 ? 100 : (profile?.max_trades || 15));
-                        const pct = max > 0 ? (used / max) * 100 : 0;
-                        return pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
-                      })()
-                    }`}
+                    className={`h-full rounded-full transition-all ${(() => {
+                      if (isUnlimitedUser) return 'bg-emerald-500';
+                      const used = isFreeJournal
+                        ? (limits?.trade_count || 0)
+                        : (limits?.current_month_trades_count || 0);
+                      const max = isFreeJournal ? 15 : (limits?.max_trades || 25);
+                      const pct = max > 0 ? (used / max) * 100 : 0;
+                      return pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500';
+                    })()}`}
                     style={{ 
-                      width: `${Math.min(100, (() => {
-                        const used = profile?.account_type === 'free' || !profile?.account_type
-                          ? (profile?.trade_count || 0)
-                          : (profile?.current_month_trades_count || 0);
-                        const max = profile?.account_type === 'free' || !profile?.account_type
-                          ? 15
-                          : (profile?.max_trades === 999999 ? 100 : (profile?.max_trades || 15));
+                      width: isUnlimitedUser ? '100%' : `${Math.min(100, (() => {
+                        const used = isFreeJournal
+                          ? (limits?.trade_count || 0)
+                          : (limits?.current_month_trades_count || 0);
+                        const max = isFreeJournal ? 15 : (limits?.max_trades || 25);
                         return max > 0 ? (used / max) * 100 : 0;
-                      })())}%` 
+                      })())}%`
                     }}
                   />
                 </div>
