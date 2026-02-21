@@ -925,17 +925,19 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
       <Card>
         <div className="p-6">
           <SectionHeader icon={TrendingUp} title="Return on Capital" subtitle="Green zone = Good range for sector" />
-<div className="flex justify-around w-full">
-  <div style={{ width: 200, flexShrink: 0 }}>
-    <ROCCircle label="ROE" value={data.roe} benchmark={15} />
-  </div>
-  <div style={{ width: 200, flexShrink: 0 }}>
-    <ROCCircle label="ROA" value={data.roa} benchmark={8} />
-  </div>
-  <div style={{ width: 200, flexShrink: 0 }}>
-    <ROCCircle label="ROIC" value={data.roic} benchmark={12} />
-  </div>
-</div>
+          <div className="w-full overflow-x-auto">
+            <div className="flex justify-around w-full min-w-[480px]">
+              <div className="flex-1 min-w-[160px] max-w-[220px]">
+                <ROCCircle label="ROE" value={data.roe} benchmark={15} />
+              </div>
+              <div className="flex-1 min-w-[160px] max-w-[220px]">
+                <ROCCircle label="ROA" value={data.roa} benchmark={8} />
+              </div>
+              <div className="flex-1 min-w-[160px] max-w-[220px]">
+                <ROCCircle label="ROIC" value={data.roic} benchmark={12} />
+              </div>
+            </div>
+          </div>
         </div>
       </Card>
 

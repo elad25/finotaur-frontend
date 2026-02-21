@@ -1,5 +1,6 @@
 // =====================================================
 // 📊 FLOW SCANNER - Stats & Tab Navigation
+// Luxury card style — colored icon badges, gradient bg
 // =====================================================
 
 import { memo } from 'react';
@@ -11,43 +12,145 @@ import { TABS } from '../shared/constants';
 import { Card } from '../shared/Ui';
 
 // =====================================================
-// Quick Stat Card
+// Quick Stat Card — Luxury Style
 // =====================================================
 
 const STAT_META = [
-  { key: 'unusualVolume', label: 'Unusual Volume', sublabel: 'stocks today', icon: Activity, color: '#F59E0B' },
-  { key: 'institutional',  label: 'Institutional',  sublabel: '13F changes',  icon: Building,  color: '#3B82F6' },
-  { key: 'insiderTrades',  label: 'Insider Trades', sublabel: 'last 24h',     icon: Users,     color: '#A855F7' },
-  { key: 'netFlow',        label: 'Net Flow',        sublabel: 'market inflow', icon: DollarSign, color: '#22C55E' },
+  {
+    key: 'unusualVolume',
+    label: 'Unusual Volume',
+    sublabel: 'stocks today',
+    icon: Activity,
+    // Icon badge: teal/cyan circle
+    iconBg: 'rgba(6, 182, 212, 0.15)',
+    iconBorder: 'rgba(6, 182, 212, 0.3)',
+    iconColor: '#06B6D4',
+    // Card accent glow at bottom
+    glowColor: 'rgba(6, 182, 212, 0.12)',
+    // Value color
+    valueColor: '#ffffff',
+  },
+  {
+    key: 'institutional',
+    label: 'Institutional',
+    sublabel: '13F changes',
+    icon: Building,
+    iconBg: 'rgba(34, 197, 94, 0.15)',
+    iconBorder: 'rgba(34, 197, 94, 0.3)',
+    iconColor: '#22C55E',
+    glowColor: 'rgba(34, 197, 94, 0.12)',
+    valueColor: '#ffffff',
+  },
+  {
+    key: 'insiderTrades',
+    label: 'Insider Trades',
+    sublabel: 'last 24h',
+    icon: Users,
+    iconBg: 'rgba(234, 179, 8, 0.15)',
+    iconBorder: 'rgba(234, 179, 8, 0.3)',
+    iconColor: '#EAB308',
+    glowColor: 'rgba(234, 179, 8, 0.12)',
+    valueColor: '#ffffff',
+  },
+  {
+    key: 'netFlow',
+    label: 'Net Flow',
+    sublabel: 'market inflow',
+    icon: DollarSign,
+    iconBg: 'rgba(168, 85, 247, 0.15)',
+    iconBorder: 'rgba(168, 85, 247, 0.3)',
+    iconColor: '#A855F7',
+    glowColor: 'rgba(168, 85, 247, 0.12)',
+    valueColor: '#22C55E', // net flow always green
+  },
 ] as const;
 
 const QuickStatCard = memo(({ meta, value, index }: {
   meta: typeof STAT_META[number];
   value: string | number;
   index: number;
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: index * 0.1 }}
-  >
-    <Card>
-      <div className="relative p-5">
-        <div className="absolute top-0 left-0 right-0 h-[2px]"
-          style={{ background: `linear-gradient(90deg, ${meta.color}, ${meta.color}50)` }} />
-        <div className="flex items-center gap-2 mb-3">
-          <meta.icon className="h-4 w-4" style={{ color: meta.color }} />
-          <span className="text-xs text-[#8B8B8B] uppercase tracking-wider">{meta.label}</span>
+}) => {
+  const Icon = meta.icon;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.08, ease: 'easeOut' }}
+      className="relative group"
+    >
+      {/* Card shell */}
+      <div
+        className="relative overflow-hidden rounded-2xl p-5 h-full transition-all duration-300 group-hover:translate-y-[-2px]"
+        style={{
+          background: 'linear-gradient(145deg, rgba(18,18,22,0.95) 0%, rgba(12,12,16,0.98) 100%)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+        }}
+      >
+        {/* Bottom glow accent — matches icon color */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-[2px] transition-opacity duration-300 group-hover:opacity-100"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${meta.iconColor}, transparent)`,
+            opacity: 0.6,
+          }}
+        />
+
+        {/* Subtle corner radial glow */}
+        <div
+          className="absolute bottom-0 right-0 w-32 h-32 rounded-full blur-3xl pointer-events-none"
+          style={{ background: meta.glowColor }}
+        />
+
+        {/* Header: label + icon badge */}
+        <div className="flex items-center justify-between mb-4">
+          <span
+            className="text-[11px] font-semibold uppercase tracking-[0.12em]"
+            style={{ color: 'rgba(160,160,180,0.7)' }}
+          >
+            {meta.label}
+          </span>
+
+          {/* Circular icon badge */}
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{
+              background: meta.iconBg,
+              border: `1px solid ${meta.iconBorder}`,
+              boxShadow: `0 0 12px ${meta.iconColor}20`,
+            }}
+          >
+            <Icon className="h-4 w-4" style={{ color: meta.iconColor }} />
+          </div>
         </div>
-        <div className="text-3xl font-bold mb-1"
-          style={{ color: meta.color === '#22C55E' ? meta.color : '#fff' }}>
+
+        {/* Value */}
+        <div
+          className="text-[2rem] font-bold leading-none mb-2 tabular-nums"
+          style={{
+            color: meta.valueColor,
+            textShadow: meta.valueColor !== '#ffffff'
+              ? `0 0 20px ${meta.valueColor}50`
+              : undefined,
+          }}
+        >
           {value}
         </div>
-        <div className="text-xs text-[#6B6B6B]">{meta.sublabel}</div>
+
+        {/* Sublabel */}
+        <div
+          className="text-xs font-medium"
+          style={{ color: 'rgba(120,120,140,0.8)' }}
+        >
+          {meta.sublabel}
+        </div>
       </div>
-    </Card>
-  </motion.div>
-));
+    </motion.div>
+  );
+});
+
+QuickStatCard.displayName = 'QuickStatCard';
 
 export const QuickStats = memo(({ stats }: { stats: FlowStats }) => (
   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -61,6 +164,8 @@ export const QuickStats = memo(({ stats }: { stats: FlowStats }) => (
     ))}
   </div>
 ));
+
+QuickStats.displayName = 'QuickStats';
 
 // =====================================================
 // Tab Navigation
@@ -100,3 +205,5 @@ export const TabNav = memo(({ activeTab, onTabChange }: {
     })}
   </div>
 ));
+
+TabNav.displayName = 'TabNav';

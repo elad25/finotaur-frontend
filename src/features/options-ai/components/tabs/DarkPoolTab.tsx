@@ -451,71 +451,114 @@ export const DarkPoolTab = memo(function DarkPoolTab() {
 
       {/* ── Top Metrics — Daily Cumulative ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <div className="relative p-5">
-            <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #8B5CF6, #A78BFA)' }} />
-            <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-2">Daily Volume</div>
-            <div className="text-2xl md:text-3xl font-bold text-[#8B5CF6] mb-0.5">
-              {summary?.totalNotionalFmt || '—'}
-            </div>
-            <div className="text-[10px] text-[#6B6B6B]">
-              {data?.meta?.totalBlocks || summary?.tradeCount || 0} blocks · {data?.meta?.uniqueSymbols || 0} symbols
+
+        {/* Daily Volume */}
+        <div
+          className="relative p-5 rounded-2xl"
+          style={{
+            background: 'linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(13,11,8,0.95) 70%)',
+            border: '1px solid rgba(139,92,246,0.2)',
+          }}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-[10px] text-[#6B6B6B] uppercase tracking-widest font-semibold">Daily Volume</span>
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)' }}
+            >
+              <Activity className="w-4 h-4" style={{ color: '#8B5CF6' }} />
             </div>
           </div>
-        </Card>
+          <div className="text-[1.6rem] font-semibold leading-none mb-1.5 text-white">
+            {summary?.totalNotionalFmt || '—'}
+          </div>
+          <div className="text-[10px] text-[#6B6B6B]">
+            {data?.meta?.totalBlocks || summary?.tradeCount || 0} blocks · {data?.meta?.uniqueSymbols || 0} symbols
+          </div>
+        </div>
 
-        <Card>
-          <div className="relative p-5">
+        {/* Flow Bias */}
+        {(() => {
+          const isBull = summary ? summary.buyPct > summary.sellPct : false;
+          const isNeutral = summary ? summary.buyPct === summary.sellPct : true;
+          const biasColor = isNeutral ? '#8B8B8B' : isBull ? '#22C55E' : '#EF4444';
+          const biasLabel = summary
+            ? isBull ? 'BULLISH' : summary.sellPct > summary.buyPct ? 'BEARISH' : 'NEUTRAL'
+            : '—';
+          const BiasIcon = isBull ? TrendingUp : TrendingDown;
+          return (
             <div
-              className="absolute top-0 left-0 right-0 h-[2px]"
+              className="relative p-5 rounded-2xl"
               style={{
-                background: summary && summary.buyPct > summary.sellPct
-                  ? 'linear-gradient(90deg, #22C55E, #34D399)'
-                  : 'linear-gradient(90deg, #EF4444, #F87171)',
-              }}
-            />
-            <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-2">Flow Bias</div>
-            <div
-              className="text-2xl md:text-3xl font-bold mb-0.5"
-              style={{
-                color: summary && summary.buyPct > summary.sellPct ? '#22C55E' : '#EF4444',
+                background: `linear-gradient(135deg, ${biasColor}1A 0%, rgba(13,11,8,0.95) 70%)`,
+                border: `1px solid ${biasColor}33`,
               }}
             >
-              {summary
-                ? summary.buyPct > summary.sellPct
-                  ? 'BULLISH'
-                  : summary.sellPct > summary.buyPct
-                    ? 'BEARISH'
-                    : 'NEUTRAL'
-                : '—'}
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-[10px] text-[#6B6B6B] uppercase tracking-widest font-semibold">Flow Bias</span>
+                <div
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: `${biasColor}26`, border: `1px solid ${biasColor}40` }}
+                >
+                  <BiasIcon className="w-4 h-4" style={{ color: biasColor }} />
+                </div>
+              </div>
+              <div className="text-[1.6rem] font-semibold leading-none mb-1.5 text-white">
+                {biasLabel}
+              </div>
+              <div className="text-[10px] text-[#6B6B6B]">
+                {summary?.buyPct || 0}% buy · {summary?.sellPct || 0}% sell
+              </div>
             </div>
-            <div className="text-[10px] text-[#6B6B6B]">
-              {summary?.buyPct || 0}% buy · {summary?.sellPct || 0}% sell
-            </div>
-          </div>
-        </Card>
+          );
+        })()}
 
-        <Card>
-          <div className="relative p-5">
-            <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #C9A646, #F4D97B)' }} />
-            <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-2">Top Symbol</div>
-            <div className="text-2xl md:text-3xl font-bold text-[#C9A646] mb-0.5">
-              {summary?.topSymbol || '—'}
+        {/* Top Symbol */}
+        <div
+          className="relative p-5 rounded-2xl"
+          style={{
+            background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(13,11,8,0.95) 70%)',
+            border: '1px solid rgba(201,166,70,0.2)',
+          }}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-[10px] text-[#6B6B6B] uppercase tracking-widest font-semibold">Top Symbol</span>
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.3)' }}
+            >
+              <Eye className="w-4 h-4" style={{ color: '#C9A646' }} />
             </div>
-            <div className="text-[10px] text-[#6B6B6B]">{summary?.topSymbolNotional || '$0'} notional</div>
           </div>
-        </Card>
+          <div className="text-[1.6rem] font-semibold leading-none mb-1.5 text-white">
+            {summary?.topSymbol || '—'}
+          </div>
+          <div className="text-[10px] text-[#6B6B6B]">{summary?.topSymbolNotional || '$0'} notional</div>
+        </div>
 
-        <Card>
-          <div className="relative p-5">
-            <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: 'linear-gradient(90deg, #F59E0B, #FBBF24)' }} />
-            <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-2">Avg Trade</div>
-            <div className="text-2xl md:text-3xl font-bold text-[#F59E0B] mb-0.5">
-              {summary?.avgTradeSize || '—'}
+        {/* Avg Trade */}
+        <div
+          className="relative p-5 rounded-2xl"
+          style={{
+            background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(13,11,8,0.95) 70%)',
+            border: '1px solid rgba(245,158,11,0.2)',
+          }}
+        >
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-[10px] text-[#6B6B6B] uppercase tracking-widest font-semibold">Avg Trade</span>
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)' }}
+            >
+              <ArrowUpRight className="w-4 h-4" style={{ color: '#F59E0B' }} />
             </div>
-            <div className="text-[10px] text-[#6B6B6B]">per asset today</div>
           </div>
-        </Card>
+          <div className="text-[1.6rem] font-semibold leading-none mb-1.5 text-white">
+            {summary?.avgTradeSize || '—'}
+          </div>
+          <div className="text-[10px] text-[#6B6B6B]">per asset today</div>
+        </div>
+
       </div>
 
       {/* ── Main Content Card — Live Feed Only ── */}

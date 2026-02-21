@@ -274,7 +274,7 @@ const pct = displayPct;
 
   return (
     <div className="flex flex-col items-center w-full">
-      <div className="relative w-full" style={{ maxWidth: W, height: 95 }}>
+      <div className="relative w-full overflow-visible" style={{ maxWidth: W, height: 110 }}>
 
         {/* Ambient radial glow — only when there's a value */}
         {hasValue && (
@@ -294,8 +294,8 @@ const pct = displayPct;
 
 <svg
   width="100%"
-  height={95}
-  viewBox={`${-PAD} -8 ${W + PAD * 2} 108`}
+  height={110}
+  viewBox={`${-PAD} -12 ${W + PAD * 2} 116`}
   className="relative"
   preserveAspectRatio="xMidYMid meet"
   style={{ overflow: 'visible' }}
@@ -450,7 +450,7 @@ const pct = displayPct;
         </svg>
 
         {/* Center value display */}
-        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 4, textAlign: 'center' }}>
+        <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 8, textAlign: 'center' }}>
           <span
             className="font-mono font-black leading-none"
             style={{

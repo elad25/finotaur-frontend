@@ -28,23 +28,53 @@ interface DailyPnLData {
   pnl: number;
 }
 
-interface DailyPnLChartProps {
-  data: DailyPnLData[];
+interface RawTrade {
+  open_at: string;
+  pnl: number | null;
 }
 
-const DailyPnLChart = React.memo(({ data }: DailyPnLChartProps) => {
-  // ✅ Optimize data for large datasets
+interface DailyPnLChartProps {
+  data: DailyPnLData[];
+  trades?: RawTrade[];
+}
+
+const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
+  // 🔥 FIX: Group by open_at (actual trade date) when trades provided
+  // Fallback to equitySeries data (grouped by close_at) if no trades
   const optimizedData = useMemo(() => {
+    // ✅ Priority: use raw trades grouped by open_at
+    if (trades && trades.length > 0) {
+      const grouped = new Map<string, { date: string; pnl: number; equity: number }>();
+
+      trades.forEach(trade => {
+        if (!trade.open_at || trade.pnl == null) return;
+        const d = new Date(trade.open_at);
+        const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (!grouped.has(key)) {
+          grouped.set(key, { date: key, pnl: 0, equity: 0 });
+        }
+        grouped.get(key)!.pnl += trade.pnl;
+      });
+
+      const sorted = Array.from(grouped.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      if (sorted.length > 100) {
+        const step = Math.ceil(sorted.length / 100);
+        return sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
+      }
+      return sorted;
+    }
+
+    // Fallback to equitySeries
     if (!data || data.length === 0) return [];
-    
-    // If more than 100 bars, downsample
     if (data.length > 100) {
       const step = Math.ceil(data.length / 100);
       return data.filter((_, index) => index % step === 0);
     }
-    
     return data;
-  }, [data]);
+  }, [trades, data]);
   
   // ✅ Empty state
   if (!data || data.length === 0) {

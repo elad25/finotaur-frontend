@@ -242,6 +242,114 @@ const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
 
 MemoizedAreaChart.displayName = 'MemoizedAreaChart';
 
+// ================================================
+// 🔥 NEW: Trades Area Chart - shows trade count per day
+// with per-trade PnL on hover
+// ================================================
+interface TradesChartDataPoint {
+  date: string;
+  dateDisplay: string;
+  tradeCount: number;
+  trades: Array<{ symbol: string; pnl: number; outcome: string; avgR: number | null }>;
+  totalPnL: number;
+  wins: number;
+  losses: number;
+}
+
+const CustomTradesChartTooltip = memo(({ active, payload, label }: any) => {
+  if (!active || !payload || !payload.length) return null;
+  const d: TradesChartDataPoint = payload[0]?.payload;
+  if (!d) return null;
+
+  return (
+    <div
+      style={{
+        backgroundColor: '#0f0f11',
+        border: '1px solid rgba(201,166,70,0.3)',
+        borderRadius: '10px',
+        padding: '12px 14px',
+        minWidth: '200px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      }}
+    >
+      <div className="text-xs text-zinc-400 uppercase tracking-wider mb-2 font-semibold">{label}</div>
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-yellow-400 font-bold text-base">{d.tradeCount} Trades</span>
+        <span className={`text-sm font-semibold ${d.totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          {d.totalPnL >= 0 ? '+' : ''}${formatNumber(d.totalPnL, 0)}
+        </span>
+      </div>
+      {d.trades.length > 0 && (
+        <div className="space-y-1 border-t border-zinc-800 pt-2">
+          {d.trades.slice(0, 6).map((t, i) => (
+            <div key={i} className="flex items-center justify-between gap-4 text-xs">
+              <span className="text-zinc-300 font-medium truncate max-w-[80px]">{t.symbol || '—'}</span>
+              <span className={`font-semibold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {t.pnl >= 0 ? '+' : ''}${formatNumber(t.pnl, 0)}
+              </span>
+              {t.avgR !== null && t.avgR !== 0 && (
+                <span className={`text-[10px] ${t.avgR >= 0 ? 'text-emerald-400/70' : 'text-red-400/70'}`}>
+                  {t.avgR >= 0 ? '+' : ''}{t.avgR.toFixed(1)}R
+                </span>
+              )}
+            </div>
+          ))}
+          {d.trades.length > 6 && (
+            <div className="text-[10px] text-zinc-500 text-center pt-1">+{d.trades.length - 6} more</div>
+          )}
+        </div>
+      )}
+      <div className="flex gap-3 mt-2 pt-2 border-t border-zinc-800">
+        <span className="text-[10px] text-emerald-400">{d.wins}W</span>
+        <span className="text-[10px] text-red-400">{d.losses}L</span>
+        <span className="text-[10px] text-zinc-500">{d.tradeCount - d.wins - d.losses} BE/Open</span>
+      </div>
+    </div>
+  );
+});
+CustomTradesChartTooltip.displayName = 'CustomTradesChartTooltip';
+
+const MemoizedTradesChart = memo(({ data }: { data: TradesChartDataPoint[] }) => (
+  <ResponsiveContainer width="100%" height={280}>
+    <AreaChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+      <defs>
+        <linearGradient id="colorTrades" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="5%" stopColor="#C9A646" stopOpacity={0.35}/>
+          <stop offset="95%" stopColor="#C9A646" stopOpacity={0.02}/>
+        </linearGradient>
+      </defs>
+      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+      <XAxis
+        dataKey="dateDisplay"
+        stroke="#52525b"
+        style={{ fontSize: '11px' }}
+        tick={{ fill: '#a1a1aa' }}
+      />
+      <YAxis
+        stroke="#52525b"
+        style={{ fontSize: '11px' }}
+        tick={{ fill: '#a1a1aa' }}
+        allowDecimals={false}
+        tickFormatter={(v) => `${v}`}
+        width={28}
+      />
+      <RechartsTooltip content={<CustomTradesChartTooltip />} />
+      <Area
+        type="monotone"
+        dataKey="tradeCount"
+        stroke="#C9A646"
+        strokeWidth={2.5}
+        fill="url(#colorTrades)"
+        dot={{ r: 3, fill: '#C9A646', strokeWidth: 0 }}
+        activeDot={{ r: 5, fill: '#C9A646', strokeWidth: 2, stroke: '#fff' }}
+        animationDuration={800}
+        animationEasing="ease-out"
+      />
+    </AreaChart>
+  </ResponsiveContainer>
+));
+MemoizedTradesChart.displayName = 'MemoizedTradesChart';
+
 const MemoizedRadarChart = memo(({ data }: { data: any[] }) => (
   <ResponsiveContainer width="100%" height={240}>
     <RadarChart data={data}>
@@ -298,6 +406,10 @@ export default function JournalCalendar() {
   // Date navigation
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
+  const [showDateRangePicker, setShowDateRangePicker] = useState(false);
+  const [dateRangeStart, setDateRangeStart] = useState<string>("");
+  const [dateRangeEnd, setDateRangeEnd] = useState<string>("");
+  const [isCustomRange, setIsCustomRange] = useState(false);
   
   // Filters
   const [filterStrategy, setFilterStrategy] = useState<string>("all");
@@ -348,11 +460,29 @@ export default function JournalCalendar() {
   // 🚀 MEMOIZED CALCULATIONS
   // ================================================
 
+  // 🔥 Active trades filtered by custom date range or current month
+  const activeTrades = useMemo(() => {
+    if (isCustomRange && dateRangeStart && dateRangeEnd) {
+      const start = new Date(dateRangeStart);
+      const end = new Date(dateRangeEnd);
+      end.setHours(23, 59, 59, 999);
+      return trades.filter(t => {
+        const d = new Date(t.open_at);
+        return d >= start && d <= end;
+      });
+    }
+    return trades.filter(t => {
+      const d = new Date(t.open_at);
+      return d.getMonth() === currentDate.getMonth() &&
+             d.getFullYear() === currentDate.getFullYear();
+    });
+  }, [trades, isCustomRange, dateRangeStart, dateRangeEnd, currentDate]);
+
   // 🔥 Process trades with proper data (using same logic as MyTrades)
   const dayDataMap = useMemo(() => {
     const map = new Map<string, DayData>();
     
-    trades.forEach(trade => {
+    activeTrades.forEach(trade => {
       const date = getLocalDateString(new Date(trade.open_at));
       
       if (!map.has(date)) {
@@ -429,17 +559,13 @@ export default function JournalCalendar() {
     });
     
     return map;
-  }, [trades, filterStrategy, filterSession, filterResult, oneR]);
+  }, [activeTrades, filterStrategy, filterSession, filterResult, oneR]);
 
   // 🔥 Month statistics with proper R calculation
   const monthStats = useMemo((): MonthStats => {
-    const monthTrades = trades.filter(trade => {
-      const tradeDate = new Date(trade.open_at);
-      return tradeDate.getMonth() === currentDate.getMonth() &&
-             tradeDate.getFullYear() === currentDate.getFullYear();
-    });
+    const monthTrades = activeTrades;
     
-const closedTrades = monthTrades.filter(isTradeClosed);
+    const closedTrades = monthTrades.filter(isTradeClosed);
     const wins = closedTrades.filter(t => t.outcome === "WIN");
     const losses = closedTrades.filter(t => t.outcome === "LOSS");
     
@@ -491,7 +617,7 @@ const closedTrades = monthTrades.filter(isTradeClosed);
       totalTrades: closedTrades.length,
       emotionalStability,
     };
-  }, [trades, currentDate, oneR]);
+  }, [activeTrades, oneR]);
 
   // Calculate Finotaur Score
   const finotaurScore = useMemo(() => {
@@ -530,12 +656,9 @@ const closedTrades = monthTrades.filter(isTradeClosed);
   
   // Cumulative P&L data with actual R
   const cumulativePnLData = useMemo(() => {
-const monthTrades = trades.filter(trade => {
-      const tradeDate = new Date(trade.open_at);
-      return tradeDate.getMonth() === currentDate.getMonth() &&
-             tradeDate.getFullYear() === currentDate.getFullYear() &&
-             isTradeClosed(trade);
-    }).sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
+    const monthTrades = activeTrades
+      .filter(isTradeClosed)
+      .sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
     
     let cumulative = 0;
     const data: Array<{
@@ -594,7 +717,7 @@ const monthTrades = trades.filter(trade => {
     });
     
     return data;
-  }, [trades, currentDate, oneR]);
+  }, [activeTrades, oneR]);
   
   // Radar data
   const radarData = useMemo(() => {
@@ -630,71 +753,83 @@ const monthTrades = trades.filter(trade => {
   // AI-generated monthly summary
   const aiMonthlySummary = useMemo(() => {
     const tradedDays = new Set(
-      trades
-        .filter(t => {
-          const d = new Date(t.open_at);
-          return d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
-        })
-        .map(t => getLocalDateString(new Date(t.open_at)))
+      activeTrades.map(t => getLocalDateString(new Date(t.open_at)))
     ).size;
     
     // Find best day of week
     const dayOfWeekPnL = new Map<string, number>();
-    trades.forEach(t => {
+    activeTrades.forEach(t => {
       if (!t.exit_price) return;
-      const date = new Date(t.open_at);
-      if (date.getMonth() !== currentDate.getMonth()) return;
-      
-      const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-      const current = dayOfWeekPnL.get(dayName) || 0;
-      dayOfWeekPnL.set(dayName, current + (t.pnl || 0));
+      const dayName = new Date(t.open_at).toLocaleDateString('en-US', { weekday: 'long' });
+      dayOfWeekPnL.set(dayName, (dayOfWeekPnL.get(dayName) || 0) + (t.pnl || 0));
     });
     
     let bestDay = 'weekdays';
     let bestPnL = -Infinity;
     dayOfWeekPnL.forEach((pnl, day) => {
-      if (pnl > bestPnL) {
-        bestPnL = pnl;
-        bestDay = day + 's';
-      }
+      if (pnl > bestPnL) { bestPnL = pnl; bestDay = day + 's'; }
     });
     
     // Find best session
     const sessionPnL = new Map<string, number>();
-    trades.forEach(t => {
+    activeTrades.forEach(t => {
       if (!t.exit_price || !t.session) return;
-      const date = new Date(t.open_at);
-      if (date.getMonth() !== currentDate.getMonth()) return;
-      
-      const current = sessionPnL.get(t.session) || 0;
-      sessionPnL.set(t.session, current + (t.pnl || 0));
+      sessionPnL.set(t.session, (sessionPnL.get(t.session) || 0) + (t.pnl || 0));
     });
     
     let bestSession = 'NY';
     let bestSessionPnL = -Infinity;
     sessionPnL.forEach((pnl, session) => {
-      if (pnl > bestSessionPnL) {
-        bestSessionPnL = pnl;
-        bestSession = session;
-      }
+      if (pnl > bestSessionPnL) { bestSessionPnL = pnl; bestSession = session; }
     });
     
     const consistencyChange = monthStats.consistencyScore >= 80 ? '+' : '';
+    const avgRText = monthStats.avgR !== 0 ? ` Avg R: ${formatRValue(monthStats.avgR)}.` : '';
     
-    // 🔥 Add actual R to summary
-    const avgRText = monthStats.avgR !== 0 
-      ? ` Avg R: ${formatRValue(monthStats.avgR)}.`
-      : '';
-    
-    return `This month you traded ${tradedDays} days with ${monthStats.winRate.toFixed(0)}% win rate.${avgRText} ${
+    return `Traded ${tradedDays} days with ${monthStats.winRate.toFixed(0)}% win rate.${avgRText} ${
       monthStats.consistencyScore >= 70 ? `${consistencyChange}${Math.round(Math.random() * 15)}% higher consistency.` : 'Focus on emotional control.'
     } Top performance: ${bestDay} in ${formatSessionDisplay(bestSession)} session.`;
-  }, [trades, currentDate, monthStats]);
+  }, [activeTrades, monthStats]);
+
+  // 🔥 Trades Chart Data - per day trade breakdown with individual trade details
+  const tradesChartData = useMemo((): TradesChartDataPoint[] => {
+    const dateGroups = new Map<string, Trade[]>();
+    activeTrades.forEach(trade => {
+      const date = getLocalDateString(new Date(trade.open_at));
+      if (!dateGroups.has(date)) dateGroups.set(date, []);
+      dateGroups.get(date)!.push(trade);
+    });
+
+    return Array.from(dateGroups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, dayTrades]) => ({
+        date,
+        dateDisplay: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        tradeCount: dayTrades.length,
+        totalPnL: dayTrades.reduce((s, t) => s + (t.pnl || 0), 0),
+        wins: dayTrades.filter(t => t.outcome === 'WIN').length,
+        losses: dayTrades.filter(t => t.outcome === 'LOSS').length,
+        trades: dayTrades.map(t => {
+          const { actualR } = getTradeData(t, oneR);
+          return {
+            symbol: (t as any).symbol || (t as any).asset || '',
+            pnl: t.pnl || 0,
+            outcome: t.outcome || 'OPEN',
+            avgR: actualR ?? null,
+          };
+        }),
+      }));
+  }, [activeTrades, oneR]);
 
   // Calendar grid generation
   const calendarDays = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
+    // When custom range spans multiple months, show from the start month
+    const displayDate = isCustomRange && dateRangeStart
+      ? new Date(dateRangeStart)
+      : currentDate;
+
+    const year = displayDate.getFullYear();
+    const month = displayDate.getMonth();
     
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
@@ -702,18 +837,16 @@ const monthTrades = trades.filter(trade => {
     
     const days: (Date | null)[] = [];
     
-    // Add empty cells for days before month starts
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
     
-    // Add all days in month
     for (let day = 1; day <= lastDay.getDate(); day++) {
       days.push(new Date(year, month, day));
     }
     
     return days;
-  }, [currentDate]);
+  }, [currentDate, isCustomRange, dateRangeStart]);
 
   // Calculate weekly summaries
   const weeklySummaries = useMemo(() => {
@@ -925,10 +1058,39 @@ const monthTrades = trades.filter(trade => {
         <PageTitle title="Performance Calendar" subtitle="Track your trading journey day by day" />
         
         <div className="flex items-center gap-3">
-          {/* 🔥 Show current 1R value */}
           <div className="text-xs text-zinc-500 bg-zinc-800/50 px-3 py-1.5 rounded-lg">
             1R = ${formatNumber(oneR, 2)}
           </div>
+
+          {isCustomRange && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-400 font-medium">
+              <CalendarDays className="w-3.5 h-3.5" />
+              {dateRangeStart} → {dateRangeEnd}
+              <button
+                onClick={() => {
+                  setIsCustomRange(false);
+                  setDateRangeStart("");
+                  setDateRangeEnd("");
+                  setCurrentDate(new Date());
+                }}
+                className="ml-1 text-yellow-400/60 hover:text-yellow-400 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDateRangePicker(!showDateRangePicker)}
+            className={`border-zinc-700 bg-zinc-900/50 hover:bg-zinc-800/50 transition-all ${
+              showDateRangePicker ? 'border-yellow-500/50 text-yellow-400' : 'hover:border-yellow-500/50'
+            }`}
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Date Range
+          </Button>
           
           <Button
             variant="outline"
@@ -951,6 +1113,81 @@ const monthTrades = trades.filter(trade => {
           </Button>
         </div>
       </div>
+
+      {showDateRangePicker && (
+        <div className="rounded-2xl border border-yellow-500/30 bg-zinc-900/95 backdrop-blur-sm p-5 shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-yellow-500" />
+              <span className="text-sm font-medium text-zinc-300">Date Range</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-zinc-500 uppercase tracking-wider">From</label>
+              <input
+                type="date"
+                value={dateRangeStart}
+                onChange={(e) => setDateRangeStart(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:border-yellow-500/50 focus:outline-none transition-colors"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-zinc-500 uppercase tracking-wider">To</label>
+              <input
+                type="date"
+                value={dateRangeEnd}
+                onChange={(e) => setDateRangeEnd(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-white focus:border-yellow-500/50 focus:outline-none transition-colors"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              {[
+                { label: 'This Week', days: 7 },
+                { label: 'This Month', days: 30 },
+                { label: 'Last 3M', days: 90 },
+              ].map(({ label, days }) => (
+                <button
+                  key={label}
+                  onClick={() => {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setDate(start.getDate() - days);
+                    setDateRangeStart(getLocalDateString(start));
+                    setDateRangeEnd(getLocalDateString(end));
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 hover:border-yellow-500/40 hover:text-yellow-400 transition-all"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              size="sm"
+              onClick={() => {
+                if (dateRangeStart && dateRangeEnd) {
+                  setIsCustomRange(true);
+                  setCurrentDate(new Date(dateRangeStart));
+                  setShowDateRangePicker(false);
+                }
+              }}
+              disabled={!dateRangeStart || !dateRangeEnd}
+              className="bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/30 transition-all disabled:opacity-40"
+            >
+              Apply
+            </Button>
+
+            <button
+              onClick={() => setShowDateRangePicker(false)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors ml-auto"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Monthly Performance Overview - PREMIUM EDITION */}
       <div 
@@ -1014,7 +1251,6 @@ const monthTrades = trades.filter(trade => {
           </div>
 
           <div className="grid grid-cols-2 gap-6">
-            {/* Cumulative P&L Curve */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
@@ -1029,75 +1265,20 @@ const monthTrades = trades.filter(trade => {
                   {showStrategyBreakdown ? 'Hide' : 'Show'} Strategy Split
                 </Button>
               </div>
-
               <MemoizedAreaChart data={cumulativePnLData} />
             </div>
 
-            {/* Performance Radar */}
             <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-6">
-              <div className="mb-4 relative z-10">
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Trader Score</p>
-                <h3 className="text-sm font-bold text-zinc-300 uppercase tracking-wider mb-3">
-                  Finotaur Balance
-                </h3>
-                
-                <div className="flex items-end gap-4">
-                  <div className="flex items-baseline gap-2">
-                    <div className="text-5xl font-black bg-gradient-to-br from-yellow-500 via-yellow-400 to-yellow-600 bg-clip-text text-transparent"
-                      style={{ filter: 'drop-shadow(0 2px 8px rgba(201,166,70,0.4))' }}
-                    >
-                      {finotaurScoreAnimated}
-                    </div>
-                    <div className="text-xs text-zinc-500 pb-1.5">
-                      <div className="font-medium">/ 100</div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1">
-                    {/* Momentum Indicator */}
-                    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${
-                      momentumChange >= 0 
-                        ? 'bg-emerald-500/15 border border-emerald-500/30' 
-                        : 'bg-red-500/15 border border-red-500/30'
-                    }`}>
-                      {momentumChange >= 0 ? (
-                        <ArrowUp className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : (
-                        <ArrowDown className="w-3.5 h-3.5 text-red-400" />
-                      )}
-                      <span className={`text-xs font-bold ${
-                        momentumChange >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}>
-                        {momentumChange >= 0 ? '+' : ''}{momentumChange}pts
-                      </span>
-                      <span className="text-[10px] text-zinc-500">vs last month</span>
-                    </div>
-                    
-                    {/* Rank Badge */}
-                    <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                      <Award className="w-3.5 h-3.5 text-yellow-500" />
-                      <span className="text-xs font-bold text-yellow-500">
-                        {finotaurScoreAnimated >= 80 ? 'Top 3%' : finotaurScoreAnimated >= 60 ? 'Top 20%' : 'Improving'}
-                      </span>
-                      <button className="text-[10px] text-yellow-500/70 hover:text-yellow-400 underline transition-colors">
-                        View Leaderboard
-                      </button>
-                    </div>
-                  </div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-yellow-500" />
+                  <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider">
+                    Trades
+                  </h3>
                 </div>
+                <span className="text-xs text-zinc-500 italic">Hover for trade details</span>
               </div>
-
-              <MemoizedRadarChart data={radarData} />
-              
-              <div className="mt-3 text-center">
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  {monthStats.avgRR >= 2 && monthStats.consistencyScore >= 80
-                    ? 'Excellent R:R ratio — maintain emotional control'
-                    : monthStats.avgRR >= 2
-                    ? 'Strong R:R, focus on consistency'
-                    : 'Improve risk management discipline'}
-                </p>
-              </div>
+              <MemoizedTradesChart data={tradesChartData} />
             </div>
           </div>
         </Card>
@@ -1290,18 +1471,18 @@ const monthTrades = trades.filter(trade => {
                   <p className="text-[10px] text-yellow-500/70 uppercase tracking-widest font-medium">Your Trading Edge</p>
                 </div>
               </div>
-              <p className="text-sm text-zinc-300 font-medium leading-relaxed">
-                Your edge comes from <span className="text-yellow-500 font-bold">{monthStats.avgRR >= 2 ? 'high R:R' : 'win rate'}</span> and 
-                <span className="text-yellow-500 font-bold"> {monthStats.consistencyScore >= 80 ? 'strong discipline' : 'improving discipline'}</span>
-              </p>
-              
-              {/* Insight of the Month */}
-              <div className="mt-4 inline-flex items-start gap-2.5 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <Lightbulb className="w-4 h-4 text-blue-400 mt-0.5" />
-                <div>
-                  <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">🧩 Insight of the Month</p>
-                  <p className="text-xs text-zinc-300 mt-1 leading-relaxed">{insightOfMonth}</p>
-                </div>
+              <div className="inline-flex items-start gap-2.5 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <Lightbulb className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  {monthStats.winRate >= 50 && monthStats.profitFactor >= 1
+                    ? `Your system is profitable — ${monthStats.wins}W / ${monthStats.losses}L with ${monthStats.profitFactor.toFixed(2)} profit factor. Protect it by staying consistent and avoiding overtrading.`
+                    : monthStats.winRate >= 50 && monthStats.profitFactor < 1
+                    ? `Win rate is solid at ${monthStats.winRate.toFixed(0)}% but profit factor is below 1. Your losers are too large — tighten stops or cut early.`
+                    : monthStats.totalTrades === 0
+                    ? `No closed trades this month yet. Start logging to unlock your performance insights.`
+                    : `Win rate is ${monthStats.winRate.toFixed(0)}% this month. Focus on high-probability setups only — fewer, better trades beat volume every time.`
+                  }
+                </p>
               </div>
             </div>
             
@@ -1677,49 +1858,6 @@ const monthTrades = trades.filter(trade => {
         </div>
       </div>
 
-      {/* AI Insights */}
-      <div 
-        className={`transition-all duration-700 delay-[450ms] transform ${
-          isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
-        }`}
-      >
-        <Card className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/5 to-purple-500/5 p-6">
-          <div className="flex items-start gap-4">
-            <div className="rounded-full bg-blue-500/20 p-3">
-              <Brain className="w-6 h-6 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-white mb-2">AI Insights</h3>
-              <div className="space-y-2 text-sm text-zinc-300">
-                {monthStats.consistencyScore > 80 && (
-                  <p>✨ Your consistency improved significantly this month. Keep following your plan!</p>
-                )}
-                {monthStats.winRate > 60 && (
-                  <p>🎯 High win rate detected. Your setups are working well.</p>
-                )}
-                {monthStats.avgRR >= 2 && (
-                  <p>💎 Excellent risk/reward management. This is your edge.</p>
-                )}
-                {/* 🔥 NEW: Insight based on avgR */}
-                {monthStats.avgR >= 1 && (
-                  <p>🚀 Great average R! You're capturing more than your planned risk on average.</p>
-                )}
-                {monthStats.avgR < 0 && monthStats.avgR !== 0 && (
-                  <p>⚠️ Negative average R detected. Review your exit strategy and trade management.</p>
-                )}
-                {monthStats.emotionalStability < 70 && (
-                  <p>⚠️ Emotional trades detected. Consider taking breaks after losses.</p>
-                )}
-                {monthStats.profitFactor >= 2 && (
-                  <p>🚀 Outstanding profit factor. You're in the top tier of traders.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Daily Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-zinc-900 border-zinc-800">
           {selectedDay && (

@@ -23,7 +23,7 @@ import {
   MessageSquare, ListChecks, Users, GraduationCap, Settings as SettingsIcon,
   Sparkles, TrendingUp, TrendingDown, UserPlus, Link2, CheckCircle2, Lock, 
   Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check, Upload, 
-  FileSpreadsheet, Download
+  FileSpreadsheet, Download, ChevronLeft, ChevronRight, CalendarRange
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useAuth } from "@/providers/AuthProvider";
@@ -36,7 +36,7 @@ import {
   getPnLColor,
   type DashboardStats
 } from "@/hooks/useDashboardData";
-import { DAYS_MAP, BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES, type DaysRange } from "@/constants/dashboard";
+import { BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettingsData } from "@/lib/queryClient";
 import { DashboardKpiCard } from "@/components/DashboardKpiCard";
@@ -767,6 +767,221 @@ const AIInsight = React.memo(({ stats }: { stats: DashboardStats }) => {
 AIInsight.displayName = 'AIInsight';
 
 // ================================================
+// DASHBOARD DATE RANGE PICKER
+// ================================================
+
+const DASH_PRESETS = [
+  { label: '7D', days: 7 },
+  { label: '30D', days: 30 },
+  { label: '90D', days: 90 },
+  { label: 'ALL', days: null },
+] as const;
+
+const DashboardDatePicker = React.memo(({ 
+  startDate, 
+  endDate, 
+  onChange 
+}: { 
+  startDate: Date | null; 
+  endDate: Date | null; 
+  onChange: (start: Date | null, end: Date | null) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [pickerMonth, setPickerMonth] = useState(new Date());
+  const [selecting, setSelecting] = useState<'start' | 'end'>('start');
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  const activePreset = useMemo(() => {
+    if (!startDate && !endDate) return 'ALL';
+    if (startDate && endDate) {
+      const days = Math.round((endDate.getTime() - startDate.getTime()) / 86400000);
+      if (days === 6) return '7D';
+      if (days === 29) return '30D';
+      if (days === 89) return '90D';
+    }
+    return null;
+  }, [startDate, endDate]);
+
+  function applyPreset(days: number | null) {
+    if (days === null) {
+      onChange(null, null);
+    } else {
+      const end = new Date(); end.setHours(23, 59, 59, 999);
+      const start = new Date(); start.setDate(start.getDate() - (days - 1)); start.setHours(0, 0, 0, 0);
+      onChange(start, end);
+    }
+    setOpen(false);
+  }
+
+  function handleDayClick(date: Date) {
+    if (selecting === 'start') {
+      onChange(date, null);
+      setSelecting('end');
+    } else {
+      if (startDate && date < startDate) {
+        onChange(date, startDate);
+      } else {
+        onChange(startDate, date);
+      }
+      setSelecting('start');
+      setOpen(false);
+    }
+  }
+
+  const calDays = useMemo(() => {
+    const year = pickerMonth.getFullYear();
+    const month = pickerMonth.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days: (Date | null)[] = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, month, d));
+    return days;
+  }, [pickerMonth]);
+
+  const formatLabel = () => {
+    if (!startDate && !endDate) return 'All Time';
+    const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+    if (startDate && endDate) return `${fmt(startDate)} – ${fmt(endDate)}`;
+    if (startDate) return `${fmt(startDate)} → today`;
+    return 'All Time';
+  };
+
+  const isSelected = (d: Date) =>
+    (startDate && d.toDateString() === startDate.toDateString()) ||
+    (endDate && d.toDateString() === endDate.toDateString()) || false;
+
+  const inRange = (d: Date) => {
+    const lo = startDate;
+    const hi = endDate || hoverDate;
+    if (!lo || !hi) return false;
+    return d > lo && d < hi;
+  };
+
+  const hasFilter = !!(startDate || endDate);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 border rounded-[14px] px-4 py-3 text-sm font-medium transition-all duration-200"
+        style={{
+          background: hasFilter ? 'rgba(201,166,70,0.12)' : '#141414',
+          borderColor: hasFilter ? 'rgba(201,166,70,0.4)' : 'rgba(255,255,255,0.08)',
+          color: hasFilter ? '#C9A646' : '#F4F4F4',
+        }}
+      >
+        <CalendarRange className="w-4 h-4" />
+        {formatLabel()}
+        {hasFilter && (
+          <span
+            className="ml-1 opacity-60 hover:opacity-100 transition-opacity"
+            onClick={e => { e.stopPropagation(); onChange(null, null); setSelecting('start'); }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 top-14 z-50 rounded-2xl shadow-2xl overflow-hidden"
+          style={{
+            background: 'rgba(14,14,14,0.98)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            backdropFilter: 'blur(20px)',
+            minWidth: 300,
+          }}
+        >
+          {/* Presets */}
+          <div className="flex gap-2 p-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+            {DASH_PRESETS.map(p => (
+              <button
+                key={p.label}
+                onClick={() => applyPreset(p.days)}
+                className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{
+                  background: activePreset === p.label
+                    ? 'linear-gradient(135deg, #C9A646, #B48C2C)'
+                    : 'rgba(255,255,255,0.05)',
+                  color: activePreset === p.label ? '#000' : '#EAEAEA',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Month nav */}
+          <div className="flex items-center justify-between px-4 py-2.5">
+            <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))}>
+              <ChevronLeft className="w-4 h-4 text-zinc-400 hover:text-white transition-colors" />
+            </button>
+            <span className="text-sm font-semibold text-[#EAEAEA]">
+              {pickerMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))}>
+              <ChevronRight className="w-4 h-4 text-zinc-400 hover:text-white transition-colors" />
+            </button>
+          </div>
+
+          {/* Day labels */}
+          <div className="grid grid-cols-7 px-3 pb-1">
+            {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+              <div key={d} className="text-center text-[10px] font-medium text-[#6A6A6A]">{d}</div>
+            ))}
+          </div>
+
+          {/* Days grid */}
+          <div className="grid grid-cols-7 px-3 pb-3 gap-y-0.5">
+            {calDays.map((day, i) => {
+              if (!day) return <div key={i} />;
+              const sel = isSelected(day);
+              const inR = inRange(day);
+              const today = day.toDateString() === new Date().toDateString();
+              const future = day > new Date();
+              return (
+                <button
+                  key={i}
+                  disabled={future}
+                  onClick={() => handleDayClick(day)}
+                  onMouseEnter={() => selecting === 'end' && setHoverDate(day)}
+                  onMouseLeave={() => setHoverDate(null)}
+                  className="h-8 flex items-center justify-center text-xs font-medium rounded-lg transition-all"
+                  style={{
+                    background: sel
+                      ? 'linear-gradient(135deg, #C9A646, #B48C2C)'
+                      : inR ? 'rgba(201,166,70,0.15)' : 'transparent',
+                    color: sel ? '#000' : future ? '#3A3A3A' : today ? '#C9A646' : '#EAEAEA',
+                    cursor: future ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {day.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="px-4 pb-3 text-center text-xs text-[#6A6A6A]">
+            {selecting === 'start' ? 'Select start date' : 'Select end date'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+DashboardDatePicker.displayName = 'DashboardDatePicker';
+
+// ================================================
 // MAIN DASHBOARD COMPONENT
 // ================================================
 
@@ -786,7 +1001,8 @@ function JournalOverviewContent() {
            'Trader';
   }, [user]);
   
-  const [range, setRange] = useState<DaysRange>('30D');
+  const [dateStart, setDateStart] = useState<Date | null>(null);
+  const [dateEnd, setDateEnd] = useState<Date | null>(null);
   const [showReferModal, setShowReferModal] = useState(false);
   const [showSnapTradePopup, setShowSnapTradePopup] = useState(false);
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
@@ -794,9 +1010,21 @@ function JournalOverviewContent() {
   
   const { id: userId, isImpersonating } = useEffectiveUser();
   const queryClient = useQueryClient();
+
+  // Convert date range to days for useDashboardStats (null = ALL TIME)
+  const dashboardDays = useMemo(() => {
+    if (!dateStart && !dateEnd) return null; // ALL TIME
+    if (dateStart && dateEnd) {
+      return Math.max(1, Math.round((dateEnd.getTime() - dateStart.getTime()) / 86400000) + 1);
+    }
+    if (dateStart) {
+      return Math.max(1, Math.round((Date.now() - dateStart.getTime()) / 86400000) + 1);
+    }
+    return 30;
+  }, [dateStart, dateEnd]);
   
   const { limits, loading: subscriptionLoading, canUseSnapTrade } = useSubscription();
-  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(DAYS_MAP[range], userId);
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
   // Covers: create, edit, delete from MyTrades + NewTrade page
@@ -987,17 +1215,11 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         {stats && <AIInsight stats={stats} />}
 
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            className="bg-[#141414] border rounded-[14px] px-4 py-3 text-sm text-[#F4F4F4] hover:border-[#C9A646]/30 transition-colors focus:outline-none focus:border-[#C9A646]/50 font-medium"
-            style={BORDER_STYLE}
-            value={range}
-            onChange={(e) => setRange(e.target.value as DaysRange)}
-          >
-            <option value="7D">Last 7 days</option>
-            <option value="30D">Last 30 days</option>
-            <option value="90D">Last 90 days</option>
-            <option value="ALL">All time</option>
-          </select>
+          <DashboardDatePicker
+            startDate={dateStart}
+            endDate={dateEnd}
+            onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
+          />
 
           <div className="ml-auto flex items-center gap-3">
             {/* ✅ UPDATED: Refer a Friend Button with Green Checkmark for Affiliates */}
@@ -1120,7 +1342,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </div>
             }>
               <Suspense fallback={<ChartSkeleton />}>
-                <DailyPnLChart data={stats.equitySeries || []} />
+                <DailyPnLChart data={stats.equitySeries || []} trades={stats.trades || []} />
               </Suspense>
             </ErrorBoundary>
 

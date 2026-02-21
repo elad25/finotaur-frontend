@@ -2113,27 +2113,73 @@ const strategiesWithStats = useMemo(() => {
             <p style={{ color: '#9A9A9A' }}>Loading strategies...</p>
           </div>
         ) : strategies.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="mb-4">
-              <Target className="w-16 h-16 mx-auto" style={{ color: '#9A9A9A' }} />
-            </div>
-            <h3 className="text-xl font-bold mb-2" style={{ color: '#EAEAEA' }}>
-              No Strategies Yet
-            </h3>
-            <p className="text-sm mb-6" style={{ color: '#9A9A9A' }}>
-              Create your first trading strategy to start tracking performance
-            </p>
-            <button
-              onClick={handleOpenNewStrategy}
-              className="px-6 py-3 rounded-xl font-bold transition-all hover:scale-105"
+          <div className="flex flex-col items-center justify-center py-24 gap-6">
+            {/* KPI Card - Total Strategies */}
+            <div
+              className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group w-64"
               style={{
-                background: 'linear-gradient(135deg, #C9A646, #B48C2C)',
-                color: '#000',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(201,166,70,0.13)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
               }}
             >
-              <Plus className="w-5 h-5 inline mr-2" />
-              Create First Strategy
-            </button>
+              {/* Ambient glow */}
+              <div
+                className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                style={{ background: 'rgba(201,166,70,0.09)', filter: 'blur(28px)' }}
+              />
+              {/* Bottom accent line */}
+              <div
+                className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+                style={{ background: 'linear-gradient(90deg, transparent, #C9A646, transparent)' }}
+              />
+              <div className="relative p-5 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: '#6A6A6A' }}>
+                    Total Strategies
+                  </div>
+                  <div className="text-3xl font-bold tracking-tight leading-none mb-2 text-[#F4F4F4]" style={{ letterSpacing: '-0.02em' }}>
+                    0
+                  </div>
+                  <div className="text-[10px] font-medium" style={{ color: '#5A5A5A' }}>
+                    No strategies yet
+                  </div>
+                </div>
+                {/* Icon */}
+                <div
+                  className="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{
+                    background: 'rgba(201,166,70,0.12)',
+                    border: '1px solid rgba(201,166,70,0.25)',
+                  }}
+                >
+                  <Target className="w-5 h-5" style={{ color: '#C9A646' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Text + CTA */}
+            <div className="text-center">
+              <h3 className="text-xl font-bold mb-2" style={{ color: '#EAEAEA' }}>
+                No Strategies Yet
+              </h3>
+              <p className="text-sm mb-6" style={{ color: '#9A9A9A' }}>
+                Create your first trading strategy to start tracking performance
+              </p>
+              <button
+                onClick={handleOpenNewStrategy}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all hover:scale-105 mx-auto"
+                style={{
+                  background: 'linear-gradient(135deg, #C9A646, #B48C2C)',
+                  color: '#000',
+                  boxShadow: '0 0 20px rgba(201,166,70,0.3)',
+                }}
+              >
+                <Plus className="w-5 h-5" />
+                Create First Strategy
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

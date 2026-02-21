@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, memo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { 
   TrendingUp, TrendingDown, Target, Award, Calendar,
@@ -14,6 +14,12 @@ import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useTimezone } from "@/contexts/TimezoneContext";
 import { formatSessionDisplay } from "@/constants/tradingSessions";
 import { EquityCurveOptimized } from "@/components/EquityCurveOptimized";
+import {
+  AreaChart, Area, Line,
+  ComposedChart, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
 import { 
   findBestCombinations, 
   getStrategyName,
@@ -135,6 +141,7 @@ export default function AnalyticsDashboard() {
             changes={analytics.changes}
             bestWorst={analytics.bestWorst}
             momentum={analytics.momentum}
+            byDayOfWeek={analytics.breakdown.byDayOfWeek || []}
           />
         )}
         
@@ -174,7 +181,8 @@ function OverviewTab({
   trades, 
   changes,
   bestWorst,
-  momentum 
+  momentum,
+  byDayOfWeek
 }: { 
   stats: StrategyStats; 
   insights: AIInsight[]; 
@@ -182,6 +190,7 @@ function OverviewTab({
   changes: { winRateChange: number; pnlChange: number; avgRChange: number };
   bestWorst: { best: BestWorstTrade | null; worst: BestWorstTrade | null };
   momentum: { score: number; label: string; color: string };
+  byDayOfWeek: { name: string; stats: StrategyStats }[];
 }) {
   return (
     <div className="space-y-5">
@@ -321,7 +330,8 @@ function OverviewTab({
           ))}
         </div>
       </div>
-    </div>
+
+      </div>
   );
 }
 
@@ -342,11 +352,14 @@ function BreakdownTab({
   return (
     <div className="space-y-6">
       <SmartInsightsPanel combinations={bestCombinations} breakdown={breakdown} timezone={timezone} />
+      <div className="grid grid-cols-2 gap-4">
+        <DayWinRateChart data={breakdown.byDayOfWeek || []} />
+        <DayOfWeekHeatmap data={breakdown.byDayOfWeek || []} />
+      </div>
       <BreakdownSection title="By Strategy" data={breakdown.byStrategy || []} />
       <BreakdownSection title="By Asset" data={breakdown.byAsset || []} />
       <BreakdownSection title="By Session" data={breakdown.bySession || []} timezone={timezone} />
       <StrategySessionOptimalPerformance trades={trades} timezone={timezone} />
-      <DayOfWeekHeatmap data={breakdown.byDayOfWeek || []} />
       <ExpandableCombinationAnalysis trades={trades} timezone={timezone} />
       <BreakdownSection title="By Direction (Long/Short)" data={breakdown.byDirection || []} />
     </div>
@@ -639,6 +652,33 @@ function StrategySessionOptimalPerformance({
 // Smart Insights Panel with Timezone
 // ==========================================
 
+function DayStatCard({ icon, label, day, value, sub, valueColor }: {
+  icon: React.ReactNode;
+  label: string;
+  day: string;
+  value: string;
+  sub: string;
+  valueColor: string;
+}) {
+  return (
+    <div
+      className="rounded-xl p-3 flex flex-col gap-1 transition-all hover:scale-[1.02]"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.07)',
+      }}
+    >
+      <div className="flex items-center gap-1.5" style={{ color: '#6A6A6A' }}>
+        {icon}
+        <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
+      </div>
+      <div className="text-base font-bold mt-0.5" style={{ color: '#EAEAEA' }}>{day}</div>
+      <div className="text-sm font-bold" style={{ color: valueColor }}>{value}</div>
+      <div className="text-[11px]" style={{ color: '#6A6A6A' }}>{sub}</div>
+    </div>
+  );
+}
+
 function SmartInsightsPanel({ 
   combinations, 
   breakdown,
@@ -648,27 +688,39 @@ function SmartInsightsPanel({
   breakdown: BreakdownData;
   timezone: string;
 }) {
+  const dayStats = useMemo(() => {
+    const data = (breakdown.byDayOfWeek || []).filter(d => d.stats.totalTrades > 0);
+    if (data.length === 0) return null;
+    return {
+      bestDay:    [...data].sort((a, b) => b.stats.totalR    - a.stats.totalR)[0],
+      worstDay:   [...data].sort((a, b) => a.stats.totalR    - b.stats.totalR)[0],
+      mostActive: [...data].sort((a, b) => b.stats.totalTrades - a.stats.totalTrades)[0],
+      bestWR:     [...data].sort((a, b) => b.stats.winRate   - a.stats.winRate)[0],
+    };
+  }, [breakdown.byDayOfWeek]);
+
   return (
     <div 
-      className="rounded-xl p-6"
+      className="rounded-xl p-5"
       style={{
         background: 'linear-gradient(135deg, rgba(201,166,70,0.1) 0%, rgba(14,14,14,0.9) 100%)',
         border: '2px solid rgba(201,166,70,0.3)',
         boxShadow: '0 8px 32px rgba(201,166,70,0.15)',
       }}
     >
-      <div className="flex items-center gap-3 mb-5">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4">
         <div 
-          className="p-3 rounded-lg"
+          className="p-2.5 rounded-lg"
           style={{
             background: 'rgba(201,166,70,0.2)',
             border: '1px solid rgba(201,166,70,0.4)',
           }}
         >
-          <Sparkles className="w-6 h-6" style={{ color: '#C9A646' }} />
+          <Sparkles className="w-5 h-5" style={{ color: '#C9A646' }} />
         </div>
         <div>
-          <h3 className="text-lg font-bold" style={{ color: '#EAEAEA' }}>
+          <h3 className="text-base font-bold" style={{ color: '#EAEAEA' }}>
             AI Trading Recommendations
           </h3>
           <p className="text-xs" style={{ color: '#9A9A9A' }}>
@@ -677,10 +729,48 @@ function SmartInsightsPanel({
         </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      {/* 4 Day Stat Cards */}
+      {dayStats && (
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <DayStatCard
+            icon={<TrendingUp className="w-3 h-3" />}
+            label="Best performing day"
+            day={dayStats.bestDay.name.slice(0, 3)}
+            value={`${dayStats.bestDay.stats.totalR >= 0 ? '+' : ''}${dayStats.bestDay.stats.totalR.toFixed(1)}R`}
+            sub={`${dayStats.bestDay.stats.totalTrades} trades`}
+            valueColor="#00C46C"
+          />
+          <DayStatCard
+            icon={<TrendingDown className="w-3 h-3" />}
+            label="Least performing day"
+            day={dayStats.worstDay.name.slice(0, 3)}
+            value={`${dayStats.worstDay.stats.totalR >= 0 ? '+' : ''}${dayStats.worstDay.stats.totalR.toFixed(1)}R`}
+            sub={`${dayStats.worstDay.stats.totalTrades} trades`}
+            valueColor="#E44545"
+          />
+          <DayStatCard
+            icon={<Zap className="w-3 h-3" />}
+            label="Most active day"
+            day={dayStats.mostActive.name.slice(0, 3)}
+            value={`${dayStats.mostActive.stats.totalTrades} trades`}
+            sub={`${dayStats.mostActive.stats.winRate.toFixed(0)}% WR`}
+            valueColor="#63B3ED"
+          />
+          <DayStatCard
+            icon={<Target className="w-3 h-3" />}
+            label="Best win rate"
+            day={dayStats.bestWR.name.slice(0, 3)}
+            value={`${dayStats.bestWR.stats.winRate.toFixed(0)}%`}
+            sub={`${dayStats.bestWR.stats.totalTrades} trade${dayStats.bestWR.stats.totalTrades !== 1 ? 's' : ''}`}
+            valueColor="#C9A646"
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
         {combinations.assetSession && (
           <RecommendationCard
-            icon={<Target className="w-5 h-5" />}
+            icon={<Target className="w-4 h-4" />}
             title="Best Time to Trade"
             subtitle={`${combinations.assetSession.asset} during ${formatSessionDisplay(combinations.assetSession.session)}`}
             metric={`+${combinations.assetSession.totalR.toFixed(1)}R`}
@@ -690,21 +780,9 @@ function SmartInsightsPanel({
           />
         )}
 
-        {combinations.strategySession && (
-          <RecommendationCard
-            icon={<Layers className="w-5 h-5" />}
-            title="Best Strategy Timing"
-            subtitle={`${combinations.strategySession.strategy} in ${formatSessionDisplay(combinations.strategySession.session)}`}
-            metric={`+${combinations.strategySession.totalR.toFixed(1)}R`}
-            metricColor="#00C46C"
-            details={`${combinations.strategySession.trades} trades • ${combinations.strategySession.winRate.toFixed(0)}% WR`}
-            actionText="Use this strategy during this session"
-          />
-        )}
-
         {combinations.strategyAsset && (
           <RecommendationCard
-            icon={<Zap className="w-5 h-5" />}
+            icon={<Zap className="w-4 h-4" />}
             title="Best Strategy-Asset Pair"
             subtitle={`${combinations.strategyAsset.strategy} on ${combinations.strategyAsset.asset}`}
             metric={`+${combinations.strategyAsset.totalR.toFixed(1)}R`}
@@ -759,40 +837,40 @@ function RecommendationCard({
 }) {
   return (
     <div 
-      className="p-4 rounded-lg transition-all hover:scale-[1.02] hover:shadow-lg cursor-pointer"
+      className="p-3 rounded-lg transition-all hover:scale-[1.01] cursor-pointer flex items-center gap-4"
       style={{
         background: 'rgba(20,20,20,0.6)',
         border: '1px solid rgba(255,255,255,0.08)',
       }}
     >
-      <div className="flex items-center gap-2 mb-3">
+      <div 
+        className="p-2.5 rounded-lg flex-shrink-0"
+        style={{ background: 'rgba(201,166,70,0.1)', border: '1px solid rgba(201,166,70,0.2)' }}
+      >
         <div style={{ color: '#C9A646' }}>{icon}</div>
-        <h4 className="text-xs font-semibold" style={{ color: '#9A9A9A' }}>
-          {title}
-        </h4>
       </div>
-      
-      <div className="mb-3">
-        <div className="text-sm font-bold mb-1" style={{ color: '#EAEAEA' }}>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#6A6A6A' }}>
+            {title}
+          </h4>
+        </div>
+        <div className="text-sm font-bold truncate" style={{ color: '#EAEAEA' }}>
           {subtitle}
         </div>
-        <div className="text-2xl font-bold mb-1" style={{ color: metricColor }}>
-          {metric}
-        </div>
-        <div className="text-xs" style={{ color: '#9A9A9A' }}>
+        <div className="text-xs mt-0.5" style={{ color: '#6A6A6A' }}>
           {details}
         </div>
       </div>
-      
-      <div 
-        className="text-xs font-medium"
-        style={{ 
-          color: '#C9A646',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
-          paddingTop: '8px',
-        }}
-      >
-        💡 {actionText}
+
+      <div className="flex-shrink-0 text-right">
+        <div className="text-xl font-bold" style={{ color: metricColor }}>
+          {metric}
+        </div>
+        <div className="text-[10px] font-medium mt-0.5" style={{ color: '#C9A646' }}>
+          💡 {actionText}
+        </div>
       </div>
     </div>
   );
@@ -1138,179 +1216,232 @@ function CompactCombinationMatrix({
 // ADVANCED TAB
 // ==========================================
 
+// ── Asset class classifier ─────────────────────────────────────────────────
+const CRYPTO_SYMBOLS  = ['BTC','ETH','SOL','XRP','BNB','ADA','DOGE','AVAX','MATIC','DOT'];
+const FOREX_PAIRS     = ['EUR','GBP','USD','JPY','AUD','CAD','CHF','NZD','EURUSD','GBPUSD','USDJPY','AUDUSD'];
+const FUTURES_SUFFIX  = ['NQ','ES','YM','RTY','CL','GC','SI','ZB','MNQ','MES'];
+
+function classifyAsset(symbol: string): 'Stocks' | 'Forex' | 'Crypto' | 'Futures' {
+  const s = (symbol || '').toUpperCase();
+  if (FUTURES_SUFFIX.some(f => s.includes(f)))  return 'Futures';
+  if (CRYPTO_SYMBOLS.some(c => s.includes(c)))  return 'Crypto';
+  if (FOREX_PAIRS.some(f => s.includes(f)))     return 'Forex';
+  return 'Stocks';
+}
+
+const ASSET_META: Record<string, { color: string; gradient: string }> = {
+  Futures: { color: '#C9A646', gradient: 'rgba(201,166,70,0.12)'  },
+  Stocks:  { color: '#63B3ED', gradient: 'rgba(99,179,237,0.12)'  },
+  Forex:   { color: '#A78BFA', gradient: 'rgba(167,139,250,0.12)' },
+  Crypto:  { color: '#F6AD55', gradient: 'rgba(246,173,85,0.12)'  },
+};
+
 function AdvancedTab({ stats, trades }: { stats: StrategyStats; trades: Trade[] }) {
-  const hitting1RPercent = stats.totalTrades > 0 ? (stats.tradesHitting1R! / stats.totalTrades) * 100 : 0;
-  const prematurePercent = stats.totalTrades > 0 ? (stats.prematurelyClosed! / stats.totalTrades) * 100 : 0;
+
+  const assetData = useMemo(() => {
+    const map = new Map<string, Map<string, Trade[]>>();
+
+    trades.forEach(trade => {
+      const asset    = classifyAsset(trade.symbol || '');
+      const strategy = trade.strategy_name || getStrategyName(trade.strategy) || 'No Strategy';
+      if (!map.has(asset)) map.set(asset, new Map());
+      const sMap = map.get(asset)!;
+      if (!sMap.has(strategy)) sMap.set(strategy, []);
+      sMap.get(strategy)!.push(trade);
+    });
+
+    return Array.from(map.entries()).map(([assetClass, stratMap]) => {
+      const strategies = Array.from(stratMap.entries()).map(([name, ts]) => {
+        const s = calculateAllStats(ts);
+        return { name, trades: ts.length, totalR: s.totalR, winRate: s.winRate, avgRR: s.avgRR };
+      }).sort((a, b) => b.totalR - a.totalR);
+
+      const allTrades  = strategies.reduce((sum, s) => sum + s.trades, 0);
+      const totalR     = strategies.reduce((sum, s) => sum + s.totalR, 0);
+      const best       = strategies[0];
+
+      return { assetClass, strategies, allTrades, totalR, best };
+    }).sort((a, b) => b.totalR - a.totalR);
+  }, [trades]);
+
+  const maxAbsR = Math.max(...assetData.flatMap(a =>
+    a.strategies.map(s => Math.abs(s.totalR))
+  ), 1);
 
   return (
     <div className="space-y-5">
-      <div 
-        className="rounded-xl p-6"
-        style={{
-          background: 'rgba(14,14,14,0.9)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderTop: '3px solid #C9A646',
-        }}
-      >
-        <h3 
-          className="text-xs uppercase tracking-widest mb-5 flex items-center gap-2"
-          style={{ color: '#C9A646', fontWeight: 700 }}
-        >
-          <LineChart className="w-4 h-4" />
-          Professional Performance Metrics
-        </h3>
-        
-        <div className="grid md:grid-cols-3 gap-4">
-          <MetricCardCompact
-            label="Sharpe Ratio"
-            value={stats.sharpeRatio?.toFixed(2) || '0.00'}
-            description="Risk-adjusted return"
-            color={(stats.sharpeRatio || 0) >= 2 ? '#00C46C' : (stats.sharpeRatio || 0) >= 1 ? '#C9A646' : '#E44545'}
-            benchmark="Target: >1.5"
-            percentile={(stats.sharpeRatio || 0) >= 1.5 ? 'Top 10%' : (stats.sharpeRatio || 0) >= 1 ? 'Top 30%' : 'Below Average'}
-          />
-          
-          <MetricCardCompact
-            label="Sortino Ratio"
-            value={stats.sortinoRatio?.toFixed(2) || '0.00'}
-            description="Downside risk-adjusted"
-            color={(stats.sortinoRatio || 0) >= 2 ? '#00C46C' : (stats.sortinoRatio || 0) >= 1 ? '#C9A646' : '#E44545'}
-            benchmark="Target: >2.0"
-            percentile={(stats.sortinoRatio || 0) >= 2 ? 'Top 5%' : (stats.sortinoRatio || 0) >= 1 ? 'Top 20%' : 'Below Average'}
-          />
-          
-          <MetricCardCompact
-            label="Expectancy"
-            value={`${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`}
-            description="Expected R per trade"
-            color={stats.expectancy >= 0 ? '#00C46C' : '#E44545'}
-            benchmark="Target: >0.5R"
-            percentile={stats.expectancy >= 0.5 ? 'Excellent' : stats.expectancy >= 0 ? 'Good' : 'Needs Work'}
-          />
-        </div>
+
+      {/* ── Summary row ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-4 gap-3">
+        {(['Futures','Stocks','Forex','Crypto'] as const).map(ac => {
+          const found = assetData.find(a => a.assetClass === ac);
+          const meta  = ASSET_META[ac];
+          return (
+            <div
+              key={ac}
+              className="rounded-xl p-4 transition-all hover:scale-[1.02]"
+              style={{
+                background: found
+                  ? `linear-gradient(135deg, ${meta.gradient} 0%, rgba(10,10,10,0.95) 100%)`
+                  : 'rgba(10,10,10,0.6)',
+                border: `1px solid ${found ? meta.color + '35' : 'rgba(255,255,255,0.04)'}`,
+                boxShadow: found ? `0 4px 20px ${meta.color}08` : 'none',
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-bold uppercase tracking-[0.15em]" style={{ color: meta.color }}>
+                  {ac}
+                </span>
+                {found && (
+                  <div
+                    className="w-1.5 h-1.5 rounded-full"
+                    style={{ background: meta.color, boxShadow: `0 0 6px ${meta.color}` }}
+                  />
+                )}
+              </div>
+              <>
+                <div className="text-2xl font-bold tracking-tight mb-1" style={{ color: found ? (found.totalR >= 0 ? '#00C46C' : '#E44545') : '#303030' }}>
+                  {found ? `${found.totalR >= 0 ? '+' : ''}${found.totalR.toFixed(1)}R` : '0.0R'}
+                </div>
+                <div className="text-[11px] mb-3" style={{ color: '#505050' }}>
+                  {found ? `${found.allTrades} trades` : '0 trades'}
+                </div>
+                {found?.best ? (
+                  <div
+                    className="text-[10px] px-2 py-1 rounded font-medium truncate"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: '#8A8A8A',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    Best: {found.best.name}
+                  </div>
+                ) : (
+                  <div
+                    className="text-[10px] px-2 py-1 rounded font-medium"
+                    style={{
+                      background: 'rgba(255,255,255,0.02)',
+                      color: '#303030',
+                      border: '1px solid rgba(255,255,255,0.03)',
+                    }}
+                  >
+                    No strategies yet
+                  </div>
+                )}
+              </>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
-        <EfficiencyCard
-          label="Trades Hitting 1R+"
-          value={`${hitting1RPercent.toFixed(0)}%`}
-          count={stats.tradesHitting1R || 0}
-          total={stats.totalTrades}
-          color={hitting1RPercent >= 50 ? '#00C46C' : hitting1RPercent >= 30 ? '#C9A646' : '#E44545'}
-        />
-        
-        <EfficiencyCard
-          label="Prematurely Closed"
-          value={`${prematurePercent.toFixed(0)}%`}
-          count={stats.prematurelyClosed || 0}
-          total={stats.totalTrades}
-          color={prematurePercent <= 20 ? '#00C46C' : prematurePercent <= 40 ? '#C9A646' : '#E44545'}
-          warning={prematurePercent > 40}
-        />
-        
-        <EfficiencyCard
-          label="Avg Trade Duration"
-          value={`${stats.avgTradeDuration?.toFixed(1) || 0}h`}
-          sublabel="Entry to exit"
-          color="#C9A646"
-        />
-      </div>
+      {/* ── Per-asset strategy breakdown ────────────────────────── */}
+      {(['Futures','Stocks','Forex','Crypto'] as const).map(ac => {
+        const found = assetData.find(a => a.assetClass === ac);
+        const meta  = ASSET_META[ac];
+        const strategies = found?.strategies || [];
 
-      <div 
-        className="rounded-xl p-5"
-        style={{
-          background: 'rgba(14,14,14,0.9)',
-          border: '1px solid rgba(255,255,255,0.08)',
-        }}
-      >
-        <h4 className="text-sm font-semibold mb-3" style={{ color: '#EAEAEA' }}>
-          Return Stability Analysis
-        </h4>
-        <div className="grid grid-cols-4 gap-4">
-          <div>
-            <div className="text-xs mb-1" style={{ color: '#606060' }}>Std Dev of R</div>
-            <div className="text-2xl font-bold" style={{ color: '#C9A646' }}>
-              {stats.stdDevR?.toFixed(2) || 0}
+        return (
+          <div
+            key={ac}
+            className="rounded-xl overflow-hidden"
+            style={{
+              background: 'rgba(10,10,10,0.95)',
+              border: `1px solid ${found ? meta.color + '25' : 'rgba(255,255,255,0.04)'}`,
+              boxShadow: found ? `0 4px 24px ${meta.color}08` : 'none',
+            }}
+          >
+            {/* Header */}
+            <div
+              className="px-5 py-4 flex items-center justify-between"
+              style={{ borderBottom: `1px solid ${meta.color}18`, background: found ? meta.gradient : 'rgba(255,255,255,0.01)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-2 h-8 rounded-full flex-shrink-0"
+                  style={{ background: found ? `linear-gradient(180deg, ${meta.color}, ${meta.color}40)` : 'rgba(255,255,255,0.06)' }}
+                />
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide" style={{ color: found ? meta.color : '#404040' }}>{ac}</h3>
+                  <p className="text-[10px]" style={{ color: '#505050' }}>
+                    {found ? `${strategies.length} strategies traded` : 'No trades recorded'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold" style={{ color: found ? (found.totalR >= 0 ? '#00C46C' : '#E44545') : '#2A2A2A' }}>
+                  {found ? `${found.totalR >= 0 ? '+' : ''}${found.totalR.toFixed(1)}R` : '0.0R'}
+                </div>
+                <div className="text-[10px]" style={{ color: '#505050' }}>total</div>
+              </div>
             </div>
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: '#606060' }}>Consistency</div>
-            <div className="text-2xl font-bold" style={{ 
-              color: (stats.consistency || 0) >= 70 ? '#00C46C' : (stats.consistency || 0) >= 50 ? '#C9A646' : '#E44545' 
-            }}>
-              {stats.consistency?.toFixed(0) || 0}
-            </div>
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: '#606060' }}>Max DD</div>
-            <div className="text-2xl font-bold" style={{ color: '#E44545' }}>
-              {stats.maxDrawdown?.toFixed(1) || 0}R
-            </div>
-          </div>
-          <div>
-            <div className="text-xs mb-1" style={{ color: '#606060' }}>Avg R</div>
-            <div className="text-2xl font-bold" style={{ 
-              color: stats.avgR >= 0 ? '#00C46C' : '#E44545' 
-            }}>
-              {stats.avgR >= 0 ? '+' : ''}{stats.avgR.toFixed(2)}R
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <div 
-          className="rounded-xl p-5"
-          style={{
-            background: 'rgba(14,14,14,0.9)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <h4 className="text-sm font-semibold mb-4" style={{ color: '#EAEAEA' }}>
-            Largest Win / Loss
-          </h4>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs" style={{ color: '#9A9A9A' }}>Largest Win</span>
-              <span className="text-xl font-bold" style={{ color: '#00C46C' }}>
-                +{stats.largestWin.toFixed(2)}R
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs" style={{ color: '#9A9A9A' }}>Largest Loss</span>
-              <span className="text-xl font-bold" style={{ color: '#E44545' }}>
-                {stats.largestLoss.toFixed(2)}R
-              </span>
+            {/* Strategy rows */}
+            <div className="p-4 space-y-3">
+              {found ? strategies.map((s, idx) => {
+                const barPct = Math.abs(s.totalR) / maxAbsR * 100;
+                const isPos  = s.totalR >= 0;
+                const isBest = idx === 0;
+                return (
+                  <div key={s.name}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isBest && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                            style={{ background: meta.color, color: '#000' }}
+                          >
+                            BEST
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold truncate" style={{ color: '#EAEAEA' }}>
+                          {s.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0 ml-3">
+                        <span className="text-[10px]" style={{ color: '#6A6A6A' }}>{s.trades}T</span>
+                        <span className="text-[10px]" style={{ color: s.winRate >= 50 ? '#00C46C' : '#E44545' }}>
+                          {s.winRate.toFixed(0)}% WR
+                        </span>
+                        <span className="text-sm font-bold w-16 text-right" style={{ color: isPos ? '#00C46C' : '#E44545' }}>
+                          {isPos ? '+' : ''}{s.totalR.toFixed(1)}R
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${barPct}%`,
+                          background: isPos
+                            ? `linear-gradient(90deg, ${meta.color}80, #00C46C)`
+                            : 'linear-gradient(90deg, #E4454580, #E44545)',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              }) : (
+                [1, 2, 3].map(i => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3 rounded" style={{ width: `${80 + i * 30}px`, background: 'rgba(255,255,255,0.03)' }} />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="h-3 w-6 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />
+                        <div className="h-3 w-12 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />
+                        <div className="h-3 w-14 rounded" style={{ background: 'rgba(255,255,255,0.03)' }} />
+                      </div>
+                    </div>
+                    <div className="h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.03)' }} />
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        </div>
-
-        <div 
-          className="rounded-xl p-5"
-          style={{
-            background: 'rgba(14,14,14,0.9)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <h4 className="text-sm font-semibold mb-4" style={{ color: '#EAEAEA' }}>
-            Win/Loss Distribution
-          </h4>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs" style={{ color: '#9A9A9A' }}>Average Win</span>
-              <span className="text-xl font-bold" style={{ color: '#00C46C' }}>
-                +{stats.avgWinR.toFixed(2)}R
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs" style={{ color: '#9A9A9A' }}>Average Loss</span>
-              <span className="text-xl font-bold" style={{ color: '#E44545' }}>
-                -{stats.avgLossR.toFixed(2)}R
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -1985,67 +2116,312 @@ function BreakdownSection({
   );
 }
 
-function DayOfWeekHeatmap({ data }: { data: { name: string; stats: StrategyStats }[] }) {
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const weekData = useMemo(() => 
+// ─── Custom Tooltip for DayOfWeek chart ──────────────────────────────────
+const DayTooltip = memo(({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const pnl = payload.find((p: any) => p.dataKey === 'totalR');
+  const cnt = payload.find((p: any) => p.dataKey === 'totalTrades');
+  const wr  = payload.find((p: any) => p.dataKey === 'winRate');
+  const isPos = (pnl?.value ?? 0) >= 0;
+
+  return (
+    <div style={{
+      background: 'rgba(14,14,14,0.97)',
+      border: `1px solid ${isPos ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)'}`,
+      borderRadius: 10,
+      padding: '12px 16px',
+      minWidth: 160,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      backdropFilter: 'blur(12px)',
+    }}>
+      <div style={{ color: '#C9A646', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{label}</div>
+      {pnl && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ color: '#9A9A9A', fontSize: 11 }}>Net R</span>
+          <span style={{ color: isPos ? '#00C46C' : '#E44545', fontSize: 13, fontWeight: 700 }}>
+            {isPos ? '+' : ''}{pnl.value?.toFixed(2)}R
+          </span>
+        </div>
+      )}
+      {cnt && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={{ color: '#9A9A9A', fontSize: 11 }}>Trades</span>
+          <span style={{ color: '#EAEAEA', fontSize: 11, fontWeight: 600 }}>{cnt.value}</span>
+        </div>
+      )}
+      {wr && cnt?.value > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#9A9A9A', fontSize: 11 }}>Win Rate</span>
+          <span style={{ color: '#C9A646', fontSize: 11, fontWeight: 600 }}>{wr.value?.toFixed(0)}%</span>
+        </div>
+      )}
+    </div>
+  );
+});
+DayTooltip.displayName = 'DayTooltip';
+
+// ─── Win Rate Bar Chart by Day ────────────────────────────────────────────
+
+const WinRateTooltip = memo(({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const wr = payload[0]?.value ?? 0;
+  const d = payload[0]?.payload;
+
+  return (
+    <div style={{
+      background: 'rgba(14,14,14,0.97)',
+      border: '1px solid rgba(0,196,108,0.3)',
+      borderRadius: 10,
+      padding: '12px 16px',
+      minWidth: 150,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      backdropFilter: 'blur(12px)',
+    }}>
+      <div style={{ color: '#C9A646', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ color: '#9A9A9A', fontSize: 11 }}>Win Rate</span>
+        <span style={{ color: '#00C46C', fontSize: 15, fontWeight: 700 }}>{wr.toFixed(0)}%</span>
+      </div>
+      {d && (
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#9A9A9A', fontSize: 11 }}>Trades</span>
+          <span style={{ color: '#EAEAEA', fontSize: 11, fontWeight: 600 }}>{d.totalTrades}</span>
+        </div>
+      )}
+    </div>
+  );
+});
+WinRateTooltip.displayName = 'WinRateTooltip';
+
+function DayWinRateChart({ data }: { data: { name: string; stats: StrategyStats }[] }) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const chartData = useMemo(() =>
     days.map(day => {
       const found = data.find(d => d.name === day);
-      return found || { name: day, stats: { totalR: 0, totalTrades: 0, winRate: 0 } as StrategyStats };
+      const stats = found?.stats ?? ({ winRate: 0, totalTrades: 0 } as StrategyStats);
+      return {
+        day: day.slice(0, 3),
+        winRate: Number((stats.winRate ?? 0).toFixed(1)),
+        totalTrades: stats.totalTrades ?? 0,
+      };
     }),
     [data]
   );
 
   return (
-    <div 
+    <div
       className="rounded-xl p-5"
       style={{
         background: 'rgba(14,14,14,0.9)',
         border: '1px solid rgba(255,255,255,0.08)',
       }}
     >
-      <h3 
-        className="text-xs uppercase tracking-widest mb-4 flex items-center gap-2"
-        style={{ color: '#C9A646', fontWeight: 700 }}
-      >
-        <Calendar className="w-4 h-4" />
-        Performance Heatmap by Day
-      </h3>
-      
-      <div className="grid grid-cols-5 gap-2">
-        {weekData.map((day, idx) => {
-          const intensity = day.stats.totalTrades > 0 
-            ? Math.min(Math.abs(day.stats.totalR) / 5, 1) 
-            : 0;
-          const isPositive = day.stats.totalR >= 0;
-          
-          return (
-            <div
-              key={idx}
-              className="aspect-square rounded-lg p-3 flex flex-col items-center justify-center transition-all hover:scale-105"
-              style={{
-                background: day.stats.totalTrades === 0 
-                  ? 'rgba(50,50,50,0.3)'
-                  : isPositive 
-                    ? `rgba(0,196,108,${0.2 + intensity * 0.6})`
-                    : `rgba(228,69,69,${0.2 + intensity * 0.6})`,
-                border: '1px solid rgba(255,255,255,0.05)',
-              }}
-            >
-              <div className="text-xs font-semibold mb-1" style={{ color: '#EAEAEA' }}>
-                {day.name.slice(0, 3)}
-              </div>
-              <div className="text-lg font-bold" style={{ 
-                color: day.stats.totalTrades === 0 ? '#606060' : isPositive ? '#00C46C' : '#E44545'
-              }}>
-                {day.stats.totalTrades > 0 ? `${day.stats.totalR >= 0 ? '+' : ''}${day.stats.totalR.toFixed(1)}R` : '—'}
-              </div>
-              <div className="text-xs" style={{ color: '#9A9A9A' }}>
-                {day.stats.totalTrades} trades
-              </div>
-            </div>
-          );
-        })}
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h3
+          className="text-xs uppercase tracking-widest flex items-center gap-2"
+          style={{ color: '#C9A646', fontWeight: 700 }}
+        >
+          <Target className="w-4 h-4" />
+          Win Rate by Day
+        </h3>
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: '#9A9A9A' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#00C46C', display: 'inline-block' }} />
+          Win %
+        </div>
       </div>
+
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="35%">
+          <defs>
+            <linearGradient id="winBarGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00E87A" stopOpacity={1} />
+              <stop offset="100%" stopColor="#00703A" stopOpacity={0.85} />
+            </linearGradient>
+          </defs>
+
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+
+          <XAxis
+            dataKey="day"
+            tick={{ fill: '#9A9A9A', fontSize: 12, fontWeight: 600 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            domain={[0, 100]}
+            tick={{ fill: '#606060', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => `${v}%`}
+            ticks={[0, 25, 50, 75, 100]}
+            width={38}
+          />
+
+          <Tooltip
+            content={<WinRateTooltip />}
+            cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+          />
+
+          <Bar
+            dataKey="winRate"
+            fill="url(#winBarGrad)"
+            radius={[0, 0, 0, 0]}
+            isAnimationActive={false}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function DayOfWeekHeatmap({ data }: { data: { name: string; stats: StrategyStats }[] }) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const chartData = useMemo(() =>
+    days.map(day => {
+      const found = data.find(d => d.name === day);
+      const stats = found?.stats ?? ({ totalR: 0, totalTrades: 0, winRate: 0 } as StrategyStats);
+      return {
+        day: day === 'Sunday' ? 'Sun'
+         : day === 'Monday' ? 'Mon'
+         : day === 'Tuesday' ? 'Tue'
+         : day === 'Wednesday' ? 'Wed'
+         : day === 'Thursday' ? 'Thu'
+         : day === 'Friday' ? 'Fri'
+         : 'Sat',  // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+        totalR: Number((stats.totalR ?? 0).toFixed(2)),
+        totalTrades: stats.totalTrades ?? 0,
+        winRate: stats.winRate ?? 0,
+      };
+    }),
+    [data]
+  );
+
+  return (
+    <div
+      className="rounded-xl p-5"
+      style={{
+        background: 'rgba(14,14,14,0.9)',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <h3
+          className="text-xs uppercase tracking-widest flex items-center gap-2"
+          style={{ color: '#C9A646', fontWeight: 700 }}
+        >
+          <Calendar className="w-4 h-4" />
+          Performance by Day
+        </h3>
+        <div className="flex items-center gap-4 text-xs" style={{ color: '#9A9A9A' }}>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(0,196,108,0.7)', display: 'inline-block' }} />
+            Net R
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(99,179,237,0.7)', display: 'inline-block' }} />
+            Trade Count
+          </span>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="dayPosGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#00C46C" stopOpacity={0.45} />
+              <stop offset="100%" stopColor="#00C46C" stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="dayNegGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#E44545" stopOpacity={0.45} />
+              <stop offset="100%" stopColor="#E44545" stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="dayCntGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#63B3ED" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#63B3ED" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+          <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" yAxisId="r" />
+
+          <XAxis
+            dataKey="day"
+            tick={{ fill: '#9A9A9A', fontSize: 12, fontWeight: 600 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            yAxisId="r"
+            tick={{ fill: '#606060', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => `${v > 0 ? '+' : ''}${v}R`}
+            width={46}
+          />
+          <YAxis
+            yAxisId="cnt"
+            orientation="right"
+            tick={{ fill: '#606060', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v) => `${v}`}
+            width={28}
+          />
+
+          <Tooltip
+            content={<DayTooltip />}
+            cursor={{ stroke: 'rgba(201,166,70,0.2)', strokeWidth: 1, strokeDasharray: '4 4' }}
+          />
+
+          {/* Net R area — positive green / negative red via sign */}
+          <Area
+            yAxisId="r"
+            type="monotone"
+            dataKey="totalR"
+            stroke="none"
+            fill="url(#dayPosGrad)"
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            yAxisId="r"
+            type="monotone"
+            dataKey="totalR"
+            stroke="#00C46C"
+            strokeWidth={2.5}
+            dot={{ r: 4, fill: '#00C46C', stroke: '#0A0A0A', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: '#00C46C', stroke: '#0A0A0A', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+
+          {/* Trade count area */}
+          <Area
+            yAxisId="cnt"
+            type="monotone"
+            dataKey="totalTrades"
+            stroke="none"
+            fill="url(#dayCntGrad)"
+            dot={false}
+            activeDot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            yAxisId="cnt"
+            type="monotone"
+            dataKey="totalTrades"
+            stroke="#63B3ED"
+            strokeWidth={2}
+            dot={{ r: 4, fill: '#63B3ED', stroke: '#0A0A0A', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: '#63B3ED', stroke: '#0A0A0A', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   );
 }
