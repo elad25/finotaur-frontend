@@ -1616,6 +1616,8 @@ if (hasResult && directRiskUSD > 0) {
           st.clearDraft();
           // 🔥 FIX: Invalidate React Query cache so MyTrades shows updated data
           await queryClient.invalidateQueries({ queryKey: ['trades'] });
+          // 🔥 SYNC: Refresh subscription so Settings shows correct trade count
+          await queryClient.invalidateQueries({ queryKey: ['subscription'] });
           setTimeout(() => navigate("/app/journal/my-trades"), 300);
         } else {
           throw new Error(result.error || "Failed to update trade");
@@ -1648,8 +1650,10 @@ if (hasResult && directRiskUSD > 0) {
             
             setTimeout(() => {
               setShowInsight(false);
-              setTimeout(() => {
+              setTimeout(async () => {
                 st.clearDraft();
+                // 🔥 SYNC: Refresh subscription so Settings shows correct trade count
+                await queryClient.invalidateQueries({ queryKey: ['subscription'] });
                 navigate("/app/journal/my-trades");
               }, 300);
             }, 5000);
@@ -1677,13 +1681,17 @@ if (hasResult && directRiskUSD > 0) {
               
               setTimeout(() => {
                 setShowInsight(false);
-                setTimeout(() => {
+                setTimeout(async () => {
                   st.clearDraft();
+                  // 🔥 SYNC: Refresh subscription so Settings shows correct trade count
+                  await queryClient.invalidateQueries({ queryKey: ['subscription'] });
                   navigate("/app/journal/my-trades");
                 }, 300);
               }, 5000);
             } else {
               st.clearDraft();
+              // 🔥 SYNC: Refresh subscription so Settings shows correct trade count
+              await queryClient.invalidateQueries({ queryKey: ['subscription'] });
               setTimeout(() => navigate("/app/journal/my-trades"), 300);
             }
           }
