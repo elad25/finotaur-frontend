@@ -62,6 +62,7 @@ if (typeof window !== 'undefined') {
 
 import SupportWidget from "@/components/SupportWidget";
 import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTracker";
+import { FEATURES } from "@/config/features";
 
 // PUBLIC PAGES
 import LandingPage from "@/pages/landing/LandingPage";
@@ -93,6 +94,7 @@ const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
 const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccessPage"));
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
 const HeatmapPage = lazy(() => import("@/pages/HeatmapPage"));
+const DesignLab = lazy(() => import("@/pages/DesignLab"));
 
 // Journal Pages
 const JournalOverview = lazy(() => import("@/pages/app/journal/Overview"));
@@ -116,6 +118,7 @@ const JournalSettings = lazy(async () => {
   const Component = (module as any).default ?? (module as any).JournalSettings ?? Object.values(module)[0];
   return { default: Component };
 });
+const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -153,6 +156,7 @@ const AllMarketsHeatmap = lazy(() => import("@/pages/app/all-markets/Heatmap"));
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
 const AdminSiteDashboard = lazy(() => import("@/pages/app/all-markets/admin/SiteDashboard"));
+const AffiliateSmartPage = lazy(() => import("@/pages/app/all-markets/affiliate/AffiliateSmartPage"));  // 🤝 NEW
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 // Stocks
@@ -169,17 +173,14 @@ const StocksValuation = lazy(() => import("@/pages/app/stocks/Valuation"));
 const StocksReports = lazy(() => import("@/pages/app/stocks/Reports"));
 const StocksWatchlists = lazy(() => import("@/pages/app/stocks/Watchlists"));
 
-// Crypto
+// Crypto — 7 Consolidated Pages
 const CryptoOverview = lazy(() => import("@/pages/app/crypto/Overview"));
-const CryptoTopCoins = lazy(() => import("@/pages/app/crypto/TopCoins"));
-const CryptoOnChain = lazy(() => import("@/pages/app/crypto/OnChain"));
-const CryptoHeatmap = lazy(() => import("@/pages/app/crypto/Heatmap"));
-const CryptoNews = lazy(() => import("@/pages/app/crypto/News"));
-const CryptoCatalysts = lazy(() => import("@/pages/app/crypto/Catalysts"));
-const CryptoExchanges = lazy(() => import("@/pages/app/crypto/Exchanges"));
-const CryptoMovers = lazy(() => import("@/pages/app/crypto/Movers"));
-const CryptoReports = lazy(() => import("@/pages/app/crypto/Reports"));
-const CryptoCalendar = lazy(() => import("@/pages/app/crypto/Calendar"));
+const CryptoCoinDetail = lazy(() => import("@/pages/app/crypto/CoinDetail"));
+const CryptoScreener = lazy(() => import("@/pages/app/crypto/Screener"));
+const CryptoDerivatives = lazy(() => import("@/pages/app/crypto/Derivatives"));
+const CryptoSentiment = lazy(() => import("@/pages/app/crypto/Sentiment"));
+const CryptoWatchlist = lazy(() => import("@/pages/app/crypto/Watchlist"));
+const CryptoAcademy = lazy(() => import("@/pages/app/crypto/Academy"));
 
 // Futures
 const FuturesOverview = lazy(() => import("@/pages/app/futures/Overview"));
@@ -293,6 +294,10 @@ function AppContent() {
       <GuidedTour />
       <WelcomeOffer />
       <Routes>
+        {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
+        {import.meta.env.DEV && (
+          <Route path="/design-lab" element={<DesignLab />} />
+        )}
         {/* PUBLIC ROUTES */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
@@ -305,7 +310,7 @@ function AppContent() {
         <Route path="/auth/reset-password" element={<ResetPassword />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        <Route path="/affiliate" element={<AffiliatePage />} />
+        <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
@@ -332,8 +337,9 @@ function AppContent() {
           <Route path="all-markets/news" element={<SuspenseRoute><AllMarketsNews /></SuspenseRoute>} />
           <Route path="all-markets/heatmap" element={<SuspenseRoute><AllMarketsHeatmap /></SuspenseRoute>} />
 <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
+          <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
-<Route path="all-markets/admin/site-dashboard" element={<ProtectedAdminRoute><SuspenseRoute><AdminSiteDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="all-markets/admin/site-dashboard" element={<ProtectedAdminRoute><SuspenseRoute><AdminSiteDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
@@ -368,17 +374,14 @@ function AppContent() {
           <Route path="stocks/reports" element={<LockedRoute domainId="stocks"><StocksReports /></LockedRoute>} />
           <Route path="stocks/watchlists" element={<LockedRoute domainId="stocks"><StocksWatchlists /></LockedRoute>} />
           
-          {/* CRYPTO */}
+          {/* CRYPTO — 7 Consolidated Pages */}
           <Route path="crypto/overview" element={<LockedRoute domainId="crypto"><CryptoOverview /></LockedRoute>} />
-          <Route path="crypto/top-coins" element={<LockedRoute domainId="crypto"><CryptoTopCoins /></LockedRoute>} />
-          <Route path="crypto/on-chain" element={<LockedRoute domainId="crypto"><CryptoOnChain /></LockedRoute>} />
-          <Route path="crypto/heatmap" element={<LockedRoute domainId="crypto"><CryptoHeatmap /></LockedRoute>} />
-          <Route path="crypto/news" element={<LockedRoute domainId="crypto"><CryptoNews /></LockedRoute>} />
-          <Route path="crypto/catalysts" element={<LockedRoute domainId="crypto"><CryptoCatalysts /></LockedRoute>} />
-          <Route path="crypto/exchanges" element={<LockedRoute domainId="crypto"><CryptoExchanges /></LockedRoute>} />
-          <Route path="crypto/movers" element={<LockedRoute domainId="crypto"><CryptoMovers /></LockedRoute>} />
-          <Route path="crypto/reports" element={<LockedRoute domainId="crypto"><CryptoReports /></LockedRoute>} />
-          <Route path="crypto/calendar" element={<LockedRoute domainId="crypto"><CryptoCalendar /></LockedRoute>} />
+          <Route path="crypto/coin/:coinId" element={<LockedRoute domainId="crypto"><CryptoCoinDetail /></LockedRoute>} />
+          <Route path="crypto/screener" element={<LockedRoute domainId="crypto"><CryptoScreener /></LockedRoute>} />
+          <Route path="crypto/derivatives" element={<LockedRoute domainId="crypto"><CryptoDerivatives /></LockedRoute>} />
+          <Route path="crypto/sentiment" element={<LockedRoute domainId="crypto"><CryptoSentiment /></LockedRoute>} />
+          <Route path="crypto/watchlist" element={<LockedRoute domainId="crypto"><CryptoWatchlist /></LockedRoute>} />
+          <Route path="crypto/academy" element={<LockedRoute domainId="crypto"><CryptoAcademy /></LockedRoute>} />
           
           {/* FUTURES */}
           <Route path="futures/overview" element={<LockedRoute domainId="futures"><FuturesOverview /></LockedRoute>} />
@@ -440,7 +443,6 @@ function AppContent() {
 <Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
-<Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 <Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
 <Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />
@@ -449,6 +451,9 @@ function AppContent() {
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
+<Route path="journal/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+<Route path="journal/copy-trading" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+<Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
           <Route path="journal/backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
@@ -465,21 +470,25 @@ function AppContent() {
           <Route path="journal/backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           <Route path="journal/backtest/new" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
 
-          {/* AFFILIATE CENTER */}
-          <Route path="journal/affiliate" element={<Navigate to="/app/journal/affiliate/overview" replace />} />
-          <Route path="journal/affiliate/overview" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
-          <Route path="journal/affiliate/dashboard" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
-          <Route path="journal/affiliate/referrals" element={<AffiliateRoute><AffiliateReferrals /></AffiliateRoute>} />
-          <Route path="journal/affiliate/earnings" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
-          <Route path="journal/affiliate/commissions" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
-          <Route path="journal/affiliate/payouts" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
-          <Route path="journal/affiliate/request-payout" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
-          <Route path="journal/affiliate/payout-history" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
-          <Route path="journal/affiliate/marketing" element={<AffiliateRoute><AffiliateMarketing /></AffiliateRoute>} />
-          <Route path="journal/affiliate/analytics" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
-          <Route path="journal/affiliate/performance" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
-          <Route path="journal/affiliate/settings" element={<AffiliateRoute><AffiliateSettings /></AffiliateRoute>} />
-          <Route path="journal/affiliate/bonuses" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+          {/* AFFILIATE CENTER — gated by FEATURES.AFFILIATE_TRACKING (re-enable for Stripe migration) */}
+          {FEATURES.AFFILIATE_TRACKING && (
+            <>
+              <Route path="journal/affiliate" element={<Navigate to="/app/journal/affiliate/overview" replace />} />
+              <Route path="journal/affiliate/overview" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
+              <Route path="journal/affiliate/dashboard" element={<AffiliateRoute><AffiliateOverview /></AffiliateRoute>} />
+              <Route path="journal/affiliate/referrals" element={<AffiliateRoute><AffiliateReferrals /></AffiliateRoute>} />
+              <Route path="journal/affiliate/earnings" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+              <Route path="journal/affiliate/commissions" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+              <Route path="journal/affiliate/payouts" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+              <Route path="journal/affiliate/request-payout" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+              <Route path="journal/affiliate/payout-history" element={<AffiliateRoute><AffiliatePayouts /></AffiliateRoute>} />
+              <Route path="journal/affiliate/marketing" element={<AffiliateRoute><AffiliateMarketing /></AffiliateRoute>} />
+              <Route path="journal/affiliate/analytics" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
+              <Route path="journal/affiliate/performance" element={<AffiliateRoute><AffiliateAnalytics /></AffiliateRoute>} />
+              <Route path="journal/affiliate/settings" element={<AffiliateRoute><AffiliateSettings /></AffiliateRoute>} />
+              <Route path="journal/affiliate/bonuses" element={<AffiliateRoute><AffiliateEarnings /></AffiliateRoute>} />
+            </>
+          )}
 
           {/* JOURNAL ADMIN */}
           <Route path="journal/admin" element={<ProtectedAdminRoute><SuspenseRoute><AdminDashboard /></SuspenseRoute></ProtectedAdminRoute>} />

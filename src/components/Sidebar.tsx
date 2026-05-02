@@ -5,13 +5,14 @@
 // Admins/VIPs with hasBetaAccess can see and access ALL locked items
 // =====================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
+import { FEATURES } from '@/config/features';
+import {
+  LayoutDashboard,
   PlusCircle, 
   BookOpen, 
   Layers, 
@@ -20,7 +21,8 @@ import {
   MessageSquare, 
   Building, 
   Target, 
-  Users, 
+  Users,
+  Copy, 
   GraduationCap, 
   Settings,
   FlaskConical,
@@ -134,15 +136,11 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   'crypto': [
     { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
-    { label: 'Top Coins', path: '/app/crypto/top-coins', icon: Coins },
-    { label: 'On-chain Data', path: '/app/crypto/on-chain', icon: Activity },
-    { label: 'Heatmap', path: '/app/crypto/heatmap', icon: Map },
-    { label: 'News & Sentiment', path: '/app/crypto/news', icon: Newspaper },
-    { label: 'Catalysts', path: '/app/crypto/catalysts', icon: Zap },
-    { label: 'Exchanges', path: '/app/crypto/exchanges', icon: Building },
-    { label: 'Top Movers', path: '/app/crypto/movers', icon: TrendingUp },
-    { label: 'Reports', path: '/app/crypto/reports', icon: FileText },
-    { label: 'Calendar', path: '/app/crypto/calendar', icon: Calendar },
+    { label: 'Screener', path: '/app/crypto/screener', icon: Search },
+    { label: 'Derivatives', path: '/app/crypto/derivatives', icon: Activity },
+    { label: 'Sentiment & News', path: '/app/crypto/sentiment', icon: Newspaper },
+    { label: 'Watchlist', path: '/app/crypto/watchlist', icon: Bell },
+    { label: 'Academy', path: '/app/crypto/academy', icon: GraduationCap },
   ],
 
   // ===============================================
@@ -246,7 +244,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
-    { label: 'Community Blog', path: '/app/journal/community', icon: Users },
+    { label: 'Trade Copier', path: '/app/journal/copy-trading', icon: Copy },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
@@ -310,7 +308,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   // 🤝 AFFILIATE
   // ===============================================
-  affiliate: [
+  affiliate: FEATURES.AFFILIATE_TRACKING ? [
     { label: 'Dashboard', path: '/app/journal/affiliate/overview', icon: LayoutDashboard },
     { label: 'My Referrals', path: '/app/journal/affiliate/referrals', icon: UserPlus },
     { label: 'Earnings', path: '/app/journal/affiliate/earnings', icon: DollarSign },
@@ -322,7 +320,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Settings', path: '/app/journal/affiliate/settings', icon: Settings },
     { label: 'divider', path: '', icon: null, divider: true },
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
-  ],
+  ] : [],
 
   // ===============================================
   // ⚙️ SETTINGS
@@ -363,9 +361,23 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // 🔥 NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
+    // Auto-collapse sidebar on AI Assistant page
+    if (window.location.pathname.startsWith('/app/ai/assistant')) {
+      return false;
+    }
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
     return saved !== 'false';
   });
+
+  // Auto-collapse on AI Assistant, restore on other pages
+  useEffect(() => {
+    if (location.pathname.startsWith('/app/ai/assistant')) {
+      setIsExpanded(false);
+    } else {
+      const saved = localStorage.getItem('finotaur-sidebar-expanded');
+      setIsExpanded(saved !== 'false');
+    }
+  }, [location.pathname]);
 
   const handleToggle = () => {
     setIsExpanded(prev => {
