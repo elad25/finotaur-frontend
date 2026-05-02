@@ -21,6 +21,47 @@ All other findings deferred — listed for next iteration.
 
 ---
 
+## KNOWN UNVERIFIED PATH (LAUNCH-CRITICAL)
+
+**Flow C — Google OAuth signup (brand new user)**
+
+- **Status:** NOT live-tested in this session (2026-05-02)
+- **Last verified:** previous session by user, specific date unknown
+- **Code-level audit:** C1/C2/C3 fixes applied to SIGNED_IN handler. Logic reviewed end-to-end (see AUTH_FLOW_MAP.md Flow C). Execution path NOT exercised.
+- **Why not tested:** Claude Preview cannot complete Google OAuth (external login window outside iframe).
+
+**Mitigation for first cohort (first 48h post-launch):**
+1. Watch Supabase auth logs for OAuth signup errors
+2. If first Google signup user reports issue → reproduce immediately
+3. After each new Google user → spot-check `profiles` table:
+   - `display_name` populated from Google `full_name`/`name` metadata
+   - `affiliate_code` generated (random alphanumeric)
+   - `terms_accepted_at` + `terms_version` set (from `pending_terms_*` localStorage via C3 fix)
+   - `account_type = 'free'`
+4. If C1/C2 regression suspected (Google user reports referral link broken or display name reverted) → check git blame on AuthProvider.tsx:211-265 + verify `affiliate_code IS NULL` gate logic
+
+**Recommended SQL for monitoring (first 48h):**
+```sql
+-- New Google signups in last 48h
+SELECT
+  u.id,
+  u.email,
+  u.created_at,
+  u.raw_app_meta_data->>'provider' AS provider,
+  p.display_name,
+  p.affiliate_code,
+  p.terms_accepted_at,
+  p.account_type
+FROM auth.users u
+LEFT JOIN public.profiles p ON p.id = u.id
+WHERE u.created_at > now() - interval '48 hours'
+  AND u.raw_app_meta_data->>'provider' = 'google'
+ORDER BY u.created_at DESC;
+```
+Flag any row where `display_name`, `affiliate_code`, or `terms_accepted_at` is NULL.
+
+---
+
 ## DEFERRED FINDINGS
 
 ### 🟠 H1 — Login page flicker for already-logged-in users
