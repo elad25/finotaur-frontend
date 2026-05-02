@@ -5,6 +5,8 @@
 
 import { Link } from "react-router-dom";
 import { Mail, Shield } from "lucide-react";
+import { Wordmark } from "@/components/ds/Wordmark";
+import { FEATURES } from "@/config/features";
 
 const footerLinks = {
   product: [
@@ -15,7 +17,9 @@ const footerLinks = {
   ],
   company: [
     { label: "Contact", href: "/contact" },
-    { label: "Affiliate Program", href: "/affiliate" },
+    ...(FEATURES.AFFILIATE_TRACKING
+      ? [{ label: "Affiliate Program", href: "/affiliate" }]
+      : []),
     { label: "About", href: "/about" },
   ],
   legal: [
@@ -48,12 +52,10 @@ const Footer = () => {
           <div className="col-span-2 md:col-span-1">
             <button
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="flex items-center group mb-4"
+              className="flex items-center mb-4"
+              aria-label="Scroll to top"
             >
-              <span className="text-xl font-bold tracking-tight">
-                <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
-                <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
-              </span>
+              <Wordmark size="default" interactive />
             </button>
             <p className="text-slate-500 text-xs leading-relaxed mb-4 max-w-xs">
               Your command center for the stock market. AI-powered tools,

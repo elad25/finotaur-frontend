@@ -3,13 +3,15 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { FEATURES } from '@/config/features';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, affiliateCode?: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
 }
@@ -111,101 +113,33 @@ async function generateAffiliateCode(name: string): Promise<string> {
   return code || 'FNT' + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
 }
 
+/**
+ * Wait for the handle_new_user trigger to create the profiles row.
+ * Polls every 250ms up to 2000ms total. Returns true if found, false on timeout.
+ *
+ * Used after signup to gate the affiliate_code / display_name UPDATE so we don't
+ * race against the trigger.
+ */
+async function waitForProfile(userId: string, timeoutMs = 2000): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+    if (data) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const queryClient = useQueryClient();
   
   const isSubscribedRef = useRef(false);
-  const snapTradeIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isTrackingActiveRef = useRef(false);
-
-  // SnapTrade tracking
-  useEffect(() => {
-    if (isTrackingActiveRef.current) {
-      // 🔥 Removed log: '[SnapTrade] Already tracking - skipping duplicate'
-      return;
-    }
-
-    if (!user) {
-      if (snapTradeIntervalRef.current) {
-        clearInterval(snapTradeIntervalRef.current);
-        snapTradeIntervalRef.current = null;
-        isTrackingActiveRef.current = false;
-      }
-      return;
-    }
-
-    isTrackingActiveRef.current = true;
-
-    const updateActivity = async () => {
-      try {
-        const { error } = await supabase
-          .from('snaptrade_activity')
-          .upsert(
-            {
-              user_id: user.id,
-              last_activity_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-            {
-              onConflict: 'user_id',
-              ignoreDuplicates: false,
-            }
-          );
-
-        if (error) {
-          // 🔥 Silent fail - removed console.error
-        }
-      } catch (error) {
-        // 🔥 Silent fail - removed console.error
-      }
-    };
-
-    updateActivity();
-    snapTradeIntervalRef.current = setInterval(updateActivity, 5 * 60 * 1000);
-
-    // 🔥 Log only once
-    logOnce('snaptrade-init', '[SnapTrade] Tracking started');
-
-    return () => {
-      if (snapTradeIntervalRef.current) {
-        clearInterval(snapTradeIntervalRef.current);
-        snapTradeIntervalRef.current = null;
-        isTrackingActiveRef.current = false;
-      }
-    };
-   }, [user?.id]);
-
-  // Visibility tracking
-  useEffect(() => {
-    if (!user) return;
-
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        try {
-          await supabase
-            .from('snaptrade_activity')
-            .upsert(
-              {
-                user_id: user.id,
-                last_activity_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'user_id' }
-            );
-        } catch (error) {
-          // 🔥 Silent fail - removed console.error
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-   }, [user?.id]);
 
   useEffect(() => {
     if (isSubscribedRef.current) {
@@ -266,61 +200,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 🔥 CRITICAL FIX: Clear any old impersonation data on real login
         sessionStorage.removeItem('imp_user_data');
 
-        const pendingAffiliateCode = localStorage.getItem('pending_affiliate_code');
-        if (pendingAffiliateCode) {
-          // 🔥 Removed log: '[Auth] Processing pending affiliate code...'
-          await processAffiliateCode(userId, pendingAffiliateCode);
-          localStorage.removeItem('pending_affiliate_code');
+        if (FEATURES.AFFILIATE_TRACKING) {
+          const pendingAffiliateCode = localStorage.getItem('pending_affiliate_code');
+          if (pendingAffiliateCode) {
+            await processAffiliateCode(userId, pendingAffiliateCode);
+            localStorage.removeItem('pending_affiliate_code');
+          }
         }
 
         if (session.user.app_metadata.provider === 'google') {
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', userId)
-            .maybeSingle();
+          const profileReady = await waitForProfile(userId);
+          if (!profileReady) {
+            console.warn(`[Auth] Profile not created within 2s for user ${userId}. Trigger may have failed.`);
+            toast.error(
+              'Account created, but profile setup is taking longer than usual. ' +
+              'Please refresh in a moment. If the problem persists, contact support.'
+            );
+          } else {
+            // First-sign-in gate: only populate user-specific fields when the
+            // profile is freshly minted (affiliate_code IS NULL means we have
+            // not run this block before). Returning users keep their data.
+            const { data: existingProfile } = await supabase
+              .from('profiles')
+              .select('affiliate_code, terms_accepted_at')
+              .eq('id', userId)
+              .maybeSingle();
 
-          if (!existingProfile) {
-  // 🔥 Creating profile for Google user with proper defaults
-  const displayName = 
-    session.user.user_metadata?.full_name || 
-    session.user.user_metadata?.name || 
-    session.user.email?.split('@')[0] || 
-    'User';
+            if (existingProfile && !existingProfile.affiliate_code) {
+              const displayName =
+                session.user.user_metadata?.full_name ||
+                session.user.user_metadata?.name ||
+                session.user.email?.split('@')[0] ||
+                'User';
+              const affiliateCode = await generateAffiliateCode(displayName);
 
-  const affiliateCode = await generateAffiliateCode(displayName);
+              // Persist pre-OAuth terms acceptance (set by Register.tsx
+              // localStorage before redirect) if profile lacks them.
+              const pendingTermsAt = localStorage.getItem('pending_terms_accepted_at');
+              const pendingTermsVer = localStorage.getItem('pending_terms_version');
+              const termsFields =
+                !existingProfile.terms_accepted_at && pendingTermsAt && pendingTermsVer
+                  ? { terms_accepted_at: pendingTermsAt, terms_version: pendingTermsVer }
+                  : {};
 
-  await supabase.from('profiles').insert({
-    id: userId,
-    display_name: displayName,
-    email: session.user.email,
-    affiliate_code: affiliateCode,
-    account_type: 'free',
-    subscription_status: null,
-    max_trades: 10,
-    trade_count: 0,
-    current_month_trades_count: 0,
-    portfolio_size: 10000,
-    risk_mode: 'percentage',
-    risk_percentage: 1.0,
-    onboarding_completed: false,
-    role: 'user',
-    is_banned: false,
-    // ✅ Newsletter token
-    newsletter_unsubscribe_token: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, ''),
-    newsletter_enabled: false,
-    newsletter_status: 'inactive',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  });
-}
+              const { error: updateError } = await supabase
+                .from('profiles')
+                .update({
+                  affiliate_code: affiliateCode,
+                  display_name: displayName,
+                  ...termsFields,
+                })
+                .eq('id', userId);
+
+              if (updateError) {
+                console.error('[Auth] First-sign-in profile UPDATE failed:', updateError);
+              } else {
+                localStorage.removeItem('pending_terms_accepted_at');
+                localStorage.removeItem('pending_terms_version');
+              }
+            }
+          }
         }
       } else if (event === 'SIGNED_OUT') {
         logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
-        // 🔥 Reset the logged keys for sign-in events so they can log again on next login
         _authLoggedOnce.delete('auth-session');
+        _authLoggedOnce.delete('auth-init');
+        _authLoggedOnce.delete('auth-no-session');
         _authLoggedOnce.forEach(key => {
-          if (key.startsWith('auth-signin-') || key.startsWith('auth-event-SIGNED_IN')) {
+          if (key.startsWith('auth-signin-') || key.startsWith('auth-event-')) {
             _authLoggedOnce.delete(key);
           }
         });
@@ -368,10 +315,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (email: string, password: string, name: string, affiliateCode?: string) => {
+  const register = useCallback(async (email: string, password: string, name: string) => {
     try {
-      // 🔥 Removed log: '[Auth] Attempting registration for:', email
-      
       // 🔥 FIX: Check if user already exists first
       const { data: existingUser } = await supabase
         .from('profiles')
@@ -398,50 +343,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const newAffiliateCode = await generateAffiliateCode(name);
 
-      // 🔥 FIX: Check again if profile was created by trigger
-      const { data: profileCheck } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', authData.user.id)
-        .maybeSingle();
-
-      if (profileCheck) {
-        // 🔥 Removed log: '[Auth] Profile already exists (created by trigger)'
+      const profileReady = await waitForProfile(authData.user.id);
+      if (!profileReady) {
+        console.warn(`[Auth] Profile not created within 2s for user ${authData.user.id}. Trigger may have failed.`);
+        toast.error(
+          'Account created, but profile setup is taking longer than usual. ' +
+          'Please refresh in a moment. If the problem persists, contact support.'
+        );
       } else {
-  const { error: profileError } = await supabase.from('profiles').insert({
-    id: authData.user.id,
-    email: email,
-    display_name: name,
-    affiliate_code: newAffiliateCode,
-    referred_by: affiliateCode || null,
-    // ✅ FIX: Match handle_new_user() trigger defaults
-    account_type: 'free',
-    subscription_status: null,
-    max_trades: 10,
-    current_month_trades_count: 0,
-    portfolio_size: 10000,
-    risk_mode: 'percentage',
-    risk_percentage: 1.0,
-    onboarding_completed: false,
-    role: 'user',
-    is_banned: false,
-    // ✅ Newsletter token
-    newsletter_unsubscribe_token: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, ''),
-    newsletter_enabled: false,
-    newsletter_status: 'inactive',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  });
-
-  // 🔥 FIX: Ignore 409 duplicate key errors
-  if (profileError && profileError.code !== '23505') {
-    throw profileError;
-  }
-}
-
-      if (affiliateCode) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await processAffiliateCode(authData.user.id, affiliateCode);
+        await supabase
+          .from('profiles')
+          .update({
+            affiliate_code: newAffiliateCode,
+          })
+          .eq('id', authData.user.id);
       }
 
       // 🔥 Removed log: '[Auth] Registration successful'

@@ -7,6 +7,9 @@ import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ds/Button";
+import { Wordmark } from "@/components/ds/Wordmark";
+import { FEATURES } from "@/config/features";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -26,7 +29,9 @@ const Navbar = () => {
     { href: "#pricing", label: "Pricing" },
     { href: "/journal", label: "Journal", isRoute: true },
     { href: "#faq", label: "FAQ" },
-    { href: "/affiliate", label: "Become an Affiliate", isRoute: true },
+    ...(FEATURES.AFFILIATE_TRACKING
+      ? [{ href: "/affiliate", label: "Become an Affiliate", isRoute: true }]
+      : []),
     { href: "/about", label: "About", isRoute: true },
   ];
 
@@ -57,32 +62,27 @@ const Navbar = () => {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.6 }}
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-        isScrolled
-          ? "bg-black/80 backdrop-blur-2xl border-b border-[#C9A646]/25 shadow-[0_4px_30px_rgba(201,166,70,0.08)]"
-          : "bg-black/40 backdrop-blur-2xl border-b border-[#C9A646]/10"
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b border-[rgba(201,166,70,0.12)] bg-black/70 backdrop-blur-xl",
+        isScrolled && "bg-black/85"
       )}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <button onClick={handleLogoClick} className="flex items-center group">
-            <span className="text-xl md:text-2xl font-bold tracking-tight">
-              <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
-              <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
-            </span>
+          <button onClick={handleLogoClick} className="flex items-center" aria-label="FINOTAUR home">
+            <Wordmark size="compact" interactive />
           </button>
 
           {/* Desktop Nav Links */}
-          <div className="hidden lg:flex items-center space-x-6">
+          <div className="hidden lg:flex items-center space-x-7">
             {navLinks.map((link, index) => (
               <button
                 key={index}
                 onClick={() => handleNavClick(link)}
-                className="text-slate-300 hover:text-white transition-colors text-sm font-medium relative group"
+                className="relative font-sans text-[12px] uppercase tracking-[0.18em] font-semibold text-white/75 hover:text-[#C9A646] transition-colors duration-300 group py-1"
               >
                 {link.label}
-                <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#C9A646] group-hover:w-full transition-all duration-300" />
+                <span className="absolute left-0 -bottom-0.5 w-full h-px origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#C9A646]/80 to-transparent transition-transform duration-300 group-hover:scale-x-100" />
               </button>
             ))}
           </div>
@@ -91,27 +91,23 @@ const Navbar = () => {
           <div className="hidden lg:flex items-center space-x-3">
             <button
               onClick={() => navigate('/auth/login')}
-              className="text-slate-300 hover:text-white px-4 py-2 transition-colors text-sm font-medium hover:bg-white/5 rounded-lg"
+              className="text-[12px] font-sans uppercase tracking-[0.18em] font-semibold text-white/80 hover:text-white transition-colors duration-300"
             >
               Login
             </button>
-            <button
+            <Button
+              variant="gold"
+              size="compact"
               onClick={() => navigate('/auth/register')}
-              className="px-5 py-2 rounded-xl font-semibold text-sm transition-all duration-300 hover:scale-105"
-              style={{
-                background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)',
-                color: '#000',
-                boxShadow: '0 4px 24px rgba(201,166,70,0.4)',
-              }}
             >
-              Start Free Trial
-            </button>
+              Start free trial
+            </Button>
           </div>
 
           {/* Mobile Menu Button */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-2 text-slate-300 hover:text-white transition-colors"
+            className="lg:hidden p-2 text-white/60 hover:text-[#C9A646] transition-colors duration-200"
           >
             {isMobileMenuOpen ? (
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -130,32 +126,33 @@ const Navbar = () => {
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="lg:hidden bg-black/95 backdrop-blur-xl border-t border-white/[0.08]"
+            className="lg:hidden bg-black/90 backdrop-blur-xl border-t border-[rgba(201,166,70,0.1)]"
           >
             <div className="px-4 py-6 space-y-4">
               {navLinks.map((link, index) => (
                 <button
                   key={index}
                   onClick={() => handleNavClick(link)}
-                  className="block w-full text-left text-slate-300 hover:text-white transition-colors text-base font-medium py-2"
+                  className="block w-full text-left font-sans text-[12px] uppercase tracking-[0.18em] font-semibold text-white/75 hover:text-[#C9A646] transition-colors duration-300 py-2"
                 >
                   {link.label}
                 </button>
               ))}
-              <div className="pt-4 border-t border-white/10 space-y-3">
+              <div className="pt-4 border-t border-[rgba(201,166,70,0.1)] space-y-3">
                 <button
                   onClick={() => { navigate('/auth/login'); setIsMobileMenuOpen(false); }}
-                  className="w-full text-slate-300 hover:text-white py-3 transition-colors"
+                  className="w-full text-[12px] font-sans uppercase tracking-[0.18em] font-semibold text-white/80 hover:text-white py-3 transition-colors duration-300"
                 >
                   Login
                 </button>
-                <button
+                <Button
+                  variant="gold"
+                  size="compact"
+                  className="w-full"
                   onClick={() => { navigate('/auth/register'); setIsMobileMenuOpen(false); }}
-                  className="w-full py-3 rounded-xl font-semibold"
-                  style={{ background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', color: '#000' }}
                 >
-                  Start Free Trial
-                </button>
+                  Start free trial
+                </Button>
               </div>
             </div>
           </motion.div>

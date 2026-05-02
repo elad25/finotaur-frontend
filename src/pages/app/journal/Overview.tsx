@@ -18,19 +18,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import PageTitle from "@/components/PageTitle";
 import dayjs from "dayjs";
+import { FEATURES } from "@/config/features";
 import {
   PlusSquare, FileText, Layers, BarChart3, Calendar as CalendarIcon,
   MessageSquare, ListChecks, Users, GraduationCap, Settings as SettingsIcon,
   Sparkles, TrendingUp, TrendingDown, UserPlus, Link2, CheckCircle2, Lock, 
   Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check, Upload, 
-  FileSpreadsheet, Download, ChevronLeft, ChevronRight, CalendarRange
+  FileSpreadsheet, Download, ChevronLeft, ChevronRight, CalendarRange,
+  RefreshCw, Wifi, WifiOff, AlertCircle
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import {
   useDashboardStats,
-  useSnapTradeConnections,
   formatCurrency,
   formatPercentage,
   getPnLColor,
@@ -61,8 +62,13 @@ const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
+const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
+const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
 const ImportTradesPopup = lazy(() => import("@/components/Importtradespopup"));
 import { useImportTrades } from '@/hooks/useImportTrades';
+import { useTradovate } from '@/hooks/useTradovate';
+import { usePortfolioContext } from '@/contexts/PortfolioContext';
+import { AccountSwitcher } from '@/components/AccountSwitcher';
 import type { FinotaurTrade } from '@/utils/importUtils';
 
 // ================================================
@@ -1005,9 +1011,34 @@ function JournalOverviewContent() {
   const [dateEnd, setDateEnd] = useState<Date | null>(null);
   const [showReferModal, setShowReferModal] = useState(false);
   const [showSnapTradePopup, setShowSnapTradePopup] = useState(false);
+  const [showTradovateModal, setShowTradovateModal] = useState(false);
+  const [tradovateInitialStep, setTradovateInitialStep] = useState<'select-env' | 'manage'>('select-env');
+  const [showBrokerPanel, setShowBrokerPanel] = useState(false);
+  const [showBrokerPicker, setShowBrokerPicker] = useState(false);
+  const { syncStatus, hasAnyConnection, credentials, reconnect } = useTradovate();
+  const {
+    portfolios,
+    activePortfolio,
+    activePortfolioId,
+    effectivePortfolioId,
+    effectivePortfolioIds,
+    setActivePortfolioId,
+    hasMultiplePortfolios,
+  } = usePortfolioContext();
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
   
+  const brokerPanelRef = React.useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (brokerPanelRef.current && !brokerPanelRef.current.contains(e.target as Node)) {
+        setShowBrokerPanel(false);
+      }
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
   const { id: userId, isImpersonating } = useEffectiveUser();
   const queryClient = useQueryClient();
 
@@ -1023,8 +1054,9 @@ function JournalOverviewContent() {
     return 30;
   }, [dateStart, dateEnd]);
   
-  const { limits, loading: subscriptionLoading, canUseSnapTrade } = useSubscription();
-  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId);
+  const { limits, loading: subscriptionLoading } = useSubscription();
+  const canUseSnapTrade = false; // disabled during SnapTrade removal (Phase A1)
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, effectivePortfolioId, effectivePortfolioIds);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
   // Covers: create, edit, delete from MyTrades + NewTrade page
@@ -1040,7 +1072,7 @@ function JournalOverviewContent() {
     });
     return unsubscribe;
   }, [queryClient, refetchStats]);
-  const { data: connections, isLoading: connectionsLoading } = useSnapTradeConnections(userId);
+  const connections: any[] = []; const connectionsLoading = false;
   const { importTrades: saveToSupabase } = useImportTrades();
 
   
@@ -1087,13 +1119,15 @@ function JournalOverviewContent() {
     window.print();
   }, []);
   
-  const handleBrokerButtonClick = useCallback(() => {
-    if (isLockedForFree) {
-      setShowFreeUserTooltip(true);
-    } else {
-      setShowSnapTradePopup(true);
+  
+
+  const handleBrokerPickerSelect = useCallback((broker: import('@/components/BrokerPickerModal').BrokerKey) => {
+    setShowBrokerPicker(false);
+    if (broker === 'tradovate') {
+      setShowTradovateModal(true);
     }
-  }, [isLockedForFree]);
+    // future brokers: add more cases here
+  }, []);
 
   const handleUpgradeFromTooltip = useCallback(() => {
     setShowFreeUserTooltip(false);
@@ -1154,37 +1188,103 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </div>
             )}
 
-            {/* ✅ DISABLED: Broker button - only admins can access */}
-            <button
-              onClick={handleBrokerButtonClick}
-              disabled={!isImpersonating}
-              className={`flex items-center gap-2.5 border rounded-[12px] px-4 py-2.5 transition-all duration-300 group relative overflow-hidden ${
-                isImpersonating
-                  ? hasActiveConnection
-                    ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
-                    : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:border-[#C9A646]/40'
-                  : 'bg-zinc-900/50 border-zinc-700/30 cursor-not-allowed opacity-50'
-              }`}
-            >
-              {isImpersonating ? (
-                hasActiveConnection ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 text-sm font-medium">Broker Connected</span>
-                  </>
-                ) : (
-                  <>
-                    <Link2 className="w-4 h-4 text-[#C9A646] group-hover:rotate-45 transition-transform duration-300" />
-                    <span className="text-[#C9A646] text-sm font-medium">Connect Broker</span>
-                  </>
-                )
-              ) : (
-                <>
-                  <Lock className="w-4 h-4 text-zinc-500" />
-                  <span className="text-zinc-500 text-sm font-medium">Connect Broker</span>
-                </>
-              )}
-            </button>
+            {/* ✅ Broker Status Button — visible to all, opens account panel */}
+            {canUseSnapTrade && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowBrokerPanel(v => !v)}
+                  className={`flex items-center gap-2.5 border rounded-[12px] px-4 py-2.5 transition-all duration-300 group relative overflow-hidden ${
+                    syncStatus.type === 'connected'
+                      ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
+                      : syncStatus.type === 'error'
+                      ? 'bg-gradient-to-r from-red-500/10 to-red-600/10 border-red-500/30 hover:border-red-500/50'
+                      : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:border-[#C9A646]/40'
+                  }`}
+                >
+                  {syncStatus.type === 'connected' ? (
+                    <>
+                      <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <div className="text-left">
+                        <div className="text-[10px] text-emerald-500/70 uppercase tracking-wider leading-none">
+                          {credentials[0]?.connection_label || 'Tradovate'}
+                        </div>
+                        <div className="text-emerald-400 text-sm font-medium leading-tight">{syncStatus.label}</div>
+                      </div>
+                      <span className="text-[10px] text-emerald-500/50 ml-1">
+                        {credentials.length} acct{credentials.length !== 1 ? 's' : ''}
+                      </span>
+                    </>
+                  ) : syncStatus.type === 'error' ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-red-400" />
+                      <div className="text-left">
+                        <div className="text-[10px] text-red-500/70 uppercase tracking-wider leading-none">Tradovate</div>
+                        <div className="text-red-400 text-sm font-medium leading-tight">Sync Error</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Link2 className="w-4 h-4 text-[#C9A646] group-hover:rotate-45 transition-transform duration-300" />
+                      <div className="text-left">
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wider leading-none">Tradovate</div>
+                        <div className="text-[#C9A646] text-sm font-medium leading-tight">Connect Broker</div>
+                      </div>
+                    </>
+                  )}
+                </button>
+
+                {/* Dropdown Panel */}
+                {showBrokerPanel && (
+                  <div
+                    className="absolute right-0 top-14 z-50 w-72 rounded-2xl shadow-2xl overflow-hidden"
+                    style={{
+                      background: 'rgba(14,14,14,0.98)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      backdropFilter: 'blur(20px)',
+                    }}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
+                      <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Connected Accounts</span>
+                      <button
+                        onClick={() => { setShowBrokerPanel(false); setShowBrokerPicker(true); }}
+                        className="flex items-center gap-1.5 text-[10px] text-[#C9A646] hover:text-[#E5C158] transition-colors font-medium"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        Add Account
+                      </button>
+                    </div>
+
+                    {/* Account List — AccountSwitcher handles ALL grouping */}
+                    <div className="p-2 max-h-72 overflow-y-auto custom-scrollbar">
+                      <AccountSwitcher />
+                      
+                    </div>
+
+                    {/* Footer */}
+                    <div className="px-3 py-3 border-t border-zinc-800/60 flex items-center gap-2">
+                      {/* + Add new connection */}
+                      <button
+                        onClick={() => { setShowBrokerPanel(false); setShowBrokerPicker(true); }}
+                        className="flex items-center justify-center w-8 h-8 rounded-xl bg-[#C9A646]/10 hover:bg-[#C9A646]/20 text-[#C9A646] transition-all border border-[#C9A646]/20 flex-shrink-0"
+                        title="Add account"
+                      >
+                        <span className="text-base font-bold leading-none">+</span>
+                      </button>
+                      {/* Manage existing connections */}
+                      <button
+                        onClick={() => { setShowBrokerPanel(false); setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-300 hover:text-white text-xs font-medium transition-all border border-zinc-700/40"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Manage Connections
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
 
             {/* ✅ NEW: Import Trades Button (replaces Trader Tier) */}
             <button
@@ -1222,28 +1322,6 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           />
 
           <div className="ml-auto flex items-center gap-3">
-            {/* ✅ UPDATED: Refer a Friend Button with Green Checkmark for Affiliates */}
-            <button
-              onClick={() => setShowReferModal(true)}
-              className={`flex items-center gap-2 border rounded-[12px] px-4 py-2.5 font-medium text-sm transition-all duration-300 group relative overflow-hidden ${
-                isAffiliate 
-                  ? 'bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border-emerald-500/30 hover:border-emerald-500/50'
-                  : 'bg-gradient-to-r from-[#1A1A1A] to-[#242424] border-[#C9A646]/20 hover:bg-[rgba(201,166,70,0.1)]'
-              }`}
-            >
-              {isAffiliate ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-emerald-400">Affiliate</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4 text-[#C9A646] relative z-10" />
-                  <span className="text-[#C9A646] relative z-10">Refer a Friend</span>
-                </>
-              )}
-            </button>
-
             <button
               onClick={handleGeneratePDF}
               className="relative flex items-center gap-2 bg-[#C9A646]/10 hover:bg-[#C9A646]/20 text-[#C9A646] border rounded-[12px] px-5 py-2.5 text-sm font-medium transition-all duration-300 overflow-hidden group"
@@ -1360,7 +1438,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         )}
       </div>
 
-      {showReferModal && (
+      {showReferModal && FEATURES.AFFILIATE_TRACKING && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <AffiliatePopup onClose={() => setShowReferModal(false)} />
@@ -1372,6 +1450,28 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         <ErrorBoundary>
           <Suspense fallback={null}>
             <BrokerConnectionPopup onClose={() => setShowSnapTradePopup(false)} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {showBrokerPicker && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <BrokerPickerModal
+              onClose={() => setShowBrokerPicker(false)}
+              onSelect={handleBrokerPickerSelect}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {showTradovateModal && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <TradovateConnectModal
+              onClose={() => { setShowTradovateModal(false); setTradovateInitialStep('select-env'); }}
+              initialStep={tradovateInitialStep}
+            />
           </Suspense>
         </ErrorBoundary>
       )}

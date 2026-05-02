@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { FEATURES } from '@/config/features';
 import type { AffiliateDiscountInfo, DiscountTier } from '../types/affiliate.types';
 
 // ============================================
@@ -107,6 +108,9 @@ function safeRemoveItem(key: string): void {
 }
 
 function getStoredAffiliateData(): { code: string; clickId?: string } | null {
+  if (!FEATURES.AFFILIATE_TRACKING) {
+    return null;
+  }
   try {
     // Try standard key first
     const storedCode = safeGetItem(STORAGE_KEYS.code);

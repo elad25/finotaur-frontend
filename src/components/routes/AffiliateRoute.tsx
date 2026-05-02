@@ -4,6 +4,7 @@ import { memo, useEffect, useState, Suspense, ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { FEATURES } from '@/config/features';
 
 // Loading component
 const PageLoader = memo(() => (
@@ -29,6 +30,12 @@ export const AffiliateRoute = memo(({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!FEATURES.AFFILIATE_TRACKING) {
+      setHasAccess(false);
+      setIsLoading(false);
+      return;
+    }
+
     async function checkAccess() {
       if (!user?.id) {
         setIsLoading(false);
