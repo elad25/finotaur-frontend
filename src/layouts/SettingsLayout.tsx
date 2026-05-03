@@ -38,13 +38,14 @@ import {
 import { useAuth } from "@/providers/AuthProvider";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
-import { 
-  Settings, Loader2, Save, Crown, Zap, ArrowRight, CreditCard, Bell, Shield,
-  Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, 
+import {
+  Settings, Loader2, Save, Crown, Zap, ArrowRight, ArrowLeft, CreditCard, Bell, Shield,
+  Clock, Calendar, CheckCircle2, AlertCircle, Key, Eye, EyeOff, Check,
   TrendingUp, Newspaper, AlertTriangle, Sparkles, Brain, Flame,
   Pencil, X, Globe, User, BookOpen, ExternalLink, Mail
 } from "lucide-react";
 import { toast } from "sonner";
+import { validatePassword, getPasswordStrength } from "@/lib/passwordValidation";
 
 // ============================================
 // TYPES - Matches actual DB schema
@@ -2454,70 +2455,110 @@ const NotificationsTab = () => {
 };
 
 // ============================================
-// TAB: SECURITY (Simplified - only password)
+// TAB: SECURITY (2-step password change with re-auth)
 // ============================================
 
 const SecurityTab = () => {
   const { user } = useAuth();
-  
+
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const handlePasswordChange = async () => {
-    // Validation
+  const newValidation = validatePassword(newPassword);
+  const isNewStrong = Object.values(newValidation).every(Boolean);
+  const passwordsMatch = newPassword.length > 0 && newPassword === confirmPassword;
+  const isDifferent = currentPassword !== newPassword;
+  const strength = getPasswordStrength(newPassword);
+  const canSubmitStep2 = isNewStrong && passwordsMatch && isDifferent && !saving;
+
+  const resetModal = () => {
+    setShowPasswordDialog(false);
+    setStep(1);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowCurrent(false);
+    setShowNew(false);
+  };
+
+  // Step 1: verify identity by re-authenticating with current password.
+  const handleVerifyCurrent = async () => {
     if (!currentPassword.trim()) {
       toast.error('Please enter your current password');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-    if (currentPassword === newPassword) {
-      toast.error('New password must be different from current password');
-      return;
-    }
-
     setSaving(true);
     try {
-      // Step 1: Verify current password by re-authenticating
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: user?.email || '',
         password: currentPassword,
       });
-
-      if (signInError) {
+      if (error) {
         toast.error('Current password is incorrect');
         return;
       }
-
-      // Step 2: Update to new password
-      const { error: updateError } = await supabase.auth.updateUser({ 
-        password: newPassword 
-      });
-      
-      if (updateError) throw updateError;
-      
-      toast.success('Password updated successfully');
-      setShowPasswordDialog(false);
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
+      setStep(2);
     } catch (error) {
-      console.error('Error updating password:', error);
+      console.error('Verify current password failed:', error);
+      toast.error('Failed to verify current password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Step 2: validate + update + revoke other sessions.
+  const handleSetNewPassword = async () => {
+    if (!isNewStrong) {
+      toast.error('New password does not meet security requirements');
+      return;
+    }
+    if (!passwordsMatch) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!isDifferent) {
+      toast.error('New password must be different from current password');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (updateError) {
+        console.error('updateUser failed:', updateError);
+        toast.error(updateError.message || 'Failed to update password');
+        return;
+      }
+
+      // NOTE: Supabase auto-revokes ALL other refresh tokens for this user
+      // when the password changes. The current session is preserved.
+      // Do NOT call signOut({ scope: 'others' }) — buggy in some SDK versions,
+      // can kill the current session and surface "Refresh Token Not Found".
+      toast.success('Password updated. Other devices have been signed out.');
+      resetModal();
+    } catch (error) {
+      console.error('Update password failed:', error);
       toast.error('Failed to update password');
     } finally {
       setSaving(false);
     }
   };
+
+  const PasswordRule = ({ ok, label }: { ok: boolean; label: string }) => (
+    <div className="flex items-center gap-1.5">
+      {ok
+        ? <Check className="h-3 w-3 text-green-500 flex-shrink-0" />
+        : <X className="h-3 w-3 text-red-500 flex-shrink-0" />}
+      <span className={`text-xs ${ok ? 'text-green-500' : 'text-zinc-400'}`}>{label}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -2538,77 +2579,180 @@ const SecurityTab = () => {
           <Key className="w-4 h-4 text-amber-400" />
           <h2 className="font-medium text-white">Password</h2>
         </div>
-        
+
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-zinc-300">Change password</p>
             <p className="text-xs text-zinc-500">Update your account password</p>
           </div>
-          
-          <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+
+          <Dialog
+            open={showPasswordDialog}
+            onOpenChange={(open) => (open ? setShowPasswordDialog(true) : resetModal())}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">Change</Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Change password</DialogTitle>
-                <DialogDescription>Enter a new password for your account</DialogDescription>
+                <DialogTitle>
+                  {step === 1 ? 'Verify it’s you' : 'Set new password'}
+                </DialogTitle>
+                <DialogDescription>
+                  {step === 1
+                    ? 'Enter your current password to continue.'
+                    : 'Choose a strong password. Other signed-in devices will be logged out.'}
+                </DialogDescription>
               </DialogHeader>
-              
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label className="text-sm">Current password</Label>
-                  <div className="relative">
-                    <Input 
-                      type={showPassword ? "text" : "password"} 
-                      value={currentPassword} 
-                      onChange={(e) => setCurrentPassword(e.target.value)} 
-                      className="h-9 pr-10" 
-                    />
-                    <button 
-                      type="button" 
-                      onClick={() => setShowPassword(!showPassword)} 
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+
+              {step === 1 ? (
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Current password</Label>
+                    <div className="relative">
+                      <Input
+                        type={showCurrent ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && currentPassword && !saving) {
+                            e.preventDefault();
+                            handleVerifyCurrent();
+                          }
+                        }}
+                        className="h-9 pr-10"
+                        autoFocus
+                        autoComplete="current-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrent(!showCurrent)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                      >
+                        {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm">New password</Label>
-                  <Input 
-                    type="password" 
-                    value={newPassword} 
-                    onChange={(e) => setNewPassword(e.target.value)} 
-                    className="h-9" 
-                  />
-                  <p className="text-xs text-zinc-500">Minimum 8 characters</p>
+              ) : (
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">New password</Label>
+                      {newPassword && (
+                        <span className={`text-xs font-semibold ${strength.color}`}>
+                          {strength.label}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type={showNew ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="h-9 pr-10"
+                        autoFocus
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNew(!showNew)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+                      >
+                        {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {newPassword && (
+                      <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${strength.bgColor} transition-all duration-500`}
+                          style={{ width: `${strength.progress}%` }}
+                        />
+                      </div>
+                    )}
+                    {newPassword && (
+                      <div className="mt-2 p-2 bg-zinc-800/50 border border-zinc-700 rounded-lg space-y-1">
+                        <p className="text-xs font-semibold text-zinc-300 mb-1">Requirements:</p>
+                        <PasswordRule ok={newValidation.minLength} label="8+ characters" />
+                        <PasswordRule ok={newValidation.hasUpperCase} label="Uppercase (A-Z)" />
+                        <PasswordRule ok={newValidation.hasNumber} label="Number (0-9)" />
+                        <PasswordRule ok={newValidation.hasSpecialChar} label="Special (@#$%...)" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm">Confirm new password</Label>
+                    <Input
+                      type={showNew ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && canSubmitStep2) {
+                          e.preventDefault();
+                          handleSetNewPassword();
+                        }
+                      }}
+                      className="h-9"
+                      autoComplete="new-password"
+                    />
+                    {confirmPassword && !passwordsMatch && (
+                      <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                        <X className="h-3 w-3" /> Passwords do not match
+                      </p>
+                    )}
+                    {confirmPassword && passwordsMatch && (
+                      <p className="text-xs text-green-500 flex items-center gap-1 mt-1">
+                        <Check className="h-3 w-3" /> Passwords match
+                      </p>
+                    )}
+                    {newPassword && !isDifferent && (
+                      <p className="text-xs text-amber-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3" /> Must be different from current password
+                      </p>
+                    )}
+                  </div>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-sm">Confirm password</Label>
-                  <Input 
-                    type="password" 
-                    value={confirmPassword} 
-                    onChange={(e) => setConfirmPassword(e.target.value)} 
-                    className="h-9" 
-                  />
-                </div>
-              </div>
-              
+              )}
+
               <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => setShowPasswordDialog(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handlePasswordChange} 
-                  disabled={saving || !currentPassword || !newPassword || !confirmPassword} 
-                  size="sm" 
-                  className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
-                >
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update'}
-                </Button>
+                {step === 1 ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={resetModal}>Cancel</Button>
+                    <Button
+                      onClick={handleVerifyCurrent}
+                      disabled={saving || !currentPassword}
+                      size="sm"
+                      className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+                    >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Next'}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setStep(1);
+                        setNewPassword("");
+                        setConfirmPassword("");
+                        setShowNew(false);
+                      }}
+                      disabled={saving}
+                    >
+                      <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                    </Button>
+                    <Button
+                      onClick={handleSetNewPassword}
+                      disabled={!canSubmitStep2}
+                      size="sm"
+                      className="bg-[#C9A646] hover:bg-[#B8963F] text-black"
+                    >
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update'}
+                    </Button>
+                  </>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>
