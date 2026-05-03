@@ -10,12 +10,12 @@ export default function StocksSentiment() {
   return (
     <div className="p-6 space-y-4">
       <div className="text-sm text-muted-foreground flex items-center gap-2">
-        {{breadcrumbs.map((b, i) => (
+        {breadcrumbs.map((b, i) => (
           <span key={i}>
-            <Link to={{b.to}} className="hover:underline">{{b.title}}</Link>
-            {{i < breadcrumbs.length - 1 ? " / " : ""}}
+            <Link to={b.to} className="hover:underline">{b.title}</Link>
+            {i < breadcrumbs.length - 1 ? " / " : ""}
           </span>
-        ))}}
+        ))}
       </div>
       <h1 className="text-xl font-semibold">Stocks — Sentiment</h1>
       <div className="rounded-xl border border-border/40 p-4">
