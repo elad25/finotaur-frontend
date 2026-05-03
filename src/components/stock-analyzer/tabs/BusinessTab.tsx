@@ -9,6 +9,7 @@
 // =====================================================
 
 import { memo, useMemo, useState, useEffect, useRef } from 'react';
+import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
 import {
   Briefcase, TrendingUp, DollarSign, Zap, Shield,
   Target, Crown, Building2, Users, Globe,
@@ -612,6 +613,7 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
   }, [data]);
 
   return (
+    <StockTabErrorBoundary>
     <div className="space-y-6">
 
       {/* ═══════════════════════════════════════════════════ */}
@@ -855,6 +857,7 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
         </div>
       </Card>
     </div>
+    </StockTabErrorBoundary>
   );
 });
 

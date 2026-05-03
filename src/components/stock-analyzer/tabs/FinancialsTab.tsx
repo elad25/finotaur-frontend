@@ -15,6 +15,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
 import { BarChart3, TrendingUp, Shield, Activity, DollarSign, Loader2, AlertTriangle } from 'lucide-react';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { C } from '@/constants/stock-analyzer.constants';
@@ -896,6 +897,7 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
   const { data: quarterlyData, loading, error } = useQuarterlyData(data.ticker, prefetchedQuarterly);
 
   return (
+    <StockTabErrorBoundary>
     <div className="space-y-6">
       {/* ====== Profitability Analysis (existing) ====== */}
       <Card>
@@ -1086,6 +1088,7 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
         </div>
       </Card>
     </div>
+    </StockTabErrorBoundary>
   );
 });
 

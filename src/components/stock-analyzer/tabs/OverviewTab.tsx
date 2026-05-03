@@ -22,6 +22,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
 import {
   Building2, Activity, FileText, Sparkles, BarChart3, Globe,
   Brain, Shield, AlertTriangle, Calendar,
@@ -1023,6 +1024,7 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
   }, [investmentStory, storyLoading, factorsLoading, data.ticker, regenerateFactors]);
 
   return (
+    <StockTabErrorBoundary>
     <div className="space-y-6">
       {/* ========== INVESTMENT STORY — AI Enhanced ========== */}
       <Card highlight>
@@ -1204,6 +1206,7 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
         )}
       </div>
     </div>
+    </StockTabErrorBoundary>
   );
 });
 
