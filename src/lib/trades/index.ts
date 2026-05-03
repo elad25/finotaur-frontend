@@ -14,6 +14,7 @@
 import { supabase } from '@/lib/supabase';
 import { invalidateCache } from '@/lib/smartRefresh';
 import { toast } from 'sonner';
+import { buildManualIdempotencyKey, isValidIdempotencyKey } from './idempotencyKey';
 
 // 🔥 VALID SESSIONS - must match DB constraint!
 const VALID_SESSIONS = ['asia', 'london', 'newyork'];
@@ -178,6 +179,7 @@ export async function createTrade(tradeData: any) {
       session: normalizedSession,  // 🔥 USE NORMALIZED SESSION!
       screenshots: tradeData.screenshots || [],
       strategy_id: tradeData.strategy_id || null,
+      idempotency_key: tradeData.idempotency_key || buildManualIdempotencyKey(),
     };
 
 console.log('✅ Creating trade with user_id:', user.id);
@@ -199,6 +201,10 @@ console.log('✅ Creating trade with user_id:', user.id);
       strategy_id: payload.strategy_id,
       multiplier: payload.multiplier,
     }, null, 2));
+
+    if (!isValidIdempotencyKey(payload.idempotency_key)) {
+      throw new Error('idempotency_key missing or malformed — bug in createTrade (lib/trades/index.ts). Manual entry must call buildManualIdempotencyKey().');
+    }
 
     // 1. יצירת הטרייד
     const { data: trade, error } = await supabase
