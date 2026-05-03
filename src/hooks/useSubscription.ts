@@ -440,8 +440,6 @@ const { error } = await supabase.rpc('mark_warning_shown', {
   const isLimitReached = !isAdmin && !isLifetimeUser && !isUnlimitedUser && 
     (isFreeJournal ? (limits?.trade_count ?? 0) >= 15 : (limits?.remaining ?? 0) <= 0);
   
-  const canUseSnapTrade = isAdmin || isLifetimeUser || (hasJournalAccess && (isTrial || isBasic || isPremium));
-  
   const isExpiringSoon = (() => {
     if (isAdmin || isLifetimeUser) return false;
     if (!limits?.subscription_expires_at) return false;
@@ -529,9 +527,6 @@ const { error } = await supabase.rpc('mark_warning_shown', {
     canAddTrade,
     isLimitReached,
     isLifetimeLimit: isFreeJournal,
-    
-    // Feature access
-    canUseSnapTrade,
     
     // Subscription status
     isExpiringSoon,
@@ -624,7 +619,6 @@ export function useSubscriptionStatus() {
     isLifetimeUser,
     isUnlimitedUser,
     isLegacyFreeUser,
-    canUseSnapTrade,
     isExpiringSoon,
     daysUntilExpiry,
     isWhopSubscription,
@@ -657,7 +651,6 @@ export function useSubscriptionStatus() {
     isLifetimeUser,
     isUnlimitedUser,
     isLegacyFreeUser,
-    canUseSnapTrade,
     isExpiringSoon,
     daysUntilExpiry,
     isWhopSubscription,
