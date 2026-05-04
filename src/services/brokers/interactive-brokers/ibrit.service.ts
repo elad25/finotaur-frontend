@@ -2,8 +2,6 @@
 // 🏦 Interactive Brokers IBRIT (Reporting Integration) Service
 // Based on official IB documentation and email from reportingintegration@interactivebrokers.com
 
-import { supabase } from '@/lib/supabase';
-
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -388,9 +386,7 @@ class IBRITService {
       broker: 'interactive_brokers',
       broker_connection_id: connectionId,
       external_id: record.TransactionID || record.IBExecID,
-      broker_trade_id: record.IBOrderID,
-      broker_order_id: record.BrokerageOrderID || record.IBOrderID,
-      execution_id: record.IBExecID,
+      idempotency_key: `interactive_brokers::${connectionId ?? 'none'}::${record.TransactionID || record.IBExecID}`,
       contract_id: record.Conid,
       underlying_symbol: record.UnderlyingSymbol || null,
       multiplier: parseFloat(record.Multiplier) || 1,
