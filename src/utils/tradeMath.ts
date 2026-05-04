@@ -12,6 +12,7 @@ export function computeRiskReward(params: {
   stop?: number,
   tp?: number,
   qty?: number,
+  multiplier?: number,
 }) {
   const side = (params.side || inferSide(params.entry, params.tp)) || "LONG";
   const sgn = side === "LONG" ? 1 : -1;
@@ -19,9 +20,10 @@ export function computeRiskReward(params: {
   const stop = Number(params.stop ?? 0);
   const tp   = Number(params.tp   ?? 0);
   const qty  = Number(params.qty  ?? 0);
+  const mult = Number(params.multiplier ?? 1);
 
-  const risk = Math.max(0, (entry - stop) * qty * sgn);
-  const reward = Math.max(0, (tp - entry) * qty * sgn);
+  const risk = Math.max(0, (entry - stop) * qty * mult * sgn);
+  const reward = Math.max(0, (tp - entry) * qty * mult * sgn);
   const rr = reward && risk ? reward / Math.abs(risk) : 0;
 
   // Profit/Loss in R units once TP present
