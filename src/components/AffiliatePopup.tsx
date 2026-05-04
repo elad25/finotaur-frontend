@@ -553,9 +553,9 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
                     Your Benefits
                   </p>
                   <div className="text-sm text-zinc-400 space-y-1">
-                    <p>✓ Up to <span className="text-white font-semibold">20%</span> commission per referral</p>
+                    <p>✓ <span className="text-white font-semibold">10%</span> commission per referral</p>
                     <p>✓ <span className="text-white font-semibold">12 months</span> recurring income</p>
-                    <p>✓ Milestone bonuses up to <span className="text-white font-semibold">$1,400+</span></p>
+                    <p>✓ Referrals get <span className="text-white font-semibold">10% off</span> with your code</p>
                   </div>
                 </div>
 
@@ -824,9 +824,8 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
                     <div className="bg-[#C9A646]/5 border border-[#C9A646]/20 rounded-xl p-3">
                       <p className="text-[#C9A646] text-xs font-medium mb-1.5">What you'll get:</p>
                       <div className="text-[11px] text-zinc-400 space-y-0.5">
-                        <p>✓ Up to 20% commission</p>
+                        <p>✓ 10% commission</p>
                         <p>✓ 12 months recurring income</p>
-                        <p>✓ Bonuses up to $1,400+</p>
                       </div>
                     </div>
 
@@ -863,16 +862,16 @@ export default function AffiliatePopup({ onClose }: AffiliatePopupProps) {
                     <Gift className="w-6 h-6 text-[#C9A646]" />
                   </div>
                   <h3 className="text-xl font-bold text-white mb-1">Earn with Finotaur</h3>
-                  <p className="text-sm text-zinc-400">Up to 20% commission on referrals</p>
+                  <p className="text-sm text-zinc-400">10% commission on referrals</p>
                 </div>
 
                 {/* Benefits */}
                 <div className="space-y-2">
                   {[
-                    { icon: DollarSign, text: 'Up to 20% per referral', color: 'text-emerald-400' },
-                    { icon: TrendingUp, text: '12 months recurring', color: 'text-[#C9A646]' },
-                    { icon: Gift, text: 'Bonuses up to $1,400+', color: 'text-purple-400' },
-                    { icon: Users, text: '5% from sub-affiliates', color: 'text-blue-400' },
+                    { icon: DollarSign, text: '10% commission per referral', color: 'text-emerald-400' },
+                    { icon: TrendingUp, text: '12 months recurring income', color: 'text-[#C9A646]' },
+                    { icon: Gift, text: 'Referrals get 10% off', color: 'text-purple-400' },
+                    { icon: Users, text: 'Real-time earnings dashboard', color: 'text-blue-400' },
                   ].map((item, i) => (
                     <div key={i} className="flex items-center gap-3 bg-[#1A1A1A] rounded-xl p-3">
                       <div className={`w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center ${item.color}`}>

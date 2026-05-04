@@ -328,9 +328,9 @@ const whopRequestBody: Record<string, any> = {
       }
     }
 
-    // 🔥 v1.4.0: Only add affiliate code if NOT applying intro discount
-    // (they use the same 'd' parameter in the URL)
-    if (!applyIntroDiscount && affiliate_code) {
+    // 🔥 v1.9.0: Always pass affiliate_code to API body when present
+    // affiliate_code in body = Whop username for commission attribution (separate from 'd' URL param)
+    if (affiliate_code) {
       whopRequestBody.affiliate_code = affiliate_code;
     }
 

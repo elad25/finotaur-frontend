@@ -58,9 +58,11 @@ export function useTimezoneSettings() {
     loadTimezone();
   }, []);
 
-  // ✅ Load trading sessions from database
+  // ✅ Load trading sessions from database (auth-gated — table has RLS)
   useEffect(() => {
     const loadSessions = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       try {
         const { data, error } = await supabase
           .from('trading_sessions')
@@ -81,9 +83,13 @@ export function useTimezoneSettings() {
     loadSessions();
   }, []);
 
-  // ✅ Get current trading session
+  // ✅ Get current trading session (auth-gated — RPC requires session)
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
     const getCurrentSession = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       try {
         const { data, error } = await supabase
           .rpc('get_current_session');
@@ -97,10 +103,8 @@ export function useTimezoneSettings() {
     };
 
     getCurrentSession();
-
-    // Update every minute
-    const interval = setInterval(getCurrentSession, 60000);
-    return () => clearInterval(interval);
+    interval = setInterval(getCurrentSession, 60000);
+    return () => { if (interval) clearInterval(interval); };
   }, []);
 
   const updateTimezone = (newTimezone: string) => {

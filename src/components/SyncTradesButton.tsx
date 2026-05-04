@@ -1,67 +1,30 @@
 // src/components/SyncTradesButton.tsx
 // כפתור לסנכרון ידני של עסקאות מהברוקר
 
-import { useState } from 'react';
-import { RefreshCw, CheckCircle, XCircle } from 'lucide-react';
-import { snaptradeTradeSync } from '@/integrations/snaptrade/snaptradeTradeSync';
-import { useAuth } from '@/providers/AuthProvider';
+import { RefreshCw, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function SyncTradesButton() {
-  const { user } = useAuth();
-  const [syncing, setSyncing] = useState(false);
-
   const handleSync = async () => {
-    if (!user) {
-      toast.error('Please sign in to sync trades');
-      return;
-    }
-
-    setSyncing(true);
-    
-    try {
-      console.log('🔄 Starting trade sync...');
-      
-      const result = await snaptradeTradeSync.manualSync(user.id);
-
-      if (result.success) {
-        if (result.tradesImported > 0) {
-          toast.success(`✅ Imported ${result.tradesImported} new trades!`, {
-            description: 'Your journal has been updated.',
-            duration: 5000,
-          });
-        } else {
-          toast.info('✓ Already up to date', {
-            description: 'No new trades to import.',
-          });
-        }
-      } else {
-        toast.error('Failed to sync trades', {
-          description: result.errors.join(', '),
-        });
-      }
-    } catch (error: any) {
-      console.error('Sync error:', error);
-      toast.error('Sync failed', {
-        description: error.message || 'Please try again later.',
-      });
-    } finally {
-      setSyncing(false);
-    }
+    console.warn('Broker sync disabled during maintenance');
+    toast.info('Broker sync temporarily unavailable', {
+      description: 'Manual trade entry is fully available.',
+    });
   };
 
   return (
     <button
       onClick={handleSync}
-      disabled={syncing}
-      className="flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 hover:bg-[#C9A646]/20 
+      disabled={true}
+      title="Maintenance"
+      className="flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10
                  text-[#C9A646] rounded-lg transition-all duration-200
                  disabled:opacity-50 disabled:cursor-not-allowed
-                 border border-[#C9A646]/20 hover:border-[#C9A646]/40
+                 border border-[#C9A646]/20
                  font-medium text-sm"
     >
-      <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-      {syncing ? 'Syncing...' : 'Sync from Broker'}
+      <RefreshCw className="w-4 h-4" />
+      Sync from Broker
     </button>
   );
 }

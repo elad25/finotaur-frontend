@@ -15,6 +15,10 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['"Cormorant Garamond"', 'Playfair Display', 'serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        display: ['"Cinzel"', '"Cormorant Garamond"', 'serif'],
+        wordmark: ['"Outfit"', '"Inter"', 'system-ui', 'sans-serif'],
       },
       colors: {
         base: {
@@ -24,8 +28,48 @@ export default {
         },
         gold: {
           DEFAULT: "#C9A646",
+          primary: ({ opacityValue }: { opacityValue?: string }) =>
+            opacityValue !== undefined ? `rgba(201, 166, 70, ${opacityValue})` : '#C9A646',
+          bright: ({ opacityValue }: { opacityValue?: string }) =>
+            opacityValue !== undefined ? `rgba(232, 199, 102, ${opacityValue})` : '#E8C766',
+          deep: ({ opacityValue }: { opacityValue?: string }) =>
+            opacityValue !== undefined ? `rgba(168, 136, 56, ${opacityValue})` : '#A88838',
+          hover: ({ opacityValue }: { opacityValue?: string }) =>
+            opacityValue !== undefined ? `rgba(212, 178, 90, ${opacityValue})` : '#D4B25A',
           600: "#D4AF37",
           muted: "rgba(201, 166, 70, 0.5)",
+          border: "rgba(201, 166, 70, 0.2)",
+          glow: "rgba(201, 166, 70, 0.45)",
+        },
+        surface: {
+          base: "#0a0a0a",
+          1: "rgba(255, 255, 255, 0.02)",
+          2: "rgba(255, 255, 255, 0.04)",
+          glass: "rgba(20, 20, 20, 0.6)",
+        },
+        ink: {
+          primary: "#ffffff",
+          secondary: "rgba(255, 255, 255, 0.65)",
+          tertiary: "rgba(255, 255, 255, 0.45)",
+          muted: "rgba(255, 255, 255, 0.30)",
+          "on-gold": "#0a0a0a",
+        },
+        "border-ds": {
+          subtle: "rgba(255, 255, 255, 0.08)",
+          default: "rgba(255, 255, 255, 0.12)",
+          strong: "rgba(255, 255, 255, 0.20)",
+        },
+        num: {
+          neutral: "#ffffff",
+          positive: "#ffffff",
+          negative: ({ opacityValue }: { opacityValue?: string }) =>
+            opacityValue !== undefined ? `rgba(226, 75, 74, ${opacityValue})` : '#E24B4A',
+        },
+        status: {
+          info: "#3b82f6",
+          warning: "#eab308",
+          error: "#E24B4A",
+          success: "#10b981",
         },
         emerald: {
           DEFAULT: "#4AD295",
@@ -117,12 +161,50 @@ export default {
           border: "rgba(255, 215, 0, 0.08)",
           ring: "#C9A646",
         },
+        bronze: {
+          deep: '#5C4A1F',
+          mid: '#7E6526',
+          warm: '#A88838',
+          dim: '#8B6F38',
+        },
+        'gold-eyebrow': 'var(--gold-eyebrow)',
+        'gold-eyebrow-hairline': 'var(--gold-eyebrow-hairline)',
       },
       borderRadius: {
         '2xl': '1rem',
+        xl: "16px",
         lg: "0.5rem",
         md: "0.375rem",
         sm: "0.25rem",
+      },
+      fontSize: {
+        // FINOTAUR DS text scale
+        display: ['72px', { lineHeight: '1.1', fontWeight: '500' }],
+        h1: ['48px', { lineHeight: '1.2', fontWeight: '500' }],
+        h2: ['32px', { lineHeight: '1.25', fontWeight: '500' }],
+        h3: ['24px', { lineHeight: '1.3', fontWeight: '500' }],
+        h4: ['18px', { lineHeight: '1.4', fontWeight: '500' }],
+        body: ['15px', { lineHeight: '1.6', fontWeight: '400' }],
+        small: ['13px', { lineHeight: '1.5', fontWeight: '400' }],
+        eyebrow: ['11px', { lineHeight: '1.4', fontWeight: '500', letterSpacing: '1.5px' }],
+        // Number scale (use with font-mono)
+        'num-display': ['48px', { lineHeight: '1.1', fontWeight: '400', letterSpacing: '-0.5px' }],
+        'num-large': ['28px', { lineHeight: '1.2', fontWeight: '400', letterSpacing: '-0.5px' }],
+        'num-default': ['22px', { lineHeight: '1.2', fontWeight: '400', letterSpacing: '-0.5px' }],
+        'num-small': ['13px', { lineHeight: '1.4', fontWeight: '400' }],
+      },
+      transitionTimingFunction: {
+        out: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'in-out': 'cubic-bezier(0.4, 0, 0.2, 1)',
+      },
+      transitionDuration: {
+        fast: '150ms',
+        base: '200ms',
+        slow: '400ms',
+      },
+      backdropBlur: {
+        glass: '12px',
+        'glass-nav': '16px',
       },
       keyframes: {
         "accordion-down": {
@@ -185,7 +267,55 @@ export default {
         "pulse-glow": "pulse-glow 3s ease-in-out infinite",
         "subtle-glow": "subtle-glow 4s ease-in-out infinite",
       },
+      backgroundColor: {
+        // FINOTAUR — Section/Atmospheric (added 2026-05-03)
+        'section-base': 'var(--bg-section-base)',
+        'section-deep': 'var(--bg-section-deep)',
+        'section-radial-mid': 'var(--bg-section-radial-mid)',
+        'section-card-rest': 'var(--bg-section-card-rest)',
+        'section-card-deep': 'var(--bg-section-card-deep)',
+      },
+      borderColor: {
+        // FINOTAUR — Construction markers (added 2026-05-03)
+        'construction': 'var(--construction-line)',
+        'construction-strong': 'var(--construction-line-strong)',
+        'construction-marker': 'var(--construction-marker)',
+      },
+      boxShadow: {
+        'gold-halo': '0 0 60px 10px rgba(201, 166, 70, 0.25)',
+        'gold-glow': '0 0 24px rgba(201, 166, 70, 0.4)',
+        'gold-soft': '0 0 12px rgba(201, 166, 70, 0.2)',
+        'gold-halo-soft': '0 0 40px 5px rgba(201, 166, 70, 0.12)',
+        'bronze-glow': '0 0 24px rgba(168, 136, 56, 0.3)',
+        // FINOTAUR DS — primary CTA glow (always-on signature, original outer-glow variant)
+        'glow-gold-resting': '0 0 24px 4px rgba(201, 166, 70, 0.25)',
+        'glow-gold-hover': '0 0 32px 6px rgba(201, 166, 70, 0.40)',
+        'glow-gold-active': '0 0 16px 2px rgba(201, 166, 70, 0.30)',
+        'glow-gold-strong': '0 0 60px 8px rgba(201, 166, 70, 0.35)',
+        // FINOTAUR DS — Pricing-canonical CTA shadow (drop + inner highlight)
+        'btn-gold': '0 4px 20px rgba(201,166,70,0.3), inset 0 1px 0 rgba(255,255,255,0.2)',
+        'btn-gold-hover': '0 6px 28px rgba(201,166,70,0.4), inset 0 1px 0 rgba(255,255,255,0.25)',
+        // FINOTAUR — Section/Atmospheric card shadows (added 2026-05-03)
+        'card-rest': 'var(--shadow-card-rest)',
+        'card-hover': 'var(--shadow-card-hover)',
+        'card-featured': 'var(--shadow-card-featured)',
+      },
+      backgroundImage: {
+        'gold-halo': 'radial-gradient(ellipse 800px 400px at 50% 0%, rgba(201, 166, 70, 0.25) 0%, transparent 70%)',
+        'gold-halo-dim': 'radial-gradient(ellipse 800px 400px at 50% 0%, rgba(201, 166, 70, 0.12) 0%, transparent 70%)',
+        'bronze-vertical': 'linear-gradient(180deg, #C9A646 0%, #7E6526 100%)',
+        'bronze-deep-vertical': 'linear-gradient(180deg, #A88838 0%, #5C4A1F 100%)',
+        // FINOTAUR DS — primary CTA gradient (Pricing-canonical: bright peak in center, dimensional)
+        'gradient-gold': 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+        // Original spec gradient (kept available for non-CTA uses if needed)
+        'gradient-gold-deep': 'linear-gradient(135deg, #E8C766 0%, #C9A646 50%, #A88838 100%)',
+        // Vertical gold gradient — lit-from-above (hero wordmark, navbar wordmark)
+        'gradient-gold-vertical': 'var(--gradient-gold-vertical)',
+      },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    require("./tailwind-plugin-ds-spacing.cjs"),
+  ],
 } satisfies Config;

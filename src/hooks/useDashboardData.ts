@@ -366,7 +366,7 @@ function computeStats(trades: any[]): DashboardStats {
 // REACT HOOKS WITH ADMIN MODE SUPPORT
 // ================================================
 
-export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
+export function useDashboardStats(daysBack?: number, overrideUserId?: string, portfolioId?: string | null, portfolioIds?: string[] | null) {
   const { id: effectiveUserId, isImpersonating } = useEffectiveUser();
   const { enableAdminMode } = useImpersonation();
   const queryClient = useQueryClient();
@@ -378,7 +378,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
   const hasPrefetched = useRef(false);
 
   const query = useQuery({
-    queryKey: dashboardKeys.stats(userId || '', daysBack || -1),
+    queryKey: [...dashboardKeys.stats(userId || '', daysBack || -1), portfolioIds ? portfolioIds.join(',') : (portfolioId ?? 'all')],
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
 
@@ -411,6 +411,13 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string) {
         `)
         .eq('user_id', userId)
         .order('open_at', { ascending: true, nullsFirst: false });
+
+      // 🔥 Portfolio filter: null = all accounts, string[] = multi-select, string = single
+      if (portfolioIds && portfolioIds.length > 0) {
+        queryBuilder = queryBuilder.in('portfolio_id', portfolioIds);
+      } else if (portfolioId) {
+        queryBuilder = queryBuilder.eq('portfolio_id', portfolioId);
+      }
 
       if (cutoffDate) {
         // 🔥 Use open_at for date filtering (works for both modes)

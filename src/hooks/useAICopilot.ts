@@ -93,14 +93,14 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
     try {
       const data = await aiCopilotApi.getUsage();
       const raw = data.usage;
-      const remaining = raw.remaining ?? 0;
+      const remaining = raw.remaining ?? raw.remaining_questions ?? 0;
       setUsage({
         questions_today: raw.questions_today ?? 0,
         tokens_today: raw.tokens_today ?? 0,
-        daily_limit: raw.daily_limit ?? 5,
+        daily_limit: raw.daily_limit ?? 3,
         remaining: remaining,
         questions_remaining: remaining,
-        user_tier: raw.tier ?? 'FREE',
+        user_tier: raw.tier ?? raw.user_tier ?? 'free',
         limit_reached: raw.limit_reached ?? false,
       });
     } catch (err) {

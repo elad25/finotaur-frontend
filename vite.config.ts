@@ -1,11 +1,19 @@
 // vite.config.ts - WORKING VERSION (object syntax)
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // Read VITE_PROXY_TARGET from .env / .env.local / OS env so dev can be pointed
+  // at a local backend (http://localhost:3000) without modifying this file.
+  // Default: production Railway. See .env.local.example for usage.
+  const env = loadEnv(mode, process.cwd(), '')
+  const proxyTarget = env.VITE_PROXY_TARGET || 'https://finotaur-server-production.up.railway.app'
+  const proxySecure = proxyTarget.startsWith('https://')
+
+  return {
   plugins: [react()],
-  
+
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -16,9 +24,9 @@ export default defineConfig({
     port: 5173,
 proxy: {
   '/api': {
-    target: 'https://finotaur-server-production.up.railway.app',
+    target: proxyTarget,
     changeOrigin: true,
-    secure: true,
+    secure: proxySecure,
   }
 },
     watch: {
@@ -119,4 +127,5 @@ proxy: {
 
   logLevel: 'info',
   cacheDir: 'node_modules/.vite',
+  }
 })

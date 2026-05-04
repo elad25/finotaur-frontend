@@ -279,11 +279,11 @@ CREATE TABLE affiliate_config (
 INSERT INTO affiliate_config (config_key, config_value, description) VALUES
 ('commission_rates', '{
   "tier_1": {"rate": 0.10, "min_clients": 0, "max_clients": 20},
-  "tier_2": {"rate": 0.15, "min_clients": 20, "max_clients": 75},
-  "tier_3": {"rate": 0.20, "min_clients": 75, "max_clients": null}
-}', 'Commission rates per tier for monthly subscriptions'),
+  "tier_2": {"rate": 0.10, "min_clients": 20, "max_clients": 75},
+  "tier_3": {"rate": 0.10, "min_clients": 75, "max_clients": null}
+}', 'Commission rates per tier - flat 10% all tiers'),
 
-('annual_commission_rate', '{"rate": 0.15}', 'Commission rate for annual subscriptions (15%)'),
+('annual_commission_rate', '{"rate": 0.10}', 'Commission rate for annual subscriptions (10%)'),
 
 ('sub_affiliate_rate', '{"rate": 0.05, "min_tier": "tier_2"}', 'Sub-affiliate commission rate (5%)'),
 
@@ -1056,16 +1056,8 @@ RETURNS NUMERIC(5,4)
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF is_annual THEN
-    RETURN 0.1500;
-  END IF;
-  
-  CASE tier
-    WHEN 'tier_1' THEN RETURN 0.1000;
-    WHEN 'tier_2' THEN RETURN 0.1500;
-    WHEN 'tier_3' THEN RETURN 0.2000;
-    ELSE RETURN 0.1000;
-  END CASE;
+  -- Flat 10% for all tiers, monthly and annual
+  RETURN 0.1000;
 END;
 $$;
 
@@ -1212,22 +1204,9 @@ CREATE OR REPLACE FUNCTION get_affiliate_discount_rate(
 RETURNS NUMERIC(5,2)
 LANGUAGE plpgsql
 AS $$
-DECLARE
-  aff_discount_tier discount_tier;
 BEGIN
-  SELECT a.discount_tier INTO aff_discount_tier
-  FROM affiliates a
-  WHERE (a.affiliate_code = UPPER(p_affiliate_code) OR a.coupon_code = UPPER(p_affiliate_code))
-    AND a.status = 'active';
-  
-  IF aff_discount_tier IS NULL THEN
-    RETURN 10.00;
-  END IF;
-  
-  CASE aff_discount_tier
-    WHEN 'vip' THEN RETURN 15.00;
-    ELSE RETURN 10.00;
-  END CASE;
+  -- Flat 10% discount for all affiliate codes
+  RETURN 10.00;
 END;
 $$;
 
@@ -2752,14 +2731,14 @@ BEGIN
       CONTINUE;
     END IF;
     
-    -- Determine commission rate
+    -- Determine commission rate - flat 10% for all plans
     IF ref_record.subscription_type = 'annual' THEN
       IF month_num > 1 THEN
         CONTINUE;
       END IF;
-      commission_rate := 0.1500;
+      commission_rate := 0.1000;
     ELSE
-      commission_rate := get_commission_rate(ref_record.current_tier, FALSE);
+      commission_rate := 0.1000;
     END IF;
     
     commission_amount := ref_record.subscription_price_usd * commission_rate;
@@ -3108,6 +3087,7 @@ DECLARE
   app_record RECORD;
   v_affiliate_id UUID;
   v_code TEXT;
+  v_use_code TEXT;
 BEGIN
   -- Get application
   SELECT * INTO app_record FROM affiliate_applications WHERE id = p_application_id;
@@ -3120,9 +3100,16 @@ BEGIN
     RAISE EXCEPTION 'Application is not pending. Current status: %', app_record.status;
   END IF;
   
+  -- ✅ Priority: admin override > applicant requested_code > full_name fallback
+  v_use_code := COALESCE(
+    NULLIF(TRIM(p_custom_code), ''),
+    NULLIF(TRIM(app_record.requested_code), ''),
+    NULL
+  );
+  
   -- Generate code
   v_code := generate_affiliate_code(
-    COALESCE(p_custom_code, app_record.requested_code),
+    v_use_code,
     app_record.full_name
   );
   
@@ -3529,11 +3516,20 @@ CREATE POLICY "Public read active global pricing" ON admin_global_pricing
 CREATE POLICY "Users can view own applications" ON affiliate_applications
   FOR SELECT USING (user_id = auth.uid() OR is_admin());
 
+DROP POLICY IF EXISTS "Users can create applications" ON affiliate_applications;
+DROP POLICY IF EXISTS "Admin can manage applications" ON affiliate_applications;
+
 CREATE POLICY "Users can create applications" ON affiliate_applications
-  FOR INSERT WITH CHECK (user_id = auth.uid());
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL AND user_id = auth.uid());
 
 CREATE POLICY "Admin can manage applications" ON affiliate_applications
-  FOR ALL USING (is_admin());
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid()
+      AND role IN ('admin', 'super_admin')
+    )
+  );
 
 -- Affiliates: User owns or admin
 CREATE POLICY "Users can view own affiliate" ON affiliates
@@ -3674,11 +3670,7 @@ SELECT
   a.can_recruit_sub_affiliates,
   a.activated_at,
   a.last_activity_at,
-  CASE a.current_tier
-    WHEN 'tier_1' THEN 10
-    WHEN 'tier_2' THEN 15
-    WHEN 'tier_3' THEN 20
-  END as commission_rate_percent,
+  10 as commission_rate_percent,
   CASE 
     WHEN a.total_clicks > 0 THEN ROUND((a.total_signups::NUMERIC / a.total_clicks) * 100, 2)
     ELSE 0

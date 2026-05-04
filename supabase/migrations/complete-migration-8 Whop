@@ -211,99 +211,9 @@ ALTER TABLE profiles ADD CONSTRAINT profiles_payment_provider_check
   CHECK (payment_provider IS NULL OR payment_provider IN ('payplus', 'stripe', 'paypal', 'whop', 'admin_granted', 'manual'));
 
 -- Platform constraints
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
--- 🔥 FIX: Clean invalid platform_plan values BEFORE adding constraint
-UPDATE profiles 
-SET platform_plan = NULL 
-WHERE platform_plan IS NOT NULL 
-  AND platform_plan NOT IN ('free', 'core', 'finotaur', 'enterprise');
-
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_plan_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_plan_check 
-  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'core', 'finotaur', 'enterprise'));
+  CHECK (platform_plan IS NULL OR platform_plan IN ('free', 'platform_core', 'platform_finotaur', 'platform_enterprise', 'core', 'finotaur', 'enterprise'));
 
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_platform_subscription_status_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_platform_subscription_status_check 
@@ -498,12 +408,8 @@ CREATE TABLE IF NOT EXISTS platform_plan_mapping (
 -- Drop old constraint first
 ALTER TABLE platform_plan_mapping DROP CONSTRAINT IF EXISTS platform_plan_mapping_finotaur_plan_check;
 
--- Fix ALL invalid values BEFORE adding constraint
+-- Fix existing 'pro' rows to 'finotaur' BEFORE adding constraint
 UPDATE platform_plan_mapping SET finotaur_plan = 'finotaur' WHERE finotaur_plan = 'pro';
-UPDATE platform_plan_mapping 
-SET finotaur_plan = NULL 
-WHERE finotaur_plan IS NOT NULL 
-  AND finotaur_plan NOT IN ('core', 'finotaur', 'enterprise');
 
 -- Now add constraint (all rows are already valid)
 ALTER TABLE platform_plan_mapping ADD CONSTRAINT platform_plan_mapping_finotaur_plan_check 
@@ -1405,7 +1311,8 @@ BEGIN
       ) VALUES (
         v_affiliate.id, v_user_id, v_user_email, NOW(), p_whop_membership_id,
         p_payment_amount, NOW(), p_payment_amount, 'verification_pending',
-        NOW(), NOW() + INTERVAL '7 days', true, p_promo_code, v_subscription_type
+        NOW(), NOW() + INTERVAL '7 days',
+        TRUE, p_promo_code, v_subscription_type
       ) RETURNING id INTO v_referral_id;
       
       UPDATE affiliates SET total_signups = COALESCE(total_signups, 0) + 1, last_activity_at = NOW() WHERE id = v_affiliate.id;
@@ -1681,9 +1588,9 @@ FROM affiliates a WHERE a.status IN ('active', 'inactive');
 -- Returns ALL fields including Platform subscription
 -- ============================================
 
-DROP FUNCTION IF EXISTS get_user_subscription_status(UUID);
+DROP FUNCTION IF EXISTS public.get_user_subscription_status(UUID);
 
-CREATE OR REPLACE FUNCTION get_user_subscription_status(p_user_id UUID)
+CREATE OR REPLACE FUNCTION public.get_user_subscription_status(p_user_id UUID)
 RETURNS TABLE (
   -- ═══════════════════════════════════════════
   -- JOURNAL SUBSCRIPTION FIELDS (existing)
@@ -1872,9 +1779,9 @@ END;
 $$;
 
 -- Grants for get_user_subscription_status
-GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO anon;
-GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO anon;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO service_role;
 -- ============================================
 -- validate_affiliate_code
 -- ============================================
@@ -2046,7 +1953,7 @@ DROP POLICY IF EXISTS "Service role can manage subscription events" ON subscript
 CREATE POLICY "Service role can manage subscription events" ON subscription_events FOR ALL USING (TRUE);
 
 -- Grants
-GRANT EXECUTE ON FUNCTION get_user_subscription_status(UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION public.get_user_subscription_status(UUID) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_finotaur_plan_from_whop(TEXT) TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION get_product_trial_days(TEXT) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION get_commission_rate(TEXT, TEXT) TO authenticated, service_role;

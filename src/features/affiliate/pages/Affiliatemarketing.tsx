@@ -194,7 +194,7 @@ export default function AffiliateMarketing() {
         }
 
         setAffiliateCode(data.affiliate_code);
-        setDiscountPercent(data.discount_tier === 'vip' ? 15 : 10);
+        setDiscountPercent(10);
       } catch (error) {
         console.error('Error fetching affiliate:', error);
       } finally {

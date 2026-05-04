@@ -92,14 +92,6 @@ export const TABS: {
   description: string;
 }[] = [
   {
-    id: 'all-flow',
-    label: 'All Flow',
-    shortLabel: 'All',
-    icon: Activity,
-    accentColor: COLORS.gold,
-    description: 'All signals in one feed',
-  },
-  {
     id: 'unusual-volume',
     label: 'Unusual Volume',
     shortLabel: 'Volume',

@@ -18,10 +18,11 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, useCallback, memo } from "react";
+import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
+import { usePortfolioContext } from "@/contexts/PortfolioContext";
 import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
@@ -33,9 +34,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
+import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -507,7 +509,8 @@ export default function MyTrades() {
   
   // ✅ 🔥 CRITICAL FIX: Now passing userId to useTrades!
   // This ensures we load the correct user's trades when admin impersonates
-  const { data: trades = [], isLoading, error } = useTrades(userId);
+  const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
+  const { data: trades = [], isLoading, error } = useTrades(userId, effectivePortfolioId);
   
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
@@ -519,6 +522,17 @@ export default function MyTrades() {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showBrokerPanel, setShowBrokerPanel] = useState(false);
+  const brokerPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (brokerPanelRef.current && !brokerPanelRef.current.contains(e.target as Node)) {
+        setShowBrokerPanel(false);
+      }
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
 
   // ✅ 3. useEffect
@@ -747,35 +761,40 @@ const stats = useMemo<Stats>(() => {
   // ✅ 8. Main render
   return (
     <div className="flex flex-col h-full pl-3">
-      {/* Header with Coming Soon Banner */}
-<div className="flex items-center px-6 py-4">
-  <h1 className="text-2xl font-bold text-white">My Trades</h1>
-  
-  {/* 🚀 Coming Soon Banner - Centered */}
-  <div className="flex-1 flex justify-center">
-    <div 
-      className="relative overflow-hidden rounded-lg px-4 py-2"
-      style={{
-        background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(161, 98, 7, 0.1) 100%)',
-        border: '1px solid rgba(234, 179, 8, 0.3)',
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-lg">🚀</span>
-        <span className="text-yellow-400 font-semibold text-sm">
-          COMING SOON: Auto Trade Documentation
-        </span>
-        <span className="text-yellow-500/60 text-sm hidden lg:inline">•</span>
-        <span className="text-yellow-500/70 text-xs hidden lg:inline">
-          Automatic trade capture & analysis
-        </span>
-        <span className="ml-2 px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/40 text-yellow-400 text-xs font-bold animate-pulse">
-          STAY TUNED
-        </span>
+      {/* Header */}
+      <div className="flex items-center px-6 py-4 gap-4">
+        <h1 className="text-2xl font-bold text-white">My Trades</h1>
+
+        {/* Account Switcher Dropdown — same pattern as Overview */}
+        <div className="relative" ref={brokerPanelRef}>
+          <button
+            onClick={() => setShowBrokerPanel(v => !v)}
+            className="flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-700/50 hover:border-[#C9A646]/30 rounded-xl px-3 py-2 transition-all duration-200 text-xs font-medium text-zinc-300"
+          >
+            <Layers className="w-3.5 h-3.5 text-[#C9A646]" />
+            <span>{activePortfolio?.name ?? 'All Accounts'}</span>
+            <ChevronDown className="w-3 h-3 text-zinc-500" />
+          </button>
+
+          {showBrokerPanel && (
+            <div
+              className="absolute left-0 top-11 z-50 w-64 rounded-2xl shadow-2xl overflow-hidden"
+              style={{
+                background: 'rgba(14,14,14,0.98)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                backdropFilter: 'blur(20px)',
+              }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60">
+                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Select Account</span>
+              </div>
+              <div className="p-2 max-h-72 overflow-y-auto custom-scrollbar">
+                <AccountSwitcher />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  </div>
-</div>
 
       {/* 🔥 Admin Impersonation Indicator */}
       {isImpersonating && (

@@ -99,7 +99,9 @@ interface UsageResponse {
     tokens_today: number;
     daily_limit: number;
     remaining: number;
+    remaining_questions: number;
     tier: string;
+    user_tier: string;
     limit_reached: boolean;
   };
 }
@@ -304,15 +306,19 @@ export const aiCopilotApi = {
     const data = await response.json();
     
     // Normalize the response
+    const remaining = data.usage?.remaining ?? data.usage?.remaining_questions ?? 0;
+    const tier = data.usage?.tier ?? data.usage?.user_tier ?? 'free';
     return {
       success: true,
       usage: {
-        questions_today: data.usage?.questions_today || 0,
-        tokens_today: data.usage?.tokens_today || 0,
-        daily_limit: data.usage?.daily_limit || 5,
-        remaining: data.usage?.remaining || 5,
-        tier: data.usage?.tier || 'FREE',
-        limit_reached: data.usage?.limit_reached || false,
+        questions_today: data.usage?.questions_today ?? 0,
+        tokens_today: data.usage?.tokens_today ?? 0,
+        daily_limit: data.usage?.daily_limit ?? 3,
+        remaining: remaining,
+        remaining_questions: remaining,
+        tier: tier,
+        user_tier: tier,
+        limit_reached: data.usage?.limit_reached ?? false,
       },
     };
   },

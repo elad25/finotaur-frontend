@@ -6,8 +6,12 @@
 // ================================================
 
 import { motion } from "framer-motion";
-import { BookOpen, Link2, Brain, BarChart3, Target, ArrowRight } from "lucide-react";
+import { BookOpen, Link2, Brain, BarChart3, Target } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ds/Button";
+import { SectionShell } from "./_shared/SectionShell";
+import { SectionEyebrow } from "./_shared/SectionEyebrow";
+import { SectionTitle } from "./_shared/SectionTitle";
 
 const journalFeatures = [
   {
@@ -34,172 +38,150 @@ const journalFeatures = [
 
 const ProductShowcase = () => {
   return (
-    <section className="py-28 px-4 relative overflow-hidden">
-      {/* ========== BACKGROUND ========== */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
+    <SectionShell id="journal-feature" atmosphere="subtle" beam={false}>
+      {/* ========== TWO-COLUMN: TEXT LEFT + OVERSIZED IMAGE RIGHT ========== */}
+      <div className="grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-8 items-center">
 
-      {/* Gold atmosphere */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[700px] bg-[#C9A646]/[0.10] rounded-full blur-[170px]" />
-      <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-[#D4AF37]/[0.07] rounded-full blur-[130px]" />
+        {/* ===== LEFT — TEXT + MINI FEATURES ===== */}
+        <div>
+          {/* Eyebrow + heading — no extra motion wrapper; SectionShell provides the outer fade-in */}
+          <div className="mb-6">
+            <SectionEyebrow className="justify-start mb-4">
+              <BookOpen className="w-4 h-4 text-gold-primary" aria-hidden="true" />
+              Smart Trading Journal
+            </SectionEyebrow>
 
-      {/* Borders */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-
-      <div className="max-w-7xl mx-auto relative z-10">
-        {/* ========== TWO-COLUMN: TEXT LEFT + OVERSIZED IMAGE RIGHT ========== */}
-        <div className="grid lg:grid-cols-[1fr_1.3fr] gap-12 lg:gap-8 items-center">
-
-          {/* ===== LEFT — TEXT + MINI FEATURES ===== */}
-          <div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
+            <SectionTitle
+              gradient="split"
+              size="default"
+              className="text-left mb-4"
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-full mb-6">
-                <BookOpen className="w-4 h-4 text-[#C9A646]" />
-                <span className="text-[#C9A646] font-semibold text-sm">Smart Trading Journal</span>
-              </div>
+              The best traders measure.{" "}
+              <span className="text-gold-primary">Do you?</span>
+            </SectionTitle>
 
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
-                <span className="text-white">The best traders</span>
-                <br />
-                <span className="text-white">measure. </span>
-                <span className="text-[#C9A646]">Do you?</span>
-              </h2>
-              <p className="text-lg text-slate-400 leading-relaxed mb-10 max-w-lg">
-                The tool that stops your losing streak. Track every trade, understand every pattern,
-                and let AI show you exactly where you're leaving money on the table.
-              </p>
-            </motion.div>
-
-            {/* Mini feature grid — 2x2 compact */}
-            <div className="grid grid-cols-2 gap-4">
-              {journalFeatures.map((feature, index) => {
-                const Icon = feature.icon;
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: 0.2 + index * 0.08 }}
-                    className="group flex items-start gap-3 p-4 rounded-xl transition-all duration-300 hover:bg-[#C9A646]/[0.04]"
-                    style={{
-                      background: 'rgba(255,255,255,0.02)',
-                      border: '1px solid rgba(201,166,70,0.1)',
-                    }}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(201,166,70,0.18), rgba(201,166,70,0.05))',
-                        border: '1px solid rgba(201,166,70,0.25)',
-                      }}
-                    >
-                      <Icon className="h-5 w-5 text-[#C9A646]" />
-                    </div>
-                    <div>
-                      <h4 className="text-white font-semibold text-sm mb-0.5 group-hover:text-[#C9A646] transition-colors">
-                        {feature.title}
-                      </h4>
-                      <p className="text-slate-500 text-xs leading-relaxed">{feature.description}</p>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            {/* CTA */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.5 }}
-              className="mt-8"
-            >
-              <Link to="/auth/register">
-                <button
-                  className="group inline-flex items-center gap-2 px-8 py-4 text-base font-bold rounded-xl transition-all duration-300 hover:scale-105"
-                  style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    color: '#000',
-                    boxShadow: '0 6px 30px rgba(201,166,70,0.35), inset 0 2px 0 rgba(255,255,255,0.2)',
-                  }}
-                >
-                  Try the Journal — 14 Days Free
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </Link>
-            </motion.div>
+            <p className="font-sans font-light text-ink-secondary text-lg leading-relaxed max-w-lg">
+              The tool that stops your losing streak. Track every trade, understand every pattern,
+              and let AI show you exactly where you're leaving money on the table.
+            </p>
           </div>
 
-          {/* ===== RIGHT — OVERSIZED CALENDAR IMAGE (overflows right edge) ===== */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, x: 40 }}
-            whileInView={{ opacity: 1, scale: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.9, delay: 0.2 }}
-            className="relative hidden lg:block"
-            style={{
-              /* Push image wider to the right — overflows the section but stays clipped */
-              marginRight: '-12vw',
-            }}
-          >
-            {/* Glow behind */}
-            <div className="absolute -inset-8 bg-gradient-to-r from-[#C9A646]/20 via-[#D4AF37]/12 to-transparent rounded-3xl blur-3xl opacity-50 pointer-events-none" />
+          {/* Mini feature grid — 2x2 compact */}
+          <div className="grid grid-cols-2 gap-4">
+            {journalFeatures.map((feature, index) => {
+              const Icon = feature.icon;
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: 0.2 + index * 0.08 }}
+                  className="group relative flex items-start gap-3 p-4 rounded-xl
+                    bg-section-card-rest border border-gold-border
+                    hover:bg-gold-primary/[0.04]
+                    transition-all duration-300"
+                >
+                  {/* Corner brackets */}
+                  <span className="absolute top-2 left-2 w-3 h-3 border-t border-l border-construction-marker pointer-events-none" aria-hidden="true" />
+                  <span className="absolute top-2 right-2 w-3 h-3 border-t border-r border-construction-marker pointer-events-none" aria-hidden="true" />
+                  <span className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-construction-marker pointer-events-none" aria-hidden="true" />
+                  <span className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-construction-marker pointer-events-none" aria-hidden="true" />
 
-            <div
-              className="relative rounded-2xl overflow-hidden"
-              style={{
-                border: '1px solid rgba(201,166,70,0.3)',
-                boxShadow: '0 30px 80px -12px rgba(0,0,0,0.8), 0 0 80px rgba(201,166,70,0.12)',
-              }}
-            >
-              {/* Browser chrome bar */}
-              <div
-                className="flex items-center gap-2 px-5 py-3"
-                style={{
-                  background: 'linear-gradient(180deg, #151515 0%, #0f0f0f 100%)',
-                  borderBottom: '1px solid rgba(201,166,70,0.15)',
-                }}
-              >
-                <div className="flex gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-red-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-                  <div className="w-3 h-3 rounded-full bg-emerald-500/60" />
-                </div>
-                <div className="flex-1 flex justify-center">
-                  <div className="px-4 py-1 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                    <span className="text-[11px] text-slate-500 font-mono">finotaur.com/app/journal/calendar</span>
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0
+                      bg-gradient-to-br from-gold-primary/[0.18] to-gold-primary/[0.05]
+                      border border-gold-primary/25
+                      group-hover:scale-110 transition-transform"
+                  >
+                    <Icon className="h-5 w-5 text-gold-primary" />
                   </div>
-                </div>
-                <div className="w-12" />
-              </div>
 
-              {/* Calendar image */}
-              <img
-                src="/assets/finotaur-calender.png"
-                alt="Finotaur Trading Journal — Calendar View with P&L tracking"
-                className="w-full h-auto block"
-                style={{ pointerEvents: 'none' }}
-                draggable={false}
-              />
-            </div>
+                  <div>
+                    <h4 className="text-ink-primary font-semibold text-sm mb-0.5 group-hover:text-gold-primary transition-colors">
+                      {feature.title}
+                    </h4>
+                    <p className="text-ink-tertiary text-xs leading-relaxed">{feature.description}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
 
-            {/* Fade-out on right edge for smooth overflow */}
-            <div
-              className="absolute top-0 right-0 bottom-0 w-24 pointer-events-none z-10"
-              style={{
-                background: 'linear-gradient(to right, transparent, rgba(10,10,10,0.8))',
-              }}
-            />
+          {/* CTA */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.5 }}
+            className="mt-8"
+          >
+            <Link to="/auth/register">
+              <Button variant="gold" size="xl">Try the Journal — 14 days free</Button>
+            </Link>
           </motion.div>
         </div>
+
+        {/* ===== RIGHT — OVERSIZED CALENDAR IMAGE (overflows right edge) ===== */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, x: 40 }}
+          whileInView={{ opacity: 1, scale: 1, x: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.9, delay: 0.2 }}
+          className="relative hidden lg:block"
+          style={{
+            /* Push image wider to the right — overflows the section but stays clipped */
+            marginRight: '-12vw',
+          }}
+        >
+          {/* Glow behind */}
+          <div className="absolute -inset-8 bg-gradient-to-r from-gold-primary/20 via-gold-primary/12 to-transparent rounded-3xl blur-3xl opacity-50 pointer-events-none" aria-hidden="true" />
+
+          {/* Image frame with corner brackets */}
+          <div className="relative rounded-2xl overflow-hidden border border-gold-border shadow-card-featured">
+            {/* Corner brackets — slightly larger (w-4 h-4) for visual centerpiece emphasis */}
+            <span className="absolute top-2 left-2 w-4 h-4 border-t border-l border-construction-marker pointer-events-none z-20" aria-hidden="true" />
+            <span className="absolute top-2 right-2 w-4 h-4 border-t border-r border-construction-marker pointer-events-none z-20" aria-hidden="true" />
+            <span className="absolute bottom-2 left-2 w-4 h-4 border-b border-l border-construction-marker pointer-events-none z-20" aria-hidden="true" />
+            <span className="absolute bottom-2 right-2 w-4 h-4 border-b border-r border-construction-marker pointer-events-none z-20" aria-hidden="true" />
+
+            {/* Browser chrome bar */}
+            <div
+              className="flex items-center gap-2 px-5 py-3 border-b border-gold-border/15 bg-gradient-to-b from-base-800 to-base-900"
+            >
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-status-error/60" />
+                <div className="w-3 h-3 rounded-full bg-status-warning/60" />
+                <div className="w-3 h-3 rounded-full bg-status-success/60" />
+              </div>
+              <div className="flex-1 flex justify-center">
+                <div className="px-4 py-1 rounded-lg bg-ink-primary/[0.04] border border-ink-primary/[0.06]">
+                  <span className="text-[11px] text-ink-tertiary font-mono">finotaur.com/app/journal/calendar</span>
+                </div>
+              </div>
+              <div className="w-12" />
+            </div>
+
+            {/* Calendar image */}
+            <img
+              src="/assets/finotaur-calender.png"
+              alt="Finotaur Trading Journal — Calendar View with P&L tracking"
+              className="w-full h-auto block"
+              style={{ pointerEvents: 'none' }}
+              draggable={false}
+            />
+          </div>
+
+          {/* Fade-out on right edge for smooth overflow */}
+          <div
+            className="absolute top-0 right-0 bottom-0 w-24 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(to right, transparent, rgba(10,10,10,0.8))',
+            }}
+          />
+        </motion.div>
       </div>
-    </section>
+    </SectionShell>
   );
 };
 

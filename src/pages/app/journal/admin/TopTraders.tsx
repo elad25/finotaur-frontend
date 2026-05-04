@@ -240,7 +240,7 @@ export default function AdminTopTraders() {
                     <div className="text-gray-400">
                       <LinkIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p className="text-lg mb-2">No API-connected traders yet</p>
-                      <p className="text-sm">Traders need to connect their brokers via SnapTrade</p>
+                      <p className="text-sm">Traders need to connect a broker</p>
                     </div>
                   </td>
                 </tr>

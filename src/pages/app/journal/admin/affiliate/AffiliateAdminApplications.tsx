@@ -18,7 +18,10 @@ import {
   Loader2,
   X,
   AlertCircle,
-  Check
+  Check,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   useAffiliateApplications, 
@@ -26,6 +29,8 @@ import {
   useRejectApplication 
 } from '@/features/affiliate/hooks/useAffiliateAdmin';
 import type { AffiliateApplication, AffiliateApplicationStatus } from '@/features/affiliate/types/affiliate.types';
+import { supabase } from '@/lib/supabase';
+import { generateRejectionEmail } from '@/features/affiliate/utils/affiliateEmailTemplates';
 
 interface Props {
   onPendingCountChange?: (count: number) => void;
@@ -39,6 +44,57 @@ const DISCOUNT_TIERS: { id: DiscountTier; label: string; discount: number }[] = 
   { id: 'vip', label: 'VIP', discount: 15 },
 ];
 
+// ─── Pre-built rejection reasons with rich Hebrew affiliate-facing messages ───
+const REJECTION_REASONS: { value: string; label: string; affiliateMessage: string }[] = [
+  {
+    value: 'insufficient_audience',
+    label: 'Insufficient audience size',
+    affiliateMessage:
+      'לאחר בדיקת הבקשה שלך, מצאנו שגודל הקהל הנוכחי שלך טרם הגיע לסף המינימלי הנדרש בתוכנית שלנו. זו לא ביקורת על האיכות שלך — פשוט אנחנו מחפשים שותפים עם בסיס עוקבים שמאפשר השפעה אמיתית. כשהקהל שלך יגדל, נשמח מאוד לקבל בקשה מחדש.',
+  },
+  {
+    value: 'brand_mismatch',
+    label: 'Content not aligned with our brand',
+    affiliateMessage:
+      'Finotaur מתמקדת בשוקי ההון, מסחר וניתוח פיננסי — ואנחנו מחפשים שותפים שהתוכן שלהם פונה ישירות לקהל שמתעניין בנושאים אלו. לאחר בחינה, מצאנו שהנישה הנוכחית שלך שונה מהקהל שאנחנו מיועדים לו. אם בעתיד הכיוון שלך ישתנה לכיוון פיננסי — הדלת תמיד פתוחה.',
+  },
+  {
+    value: 'geographic_restrictions',
+    label: 'Geographic restrictions',
+    affiliateMessage:
+      'תוכנית האפילייטים שלנו פועלת כרגע במדינות מוגבלות בלבד, בשל דרישות רגולטוריות ומגבלות תשלום בינלאומיות. לצערנו האזור שלך אינו נכלל בשלב זה — אך אנחנו עובדים על הרחבת הכיסוי. נשמח שתחזור ותגיש בקשה כשנרחיב לאזורך.',
+  },
+  {
+    value: 'incomplete_application',
+    label: 'Incomplete application',
+    affiliateMessage:
+      'בבדיקת הבקשה שלך שמנו לב שחסרים בה פרטים חיוניים — ייתכן שחלק מהשדות לא מולאו, קישורים לא היו פעילים, או שמידע מסוים חסר. הבשורה הטובה: זה קל מאוד לתיקון. פשוט הגש בקשה מחדש עם כל הפרטים המלאים, כולל קישורים פעילים לערוצים שלך — ונשמח לבחון אותה מחדש.',
+  },
+  {
+    value: 'duplicate_application',
+    label: 'Duplicate application',
+    affiliateMessage:
+      'מצאנו במערכת שלנו בקשה קיימת או חשבון הקשורים לפרטים שלך. אנחנו לא מאפשרים בקשות כפולות מאותו אדם. אם אתה חושב שמדובר בטעות — למשל, אם הגשת בעבר עם כתובת אימייל שונה — אנא פנה אלינו ישירות ונבדוק את זה יחד.',
+  },
+  {
+    value: 'low_quality_content',
+    label: 'Content quality below standards',
+    affiliateMessage:
+      'בבחינת הנוכחות הדיגיטלית שלך, הרגשנו שהתוכן הנוכחי שלך עדיין לא מגיע לרמת האיכות, המקצועיות והעקביות שאנחנו מחפשים בשותפינו. זה שלב טבעי בדרך של כל יוצר תוכן. אנחנו ממליצים להמשיך לפתח את הסגנון שלך — ולאחר שתבנה תיק עבודות חזק יותר, נשמח לראות את הבקשה שלך שוב.',
+  },
+  {
+    value: 'no_active_channels',
+    label: 'No active channels verified',
+    affiliateMessage:
+      'בניסיון לאמת את ערוצי התוכן שציינת, לא הצלחנו למצוא פעילות מאומתת — ייתכן שהקישורים לא עבדו, שהערוצים לא היו ציבוריים, או שהפרטים לא תאמו את הפרופילים. אנחנו ממליצים לוודא שכל הפרופילים שלך ציבוריים ופעילים, ולאחר מכן להגיש בקשה מחדש עם פרטים מדויקים.',
+  },
+  {
+    value: 'other',
+    label: 'Other (enter custom reason)',
+    affiliateMessage: '',
+  },
+];
+
 export default function AffiliateAdminApplications({ onPendingCountChange }: Props) {
   const [statusFilter, setStatusFilter] = useState<AffiliateApplicationStatus | 'all'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +103,9 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
-  const [rejectReason, setRejectReason] = useState('');
+  const [rejectReasonKey, setRejectReasonKey] = useState('');
+  const [affiliateMessage, setAffiliateMessage] = useState('');
+  const [showMessageEditor, setShowMessageEditor] = useState(false);
   const [discountTier, setDiscountTier] = useState<DiscountTier>('standard');
   const [useRequestedCode, setUseRequestedCode] = useState(true);
 
@@ -116,18 +174,43 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
 
   // Handle reject
   const handleReject = async () => {
-    if (!selectedApp || !rejectReason) return;
-    
+    if (!selectedApp || !rejectReasonKey) return;
+
+    const reasonObj = REJECTION_REASONS.find(r => r.value === rejectReasonKey);
+    const reasonLabel = reasonObj?.label || rejectReasonKey;
+    const messageToAffiliate = affiliateMessage.trim() || reasonObj?.affiliateMessage || reasonLabel;
+
     await rejectApplication.mutateAsync({
       applicationId: selectedApp.id,
-      reason: rejectReason,
+      reason: reasonLabel,
       adminNotes: adminNotes || undefined,
     });
 
+    // Send rejection email
+    try {
+      const emailContent = generateRejectionEmail({
+        fullName: selectedApp.full_name,
+        rejectionReason: reasonLabel,
+        messageToAffiliate,
+      });
+      await supabase.functions.invoke('send-affiliate-email', {
+        body: {
+          to: selectedApp.email,
+          subject: emailContent.subject,
+          html: emailContent.html,
+          text: emailContent.text,
+        },
+      });
+    } catch (emailErr) {
+      console.error('Failed to send rejection email:', emailErr);
+    }
+
     setShowRejectModal(false);
     setSelectedApp(null);
-    setRejectReason('');
+    setRejectReasonKey('');
+    setAffiliateMessage('');
     setAdminNotes('');
+    setShowMessageEditor(false);
   };
 
   // Open approve modal and initialize values
@@ -496,9 +579,12 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
             <div className="p-6 space-y-5">
               {/* Affiliate Code - Compact Design */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Affiliate Code
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Affiliate Code (Whop Coupon)
                 </label>
+                <p className="text-gray-500 text-xs mb-2">
+                  קוד זה ייווצר ב-Whop. ניתן לשנותו — הקוד יעניק הנחה לקונים ויקשר את העמלה לאפילייט.
+                </p>
                 
                 {selectedApp.requested_code ? (
                   <div className="space-y-2">
@@ -613,7 +699,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                   ))}
                 </div>
                 <p className="text-gray-500 text-xs mt-2">
-                  Discount customers receive when using this affiliate's code
+                  הנחה שיקבלו לקוחות כשישתמשו בקוד — תקף לכל התוכניות. האפילייט מקבל 10% עמלה על כל תשלום ל-12 חודשים.
                 </p>
               </div>
 
@@ -674,53 +760,105 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
           onClick={() => setShowRejectModal(false)}
         >
           <div 
-            className="bg-[#111111] border border-gray-800 rounded-xl max-w-md w-full"
+            className="bg-[#111111] border border-gray-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-gray-800">
-              <h3 className="text-xl font-bold text-white">Reject Application</h3>
-              <p className="text-gray-400 text-sm mt-1">
-                Reject application from {selectedApp.full_name}
-              </p>
+            <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white">Reject Application</h3>
+                <p className="text-gray-400 text-sm mt-1">{selectedApp.full_name} · {selectedApp.email}</p>
+              </div>
+              <button onClick={() => setShowRejectModal(false)} className="p-2 text-gray-400 hover:text-white hover:bg-[#0A0A0A] rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-5">
+              {/* Warning */}
               <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
                 <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                 <p className="text-red-400 text-sm">
-                  This action cannot be undone. The applicant will be notified.
+                  The applicant will receive a rejection email with the reason selected. This action cannot be undone.
                 </p>
               </div>
 
+              {/* Reason selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-300 mb-3">
                   Rejection Reason <span className="text-red-400">*</span>
                 </label>
-                <select
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white focus:outline-none focus:border-[#D4AF37]"
-                >
-                  <option value="">Select a reason...</option>
-                  <option value="Insufficient audience size">Insufficient audience size</option>
-                  <option value="Content not aligned with our brand">Content not aligned with our brand</option>
-                  <option value="Geographic restrictions">Geographic restrictions</option>
-                  <option value="Incomplete application">Incomplete application</option>
-                  <option value="Duplicate application">Duplicate application</option>
-                  <option value="Other">Other</option>
-                </select>
+                <div className="space-y-2">
+                  {REJECTION_REASONS.map((r) => (
+                    <button
+                      key={r.value}
+                      onClick={() => {
+                        setRejectReasonKey(r.value);
+                        setAffiliateMessage(r.affiliateMessage);
+                        setShowMessageEditor(false);
+                      }}
+                      className={`
+                        w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all
+                        ${rejectReasonKey === r.value
+                          ? 'border-red-500/60 bg-red-500/10'
+                          : 'border-gray-700 bg-[#0A0A0A] hover:border-gray-600'
+                        }
+                      `}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center
+                        ${rejectReasonKey === r.value ? 'border-red-400 bg-red-400' : 'border-gray-600'}`}>
+                        {rejectReasonKey === r.value && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                      <span className={`text-sm font-medium ${rejectReasonKey === r.value ? 'text-red-300' : 'text-gray-300'}`}>
+                        {r.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
+              {/* Message to affiliate – collapsible editor */}
+              {rejectReasonKey && (
+                <div className="rounded-lg border border-gray-700 overflow-hidden">
+                  <button
+                    onClick={() => setShowMessageEditor(v => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-[#0A0A0A] hover:bg-[#111] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-[#D4AF37]" />
+                      <span className="text-sm font-medium text-gray-300">Message to affiliate (sent in email)</span>
+                    </div>
+                    {showMessageEditor ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+                  </button>
+                  {showMessageEditor && (
+                    <div className="p-4 bg-[#0D0D0D] border-t border-gray-800">
+                      <p className="text-gray-500 text-xs mb-2">This text will appear in the rejection email. Auto-filled — feel free to edit.</p>
+                      <textarea
+                        value={affiliateMessage}
+                        onChange={(e) => setAffiliateMessage(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2.5 bg-black/60 border border-gray-700 rounded-lg text-gray-200 text-sm placeholder-gray-600 focus:outline-none focus:border-[#D4AF37] resize-none leading-relaxed"
+                      />
+                    </div>
+                  )}
+                  {!showMessageEditor && affiliateMessage && (
+                    <div className="px-4 py-3 bg-[#0D0D0D] border-t border-gray-800">
+                      <p className="text-gray-500 text-xs line-clamp-2">{affiliateMessage}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Admin internal notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Admin Notes (optional)
+                  Internal notes (not sent to applicant)
                 </label>
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
-                  placeholder="Internal notes..."
-                  rows={3}
-                  className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#D4AF37] resize-none"
+                  placeholder="Internal notes for the team only..."
+                  rows={2}
+                  className="w-full px-4 py-3 bg-[#0A0A0A] border border-gray-700 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-[#D4AF37] resize-none"
                 />
               </div>
             </div>
@@ -729,8 +867,10 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
               <button
                 onClick={() => {
                   setShowRejectModal(false);
-                  setRejectReason('');
+                  setRejectReasonKey('');
+                  setAffiliateMessage('');
                   setAdminNotes('');
+                  setShowMessageEditor(false);
                 }}
                 className="flex-1 px-4 py-3 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
               >
@@ -738,7 +878,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
               </button>
               <button
                 onClick={handleReject}
-                disabled={rejectApplication.isPending || !rejectReason}
+                disabled={rejectApplication.isPending || !rejectReasonKey}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
               >
                 {rejectApplication.isPending ? (
@@ -749,7 +889,7 @@ export default function AffiliateAdminApplications({ onPendingCountChange }: Pro
                 ) : (
                   <>
                     <XCircle className="w-4 h-4" />
-                    Reject
+                    Reject & Send Email
                   </>
                 )}
               </button>

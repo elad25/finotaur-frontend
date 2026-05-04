@@ -18,6 +18,23 @@
 -- ⚠️  NOTE: referrals/affiliate tables removed in Part 1
 -- ===============================================
 
+-- ═══════════════════════════════════════════════════════════════
+-- 🔒 DEADLOCK PREVENTION: Kill idle connections + set lock timeout
+-- ═══════════════════════════════════════════════════════════════
+DO $$
+BEGIN
+  PERFORM pg_terminate_backend(pid)
+  FROM pg_stat_activity
+  WHERE datname = current_database()
+    AND pid <> pg_backend_pid()
+    AND state IN ('idle', 'idle in transaction', 'idle in transaction (aborted)')
+    AND query_start < NOW() - INTERVAL '30 seconds'
+    AND usename = current_user;
+END $$;
+
+SET lock_timeout = '10s';
+SET statement_timeout = '300s';
+
 BEGIN;
 
 -- ═══════════════════════════════════════════════════════════════
@@ -88,23 +105,49 @@ BEGIN
   RAISE NOTICE '[0/10] 💣 Nuclear cleanup - dropping all existing views...';
 END $$;
 
-DROP MATERIALIZED VIEW IF EXISTS public.webhook_stats CASCADE;
-DROP MATERIALIZED VIEW IF EXISTS public.strategy_stats_view CASCADE;
-DROP VIEW IF EXISTS public.payment_analytics CASCADE;
-DROP VIEW IF EXISTS public.admin_stats_view CASCADE;
-DROP VIEW IF EXISTS public.admin_users_list_view CASCADE;
-DROP VIEW IF EXISTS public.active_subscriptions CASCADE;
-DROP VIEW IF EXISTS public.pricing_info CASCADE;
-DROP VIEW IF EXISTS public.archived_users_view CASCADE;
-DROP VIEW IF EXISTS public.subscription_health_view CASCADE;
-DROP VIEW IF EXISTS public.revenue_analytics_view CASCADE;
-DROP VIEW IF EXISTS public.proration_impact_view CASCADE;
-DROP VIEW IF EXISTS public.cancellation_analytics_view CASCADE;
-DROP VIEW IF EXISTS public.subscription_flow_view CASCADE;
+DO $$
+DECLARE
+  v_view TEXT;
+  v_mat_views TEXT[] := ARRAY[
+    'webhook_stats',
+    'strategy_stats_view'
+  ];
+  v_reg_views TEXT[] := ARRAY[
+    'payment_analytics',
+    'admin_stats_view',
+    'admin_users_list_view',
+    'active_subscriptions',
+    'pricing_info',
+    'archived_users_view',
+    'subscription_health_view',
+    'revenue_analytics_view',
+    'proration_impact_view',
+    'cancellation_analytics_view',
+    'subscription_flow_view',
+    'user_referral_info',
+    'affiliate_stats_view'
+  ];
+BEGIN
+  -- Drop materialized views one by one with error handling
+  FOREACH v_view IN ARRAY v_mat_views LOOP
+    BEGIN
+      EXECUTE format('DROP MATERIALIZED VIEW IF EXISTS public.%I CASCADE', v_view);
+      RAISE NOTICE '✅ Dropped mat view: %', v_view;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING '⚠️  Could not drop mat view % (in use?): %', v_view, SQLERRM;
+    END;
+  END LOOP;
 
--- 🔴 REMOVED: These views use deleted tables (referrals, affiliate_stats)
-DROP VIEW IF EXISTS public.user_referral_info CASCADE;
-DROP VIEW IF EXISTS public.affiliate_stats_view CASCADE;
+  -- Drop regular views one by one with error handling
+  FOREACH v_view IN ARRAY v_reg_views LOOP
+    BEGIN
+      EXECUTE format('DROP VIEW IF EXISTS public.%I CASCADE', v_view);
+      RAISE NOTICE '✅ Dropped view: %', v_view;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING '⚠️  Could not drop view % (in use?): %', v_view, SQLERRM;
+    END;
+  END LOOP;
+END $$;
 
 -- ===============================================
 -- 🆕 SECTION 0.7: ADD BETA ACCOUNT TYPE
@@ -1165,6 +1208,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'profiles' AND column_name = 'top_secret_trial_ends_at') THEN
     ALTER TABLE public.profiles ADD COLUMN top_secret_trial_ends_at TIMESTAMPTZ;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'profiles' AND column_name = 'top_secret_email_notifications') THEN
+    ALTER TABLE public.profiles ADD COLUMN top_secret_email_notifications BOOLEAN DEFAULT TRUE;
   END IF;
 
   -- Platform columns
@@ -3607,6 +3655,175 @@ BEGIN
   END;
 END $$;
 
+-- ═══════════════════════════════════════════════════════════════
+-- FUNCTION: admin_grant_access
+-- Called by SiteDashboard.tsx → handleGrantAccess()
+-- Grants platform access directly in DB (no Whop required)
+-- ═══════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.admin_grant_access(UUID, TEXT, TEXT, INTEGER) CASCADE;
+
+CREATE OR REPLACE FUNCTION public.admin_grant_access(
+  p_user_id     UUID,
+  p_product     TEXT,     -- 'platform'
+  p_plan        TEXT,     -- 'core' | 'finotaur' | 'enterprise'
+  p_duration_days INTEGER DEFAULT 30
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_admin_id    UUID;
+  v_expires_at  TIMESTAMPTZ;
+  v_user_exists BOOLEAN;
+  v_full_plan   TEXT;
+BEGIN
+  v_admin_id := auth.uid();
+
+  -- Check admin
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = v_admin_id
+      AND role IN ('admin', 'super_admin')
+      AND COALESCE(is_banned, FALSE) = FALSE
+  ) THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Access denied: Admin only');
+  END IF;
+
+  -- Check user exists
+  SELECT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_user_id)
+  INTO v_user_exists;
+
+  IF NOT v_user_exists THEN
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+
+  -- Validate plan
+  IF p_plan NOT IN ('core', 'finotaur', 'enterprise') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid plan: must be core, finotaur, or enterprise');
+  END IF;
+
+  -- Build full plan name (matching webhook convention)
+  v_full_plan  := 'platform_' || p_plan;
+  v_expires_at := NOW() + (p_duration_days || ' days')::INTERVAL;
+
+  -- Update profile (platform fields)
+  UPDATE public.profiles
+  SET
+    platform_plan                   = v_full_plan,
+    platform_subscription_status    = 'active',
+    platform_subscription_started_at = NOW(),
+    platform_subscription_expires_at = v_expires_at,
+    platform_payment_provider       = 'admin_granted',
+    platform_is_in_trial            = FALSE,
+    platform_cancel_at_period_end   = FALSE,
+    updated_at                      = NOW(),
+
+    -- 🔥 Core: Journal Basic included
+    account_type = CASE
+      WHEN p_plan = 'core' THEN 'basic'
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN 'premium'
+      ELSE account_type
+    END,
+    max_trades = CASE
+      WHEN p_plan = 'core' THEN 25
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN 999999
+      ELSE max_trades
+    END,
+    subscription_status = CASE
+      WHEN p_plan IN ('core', 'finotaur', 'enterprise') THEN 'active'
+      ELSE subscription_status
+    END,
+    subscription_started_at = CASE
+      WHEN p_plan IN ('core', 'finotaur', 'enterprise') THEN NOW()
+      ELSE subscription_started_at
+    END,
+    subscription_expires_at = CASE
+      WHEN p_plan IN ('core', 'finotaur', 'enterprise') THEN v_expires_at
+      ELSE subscription_expires_at
+    END,
+    is_in_trial = CASE
+      WHEN p_plan IN ('core', 'finotaur', 'enterprise') THEN FALSE
+      ELSE is_in_trial
+    END,
+    platform_bundle_journal_granted = CASE
+      WHEN p_plan IN ('core', 'finotaur', 'enterprise') THEN TRUE
+      ELSE platform_bundle_journal_granted
+    END,
+
+    -- 🔥 Finotaur/Enterprise: War Zone Newsletter included
+    newsletter_enabled = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN TRUE
+      ELSE newsletter_enabled
+    END,
+    newsletter_status = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN 'active'
+      ELSE newsletter_status
+    END,
+    newsletter_paid = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN TRUE
+      ELSE newsletter_paid
+    END,
+    platform_bundle_newsletter_granted = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN TRUE
+      ELSE platform_bundle_newsletter_granted
+    END,
+
+    -- 🔥 Finotaur/Enterprise: Top Secret included
+    top_secret_enabled = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN TRUE
+      ELSE top_secret_enabled
+    END,
+    top_secret_status = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN 'active'
+      ELSE top_secret_status
+    END,
+    top_secret_interval = CASE
+      WHEN p_plan IN ('finotaur', 'enterprise') THEN 'monthly'
+      ELSE top_secret_interval
+    END,
+
+    -- 🔥 Enterprise: AI Portfolio included
+    enterprise_ai_portfolio_enabled = CASE
+      WHEN p_plan = 'enterprise' THEN TRUE
+      ELSE enterprise_ai_portfolio_enabled
+    END
+  WHERE id = p_user_id;
+
+  -- Log action
+  PERFORM public.log_admin_action(
+    'ADMIN_GRANT_PLATFORM_ACCESS',
+    'user',
+    p_user_id,
+    jsonb_build_object(
+      'product',       p_product,
+      'plan',          v_full_plan,
+      'duration_days', p_duration_days,
+      'expires_at',    v_expires_at
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'success',    true,
+    'plan',       v_full_plan,
+    'expires_at', v_expires_at,
+    'message',    'Platform ' || p_plan || ' granted for ' || p_duration_days || ' days'
+  );
+
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
+END;
+$$;
+
+COMMENT ON FUNCTION public.admin_grant_access IS
+'Admin grants platform access directly in DB (no Whop). Called by SiteDashboard Grant Access dialog.';
+
+GRANT EXECUTE ON FUNCTION public.admin_grant_access(UUID, TEXT, TEXT, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_grant_access(UUID, TEXT, TEXT, INTEGER) TO service_role;
+
 -- Main Grant Free Access Function
 DO $$
 BEGIN
@@ -4384,6 +4601,115 @@ BEGIN
   RAISE NOTICE '   └─ start_trial(UUID) - abuse prevention';
   RAISE NOTICE '';
 END $$;
+-- ═══════════════════════════════════════════════════════════════
+-- 12.13b: PORTFOLIOS TABLE
+-- Required by upsert_portfolio_from_tradovate and usePortfolios hook
+-- One row per Tradovate account (and optionally per manual portfolio)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.portfolios (
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                  UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  name                     TEXT NOT NULL,
+  description              TEXT,
+  broker                   TEXT DEFAULT 'tradovate',
+  account_number           TEXT,
+  tradovate_account_id     BIGINT,
+  tradovate_account_spec   TEXT,
+  environment              TEXT CHECK (environment IN ('live', 'demo')),
+  source                   TEXT NOT NULL DEFAULT 'tradovate'
+                             CHECK (source IN ('manual', 'tradovate')),
+  is_default               BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active                BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, name),
+  UNIQUE (user_id, account_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolios_user_id
+  ON public.portfolios(user_id)
+  WHERE is_active = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_portfolios_tradovate_account
+  ON public.portfolios(tradovate_account_id)
+  WHERE tradovate_account_id IS NOT NULL;
+
+ALTER TABLE public.portfolios ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users see own portfolios" ON public.portfolios;
+CREATE POLICY "Users see own portfolios" ON public.portfolios
+  FOR ALL USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "service_role_portfolios" ON public.portfolios;
+CREATE POLICY "service_role_portfolios" ON public.portfolios
+  FOR ALL USING (auth.role() = 'service_role');
+
+GRANT ALL ON public.portfolios TO authenticated;
+GRANT ALL ON public.portfolios TO service_role;
+-- Required by tradovate-auth edge function
+-- tradovate_vault_upsert — stores credentials encrypted in Vault
+-- tradovate_vault_read   — reads credentials from Vault
+-- Both are service_role ONLY (never exposed to authenticated/anon)
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.tradovate_vault_upsert(
+  p_name   TEXT,
+  p_secret TEXT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_id UUID;
+BEGIN
+  UPDATE vault.secrets
+    SET secret = p_secret
+    WHERE name = p_name
+    RETURNING id INTO v_id;
+
+  IF v_id IS NULL THEN
+    SELECT vault.create_secret(p_secret, p_name) INTO v_id;
+  END IF;
+
+  RETURN v_id::TEXT;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.tradovate_vault_upsert(TEXT, TEXT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.tradovate_vault_upsert(TEXT, TEXT) FROM authenticated, anon;
+
+CREATE OR REPLACE FUNCTION public.tradovate_vault_read(
+  p_secret_id TEXT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_secret TEXT;
+BEGIN
+  SELECT decrypted_secret
+  INTO v_secret
+  FROM vault.decrypted_secrets
+  WHERE id = p_secret_id::UUID;
+
+  RETURN v_secret;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.tradovate_vault_read(TEXT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.tradovate_vault_read(TEXT) FROM authenticated, anon;
+
 -- ===============================================
 -- END OF MIGRATION v9.4.2
 -- ===============================================
+
+COMMIT;
+
+-- Reset timeouts to defaults after migration
+RESET lock_timeout;
+RESET statement_timeout;

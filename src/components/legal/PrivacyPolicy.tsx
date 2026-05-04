@@ -48,7 +48,7 @@ const PrivacyPolicy = () => {
 
           <h2 className="text-2xl font-semibold mt-12 mb-4">4. Data Sharing</h2>
           <p>
-            We do not sell personal data. We may share limited data with secure third parties (e.g., PayPlus, Supabase, SnapTrade) solely for functionality and compliance.
+            We do not sell personal data. We may share limited data with secure third parties (e.g., PayPlus, Supabase) solely for functionality and compliance.
           </p>
 
           <h2 className="text-2xl font-semibold mt-12 mb-4">5. Cookies</h2>

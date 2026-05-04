@@ -40,6 +40,7 @@ export default function AffiliateAdminList() {
   const [selectedAffiliate, setSelectedAffiliate] = useState<Affiliate | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [suspensionReason, setSuspensionReason] = useState('');
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
 
@@ -81,7 +82,17 @@ export default function AffiliateAdminList() {
     setActionMenuOpen(null);
   };
 
-  // Get tier badge color
+  // Handle remove (terminate) affiliate
+  const handleRemove = async (affiliateId: string) => {
+    await updateStatus.mutateAsync({
+      affiliateId,
+      status: 'terminated',
+      suspensionReason: 'Removed by admin',
+    });
+    setShowRemoveModal(false);
+    setSelectedAffiliate(null);
+    setActionMenuOpen(null);
+  };
   const getTierBadge = (tier: string) => {
     switch (tier) {
       case 'tier_1':
@@ -327,6 +338,18 @@ export default function AffiliateAdminList() {
                                   Reactivate
                                 </button>
                               ) : null}
+                              <div className="border-t border-gray-800 my-1" />
+                              <button
+                                onClick={() => {
+                                  setSelectedAffiliate(affiliate);
+                                  setShowRemoveModal(true);
+                                  setActionMenuOpen(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Remove Affiliate
+                              </button>
                             </div>
                           </>
                         )}
@@ -552,6 +575,76 @@ export default function AffiliateAdminList() {
                   <>
                     <Pause className="w-4 h-4" />
                     Suspend
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Remove Modal */}
+      {showRemoveModal && selectedAffiliate && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowRemoveModal(false);
+            setSelectedAffiliate(null);
+          }}
+        >
+          <div
+            className="bg-[#111111] border border-red-900/40 rounded-xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-800">
+              <h3 className="text-xl font-bold text-white">Remove Affiliate</h3>
+              <p className="text-gray-400 text-sm mt-1">
+                {selectedAffiliate.display_name} · {selectedAffiliate.email}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-red-400 text-sm font-medium">This action will permanently remove the affiliate.</p>
+                  <ul className="text-red-400/80 text-sm space-y-0.5 list-disc list-inside">
+                    <li>Their coupon code will be deactivated</li>
+                    <li>They will no longer earn commissions</li>
+                    <li>Their referral link will stop working</li>
+                    <li>Existing earned commissions remain payable</li>
+                  </ul>
+                </div>
+              </div>
+
+              <p className="text-gray-400 text-sm">
+                Code: <span className="font-mono text-[#D4AF37]">{selectedAffiliate.affiliate_code}</span>
+              </p>
+            </div>
+
+            <div className="p-6 border-t border-gray-800 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowRemoveModal(false);
+                  setSelectedAffiliate(null);
+                }}
+                className="flex-1 px-4 py-3 bg-[#0A0A0A] border border-gray-700 text-white rounded-lg hover:border-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemove(selectedAffiliate.id)}
+                disabled={updateStatus.isPending}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {updateStatus.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Remove Affiliate
                   </>
                 )}
               </button>

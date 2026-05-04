@@ -9,7 +9,6 @@ import Navbar from '@/components/landing-new/Navbar';
 import Hero from '@/components/landing-new/Hero';
 import SocialProof from '@/components/landing-new/SocialProof';
 import BeforeAfter from '@/components/landing-new/BeforeAfter';
-import Reframe from '@/components/landing-new/Reframe';
 import AISection from '@/components/landing-new/AISection';
 import CoreSystem from '@/components/landing-new/CoreSystem';
 import ProductShowcase from '@/components/landing-new/ProductShowcase';
@@ -18,8 +17,6 @@ import Testimonials from '@/components/landing-new/Testimonials';
 import Vision from '@/components/landing-new/Vision';
 import Pricing from '@/components/landing-new/Pricing';
 import RiskReversal from '@/components/landing-new/RiskReversal';
-import Scarcity from '@/components/landing-new/Scarcity';
-import FinalCTA from '@/components/landing-new/FinalCTA';
 import FAQ from '@/components/landing-new/FAQ';
 import Footer from '@/components/landing-new/Footer';
 
@@ -89,7 +86,6 @@ const LandingPage = () => {
       <Hero />
       <SocialProof />
       <BeforeAfter />
-      <Reframe />
       <AISection />
       <CoreSystem />
       <ProductShowcase />
@@ -98,8 +94,6 @@ const LandingPage = () => {
       <Vision />
       <Pricing />
       <RiskReversal />
-      <Scarcity />
-      <FinalCTA />
       <FAQ />
       <Footer />
     </div>

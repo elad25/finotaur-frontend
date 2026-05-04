@@ -128,13 +128,17 @@ export interface TradeStats {
 // 🔥 FETCH ALL TRADES - FIXED: Use supabaseAdmin when impersonating
 // ================================================
 
-async function fetchAllTrades(userId: string, isImpersonating: boolean = false): Promise<Trade[]> {
+async function fetchAllTrades(
+  userId: string,
+  isImpersonating: boolean = false,
+  portfolioId?: string | null
+): Promise<Trade[]> {
   if (!userId) {
     console.log('❌ No user ID - skipping trades fetch');
     return [];
   }
 
-  console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating);
+  console.log('📊 Fetching trades for user:', userId, '| Impersonating:', isImpersonating, '| Portfolio:', portfolioId ?? 'ALL');
 
   try {
     // 🔥 CRITICAL FIX: Use admin client when impersonating to bypass RLS
@@ -142,7 +146,7 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
     
     console.log(`✅ Using ${isImpersonating ? 'ADMIN' : 'REGULAR'} client for trades fetch`);
 
-    const { data, error } = await client
+    let query = client
       .from('trades')
       .select(`
         *,
@@ -152,6 +156,13 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
       `)
       .eq('user_id', userId)
       .order('open_at', { ascending: false });
+
+    // 🔥 Portfolio filter: NULL = show all accounts, string = specific portfolio only
+    if (portfolioId) {
+      query = query.eq('portfolio_id', portfolioId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Error fetching trades:', error);
@@ -215,7 +226,7 @@ async function fetchAllTrades(userId: string, isImpersonating: boolean = false):
 // 🔥 PRIMARY HOOK - All Trades - WITH IMPERSONATION SUPPORT
 // ================================================
 
-export function useTrades(userId?: string) {
+export function useTrades(userId?: string, portfolioId?: string | null) {
   const { id: effectiveUserId } = useEffectiveUser();
   const { isImpersonating } = useImpersonation();
   
@@ -223,18 +234,22 @@ export function useTrades(userId?: string) {
   const targetUserId = userId || effectiveUserId;
 
   return useQuery({
-    queryKey: [...queryKeys.trades(targetUserId || ''), isImpersonating ? 'admin' : 'user'],
-    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating),
+    queryKey: [
+      ...queryKeys.trades(targetUserId || ''),
+      isImpersonating ? 'admin' : 'user',
+      portfolioId ?? 'all',
+    ],
+    queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId),
     enabled: !!targetUserId,
     
     // 🚀 PERFORMANCE: Aggressive caching
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     
     // 🚀 FIXED: Smart refetch strategy
     refetchOnWindowFocus: false,
-    refetchOnMount: 'always', // ✅ Always check for fresh data on mount
-    refetchInterval: false, // ❌ No automatic polling
+    refetchOnMount: 'always',
+    refetchInterval: false,
   });
 }
 

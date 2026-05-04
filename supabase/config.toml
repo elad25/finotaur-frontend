@@ -30,16 +30,6 @@ enabled = true
 verify_jwt = true  # User must be logged in to create checkout
 
 # ============================================
-# 🔒 SNAPTRADE / BROKER FUNCTIONS
-# ============================================
-
-[functions.snaptrade-proxy]
-enabled = true
-verify_jwt = true
-import_map = "./functions/snaptrade-proxy/deno.json"
-entrypoint = "./functions/snaptrade-proxy/index.ts"
-
-# ============================================
 # 🧪 TEST FUNCTIONS
 # ============================================
 

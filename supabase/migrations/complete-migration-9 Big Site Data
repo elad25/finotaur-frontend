@@ -812,7 +812,7 @@ BEGIN
   RAISE NOTICE '=====================================================';
   RAISE NOTICE '✅ PART 16: TOP 5 SCANNER v3 COMPLETE';
   RAISE NOTICE '=====================================================';
-  RAISE NOTICE 'Tables created: %/3', v_tables;
+  RAISE NOTICE 'Tables created: % of 3', v_tables;
   RAISE NOTICE '  • top5_scans - Daily scan metadata';
   RAISE NOTICE '  • top5_picks - Top 5 picks per scan';
   RAISE NOTICE '  • earnings_reports - Comprehensive earnings log';
@@ -962,7 +962,7 @@ BEGIN
   WHERE table_schema = 'public'
   AND table_name IN ('catalyst_scans', 'catalyst_picks');
   RAISE NOTICE '✅ PART 17: Scanner v5 Upgrade COMPLETE';
-  RAISE NOTICE 'Catalyst tables created: %/2', v_tables;
+  RAISE NOTICE 'Catalyst tables created: % of 2', v_tables;
 END $$;
 
 -- =====================================================
@@ -1383,7 +1383,7 @@ BEGIN
   RAISE NOTICE '  • ai_bull_case, ai_bear_case, ai_key_trade';
   RAISE NOTICE '';
   RAISE NOTICE 'Refresh: 4x/day (8:30, 10:30, 12:00, 16:30 ET)';
-  RAISE NOTICE 'Cost:    ~$25/month for 10,000 users';
+  RAISE NOTICE 'Cost:    ~25 USD/month for 10,000 users';
   RAISE NOTICE '';
   RAISE NOTICE 'Monitor: SELECT * FROM sector_refresh_stats;';
   RAISE NOTICE '=====================================================';
@@ -2269,6 +2269,15 @@ ALTER TABLE flow_scanner_cache        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE flow_scanner_stats_cache  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE flow_scanner_refresh_log  ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "fsc_service_all"  ON flow_scanner_cache;
+DROP POLICY IF EXISTS "fssc_service_all" ON flow_scanner_stats_cache;
+DROP POLICY IF EXISTS "fsrl_service_all" ON flow_scanner_refresh_log;
+DROP POLICY IF EXISTS "fsc_read_auth"    ON flow_scanner_cache;
+DROP POLICY IF EXISTS "fssc_read_auth"   ON flow_scanner_stats_cache;
+DROP POLICY IF EXISTS "fsrl_read_auth"   ON flow_scanner_refresh_log;
+DROP POLICY IF EXISTS "fsc_read_anon"    ON flow_scanner_cache;
+DROP POLICY IF EXISTS "fssc_read_anon"   ON flow_scanner_stats_cache;
+
 CREATE POLICY "fsc_service_all"  ON flow_scanner_cache        FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "fssc_service_all" ON flow_scanner_stats_cache  FOR ALL TO service_role USING (true) WITH CHECK (true);
 CREATE POLICY "fsrl_service_all" ON flow_scanner_refresh_log  FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -2304,4 +2313,161 @@ BEGIN
   RAISE NOTICE '  • flow_scanner_stats_cache — pre-computed stats';
   RAISE NOTICE '  • flow_scanner_refresh_log — cron monitoring';
   RAISE NOTICE 'Monitor: SELECT * FROM flow_scanner_health;';
+END $$;
+-- =====================================================
+-- PART 29: FLOW SCANNER v2 — Dark Pool + Confluence
+-- =====================================================
+
+-- ─── 1. Add dark pool columns to flow_scanner_cache ───
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS sector TEXT;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS dark_pool_percent INTEGER;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS dp_print_size TEXT;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS confluence_score INTEGER;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS active_signals JSONB DEFAULT '[]';
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS insider_name TEXT;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS insider_title TEXT;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS insider_shares INTEGER;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS institution_name TEXT;
+ALTER TABLE flow_scanner_cache ADD COLUMN IF NOT EXISTS short_interest_pct NUMERIC(6,2);
+
+-- ─── 2. Update CHECK constraint for new types ────
+ALTER TABLE flow_scanner_cache DROP CONSTRAINT IF EXISTS flow_scanner_cache_type_check;
+ALTER TABLE flow_scanner_cache ADD CONSTRAINT flow_scanner_cache_type_check
+  CHECK (type IN ('unusual_volume','block_trade','sweep','short_squeeze',
+                  'dark_pool','dark_pool_sweep',
+                  'insider_buy','insider_sell','cluster_insider',
+                  'institutional_new','institutional_increase','institutional_exit',
+                  'confluence',
+                  'institutional','insider','accumulation'));
+
+-- ─── 3. Indexes for dark pool + confluence queries ────
+CREATE INDEX IF NOT EXISTS idx_fsc_dp_pct ON flow_scanner_cache(dark_pool_percent DESC)
+  WHERE dark_pool_percent IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fsc_confluence ON flow_scanner_cache(confluence_score DESC)
+  WHERE confluence_score IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fsc_sector ON flow_scanner_cache(sector);
+
+-- ─── 4. Add dark_pool_count + confluence_count to stats ─
+ALTER TABLE flow_scanner_stats_cache ADD COLUMN IF NOT EXISTS dark_pool_count INTEGER DEFAULT 0;
+ALTER TABLE flow_scanner_stats_cache ADD COLUMN IF NOT EXISTS confluence_count INTEGER DEFAULT 0;
+ALTER TABLE flow_scanner_stats_cache ADD COLUMN IF NOT EXISTS market_sentiment TEXT DEFAULT 'neutral';
+
+-- ─── 5. Add columns to refresh log ─
+ALTER TABLE flow_scanner_refresh_log ADD COLUMN IF NOT EXISTS dark_pool_items INTEGER DEFAULT 0;
+ALTER TABLE flow_scanner_refresh_log ADD COLUMN IF NOT EXISTS confluence_items INTEGER DEFAULT 0;
+
+DO $$
+BEGIN
+  RAISE NOTICE '✅ PART 29: FLOW SCANNER v2 — Dark Pool + Confluence COMPLETE';
+  RAISE NOTICE '  • New columns: sector, dark_pool_percent, dp_print_size, confluence_score, active_signals';
+  RAISE NOTICE '  • Updated type CHECK for new signal types';
+  RAISE NOTICE '  • Stats: dark_pool_count, confluence_count, market_sentiment';
+END $$;
+
+-- ============================================================
+-- PART 30: PICK PRICE HISTORY — Daily Price Snapshots for Charts
+-- ============================================================
+-- Stores daily closing prices for every tracked pick
+-- Populated by priceTrackerCron (Polygon only, ZERO AI)
+-- Used by Admin Tracker performance chart (AreaChart)
+-- One row per pick per day — compact, efficient
+--
+-- Architecture (10K+ users):
+--   • Cron writes ~100 rows/day after market close
+--   • Server cache: 10 min TTL per pick
+--   • Service cache: 5 min TTL per pick
+--   • Frontend cache: 5 min per session
+--   • Result: ~10 DB queries/min max, zero AI, zero extra API
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS pick_price_history (
+  id BIGSERIAL PRIMARY KEY,
+  
+  -- Foreign key to pick_tracking
+  pick_tracking_id UUID NOT NULL REFERENCES pick_tracking(id) ON DELETE CASCADE,
+  ticker TEXT NOT NULL,
+  
+  -- Daily snapshot
+  trade_date DATE NOT NULL,
+  close_price NUMERIC(12,2) NOT NULL,
+  open_price NUMERIC(12,2),
+  high_price NUMERIC(12,2),
+  low_price NUMERIC(12,2),
+  volume BIGINT,
+  
+  -- Computed from pick_price at registration time
+  return_pct NUMERIC(8,2),
+  
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- One price per pick per day
+  UNIQUE(pick_tracking_id, trade_date)
+);
+
+-- Primary query: get all prices for a specific pick (chart)
+CREATE INDEX IF NOT EXISTS idx_pph_pick_date 
+  ON pick_price_history(pick_tracking_id, trade_date ASC);
+
+-- Cleanup queries
+CREATE INDEX IF NOT EXISTS idx_pph_trade_date 
+  ON pick_price_history(trade_date DESC);
+
+-- Ticker lookup (for batch operations)
+CREATE INDEX IF NOT EXISTS idx_pph_ticker 
+  ON pick_price_history(ticker);
+
+-- RLS
+ALTER TABLE pick_price_history ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "pph_service_all" ON pick_price_history;
+CREATE POLICY "pph_service_all" ON pick_price_history
+  FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "pph_read_authenticated" ON pick_price_history;
+CREATE POLICY "pph_read_authenticated" ON pick_price_history
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "pph_read_anon" ON pick_price_history;
+CREATE POLICY "pph_read_anon" ON pick_price_history
+  FOR SELECT TO anon
+  USING (true);
+
+GRANT SELECT ON pick_price_history TO authenticated, anon;
+GRANT ALL ON pick_price_history TO service_role;
+
+-- Cleanup function — removes history for closed picks > 90 days
+CREATE OR REPLACE FUNCTION cleanup_old_price_history()
+RETURNS INTEGER AS $$
+DECLARE
+  v_deleted INTEGER;
+BEGIN
+  DELETE FROM pick_price_history
+  WHERE pick_tracking_id IN (
+    SELECT id FROM pick_tracking 
+    WHERE status NOT IN ('active', 'hit_target_1')
+    AND closed_at < NOW() - INTERVAL '90 days'
+  );
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT EXECUTE ON FUNCTION cleanup_old_price_history() TO service_role;
+
+DO $$
+BEGIN
+  RAISE NOTICE '';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE '✅ PART 30: PICK PRICE HISTORY TABLE CREATED';
+  RAISE NOTICE '=====================================================';
+  RAISE NOTICE 'Table: pick_price_history';
+  RAISE NOTICE '  - One row per pick per day (OHLCV + return pct)';
+  RAISE NOTICE '  - Populated by priceTrackerCron (Polygon, zero AI)';
+  RAISE NOTICE '  - Used for Admin Tracker area charts';
+  RAISE NOTICE '  - Auto-cleanup for closed picks > 90 days';
+  RAISE NOTICE '  - Estimated: ~100 picks × 60 days = 6K rows';
+  RAISE NOTICE '  - Serves 10K+ users from 3-layer cache';
+  RAISE NOTICE '=====================================================';
 END $$;

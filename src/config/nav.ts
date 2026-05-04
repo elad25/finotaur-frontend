@@ -3,8 +3,9 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, Shield, 
-  FlaskConical, PlayCircle, TrendingDown, Brain, Database, Code, type LucideIcon
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -185,7 +186,7 @@ export const domains: Record<string, Domain> = {
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
       { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks },
-      { label: 'Community Blog', path: '/app/journal/community', icon: Users },
+      { label: 'Trade Copier', path: '/app/journal/trade-copier', icon: Copy },
       { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
       { label: 'Settings', path: '/app/journal/settings', icon: SettingsIcon },
     ],

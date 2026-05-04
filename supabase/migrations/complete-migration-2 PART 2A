@@ -393,69 +393,8 @@ CREATE TRIGGER trigger_initialize_risk_settings
 COMMENT ON TRIGGER trigger_initialize_risk_settings ON public.profiles IS 
 'v8.5.9: Auto-initialize risk settings on profile creation';
 
--- Auto-Create Profile on Signup (FIXED - NO AFFILIATE CODE)
+-- handle_new_user: authoritative version in WHOP_DB (runs last)
 DROP FUNCTION IF EXISTS public.handle_new_user() CASCADE;
-
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER 
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_display_name TEXT;
-BEGIN
-  v_display_name := COALESCE(
-    NEW.raw_user_meta_data->>'display_name',
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'name',
-    split_part(NEW.email, '@', 1)
-  );
-
-INSERT INTO public.profiles (
-    id, email, display_name,
-    account_type, 
-    subscription_status,
-    is_in_trial,
-    trial_ends_at,
-    trial_used,
-    max_trades, 
-    trade_count, 
-    current_month_trades_count,
-    billing_cycle_start,
-    current_portfolio, total_pnl, initial_portfolio,
-    portfolio_size, risk_mode, risk_percentage,
-    role, is_banned,
-    created_at, updated_at
-  ) VALUES (
-    NEW.id, NEW.email, v_display_name,
-    'platform_free',                      -- ✅ מתחיל כ-PLATFORM FREE
-    NULL,                                 -- ✅ אין סטטוס מנוי
-    FALSE,                                -- ✅ לא ב-trial
-    NULL,                                 -- ✅ אין תאריך trial
-    FALSE,                                -- ✅ לא השתמש ב-trial
-    0,                                    -- ✅ 0 טריידים (לא כולל journal)
-    0, 0,
-    NULL,                                 -- ✅ אין billing cycle
-    10000, 0, 10000, 10000,
-    'percentage', 1.0,
-    'user', FALSE,
-    NOW(), NOW()
-  )
-  ON CONFLICT (id) DO UPDATE SET
-    email = EXCLUDED.email,
-    display_name = COALESCE(profiles.display_name, EXCLUDED.display_name),
-    updated_at = NOW();
-  
-  RETURN NEW;
-EXCEPTION WHEN OTHERS THEN
-  RAISE WARNING 'handle_new_user failed for %: %', NEW.email, SQLERRM;
-  RETURN NEW;
-END;
-$$;
-
-COMMENT ON FUNCTION public.handle_new_user IS 
-'v8.5.11: Creates profile with account_type=platform_free. Journal/Newsletter via Whop payment!';
 
 DO $$
 BEGIN
@@ -1123,132 +1062,10 @@ END $$;
 
 
 -- ═══════════════════════════════════════════════════════════════
--- 🔒 can_create_trade - Checks if user is under their trade limit
+-- 🔒 can_create_trade - authoritative version in DB_4 (runs later)
 -- ═══════════════════════════════════════════════════════════════
 
 DROP FUNCTION IF EXISTS public.can_create_trade(UUID) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.can_create_trade(p_user_id UUID)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path TO 'public'
-AS $$
-DECLARE
-  v_account_type         TEXT;
-  v_role                 TEXT;
-  v_subscription_status  TEXT;
-  v_is_in_trial          BOOLEAN;
-  v_trial_ends_at        TIMESTAMPTZ;
-  v_subscription_expires TIMESTAMPTZ;
-  v_max_trades           INTEGER;
-  v_monthly_count        INTEGER;
-  v_lifetime_trades      BIGINT;
-  v_platform_plan        TEXT := NULL;
-  v_platform_status      TEXT := NULL;
-  v_has_platform_cols    BOOLEAN;
-BEGIN
-  -- ✅ Check if platform columns exist (added by WHOP_DB which runs later)
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-      AND table_name = 'profiles' 
-      AND column_name = 'platform_plan'
-  ) INTO v_has_platform_cols;
-
-  -- ✅ Always select base columns (always exist from DB_1)
-  SELECT 
-    account_type,
-    role,
-    subscription_status,
-    is_in_trial,
-    trial_ends_at,
-    subscription_expires_at,
-    max_trades,
-    current_month_trades_count
-  INTO 
-    v_account_type, v_role, v_subscription_status,
-    v_is_in_trial, v_trial_ends_at, v_subscription_expires,
-    v_max_trades, v_monthly_count
-  FROM public.profiles
-  WHERE id = p_user_id;
-
-  IF NOT FOUND THEN
-    RETURN FALSE;
-  END IF;
-
-  -- ✅ Lifetime trades count
-  SELECT COUNT(*) INTO v_lifetime_trades
-  FROM public.trades
-  WHERE user_id = p_user_id AND deleted_at IS NULL;
-
-  -- ✅ Platform columns (only if they exist — WHOP_DB adds them)
-  IF v_has_platform_cols THEN
-    EXECUTE format(
-      'SELECT platform_plan, platform_subscription_status FROM public.profiles WHERE id = %L',
-      p_user_id
-    ) INTO v_platform_plan, v_platform_status;
-  END IF;
-
-  -- Admins = unlimited
-  IF v_role IN ('admin', 'super_admin') THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Premium/VIP/Beta/Admin/Trial account_type = unlimited
-  IF v_account_type IN ('premium', 'admin', 'vip', 'beta', 'trial') THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Platform Finotaur/Enterprise = unlimited
-  IF v_platform_plan IN ('finotaur', 'platform_finotaur', 'enterprise', 'platform_enterprise')
-     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
-    RETURN TRUE;
-  END IF;
-
-  -- Platform Core = 50/month
-  IF v_platform_plan IN ('core', 'platform_core')
-     AND v_platform_status IN ('active', 'trial', 'trialing') THEN
-    RETURN COALESCE(v_monthly_count, 0) < 50;
-  END IF;
-
-  -- Free / platform_free / NULL = 15 lifetime
-  IF v_account_type IN ('free', 'platform_free') OR v_account_type IS NULL THEN
-    RETURN COALESCE(v_lifetime_trades, 0) < 15;
-  END IF;
-
-  -- Basic — בדיקת תוקף לפני מגבלה חודשית
-  IF v_account_type = 'basic' THEN
-    -- Trial פג
-    IF (v_subscription_status = 'trial' OR COALESCE(v_is_in_trial, FALSE))
-       AND v_trial_ends_at IS NOT NULL
-       AND v_trial_ends_at < NOW() THEN
-      RETURN FALSE;
-    END IF;
-    -- Subscription פגה
-    IF v_subscription_status = 'expired' THEN
-      RETURN FALSE;
-    END IF;
-    -- Cancelled וגרייס פיריוד נגמר
-    IF v_subscription_status = 'cancelled'
-       AND (v_subscription_expires IS NULL
-            OR v_subscription_expires < NOW()) THEN
-      RETURN FALSE;
-    END IF;
-    -- ✅ NULL status = משתמש חדש, webhook לא ירה עדיין — מאפשרים
-    RETURN COALESCE(v_monthly_count, 0) < COALESCE(v_max_trades, 25);
-  END IF;
-
-  RETURN FALSE;
-END;
-$$;
-
-COMMENT ON FUNCTION public.can_create_trade(UUID) IS
-'v10.1.0-SAFE: עובד גם לפני WHOP_DB. platform_plan נבדק דינמית. FREE=15 lifetime, BASIC=25/month, PREMIUM=unlimited.';
-
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO service_role;
 
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1771,8 +1588,7 @@ BEGIN
   SET 
     account_type = p_account_type,
     payment_provider = p_payment_provider,
-    subscription_id = COALESCE(p_subscription_id, subscription_id),
-    subscription_end_date = COALESCE(p_period_end, subscription_end_date),
+    subscription_expires_at = COALESCE(p_period_end, subscription_expires_at),
     max_trades = v_max_trades,
     -- Reset monthly count on upgrade
     current_month_trades_count = CASE 
@@ -1838,62 +1654,8 @@ $$;
 COMMENT ON FUNCTION public.record_payment IS 
 'v8.5.9: Records payment transaction in payment_history table';
 
--- ✅ Update Account Type on Payment (TRIGGER - NO AFFILIATE)
+-- update_account_type_on_payment: authoritative placeholder in DB_3 (Whop webhooks handle updates)
 DROP FUNCTION IF EXISTS public.update_account_type_on_payment() CASCADE;
-
-CREATE OR REPLACE FUNCTION public.update_account_type_on_payment()
-RETURNS TRIGGER 
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  v_max_trades INTEGER;
-  v_subscription_interval TEXT;
-BEGIN
-  IF NEW.status = 'completed' AND (OLD IS NULL OR OLD.status != 'completed') THEN
-    
-    v_max_trades := get_trade_limit(NEW.plan);
-    v_subscription_interval := CASE 
-      WHEN NEW.amount > 100 THEN 'yearly'
-      ELSE 'monthly'
-    END;
-    
-    UPDATE public.profiles
-    SET 
-      account_type = NEW.plan,
-      max_trades = v_max_trades,
-      subscription_interval = v_subscription_interval,
-      subscription_status = 'active',
-      subscription_started_at = NOW(),
-      subscription_expires_at = CASE 
-        WHEN v_subscription_interval = 'yearly' THEN NOW() + INTERVAL '1 year'
-        ELSE NOW() + INTERVAL '1 month'
-      END,
-      updated_at = NOW()
-    WHERE id = NEW.user_id;
-    
-    INSERT INTO public.subscription_periods (
-      user_id, plan, payplus_transaction_id, period_start, period_end, auto_renew
-    ) VALUES (
-      NEW.user_id, 
-      NEW.plan, 
-      NEW.payplus_transaction_id, 
-      NOW(),
-      CASE 
-        WHEN v_subscription_interval = 'yearly' THEN NOW() + INTERVAL '1 year'
-        ELSE NOW() + INTERVAL '1 month'
-      END,
-      TRUE
-    ) ON CONFLICT DO NOTHING;
-    
-  END IF;
-  
-  RETURN NEW;
-END;
-$$;
-
-COMMENT ON FUNCTION public.update_account_type_on_payment IS 
-'v8.5.9-NO-AFFILIATE: Updates account only after successful payment';
 
 -- ✅ Verify Paid Access
 DROP FUNCTION IF EXISTS public.verify_paid_access(UUID) CASCADE;
@@ -2175,17 +1937,23 @@ BEGIN
     account_type = p_new_plan,
     subscription_interval = p_new_interval,
     subscription_status = 'active',
-    payment_provider = 'payplus',
+    payment_provider = 'whop',
     subscription_started_at = NOW(),
     subscription_expires_at = v_new_expires_at,
-    max_trades = public.get_trade_limit(p_new_plan),
+    max_trades = CASE p_new_plan
+      WHEN 'basic'   THEN 25
+      WHEN 'premium' THEN 999999
+      WHEN 'trial'   THEN 25
+      WHEN 'free'    THEN 15
+      ELSE 15
+    END,
     billing_cycle_start = CURRENT_DATE,
     current_month_trades_count = 0,
     updated_at = NOW()
   WHERE id = p_user_id;
   
   INSERT INTO public.payment_history (
-    user_id, amount, currency, status, plan, payplus_transaction_id, created_at
+    user_id, amount, currency, status, plan, whop_transaction_id, created_at
   ) VALUES (
     p_user_id, p_amount_paid, 'USD', 'completed', p_new_plan, p_payplus_transaction_id, NOW()
   );
@@ -2246,7 +2014,7 @@ BEGIN
   WHERE id = p_user_id;
   
   INSERT INTO public.payment_history (
-    user_id, amount, currency, status, plan, payplus_transaction_id, created_at
+    user_id, amount, currency, status, plan, whop_transaction_id, created_at
   ) VALUES (
     p_user_id, p_amount, 'USD', 'completed', v_profile.account_type, p_payplus_transaction_id, NOW()
   );
@@ -2402,30 +2170,9 @@ COMMENT ON FUNCTION public.downgrade_expired_subscriptions IS
 COMMENT ON FUNCTION public.downgrade_expired_subscriptions IS 
 'v8.5.9: CRON job to downgrade expired subscriptions (3-day grace period)';
 
--- ✅ Start Trial
+-- start_trial: authoritative version in DB_4 (real implementation)
 DROP FUNCTION IF EXISTS public.start_trial(UUID) CASCADE;
 DROP FUNCTION IF EXISTS public.start_trial(UUID, INTEGER) CASCADE;
-
-CREATE OR REPLACE FUNCTION public.start_trial(
-  p_user_id UUID,
-  p_trial_days INTEGER DEFAULT 14
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  -- 🔒 BLOCKED: Trial only through Whop checkout!
-  RETURN jsonb_build_object(
-    'success', FALSE,
-    'error', 'Trial is only available through Whop checkout. Please subscribe at finotaur.com/pricing',
-    'code', 'USE_WHOP_CHECKOUT'
-  );
-END;
-$$;
-
-COMMENT ON FUNCTION public.start_trial IS 
-'v6.3.0: Starts 14-day trial. Sets account_type=basic, subscription_status=trial. Trial is a STATUS not account_type!';
 
 -- ✅ Get User Role (for admin checks)
 -- Drop all versions of get_user_role
@@ -2468,7 +2215,7 @@ COMMENT ON FUNCTION public.get_user_role IS
 
 -- Grant permissions
 GRANT EXECUTE ON FUNCTION public.downgrade_expired_subscriptions() TO service_role;
-GRANT EXECUTE ON FUNCTION public.start_trial(UUID, INTEGER) TO authenticated;
+-- start_trial GRANT moved to DB_4 (after function creation with correct signature)
 GRANT EXECUTE ON FUNCTION public.get_user_role(UUID) TO authenticated;
 
 DO $$
@@ -2517,7 +2264,8 @@ BEGIN
     t.multiplier
   FROM public.ticker_symbols t
   WHERE 
-    t.is_popular = TRUE
+    t.popularity_rank <= 20
+    AND t.is_active = TRUE
     AND (p_asset_class IS NULL OR t.asset_class = p_asset_class)
   ORDER BY t.symbol
   LIMIT p_limit;
@@ -2795,9 +2543,8 @@ GRANT EXECUTE ON FUNCTION public.update_timestamp() TO authenticated;
 
 -- Trade functions
 GRANT EXECUTE ON FUNCTION public.handle_trade_changes_unified() TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.can_create_trade(UUID) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
+-- get_trade_limit GRANT moved to DB_4 (after function creation)
+-- can_create_trade GRANT moved to DB_4 (after function creation)
 
 -- Session functions
 GRANT EXECUTE ON FUNCTION public.get_trading_session(TIMESTAMPTZ) TO authenticated, anon;
