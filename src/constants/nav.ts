@@ -17,7 +17,7 @@ import {
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
   ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
   FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -29,6 +29,7 @@ export interface NavItem {
   locked?: boolean;
   beta?: boolean;
   hideForAdmin?: boolean;
+  affiliateSmartPage?: boolean;
 }
 
 export interface Domain { 
@@ -52,10 +53,11 @@ export const domains: Record<string, Domain> = {
       { label: 'Overview', path: '/app/all-markets/overview', locked: true },
       { label: 'Summary', path: '/app/all-markets/summary', locked: true },
       { label: 'Chart', path: '/app/all-markets/chart', locked: true },
-{ label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
+      { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
-      { label: 'Site Dashboard', path: '/app/all-markets/admin/site-dashboard', adminOnly: true },  // 🔥 NEW
+      { label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true },  // 🤝 NEW
+      { label: 'Site Dashboard', path: '/app/all-markets/admin/site-dashboard', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
@@ -103,19 +105,16 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/crypto/overview' },
-      { label: 'News', path: '/app/crypto/news' },
+      { label: 'Screener', path: '/app/crypto/screener' },
+      { label: 'Sentiment', path: '/app/crypto/sentiment' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
-      { label: 'Top Coins', path: '/app/crypto/top-coins', icon: Coins },
-      { label: 'On-chain Data', path: '/app/crypto/on-chain', icon: Activity },
-      { label: 'Heatmap', path: '/app/crypto/heatmap', icon: Map },
-      { label: 'News & Sentiment', path: '/app/crypto/news', icon: Newspaper },
-      { label: 'Catalysts', path: '/app/crypto/catalysts', icon: Zap },
-      { label: 'Exchanges', path: '/app/crypto/exchanges', icon: Building },
-      { label: 'Top Movers', path: '/app/crypto/movers', icon: TrendingUp },
-      { label: 'Reports', path: '/app/crypto/reports', icon: FileText },
-      { label: 'Calendar', path: '/app/crypto/calendar', icon: Calendar },
+      { label: 'Screener', path: '/app/crypto/screener', icon: Search },
+      { label: 'Derivatives', path: '/app/crypto/derivatives', icon: Activity },
+      { label: 'Sentiment & News', path: '/app/crypto/sentiment', icon: Newspaper },
+      { label: 'Watchlist', path: '/app/crypto/watchlist', icon: Bell },
+      { label: 'Academy', path: '/app/crypto/academy', icon: GraduationCap },
     ],
   },
 
@@ -226,7 +225,6 @@ ai: {
     subNav: [
       { label: 'Dashboard', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
-      { label: 'Affiliate', path: '/app/journal/affiliate/overview', affiliateOnly: true },
       { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
     ],
     sidebar: [
@@ -238,7 +236,7 @@ ai: {
       { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks },
-      { label: 'Community Blog', path: '/app/journal/community', icon: Users },
+      { label: 'Trade Copier', path: '/app/journal/trade-copier', icon: Copy },
       { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
       { label: 'Settings', path: '/app/journal/settings', icon: SettingsIcon },
     ],

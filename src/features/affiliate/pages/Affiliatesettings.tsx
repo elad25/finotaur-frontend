@@ -38,13 +38,13 @@ interface AffiliateProfile {
 
 const TIER_CONFIG: Record<string, { name: string; commission: number }> = {
   tier_1: { name: 'Starter', commission: 10 },
-  tier_2: { name: 'Growth', commission: 15 },
-  tier_3: { name: 'Pro', commission: 20 },
+  tier_2: { name: 'Growth', commission: 10 },
+  tier_3: { name: 'Pro', commission: 10 },
 };
 
 const DISCOUNT_CONFIG: Record<string, { name: string; discount: number }> = {
   standard: { name: 'Standard', discount: 10 },
-  vip: { name: 'VIP', discount: 15 },
+  vip: { name: 'VIP', discount: 10 },
 };
 
 type TierKey = keyof typeof TIER_CONFIG;

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,9 +16,10 @@ All colors MUST be HSL.
     --base-700: 220 10% 15%;
     --muted-700: 220 8% 25%;
     
-    --gold: 45 90% 55%;
-    --gold-600: 45 85% 48%;
-    --gold-muted: 45 40% 35%;
+    /* Calibrated to match brand hex #C9A646 exactly (was 45 90% 55%) */
+    --gold: 44 55% 53%;
+    --gold-600: 44 50% 45%;
+    --gold-muted: 44 40% 35%;
     
     --accent-emerald: 142 76% 45%;
     --accent-red: 0 72% 55%;
@@ -59,6 +62,167 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: var(--base-700);
     --sidebar-ring: var(--gold);
+
+    --gold-primary: #C9A646;
+    --gold-soft: #E5C875;
+    --gold-glow: rgba(201, 166, 70, 0.4);
+    --gold-border: rgba(201, 166, 70, 0.15);
+    --glass-bg: rgba(20, 20, 20, 0.5);
+
+    --bronze-deep: #5C4A1F;
+    --bronze-mid: #7E6526;
+    --bronze-warm: #A88838;
+    --gold-dim: #8B6F38;
+    --bg-near-black: #020202;
+    --bg-warm-shadow: #050402;
+
+    /* ============================================================
+       FINOTAUR Design System tokens (added 2026-05-01)
+       Reference: DESIGN_SYSTEM.md
+       Do NOT edit values here without updating DESIGN_SYSTEM.md.
+       ============================================================ */
+
+    /* ---------- Gold (extends existing palette) ---------- */
+    --gold-bright: #E8C766;       /* gradient top edge */
+    --gold-deep: #A88838;         /* gradient bottom edge */
+    --gold-hover: #D4B25A;
+    --gold-muted-rgba: rgba(201, 166, 70, 0.7);
+
+    /* ---------- Surfaces ---------- */
+    --bg-base: #0a0a0a;
+    --bg-surface-1: rgba(255, 255, 255, 0.02);
+    --bg-surface-2: rgba(255, 255, 255, 0.04);
+    --bg-glass: var(--glass-bg);  /* alias for spec compatibility */
+
+    /* ---------- Text ---------- */
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.65);
+    --text-tertiary: rgba(255, 255, 255, 0.45);
+    --text-muted: rgba(255, 255, 255, 0.30);
+    --text-on-gold: #0a0a0a;
+
+    /* ---------- Borders (DS namespace — `--border` is shadcn) ---------- */
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-default: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.20);
+
+    /* ---------- Financial data (Variant 1: Apple Stocks) ---------- */
+    --num-neutral: #ffffff;
+    --num-positive: #ffffff;
+    --num-negative: #E24B4A;
+
+    /* ---------- Status (NOT for financial data) ---------- */
+    --status-info: #3b82f6;
+    --status-warning: #eab308;
+    --status-error: #E24B4A;
+    --status-success: #10b981;
+
+    /* ---------- Typography: families ---------- */
+    --font-sans: 'Inter', -apple-system, 'SF Pro Text', BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
+    --font-serif: 'Cormorant Garamond', Georgia, serif;
+
+    /* ---------- Typography: text scale ---------- */
+    --text-display: 72px;
+    --text-h1: 48px;
+    --text-h2: 32px;
+    --text-h3: 24px;
+    --text-h4: 18px;
+    --text-body: 15px;
+    --text-small: 13px;
+    --text-eyebrow: 11px;
+
+    /* ---------- Typography: number scale (mono) ---------- */
+    --num-display: 48px;
+    --num-large: 28px;
+    --num-default: 22px;
+    --num-small: 13px;
+
+    /* ---------- Spacing — 8px grid (px, used as `var(--space-N)`) ---------- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --space-8: 64px;
+    --space-9: 96px;
+
+    /* ---------- Radius (DS scale, separate from shadcn `--radius`) ---------- */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    /* ---------- Functional shadows ---------- */
+    --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ds-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    --ds-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+
+    /* ---------- Gold glow (the FINOTAUR signature) ---------- */
+    --glow-gold-resting: 0 0 24px 4px rgba(201, 166, 70, 0.25);
+    --glow-gold-hover: 0 0 32px 6px rgba(201, 166, 70, 0.40);
+    --glow-gold-active: 0 0 16px 2px rgba(201, 166, 70, 0.30);
+    --glow-gold-strong: 0 0 60px 8px rgba(201, 166, 70, 0.35);
+
+    /* ---------- Gold gradient (for primary CTAs) ---------- */
+    --gradient-gold: linear-gradient(
+      135deg,
+      var(--gold-bright) 0%,
+      var(--gold-primary) 50%,
+      var(--gold-deep) 100%
+    );
+
+    /* ---------- Gold gradient — vertical (lit-from-above) ---------- */
+    /* Used for: hero wordmark, navbar wordmark. Creates dimensional "lit from above" feel. */
+    /* Values extracted from Hero.tsx inline style — do NOT change independently. */
+    --gradient-gold-vertical: linear-gradient(
+      to bottom,
+      rgba(255, 230, 160, 1) 0%,
+      rgba(230, 195, 100, 0.98) 25%,
+      rgba(201, 166, 70, 0.92) 60%,
+      rgba(150, 120, 50, 0.80) 100%
+    );
+
+    /* ---------- Motion ---------- */
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 400ms;
+
+    /* ============================================================
+       FINOTAUR — Section/Atmospheric Semantic Tokens (added 2026-05-03)
+       Reference: .claude/plans/landing-design-overhaul.md Phase A
+       Do NOT edit values here without updating the plan doc.
+       ============================================================ */
+
+    /* Section backgrounds */
+    --bg-section-base: #080808;
+    --bg-section-deep: #050608;
+    --bg-section-radial-mid: #0a0c10;
+    --bg-section-card-rest: rgba(20, 20, 20, 0.7);
+    --bg-section-card-deep: rgba(12, 12, 12, 0.5);
+
+    /* Construction markers */
+    --construction-line: rgba(201, 166, 70, 0.15);
+    --construction-line-strong: rgba(201, 166, 70, 0.35);
+    --construction-marker: rgba(201, 166, 70, 0.40);
+
+    /* Atmospheric gold beam (3 layers from widest/dimmest to narrowest/brightest) */
+    --beam-ambient: rgba(201, 166, 70, 0.18);
+    --beam-medium: rgba(230, 195, 100, 0.22);
+    --beam-core: rgba(255, 220, 140, 0.25);
+
+    /* Card shadows */
+    --shadow-card-rest: 0 30px 80px rgba(0,0,0,0.6), 0 0 60px rgba(201,166,70,0.04);
+    --shadow-card-hover: 0 40px 100px rgba(0,0,0,0.7), 0 0 120px rgba(201,166,70,0.10);
+    --shadow-card-featured: 0 50px 120px rgba(0,0,0,0.75), 0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(201,166,70,0.18);
+
+    /* Eyebrow text/lines (renamed from --text-eyebrow to avoid collision with existing 11px font-size token) */
+    --gold-eyebrow: rgba(201, 166, 70, 0.75);
+    --gold-eyebrow-hairline: rgba(201, 166, 70, 0.50);
   }
 }
 
@@ -81,6 +245,52 @@ All colors MUST be HSL.
 }
 
 @layer utilities {
+  /* ============================================================
+     FINOTAUR DS utilities (added 2026-05-01)
+     Reference: DESIGN_SYSTEM.md §2 (typography), §9 (do/don't)
+     ============================================================ */
+
+  /* Numbers — apply to ANY element displaying a numeric value */
+  .num {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    color: var(--num-neutral);
+    letter-spacing: -0.5px;
+  }
+  .num--small { font-size: var(--num-small); letter-spacing: 0; }
+  .num--default { font-size: var(--num-default); }
+  .num--large { font-size: var(--num-large); }
+  .num--display { font-size: var(--num-display); }
+
+  /* Number change (the +/- delta below the price) */
+  .num-change {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum";
+    font-size: var(--num-small);
+  }
+  .num-change--positive { color: var(--num-positive); }
+  .num-change--negative { color: var(--num-negative); }
+
+  /* Eyebrow — small uppercase label (e.g. "FLAGSHIP") */
+  .ds-eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--text-eyebrow);
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--gold-muted-rgba);
+  }
+
+  /* Glass panel (DS variant — distinct from existing .glass-card) */
+  .ds-glass-panel {
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border: 0.5px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+  }
+
   .shadow-premium {
     box-shadow: 
       0 10px 40px -10px hsl(var(--base-900) / 0.8),
@@ -372,3 +582,35 @@ nav[class*="flex-col"] button.active {
 .ticker-loading-spinner {
   animation: ticker-spin 0.8s linear infinite;
 }
+
+/* ========== FEATURED CARD GOLD BORDER SHIMMER ========== */
+@keyframes gold-border-shimmer {
+  0%, 100% {
+    background:
+      linear-gradient(135deg, rgba(22, 22, 22, 0.85) 0%, rgba(14, 14, 14, 0.7) 100%) padding-box,
+      linear-gradient(
+        135deg,
+        rgba(255, 220, 140, 0.7) 0%,
+        rgba(201, 166, 70, 0.4) 25%,
+        rgba(180, 145, 55, 0.3) 50%,
+        rgba(201, 166, 70, 0.4) 75%,
+        rgba(255, 220, 140, 0.6) 100%
+      ) border-box;
+  }
+  50% {
+    background:
+      linear-gradient(135deg, rgba(22, 22, 22, 0.85) 0%, rgba(14, 14, 14, 0.7) 100%) padding-box,
+      linear-gradient(
+        135deg,
+        rgba(255, 220, 140, 0.5) 0%,
+        rgba(255, 220, 140, 0.6) 25%,
+        rgba(201, 166, 70, 0.4) 50%,
+        rgba(255, 220, 140, 0.5) 75%,
+        rgba(201, 166, 70, 0.4) 100%
+      ) border-box;
+  }
+}
+.animate-gold-border-shimmer {
+  animation: gold-border-shimmer 8s ease-in-out infinite;
+}
+

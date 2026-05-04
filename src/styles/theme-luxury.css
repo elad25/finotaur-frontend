@@ -3,6 +3,19 @@
    Bloomberg Terminal × Apple Vision × Metallic Gold
    ============================================ */
 
+/* ⚠️  DEPRECATED (2026-05-01) ⚠️
+   This file is being phased out in favor of the consolidated tokens
+   in `globals.css`. New tokens (`--gold-bright`, `--gold-deep`, `--bg-base`,
+   `--text-primary`, `--space-*`, `--radius-*`, etc.) live there now.
+
+   DO NOT add new variables to this file.
+   DO NOT reference `--color-*` patterns from this file in new code.
+
+   This file will be removed once `DESIGN_AUDIT.md` shows zero references
+   to `--color-bg-primary`, `--color-gold-primary`, etc. across the codebase.
+   See: DESIGN_SYSTEM.md, finotaur-frontend/DESIGN_AUDIT.md
+   ============================================ */
+
 :root {
   /* ============================================
      CORE COLORS - Deep Blacks & Metallic Gold

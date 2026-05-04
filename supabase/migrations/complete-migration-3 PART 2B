@@ -1930,11 +1930,10 @@ CREATE TRIGGER set_updated_at
   EXECUTE FUNCTION public.handle_updated_at();
 
 -- Auth trigger (new user creation)
+-- NOTE: handle_new_user() is created in WHOP_DB (runs last)
+-- Trigger is created there too - removing from DB_3 to prevent dependency error
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();
+-- CREATE TRIGGER moved to WHOP_DB (after function creation)
 
 -- Trades search vector trigger
 DROP TRIGGER IF EXISTS trades_search_vector_update ON public.trades;

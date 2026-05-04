@@ -1,72 +1,244 @@
 // src/components/landing-new/SocialProof.tsx
 // ================================================
-// 🌟 SOCIAL PROOF BAR — Icons + Bold White Numbers
-// Original style, made more prominent
+// SOCIAL PROOF — Bloomberg-Terminal-style horizontal stat strip
+// Premium institutional feel: hairline rules, vertical separators,
+// lit-from-above gradient numbers, count-up animation on viewport entry.
 // ================================================
 
-import { motion } from "framer-motion";
-import { Users, Brain, Star, Calendar } from "lucide-react";
+"use client";
 
-const stats = [
-  { icon: Users, value: "847+", label: "Active Traders" },
-  { icon: Brain, value: "50,000+", label: "AI Analyses Run" },
-  { icon: Star, value: "4.9/5", label: "User Rating" },
-  { icon: Calendar, value: "365", label: "Days of War Zone" },
+import { useEffect, useRef, useState } from "react";
+import { motion, useInView } from "framer-motion";
+import { Users, Cpu, Star, Swords } from "lucide-react";
+import { SectionShell } from "./_shared/SectionShell";
+import { SectionEyebrow } from "./_shared/SectionEyebrow";
+import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Stat definitions
+// ---------------------------------------------------------------------------
+type StatDef = {
+  icon: React.ElementType;
+  /** The final numeric target to count up to */
+  target: number;
+  /** Text appended after the animated number, e.g. "+" or "/5" */
+  suffix: string;
+  /** Whether to format with toLocaleString() (adds commas) */
+  format?: "locale" | "decimal1" | "none";
+  label: string;
+};
+
+const STATS: StatDef[] = [
+  {
+    icon: Users,
+    target: 847,
+    suffix: "+",
+    format: "none",
+    label: "Active Traders",
+  },
+  {
+    icon: Cpu,
+    target: 50000,
+    suffix: "+",
+    format: "locale",
+    label: "AI Analyses Run",
+  },
+  {
+    icon: Star,
+    target: 4.9,
+    suffix: "/5",
+    format: "decimal1",
+    label: "User Rating",
+  },
+  {
+    icon: Swords,
+    target: 365,
+    suffix: "",
+    format: "none",
+    label: "Days of War Zone",
+  },
 ];
 
-const SocialProof = () => {
+// ---------------------------------------------------------------------------
+// useCountUp — animates a number from 0 to target over `duration` ms
+// ---------------------------------------------------------------------------
+function useCountUp(target: number, duration: number, active: boolean) {
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+
+    let startTime: number | null = null;
+    let raf: number;
+
+    const step = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const elapsed = ts - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(eased * target);
+      if (progress < 1) {
+        raf = requestAnimationFrame(step);
+      } else {
+        setValue(target);
+      }
+    };
+
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [active, target, duration]);
+
+  return value;
+}
+
+// ---------------------------------------------------------------------------
+// StatCell — individual stat with icon, animated number, micro-label
+// ---------------------------------------------------------------------------
+type StatCellProps = {
+  stat: StatDef;
+  index: number;
+  active: boolean;
+};
+
+function StatCell({ stat, index, active }: StatCellProps) {
+  const raw = useCountUp(stat.target, 1200, active);
+
+  let display: string;
+  if (stat.format === "locale") {
+    display = Math.floor(raw).toLocaleString();
+  } else if (stat.format === "decimal1") {
+    display = raw.toFixed(1);
+  } else {
+    display = Math.floor(raw).toString();
+  }
+
+  const Icon = stat.icon;
+
   return (
-    <section className="relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#110d08] to-[#0a0a0a]" />
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={active ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+      transition={{ duration: 0.5, delay: index * 0.12, ease: "easeOut" }}
+      className="flex flex-col items-center gap-2 px-6 py-4 md:py-0 flex-1 min-w-0"
+    >
+      {/* Tiny gold icon */}
+      <Icon
+        className="w-4 h-4 text-gold-eyebrow"
+        aria-hidden="true"
+        strokeWidth={1.5}
+      />
 
-      {/* Gold glow behind */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[300px] bg-[#C9A646]/[0.08] rounded-full blur-[120px]" />
+      {/* Big animated number — lit-from-above gold gradient */}
+      <span
+        className={cn(
+          "font-wordmark font-medium tabular-nums tracking-[-0.02em]",
+          "text-5xl md:text-6xl lg:text-7xl",
+          "bg-gradient-gold-vertical bg-clip-text text-transparent",
+          "leading-none",
+        )}
+        aria-label={`${display}${stat.suffix}`}
+      >
+        {display}
+        <span className="text-3xl md:text-4xl lg:text-5xl">{stat.suffix}</span>
+      </span>
 
-      {/* Golden divider — TOP */}
-      <div className="relative w-full h-[2px]">
+      {/* Micro hairline under number */}
+      <div
+        className="w-6 h-px bg-gold-eyebrow-hairline opacity-30"
+        aria-hidden="true"
+      />
+
+      {/* Uppercase label */}
+      <span
+        className="font-sans text-[10px] tracking-[0.32em] uppercase text-ink-tertiary"
+      >
+        {stat.label}
+      </span>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hairline — animated horizontal gold rule (scaleX 0→1)
+// ---------------------------------------------------------------------------
+function AnimatedHairline({ active }: { active: boolean }) {
+  return (
+    <motion.div
+      className="w-full h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent"
+      initial={{ scaleX: 0 }}
+      animate={active ? { scaleX: 1 } : { scaleX: 0 }}
+      transition={{ duration: 0.8, ease: "easeOut" }}
+      style={{ transformOrigin: "center" }}
+      aria-hidden="true"
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SocialProof
+// ---------------------------------------------------------------------------
+const SocialProof = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(containerRef, { once: true, margin: "-80px" });
+
+  return (
+    <SectionShell
+      atmosphere="none"
+      beam={false}
+      className="py-12 md:py-16"
+    >
+      <div ref={containerRef} className="max-w-6xl mx-auto px-6 relative">
+        {/* Subtle ambient gold beam — behind content */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 pointer-events-none"
+          aria-hidden="true"
           style={{
-            background: 'linear-gradient(90deg, transparent, #C9A646 20%, #F4D97B 50%, #C9A646 80%, transparent)',
-            boxShadow: '0 0 20px rgba(201,166,70,0.6)',
+            background:
+              "radial-gradient(ellipse 80% 100% at 50% 50%, rgba(201,166,70,0.05) 0%, transparent 70%)",
+            filter: "blur(20px)",
           }}
         />
-      </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-12 relative z-10">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-10">
-          {stats.map((stat, index) => {
-            const Icon = stat.icon;
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="flex flex-col items-center text-center gap-2"
-              >
-                <Icon className="w-6 h-6 text-[#C9A646] mb-1" />
-                <span className="text-3xl md:text-4xl font-bold text-white">{stat.value}</span>
-                <span className="text-sm text-slate-400">{stat.label}</span>
-              </motion.div>
-            );
-          })}
+        {/* TOP hairline rule */}
+        <AnimatedHairline active={inView} />
+
+        {/* Eyebrow */}
+        <div className="py-4 md:py-6">
+          <SectionEyebrow className="mb-0">
+            Trusted by the Community
+          </SectionEyebrow>
         </div>
-      </div>
 
-      {/* Golden divider — BOTTOM */}
-      <div className="relative w-full h-[2px]">
-        <div
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(90deg, transparent, #C9A646 20%, #F4D97B 50%, #C9A646 80%, transparent)',
-            boxShadow: '0 0 20px rgba(201,166,70,0.6)',
-          }}
-        />
+        {/* ── STAT ROW ── */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center">
+          {STATS.map((stat, index) => (
+            <div key={stat.label} className="contents">
+              {/* Horizontal separator between cells — mobile only */}
+              {index > 0 && (
+                <div
+                  className="md:hidden w-full h-px bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent opacity-30"
+                  aria-hidden="true"
+                />
+              )}
+
+              <StatCell stat={stat} index={index} active={inView} />
+
+              {/* Vertical separator between cells — desktop only */}
+              {index < STATS.length - 1 && (
+                <div
+                  className="hidden md:block w-px self-stretch bg-gradient-to-b from-transparent via-gold-eyebrow-hairline to-transparent opacity-50"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* BOTTOM hairline rule */}
+        <AnimatedHairline active={inView} />
       </div>
-    </section>
+    </SectionShell>
   );
 };
 

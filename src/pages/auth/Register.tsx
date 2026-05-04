@@ -2,7 +2,7 @@
 // 📝 REGISTRATION PAGE WITH TERMS ACCEPTANCE CHECKBOX + MODAL POPUP
 // 🎯 UPDATED: After registration → Guided Tour (War Zone → Top Secret → Journal → AI)
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -14,32 +14,10 @@ import { toast } from 'sonner';
 import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
 import { startGuidedTour, isGuidedTourActive } from '@/components/onboarding/GuidedTour';
+import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation';
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
-
-// Password validation helper
-const validatePassword = (password: string) => {
-  return {
-    minLength: password.length >= 8,
-    hasUpperCase: /[A-Z]/.test(password),
-    hasNumber: /[0-9]/.test(password),
-    hasSpecialChar: /[@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?!]/.test(password),
-  };
-};
-
-// Password strength calculator
-const getPasswordStrength = (password: string) => {
-  if (!password) return { label: '', color: '', bgColor: '', progress: 0 };
-  
-  const validation = validatePassword(password);
-  const score = Object.values(validation).filter(Boolean).length;
-  
-  if (score === 4) return { label: 'Strong', color: 'text-green-500', bgColor: 'bg-green-500', progress: 100 };
-  if (score === 3) return { label: 'Good', color: 'text-yellow-500', bgColor: 'bg-yellow-500', progress: 75 };
-  if (score === 2) return { label: 'Fair', color: 'text-orange-500', bgColor: 'bg-orange-500', progress: 50 };
-  return { label: 'Weak', color: 'text-red-500', bgColor: 'bg-red-500', progress: 25 };
-};
 
 // Email validation helper
 const validateEmail = (email: string) => {
@@ -65,9 +43,17 @@ const saveTermsAcceptance = async (userId: string) => {
   }
 };
 
+// Only allow redirects to internal /app/ paths (prevent open-redirect)
+function getSafeFrom(from: string | undefined): string {
+  if (from && from.startsWith('/app/')) return from;
+  return '/app/top-secret';
+}
+
 export default function Register() {
   const { user, register, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const postRegisterDest = getSafeFrom((location.state as { from?: { pathname?: string } } | null)?.from?.pathname);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -139,7 +125,7 @@ export default function Register() {
           return;
         }
 
-        navigate('/app/top-secret', { replace: true });
+        navigate(postRegisterDest, { replace: true });
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
@@ -147,7 +133,7 @@ export default function Register() {
     };
 
     checkUserStatus();
-  }, [user, navigate]);
+  }, [user, navigate, postRegisterDest]);
 
   // Handle Enter key for form navigation
   const handleKeyDown = (e: React.KeyboardEvent, nextRef?: React.RefObject<HTMLInputElement>) => {
@@ -198,22 +184,24 @@ export default function Register() {
 
     setLoading(true);
     try {
-      // 🎯 Start guided tour BEFORE register so it's ready when checkUserStatus runs
-      startGuidedTour();
-      
       await register(email, password, name);
-      
-      toast.success('Account created successfully!');
-      
-      // ✅ Save terms acceptance after successful registration
-      // Wait a bit for the user to be created in DB
-      setTimeout(async () => {
-        const { data: { user: newUser } } = await supabase.auth.getUser();
-        if (newUser) {
+
+      // ✅ Save terms acceptance synchronously after successful registration
+      const { data: { user: newUser } } = await supabase.auth.getUser();
+      if (newUser) {
+        try {
           await saveTermsAcceptance(newUser.id);
+        } catch (termsErr) {
+          console.error('Terms save failed (non-blocking):', termsErr);
+          toast.error('Account created, but failed to record terms acceptance. Please contact support.');
         }
-      }, 1000);
-      
+      }
+
+      // 🎯 Start guided tour AFTER successful registration
+      startGuidedTour();
+
+      toast.success('Account created successfully!');
+
     } catch (error: any) {
       console.error('Registration error:', error);
       
@@ -310,7 +298,7 @@ export default function Register() {
             </div>
             
             <p className="text-zinc-300 text-base font-medium tracking-wide">
-              You're not a trader anymore — you're a <span className="text-yellow-500 font-semibold">Finotaur</span>
+              You're not a trader anymore — you're a <span className="text-gold-primary font-semibold">Finotaur</span>
             </p>
           </div>
 

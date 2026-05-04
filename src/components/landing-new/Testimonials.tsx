@@ -1,14 +1,20 @@
-// src/pages/landing/Testimonials.tsx
+// src/components/landing-new/Testimonials.tsx
 // ================================================
-// 🔥 TESTIMONIALS — "Real Traders. Real Results."
-// Auto-scrolling carousel like old War Zone page +
-// premium cards with highlighted quotes + metrics
+// TESTIMONIALS — "Real Traders. Real Results."
+// Auto-scrolling RAF carousel — premium card design.
+// Tokens-only: zero hardcoded hex colours.
 // ================================================
 
-import { Star, TrendingUp, Award, Target, Zap, Quote } from "lucide-react";
+import { TrendingUp, Award, Target, Zap, Quote, Star } from "lucide-react";
 import { motion } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
+import { SectionShell } from "./_shared/SectionShell";
+import { SectionEyebrow } from "./_shared/SectionEyebrow";
+import { SectionTitle } from "./_shared/SectionTitle";
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 interface Testimonial {
   id: number;
   name: string;
@@ -18,9 +24,12 @@ interface Testimonial {
   highlight: string;
   metric?: string;
   metricValue?: string;
-  icon?: any;
+  icon?: React.ElementType;
 }
 
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
 const testimonials: Testimonial[] = [
   {
     id: 1,
@@ -92,6 +101,107 @@ const testimonials: Testimonial[] = [
 
 const duplicatedTestimonials = [...testimonials, ...testimonials];
 
+// ---------------------------------------------------------------------------
+// highlightText — wraps the accent phrase in gold
+// ---------------------------------------------------------------------------
+function highlightText(text: string, highlight: string): React.ReactNode {
+  if (!highlight) return text;
+  const parts = text.split(highlight);
+  if (parts.length < 2) return text;
+  return (
+    <>
+      {parts[0]}
+      <span className="text-gold-primary font-semibold">{highlight}</span>
+      {parts[1]}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TestimonialCard
+// ---------------------------------------------------------------------------
+function TestimonialCard({ t }: { t: Testimonial }) {
+  const Icon = t.icon;
+
+  return (
+    <div
+      className={[
+        "flex-shrink-0 w-[380px] p-6 rounded-2xl relative group transition-all duration-300",
+        "bg-section-card-rest border border-gold-border",
+        "shadow-card-rest hover:shadow-card-hover",
+      ].join(" ")}
+    >
+      {/* ── Corner brackets (blueprint aesthetic) ── */}
+      {/* Top-left */}
+      <span
+        className="absolute top-2 left-2 w-3 h-3 border-t border-l border-construction-marker opacity-60 pointer-events-none"
+        aria-hidden="true"
+      />
+      {/* Top-right */}
+      <span
+        className="absolute top-2 right-2 w-3 h-3 border-t border-r border-construction-marker opacity-60 pointer-events-none"
+        aria-hidden="true"
+      />
+      {/* Bottom-left */}
+      <span
+        className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-construction-marker opacity-60 pointer-events-none"
+        aria-hidden="true"
+      />
+      {/* Bottom-right */}
+      <span
+        className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-construction-marker opacity-60 pointer-events-none"
+        aria-hidden="true"
+      />
+
+      {/* Quote icon */}
+      <Quote className="absolute top-4 right-4 w-8 h-8 text-gold-primary/40" aria-hidden="true" />
+
+      {/* 5-star row */}
+      <div className="flex gap-1 mb-4">
+        {[...Array(5)].map((_, i) => (
+          <Star key={i} className="w-4 h-4 fill-gold-primary text-gold-primary" />
+        ))}
+      </div>
+
+      {/* Quote text with highlighted phrase */}
+      <p className="text-ink-secondary text-sm leading-relaxed mb-4">
+        &ldquo;{highlightText(t.text, t.highlight)}&rdquo;
+      </p>
+
+      {/* Metric badge */}
+      {t.metric && t.metricValue && (
+        <div className="flex items-center gap-3 mb-4 py-3 px-4 rounded-lg bg-gold-border border border-gold-muted">
+          {Icon && <Icon className="w-5 h-5 text-gold-primary" />}
+          <div>
+            <div className="text-[10px] text-ink-tertiary uppercase tracking-wider">{t.metric}</div>
+            <div className="text-lg font-bold text-gold-primary">{t.metricValue}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Author */}
+      <div className="flex items-center gap-3">
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold border border-gold-border"
+          style={{
+            background: 'linear-gradient(135deg, var(--gold-primary), rgba(168,136,56,1))',
+            color: 'var(--text-on-gold)',
+          }}
+        >
+          {t.avatar}
+        </div>
+        <div>
+          <p className="text-ink-primary font-semibold text-sm">{t.name}</p>
+          <p className="text-ink-tertiary text-xs">{t.role}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Testimonials
+// ---------------------------------------------------------------------------
 const Testimonials = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -120,167 +230,78 @@ const Testimonials = () => {
     return () => cancelAnimationFrame(animationId);
   }, [isPaused]);
 
-  const highlightText = (text: string, highlight: string) => {
-    if (!highlight) return text;
-    const parts = text.split(highlight);
-    if (parts.length < 2) return text;
-    return <>{parts[0]}<span className="text-[#C9A646] font-semibold">{highlight}</span>{parts[1]}</>;
-  };
-
   return (
-    <section className="py-24 px-4 relative overflow-hidden">
-      {/* ========== BACKGROUND ========== */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/35 to-transparent" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-[#C9A646]/[0.12] rounded-full blur-[150px]" />
+    <SectionShell id="testimonials" atmosphere="subtle" beam={false}>
+      {/* ========== HEADER ========== */}
+      <div className="text-center mb-14">
+        <SectionEyebrow>From Our Members</SectionEyebrow>
+        <SectionTitle gradient="split">
+          Real Traders.{" "}
+          <span className="text-gold-primary">Real Results.</span>
+        </SectionTitle>
+        <p className="text-lg text-ink-secondary max-w-2xl mx-auto mt-2">
+          Join hundreds of traders who turned data into discipline — and discipline into profit.
+        </p>
+      </div>
 
-      <div className="max-w-7xl mx-auto relative z-10">
-        {/* ========== HEADER ========== */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          className="text-center mb-14"
+      {/* ========== SCROLLING CAROUSEL ========== */}
+      <div className="relative">
+        {/* Fade edges — use section-base so they match the shell background */}
+        <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-section-base to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-section-base to-transparent z-10 pointer-events-none" />
+
+        <div
+          ref={scrollRef}
+          className="flex gap-6 overflow-x-hidden"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          style={{ scrollBehavior: 'auto' }}
         >
-          {/* Stars */}
-          <div className="flex justify-center gap-1.5 mb-6">
-            {[...Array(5)].map((_, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, scale: 0 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 + i * 0.08, type: "spring", stiffness: 300 }}
-              >
-                <Star className="w-6 h-6 fill-[#D4AF37] text-[#D4AF37]" />
-              </motion.div>
-            ))}
-          </div>
+          {duplicatedTestimonials.map((t, index) => (
+            <TestimonialCard key={`${t.id}-${index}`} t={t} />
+          ))}
+        </div>
 
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            <span className="text-white heading-serif italic">Real Traders. </span>
-            <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Real Results.</span>
-          </h2>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Join hundreds of traders who turned data into discipline — and discipline into profit.
-          </p>
-        </motion.div>
+        {/* Pause hint */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isPaused ? 0 : 0.5 }}
+          className="text-center text-ink-muted text-sm mt-6"
+        >
+          Hover to pause
+        </motion.p>
+      </div>
 
-        {/* ========== SCROLLING CAROUSEL ========== */}
-        <div className="relative">
-          {/* Fade edges */}
-          <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
-          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-[#0a0a0a] to-transparent z-10 pointer-events-none" />
-
-          <div
-            ref={scrollRef}
-            className="flex gap-6 overflow-x-hidden"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-            style={{ scrollBehavior: 'auto' }}
-          >
-            {duplicatedTestimonials.map((t, index) => (
+      {/* ========== SOCIAL PROOF FOOTER ========== */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.5 }}
+        className="text-center mt-12"
+      >
+        <div className="inline-flex items-center gap-3">
+          <div className="flex -space-x-3">
+            {['JK', 'RG', 'AT', 'DC', 'SM'].map((initials, i) => (
               <div
-                key={`${t.id}-${index}`}
-                className="flex-shrink-0 w-[380px] p-6 rounded-2xl relative group transition-all duration-300"
+                key={i}
+                className="w-10 h-10 rounded-full border-2 border-section-base flex items-center justify-center text-[10px] text-gold-primary font-bold"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(201,166,70,0.05), rgba(20,20,20,0.8))',
-                  border: '1px solid rgba(201,166,70,0.2)',
-                  backdropFilter: 'blur(10px)',
+                  zIndex: 10 - i,
+                  background: 'linear-gradient(135deg, rgba(201,166,70,0.3), rgba(15,15,15,1))',
                 }}
               >
-                {/* Quote icon */}
-                <Quote className="absolute top-4 right-4 w-8 h-8 text-[#C9A646]/20" />
-
-                {/* Stars */}
-                <div className="flex gap-1 mb-4">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-[#C9A646] text-[#C9A646]" />
-                  ))}
-                </div>
-
-                {/* Quote text with highlight */}
-                <p className="text-slate-300 text-sm leading-relaxed mb-4">
-                  &ldquo;{highlightText(t.text, t.highlight)}&rdquo;
-                </p>
-
-                {/* Metric badge */}
-                {t.metric && t.metricValue && (
-                  <div className="flex items-center gap-3 mb-4 py-3 px-4 rounded-lg bg-[#C9A646]/[0.06] border border-[#C9A646]/15">
-                    {t.icon && <t.icon className="w-5 h-5 text-[#C9A646]" />}
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase tracking-wider">{t.metric}</div>
-                      <div className="text-lg font-bold text-[#C9A646]">{t.metricValue}</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Author */}
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold"
-                    style={{ background: 'linear-gradient(135deg, #C9A646, #B8963F)', color: '#0a0a0a' }}
-                  >
-                    {t.avatar}
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold text-sm">{t.name}</p>
-                    <p className="text-slate-500 text-xs">{t.role}</p>
-                  </div>
-                </div>
-
-                {/* Hover glow */}
-                <div
-                  className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                  style={{ boxShadow: '0 0 30px rgba(201,166,70,0.3)' }}
-                />
+                {initials}
               </div>
             ))}
           </div>
-
-          {/* Pause hint */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: isPaused ? 0 : 0.5 }}
-            className="text-center text-slate-600 text-sm mt-6"
-          >
-            Hover to pause
-          </motion.p>
-        </div>
-
-        {/* ========== SOCIAL PROOF FOOTER ========== */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.5 }}
-          className="text-center mt-12"
-        >
-          <div className="inline-flex items-center gap-3">
-            <div className="flex -space-x-3">
-              {['JK', 'RG', 'AT', 'DC', 'SM'].map((initials, i) => (
-                <div
-                  key={i}
-                  className="w-10 h-10 rounded-full border-2 flex items-center justify-center text-[10px] text-[#C9A646] font-bold"
-                  style={{
-                    zIndex: 10 - i,
-                    borderColor: '#0a0a0a',
-                    background: 'linear-gradient(135deg, rgba(201,166,70,0.3), rgba(15,15,15,1))',
-                  }}
-                >
-                  {initials}
-                </div>
-              ))}
-            </div>
-            <div className="text-left ml-2">
-              <div className="text-white font-semibold text-sm">847+ Elite Traders</div>
-              <div className="text-xs text-slate-500">Trading smarter every day</div>
-            </div>
+          <div className="text-left ml-2">
+            <div className="text-ink-primary font-semibold text-sm">847+ Elite Traders</div>
+            <div className="text-xs text-ink-tertiary">Trading smarter every day</div>
           </div>
-        </motion.div>
-      </div>
-    </section>
+        </div>
+      </motion.div>
+    </SectionShell>
   );
 };
 

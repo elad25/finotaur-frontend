@@ -201,13 +201,14 @@ function OverviewTab({
           color="#EAEAEA"
           icon={<BarChart3 className="w-4 h-4" />}
         />
-        <StatBoxCompact
+<StatBoxCompact
           label="Win Rate"
           value={`${stats.winRate.toFixed(0)}%`}
           color={stats.winRate >= 50 ? '#00C46C' : '#E44545'}
           icon={<Target className="w-4 h-4" />}
           change={changes?.winRateChange}
           trend={changes && changes.winRateChange > 0 ? 'up' : changes && changes.winRateChange < 0 ? 'down' : undefined}
+          gaugeData={{ wins: stats.wins, losses: stats.losses, breakeven: stats.breakeven }}
         />
         <StatBoxCompact
           label="Net P&L"
@@ -1651,6 +1652,86 @@ function PsychologyTab({ stats, trades }: { stats: StrategyStats; trades: Trade[
 // HELPER COMPONENTS
 // ==========================================
 
+function AnalyticsGauge({ wins, losses, breakeven = 0 }: { wins: number; losses: number; breakeven?: number }) {
+  const total = wins + losses + breakeven;
+  const winPercent = total > 0 ? (wins / total) * 100 : 0;
+
+  const cx = 54; const cy = 50;
+  const R = 38; const SW = 9;
+  const startAngle = Math.PI;
+  const endAngle = 0;
+  const arcLen = Math.PI * R;
+
+  const x1 = cx + R * Math.cos(startAngle);
+  const y1 = cy + R * Math.sin(startAngle);
+  const x2 = cx + R * Math.cos(endAngle);
+  const y2 = cy + R * Math.sin(endAngle);
+
+  const needleAngle = Math.PI - (winPercent / 100) * Math.PI;
+  const needleLen = R - 4;
+  const nx = cx + needleLen * Math.cos(needleAngle);
+  const ny = cy + needleLen * Math.sin(needleAngle);
+
+  const gradId = `ag-grad-${wins}-${losses}`;
+  const glowId = `ag-glow-${wins}-${losses}`;
+
+  return (
+    <div className="flex flex-col items-center" style={{ width: 108 }}>
+      <svg width={108} height={62} viewBox="0 0 108 62">
+        <defs>
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stopColor="#E36363" />
+            <stop offset="45%"  stopColor="#C9A646" />
+            <stop offset="100%" stopColor="#4AD295" />
+          </linearGradient>
+          <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <path
+          d={`M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`}
+          fill="none"
+          stroke="rgba(255,255,255,0.07)"
+          strokeWidth={SW}
+          strokeLinecap="round"
+        />
+
+        {total > 0 && (
+          <path
+            d={`M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`}
+            fill="none"
+            stroke={`url(#${gradId})`}
+            strokeWidth={SW}
+            strokeLinecap="round"
+            strokeDasharray={`${(winPercent / 100) * arcLen} ${arcLen}`}
+            filter={`url(#${glowId})`}
+            style={{ transition: 'stroke-dasharray 1s ease-out' }}
+          />
+        )}
+      </svg>
+
+      <div className="flex justify-between w-full px-1 -mt-1">
+        <div className="flex items-center gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#4AD295]" />
+          <span className="text-[9px] font-semibold text-[#4AD295]">{wins}W</span>
+        </div>
+        {breakeven > 0 && (
+          <div className="flex items-center gap-0.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
+            <span className="text-[9px] font-semibold text-[#C9A646]">{breakeven}BE</span>
+          </div>
+        )}
+        <div className="flex items-center gap-0.5">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#E36363]" />
+          <span className="text-[9px] font-semibold text-[#E36363]">{losses}L</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StatBoxCompact({ 
   label, 
   value, 
@@ -1658,7 +1739,8 @@ function StatBoxCompact({
   sublabel,
   icon,
   change,
-  trend
+  trend,
+  gaugeData
 }: { 
   label: string; 
   value: string; 
@@ -1667,13 +1749,14 @@ function StatBoxCompact({
   icon?: React.ReactNode;
   change?: number;
   trend?: 'up' | 'down';
+  gaugeData?: { wins: number; losses: number; breakeven?: number };
 }) {
   return (
     <div 
       className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group"
       style={{
         background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        border: `1px solid ${color}22`,
         boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
         backdropFilter: 'blur(12px)',
       }}
@@ -1689,37 +1772,51 @@ function StatBoxCompact({
         style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }}
       />
 
-      <div className="relative p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-1.5">
-            {icon && (
-              <div 
-                className="inline-flex items-center justify-center w-7 h-7 rounded-lg"
-                style={{ background: `${color}18`, border: `1px solid ${color}30` }}
-              >
-                <div style={{ color }}>{icon}</div>
+      <div className={`relative p-4 ${gaugeData ? 'flex items-center justify-between gap-2' : ''}`}>
+        <div className={gaugeData ? 'flex-1 min-w-0' : ''}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5">
+              {icon && (
+                <div 
+                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg"
+                  style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+                >
+                  <div style={{ color }}>{icon}</div>
+                </div>
+              )}
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6A6A6A' }}>
+                {label}
+              </p>
+            </div>
+            {!gaugeData && trend && change !== undefined && (
+              <div className="flex items-center gap-1" style={{ color }}>
+                {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                <span className="text-xs font-semibold">{Math.abs(change).toFixed(1)}</span>
               </div>
             )}
-            <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6A6A6A' }}>
-              {label}
-            </p>
           </div>
-          {trend && change !== undefined && (
-            <div className="flex items-center gap-1" style={{ color }}>
+          
+          <p className="text-3xl font-bold tracking-tight" style={{ color }}>
+            {value}
+          </p>
+          
+          {sublabel && (
+            <p className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
+              {sublabel}
+            </p>
+          )}
+          {gaugeData && trend && change !== undefined && (
+            <div className="flex items-center gap-1 mt-1" style={{ color }}>
               {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              <span className="text-xs font-semibold">{Math.abs(change).toFixed(1)}</span>
+              <span className="text-[10px] font-semibold">{Math.abs(change).toFixed(1)}%</span>
             </div>
           )}
         </div>
-        
-        <p className="text-3xl font-bold tracking-tight" style={{ color }}>
-          {value}
-        </p>
-        
-        {sublabel && (
-          <p className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
-            {sublabel}
-          </p>
+
+        {gaugeData && (
+          <div className="flex-shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
+            <AnalyticsGauge wins={gaugeData.wins} losses={gaugeData.losses} breakeven={gaugeData.breakeven} />
+          </div>
         )}
       </div>
     </div>
@@ -1893,7 +1990,7 @@ function MomentumCard({ momentum }: { momentum: { score: number; label: string; 
 }
 
 function DistributionPieChart({ trades }: { trades: Trade[] }) {
-  const { data, colors } = useMemo(() => {
+  const { data, colorPairs } = useMemo(() => {
     const strategyMap = new Map<string, number>();
     trades.forEach(trade => {
       const strategyName = trade.strategy_name || 
@@ -1907,109 +2004,144 @@ function DistributionPieChart({ trades }: { trades: Trade[] }) {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    const colors = ['#C9A646', '#4ADE80', '#EF4444', '#60A5FA', '#F59E0B'];
+    const colorPairs: [string, string][] = [
+      ['#B48C2C', '#C9A646'],
+      ['#2DB870', '#4ADE80'],
+      ['#D63B3B', '#EF4444'],
+      ['#3B82F6', '#60A5FA'],
+      ['#D97706', '#F59E0B'],
+    ];
     
-    return { data, colors };
+    return { data, colorPairs };
   }, [trades]);
+
+  const flatColors = colorPairs.map(p => p[1]);
 
   return (
     <div 
-      className="rounded-[20px] p-6 shadow-[0_0_30px_rgba(201,166,70,0.05)]"
+      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.01] group"
       style={{
-        background: '#0C0C0C',
-        border: '1px solid rgba(255, 215, 0, 0.08)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+        border: '1px solid rgba(201, 166, 70, 0.12)',
+        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+        backdropFilter: 'blur(12px)',
       }}
     >
-      <div className="flex items-center gap-2 mb-6">
-        <PieChart className="w-5 h-5" style={{ color: '#C9A646' }} />
-        <h3 
-          className="text-base font-semibold"
-          style={{ color: '#F4F4F4' }}
-        >
-          Trade Distribution by Strategy
-        </h3>
-      </div>
-      
-      <div className="flex items-start gap-8">
-        <div className="flex-shrink-0">
-          <div className="w-36 h-36 relative">
-            <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-              <circle cx="50" cy="50" r="32" fill="#0A0A0A" />
+      <div 
+        className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+        style={{ background: 'rgba(201,166,70,0.12)', filter: 'blur(28px)' }}
+      />
+      <div 
+        className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+        style={{ background: 'linear-gradient(90deg, transparent, #C9A646, transparent)' }}
+      />
+
+      <div className="relative p-6">
+        <div className="flex items-center gap-2 mb-6">
+          <div 
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg"
+            style={{ background: 'rgba(201,166,70,0.15)', border: '1px solid rgba(201,166,70,0.25)' }}
+          >
+            <PieChart className="w-4 h-4" style={{ color: '#C9A646' }} />
+          </div>
+          <h3 
+            className="text-[10px] font-semibold uppercase tracking-widest"
+            style={{ color: '#6A6A6A' }}
+          >
+            Trade Distribution by Strategy
+          </h3>
+        </div>
+        
+        <div className="flex items-start gap-8">
+          <div className="flex-shrink-0">
+            <div className="w-36 h-36 relative">
+              <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
+                <defs>
+                  {data.map((_, idx) => (
+                    <linearGradient key={`dpg-${idx}`} id={`dpg-${idx}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor={colorPairs[idx][0]} />
+                      <stop offset="100%" stopColor={colorPairs[idx][1]} />
+                    </linearGradient>
+                  ))}
+                  <filter id="dp-glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="1.5" result="blur" />
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+
+                <circle cx="50" cy="50" r="32" fill="#0A0A0A" />
+                
+                {data.map((item, idx) => {
+                  const startAngle = data.slice(0, idx).reduce((sum, d) => sum + (d.percent / 100) * 360, 0);
+                  const sweepDeg = (item.percent / 100) * 360;
+                  const gapDeg = data.length > 1 ? 1.5 : 0;
+                  const adjStart = startAngle + (idx > 0 ? gapDeg / 2 : 0);
+                  const adjEnd = startAngle + sweepDeg - (idx < data.length - 1 ? gapDeg / 2 : 0);
+                  
+                  if (adjEnd <= adjStart) return null;
+                  
+                  const largeArc = (adjEnd - adjStart) > 180 ? 1 : 0;
+                  const outerRadius = 42;
+                  const innerRadius = 32;
+                  
+                  const x1 = 50 + outerRadius * Math.cos((adjStart * Math.PI) / 180);
+                  const y1 = 50 + outerRadius * Math.sin((adjStart * Math.PI) / 180);
+                  const x2 = 50 + outerRadius * Math.cos((adjEnd * Math.PI) / 180);
+                  const y2 = 50 + outerRadius * Math.sin((adjEnd * Math.PI) / 180);
+                  const innerX1 = 50 + innerRadius * Math.cos((adjEnd * Math.PI) / 180);
+                  const innerY1 = 50 + innerRadius * Math.sin((adjEnd * Math.PI) / 180);
+                  const innerX2 = 50 + innerRadius * Math.cos((adjStart * Math.PI) / 180);
+                  const innerY2 = 50 + innerRadius * Math.sin((adjStart * Math.PI) / 180);
+                  
+                  return (
+                    <path
+                      key={idx}
+                      d={`M ${x1} ${y1} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2} ${y2} L ${innerX1} ${innerY1} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerX2} ${innerY2} Z`}
+                      fill={`url(#dpg-${idx})`}
+                      filter="url(#dp-glow)"
+                      opacity="0.95"
+                    />
+                  );
+                })}
+              </svg>
               
-              {data.map((item, idx) => {
-                const startAngle = data.slice(0, idx).reduce((sum, d) => sum + (d.percent / 100) * 360, 0);
-                const endAngle = startAngle + (item.percent / 100) * 360;
-                const largeArc = item.percent > 50 ? 1 : 0;
-                
-                const outerRadius = 42;
-                const innerRadius = 32;
-                
-                const x1 = 50 + outerRadius * Math.cos((startAngle * Math.PI) / 180);
-                const y1 = 50 + outerRadius * Math.sin((startAngle * Math.PI) / 180);
-                const x2 = 50 + outerRadius * Math.cos((endAngle * Math.PI) / 180);
-                const y2 = 50 + outerRadius * Math.sin((endAngle * Math.PI) / 180);
-                
-                const innerX1 = 50 + innerRadius * Math.cos((endAngle * Math.PI) / 180);
-                const innerY1 = 50 + innerRadius * Math.sin((endAngle * Math.PI) / 180);
-                const innerX2 = 50 + innerRadius * Math.cos((startAngle * Math.PI) / 180);
-                const innerY2 = 50 + innerRadius * Math.sin((startAngle * Math.PI) / 180);
-                
-                return (
-                  <path
-                    key={idx}
-                    d={`M ${x1} ${y1} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2} ${y2} L ${innerX1} ${innerY1} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerX2} ${innerY2} Z`}
-                    fill={colors[idx]}
-                    opacity="0.95"
-                  />
-                );
-              })}
-            </svg>
-            
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <div className="text-2xl font-bold" style={{ color: '#F4F4F4' }}>
-                {data.length}
-              </div>
-              <div className="text-[10px] font-light" style={{ color: '#A0A0A0' }}>
-                Strategies
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="text-2xl font-bold" style={{ color: '#F4F4F4' }}>
+                  {data.length}
+                </div>
+                <div className="text-[10px] font-light" style={{ color: '#6A6A6A' }}>
+                  Strategies
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <div className="flex-1 space-y-2.5">
-          {data.map((item, idx) => (
-            <div 
-              key={idx} 
-              className="flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2.5 flex-1">
-                <div 
-                  className="w-3 h-3 rounded-sm flex-shrink-0"
-                  style={{ background: colors[idx] }}
-                />
-                <span 
-                  className="text-sm font-medium"
-                  style={{ color: '#E0E0E0' }}
-                >
-                  {item.name}
-                </span>
+          
+          <div className="flex-1 space-y-2.5">
+            {data.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5 flex-1">
+                  <div 
+                    className="w-3 h-3 rounded-sm flex-shrink-0"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${colorPairs[idx][0]}, ${colorPairs[idx][1]})`,
+                      boxShadow: `0 0 6px ${colorPairs[idx][1]}40`
+                    }}
+                  />
+                  <span className="text-sm font-medium" style={{ color: '#E0E0E0' }}>
+                    {item.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-semibold whitespace-nowrap" style={{ color: flatColors[idx] }}>
+                    {item.count} trade{item.count !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-xs font-light w-12 text-right" style={{ color: '#6A6A6A' }}>
+                    {item.percent.toFixed(1)}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <span 
-                  className="text-sm font-semibold whitespace-nowrap"
-                  style={{ color: colors[idx] }}
-                >
-                  {item.count} trade{item.count !== 1 ? 's' : ''}
-                </span>
-                <span 
-                  className="text-xs font-light w-12 text-right"
-                  style={{ color: '#A0A0A0' }}
-                >
-                  {item.percent.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

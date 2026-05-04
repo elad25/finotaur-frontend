@@ -48,7 +48,6 @@ export const queryKeys = {
   
   // Dashboard
   dashboardStats: (days: number) => ['dashboard-stats', days] as const,
-  snapTradeConnections: () => ['snaptrade-connections'] as const,
 
   // 🔥 NEW: Affiliate System
   affiliate: {

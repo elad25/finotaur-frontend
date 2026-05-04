@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,19 +7,28 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Eye, EyeOff } from 'lucide-react';
+import { Wordmark } from '@/components/ds/Wordmark';
 
+
+// Only allow redirects to internal /app/ paths (prevent open-redirect)
+function getSafeFrom(from: string | undefined): string {
+  if (from && from.startsWith('/app/')) return from;
+  return '/app/top-secret';
+}
 
 export default function Login() {
   const { user, login, signInWithGoogle } = useAuth();
+  const location = useLocation();
+  const from = getSafeFrom((location.state as { from?: { pathname?: string } } | null)?.from?.pathname);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Redirect if already logged in
   if (user) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to={from} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,9 +68,8 @@ const [showPassword, setShowPassword] = useState(false);
     <div className="flex min-h-screen items-center justify-center p-4 bg-black">
       <Card className="w-full max-w-md rounded-2xl border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
         <div className="mb-8 text-center">
-          <h1 className="mb-2 text-3xl font-bold">
-            <span className="text-yellow-500">FINO</span>
-            <span className="text-white">TAUR</span>
+          <h1 className="mb-2">
+            <Wordmark size="large" />
           </h1>
           <p className="text-zinc-400">We help traders become profitable!</p>
         </div>

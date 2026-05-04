@@ -1,7 +1,7 @@
 // ================================================
 // TRADE DURATION PERFORMANCE WITH LOCK FOR FREE USERS
 // Component: src/components/charts/TradeDurationPerformanceChart.tsx
-// ✅ Locked for FREE users and users without SnapTrade
+// ✅ Locked for FREE users without broker connections
 // ✅ Fixed: Points no longer cut off at edges
 // ✅ Scrollable for many data points
 // ================================================
@@ -120,7 +120,7 @@ export const TradeDurationPerformanceChart: React.FC<TradeDurationPerformanceCha
             </h4>
             
             <p className="text-[#A0A0A0] text-sm mb-6 leading-relaxed">
-              This feature requires automatic trade sync with <span className="text-[#C9A646] font-semibold">SnapTrade</span> to accurately track entry and exit times
+              This feature requires automatic trade sync via a <span className="text-[#C9A646] font-semibold">broker connection</span> to accurately track entry and exit times
             </p>
 
             {/* Info Box */}
@@ -132,7 +132,7 @@ export const TradeDurationPerformanceChart: React.FC<TradeDurationPerformanceCha
               <ul className="space-y-2.5">
                 <li className="flex items-start gap-2.5 text-sm text-zinc-300">
                   <CheckCircle2 className="w-4 h-4 text-[#C9A646] mt-0.5 flex-shrink-0" />
-                  <span>Automatic broker connection via SnapTrade</span>
+                  <span>Connect a broker for automatic trade imports</span>
                 </li>
                 <li className="flex items-start gap-2.5 text-sm text-zinc-300">
                   <CheckCircle2 className="w-4 h-4 text-[#C9A646] mt-0.5 flex-shrink-0" />

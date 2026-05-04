@@ -5,7 +5,7 @@ import { TopNav } from '@/components/TopNav';
 import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
-// 🔥 הסרנו את OnboardingGuard - ProtectedRoute כבר עושה את הבדיקה
+import { PortfolioProvider } from '@/contexts/PortfolioContext';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -26,19 +26,20 @@ export const ProtectedAppLayout = () => {
   );
 
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      <ImpersonationBanner />
-      <TopNav />
-      <SubNav />
-      <div className="flex flex-1">
-        {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
-        <main className="flex-1 overflow-auto">
-          <div className={hideSidebar ? "p-0" : "w-full"}>
-
-            <Outlet />
-          </div>
-        </main>
+    <PortfolioProvider>
+      <div className="flex min-h-screen w-full flex-col">
+        <ImpersonationBanner />
+        <TopNav />
+        <SubNav />
+        <div className="flex flex-1">
+          {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
+          <main className="flex-1 overflow-auto">
+            <div className={hideSidebar ? "p-0" : "w-full"}>
+              <Outlet />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </PortfolioProvider>
   );
 };

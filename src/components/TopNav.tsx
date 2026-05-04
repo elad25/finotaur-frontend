@@ -28,6 +28,7 @@ import { useDomain } from '@/hooks/useDomain';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
 import { supabase } from '@/lib/supabase';
+import { Wordmark } from '@/components/ds/Wordmark';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,14 +156,12 @@ export const TopNav = () => {
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
         {/* Logo - 🔥 NOW NAVIGATES TO TOP SECRET */}
         <div className="flex items-center gap-6 lg:gap-8">
-          <button 
+          <button
             onClick={() => navigate('/app/top-secret')}
-            className="flex items-center group cursor-pointer"
+            className="flex items-center cursor-pointer"
+            aria-label="FINOTAUR home"
           >
-            <span className="text-2xl md:text-3xl font-bold tracking-tight">
-              <span className="text-white group-hover:text-slate-300 transition-colors">FINO</span>
-              <span className="text-[#C9A646] group-hover:text-[#D4AF37] transition-colors">TAUR</span>
-            </span>
+            <Wordmark size="default" interactive />
           </button>
 
           {/* Main Tabs - Desktop */}

@@ -98,8 +98,6 @@ export interface Trade {
   updated_at: string
   deleted_at?: string | null
   deleted_by?: string | null
-  snaptrade_activity_id?: string | null
-  snaptrade_account_id?: string | null
   import_source?: string | null
   imported_at?: string | null
   // 🆕 v9.4.6: NEW FIELDS
@@ -134,28 +132,6 @@ export interface Referral {
   converted_to_paid_at?: string | null
   discount_applied: boolean
   converted_to_paid: boolean
-  created_at: string
-  updated_at: string
-}
-
-export interface SnapTradeActivity {
-  id: string
-  user_id: string
-  last_activity_at: string
-  connection_status: string
-  brokerage_connection_id?: string | null
-  brokerage_name?: string | null
-  connected_at?: string | null
-  disconnected_at?: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface SnapTradeUser {
-  id: string
-  user_id: string
-  snaptrade_user_id: string
-  snaptrade_user_secret?: string | null
   created_at: string
   updated_at: string
 }
@@ -232,24 +208,6 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<Referral, 'id' | 'created_at' | 'updated_at'>>
-      }
-      snaptrade_activity: {
-        Row: SnapTradeActivity
-        Insert: Omit<SnapTradeActivity, 'id' | 'created_at' | 'updated_at'> & {
-          id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Omit<SnapTradeActivity, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
-      }
-      snaptrade_users: {
-        Row: SnapTradeUser
-        Insert: Omit<SnapTradeUser, 'id' | 'created_at' | 'updated_at'> & {
-          id?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: Partial<Omit<SnapTradeUser, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
       }
       payment_history: {
         Row: PaymentHistory

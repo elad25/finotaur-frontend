@@ -62,6 +62,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import AIOperationsTab from "./AIOperationsTab";
 
 // =====================================================
 // TYPES
@@ -1312,7 +1313,14 @@ const handleDeleteUsers = async (userIds: string[]) => {
     
     try {
       const durationDays = grantDialog.noExpiry ? 36500 : (grantDialog.days ?? 30);
-      
+
+      // ── שמור את הפלאן הנוכחי לפני השינוי ──
+      const { data: beforeData } = await supabase
+        .from('profiles')
+        .select('platform_plan, platform_subscription_status, platform_subscription_expires_at')
+        .eq('id', grantDialog.userId)
+        .single();
+
       const { data, error } = await supabase.rpc('admin_grant_access', {
         p_user_id: grantDialog.userId,
         p_product: 'platform',
@@ -1326,11 +1334,36 @@ const handleDeleteUsers = async (userIds: string[]) => {
         throw new Error(data.error || 'Grant failed');
       }
 
+      // ── בדוק אם הפלאן אכן השתנה ──
+      const { data: afterData } = await supabase
+        .from('profiles')
+        .select('platform_plan, platform_subscription_status, platform_subscription_expires_at')
+        .eq('id', grantDialog.userId)
+        .single();
+
+      const planChanged = 
+        afterData?.platform_plan !== beforeData?.platform_plan ||
+        afterData?.platform_subscription_status !== beforeData?.platform_subscription_status ||
+        afterData?.platform_subscription_expires_at !== beforeData?.platform_subscription_expires_at;
+
+      if (!planChanged) {
+        showToast(
+          `⚠️ Grant ran but NO CHANGE detected for ${grantDialog.userEmail}. Current plan: ${afterData?.platform_plan || 'none'} (${afterData?.platform_subscription_status || 'none'}). Check DB manually.`,
+          'warning'
+        );
+        fetchAllUsers();
+        return;
+      }
+
       const expiryText = grantDialog.noExpiry 
         ? 'No expiry (permanent)' 
         : `Expires: ${new Date(data.expires_at).toLocaleDateString('en-US')}`;
 
-      showToast(`✅ Access granted to ${grantDialog.userEmail}! ${expiryText}`, 'success');
+      const prevPlan = beforeData?.platform_plan || 'none';
+      const newPlan = afterData?.platform_plan || 'none';
+      const changeText = prevPlan !== newPlan ? ` (${prevPlan} → ${newPlan})` : '';
+
+      showToast(`✅ Access granted to ${grantDialog.userEmail}!${changeText} ${expiryText}`, 'success');
       fetchAllUsers();
       setGrantDialog({ open: false, userId: null, userEmail: null, plan: 'finotaur', days: 30, noExpiry: false });
     } catch (err) {
@@ -2938,6 +2971,9 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
           </TabsTrigger>
           <TabsTrigger value="announcements" className="data-[state=active]:bg-[#C9A646] data-[state=active]:text-black">
             📢 Announcements
+          </TabsTrigger>
+          <TabsTrigger value="ai-ops" className="data-[state=active]:bg-gold-primary data-[state=active]:text-ink-on-gold">
+            AI Ops
           </TabsTrigger>
         </TabsList>
 
@@ -5732,6 +5768,14 @@ You can use these variables:
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* =====================================================
+            AI OPS TAB (conditional mount → unmount on tab switch
+            triggers cleanup of 30s polling interval)
+        ===================================================== */}
+        <TabsContent value="ai-ops" className="space-y-6">
+          {activeTab === 'ai-ops' && <AIOperationsTab />}
         </TabsContent>
       </Tabs>
 

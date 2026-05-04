@@ -21,9 +21,9 @@
 //    - Simpler workflow for quick trade logging
 // ================================================
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query"; // 🔥 ADD
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,7 +33,11 @@ import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import MultiUploadZone from "@/components/journal/MultiUploadZone";
 import { toast } from "sonner";
-import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, CheckCircle2, Clock, Zap, Calendar, X, Globe, Plus, Calculator, Percent, DollarSign, Briefcase, Copy } from "lucide-react";
+import { usePortfolios } from "@/hooks/usePortfolios"; // still needed for refetchPortfolios
+
+const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
+const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
 import InsightPopup from "@/components/journal/InsightPopup";
 import { useInsightEngine } from "@/hooks/useInsightEngine";
 import { getStrategies as getStrategiesFromSupabase } from "@/routes/strategies";
@@ -45,6 +49,7 @@ import { createTrade, updateTrade, uploadScreenshot } from '@/lib/trades';
 import { TickerAutocomplete } from '@/components/TickerAutocomplete';
 import { supabase } from '@/lib/supabase';
 import { useTimezone } from '@/contexts/TimezoneContext';
+import { usePortfolioContext } from '@/contexts/PortfolioContext';
 import { formatTradeDate, formatForInput } from '@/utils/dateFormatter';
 import { 
   getCurrentTradingSession, 
@@ -727,6 +732,42 @@ export default function New() {
   
   // 🌍 Timezone support
   const timezone = useTimezone();
+
+  // 🏦 Portfolio selection — reads from global context, falls back to usePortfolios for refetch
+  const { portfolios, activePortfolio, isLoading: portfoliosLoading, refetch: refetchPortfolios } = usePortfolios();
+  const [selectedPortfolioIds, setSelectedPortfolioIds] = useState<string[]>([]);
+  const [showBrokerPicker, setShowBrokerPicker] = useState(false);
+  const [showTradovateModal, setShowTradovateModal] = useState(false);
+
+  const handleBrokerPickerSelect = useCallback((broker: any) => {
+    setShowBrokerPicker(false);
+    if (broker === 'tradovate') {
+      setShowTradovateModal(true);
+    }
+  }, []);
+
+  // ── Sync with global portfolio context ──────────────────────
+  const { effectivePortfolioId, isShowingAll } = usePortfolioContext();
+
+  // Auto-select portfolio: global context first, then fallback to first portfolio
+  useEffect(() => {
+    if (selectedPortfolioIds.length > 0) return; // user already selected manually
+    if (!isShowingAll && effectivePortfolioId) {
+      setSelectedPortfolioIds([effectivePortfolioId]);
+    } else if (activePortfolio) {
+      setSelectedPortfolioIds([activePortfolio.id]);
+    }
+  }, [effectivePortfolioId, activePortfolio?.id, isShowingAll]);
+
+  
+
+  const togglePortfolio = useCallback((id: string) => {
+    setSelectedPortfolioIds(prev =>
+      prev.includes(id)
+        ? prev.length > 1 ? prev.filter(p => p !== id) : prev // keep at least 1
+        : [...prev, id]
+    );
+  }, []);
   
 const { 
   canAddTrade, 
@@ -1451,7 +1492,8 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           broker: 'manual',
           import_source: 'manual',
-          input_mode: 'risk-only',  // 🔥 Mark as risk-only trade
+          input_mode: 'risk-only',
+          portfolio_id: selectedPortfolioIds[0] ?? null,
           
           // ═══════════════════════════════════════════
           // PARTIAL EXITS (not used in risk-only)
@@ -1578,7 +1620,8 @@ if (hasResult && directRiskUSD > 0) {
           // ═══════════════════════════════════════════
           broker: 'manual',
           import_source: 'manual',
-          input_mode: 'summary',  // 🔥 Mark as summary trade
+          input_mode: 'summary',
+          portfolio_id: selectedPortfolioIds[0] ?? null,
           
           // ═══════════════════════════════════════════
           // PARTIAL EXITS DATA
@@ -1626,11 +1669,31 @@ if (hasResult && directRiskUSD > 0) {
         // Check if first trade
         const existingTrades = await getTrades();
         const isFirstTrade = !existingTrades.data || existingTrades.data.length === 0;
+
+        // 🏦 Multi-portfolio: create trade for each selected portfolio
+        const portfolioTargets = selectedPortfolioIds.length > 0 ? selectedPortfolioIds : [null];
         
-        const result = await createTrade(payload);
+        // Create primary trade (first portfolio)
+        const primaryPayload = { ...payload, portfolio_id: portfolioTargets[0] ?? null };
+        const result = await createTrade(primaryPayload);
         
         if (result.success) {
-          toast.success("Trade created successfully! 🎉");
+          // Create copies for additional portfolios (silent, parallel)
+          if (portfolioTargets.length > 1) {
+            const extraCopies = portfolioTargets.slice(1).map(pid =>
+              createTrade({ ...payload, portfolio_id: pid ?? null })
+            );
+            const extraResults = await Promise.allSettled(extraCopies);
+            const failedCount = extraResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+            
+            if (failedCount > 0) {
+              toast.warning(`Trade created for ${portfolioTargets.length - failedCount} of ${portfolioTargets.length} portfolios`);
+            } else {
+              toast.success(`Trade created in ${portfolioTargets.length} portfolios! 🎉`);
+            }
+          } else {
+            toast.success("Trade created successfully! 🎉");
+          }
           
           // First trade celebration
           if (isFirstTrade) {
@@ -1800,8 +1863,9 @@ if (hasResult && directRiskUSD > 0) {
         {/* Header */}
         <section className="pt-10 relative">
           <div className="pointer-events-none absolute -top-6 left-0 h-24 w-64 rounded-full bg-yellow-500/10 blur-3xl" />
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-6">
+            {/* Left: Title */}
+            <div className="min-w-0">
               <h1 className="text-3xl font-semibold text-white tracking-tight flex items-center gap-3">
                 {isEditMode ? (
                   <>
@@ -1824,7 +1888,11 @@ if (hasResult && directRiskUSD > 0) {
                 )}
               </p>
             </div>
-            <div className="text-right">
+
+            
+
+            {/* Right: Completion */}
+            <div className="text-right flex-shrink-0">
               <div className="text-xs text-zinc-500 mb-1">Completion</div>
               <div className="flex items-center gap-2">
                 <div className="w-32 h-2 bg-zinc-800 rounded-full overflow-hidden">
@@ -2993,6 +3061,26 @@ if (hasResult && directRiskUSD > 0) {
         tradesUsed={limits?.used ?? 0}
         maxTrades={25}
       />
+      {/* 🏦 Broker Connect Modals */}
+      {showBrokerPicker && (
+        <Suspense fallback={null}>
+          <BrokerPickerModal
+            onClose={() => setShowBrokerPicker(false)}
+            onSelect={handleBrokerPickerSelect}
+          />
+        </Suspense>
+      )}
+      {showTradovateModal && (
+        <Suspense fallback={null}>
+          <TradovateConnectModal
+            onClose={() => {
+              setShowTradovateModal(false);
+              refetchPortfolios();
+            }}
+          />
+        </Suspense>
+      )}
+
       {/* Usage Warning Modal */}
       {showUsageWarning && warningState && (
         <UsageWarningModal

@@ -177,7 +177,7 @@ const SimplePieChart = memo(({ wins, losses }: { wins: number; losses: number })
         className="w-full h-full rounded-full"
         style={{
           background: `conic-gradient(
-            #00C46C 0deg ${(winPercent / 100) * 360}deg,
+            #34D399 0deg ${(winPercent / 100) * 360}deg,
             #E44545 ${(winPercent / 100) * 360}deg 360deg
           )`,
         }}
@@ -228,7 +228,7 @@ const RDistributionChart = memo(({ rValues }: { rValues: number[] }) => {
               style={{
                 width: `${maxCount > 0 ? (counts[i] / maxCount) * 100 : 0}%`,
                 background: bin >= 0 
-                  ? 'linear-gradient(90deg, rgba(0,196,108,0.6), rgba(0,196,108,0.3))'
+                  ? 'linear-gradient(90deg, rgba(52,211,153,0.6), rgba(52,211,153,0.3))'
                   : 'linear-gradient(90deg, rgba(228,69,69,0.6), rgba(228,69,69,0.3))',
               }}
             />
@@ -353,56 +353,85 @@ const strategyTrades = useMemo(() => {
 
         {stats.totalTrades > 0 && (
           <div 
-            className="mb-8 p-6 rounded-2xl opacity-0 animate-fadeIn"
+            className="group relative overflow-hidden mb-10 p-8 rounded-2xl opacity-0 animate-fadeIn"
             style={{ 
-              background: isProfitable
-                ? 'linear-gradient(135deg, rgba(0,196,108,0.08), rgba(201,166,70,0.08))'
-                : 'linear-gradient(135deg, rgba(228,69,69,0.08), rgba(201,166,70,0.08))',
-              border: `2px solid ${isProfitable ? 'rgba(0,196,108,0.2)' : 'rgba(228,69,69,0.2)'}`,
-              boxShadow: `0 8px 32px ${isProfitable ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)'}`,
+              background: 'linear-gradient(135deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.02) 40%, rgba(255,255,255,0.015) 100%)',
+              border: '1px solid rgba(201,166,70,0.12)',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(201,166,70,0.08)',
+              backdropFilter: 'blur(16px)',
               animationDelay: '0.2s',
               animationFillMode: 'forwards'
             }}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <Award className="w-5 h-5" style={{ color: '#C9A646' }} />
-              <h3 className="text-lg font-bold" style={{ color: '#EAEAEA' }}>Quick Stats</h3>
+            {/* Top gold gradient line */}
+            <div 
+              className="absolute top-0 left-8 right-8 h-px pointer-events-none"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+            />
+            {/* Gold ambient glow top-left */}
+            <div 
+              className="absolute -top-12 -left-12 w-48 h-48 rounded-full pointer-events-none"
+              style={{ background: 'rgba(201,166,70,0.06)', filter: 'blur(40px)' }}
+            />
+            {/* Emerald ambient glow bottom-right */}
+            <div 
+              className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full pointer-events-none"
+              style={{ background: 'rgba(52,211,153,0.04)', filter: 'blur(32px)' }}
+            />
+            {/* Bottom accent line */}
+            <div 
+              className="absolute bottom-0 left-8 right-8 h-px opacity-30 pointer-events-none"
+              style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
+            />
+
+            <div className="relative flex items-center gap-2.5 mb-6">
+              <div 
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ 
+                  background: 'rgba(201,166,70,0.12)', 
+                  border: '1px solid rgba(201,166,70,0.25)' 
+                }}
+              >
+                <Award className="w-4 h-4" style={{ color: '#C9A646' }} />
+              </div>
+              <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#C9A646' }}>Quick Stats</h3>
             </div>
-            <div className="grid grid-cols-6 gap-4">
+
+            <div className="relative flex items-center justify-between">
               {[
                 { 
                   icon: Percent, 
                   label: 'Win Rate', 
                   value: `${stats.winRate.toFixed(0)}%`,
-                  color: stats.winRate >= 50 ? '#00C46C' : '#E44545',
+                  color: stats.winRate >= 50 ? '#34D399' : '#E44545',
                   tooltip: 'Percentage of winning trades'
                 },
                 { 
                   icon: TrendingUp, 
                   label: 'Avg R', 
                   value: `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`,
-                  color: stats.avgR >= 0 ? '#00C46C' : '#E44545',
+                  color: stats.avgR >= 0 ? '#34D399' : '#E44545',
                   tooltip: 'Average R multiple per trade'
                 },
                 { 
                   icon: DollarSign, 
                   label: 'Net P&L', 
                   value: `$${stats.netPnL >= 0 ? '+' : ''}${stats.netPnL.toFixed(0)}`,
-                  color: stats.netPnL >= 0 ? '#00C46C' : '#E44545',
+                  color: stats.netPnL >= 0 ? '#34D399' : '#E44545',
                   tooltip: 'Total profit/loss in dollars'
                 },
                 { 
                   icon: Zap, 
                   label: 'Profit Factor', 
                   value: stats.profitFactor.toFixed(2),
-                  color: stats.profitFactor >= 1.5 ? '#00C46C' : stats.profitFactor >= 1 ? '#C9A646' : '#E44545',
+                  color: stats.profitFactor >= 1.5 ? '#34D399' : stats.profitFactor >= 1 ? '#C9A646' : '#E44545',
                   tooltip: 'Total wins ÷ Total losses'
                 },
                 { 
                   icon: Target, 
                   label: 'Expectancy', 
                   value: `${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`,
-                  color: stats.expectancy >= 0 ? '#00C46C' : '#E44545',
+                  color: stats.expectancy >= 0 ? '#34D399' : '#E44545',
                   tooltip: 'Expected R per trade'
                 },
                 { 
@@ -412,14 +441,19 @@ const strategyTrades = useMemo(() => {
                   color: '#E44545',
                   tooltip: 'Maximum drawdown from peak equity'
                 },
-              ].map((kpi, i) => (
+              ].map((kpi, i, arr) => (
                 <Tooltip key={i} content={kpi.tooltip}>
-                  <div className="flex flex-col items-center text-center">
-                    <kpi.icon className="w-5 h-5 mb-2" style={{ color: '#C9A646' }} />
-                    <div className="text-2xl font-bold mb-1" style={{ color: kpi.color }}>
-                      {kpi.value}
+                  <div className="flex items-center">
+                    <div className="flex flex-col items-center text-center px-4">
+                      <kpi.icon className="w-5 h-5 mb-2" style={{ color: '#C9A646' }} />
+                      <div className="text-2xl font-bold mb-1" style={{ color: kpi.color }}>
+                        {kpi.value}
+                      </div>
+                      <div className="text-[11px] font-medium" style={{ color: '#7A7A7A' }}>{kpi.label}</div>
                     </div>
-                    <div className="text-xs" style={{ color: '#9A9A9A' }}>{kpi.label}</div>
+                    {i < arr.length - 1 && (
+                      <div className="w-px h-12 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.15)' }} />
+                    )}
                   </div>
                 </Tooltip>
               ))}
@@ -437,19 +471,19 @@ const strategyTrades = useMemo(() => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all hover:scale-105"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-sm transition-all duration-300 hover:scale-105"
               style={activeTab === tab.id ? {
-                background: 'linear-gradient(135deg, rgba(201,166,70,0.25), rgba(201,166,70,0.15))',
-                color: '#C9A646',
-                border: '2px solid rgba(201,166,70,0.4)',
-                boxShadow: '0 4px 16px rgba(201,166,70,0.2)',
+                background: 'linear-gradient(135deg, #C9A646 0%, #E8D48B 100%)',
+                color: '#000000',
+                border: '1px solid rgba(201,166,70,0.6)',
+                boxShadow: '0 4px 20px rgba(201,166,70,0.35), inset 0 1px 0 rgba(255,255,255,0.3)',
               } : {
                 background: 'rgba(255,255,255,0.03)',
                 color: '#9A9A9A',
-                border: '2px solid rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.10)',
               }}
             >
-              <tab.icon className="w-5 h-5" />
+              <tab.icon className="w-4 h-4" />
               {tab.label}
             </button>
           ))}
@@ -462,26 +496,45 @@ const strategyTrades = useMemo(() => {
           <div className="space-y-6">
             <div className="grid grid-cols-4 gap-6">
               {[
-                { label: 'Total Trades', value: stats.totalTrades, color: '#EAEAEA', icon: List },
-                { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: stats.winRate >= 50 ? '#00C46C' : '#E44545', icon: Percent },
-                { label: 'Total R', value: `${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`, color: stats.totalR >= 0 ? '#00C46C' : '#E44545', icon: TrendingUp },
-                { label: 'Net P&L', value: `$${stats.netPnL >= 0 ? '+' : ''}${stats.netPnL.toFixed(2)}`, color: stats.netPnL >= 0 ? '#00C46C' : '#E44545', icon: DollarSign },
+                { label: 'Total Trades', value: stats.totalTrades, color: '#EAEAEA', icon: List, iconBg: 'rgba(234,234,234,0.1)', iconBorder: 'rgba(234,234,234,0.3)' },
+                { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: stats.winRate >= 50 ? '#00C46C' : '#E44545', icon: Percent, iconBg: stats.winRate >= 50 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.winRate >= 50 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
+                { label: 'Total R', value: `${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`, color: stats.totalR >= 0 ? '#00C46C' : '#E44545', icon: TrendingUp, iconBg: stats.totalR >= 0 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.totalR >= 0 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
+                { label: 'Net P&L', value: `$${stats.netPnL >= 0 ? '+' : ''}${stats.netPnL.toFixed(2)}`, color: stats.netPnL >= 0 ? '#00C46C' : '#E44545', icon: DollarSign, iconBg: stats.netPnL >= 0 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.netPnL >= 0 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
               ].map((stat, i) => (
                 <div
                   key={i}
-                  className="p-6 rounded-xl transition-all duration-300 hover:scale-105 opacity-0 animate-fadeIn"
+                  className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] opacity-0 animate-fadeIn"
                   style={{
-                    background: 'rgba(20,20,20,0.8)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
                     animationDelay: `${0.3 + i * 0.1}s`,
                     animationFillMode: 'forwards'
                   }}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <stat.icon className="w-4 h-4" style={{ color: '#C9A646' }} />
-                    <p className="text-xs" style={{ color: '#9A9A9A' }}>{stat.label}</p>
+                  <div 
+                    className="absolute -top-10 -left-10 w-32 h-32 rounded-full opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"
+                    style={{ background: stat.color, filter: 'blur(32px)' }}
+                  />
+                  <div 
+                    className="absolute bottom-0 left-4 right-4 h-px opacity-30 pointer-events-none"
+                    style={{ background: `linear-gradient(90deg, transparent, ${stat.color}, transparent)` }}
+                  />
+                  <div className="relative p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: '#6A6A6A' }}>
+                        {stat.label}
+                      </div>
+                      <div 
+                        className="w-8 h-8 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                        style={{ background: stat.iconBg, border: `1px solid ${stat.iconBorder}` }}
+                      >
+                        <stat.icon className="w-4 h-4" style={{ color: stat.color }} strokeWidth={1.8} />
+                      </div>
+                    </div>
+                    <p className="text-3xl font-bold tracking-tight leading-none" style={{ color: stat.color }}>{stat.value}</p>
                   </div>
-                  <p className="text-3xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
                 </div>
               ))}
             </div>
@@ -500,19 +553,25 @@ const strategyTrades = useMemo(() => {
               ].map((stat, i) => (
                 <Tooltip key={i} content={stat.tooltip}>
                   <div
-                    className="p-5 rounded-xl transition-all duration-300 hover:scale-105 opacity-0 animate-fadeIn"
+                    className="group relative overflow-hidden p-5 rounded-2xl transition-all duration-300 hover:scale-[1.02] opacity-0 animate-fadeIn"
                     style={{
-                      background: 'rgba(20,20,20,0.6)',
-                      border: '1px solid rgba(201,166,70,0.15)',
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                      border: '1px solid rgba(255,255,255,0.06)',
+                      boxShadow: '0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
+                      backdropFilter: 'blur(12px)',
                       animationDelay: `${0.7 + i * 0.05}s`,
                       animationFillMode: 'forwards'
                     }}
                   >
-                    <div className="flex items-center gap-2 mb-1">
+                    <div 
+                      className="absolute -top-6 -right-6 w-20 h-20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                      style={{ background: 'rgba(201,166,70,0.08)', filter: 'blur(20px)' }}
+                    />
+                    <div className="relative flex items-center gap-2 mb-1">
                       <stat.icon className="w-4 h-4" style={{ color: '#C9A646' }} />
-                      <p className="text-xs" style={{ color: '#9A9A9A' }}>{stat.label}</p>
+                      <p className="text-xs" style={{ color: '#6A6A6A' }}>{stat.label}</p>
                     </div>
-                    <p className="text-xl font-semibold" style={{ color: '#EAEAEA' }}>{stat.value}</p>
+                    <p className="relative text-xl font-bold" style={{ color: '#EAEAEA' }}>{stat.value}</p>
                   </div>
                 </Tooltip>
               ))}
@@ -521,10 +580,12 @@ const strategyTrades = useMemo(() => {
             {stats.totalTrades > 0 && (
               <div className="grid grid-cols-2 gap-6">
                 <div 
-                  className="p-6 rounded-xl opacity-0 animate-fadeIn"
+                  className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
                   style={{
-                    background: 'rgba(20,20,20,0.8)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
                     animationDelay: '1.2s',
                     animationFillMode: 'forwards'
                   }}
@@ -547,10 +608,12 @@ const strategyTrades = useMemo(() => {
                 </div>
 
                 <div 
-                  className="p-6 rounded-xl opacity-0 animate-fadeIn"
+                  className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
                   style={{
-                    background: 'rgba(20,20,20,0.8)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
                     animationDelay: '1.3s',
                     animationFillMode: 'forwards'
                   }}
@@ -573,10 +636,12 @@ const strategyTrades = useMemo(() => {
             {strategyTrades.length > 0 ? (
               <div className="space-y-4">
                 <div 
-                  className="p-4 rounded-xl flex items-center justify-between"
+                  className="group relative overflow-hidden p-4 rounded-2xl flex items-center justify-between"
                   style={{
-                    background: 'rgba(201,166,70,0.1)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)',
+                    border: '1px solid rgba(201,166,70,0.15)',
+                    boxShadow: '0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(201,166,70,0.1)',
+                    backdropFilter: 'blur(12px)',
                   }}
                 >
                   <div className="flex items-center gap-4">
@@ -610,17 +675,19 @@ const strategyTrades = useMemo(() => {
                 </div>
 
                 <div 
-                  className="rounded-xl overflow-hidden"
+                  className="rounded-2xl overflow-hidden"
                   style={{
-                    background: 'rgba(20,20,20,0.8)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
                   }}
                 >
                   <div 
-                    className="grid grid-cols-8 gap-4 p-4 text-xs font-bold"
+                    className="grid grid-cols-8 gap-4 p-4 text-xs font-bold uppercase tracking-wider"
                     style={{ 
-                      background: 'rgba(201,166,70,0.1)',
-                      borderBottom: '1px solid rgba(201,166,70,0.2)',
+                      background: 'rgba(201,166,70,0.06)',
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
                       color: '#C9A646'
                     }}
                   >
@@ -645,7 +712,7 @@ const strategyTrades = useMemo(() => {
   return (
     <div
       key={trade.id || index}
-      className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/5 transition-all cursor-pointer"
+      className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/[0.03] transition-all duration-200 cursor-pointer"
       style={{ color: '#EAEAEA' }}
     >
       {/* ✅ Date עם Timezone Support */}
@@ -714,10 +781,12 @@ const strategyTrades = useMemo(() => {
             {stats.totalTrades > 0 ? (
               <>
                 <div 
-                  className="p-6 rounded-xl"
+                  className="group relative overflow-hidden p-6 rounded-2xl"
                   style={{
-                    background: 'rgba(20,20,20,0.8)',
-                    border: '1px solid rgba(201,166,70,0.2)',
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
                   }}
                 >
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
@@ -731,12 +800,14 @@ const strategyTrades = useMemo(() => {
 
                 <div className="grid grid-cols-3 gap-6">
                   <div 
-                    className="p-6 rounded-xl"
-                    style={{
-                      background: 'rgba(20,20,20,0.8)',
-                      border: '1px solid rgba(201,166,70,0.2)',
-                    }}
-                  >
+              className="group relative overflow-hidden p-6 rounded-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
                     <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
                       <Percent className="w-4 h-4" style={{ color: '#C9A646' }} />
                       Win Rate
@@ -766,12 +837,14 @@ const strategyTrades = useMemo(() => {
                   </div>
 
                   <div 
-                    className="p-6 rounded-xl"
-                    style={{
-                      background: 'rgba(20,20,20,0.8)',
-                      border: '1px solid rgba(201,166,70,0.2)',
-                    }}
-                  >
+              className="group relative overflow-hidden p-6 rounded-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
                     <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
                       <Target className="w-4 h-4" style={{ color: '#C9A646' }} />
                       Average R
@@ -794,12 +867,14 @@ const strategyTrades = useMemo(() => {
                   </div>
 
                   <div 
-                    className="p-6 rounded-xl"
-                    style={{
-                      background: 'rgba(20,20,20,0.8)',
-                      border: '1px solid rgba(201,166,70,0.2)',
-                    }}
-                  >
+              className="group relative overflow-hidden p-6 rounded-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
                     <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
                       <DollarSign className="w-4 h-4" style={{ color: '#C9A646' }} />
                       Total P&L
@@ -823,12 +898,14 @@ const strategyTrades = useMemo(() => {
 
                 <div className="grid grid-cols-2 gap-6">
                   <div 
-                    className="p-6 rounded-xl"
-                    style={{
-                      background: 'rgba(20,20,20,0.8)',
-                      border: '1px solid rgba(201,166,70,0.2)',
-                    }}
-                  >
+              className="group relative overflow-hidden p-6 rounded-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
                       <BarChart3 className="w-5 h-5" style={{ color: '#C9A646' }} />
                       R Distribution
@@ -837,12 +914,14 @@ const strategyTrades = useMemo(() => {
                   </div>
 
                   <div 
-                    className="p-6 rounded-xl"
-                    style={{
-                      background: 'rgba(20,20,20,0.8)',
-                      border: '1px solid rgba(201,166,70,0.2)',
-                    }}
-                  >
+              className="group relative overflow-hidden p-6 rounded-2xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)',
+              }}
+            >
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
                       <Activity className="w-5 h-5" style={{ color: '#C9A646' }} />
                       Performance Breakdown

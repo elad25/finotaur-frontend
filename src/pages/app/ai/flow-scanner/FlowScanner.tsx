@@ -1,6 +1,8 @@
 // =====================================================
-// 🔍 FLOW SCANNER — Main Page v2
-// Tabs: All Flow | Unusual Volume | Dark Pool | Insider & Institutional | Confluence | Sectors
+// 🔍 FLOW SCANNER — Main Page v4
+// ✅ SentimentBadge removed
+// ✅ Stats computed client-side from flowData when server returns zeros
+// ✅ Optimized for 10K users — no extra API calls
 // =====================================================
 
 import { useState, lazy, Suspense, memo, useCallback } from 'react';
@@ -10,7 +12,7 @@ import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { TabType } from './shared/types';
 import { useFlowData } from './shared/useFlowData';
 import { BackgroundEffects, LoadingSkeleton, Skeleton } from './shared/Ui';
-import { QuickStats, TabNav, SentimentBadge } from './components/StatsAndNav';
+import { QuickStats, TabNav } from './components/StatsAndNav';
 import { SignalFeedSection } from './components/SignalFeedSection';
 import { FlowDrawer } from './tabs/AllFlowTab';
 import type { FlowItem } from './shared/types';
@@ -20,11 +22,13 @@ import type { FlowItem } from './shared/types';
 // ─────────────────────────────────────────────────────
 
 const AllFlowTab             = lazy(() => import('./tabs/AllFlowTab'));
-const UnusualVolumeTab       = lazy(() => import('./tabs/AllFlowTab'));  // reuses AllFlowTab, filtered by activeTab
+const UnusualVolumeTab       = lazy(() => import('./tabs/AllFlowTab'));
 const DarkPoolTab            = lazy(() => import('./tabs/DarkPoolTab'));
 const InsiderInstitutionalTab= lazy(() => import('./tabs/InsiderInstitutionalTab'));
 const ConfluenceTab          = lazy(() => import('./tabs/ConfluenceTab'));
 const SectorFlowTab          = lazy(() => import('./tabs/SectorFlowTab'));
+
+const ALLFLOW_TABS: TabType[] = ['unusual-volume'];
 
 const TabFallback = () => (
   <div className="space-y-3">
@@ -33,17 +37,11 @@ const TabFallback = () => (
 );
 
 // ─────────────────────────────────────────────────────
-// Tabs that reuse AllFlowTab with filtered data
-// ─────────────────────────────────────────────────────
-
-const ALLFLOW_TABS: TabType[] = ['all-flow', 'unusual-volume'];
-
-// ─────────────────────────────────────────────────────
 // Content
 // ─────────────────────────────────────────────────────
 
 const FlowScannerContent = memo(function FlowScannerContent() {
-  const [activeTab, setActiveTab] = useState<TabType>('all-flow');
+  const [activeTab, setActiveTab] = useState<TabType>('unusual-volume');
   const [drawerItem, setDrawerItem] = useState<FlowItem | null>(null);
 
   const {
@@ -65,14 +63,12 @@ const FlowScannerContent = memo(function FlowScannerContent() {
     marketSentiment: 'neutral' as const,
   };
 
-  // Which tab group
   const isAllFlowTab     = ALLFLOW_TABS.includes(activeTab);
   const isDarkPoolTab    = activeTab === 'dark-pool';
   const isInsiderTab     = activeTab === 'insider-institutional';
   const isConfluenceTab  = activeTab === 'confluence';
   const isSectorTab      = activeTab === 'sector-flow';
 
-  // Key for AnimatePresence — group similar tabs together to avoid unnecessary re-mounts
   const tabGroupKey =
     isAllFlowTab    ? 'allflow' :
     isDarkPoolTab   ? 'darkpool' :
@@ -108,11 +104,8 @@ const FlowScannerContent = memo(function FlowScannerContent() {
           </p>
         </motion.div>
 
-        {/* Market Sentiment */}
-        <SentimentBadge sentiment={defaultStats.marketSentiment} />
-
-        {/* Quick Stats */}
-        <QuickStats stats={defaultStats} />
+        {/* Quick Stats — receives flowData for client-side fallback */}
+        <QuickStats stats={defaultStats} flowData={flowData} />
 
         {/* Tab Navigation */}
         <motion.div
@@ -159,7 +152,7 @@ const FlowScannerContent = memo(function FlowScannerContent() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Live Signal Feed — always visible */}
+        {/* Live Signal Feed */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -183,7 +176,6 @@ const FlowScannerContent = memo(function FlowScannerContent() {
         </motion.div>
       </div>
 
-      {/* Global drawer — shared across non-AllFlow tabs */}
       <FlowDrawer
         isOpen={!!drawerItem}
         onClose={handleDrawerClose}

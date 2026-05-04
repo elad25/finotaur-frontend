@@ -31,13 +31,12 @@ export type AffiliateStatus =
 
 export type AffiliateTier = 
   | 'tier_1'  // 0-20 clients, 10%
-  | 'tier_2'  // 20-75 clients, 15%
-  | 'tier_3'; // 75+ clients, 20%
+  | 'tier_2'  // 20-75 clients, 10%
+  | 'tier_3'; // 75+ clients, 10%
 
 // 🔥 v2.3.0 NEW: Discount Tier (Customer discount when using affiliate code)
 export type DiscountTier = 
-  | 'standard'  // 10% discount for customers
-  | 'vip';      // 15% discount for customers
+  | 'standard';  // 10% discount for customers
 
 // 🔥 v2.1 UPDATED: Added 'verification_pending' status
 export type ReferralStatus = 
@@ -50,7 +49,7 @@ export type ReferralStatus =
 
 export type CommissionType = 
   | 'monthly_recurring'  // Regular monthly
-  | 'annual_upfront'     // 15% upfront for annual
+  | 'annual_upfront'     // 10% upfront for annual
   | 'sub_affiliate';     // 5% from sub-affiliates
 
 export type CommissionStatus = 
@@ -60,11 +59,7 @@ export type CommissionStatus =
   | 'cancelled'
   | 'expired';
 
-export type BonusType = 
-  | 'milestone_20'          // $100 for 20 clients
-  | 'milestone_50'          // $300 for 50 clients
-  | 'milestone_100'         // $1,000 for 100 clients
-  | 'milestone_50_recurring'; // $100 for every 50 after 100
+export type BonusType = never;
 
 export type BonusStatus = 
   | 'pending'
@@ -572,9 +567,7 @@ export interface ValidateCodeResponse {
   affiliate_id?: string;
   affiliate_name?: string;
   affiliate_code?: string;
-  discount_monthly?: number;
-  discount_yearly?: number;
-  discount_tier?: DiscountTier;
+  discount_percent?: number;
 }
 
 
@@ -626,15 +619,15 @@ export const TIER_INFO: Record<AffiliateTier, TierInfo> = {
     minClients: 0,
     maxClients: 20,
     commissionRate: 0.10,
-    annualRate: 0.15,
+    annualRate: 0.10,
     description: '0-20 paying clients',
   },
   tier_2: {
     name: 'Tier 2',
     minClients: 20,
     maxClients: 75,
-    commissionRate: 0.15,
-    annualRate: 0.15,
+    commissionRate: 0.10,
+    annualRate: 0.10,
     description: '20-75 paying clients',
     canRecruitSubAffiliates: true,
   },
@@ -642,8 +635,8 @@ export const TIER_INFO: Record<AffiliateTier, TierInfo> = {
     name: 'Tier 3',
     minClients: 75,
     maxClients: null,
-    commissionRate: 0.20,
-    annualRate: 0.15,
+    commissionRate: 0.10,
+    annualRate: 0.10,
     description: '75+ paying clients',
     canRecruitSubAffiliates: true,
   },
@@ -665,13 +658,6 @@ export const DISCOUNT_TIER_INFO: Record<DiscountTier, DiscountTierInfo> = {
     description: '10% discount for customers',
     badgeColor: 'text-gray-400',
     bgColor: 'bg-gray-500/10',
-  },
-  vip: {
-    name: 'VIP',
-    discountRate: 0.15,  // 15%
-    description: '15% discount for customers',
-    badgeColor: 'text-[#D4AF37]',
-    bgColor: 'bg-[#D4AF37]/10',
   },
 } as const;
 

@@ -1,84 +1,168 @@
 // =====================================================
-// 📊 FLOW SCANNER — Stats & Tab Navigation v2
+// 📊 FLOW SCANNER — Stats & Tab Navigation v4
+// ✅ Luxury color palette — Gold / Teal / Violet / Rose / Emerald
+// ✅ SentimentBadge removed
+// ✅ Client-side stats fallback from flowData
 // =====================================================
 
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, Eye, Users, DollarSign, GitMerge, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, Eye, Users, DollarSign, GitMerge } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { TabType, FlowStats, Direction } from '../shared/types';
+import { TabType, FlowStats, FlowItem, Direction } from '../shared/types';
 import { TABS, COLORS } from '../shared/constants';
 
 // ─────────────────────────────────────────────────────
-// Stat Card Meta
+// Luxury Color Palette
+// Gold / Teal / Violet / Rose-Gold / Emerald
 // ─────────────────────────────────────────────────────
 
 const STAT_META = [
   {
     key: 'unusualVolume',
-    label: 'Unusual Volume',
-    sublabel: 'alerts today',
+    label: 'UNUSUAL VOLUME',
+    sublabelKey: 'unusualVolumeSub',
+    defaultSublabel: 'alerts today',
     icon: Activity,
-    iconColor: '#F59E0B',
-    iconBg:    'rgba(245,158,11,0.12)',
-    iconBorder:'rgba(245,158,11,0.25)',
-    glowColor: 'rgba(245,158,11,0.08)',
-    barColor:  '#F59E0B',
+    // Warm gold — luxury accent
+    iconColor: '#C9A646',
+    iconBg:    'rgba(201,166,70,0.14)',
+    iconBorder:'rgba(201,166,70,0.35)',
+    cardBg:    'linear-gradient(145deg, rgba(201,166,70,0.09) 0%, rgba(201,166,70,0.03) 45%, rgba(12,11,9,0.97) 100%)',
+    barColor:  '#C9A646',
+    glowColor: 'rgba(201,166,70,0.10)',
+    borderColor: 'rgba(201,166,70,0.16)',
+    valueColor: '#E8D5A0',
   },
   {
     key: 'darkPoolAlerts',
-    label: 'Dark Pool',
-    sublabel: 'prints detected',
+    label: 'DARK POOL',
+    sublabelKey: 'darkPoolSub',
+    defaultSublabel: 'prints detected',
     icon: Eye,
-    iconColor: '#6366F1',
-    iconBg:    'rgba(99,102,241,0.12)',
-    iconBorder:'rgba(99,102,241,0.25)',
-    glowColor: 'rgba(99,102,241,0.08)',
-    barColor:  '#6366F1',
+    // Cool teal — institutional, sophisticated
+    iconColor: '#2DD4BF',
+    iconBg:    'rgba(45,212,191,0.12)',
+    iconBorder:'rgba(45,212,191,0.30)',
+    cardBg:    'linear-gradient(145deg, rgba(45,212,191,0.08) 0%, rgba(45,212,191,0.025) 45%, rgba(12,11,9,0.97) 100%)',
+    barColor:  '#2DD4BF',
+    glowColor: 'rgba(45,212,191,0.10)',
+    borderColor: 'rgba(45,212,191,0.14)',
+    valueColor: '#A8E8DF',
   },
   {
     key: 'insiderTrades',
-    label: 'Insider Trades',
-    sublabel: 'last 24h',
+    label: 'INSIDER TRADES',
+    sublabelKey: 'insiderSub',
+    defaultSublabel: 'last 24h',
     icon: Users,
-    iconColor: '#A855F7',
-    iconBg:    'rgba(168,85,247,0.12)',
-    iconBorder:'rgba(168,85,247,0.25)',
-    glowColor: 'rgba(168,85,247,0.08)',
-    barColor:  '#A855F7',
+    // Soft violet — premium, subtle
+    iconColor: '#A78BFA',
+    iconBg:    'rgba(167,139,250,0.12)',
+    iconBorder:'rgba(167,139,250,0.30)',
+    cardBg:    'linear-gradient(145deg, rgba(167,139,250,0.08) 0%, rgba(167,139,250,0.025) 45%, rgba(12,11,9,0.97) 100%)',
+    barColor:  '#A78BFA',
+    glowColor: 'rgba(167,139,250,0.10)',
+    borderColor: 'rgba(167,139,250,0.14)',
+    valueColor: '#C4B5FD',
   },
   {
     key: 'confluenceAlerts',
-    label: 'Confluence',
-    sublabel: '3+ signals',
+    label: 'CONFLUENCE',
+    sublabelKey: 'confluenceSub',
+    defaultSublabel: '3+ signals',
     icon: GitMerge,
-    iconColor: '#EF4444',
-    iconBg:    'rgba(239,68,68,0.12)',
-    iconBorder:'rgba(239,68,68,0.25)',
-    glowColor: 'rgba(239,68,68,0.08)',
-    barColor:  '#EF4444',
+    // Rose gold — high-alert but elegant
+    iconColor: '#F472B6',
+    iconBg:    'rgba(244,114,182,0.12)',
+    iconBorder:'rgba(244,114,182,0.30)',
+    cardBg:    'linear-gradient(145deg, rgba(244,114,182,0.08) 0%, rgba(244,114,182,0.025) 45%, rgba(12,11,9,0.97) 100%)',
+    barColor:  '#F472B6',
+    glowColor: 'rgba(244,114,182,0.10)',
+    borderColor: 'rgba(244,114,182,0.14)',
+    valueColor: '#FBCFE8',
   },
   {
     key: 'netFlow',
-    label: 'Net Flow',
-    sublabel: 'market inflow',
+    label: 'NET FLOW',
+    sublabelKey: 'netFlowSub',
+    defaultSublabel: 'market inflow',
     icon: DollarSign,
-    iconColor: '#22C55E',
-    iconBg:    'rgba(34,197,94,0.12)',
-    iconBorder:'rgba(34,197,94,0.25)',
-    glowColor: 'rgba(34,197,94,0.08)',
-    barColor:  '#22C55E',
-    valueColor: '#22C55E',
+    // Emerald — wealth, money flow
+    iconColor: '#34D399',
+    iconBg:    'rgba(52,211,153,0.12)',
+    iconBorder:'rgba(52,211,153,0.30)',
+    cardBg:    'linear-gradient(145deg, rgba(52,211,153,0.08) 0%, rgba(52,211,153,0.025) 45%, rgba(12,11,9,0.97) 100%)',
+    barColor:  '#34D399',
+    glowColor: 'rgba(52,211,153,0.10)',
+    borderColor: 'rgba(52,211,153,0.14)',
+    valueColor: '#34D399',
   },
 ] as const;
 
 // ─────────────────────────────────────────────────────
-// Quick Stat Card
+// Compute stats client-side from flowData
 // ─────────────────────────────────────────────────────
 
-const QuickStatCard = memo(({ meta, value, index }: {
+export function computeStatsFromFlowData(flowData: FlowItem[]): FlowStats & {
+  unusualVolumeSub: string;
+  darkPoolSub: string;
+  insiderSub: string;
+  confluenceSub: string;
+  netFlowSub: string;
+} {
+  const volumeTypes  = ['unusual_volume', 'block_trade', 'sweep', 'short_squeeze'];
+  const dpTypes      = ['dark_pool', 'dark_pool_sweep'];
+  const insiderTypes = ['insider_buy', 'insider_sell', 'cluster_insider', 'institutional_new', 'institutional_increase', 'institutional_exit'];
+
+  const unusualVolume    = flowData.filter(i => volumeTypes.includes(i.type)).length;
+  const darkPoolAlerts   = flowData.filter(i => dpTypes.includes(i.type)).length;
+  const insiderTrades    = flowData.filter(i => insiderTypes.includes(i.type)).length;
+  const confluenceAlerts = flowData.filter(i => i.type === 'confluence').length;
+
+  const bullish = flowData.filter(i => i.direction === 'bullish').length;
+  const bearish = flowData.filter(i => i.direction === 'bearish').length;
+
+  const netDollar = flowData.reduce((sum, item) => {
+    const mult = item.direction === 'bullish' ? 1 : item.direction === 'bearish' ? -1 : 0;
+    return sum + ((item.volume || 0) * (item.price || 0) * mult);
+  }, 0);
+
+  const absVal = Math.abs(netDollar);
+  const netFlow =
+    absVal >= 1e9 ? `${netDollar >= 0 ? '+' : '-'}$${(absVal / 1e9).toFixed(1)}B` :
+    absVal >= 1e6 ? `${netDollar >= 0 ? '+' : '-'}$${(absVal / 1e6).toFixed(0)}M` :
+    absVal >= 1e3 ? `${netDollar >= 0 ? '+' : '-'}$${(absVal / 1e3).toFixed(0)}K` : '—';
+
+  const sentiment: Direction = bullish > bearish * 1.5 ? 'bullish'
+                             : bearish > bullish * 1.5 ? 'bearish'
+                             : 'neutral';
+
+  const netFlowDirection = netDollar >= 0 ? 'market inflow' : 'market outflow';
+
+  return {
+    unusualVolume,
+    darkPoolAlerts,
+    insiderTrades,
+    confluenceAlerts,
+    netFlow,
+    marketSentiment: sentiment,
+    unusualVolumeSub:  'alerts today',
+    darkPoolSub:       'prints detected',
+    insiderSub:        'last 24h',
+    confluenceSub:     confluenceAlerts > 0 ? `${confluenceAlerts} multi-signal` : '3+ signals',
+    netFlowSub:        netFlowDirection,
+  };
+}
+
+// ─────────────────────────────────────────────────────
+// Quick Stat Card — Luxury Style
+// ─────────────────────────────────────────────────────
+
+const QuickStatCard = memo(({ meta, value, sublabel, index }: {
   meta: typeof STAT_META[number];
   value: string | number;
+  sublabel: string;
   index: number;
 }) => {
   const Icon = meta.icon;
@@ -92,10 +176,11 @@ const QuickStatCard = memo(({ meta, value, index }: {
     >
       <div
         className="relative overflow-hidden rounded-2xl p-5 h-full cursor-default
-                   transition-all duration-300 group-hover:-translate-y-[2px]"
+                   transition-all duration-300 group-hover:-translate-y-[2px]
+                   group-hover:shadow-lg"
         style={{
-          background: 'linear-gradient(145deg, rgba(16,14,10,0.97), rgba(10,9,7,0.99))',
-          border: '1px solid rgba(255,255,255,0.055)',
+          background: meta.cardBg,
+          border: `1px solid ${meta.borderColor}`,
           boxShadow: '0 4px 28px rgba(0,0,0,0.45)',
         }}
       >
@@ -108,40 +193,47 @@ const QuickStatCard = memo(({ meta, value, index }: {
 
         {/* Corner glow */}
         <div
-          className="absolute bottom-0 right-0 w-28 h-28 rounded-full blur-2xl pointer-events-none"
+          className="absolute -bottom-4 -right-4 w-32 h-32 rounded-full blur-3xl pointer-events-none
+                     opacity-50 group-hover:opacity-70 transition-opacity duration-300"
+          style={{ background: meta.glowColor }}
+        />
+
+        {/* Top-left subtle glow */}
+        <div
+          className="absolute -top-6 -left-6 w-20 h-20 rounded-full blur-2xl pointer-events-none opacity-20"
           style={{ background: meta.glowColor }}
         />
 
         {/* Header */}
         <div className="flex items-center justify-between mb-4 relative">
           <span className="text-[10.5px] font-semibold uppercase tracking-widest"
-            style={{ color: 'rgba(150,145,135,0.7)' }}>
+            style={{ color: 'rgba(160,155,148,0.75)' }}>
             {meta.label}
           </span>
           <div
-            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
             style={{
               background: meta.iconBg,
-              border: `1px solid ${meta.iconBorder}`,
-              boxShadow: `0 0 10px ${meta.iconColor}18`,
+              border: `1.5px solid ${meta.iconBorder}`,
+              boxShadow: `0 0 12px ${meta.iconColor}18`,
             }}
           >
-            <Icon className="h-3.5 w-3.5" style={{ color: meta.iconColor }} />
+            <Icon className="h-4 w-4" style={{ color: meta.iconColor }} />
           </div>
         </div>
 
         {/* Value */}
         <div
           className="text-[2rem] font-bold leading-none mb-1.5 tabular-nums relative"
-          style={{ color: ('valueColor' in meta ? meta.valueColor : '#fff') as string }}
+          style={{ color: meta.valueColor ?? '#ffffff' }}
         >
           {value}
         </div>
 
         {/* Sublabel */}
         <div className="text-[11px] font-medium relative"
-          style={{ color: 'rgba(110,105,98,0.8)' }}>
-          {meta.sublabel}
+          style={{ color: 'rgba(130,125,118,0.8)' }}>
+          {sublabel}
         </div>
       </div>
     </motion.div>
@@ -150,50 +242,70 @@ const QuickStatCard = memo(({ meta, value, index }: {
 
 QuickStatCard.displayName = 'QuickStatCard';
 
-export const QuickStats = memo(({ stats }: { stats: FlowStats }) => (
-  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
-    {STAT_META.map((meta, i) => (
-      <QuickStatCard
-        key={meta.key}
-        meta={meta}
-        value={stats[meta.key as keyof FlowStats] as string | number}
-        index={i}
-      />
-    ))}
-  </div>
-));
-
-QuickStats.displayName = 'QuickStats';
-
 // ─────────────────────────────────────────────────────
-// Sentiment Badge (above tab nav)
+// QuickStats — with flowData fallback
 // ─────────────────────────────────────────────────────
 
-export const SentimentBadge = memo(({ sentiment }: { sentiment: Direction }) => {
-  const cfg = {
-    bullish: { label: 'Risk On',     color: '#22C55E', Icon: TrendingUp   },
-    bearish: { label: 'Risk Off',    color: '#EF4444', Icon: TrendingDown },
-    neutral: { label: 'Mixed Flow',  color: '#8B8B8B', Icon: Activity     },
-  }[sentiment];
+interface QuickStatsProps {
+  stats: FlowStats;
+  flowData?: FlowItem[];
+}
+
+export const QuickStats = memo(({ stats, flowData }: QuickStatsProps) => {
+  const effectiveStats = useMemo(() => {
+    const serverHasData =
+      stats.unusualVolume > 0 ||
+      stats.darkPoolAlerts > 0 ||
+      stats.insiderTrades > 0 ||
+      stats.confluenceAlerts > 0 ||
+      (stats.netFlow !== '—' && stats.netFlow !== '0');
+
+    if (serverHasData) {
+      return {
+        ...stats,
+        unusualVolumeSub:  'alerts today',
+        darkPoolSub:       'prints detected',
+        insiderSub:        'last 24h',
+        confluenceSub:     stats.confluenceAlerts > 0 ? `${stats.confluenceAlerts} multi-signal` : '3+ signals',
+        netFlowSub:        stats.netFlow.startsWith('-') ? 'market outflow' : 'market inflow',
+      };
+    }
+
+    if (flowData && flowData.length > 0) {
+      return computeStatsFromFlowData(flowData);
+    }
+
+    return {
+      ...stats,
+      unusualVolumeSub: 'alerts today',
+      darkPoolSub: 'prints detected',
+      insiderSub: 'last 24h',
+      confluenceSub: '3+ signals',
+      netFlowSub: 'market inflow',
+    };
+  }, [stats, flowData]);
 
   return (
-    <div className="flex items-center justify-center mb-4">
-      <div
-        className="flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold"
-        style={{
-          background: `${cfg.color}12`,
-          border: `1px solid ${cfg.color}30`,
-          color: cfg.color,
-        }}
-      >
-        <cfg.Icon className="h-3 w-3" />
-        Market Sentiment: {cfg.label}
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+      {STAT_META.map((meta, i) => {
+        const value = (effectiveStats[meta.key as keyof FlowStats] ?? 0) as string | number;
+        const sublabel = (effectiveStats as any)[meta.sublabelKey] || meta.defaultSublabel;
+
+        return (
+          <QuickStatCard
+            key={meta.key}
+            meta={meta}
+            value={value}
+            sublabel={sublabel}
+            index={i}
+          />
+        );
+      })}
     </div>
   );
 });
 
-SentimentBadge.displayName = 'SentimentBadge';
+QuickStats.displayName = 'QuickStats';
 
 // ─────────────────────────────────────────────────────
 // Tab Navigation

@@ -1,17 +1,19 @@
 // src/components/SubNav.tsx
 // =====================================================
-// 🔥 v3.0: BETA ACCESS SYSTEM
+// 🔥 v4.0: AFFILIATE IN ALL-MARKETS
 // =====================================================
-// - Added hasBetaAccess support
-// - Admins/VIPs can access locked items
-// - Fixed Top Secret admin visibility
+// - Affiliate tab added to all-markets subNav
+// - Positioned BEFORE Site Dashboard
+// - Visible to: affiliates (active), admins
+// - Non-affiliates: can see & click → AffiliateSmartPage shows landing
+// - Journal active detection: excludes /affiliate path
 // =====================================================
 
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { Lock, Shield, Users, Sparkles } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { supabase } from '@/lib/supabase';
 import { useState, useEffect, useCallback } from 'react';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
@@ -54,11 +56,11 @@ export const SubNav = () => {
   const { user } = useAuth();
   const { isImpersonating } = useImpersonation();
   const { hasAccess: hasBacktestAccess } = useBacktestAccess();
-  const { hasBetaAccess } = useAdminAuth();  // 🔥 NEW: Beta access check
+  const { hasBetaAccess } = useAdminAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isAffiliate, setIsAffiliate] = useState(false);
 
-  // 🔐 Check if user is admin by fetching role from profiles table
+  // 🔐 Check if user is admin
   useEffect(() => {
     async function checkAdminStatus() {
       if (!user?.id) {
@@ -74,9 +76,8 @@ export const SubNav = () => {
           try {
             const data = JSON.parse(savedImpersonation);
             userIdToCheck = data.originalAdminId;
-            console.log('🎭 Checking admin status for original admin:', userIdToCheck);
           } catch {
-            // Invalid JSON, ignore
+            // ignore
           }
         }
 
@@ -87,17 +88,7 @@ export const SubNav = () => {
           .maybeSingle();
 
         if (!error && data) {
-          const isAdminUser = 
-            data.role === 'admin' || 
-            data.role === 'super_admin';
-          
-          console.log('🔐 Admin status check:', {
-            userId: userIdToCheck,
-            role: data.role,
-            isAdmin: isAdminUser,
-            isImpersonating
-          });
-          
+          const isAdminUser = data.role === 'admin' || data.role === 'super_admin';
           setIsAdmin(isAdminUser);
         } else {
           setIsAdmin(false);
@@ -123,7 +114,6 @@ export const SubNav = () => {
         const affiliatesTableExists = await tableExists('affiliates');
         
         if (!affiliatesTableExists) {
-          console.log('🤝 Affiliates table not found - skipping affiliate check');
           setIsAffiliate(false);
           return;
         }
@@ -137,26 +127,14 @@ export const SubNav = () => {
 
         if (error) {
           if (error.code === '42P01' || error.code === 'PGRST116' || error.code === '406') {
-            console.log('🤝 Affiliates table/RLS issue - user is not affiliate');
             setIsAffiliate(false);
             return;
           }
-          console.error('Error checking affiliate status:', error);
           setIsAffiliate(false);
           return;
         }
 
-        if (data) {
-          console.log('🤝 Affiliate status check:', {
-            userId: user.id,
-            affiliateId: data.id,
-            status: data.status,
-            isAffiliate: true
-          });
-          setIsAffiliate(true);
-        } else {
-          setIsAffiliate(false);
-        }
+        setIsAffiliate(!!data);
       } catch (error) {
         console.error('Error checking affiliate status (non-fatal):', error);
         setIsAffiliate(false);
@@ -176,7 +154,7 @@ export const SubNav = () => {
   }, []);
 
   // 🔥 Enhanced active detection
-const isTabActive = useCallback((itemPath: string): boolean => {
+  const isTabActive = useCallback((itemPath: string): boolean => {
     if (location.pathname === itemPath) return true;
     
     // SITE DASHBOARD - Exact matching
@@ -189,6 +167,11 @@ const isTabActive = useCallback((itemPath: string): boolean => {
       return location.pathname === '/app/all-markets/admin/support';
     }
     
+    // AFFILIATE in all-markets - exact + child paths
+    if (itemPath === '/app/all-markets/affiliate') {
+      return location.pathname.startsWith('/app/all-markets/affiliate');
+    }
+    
     // TOP SECRET - Exact matching
     if (itemPath === '/app/top-secret') {
       return location.pathname === '/app/top-secret';
@@ -198,7 +181,7 @@ const isTabActive = useCallback((itemPath: string): boolean => {
       return location.pathname.startsWith('/app/top-secret/admin');
     }
     
-    // Journal tab
+    // Journal tab — must exclude /affiliate paths
     if (itemPath === '/app/journal/overview' || itemPath === '/app/journal') {
       return location.pathname.startsWith('/app/journal') && 
              !location.pathname.startsWith('/app/journal/backtest') &&
@@ -210,8 +193,9 @@ const isTabActive = useCallback((itemPath: string): boolean => {
       return location.pathname.includes('/backtest');
     }
     
-    if (itemPath.includes('/affiliate')) {
-      return location.pathname.includes('/affiliate');
+    if (itemPath.includes('/affiliate') && !itemPath.includes('/all-markets')) {
+      return location.pathname.includes('/affiliate') && 
+             !location.pathname.includes('/all-markets/affiliate');
     }
     
     if (itemPath.includes('/admin') && !itemPath.includes('/top-secret')) {
@@ -245,10 +229,16 @@ const isTabActive = useCallback((itemPath: string): boolean => {
       return;
     }
 
-    // AFFILIATE ACCESS CONTROL
-    if (path.includes('/affiliate') && !path.includes('/admin')) {
+    // AFFILIATE in all-markets: always navigable (smart page handles access internally)
+    if (path === '/app/all-markets/affiliate') {
+      navigate(path);
+      return;
+    }
+
+    // AFFILIATE in journal (old paths): still require affiliate/admin
+    if (path.includes('/journal/affiliate') && !path.includes('/admin')) {
       if (!isAffiliate && !isAdmin) {
-        console.log('🚫 User is not an affiliate, cannot access affiliate pages');
+        console.log('🚫 User is not an affiliate, cannot access journal affiliate pages');
         return;
       }
       navigate(path);
@@ -268,7 +258,6 @@ const isTabActive = useCallback((itemPath: string): boolean => {
   const shouldShowItem = useCallback((item: any): boolean => {
     // Hide admin items during impersonation
     if (isImpersonating && item.adminOnly) {
-      console.log('🎭 Hiding admin item during impersonation:', item.label);
       return false;
     }
     
@@ -279,11 +268,15 @@ const isTabActive = useCallback((itemPath: string): boolean => {
 
     // Hide items marked hideForAdmin when user IS admin
     if (item.hideForAdmin && isAdmin) {
-      console.log('🔐 Hiding item for admin (has admin version):', item.label);
       return false;
     }
 
-    // Hide affiliate-only items for non-affiliates (unless admin)
+    // 🤝 Affiliate item in all-markets: visible to everyone (landing shown if not affiliate)
+    if ((item as any).affiliateSmartPage) {
+      return true;
+    }
+
+    // Hide legacy affiliate-only items for non-affiliates (unless admin)
     if (item.affiliateOnly && !isAffiliate && !isAdmin) {
       return false;
     }
@@ -312,10 +305,14 @@ const isTabActive = useCallback((itemPath: string): boolean => {
             const backtestLocked = item.path.includes('/backtest') && isPathLocked(item.path);
             const itemLocked = (item as any).locked === true;
             const isBetaItem = (item as any).beta === true;
+            const isAffiliateSmartItem = (item as any).affiliateSmartPage === true;
             
             // 🔥 BETA ACCESS: Override locked status for beta users
             const locked = (domainLocked || backtestLocked || itemLocked) && !hasBetaAccess;
             const active = isTabActive(item.path);
+
+            // Is this the affiliate tab and the user is an active affiliate or admin?
+            const isActiveAffiliate = isAffiliateSmartItem && (isAffiliate || isAdmin);
             
             const buttonContent = (
               <button
@@ -327,6 +324,7 @@ const isTabActive = useCallback((itemPath: string): boolean => {
                   item.path.includes('warzone') ? 'warzone' :
                   item.path === '/app/journal/overview' || item.path === '/app/journal' ? 'journal' :
                   item.path.includes('/ai/') ? 'ai' :
+                  item.path.includes('/affiliate') ? 'affiliate' :
                   undefined
                 }
                 className={`relative flex-shrink-0 rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-300 flex items-center gap-1.5 ${
@@ -363,8 +361,16 @@ const isTabActive = useCallback((itemPath: string): boolean => {
                   />
                 )}
 
-                {/* Affiliate badge */}
-                {item.affiliateOnly && (isAffiliate || isAdmin) && (
+                {/* Affiliate badge (active affiliates/admins on smart page) */}
+                {isActiveAffiliate && (
+                  <Users 
+                    className="h-3 w-3 text-emerald-400" 
+                    style={{ filter: 'drop-shadow(0 0 4px rgba(52,211,153,0.5))' }}
+                  />
+                )}
+
+                {/* Legacy affiliate-only badge */}
+                {item.affiliateOnly && !isAffiliateSmartItem && (isAffiliate || isAdmin) && (
                   <Users 
                     className="h-3 w-3 text-emerald-400" 
                     style={{ filter: 'drop-shadow(0 0 4px rgba(52,211,153,0.5))' }}
@@ -389,7 +395,7 @@ const isTabActive = useCallback((itemPath: string): boolean => {
               </button>
             );
 
-            // Wrap locked items with tooltip (only if actually locked for this user)
+            // Wrap locked items with tooltip
             if (locked) {
               return (
                 <Tooltip key={item.path}>

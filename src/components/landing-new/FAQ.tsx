@@ -6,7 +6,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Minus, HelpCircle } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
+import { SectionShell, SectionEyebrow, SectionTitle } from "@/components/landing-new/_shared";
 
 interface FAQItem {
   question: string;
@@ -64,41 +65,21 @@ const FAQ = () => {
   };
 
   return (
-    <section id="faq" className="py-28 px-4 relative overflow-hidden">
-      {/* ========== BACKGROUND ========== */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#100d08] to-[#0a0a0a]" />
-
-      {/* Gold glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-[#C9A646]/[0.06] rounded-full blur-[160px]" />
-
-      {/* Borders */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-
-      <div className="max-w-3xl mx-auto relative z-10">
+    <SectionShell id="faq" atmosphere="subtle" beam={false}>
+      <div className="max-w-3xl mx-auto">
         {/* ========== HEADER ========== */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-14"
-        >
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-full mb-6">
-            <HelpCircle className="w-4 h-4 text-[#C9A646]" />
-            <span className="text-[#C9A646] font-semibold text-sm">
-              FAQ
-            </span>
-          </div>
+        <div className="text-center mb-14">
+          <SectionEyebrow>FAQ</SectionEyebrow>
 
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
-            <span className="text-white">Questions? </span>
-            <span className="text-[#C9A646]">Answers.</span>
-          </h2>
-          <p className="text-lg text-slate-400 max-w-xl mx-auto">
+          <SectionTitle gradient="split">
+            <span className="text-ink-primary">Questions? </span>
+            <span className="text-gold-primary">Answers.</span>
+          </SectionTitle>
+
+          <p className="text-lg text-ink-secondary max-w-xl mx-auto">
             Everything you need to know before getting started.
           </p>
-        </motion.div>
+        </div>
 
         {/* ========== ACCORDION ========== */}
         <div className="space-y-3">
@@ -132,7 +113,7 @@ const FAQ = () => {
                   >
                     <span
                       className={`text-base md:text-lg font-semibold pr-4 transition-colors duration-300 ${
-                        isOpen ? "text-[#C9A646]" : "text-white group-hover:text-slate-200"
+                        isOpen ? "text-gold-primary" : "text-ink-primary group-hover:text-ink-secondary"
                       }`}
                     >
                       {faq.question}
@@ -151,9 +132,9 @@ const FAQ = () => {
                       }}
                     >
                       {isOpen ? (
-                        <Minus className="w-4 h-4 text-[#C9A646]" />
+                        <Minus className="w-4 h-4 text-gold-primary" />
                       ) : (
-                        <Plus className="w-4 h-4 text-slate-400" />
+                        <Plus className="w-4 h-4 text-ink-tertiary" />
                       )}
                     </div>
                   </button>
@@ -169,8 +150,8 @@ const FAQ = () => {
                         className="overflow-hidden"
                       >
                         <div className="px-5 md:px-6 pb-5 md:pb-6">
-                          <div className="h-px bg-gradient-to-r from-[#C9A646]/20 via-[#C9A646]/10 to-transparent mb-4" />
-                          <p className="text-slate-400 leading-relaxed text-sm md:text-base">
+                          <div className="h-px bg-gradient-to-r from-gold-border via-gold-border/50 to-transparent mb-4" />
+                          <p className="text-ink-secondary leading-relaxed text-sm md:text-base">
                             {faq.answer}
                           </p>
                         </div>
@@ -183,7 +164,7 @@ const FAQ = () => {
           })}
         </div>
       </div>
-    </section>
+    </SectionShell>
   );
 };
 

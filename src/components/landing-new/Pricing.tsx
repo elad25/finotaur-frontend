@@ -1,14 +1,18 @@
 // src/components/landing-new/Pricing.tsx
 // ================================================
-// 🔥 PRICING — COMPACT — 4 Plans
+// PRICING — COMPACT — 4 Plans
 // Free | Core ($59) | Finotaur ($109 FEATURED) | Enterprise ($500)
 // Monthly/Yearly toggle with savings
 // ================================================
 
-import { Check, Shield, Clock, Crown, ArrowRight, Gift, Star, Zap } from "lucide-react";
+import { Check, Shield, Clock, Gift, Star, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { Button } from "@/components/ds/Button";
+import { SectionShell } from "./_shared/SectionShell";
+import { SectionEyebrow } from "./_shared/SectionEyebrow";
+import { SectionTitle } from "./_shared/SectionTitle";
 
 type BillingInterval = "monthly" | "yearly";
 
@@ -151,17 +155,9 @@ const Pricing = () => {
   };
 
   return (
-    <section id="pricing" className="py-20 px-4 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0B0B0B] via-[#1E1B16] to-[#0B0B0B]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-[#C9A646]/[0.08] rounded-full blur-[160px]" />
-
-      {/* Borders */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/40 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-
-      <div className="max-w-6xl mx-auto relative z-10">
-        {/* Header — compact */}
+    <SectionShell id="pricing" atmosphere="full" beam={false} constructionMarkers={false}>
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -169,17 +165,18 @@ const Pricing = () => {
           transition={{ duration: 0.5 }}
           className="text-center mb-8"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-2">
-            <span className="text-white">Choose Your </span>
-            <span className="text-[#C9A646]">Plan</span>
-          </h2>
-          <p className="text-sm text-slate-400">
+          <SectionEyebrow>Pricing</SectionEyebrow>
+          <SectionTitle gradient="split" size="default">
+            <span className="text-ink-primary">Choose Your </span>
+            <span className="text-gold-primary">Plan</span>
+          </SectionTitle>
+          <p className="text-sm text-ink-muted">
             Simple, transparent pricing. Start with a 14-day free trial. Cancel
             anytime.
           </p>
         </motion.div>
 
-        {/* Billing Toggle — compact */}
+        {/* Billing Toggle */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -229,7 +226,7 @@ const Pricing = () => {
               }}
             >
               Yearly
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-border border border-gold-muted text-gold-primary">
                 Save 17%
               </span>
             </button>
@@ -301,19 +298,19 @@ const Pricing = () => {
                     {/* Name + Price */}
                     <div className="text-center mb-4">
                       <h3
-                        className={`text-lg font-bold mb-2 ${plan.featured ? "text-[#C9A646]" : "text-white"}`}
+                        className={`text-lg font-bold mb-2 ${plan.featured ? "text-gold-primary" : "text-ink-primary"}`}
                       >
                         {plan.name}
                       </h3>
 
                       <div className="flex items-end justify-center gap-1">
                         <span
-                          className={`font-bold ${plan.isFree ? "text-3xl text-emerald-400" : "text-3xl text-white"}`}
+                          className={`font-bold ${plan.isFree ? "text-3xl text-gold-primary" : "text-3xl text-ink-primary"}`}
                         >
                           {displayPrice.price}
                         </span>
                         {displayPrice.period && (
-                          <span className="text-slate-500 text-sm mb-0.5">
+                          <span className="text-ink-tertiary text-sm mb-0.5">
                             {displayPrice.period}
                           </span>
                         )}
@@ -321,7 +318,7 @@ const Pricing = () => {
 
                       {/* Trial text */}
                       {plan.trialDays && billingInterval === "monthly" && (
-                        <p className="text-emerald-400 text-xs font-semibold mt-1">
+                        <p className="text-gold-primary text-xs font-semibold mt-1">
                           First {plan.trialDays} days free
                         </p>
                       )}
@@ -329,21 +326,21 @@ const Pricing = () => {
                       {/* Billed yearly text */}
                       {"billedAs" in displayPrice &&
                         (displayPrice as any).billedAs && (
-                          <p className="text-slate-500 text-[10px] mt-0.5">
+                          <p className="text-ink-tertiary text-[10px] mt-0.5">
                             {(displayPrice as any).billedAs}
                           </p>
                         )}
 
-                      <p className="text-slate-500 text-xs mt-1.5">
+                      <p className="text-ink-muted text-xs mt-1.5">
                         {plan.description}
                       </p>
                     </div>
 
                     {/* Extras badge */}
                     {plan.includesExtras && (
-                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C9A646]/8 border border-[#C9A646]/15 mb-4">
-                        <Gift className="w-3.5 h-3.5 text-[#C9A646] shrink-0" />
-                        <span className="text-[#C9A646] text-[10px] font-semibold leading-tight">
+                      <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gold-border border border-gold-muted mb-4">
+                        <Gift className="w-3.5 h-3.5 text-gold-primary shrink-0" />
+                        <span className="text-gold-primary text-[10px] font-semibold leading-tight">
                           {plan.includesExtras}
                         </span>
                       </div>
@@ -354,18 +351,13 @@ const Pricing = () => {
                       {plan.features.map((feature, i) => (
                         <div key={i} className="flex items-start gap-2">
                           <div
-                            className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5"
-                            style={{
-                              background: plan.featured
-                                ? "rgba(201,166,70,0.15)"
-                                : "rgba(16,185,129,0.12)",
-                            }}
+                            className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 bg-gold-border"
                           >
                             <Check
-                              className={`w-2.5 h-2.5 ${plan.featured ? "text-[#C9A646]" : "text-emerald-400"}`}
+                              className="w-2.5 h-2.5 text-gold-primary"
                             />
                           </div>
-                          <span className="text-slate-300 text-xs leading-tight">
+                          <span className="text-ink-secondary text-xs leading-tight">
                             {feature}
                           </span>
                         </div>
@@ -373,31 +365,23 @@ const Pricing = () => {
                     </div>
 
                     {/* CTA */}
-                    <button
-                      onClick={() => handlePlanClick(plan.id)}
-                      className="w-full py-3 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 hover:scale-[1.02]"
-                      style={
-                        plan.featured
-                          ? {
-                              background:
-                                "linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)",
-                              color: "#000",
-                              boxShadow:
-                                "0 4px 20px rgba(201,166,70,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-                            }
-                          : {
-                              background: "rgba(255,255,255,0.04)",
-                              color: "#fff",
-                              border:
-                                "1px solid rgba(255,255,255,0.1)",
-                            }
-                      }
-                    >
-                      {plan.cta}
-                      {plan.featured && (
-                        <ArrowRight className="w-4 h-4" />
-                      )}
-                    </button>
+                    {plan.featured ? (
+                      <Button
+                        variant="gold"
+                        size="full"
+                        onClick={() => handlePlanClick(plan.id)}
+                      >
+                        {plan.cta}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="goldOutline"
+                        size="full"
+                        onClick={() => handlePlanClick(plan.id)}
+                      >
+                        {plan.cta}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -413,29 +397,29 @@ const Pricing = () => {
           transition={{ delay: 0.5 }}
           className="mt-8 text-center"
         >
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-slate-500 text-xs">
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-ink-tertiary text-xs">
             <span className="flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-[#C9A646]/50" />
+              <Shield className="w-3.5 h-3.5 text-gold-primary/50" />
               Bank-grade security
             </span>
-            <span className="text-slate-700">·</span>
+            <span className="text-ink-tertiary/40">·</span>
             <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-[#C9A646]/50" />
+              <Clock className="w-3.5 h-3.5 text-gold-primary/50" />
               14-Day Free Trial
             </span>
-            <span className="text-slate-700">·</span>
+            <span className="text-ink-tertiary/40">·</span>
             <span className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-[#C9A646]/50" />
+              <Zap className="w-3.5 h-3.5 text-gold-primary/50" />
               Cancel anytime
             </span>
           </div>
-          <p className="text-slate-600 text-[10px] mt-2">
+          <p className="text-ink-tertiary/60 text-[10px] mt-2">
             Your data stays yours. We never sell your information. Cancel with
             one click, no questions asked.
           </p>
         </motion.div>
       </div>
-    </section>
+    </SectionShell>
   );
 };
 

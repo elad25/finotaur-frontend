@@ -130,7 +130,6 @@ export type FlowTypeFilter =
 export type DirectionFilter = 'all' | 'bullish' | 'bearish' | 'neutral';
 
 export type TabType =
-  | 'all-flow'
   | 'unusual-volume'
   | 'dark-pool'
   | 'insider-institutional'

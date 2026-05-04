@@ -24,8 +24,8 @@ import {
 } from "lucide-react";
 
 const stats = [
-  { value: "10%", label: "Monthly Commission", icon: DollarSign },
-  { value: "15%", label: "On Yearly Plans", icon: TrendingUp },
+  { value: "10%", label: "Commission Rate", icon: DollarSign },
+  { value: "All Plans", label: "Monthly & Yearly", icon: TrendingUp },
   { value: "12 mo", label: "Commission Duration", icon: Clock },
   { value: "$0", label: "Cost to Join", icon: Shield },
 ];
@@ -45,22 +45,22 @@ const howItWorks = [
   },
   {
     step: "03",
-    title: "Earn 10–15% for 12 Months",
-    description: "Earn 10% on every monthly subscription payment, or 15% if they choose yearly — for the first 12 months of each referral.",
+    title: "Earn 10% for 12 Months",
+    description: "Earn 10% on every payment — monthly or yearly — for the first 12 months of each referral.",
     icon: TrendingUp,
   },
 ];
 
 const earningsExamples = [
   { referrals: 10, plan: "Finotaur Monthly", monthly: "$109", yearly: "$1,308" },
-  { referrals: 10, plan: "Finotaur Yearly", monthly: "—", yearly: "$1,635" },
+  { referrals: 10, plan: "Finotaur Yearly", monthly: "—", yearly: "$1,090" },
   { referrals: 25, plan: "Mixed (monthly)", monthly: "$272", yearly: "$3,270" },
   { referrals: 50, plan: "Mixed plans", monthly: "$450+", yearly: "$5,400+" },
   { referrals: 100, plan: "Mixed plans", monthly: "$900+", yearly: "$10,800+" },
 ];
 
 const benefits = [
-  "10% commission on monthly plans, 15% on yearly plans",
+  "10% commission on all plans — monthly and yearly",
   "Commissions paid for the first 12 months per referral",
   "Your referrals get 10% off with your coupon code",
   "Real-time dashboard to track clicks, signups & earnings",
@@ -102,14 +102,14 @@ const AffiliatePage = () => {
 
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-5 leading-tight">
               <span className="text-white">Earn </span>
-              <span className="text-[#C9A646]">10–15% commission</span>
+              <span className="text-[#C9A646]">10% commission</span>
               <br />
               <span className="text-white">for every trader you refer.</span>
             </h1>
 
             <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
               Share Finotaur with your audience. They get <span className="text-white font-semibold">10% off</span> with your
-              coupon code. You earn <span className="text-white font-semibold">10% on monthly plans</span> or <span className="text-white font-semibold">15% on yearly plans</span> — for the first 12 months per referral.
+              coupon code. You earn <span className="text-white font-semibold">10% on every payment</span> — monthly or yearly — for the first 12 months per referral.
             </p>
 
             <button
@@ -255,11 +255,11 @@ const AffiliatePage = () => {
                 </div>
                 <div>
                   <h3 className="text-white font-bold text-lg">You Earn</h3>
-                  <span className="text-[#C9A646] text-sm font-semibold">10% Monthly · 15% Yearly · 12 Months</span>
+                  <span className="text-[#C9A646] text-sm font-semibold">10% · All Plans · 12 Months</span>
                 </div>
               </div>
               <p className="text-slate-400 text-sm leading-relaxed">
-                For every subscriber who signs up through your referral link, you earn <span className="text-white font-semibold">10% of every monthly payment</span> or <span className="text-white font-semibold">15% of yearly payments</span> — for the first 12 months of their subscription.
+                For every subscriber who signs up through your referral link, you earn <span className="text-white font-semibold">10% of every payment</span> — monthly or yearly — for the first 12 months of their subscription.
               </p>
             </motion.div>
 
@@ -310,7 +310,7 @@ const AffiliatePage = () => {
               <span className="text-white">Earning </span>
               <span className="text-[#C9A646]">potential</span>
             </h2>
-            <p className="text-sm text-slate-400">10% on monthly · 15% on yearly · First 12 months per referral.</p>
+            <p className="text-sm text-slate-400">10% on all plans · First 12 months per referral.</p>
           </motion.div>
 
           <div

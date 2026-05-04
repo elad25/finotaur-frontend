@@ -8,7 +8,7 @@
 // - Added requested_code field for custom affiliate codes
 // =====================================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -32,13 +32,16 @@ import {
   Youtube,
   Twitter,
   Globe,
-  Sparkles
+  Sparkles,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useSubmitAffiliateApplication, useAffiliateApplication } from "../hooks/useAffiliate";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import type { AffiliateApplicationSubmission } from "../types/affiliate.types";
+import { supabase } from "@/lib/supabase";
 
 // ============================================
 // FORM SCHEMA
@@ -103,9 +106,44 @@ export default function AffiliateApplicationForm({
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 3;
+
+  // Coupon availability state
+  const [codeStatus, setCodeStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [codeCheckTimer, setCodeCheckTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   
   const { data: existingApplication, isLoading: checkingApplication } = useAffiliateApplication();
   const submitApplication = useSubmitAffiliateApplication();
+
+  // Check if coupon code is already taken
+  const checkCodeAvailability = useCallback(async (code: string) => {
+    if (!code || code.length < 2) {
+      setCodeStatus('idle');
+      return;
+    }
+    setCodeStatus('checking');
+    try {
+      const { data, error } = await supabase
+        .from('affiliates')
+        .select('id')
+        .or(`affiliate_code.ilike.${code},coupon_code.ilike.${code}`)
+        .limit(1);
+
+      if (error) throw error;
+
+      // Also check pending applications
+      const { data: appData } = await supabase
+        .from('affiliate_applications')
+        .select('id')
+        .ilike('requested_code', code)
+        .in('status', ['pending', 'under_review', 'approved'])
+        .limit(1);
+
+      const isTaken = (data && data.length > 0) || (appData && appData.length > 0);
+      setCodeStatus(isTaken ? 'taken' : 'available');
+    } catch {
+      setCodeStatus('idle');
+    }
+  }, []);
 
   const form = useForm<ApplicationFormData>({
     resolver: zodResolver(applicationSchema),
@@ -135,13 +173,26 @@ export default function AffiliateApplicationForm({
     }
   }, [user, form]);
 
-  // Handle requested code input - uppercase and filter
+  // Handle requested code input - uppercase, filter, and debounce check
   const handleRequestedCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
     form.setValue("requested_code", value);
+
+    if (codeCheckTimer) clearTimeout(codeCheckTimer);
+    if (!value) {
+      setCodeStatus('idle');
+      return;
+    }
+    setCodeStatus('checking');
+    const timer = setTimeout(() => checkCodeAvailability(value), 500);
+    setCodeCheckTimer(timer);
   };
 
   const onSubmit = async (data: ApplicationFormData) => {
+    if (codeStatus === 'taken') {
+      toast.error("The requested code is already taken. Please choose a different code.");
+      return;
+    }
     try {
       // 🔥 FIX: Ensure email and full_name are always present (they're required in schema)
       const submissionData: AffiliateApplicationSubmission = {
@@ -457,24 +508,53 @@ export default function AffiliateApplicationForm({
                   Request Your Custom Code (Optional)
                 </Label>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="text-zinc-500 font-mono text-sm">FINOTAUR-</span>
                   <Input
                     id="requested_code"
                     value={form.watch("requested_code") || ""}
                     onChange={handleRequestedCodeChange}
-                    className="bg-zinc-800/50 border-zinc-700 uppercase font-mono"
+                    className={`bg-zinc-800/50 uppercase font-mono transition-colors ${
+                      codeStatus === 'taken'
+                        ? 'border-red-500 focus-visible:ring-red-500'
+                        : codeStatus === 'available'
+                        ? 'border-green-500 focus-visible:ring-green-500'
+                        : 'border-zinc-700'
+                    }`}
                     placeholder="YOURCODE"
                     maxLength={15}
                   />
+                  {/* Status indicator */}
+                  <div className="flex-shrink-0 w-6 flex items-center justify-center">
+                    {codeStatus === 'checking' && (
+                      <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+                    )}
+                    {codeStatus === 'available' && (
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                    )}
+                    {codeStatus === 'taken' && (
+                      <XCircle className="w-5 h-5 text-red-500" />
+                    )}
+                  </div>
                 </div>
-                {form.watch("requested_code") && (
-                  <p className="text-xs text-yellow-500/70 mt-2">
-                    Your code will be: <span className="font-mono font-bold">FINOTAUR-{form.watch("requested_code")}</span>
+
+                {/* Status message */}
+                {codeStatus === 'available' && form.watch("requested_code") && (
+                  <p className="text-green-400 text-xs mt-2 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" />
+                    <span className="font-mono font-bold">{form.watch("requested_code")}</span> is available!
                   </p>
                 )}
-                <p className="text-xs text-zinc-500 mt-1">
-                  Leave empty for auto-generated. We'll try to honor your request if available.
-                </p>
+                {codeStatus === 'taken' && (
+                  <p className="text-red-400 text-xs mt-2 flex items-center gap-1">
+                    <XCircle className="w-3 h-3" />
+                    <span className="font-mono font-bold">{form.watch("requested_code")}</span> is already taken. Please choose a different code.
+                  </p>
+                )}
+                {codeStatus === 'idle' && (
+                  <p className="text-xs text-zinc-500 mt-2">
+                    Leave empty for auto-generated. We'll try to honor your request if available.
+                  </p>
+                )}
+
                 {form.formState.errors.requested_code && (
                   <p className="text-red-400 text-sm mt-1">{form.formState.errors.requested_code.message}</p>
                 )}
@@ -565,8 +645,8 @@ export default function AffiliateApplicationForm({
             ) : (
               <Button
                 type="submit"
-                disabled={submitApplication.isPending}
-                className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-semibold"
+                disabled={submitApplication.isPending || codeStatus === 'taken'}
+                className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-semibold disabled:opacity-50"
               >
                 {submitApplication.isPending ? (
                   <>

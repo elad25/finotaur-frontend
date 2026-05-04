@@ -1,94 +1,165 @@
 // src/components/landing-new/BeforeAfter.tsx
 // ================================================
-// 🔥 THE PROBLEM — COMPACT
-// "Retail Traders Fight with Tied Hands"
+// UNLOCK — "Unlock the power of FINOTAUR"
+// Positive exclusive framing: 3 institutional capabilities decoded.
+// Full reframe from the old "Retail traders fight with hands tied" pain-point pattern.
 // ================================================
 
-import { motion } from "framer-motion";
-import { AlertCircle, Brain, Clock, Crosshair, Skull } from "lucide-react";
+import { motion } from 'framer-motion';
+import { Brain, Zap, LineChart } from 'lucide-react';
+import { SectionShell } from './_shared/SectionShell';
+import { SectionEyebrow } from './_shared/SectionEyebrow';
+import { SectionTitle } from './_shared/SectionTitle';
 
-const painPoints = [
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
+const unlocks = [
   {
-    icon: Brain,
-    text: "Institutions use AI, analyst teams, and $25K/year reports. You? Google and Twitter.",
+    number: '01',
+    eyebrow: 'UNLOCK 01',
+    title: 'Institutional Intelligence',
+    description:
+      'Real-time AI analysis trained on flow data, macro signals, and analyst-grade research. The same edge funds pay $25K/year for.',
+    includesLabel: 'INCLUDES',
+    includes: ['AI Engine', 'Top Secret Reports', 'Sector Analyzer'],
+    Icon: Brain,
   },
   {
-    icon: Clock,
-    text: "You get information — but not conclusions. 50 headlines each morning and zero clarity.",
+    number: '02',
+    eyebrow: 'UNLOCK 02',
+    title: 'Real-Time Edge',
+    description:
+      'Pre-market briefings, live options flow, sector rotation tracking. See where smart money is moving before the headlines.',
+    includesLabel: 'INCLUDES',
+    includes: ['War Zone', 'Options Flow', 'Live Signals'],
+    Icon: Zap,
   },
   {
-    icon: Crosshair,
-    text: "You react to the market instead of getting ahead of it.",
+    number: '03',
+    eyebrow: 'UNLOCK 03',
+    title: 'Personal Trading System',
+    description:
+      'Your trades, backtested. Your strategies, refined. AI-powered insights from your own data — what works, what doesn\'t, and why.',
+    includesLabel: 'INCLUDES',
+    includes: ['Trading Journal', 'Backtesting', 'AI Insights'],
+    Icon: LineChart,
   },
-  {
-    icon: Skull,
-    text: "You don't have a system — you trade on gut feeling.",
-  },
-];
+] as const;
 
-const BeforeAfter = () => {
+// ---------------------------------------------------------------------------
+// UnlockCard
+// ---------------------------------------------------------------------------
+type UnlockData = (typeof unlocks)[number];
+
+function UnlockCard({ unlock, index }: { unlock: UnlockData; index: number }) {
+  const { number, eyebrow, title, description, includesLabel, includes, Icon } = unlock;
+
   return (
-    <section className="py-16 px-4 relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0e0a08] to-[#0a0a0a]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-red-500/[0.03] rounded-full blur-[120px]" />
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.6, delay: index * 0.15 }}
+      className="relative rounded-[12px] p-8 md:p-10
+        bg-section-card-rest backdrop-blur-md
+        border border-gold-border
+        shadow-card-rest hover:shadow-card-hover
+        hover:-translate-y-1
+        transition-all duration-500 group"
+    >
+      {/* Corner brackets */}
+      <span className="absolute top-2 left-2 w-3 h-3 border-t border-l border-construction-marker pointer-events-none" aria-hidden="true" />
+      <span className="absolute top-2 right-2 w-3 h-3 border-t border-r border-construction-marker pointer-events-none" aria-hidden="true" />
+      <span className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-construction-marker pointer-events-none" aria-hidden="true" />
+      <span className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-construction-marker pointer-events-none" aria-hidden="true" />
 
-      {/* Borders */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
+      {/* Icon — top-right corner, subtle gold */}
+      <div className="absolute top-6 right-6 opacity-40 text-gold-primary" aria-hidden="true">
+        <Icon className="w-4 h-4" />
+      </div>
 
-      <div className="max-w-3xl mx-auto relative z-10">
-        {/* Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4 }}
-          className="flex justify-center mb-5"
-        >
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-full">
-            <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-            <span className="text-red-400 font-semibold text-xs">The Problem</span>
-          </div>
-        </motion.div>
+      {/* Eyebrow: UNLOCK 01 */}
+      <p className="font-sans uppercase tracking-[0.32em] text-[10px] text-gold-eyebrow font-medium flex items-center gap-1.5">
+        <span className="inline-block w-1 h-1 rounded-full bg-gold-primary flex-shrink-0" aria-hidden="true" />
+        {eyebrow}
+      </p>
 
-        {/* Headline */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-8"
-        >
-          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight">
-            <span className="text-white">Retail traders are fighting</span>{' '}
-            <span className="text-red-400">with their hands tied.</span>
-          </h2>
-        </motion.div>
+      {/* Big number */}
+      <motion.p
+        initial={{ opacity: 0, scale: 0.9 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.3 + index * 0.15, duration: 0.7 }}
+        className="font-wordmark font-medium text-7xl leading-[0.9] tracking-[-0.02em] mt-3
+          bg-gradient-gold-vertical bg-clip-text text-transparent select-none"
+        aria-hidden="true"
+      >
+        {number}
+      </motion.p>
 
-        {/* Pain Points — compact */}
-        <div className="space-y-3">
-          {painPoints.map((point, index) => {
-            const Icon = point.icon;
-            return (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, x: -15 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.2 + index * 0.08 }}
-                className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-red-500/8 hover:border-red-500/20 transition-colors"
-              >
-                <div className="w-10 h-10 rounded-lg bg-red-500/8 border border-red-500/15 flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-5 h-5 text-red-400/70" />
-                </div>
-                <p className="text-base text-slate-300 leading-relaxed">{point.text}</p>
-              </motion.div>
-            );
-          })}
+      {/* Title */}
+      <h3 className="font-wordmark font-medium text-2xl md:text-3xl text-ink-primary tracking-[-0.02em] leading-[1.1] mt-3">
+        {title}
+      </h3>
+
+      {/* Description */}
+      <p className="font-sans font-light text-ink-secondary text-base leading-[1.6] mt-4">
+        {description}
+      </p>
+
+      {/* Divider */}
+      <div className="border-t border-construction mt-6 pt-6">
+        {/* Includes label */}
+        <p className="font-sans text-[10px] uppercase tracking-[0.32em] text-ink-muted font-medium mb-3">
+          {includesLabel}
+        </p>
+
+        {/* Chips */}
+        <div className="flex flex-wrap gap-2">
+          {includes.map((chip) => (
+            <span
+              key={chip}
+              className="px-2.5 py-1 rounded-sm border border-gold-border bg-gold-border/30
+                text-[11px] tracking-[0.08em] text-ink-secondary"
+            >
+              {chip}
+            </span>
+          ))}
         </div>
       </div>
-    </section>
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BeforeAfter (now: UNLOCK section)
+// ---------------------------------------------------------------------------
+const BeforeAfter = () => {
+  return (
+    <SectionShell id="unlock" atmosphere="full" beam={false} constructionMarkers={false}>
+      {/* Section header */}
+      <div className="text-center mb-12 md:mb-16">
+        <SectionEyebrow size="lg">The Privilege</SectionEyebrow>
+
+        <SectionTitle gradient="split" size="large">
+          Unlock the power of{' '}
+          <span className="text-gold-primary">FINOTAUR</span>.
+        </SectionTitle>
+
+        {/* Subhead */}
+        <p className="font-sans font-light text-ink-secondary text-base md:text-lg max-w-2xl mx-auto mt-4">
+          Three institutional capabilities, decoded for the independent trader. No more guesswork. No more lag.
+        </p>
+      </div>
+
+      {/* Cards grid */}
+      <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+        {unlocks.map((unlock, index) => (
+          <UnlockCard key={unlock.number} unlock={unlock} index={index} />
+        ))}
+      </div>
+    </SectionShell>
   );
 };
 

@@ -2,4 +2,11 @@ node_modules
 dist
 .env
 .env.*
+!.env*.example
 *.log
+
+# DB dumps - never commit
+supabase/migrations_v2/
+*.dump
+*.sql.dump
+db_export_*.sql

@@ -1,6 +1,6 @@
 // src/components/BrokerConnectionManual.tsx
 // Manual broker connection - CSV Import focused
-// This replaces SnapTradePopup for now, but SnapTrade code is preserved
+// Manual broker entry component
 
 import { useState } from "react";
 import { X, Upload, FileText, Download, ExternalLink, Search, ChevronRight } from "lucide-react";

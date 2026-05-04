@@ -23,13 +23,13 @@ import { useState, useCallback, useMemo, memo } from 'react';
 
 const TIER_CONFIG: Record<string, { name: string; commission: number; minReferrals: number; maxReferrals: number; color: string }> = {
   tier_1: { name: 'Starter', commission: 10, minReferrals: 0, maxReferrals: 19, color: 'text-gray-400' },
-  tier_2: { name: 'Growth', commission: 15, minReferrals: 20, maxReferrals: 74, color: 'text-blue-400' },
-  tier_3: { name: 'Pro', commission: 20, minReferrals: 75, maxReferrals: Infinity, color: 'text-[#C9A646]' },
+  tier_2: { name: 'Growth', commission: 10, minReferrals: 20, maxReferrals: 74, color: 'text-blue-400' },
+  tier_3: { name: 'Pro', commission: 10, minReferrals: 75, maxReferrals: Infinity, color: 'text-[#C9A646]' },
 };
 
 const DISCOUNT_CONFIG: Record<string, { name: string; discount: number }> = {
   standard: { name: 'Standard', discount: 10 },
-  vip: { name: 'VIP', discount: 15 },
+  vip: { name: 'VIP', discount: 10 },
 };
 
 type TierKey = keyof typeof TIER_CONFIG;
@@ -361,8 +361,7 @@ export default function AffiliateOverview() {
           
           {nextTier ? (
             <p className="text-gray-400 text-sm">
-              <span className="text-[#C9A646] font-medium">{referralsToNextTier}</span> more qualified customers to reach{' '}
-              <span className="text-[#C9A646]">{nextTier.commission}% commission</span>!
+              <span className="text-[#C9A646] font-medium">{referralsToNextTier}</span> more qualified customers to reach the next tier!
             </p>
           ) : (
             <p className="text-emerald-400 text-sm">

@@ -9,7 +9,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ds/Button";
 import { Wordmark } from "@/components/ds/Wordmark";
-import { FEATURES } from "@/config/features";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -28,10 +27,6 @@ const Navbar = () => {
     { href: "#features", label: "Features" },
     { href: "#pricing", label: "Pricing" },
     { href: "/journal", label: "Journal", isRoute: true },
-    { href: "#faq", label: "FAQ" },
-    ...(FEATURES.AFFILIATE_TRACKING
-      ? [{ href: "/affiliate", label: "Become an Affiliate", isRoute: true }]
-      : []),
     { href: "/about", label: "About", isRoute: true },
   ];
 
@@ -69,9 +64,12 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <button onClick={handleLogoClick} className="flex items-center" aria-label="FINOTAUR home">
-            <Wordmark size="compact" interactive />
-          </button>
+          <div className="flex flex-col items-start gap-[3px]">
+            <button onClick={handleLogoClick} className="flex items-center" aria-label="FINOTAUR home">
+              <Wordmark size="nav" interactive />
+            </button>
+            <span className="h-px w-full bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent" />
+          </div>
 
           {/* Desktop Nav Links */}
           <div className="hidden lg:flex items-center space-x-7">
@@ -79,7 +77,7 @@ const Navbar = () => {
               <button
                 key={index}
                 onClick={() => handleNavClick(link)}
-                className="relative font-sans text-[12px] uppercase tracking-[0.18em] font-semibold text-white/75 hover:text-[#C9A646] transition-colors duration-300 group py-1"
+                className="relative font-sans text-[12px] uppercase tracking-[0.14em] font-medium text-white/75 hover:text-[#C9A646] transition-colors duration-300 group py-1"
               >
                 {link.label}
                 <span className="absolute left-0 -bottom-0.5 w-full h-px origin-center scale-x-0 bg-gradient-to-r from-transparent via-[#C9A646]/80 to-transparent transition-transform duration-300 group-hover:scale-x-100" />
@@ -91,7 +89,7 @@ const Navbar = () => {
           <div className="hidden lg:flex items-center space-x-3">
             <button
               onClick={() => navigate('/auth/login')}
-              className="text-[12px] font-sans uppercase tracking-[0.18em] font-semibold text-white/80 hover:text-white transition-colors duration-300"
+              className="text-[12px] font-sans uppercase tracking-[0.14em] font-medium text-white/80 hover:text-white transition-colors duration-300"
             >
               Login
             </button>
@@ -133,7 +131,7 @@ const Navbar = () => {
                 <button
                   key={index}
                   onClick={() => handleNavClick(link)}
-                  className="block w-full text-left font-sans text-[12px] uppercase tracking-[0.18em] font-semibold text-white/75 hover:text-[#C9A646] transition-colors duration-300 py-2"
+                  className="block w-full text-left font-sans text-[12px] uppercase tracking-[0.14em] font-medium text-white/75 hover:text-[#C9A646] transition-colors duration-300 py-2"
                 >
                   {link.label}
                 </button>
@@ -141,7 +139,7 @@ const Navbar = () => {
               <div className="pt-4 border-t border-[rgba(201,166,70,0.1)] space-y-3">
                 <button
                   onClick={() => { navigate('/auth/login'); setIsMobileMenuOpen(false); }}
-                  className="w-full text-[12px] font-sans uppercase tracking-[0.18em] font-semibold text-white/80 hover:text-white py-3 transition-colors duration-300"
+                  className="w-full text-[12px] font-sans uppercase tracking-[0.14em] font-medium text-white/80 hover:text-white py-3 transition-colors duration-300"
                 >
                   Login
                 </button>

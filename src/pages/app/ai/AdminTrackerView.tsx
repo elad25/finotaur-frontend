@@ -19,6 +19,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PickPerformanceChart from './PickPerformanceChart';
 import {
   Target, Clock, RefreshCw, ChevronDown, ChevronUp,
   Search, Crosshair, AlertTriangle, Star,
@@ -408,6 +409,17 @@ export default function AdminTrackerView() {
     setBackfilling(false);
   };
 
+  const [backfillingHistory, setBackfillingHistory] = useState(false);
+  const triggerBackfillHistory = async () => {
+    setBackfillingHistory(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/backfill-history`, { method: 'POST', headers: getAuthHeaders() });
+      const data = await res.json();
+      setLastAction(`Chart data backfilled: ${data.backfilled || 0} price bars`);
+    } catch (e) { console.error('History backfill failed:', e); }
+    setBackfillingHistory(false);
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -565,6 +577,7 @@ export default function AdminTrackerView() {
         </div>
         <div className="flex items-center gap-2.5">
           {[
+            { label: backfillingHistory ? 'Backfilling Charts...' : 'Backfill Charts', icon: backfillingHistory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BarChart3 className="h-3.5 w-3.5" />, onClick: triggerBackfillHistory, disabled: backfillingHistory, accent: false },
             { label: backfilling ? 'Backfilling...' : 'Backfill', icon: backfilling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />, onClick: triggerBackfill, disabled: backfilling, accent: false },
             { label: registeringPicks ? 'Registering...' : 'Register Picks', icon: registeringPicks ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />, onClick: triggerRegisterPicks, disabled: registeringPicks, accent: true },
             { label: updatingPrices ? 'Updating...' : 'Update Prices', icon: updatingPrices ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />, onClick: triggerPriceUpdate, disabled: updatingPrices, accent: false },
@@ -1091,43 +1104,56 @@ export default function AdminTrackerView() {
                 </table>
               </div>
 
-              {/* ── Expanded Detail Row ─────────── */}
+              {/* ── Expanded Detail Row + Performance Chart ─────────── */}
               <AnimatePresence>
                 {expandedRow && recommendations.find(r => r.id === expandedRow) && (() => {
                   const rec = recommendations.find(r => r.id === expandedRow)!;
                   return (
                     <motion.div key={`expanded-${rec.id}`}
                       initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="px-4 pb-4 overflow-hidden"
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className="overflow-hidden"
                       style={{ borderTop: `1px solid ${GOLD.dim}0.08)` }}>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3">
-                        <div>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Sector</span>
-                          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{rec.sector || '—'}</span>
+                      <div className="p-4 space-y-4">
+                        
+                        {/* ── Performance Area Chart ── */}
+                        <PickPerformanceChart 
+                          pickId={rec.id} 
+                          getAuthHeaders={getAuthHeaders} 
+                        />
+                        
+                        {/* ── Detail Grid ── */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div>
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Sector</span>
+                            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.6)' }}>{rec.sector || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Direction</span>
+                            <span className="text-[11px]" style={{ color: rec.direction === 'BULLISH' ? `${GREEN.dim}0.7)` : `${RED.dim}0.7)` }}>{rec.direction || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Trade Type</span>
+                            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{rec.trade_type?.replace(/_/g, ' ') || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Max Drawdown</span>
+                            <ReturnBadge value={rec.max_drawdown} size="sm" />
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Direction</span>
-                          <span className="text-[11px]" style={{ color: rec.direction === 'BULLISH' ? `${GREEN.dim}0.7)` : `${RED.dim}0.7)` }}>{rec.direction || '—'}</span>
+                        
+                        {rec.catalyst && (
+                          <div className="pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.02)' }}>
+                            <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Catalyst</span>
+                            <p className="text-[11px] leading-relaxed" style={{ color: 'rgba(200,200,200,0.5)' }}>{rec.catalyst}</p>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-3">
+                          <span className="text-[8px] font-mono" style={{ color: 'rgba(139,139,139,0.2)' }}>
+                            Finotaur Score: {rec.finotaur_score} · Pattern: {rec.pattern || 'N/A'}
+                          </span>
                         </div>
-                        <div>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Trade Type</span>
-                          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{rec.trade_type?.replace(/_/g, ' ') || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Max Drawdown</span>
-                          <ReturnBadge value={rec.max_drawdown} size="sm" />
-                        </div>
-                      </div>
-                      {rec.catalyst && (
-                        <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.02)' }}>
-                          <span className="text-[8px] font-bold uppercase tracking-[0.12em] block mb-1" style={{ color: 'rgba(139,139,139,0.3)' }}>Catalyst</span>
-                          <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{rec.catalyst}</p>
-                        </div>
-                      )}
-                      <div className="mt-3 flex items-center gap-3">
-                        <span className="text-[8px] font-mono" style={{ color: 'rgba(139,139,139,0.2)' }}>
-                          Finotaur Score: {rec.finotaur_score} · Pattern: {rec.pattern || 'N/A'}
-                        </span>
                       </div>
                     </motion.div>
                   );

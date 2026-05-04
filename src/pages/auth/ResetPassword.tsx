@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Lock, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { Lock, CheckCircle, Eye, EyeOff, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { isStrongPassword, validatePassword } from '@/lib/passwordValidation';
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -34,8 +35,8 @@ export default function ResetPassword() {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (!isStrongPassword(password)) {
+      toast.error('Password must be at least 8 chars with uppercase, number, and special char');
       return;
     }
 
@@ -120,14 +121,29 @@ export default function ResetPassword() {
               </div>
 
               {/* Password Requirements */}
-              <div className="text-xs text-zinc-500 space-y-1">
-                <p className={password.length >= 6 ? 'text-green-500' : ''}>
-                  • At least 6 characters
-                </p>
-                <p className={password === confirmPassword && password ? 'text-green-500' : ''}>
-                  • Passwords match
-                </p>
-              </div>
+              {password && (() => {
+                const v = validatePassword(password);
+                return (
+                  <div className="p-2 bg-zinc-800/50 border border-zinc-700 rounded-lg space-y-1">
+                    <p className="text-xs font-semibold text-zinc-300 mb-1">Requirements:</p>
+                    {[
+                      { ok: v.minLength, label: '8+ characters' },
+                      { ok: v.hasUpperCase, label: 'Uppercase (A-Z)' },
+                      { ok: v.hasNumber, label: 'Number (0-9)' },
+                      { ok: v.hasSpecialChar, label: 'Special (@#$%...)' },
+                    ].map(({ ok, label }) => (
+                      <div key={label} className="flex items-center gap-1.5">
+                        {ok ? (
+                          <Check className="h-3 w-3 text-green-500 flex-shrink-0" />
+                        ) : (
+                          <X className="h-3 w-3 text-red-500 flex-shrink-0" />
+                        )}
+                        <span className={`text-xs ${ok ? 'text-green-500' : 'text-zinc-400'}`}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               <Button
                 type="submit"

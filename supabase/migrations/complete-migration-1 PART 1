@@ -609,7 +609,7 @@ ALTER TABLE public.trades ADD CONSTRAINT trades_outcome_check
 
 ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS trades_broker_check;
 ALTER TABLE public.trades ADD CONSTRAINT trades_broker_check 
-  CHECK (broker IN ('manual', 'interactive_brokers', 'td_ameritrade', 'alpaca', 'tradingview', 'mt4', 'mt5', 'ninja_trader'));
+  CHECK (broker IN ('manual', 'interactive_brokers', 'td_ameritrade', 'alpaca', 'tradingview', 'mt4', 'mt5', 'ninja_trader', 'tradovate'));
 
 ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS trades_strategy_id_fkey;
 ALTER TABLE public.trades ADD CONSTRAINT trades_strategy_id_fkey 
@@ -621,7 +621,7 @@ ALTER TABLE public.trades ADD CONSTRAINT trades_deleted_by_fkey
 
 ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS check_import_source;
 ALTER TABLE public.trades ADD CONSTRAINT check_import_source 
-  CHECK (import_source IN ('manual', 'snaptrade', 'csv', 'api'));
+  CHECK (import_source IN ('manual', 'snaptrade', 'csv', 'api', 'tradovate'));
 
 UPDATE public.trades 
 SET import_source = 'manual' 
@@ -1345,7 +1345,7 @@ CREATE TABLE IF NOT EXISTS public.broker_connections (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   broker TEXT NOT NULL CHECK (broker IN (
     'interactive_brokers', 'td_ameritrade', 'alpaca', 'tradingview',
-    'mt4', 'mt5', 'ninja_trader', 'manual'
+    'mt4', 'mt5', 'ninja_trader', 'manual', 'tradovate'
   )),
   status TEXT NOT NULL DEFAULT 'disconnected' CHECK (status IN (
     'connected', 'disconnected', 'error', 'pending'
@@ -1799,142 +1799,20 @@ BEGIN
   RAISE NOTICE '      🔧 get_remaining_trades() - returns remaining trades info';
 END $$;
 -- ═══════════════════════════════════════════════════════════════
--- 📊 get_trade_limit - Returns trade limit based on account type
+-- 📊 get_trade_limit - authoritative version in DB_4 (runs later)
 -- ═══════════════════════════════════════════════════════════════
 
--- 🔥 FIX: Drop existing function first (parameter name conflict)
 DROP FUNCTION IF EXISTS public.get_trade_limit(TEXT) CASCADE;
 
-CREATE OR REPLACE FUNCTION public.get_trade_limit(plan_type TEXT)
-RETURNS INTEGER
-LANGUAGE plpgsql
-IMMUTABLE
-AS $$
-BEGIN
-RETURN CASE LOWER(COALESCE(plan_type, 'free'))
-  WHEN 'free' THEN 15
-  WHEN 'basic' THEN 25
-  WHEN 'premium' THEN 999999
-  WHEN 'admin' THEN 999999
-  WHEN 'vip' THEN 999999
-  WHEN 'beta' THEN 999999
-  ELSE 15
-  END;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_trade_limit(TEXT) TO service_role;
-
-COMMENT ON FUNCTION public.get_trade_limit IS 
-'v9.4.3: Returns trade limit based on account type. FREE=10 lifetime, BASIC/TRIAL=25/month, PREMIUM=unlimited.';
-
 -- ═══════════════════════════════════════════════════════════════
 
 
 -- ═══════════════════════════════════════════════════════════════
--- 📊 get_remaining_trades - Returns remaining trades info
+-- 📊 get_remaining_trades - DB_4 is authoritative
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION public.get_remaining_trades(user_id_param UUID)
-RETURNS TABLE (
-  remaining INTEGER,
-  used INTEGER,
-  max_limit INTEGER,
-  can_create BOOLEAN,
-  account_type TEXT,
-  is_in_trial BOOLEAN,
-  trial_days_remaining INTEGER,
-  needs_subscription BOOLEAN
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path = public
-AS $$
-DECLARE
-  v_profile RECORD;
-  v_limit INTEGER;
-  v_trades_used INTEGER;
-  v_trial_days INTEGER;
-  v_needs_sub BOOLEAN;
-BEGIN
-  SELECT 
-    p.account_type,
-    p.role,
-    p.subscription_status,
-    p.is_in_trial,
-    p.trial_ends_at,
-    COALESCE(p.current_month_trades_count, 0) as monthly_trades
-  INTO v_profile
-  FROM public.profiles p
-  WHERE p.id = user_id_param;
-  
-  -- ✅ FIXED: User not found - return 'none', not 'free'
-  -- User not found - return basic defaults
-  IF NOT FOUND THEN
-    RETURN QUERY SELECT 
-      0::INTEGER,
-      0::INTEGER,
-      25::INTEGER,  -- Default to basic limit
-      FALSE,
-      'basic'::TEXT,
-      FALSE,
-      NULL::INTEGER,
-      TRUE;  -- needs_subscription = true
-    RETURN;
-  END IF;
-  v_limit := public.get_trade_limit(v_profile.account_type);
-  
-  -- ✅ FIXED: All plans use monthly trades
-  v_trades_used := v_profile.monthly_trades;
-  
-  -- Calculate trial days
-  IF v_profile.is_in_trial AND v_profile.trial_ends_at IS NOT NULL THEN
-    v_trial_days := GREATEST(0, EXTRACT(DAY FROM v_profile.trial_ends_at - NOW())::INTEGER);
-  ELSE
-    v_trial_days := NULL;
-  END IF;
-  
-  -- Check if needs subscription
-  v_needs_sub := (
-    v_profile.subscription_status IS NULL OR
-    v_profile.subscription_status IN ('expired', 'cancelled') OR
-    v_profile.account_type IS NULL
-  );
-  
-  -- Premium/Admin = unlimited
-  IF v_profile.role IN ('admin', 'super_admin') OR v_profile.account_type IN ('premium', 'admin', 'vip') THEN
-    RETURN QUERY SELECT 
-      999999::INTEGER,
-      v_trades_used::INTEGER,
-      999999::INTEGER,
-      TRUE,
-      v_profile.account_type::TEXT,
-      COALESCE(v_profile.is_in_trial, FALSE),
-      v_trial_days,
-      FALSE;
-    RETURN;
-  END IF;
-  
-  -- Basic/Trial users
-  RETURN QUERY SELECT 
-    GREATEST(0, v_limit - v_trades_used)::INTEGER,
-    v_trades_used::INTEGER,
-    v_limit::INTEGER,
-    (v_trades_used < v_limit AND NOT v_needs_sub),
-    COALESCE(v_profile.account_type, 'none')::TEXT,
-    COALESCE(v_profile.is_in_trial, FALSE),
-    v_trial_days,
-    v_needs_sub;
-END;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_remaining_trades(UUID) TO service_role;
-
-COMMENT ON FUNCTION public.get_remaining_trades IS 
-'v9.4.3: Returns detailed trade limit info for a user including remaining, used, max, and can_create flag.';
+-- DB_1: DROP only — DB_4 creates the canonical version
+DROP FUNCTION IF EXISTS public.get_remaining_trades(UUID) CASCADE;
 
 DO $$
 BEGIN
@@ -2544,26 +2422,11 @@ USING (
 -- 🔐 enable_admin_mode() - Required for admin impersonation
 -- ═══════════════════════════════════════════════════════════════
 
-CREATE OR REPLACE FUNCTION public.enable_admin_mode()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  IF NOT public.rls_check_admin() THEN
-    RAISE EXCEPTION 'Admin access required';
-  END IF;
-  
-  PERFORM set_config('app.admin_mode', 'true', true);
-END;
-$$;
+-- enable_admin_mode: authoritative version in DB_2 (BOOLEAN return + rls_check)
+DROP FUNCTION IF EXISTS public.enable_admin_mode() CASCADE;
 
-GRANT EXECUTE ON FUNCTION public.enable_admin_mode() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.enable_admin_mode() TO service_role;
-
-COMMENT ON FUNCTION public.enable_admin_mode() IS 
-'v9.4.3: Enables admin mode for the current transaction. Required for admin impersonation.';
+-- NOTE: COMMENT intentionally removed - function is created in DB_2
+-- Adding COMMENT here would fail since the function doesn't exist yet at this stage.
 
 -- ═══════════════════════════════════════════════════════════════
 -- 🔍 VERIFICATION
