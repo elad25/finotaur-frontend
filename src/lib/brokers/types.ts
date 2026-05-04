@@ -23,9 +23,7 @@ export interface BrokerConnection {
   connected_at: string;
   last_sync_at?: string;
   error_message?: string;
-  // Encrypted OAuth tokens (never expose to frontend)
-  access_token?: string;
-  refresh_token?: string;
+  // OAuth token expiry (plaintext columns dropped; tokens stored encrypted-only)
   expires_at?: string;
 }
 
