@@ -26,9 +26,10 @@ export interface FinotaurTradeData {
   side: 'LONG' | 'SHORT';           // UPPERCASE - DB constraint!
   quantity: number;
   entry_price: number;
-  stop_price: number;                // REQUIRED for R calculation!
+  stop_price: number | null;         // B2: NULL when no real stop captured from broker
+  risk_estimated: boolean;           // B2: TRUE when stop_price is estimated/missing
   open_at: string;                   // ISO timestamp
-  
+
   // === OPTIONAL/NULLABLE FIELDS ===
   exit_price: number | null;
   close_at: string | null;           // null = open trade
@@ -41,7 +42,8 @@ export interface FinotaurTradeData {
   import_source: 'tradovate';
   multiplier: number;                // product.valuePerPoint
   asset_class: 'futures';
-  
+  idempotency_key: string;           // B3: UNIQUE composite — prevents duplicate inserts on re-sync
+
   // === BROKER CONNECTION (from migration) ===
   broker_connection_id?: string;
   broker_account_id?: string;
@@ -225,19 +227,19 @@ class TradovateTradeMapperService {
     
     // Get multiplier (valuePerPoint is the $ value per point movement)
     const multiplier = product.valuePerPoint;
-    
-    // Calculate stop price (REQUIRED for R calculation)
-    // Using 2% from entry as default - ideally should come from order data
-    const stopDistance = entryFill.price * 0.02;
-    const stopPrice = direction === 'long'
-      ? entryFill.price - stopDistance
-      : entryFill.price + stopDistance;
-    
+
+    // B2: Tradovate fills do not include stop orders. We send NULL stop_price
+    // and flag the trade as risk_estimated=true so the user can fill in the
+    // real stop manually. Without a real stop, the trigger leaves R-multiples
+    // NULL — which is correct (R is meaningless without a real stop).
+    const stopPrice: number | null = null;
+    const riskEstimated = true;
+
     // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
-    
+
     const now = new Date().toISOString();
-    
+
     // Build trade data - only fields we should send
     // pnl, outcome, R-values will be calculated by trigger!
     return {
@@ -247,7 +249,8 @@ class TradovateTradeMapperService {
       side: sideUppercase,
       quantity,
       entry_price: entryFill.price,
-      stop_price: stopPrice,      // REQUIRED for R calculation!
+      stop_price: stopPrice,
+      risk_estimated: riskEstimated,
       open_at: openAt,
       
       // Optional/nullable
@@ -262,15 +265,14 @@ class TradovateTradeMapperService {
       import_source: 'tradovate',
       multiplier,
       asset_class: 'futures',
-      
+      idempotency_key: `tradovate::${brokerConnectionId ?? 'none'}::${externalId}`,
+
       // Broker connection references
       broker_connection_id: brokerConnectionId,
       broker_account_id: brokerAccountId,
-      broker_name: 'tradovate',
-      broker_trade_id: `${entryFill.id}_${exitFill?.id ?? 'open'}`,
       synced_at: now,
       sync_source: 'tradovate_api',
-      
+
       // Raw data for debugging
       raw_data: {
         entryFill: {
@@ -318,18 +320,17 @@ class TradovateTradeMapperService {
     const direction: 'long' | 'short' = position.netPos > 0 ? 'long' : 'short';
     const quantity = Math.abs(position.netPos);
     const multiplier = product.valuePerPoint;
-    
-    // Calculate stop (REQUIRED for R calculation)
-    const stopDistance = position.netPrice * 0.02;
-    const stopPrice = direction === 'long'
-      ? position.netPrice - stopDistance
-      : position.netPrice + stopDistance;
-    
+
+    // B2: Open positions from Tradovate API do not expose stop orders.
+    // Send NULL + risk_estimated=true so the user can supply the real stop.
+    const stopPrice: number | null = null;
+    const riskEstimated = true;
+
     // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
-    
+
     const now = new Date().toISOString();
-    
+
     return {
       // Required fields
       user_id: userId,
@@ -338,6 +339,7 @@ class TradovateTradeMapperService {
       quantity,
       entry_price: position.netPrice,
       stop_price: stopPrice,
+      risk_estimated: riskEstimated,
       open_at: new Date(position.timestamp).toISOString(),
       
       // Open position - no exit
@@ -352,15 +354,14 @@ class TradovateTradeMapperService {
       import_source: 'tradovate',
       multiplier,
       asset_class: 'futures',
-      
+      idempotency_key: `tradovate::${brokerConnectionId ?? 'none'}::tradovate_pos_${position.id}`,
+
       // Broker connection references
       broker_connection_id: brokerConnectionId,
       broker_account_id: brokerAccountId,
-      broker_name: 'tradovate',
-      broker_trade_id: `pos_${position.id}`,
       synced_at: now,
       sync_source: 'tradovate_api',
-      
+
       // Raw data
       raw_data: {
         position: {
@@ -423,15 +424,18 @@ class TradovateTradeMapperService {
     // Numeric validations
     if (trade.quantity <= 0) errors.push('Invalid quantity (must be > 0)');
     if (trade.entry_price <= 0) errors.push('Invalid entry_price (must be > 0)');
-    if (trade.stop_price <= 0) errors.push('Invalid stop_price (must be > 0)');
     if (trade.multiplier <= 0) errors.push('Invalid multiplier (must be > 0)');
-    
-    // Stop price logic
-    if (trade.side === 'LONG' && trade.stop_price >= trade.entry_price) {
-      errors.push('For LONG, stop_price must be below entry_price');
-    }
-    if (trade.side === 'SHORT' && trade.stop_price <= trade.entry_price) {
-      errors.push('For SHORT, stop_price must be above entry_price');
+
+    // B2: stop_price may be NULL when risk_estimated=true (broker did not
+    // expose a real stop). Validate the value only when one is present.
+    if (trade.stop_price !== null && trade.stop_price !== undefined) {
+      if (trade.stop_price <= 0) errors.push('Invalid stop_price (must be > 0 when set)');
+      if (trade.side === 'LONG' && trade.stop_price >= trade.entry_price) {
+        errors.push('For LONG, stop_price must be below entry_price');
+      }
+      if (trade.side === 'SHORT' && trade.stop_price <= trade.entry_price) {
+        errors.push('For SHORT, stop_price must be above entry_price');
+      }
     }
     
     // Broker validation
