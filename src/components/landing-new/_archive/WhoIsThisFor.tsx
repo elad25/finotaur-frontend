@@ -1,4 +1,8 @@
-// src/components/landing-new/WhoIsThisFor.tsx
+// UNUSED — archived 2026-05-05. Component was orphaned during landing
+// refactor. Not imported anywhere. Kept for potential future
+// re-integration. If still unused after 90 days, may delete.
+//
+// src/components/landing-new/_archive/WhoIsThisFor.tsx
 // ================================================
 // 🔥 WHO THIS IS FOR / NOT FOR
 // Goal: Raise status & reduce refunds through qualification
