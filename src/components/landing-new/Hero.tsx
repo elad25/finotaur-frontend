@@ -531,6 +531,10 @@ const Hero = () => {
         src="/logo.png"
         alt=""
         aria-hidden="true"
+        width={1024}
+        height={648}
+        loading="eager"
+        fetchPriority="low"
         className="absolute pointer-events-none select-none"
         style={{
           left: '-18%',
