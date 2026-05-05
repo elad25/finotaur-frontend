@@ -118,7 +118,9 @@ export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
       </div>
       
       <div className="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
-        {Object.entries(BROKER_CONFIGS).map(([key, config]) => {
+        {Object.entries(BROKER_CONFIGS)
+          .filter(([key]) => key !== 'interactive_brokers' || import.meta.env.VITE_ENABLE_IBKR === 'true')
+          .map(([key, config]) => {
           const broker = key as BrokerName;
           const isAvailable = config.status === 'available' || config.status === 'beta';
           

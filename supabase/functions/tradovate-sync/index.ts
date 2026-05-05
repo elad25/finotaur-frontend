@@ -181,9 +181,6 @@ async function processFill(
         .eq('id', openPos.id);
     }
 
-    // Trigger copy rules on close
-    await supabaseAdmin.rpc('process_copy_rules', { p_trade_id: openPos.open_trade_id });
-
     return 'updated';
   }
 
@@ -192,9 +189,12 @@ async function processFill(
     .from('trades')
     .insert({
       user_id:              cred.user_id,
-      tradovate_fill_id:    fill.id,
-      tradovate_order_id:   fill.orderId,
-      tradovate_account_id: cred.account_id,
+      // NOTE: cred is from tradovate_credentials, NOT broker_connections.
+      //       broker_connection_id / broker_account_id intentionally omitted
+      //       (NULL) — types don't match. J2 will add lookup. See OQ-22.
+      external_id:          `tradovate::fill::${fill.id}`,
+      broker_trade_id:      String(fill.id),
+      idempotency_key:      `tradovate::${cred.user_id}::${cred.environment}::${fill.id}`,
       symbol,
       side:                 fillSide,
       quantity:             fill.qty,
@@ -231,9 +231,6 @@ async function processFill(
       open_trade_id:        newTrade.id,
       last_updated_at:      fillAt,
     }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
-
-  // Trigger copy rules on open
-  await supabaseAdmin.rpc('process_copy_rules', { p_trade_id: newTrade.id });
 
   return 'inserted';
 }

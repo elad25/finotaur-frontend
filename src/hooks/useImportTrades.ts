@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 // ✅ FIXED: Correct import path
 import type { FinotaurTrade } from '@/utils/importUtils';
+import { buildCSVIdempotencyKey } from '@/lib/trades/idempotencyKey';
 
 // ================================================
 // TYPES
@@ -106,7 +107,7 @@ export function useImportTrades(): UseImportTradesReturn {
       // STEP 2: Prepare trades for insertion
       // ================================================
       
-      const tradesToInsert = newTrades.map(trade => ({
+      const tradesToInsert = await Promise.all(newTrades.map(async (trade) => ({
         user_id: trade.user_id,
         symbol: trade.symbol,
         side: trade.side,
@@ -133,10 +134,22 @@ export function useImportTrades(): UseImportTradesReturn {
         grade: trade.grade || null,
         imported_from: trade.imported_from || null,
         external_id: trade.external_id || null,
+        idempotency_key: await buildCSVIdempotencyKey(
+          trade.user_id,
+          trade.imported_from || 'csv',
+          {
+            symbol: trade.symbol,
+            quantity: trade.quantity,
+            entry_price: trade.entry_price,
+            open_at: trade.open_at,
+            exit_price: trade.exit_price,
+            close_at: trade.close_at,
+          },
+        ),
         // Timestamps
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      }));
+      })));
 
       // ================================================
       // STEP 3: Batch insert trades

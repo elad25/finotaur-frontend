@@ -19524,8 +19524,9 @@ CREATE TABLE IF NOT EXISTS "public"."trades" (
     "ib_conid" character varying(20),
     "ib_exec_id" character varying(100),
     "portfolio_id" "uuid",
+    "idempotency_key" "text" NOT NULL,
     CONSTRAINT "check_import_source" CHECK (("import_source" = ANY (ARRAY['manual'::"text", 'snaptrade'::"text", 'csv'::"text", 'api'::"text", 'tradovate'::"text"]))),
-    CONSTRAINT "trades_broker_check" CHECK (("broker" = ANY (ARRAY['manual'::"text", 'interactive_brokers'::"text", 'td_ameritrade'::"text", 'alpaca'::"text", 'tradingview'::"text", 'mt4'::"text", 'mt5'::"text", 'ninja_trader'::"text", 'tradovate'::"text"]))),
+    CONSTRAINT "trades_broker_check" CHECK (("broker" = ANY (ARRAY['manual'::"text", 'interactive_brokers'::"text", 'alpaca'::"text", 'tradingview'::"text", 'mt4'::"text", 'mt5'::"text", 'ninja_trader'::"text", 'tradovate'::"text"]))),
     CONSTRAINT "trades_input_mode_check" CHECK ((("input_mode" = ANY (ARRAY['summary'::"text", 'risk-only'::"text"])) OR ("input_mode" IS NULL))),
     CONSTRAINT "trades_outcome_check" CHECK ((("outcome" = ANY (ARRAY['WIN'::"text", 'LOSS'::"text", 'BE'::"text", 'OPEN'::"text"])) OR ("outcome" IS NULL))),
     CONSTRAINT "trades_session_check" CHECK ((("session" IS NULL) OR ("lower"(TRIM(BOTH FROM "session")) = ANY (ARRAY['asia'::"text", 'london'::"text", 'newyork'::"text"])))),
@@ -20927,7 +20928,7 @@ CREATE TABLE IF NOT EXISTS "public"."broker_connections" (
     "credentials_encrypted" "bytea",
     "credentials_iv" "bytea",
     "token_expires_at" timestamp with time zone,
-    CONSTRAINT "broker_connections_broker_check" CHECK (("broker" = ANY (ARRAY['interactive_brokers'::"text", 'td_ameritrade'::"text", 'alpaca'::"text", 'tradingview'::"text", 'mt4'::"text", 'mt5'::"text", 'ninja_trader'::"text", 'manual'::"text"]))),
+    CONSTRAINT "broker_connections_broker_check" CHECK (("broker" = ANY (ARRAY['manual'::"text", 'interactive_brokers'::"text", 'alpaca'::"text", 'tradingview'::"text", 'mt4'::"text", 'mt5'::"text", 'ninja_trader'::"text", 'tradovate'::"text"]))),
     CONSTRAINT "broker_connections_status_check" CHECK (("status" = ANY (ARRAY['connected'::"text", 'disconnected'::"text", 'error'::"text", 'pending'::"text"])))
 );
 
@@ -29827,6 +29828,10 @@ CREATE UNIQUE INDEX "idx_trades_external_id_unique" ON "public"."trades" USING "
 
 
 
+CREATE UNIQUE INDEX "trades_idempotency_key_unique" ON "public"."trades" USING "btree" ("idempotency_key");
+
+
+
 CREATE INDEX "idx_trades_has_partial_exits" ON "public"."trades" USING "btree" ((("partial_exits" <> '[]'::"jsonb"))) WHERE ("partial_exits" IS NOT NULL);
 
 
@@ -30283,7 +30288,8 @@ CREATE OR REPLACE TRIGGER "set_updated_at" BEFORE UPDATE ON "public"."trades" FO
 
 
 
-CREATE OR REPLACE TRIGGER "support-emails-http" AFTER INSERT OR UPDATE ON "public"."support_tickets" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://xsgbtptkueabylkxibly.supabase.co/functions/v1/send-support-email', 'POST', '{"Content-type":"application/json","Authorization":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzZ2J0cHRrdWVhYnlsa3hpYmx5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTM4ODY3MCwiZXhwIjoyMDc2OTY0NjcwfQ.mcZbqDwE2eixXYtczH5C3oA76cI20HmE2cnkwdfISgQ"}', '{}', '5000');
+-- TRIGGER support-emails-http: removed 2026-05-05 after Supabase JWT-based API keys disabled.
+-- Will be re-created in next session with Secret API key bearer token. See OQ-30.
 
 
 
