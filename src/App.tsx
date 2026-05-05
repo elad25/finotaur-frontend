@@ -65,7 +65,7 @@ import { AffiliateTracker } from "@/features/affiliate/components/AffiliateTrack
 import { FEATURES } from "@/config/features";
 
 // PUBLIC PAGES
-import LandingPage from "@/pages/landing/LandingPage";
+const LandingPage = lazy(() => import("@/pages/landing/LandingPage"));
 import Login from "@/pages/auth/Login";
 import Register from "@/pages/auth/Register";
 import ForgotPassword from '@/pages/auth/ForgotPassword';
@@ -299,7 +299,7 @@ function AppContent() {
           <Route path="/design-lab" element={<DesignLab />} />
         )}
         {/* PUBLIC ROUTES */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<SuspenseRoute><LandingPage /></SuspenseRoute>} />
         <Route path="/login" element={<Login />} />
         <Route path="/auth/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
