@@ -24,40 +24,9 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
-
-        .heading-serif {
-          font-family: 'Playfair Display', Georgia, serif;
-        }
-
-        @keyframes hero-orb {
-          0%, 100% { transform: scale(1); opacity: 0.08; }
-          50% { transform: scale(1.1); opacity: 0.12; }
-        }
-        .hero-background-orb {
-          animation: hero-orb 8s ease-in-out infinite;
-        }
-
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
-        }
-
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-8px); }
-        }
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-
-        @keyframes glow-pulse {
-          0%, 100% { box-shadow: 0 0 20px rgba(201,166,70,0.2); }
-          50% { box-shadow: 0 0 40px rgba(201,166,70,0.4); }
-        }
-        .animate-glow-pulse {
-          animation: glow-pulse 3s ease-in-out infinite;
-        }
+        /* Landing-only global styles. .heading-serif and dead animations
+           (hero-orb, shimmer, float, glow-pulse) removed 2026-05-05.
+           Playfair @import moved to index.html. */
 
         html { scroll-behavior: smooth; }
 
