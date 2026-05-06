@@ -5,8 +5,10 @@
 
 /* ============================================
    FONTS
+   Playfair Display @import removed — font now falls back to Georgia /
+   system serif via the chain in .heading-serif. Site-wide canonical font
+   loading is in src/styles/globals.css (Inter + JetBrains Mono + Outfit).
    ============================================ */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap');
 
 .heading-serif {
   font-family: 'Playfair Display', Georgia, serif;

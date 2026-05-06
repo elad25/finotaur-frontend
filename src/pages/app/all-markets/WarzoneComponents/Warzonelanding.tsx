@@ -1330,7 +1330,6 @@ const LandingView = memo(function LandingView({
     <div className="min-h-screen bg-[#0a0806] overflow-hidden relative">
       {/* CSS Animations */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
         .heading-serif{font-family:'Playfair Display',Georgia,serif}
         @keyframes hero-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}
         .hero-orb{animation:hero-orb 8s ease-in-out infinite}
