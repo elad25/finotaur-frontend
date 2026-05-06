@@ -171,17 +171,36 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         return { success: false, error: `Sync not implemented for ${conn.broker}` };
       }
 
-      const { error: e } = await supabase.functions.invoke('tradovate-sync', {
+      const { data, error: e } = await supabase.functions.invoke('tradovate-sync', {
         body: { userId, environment: conn.environment, mode: 'manual' },
       });
       if (e) {
-        toast.error('Sync failed');
+        toast.error('Sync failed — network or server error');
         return { success: false, error: e.message };
       }
+
+      // Always invalidate — broker_connections may have flipped to is_active=false
+      // inside the edge function (e.g. token expired path), regardless of HTTP status.
       invalidate();
       qc.invalidateQueries({ queryKey: ['trades'] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success('Sync triggered — new trades will appear shortly');
+
+      // L4 (F2): inspect business-level result. HTTP 200 ≠ business success —
+      // tradovate-sync returns {synced, totalInserted, totalErrors} and a non-zero
+      // totalErrors means the function caught an exception (e.g. TOKEN_EXPIRED).
+      const body = (data ?? {}) as { totalErrors?: number; totalInserted?: number };
+      const totalErrors = body.totalErrors ?? 0;
+      const totalInserted = body.totalInserted ?? 0;
+
+      if (totalErrors > 0) {
+        toast.error('Sync failed — please reconnect your broker.');
+        return { success: false, error: 'Connection requires re-authentication' };
+      }
+      if (totalInserted > 0) {
+        toast.success(`Sync complete — ${totalInserted} new trade${totalInserted === 1 ? '' : 's'} imported`);
+      } else {
+        toast.success('Sync complete — no new trades');
+      }
       return { success: true };
     },
     [userId, connections, invalidate, qc],
