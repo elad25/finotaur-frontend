@@ -1,2 +1,3 @@
+https://www.finotaur.com/* https://finotaur.com/:splat 301!
 /api/* https://finotaur-server-production.up.railway.app/api/:splat 200
 /* /index.html 200
