@@ -1,7 +1,6 @@
 // lib/brokers/ib/ib-oauth.ts
 // Interactive Brokers OAuth 2.0 integration
 
-import { createClient } from '@supabase/supabase-js';
 
 interface IBOAuthConfig {
   clientId: string;
@@ -14,9 +13,9 @@ interface IBOAuthConfig {
 
 // IB OAuth configuration
 const IB_CONFIG: IBOAuthConfig = {
-  clientId: process.env.IB_CLIENT_ID!,
-  clientSecret: process.env.IB_CLIENT_SECRET!,
-  redirectUri: process.env.IB_REDIRECT_URI || 'https://finotaur.com/api/brokers/ib/callback',
+  clientId: (import.meta.env.VITE_IB_CLIENT_ID as string | undefined) || '',
+  clientSecret: (import.meta.env.VITE_IB_CLIENT_SECRET as string | undefined) || '',
+  redirectUri: (import.meta.env.VITE_IB_REDIRECT_URI as string | undefined) || 'https://finotaur.com/api/brokers/ib/callback',
   authUrl: 'https://api.ibkr.com/v1/oauth2/authorize',
   tokenUrl: 'https://api.ibkr.com/v1/oauth2/token',
   apiBaseUrl: 'https://api.ibkr.com/v1',
@@ -24,6 +23,9 @@ const IB_CONFIG: IBOAuthConfig = {
 
 // Step 1: Generate authorization URL
 export function getIBAuthorizationUrl(userId: string): string {
+  if (!IB_CONFIG.clientId) {
+    throw new Error('IBKR is not configured (VITE_IB_CLIENT_ID missing). IBKR ships in F4.');
+  }
   const state = encodeURIComponent(JSON.stringify({
     userId,
     timestamp: Date.now(),
@@ -96,79 +98,17 @@ export async function refreshAccessToken(refreshToken: string): Promise<{
 
 // Step 4: Save encrypted tokens to database
 export async function saveTokens(
-  userId: string,
-  accessToken: string,
-  refreshToken: string,
-  expiresIn: number
-) {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-  
-  // Encrypt tokens before storing (use your encryption method)
-  const encryptedAccessToken = await encryptToken(accessToken);
-  const encryptedRefreshToken = await encryptToken(refreshToken);
-  
-  const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-  
-  const { error } = await supabase
-    .from('broker_connections')
-    .upsert({
-      user_id: userId,
-      broker: 'interactive_brokers',
-      status: 'connected',
-      access_token: encryptedAccessToken,
-      refresh_token: encryptedRefreshToken,
-      expires_at: expiresAt,
-      connected_at: new Date().toISOString(),
-    });
-  
-  if (error) {
-    throw new Error(`Failed to save tokens: ${error.message}`);
-  }
+  _userId: string,
+  _accessToken: string,
+  _refreshToken: string,
+  _expiresIn: number
+): Promise<void> {
+  throw new Error('IBKR saveTokens is server-side; not implemented in frontend (F4 will rewire).');
 }
 
 // Step 5: Get valid access token (refresh if needed)
-export async function getValidAccessToken(userId: string): Promise<string> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-  
-  const { data: connection, error } = await supabase
-    .from('broker_connections')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('broker', 'interactive_brokers')
-    .single();
-  
-  if (error || !connection) {
-    throw new Error('No IB connection found');
-  }
-  
-  // Check if token is expired
-  const now = new Date();
-  const expiresAt = new Date(connection.expires_at);
-  
-  if (now >= expiresAt) {
-    // Token expired, refresh it
-    const decryptedRefreshToken = await decryptToken(connection.refresh_token);
-    const tokens = await refreshAccessToken(decryptedRefreshToken);
-    
-    // Save new tokens
-    await saveTokens(
-      userId,
-      tokens.access_token,
-      tokens.refresh_token,
-      tokens.expires_in
-    );
-    
-    return tokens.access_token;
-  }
-  
-  // Token still valid
-  return await decryptToken(connection.access_token);
+export async function getValidAccessToken(_userId: string): Promise<string> {
+  throw new Error('IBKR getValidAccessToken is server-side; not implemented in frontend (F4 will rewire).');
 }
 
 // Encryption helpers (implement with your preferred method)
