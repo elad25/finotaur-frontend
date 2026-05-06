@@ -245,13 +245,13 @@ export const ActiveSubscriberView = memo(function ActiveSubscriberView({
                   WebkitMaskImage: 'radial-gradient(ellipse 70% 80% at 50% 50%, black 30%, transparent 70%)',
                 }}
               >
-                <img 
-                  src={CONFIG.BULL_IMAGE} 
-                  alt="War Zone Bull" 
-                  className="w-[500px] md:w-[600px] lg:w-[700px] h-auto"
-                  style={{ 
-                    filter: 'drop-shadow(0 0 80px rgba(255,130,30,0.8)) drop-shadow(0 0 40px rgba(255,100,20,0.6))',
-                    mixBlendMode: 'lighten',
+                <div
+                  role="img"
+                  aria-label="War Zone Bull"
+                  className="w-[500px] md:w-[600px] lg:w-[700px] aspect-square"
+                  style={{
+                    background: 'radial-gradient(ellipse at center, rgba(255,130,30,0.18), rgba(255,100,20,0.08) 50%, transparent 75%)',
+                    filter: 'drop-shadow(0 0 80px rgba(255,130,30,0.5))',
                     marginTop: '-22%',
                     marginBottom: '-45%',
                   }}

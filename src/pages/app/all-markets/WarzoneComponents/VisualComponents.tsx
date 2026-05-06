@@ -251,20 +251,24 @@ export const FullPageLoader = memo(function FullPageLoader({ text = 'Loading...'
 // BULL IMAGE COMPONENT
 // ============================================
 
-export const BullImage = memo(function BullImage({ 
+export const BullImage = memo(function BullImage({
   className,
   style,
-}: { 
+}: {
   className?: string;
   style?: React.CSSProperties;
 }) {
+  // Placeholder — original Bull-WarZone.png removed pending UI redesign.
   return (
-    <img 
-      src="/assets/Bull-WarZone.png"
-      alt="War Zone Bull" 
+    <div
+      role="img"
+      aria-label="War Zone Bull"
       className={className}
-      style={style}
-      loading="eager"
+      style={{
+        aspectRatio: '1 / 1',
+        background: 'radial-gradient(ellipse at center, rgba(201,166,70,0.18), transparent 70%)',
+        ...style,
+      }}
     />
   );
 });

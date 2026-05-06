@@ -37,7 +37,6 @@ export const CONFIG = {
   WHOP_CHECKOUT_BASE_URL_MONTHLY: 'https://whop.com/checkout/plan_U6lF2eO5y9469',
   WHOP_CHECKOUT_BASE_URL_YEARLY: 'https://whop.com/checkout/plan_bp2QTGuwfpj0A',
   API_BASE: import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app',
-  BULL_IMAGE: '/assets/Bull-WarZone.png',
 } as const;
 
 export const YEARLY_SAVINGS = Math.round((CONFIG.MONTHLY_PRICE * 12) - CONFIG.YEARLY_PRICE);

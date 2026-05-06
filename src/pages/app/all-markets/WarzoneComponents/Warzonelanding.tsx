@@ -1259,13 +1259,14 @@ const HeroDesktop = memo(function HeroDesktop({
               WebkitMaskImage: 'radial-gradient(ellipse 75% 80% at 45% 50%, black 30%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.2) 70%, transparent 85%)',
             }}
           >
-            <img 
-              src={CONFIG.BULL_IMAGE}
-              alt="War Zone Bull" 
-              className="w-[500px] xl:w-[580px] 2xl:w-[650px] h-auto object-contain pointer-events-none select-none"
-              style={{ filter: 'drop-shadow(0 0 80px rgba(255,150,50,0.3))' }}
-              draggable={false}
-              onContextMenu={(e) => e.preventDefault()}
+            <div
+              role="img"
+              aria-label="War Zone Bull"
+              className="w-[500px] xl:w-[580px] 2xl:w-[650px] aspect-square pointer-events-none select-none"
+              style={{
+                background: 'radial-gradient(ellipse at center, rgba(255,150,50,0.18), transparent 70%)',
+                filter: 'drop-shadow(0 0 80px rgba(255,150,50,0.3))',
+              }}
             />
           </div>
           
