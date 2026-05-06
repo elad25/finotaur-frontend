@@ -534,7 +534,8 @@ const Hero = () => {
         width={1024}
         height={648}
         loading="eager"
-        fetchPriority="low"
+        // @ts-expect-error — fetchpriority is a valid HTML attr; React 18 types lag (added in React 19)
+        fetchpriority="low"
         className="absolute pointer-events-none select-none"
         style={{
           left: '-18%',
