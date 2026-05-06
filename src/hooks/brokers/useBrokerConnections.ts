@@ -1,0 +1,201 @@
+// src/hooks/brokers/useBrokerConnections.ts
+// ─────────────────────────────────────────────────────────────────────
+// Generic hook over public.broker_connections (post-F1.A architecture).
+// Tradovate now lives here (was tradovate_credentials). IBKR will follow
+// after J2. Other brokers (alpaca, mt4/5, etc.) plug in by reusing the
+// same data layer when their connect flows ship.
+//
+// Usage in BrokerConnectionModal (Phase 10):
+//   const { connections, isLoading, disconnect, reconnect, syncNow } =
+//     useBrokerConnections({ active: true });   // Active section
+//   const { connections: inactive } =
+//     useBrokerConnections({ active: false });  // Re-auth section
+// ─────────────────────────────────────────────────────────────────────
+
+import { useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+import { toast } from 'sonner';
+import type { BrokerConnection, BrokerName } from '@/lib/brokers/types';
+
+interface UseBrokerConnectionsOptions {
+  /** When `true`, returns only `is_active=true` rows. When `false`, only `is_active=false`. Omit for both. */
+  active?: boolean;
+  /** Filter by broker. Omit for all brokers. */
+  broker?: BrokerName;
+}
+
+const SELECT_COLS =
+  'id,user_id,broker,status,is_active,account_id,account_name,environment,connection_name,' +
+  'connected_at,disconnected_at,last_sync_at,last_successful_sync_at,error_count,last_error,' +
+  'last_error_at,token_expires_at,connection_data,created_at,updated_at';
+
+const queryKey = (userId: string, opts: UseBrokerConnectionsOptions) =>
+  ['broker_connections', userId, opts.active ?? 'all', opts.broker ?? 'all'] as const;
+
+async function fetchConnections(
+  userId: string,
+  opts: UseBrokerConnectionsOptions,
+): Promise<BrokerConnection[]> {
+  let q = supabase
+    .from('broker_connections')
+    .select(SELECT_COLS)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+
+  if (opts.active !== undefined) q = q.eq('is_active', opts.active);
+  if (opts.broker) q = q.eq('broker', opts.broker);
+
+  const { data, error } = await q;
+  if (error?.code === '42P01') return []; // table missing — defensive (e.g. fresh dev DB)
+  if (error) throw error;
+  return (data ?? []) as BrokerConnection[];
+}
+
+export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
+  const { id: userId } = useEffectiveUser();
+  const qc = useQueryClient();
+
+  const { data: connections = [], isLoading, isError, error } = useQuery({
+    queryKey: queryKey(userId ?? '', opts),
+    queryFn: () => fetchConnections(userId!, opts),
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  });
+
+  /** Invalidate every broker_connections variant for the current user. */
+  const invalidate = useCallback(() => {
+    if (!userId) return;
+    qc.invalidateQueries({ queryKey: ['broker_connections', userId] });
+  }, [userId, qc]);
+
+  /**
+   * Soft-disconnect: flip is_active=false + status=disconnected.
+   * The row moves to the "Re-authenticate Required" section in the Modal,
+   * and the user can re-auth via OAuth without losing portfolio history.
+   * Use `remove()` for hard delete.
+   */
+  const disconnect = useCallback(
+    async (id: string) => {
+      if (!userId) return { success: false, error: 'Not authenticated' };
+      const { error: e } = await supabase
+        .from('broker_connections')
+        .update({
+          is_active: false,
+          status: 'disconnected',
+          disconnected_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (e) {
+        toast.error('Failed to disconnect');
+        return { success: false, error: e.message };
+      }
+      invalidate();
+      toast.success('Connection disconnected');
+      return { success: true };
+    },
+    [userId, invalidate],
+  );
+
+  /**
+   * Hard-delete: removes the row entirely. CASCADEs to broker_accounts /
+   * broker_raw_data / broker_sync_logs (all empty in F1.A). trades.broker_connection_id
+   * is SET NULL (no impact in F1.A — no trades currently link to broker_connections).
+   * Vault secret is NOT cleaned up here — accumulates as orphaned. Tracked for cleanup.
+   */
+  const remove = useCallback(
+    async (id: string) => {
+      if (!userId) return { success: false, error: 'Not authenticated' };
+      const { error: e } = await supabase
+        .from('broker_connections')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (e) {
+        toast.error('Failed to remove connection');
+        return { success: false, error: e.message };
+      }
+      invalidate();
+      toast.success('Connection removed');
+      return { success: true };
+    },
+    [userId, invalidate],
+  );
+
+  /**
+   * Re-authenticate via stored Vault credentials (no password re-entry needed).
+   * Currently only Tradovate supports this — invokes tradovate-auth with mode=reconnect.
+   * Future: branch by `connection.broker`.
+   */
+  const reconnect = useCallback(
+    async (id: string) => {
+      if (!userId) return { success: false, error: 'Not authenticated' };
+      const conn = connections.find((c) => c.id === id);
+      if (!conn) return { success: false, error: 'Connection not found' };
+
+      if (conn.broker !== 'tradovate') {
+        toast.error(`Reconnect not yet implemented for ${conn.broker}`);
+        return { success: false, error: `Reconnect not implemented for ${conn.broker}` };
+      }
+
+      const { error: e } = await supabase.functions.invoke('tradovate-auth', {
+        body: { mode: 'reconnect', credentialId: id, userId },
+      });
+      if (e) {
+        toast.error(e.message || 'Reconnect failed');
+        return { success: false, error: e.message };
+      }
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['trades'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Reconnected — syncing trades...');
+      return { success: true };
+    },
+    [userId, connections, invalidate, qc],
+  );
+
+  /**
+   * Manual sync now. Currently only Tradovate.
+   */
+  const syncNow = useCallback(
+    async (id: string) => {
+      if (!userId) return { success: false, error: 'Not authenticated' };
+      const conn = connections.find((c) => c.id === id);
+      if (!conn) return { success: false, error: 'Connection not found' };
+
+      if (conn.broker !== 'tradovate') {
+        toast.error(`Sync not yet implemented for ${conn.broker}`);
+        return { success: false, error: `Sync not implemented for ${conn.broker}` };
+      }
+
+      const { error: e } = await supabase.functions.invoke('tradovate-sync', {
+        body: { userId, environment: conn.environment, mode: 'manual' },
+      });
+      if (e) {
+        toast.error('Sync failed');
+        return { success: false, error: e.message };
+      }
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['trades'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      toast.success('Sync triggered — new trades will appear shortly');
+      return { success: true };
+    },
+    [userId, connections, invalidate, qc],
+  );
+
+  return {
+    connections,
+    isLoading,
+    isError,
+    error,
+    invalidate,
+    disconnect,
+    remove,
+    reconnect,
+    syncNow,
+  };
+}

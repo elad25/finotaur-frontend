@@ -161,14 +161,16 @@ async function storeInVault(
 
   if (error || !data) {
     console.error('[tradovate-auth] vault upsert failed:', error?.message);
-    // Fallback: reuse existing vault_secret_id to avoid losing the reference
+    // Fallback: reuse existing vault_secret_id from broker_connections.connection_data
     const { data: existing } = await supabaseAdmin
-      .from('tradovate_credentials')
-      .select('vault_secret_id')
+      .from('broker_connections')
+      .select('connection_data')
       .eq('user_id', userId)
+      .eq('broker', 'tradovate')
       .eq('environment', environment)
       .maybeSingle();
-    return existing?.vault_secret_id ?? crypto.randomUUID();
+    const existingVaultId = (existing?.connection_data as { vault_secret_id?: string } | null)?.vault_secret_id;
+    return existingVaultId ?? crypto.randomUUID();
   }
 
   return data as string;
@@ -210,21 +212,33 @@ Deno.serve(async (req: Request) => {
     // full re-login only if renewal fails.
     // ══════════════════════════════════════════════════════════
     if (mode === 'refresh') {
-      // Find credentials whose token expires within RENEW_AHEAD_MS
+      // Find active broker_connections whose token expires within RENEW_AHEAD_MS
       const { data: connected } = await supabaseAdmin
-        .from('tradovate_credentials')
-        .select('id, user_id, environment, vault_secret_id, account_id')
-        .in('status', ['connected', 'expired'])
+        .from('broker_connections')
+        .select('id, user_id, environment, connection_data, account_id')
+        .eq('broker', 'tradovate')
+        .eq('is_active', true)
         .lt('token_expires_at', new Date(Date.now() + RENEW_AHEAD_MS).toISOString());
 
       let refreshed = 0;
 
       for (const cred of connected ?? []) {
         try {
-          // Read stored credentials from Vault
-          const secret = await readFromVault(cred.vault_secret_id);
+          // Read stored credentials from Vault — vault_secret_id lives in connection_data jsonb.
+          // F1.A note: rows backfilled from tradovate_credentials have empty connection_data
+          // (vault_secret_id intentionally NOT migrated). Those rows are is_active=false and
+          // appear under "Re-authenticate Required" in the Modal — refresh skips them by design.
+          const cdata = (cred.connection_data ?? {}) as { vault_secret_id?: string };
+          if (!cdata.vault_secret_id) {
+            console.log(
+              `[tradovate-auth] skip refresh for connection ${cred.id}: no vault_secret_id ` +
+              `in connection_data (likely an F1.A backfill row — user must re-auth via Modal).`
+            );
+            continue;
+          }
+          const secret = await readFromVault(cdata.vault_secret_id);
           if (!secret) {
-            console.warn(`[tradovate-auth] no vault secret for cred ${cred.id}`);
+            console.warn(`[tradovate-auth] vault read returned null for connection ${cred.id}`);
             continue;
           }
 
@@ -246,21 +260,29 @@ Deno.serve(async (req: Request) => {
             cred.user_id, cred.environment, username, password, newToken
           );
 
-          await supabaseAdmin.from('tradovate_credentials').update({
-            vault_secret_id:    newVaultId,
-            access_token_hash:  newToken.slice(0, 8),
-            token_expires_at:   new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-            status:             'connected',
-            sync_error_count:   0,
-            sync_error_message: null,
+          await supabaseAdmin.from('broker_connections').update({
+            connection_data: {
+              ...cdata,
+              vault_secret_id:   newVaultId,
+              access_token_hash: newToken.slice(0, 8),
+            },
+            token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
+            status:           'connected',
+            is_active:        true,
+            error_count:      0,
+            last_error:       null,
           }).eq('id', cred.id);
 
           refreshed++;
         } catch (err) {
-          console.error(`[tradovate-auth] refresh failed for cred ${cred.id}:`, err);
-          await supabaseAdmin.from('tradovate_credentials').update({
-            status:             'expired',
-            sync_error_message: String(err).slice(0, 200),
+          console.error(`[tradovate-auth] refresh failed for connection ${cred.id}:`, err);
+          // 'expired' is not a valid broker_connections.status — coerce to 'disconnected' + is_active=false
+          await supabaseAdmin.from('broker_connections').update({
+            status:          'disconnected',
+            is_active:       false,
+            last_error:      String(err).slice(0, 500),
+            last_error_at:   new Date().toISOString(),
+            disconnected_at: new Date().toISOString(),
           }).eq('id', cred.id);
         }
       }
@@ -276,31 +298,40 @@ Deno.serve(async (req: Request) => {
       if (!credentialId) return json({ error: 'Missing credentialId' }, 400);
 
       const { data: cred } = await supabaseAdmin
-        .from('tradovate_credentials')
-        .select('id, user_id, environment, vault_secret_id, account_id, connection_label, account_name, account_spec')
+        .from('broker_connections')
+        .select('id, user_id, environment, account_id, connection_name, account_name, connection_data')
         .eq('id', credentialId)
+        .eq('broker', 'tradovate')
         .single();
 
-      if (!cred) return json({ error: 'Credential not found' }, 404);
+      if (!cred) return json({ error: 'Connection not found' }, 404);
 
-      const secret = await readFromVault(cred.vault_secret_id);
-      if (!secret) return json({ error: 'No vault secret found for this credential' }, 400);
+      const cdata = (cred.connection_data ?? {}) as { vault_secret_id?: string; account_spec?: string; access_token_hash?: string };
+      if (!cdata.vault_secret_id) return json({ error: 'No vault_secret_id in connection_data' }, 400);
+
+      const secret = await readFromVault(cdata.vault_secret_id);
+      if (!secret) return json({ error: 'No vault secret found for this connection' }, 400);
 
       const { username, password } = JSON.parse(secret);
       const env = cred.environment as 'live' | 'demo';
 
       // Full re-login with stored credentials
-      const { accessToken, accounts } = await tradovateLogin(env, username, password);
+      const { accessToken } = await tradovateLogin(env, username, password);
 
       const newVaultId = await storeInVault(cred.user_id, env, username, password, accessToken);
 
-      await supabaseAdmin.from('tradovate_credentials').update({
-        vault_secret_id:    newVaultId,
-        access_token_hash:  accessToken.slice(0, 8),
-        token_expires_at:   new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-        status:             'connected',
-        sync_error_count:   0,
-        sync_error_message: null,
+      await supabaseAdmin.from('broker_connections').update({
+        connection_data: {
+          ...cdata,
+          vault_secret_id:   newVaultId,
+          access_token_hash: accessToken.slice(0, 8),
+        },
+        token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
+        status:           'connected',
+        is_active:        true,
+        error_count:      0,
+        last_error:       null,
+        connected_at:     new Date().toISOString(),
       }).eq('id', cred.id);
 
       // Kick off sync
@@ -345,37 +376,51 @@ Deno.serve(async (req: Request) => {
       throw new Error('No accounts returned from Tradovate — check credentials and account status');
     }
 
-    // 4. Upsert credential row (metadata only — never store tokens in plain columns)
-    console.log('[tradovate-auth] upserting credential row...');
-// Get existing credential ID if reconnecting (to preserve references)
-    const { data: existingCred } = await supabaseAdmin
-      .from('tradovate_credentials')
-      .select('id')
+    // 4. Upsert broker_connections row (metadata + jsonb only — tokens live in Vault)
+    console.log('[tradovate-auth] upserting broker_connections row...');
+    // Get existing connection ID + connection_data if reconnecting (to preserve PK + FK refs
+    // AND to avoid wiping out other jsonb fields a future feature may have added).
+    // Match the new UNIQUE constraint: (user_id, broker, account_id)
+    const { data: existingConn } = await supabaseAdmin
+      .from('broker_connections')
+      .select('id, connection_data')
       .eq('user_id', userId)
-      .eq('environment', env)
-      .eq('account_id', primaryAccount.id)
+      .eq('broker', 'tradovate')
+      .eq('account_id', String(primaryAccount.id))
       .maybeSingle();
 
-    const credentialId = existingCred?.id ?? crypto.randomUUID();
+    const credentialId = existingConn?.id ?? crypto.randomUUID();
+    const existingCData = (existingConn?.connection_data ?? {}) as Record<string, unknown>;
 
-    const { error: upsertError } = await supabaseAdmin.from('tradovate_credentials').upsert({
-      id:                 credentialId,
-      user_id:            userId,
-      connection_label:   body.connectionLabel ?? `${env} – ${primaryAccount.name}`,
-      environment:        env,
-      vault_secret_id:    vaultId,
-      account_id:         primaryAccount.id,
-      account_name:       primaryAccount.name,
-      account_spec:       `${primaryAccount.name}${primaryAccount.id}`,
-      status:             'connected',
-      token_expires_at:   new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-      access_token_hash:  accessToken.slice(0, 8),
-      sync_error_count:   0,
-      sync_error_message: null,
-    }, { onConflict: 'user_id,environment,account_id' });
+    const { error: upsertError } = await supabaseAdmin.from('broker_connections').upsert({
+      id:               credentialId,
+      user_id:          userId,
+      broker:           'tradovate',
+      status:           'connected',
+      is_active:        true,
+      account_id:       String(primaryAccount.id),
+      account_name:     primaryAccount.name,
+      environment:      env,
+      connection_name:  body.connectionLabel ?? `${env} – ${primaryAccount.name}`,
+      token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
+      connected_at:     new Date().toISOString(),
+      error_count:      0,
+      last_error:       null,
+      // Merge with existing jsonb so future feature-added keys aren't wiped on re-auth.
+      // Vault flow: vault_secret_id is the lookup; the actual token bytes live in Vault.
+      // The dedicated bytea columns (access_token_encrypted, refresh_token_encrypted) belong
+      // to a different "in-DB encryption" pattern (designed for IBKR per OQ-14) — Tradovate
+      // stays on the Vault pattern in F1.A. Convergence is a future decision.
+      connection_data: {
+        ...existingCData,
+        vault_secret_id:   vaultId,
+        account_spec:      `${primaryAccount.name}${primaryAccount.id}`,
+        access_token_hash: accessToken.slice(0, 8),
+      },
+    }, { onConflict: 'user_id,broker,account_id' });
 
     console.log('[tradovate-auth] upsert result:', upsertError ? `ERROR: ${upsertError.message} code:${upsertError.code}` : 'OK');
-    if (upsertError) throw new Error(`Credential upsert failed: ${upsertError.message}`);
+    if (upsertError) throw new Error(`broker_connections upsert failed: ${upsertError.message}`);
 
     // 5. Create a portfolio row for every account under this login
     for (const acc of accounts) {

@@ -40,14 +40,45 @@ const tradovateKeys = {
 };
 
 async function fetchCredentials(userId: string): Promise<TradovateCredential[]> {
+  // Post-F1.A: Tradovate lives in broker_connections (was tradovate_credentials).
+  // Field renames: connection_label→connection_name, sync_error_message→last_error,
+  // sync_error_count→error_count, account_spec→connection_data.account_spec.
+  // account_id is now TEXT (was BIGINT) — coerce back for caller compatibility.
+  // The legacy TradovateCredential shape is preserved so existing callers don't change.
   const { data, error } = await supabase
-    .from('tradovate_credentials')
-    .select('id,connection_label,environment,account_id,account_name,account_spec,status,token_expires_at,last_sync_at,sync_error_message,sync_error_count')
+    .from('broker_connections')
+    .select('id,connection_name,environment,account_id,account_name,connection_data,status,token_expires_at,last_sync_at,last_error,error_count')
     .eq('user_id', userId)
+    .eq('broker', 'tradovate')
     .order('created_at', { ascending: true });
   if (error?.code === '42P01') return [];
   if (error) throw error;
-  return data ?? [];
+  type Row = {
+    id: string;
+    connection_name: string | null;
+    environment: string | null;
+    account_id: string | null;
+    account_name: string | null;
+    connection_data: { account_spec?: string } | null;
+    status: string | null;
+    token_expires_at: string | null;
+    last_sync_at: string | null;
+    last_error: string | null;
+    error_count: number | null;
+  };
+  return (data ?? []).map((r: Row): TradovateCredential => ({
+    id: r.id,
+    connection_label: r.connection_name ?? '',
+    environment: (r.environment ?? 'demo') as TradovateEnv,
+    account_id: r.account_id != null ? Number(r.account_id) : null,
+    account_name: r.account_name,
+    account_spec: r.connection_data?.account_spec ?? null,
+    status: (r.status ?? 'disconnected') as TradovateCredential['status'],
+    token_expires_at: r.token_expires_at,
+    last_sync_at: r.last_sync_at,
+    sync_error_message: r.last_error,
+    sync_error_count: r.error_count ?? 0,
+  }));
 }
 
 async function fetchCopyRules(userId: string): Promise<PortfolioCopyRule[]> {
@@ -123,21 +154,26 @@ export function useTradovate() {
     }
   }, [userId, loadCredentials, queryClient]);
 
-  // ── Disconnect — deletes credential row entirely
+  // ── Disconnect — deletes broker_connections row entirely (Tradovate scope)
+  // Post-F1.A: scoped to broker='tradovate' so we don't accidentally delete IBKR rows
+  // when they ship. For soft-disconnect (UI "Disconnect" button → keep row, flip is_active=false),
+  // use useBrokerConnections.disconnect instead.
   const disconnect = useCallback(async (environment: TradovateEnv, credentialId?: string) => {
     if (!userId) return;
     setIsLoading(true);
     try {
       let query = supabase
-        .from('tradovate_credentials')
+        .from('broker_connections')
         .delete()
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .eq('broker', 'tradovate');
       if (credentialId) {
         query = query.eq('id', credentialId);
       } else {
         query = query.eq('environment', environment);
       }
       await query;
+      await queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
       await queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -192,18 +228,21 @@ export function useTradovate() {
     }
   }, [userId, queryClient, loadCredentials]);
 
-  // ── Update connection label — syncs credentials + portfolios via account_id
+  // ── Update connection label — syncs broker_connections + portfolios via account_id
+  // Post-F1.A: writes connection_name (was connection_label). account_id is TEXT in
+  // broker_connections; portfolios.tradovate_account_id is BIGINT — coerce.
   const updateLabel = useCallback(async (credentialId: string, newLabel: string) => {
     if (!userId) return { success: false };
     const trimmed = newLabel.trim();
     if (!trimmed) return { success: false };
 
-    // 1. Update credentials + fetch account_id in one shot
+    // 1. Update broker_connections row + fetch account_id in one shot
     const { data: credData, error: credError } = await supabase
-      .from('tradovate_credentials')
-      .update({ connection_label: trimmed })
+      .from('broker_connections')
+      .update({ connection_name: trimmed })
       .eq('id', credentialId)
       .eq('user_id', userId)
+      .eq('broker', 'tradovate')
       .select('account_id')
       .single();
 
@@ -212,17 +251,21 @@ export function useTradovate() {
       return { success: false };
     }
 
-    // 2. Sync to portfolios via tradovate_account_id
+    // 2. Sync to portfolios via tradovate_account_id (BIGINT) — coerce TEXT→number
     if (credData?.account_id) {
-      await supabase
-        .from('portfolios')
-        .update({ connection_label: trimmed })
-        .eq('user_id', userId)
-        .eq('tradovate_account_id', credData.account_id);
+      const accountIdNum = Number(credData.account_id);
+      if (Number.isFinite(accountIdNum)) {
+        await supabase
+          .from('portfolios')
+          .update({ connection_label: trimmed })
+          .eq('user_id', userId)
+          .eq('tradovate_account_id', accountIdNum);
+      }
     }
 
     // 3. Force-remove stale cache so next render fetches fresh data
     queryClient.removeQueries({ queryKey: ['tradovate_credentials', userId] });
+    queryClient.removeQueries({ queryKey: ['broker_connections', userId] });
     queryClient.removeQueries({ queryKey: ['portfolios', userId] });
 
     toast.success('Connection renamed');

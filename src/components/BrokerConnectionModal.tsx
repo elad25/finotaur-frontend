@@ -1,371 +1,403 @@
 // components/BrokerConnectionModal.tsx
-// Enhanced modal for connecting brokers with multiple methods
+// ─────────────────────────────────────────────────────────────────────
+// F1.A entry point — unified broker connections manager.
+// 3 sections: Active Connections / Re-authenticate Required / Add New.
+// Backed by useBrokerConnections (broker_connections table, post-F1.A).
+// Tradovate connect form is delegated to the existing TradovateConnectModal
+// to avoid duplicating credentials UX.
+// ─────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react';
-import { X, Upload, Link as LinkIcon, Key, Zap, CheckCircle2, AlertCircle } from 'lucide-react';
-import { BROKER_CONFIGS, BrokerName } from '@/lib/brokers/types';
-import { parseCSV, matchTradesOpenClose } from '@/lib/brokers/csv-import';
+import {
+  X, RefreshCw, AlertCircle, Link as LinkIcon, Trash2,
+  CheckCircle2, Clock, Plus,
+} from 'lucide-react';
+import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { getIBAuthorizationUrl } from '@/lib/brokers/ib/ib-oauth';
 import { useAuth } from '@/hooks/useAuth';
+import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import TradovateConnectModal from '@/components/TradovateConnectModal';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
 
-type ConnectionMethod = 'oauth' | 'csv' | 'webhook' | 'api_key';
+const BORDER_LIGHT = 'rgba(255, 215, 0, 0.08)';
 
-export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
-  const { user } = useAuth();
-  const [selectedBroker, setSelectedBroker] = useState<BrokerName | null>(null);
-  const [connectionMethod, setConnectionMethod] = useState<ConnectionMethod | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{
-    success: boolean;
-    message: string;
-    trades?: number;
-  } | null>(null);
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return 'never';
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
 
-  if (!isOpen) return null;
+function brokerDisplay(broker: string): string {
+  return BROKER_CONFIGS[broker as BrokerName]?.displayName ?? broker;
+}
 
-  const handleBrokerSelect = (broker: BrokerName) => {
-    setSelectedBroker(broker);
-    
-    // Auto-select connection method if only one available
-    const config = BROKER_CONFIGS[broker];
-    if (config.features.oauth && !config.features.fileImport && !config.features.webhook) {
-      setConnectionMethod('oauth');
-    } else if (config.features.fileImport && !config.features.oauth && !config.features.webhook) {
-      setConnectionMethod('csv');
-    } else if (config.features.webhook && !config.features.oauth && !config.features.fileImport) {
-      setConnectionMethod('webhook');
-    }
-  };
+function brokerColor(broker: string): string {
+  return BROKER_CONFIGS[broker as BrokerName]?.color ?? '#C9A646';
+}
 
-  const handleOAuthConnect = () => {
-    if (!selectedBroker || !user) return;
-    
-    if (selectedBroker === 'interactive_brokers') {
-      const authUrl = getIBAuthorizationUrl(user.id);
-      window.location.href = authUrl;
-    }
-    // Add other brokers here
-  };
+function statusBadge(conn: BrokerConnection): { label: string; color: string; bg: string } {
+  switch (conn.status) {
+    case 'connected':
+      return { label: 'Connected', color: '#4AD295', bg: 'rgba(74,210,149,0.1)' };
+    case 'error':
+      return { label: 'Error', color: '#E36363', bg: 'rgba(227,99,99,0.1)' };
+    case 'pending':
+      return { label: 'Pending', color: '#C9A646', bg: 'rgba(201,166,70,0.1)' };
+    case 'disconnected':
+    default:
+      return { label: 'Disconnected', color: '#A0A0A0', bg: 'rgba(160,160,160,0.1)' };
+  }
+}
 
-  const handleCSVUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    setUploadResult(null);
-    
-    try {
-      // Parse CSV
-      const result = await parseCSV(file);
-      
-      if (result.errors.length > 0) {
-        setUploadResult({
-          success: false,
-          message: `Errors: ${result.errors.join(', ')}`,
-        });
-        return;
-      }
-      
-      // Match open/close trades
-      const matched = matchTradesOpenClose(result.trades);
-      
-      // Save to database
-      const response = await fetch('/api/trades/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trades: matched,
-          broker: selectedBroker,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setUploadResult({
-          success: true,
-          message: `Successfully imported ${data.count} trades!`,
-          trades: data.count,
-        });
-      } else {
-        setUploadResult({
-          success: false,
-          message: data.error || 'Failed to import trades',
-        });
-      }
-    } catch (error: any) {
-      setUploadResult({
-        success: false,
-        message: error.message || 'Failed to parse CSV',
-      });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const renderBrokerSelection = () => (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-[#F4F4F4] text-xl font-semibold mb-2">Connect Your Broker</h3>
-        <p className="text-[#A0A0A0] text-sm font-light">
-          Auto-sync your trades or import from CSV
-        </p>
+// ── Active connection row ────────────────────────────────────────────
+function ActiveConnectionRow({
+  conn,
+  onSync,
+  onDisconnect,
+  busy,
+}: {
+  conn: BrokerConnection;
+  onSync: (id: string) => void;
+  onDisconnect: (id: string) => void;
+  busy: boolean;
+}) {
+  const badge = statusBadge(conn);
+  const envLabel = conn.environment ? ` · ${String(conn.environment).toUpperCase()}` : '';
+  return (
+    <div
+      className="bg-[#0A0A0A] border rounded-[14px] p-4 flex items-center gap-3"
+      style={{ borderColor: BORDER_LIGHT }}
+    >
+      <div
+        className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-mono flex-shrink-0"
+        style={{ background: `${brokerColor(conn.broker)}20`, color: brokerColor(conn.broker) }}
+      >
+        {brokerDisplay(conn.broker).substring(0, 2).toUpperCase()}
       </div>
-      
-      <div className="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto">
-        {Object.entries(BROKER_CONFIGS)
-          .filter(([key]) => key !== 'interactive_brokers' || import.meta.env.VITE_ENABLE_IBKR === 'true')
-          .map(([key, config]) => {
-          const broker = key as BrokerName;
-          const isAvailable = config.status === 'available' || config.status === 'beta';
-          
-          return (
-            <button
-              key={broker}
-              onClick={() => isAvailable && handleBrokerSelect(broker)}
-              disabled={!isAvailable}
-              className={`bg-[#0A0A0A] border rounded-[16px] p-4 text-left transition-all duration-300 ${
-                isAvailable
-                  ? 'hover:border-[#C9A646]/30 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'
-              }`}
-              style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-mono"
-                  style={{ background: `${config.color}20`, color: config.color }}
-                >
-                  {config.displayName.substring(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1">
-                  <div className="text-[#F4F4F4] text-sm font-medium">
-                    {config.displayName}
-                  </div>
-                  {config.status === 'beta' && (
-                    <span className="text-[10px] text-[#C9A646] uppercase tracking-wider">
-                      Beta
-                    </span>
-                  )}
-                  {config.status === 'coming_soon' && (
-                    <span className="text-[10px] text-[#A0A0A0] uppercase tracking-wider">
-                      Coming Soon
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-1.5">
-                {config.features.oauth && (
-                  <span className="text-[9px] bg-[#C9A646]/10 text-[#C9A646] px-2 py-0.5 rounded">
-                    OAuth
-                  </span>
-                )}
-                {config.features.fileImport && (
-                  <span className="text-[9px] bg-[#4AD295]/10 text-[#4AD295] px-2 py-0.5 rounded">
-                    CSV
-                  </span>
-                )}
-                {config.features.webhook && (
-                  <span className="text-[9px] bg-[#5B9BFF]/10 text-[#5B9BFF] px-2 py-0.5 rounded">
-                    Webhook
-                  </span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[#F4F4F4] text-sm font-medium truncate">
+            {conn.connection_name || conn.account_name || brokerDisplay(conn.broker)}
+          </span>
+          <span
+            className="text-[10px] px-2 py-0.5 rounded uppercase tracking-wider flex-shrink-0"
+            style={{ color: badge.color, background: badge.bg }}
+          >
+            {badge.label}
+          </span>
+        </div>
+        <div className="text-[11px] text-[#A0A0A0] flex items-center gap-2 flex-wrap">
+          <span>{brokerDisplay(conn.broker)}{envLabel}</span>
+          {conn.account_name && conn.connection_name !== conn.account_name && (
+            <span className="text-[#666]">· acct {conn.account_name}</span>
+          )}
+          <span className="text-[#666]">· last sync {timeAgo(conn.last_sync_at)}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button
+          onClick={() => onSync(conn.id)}
+          disabled={busy}
+          className="p-2 rounded-lg text-[#A0A0A0] hover:text-[#C9A646] hover:bg-[#C9A646]/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Sync now"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+        <button
+          onClick={() => {
+            if (confirm(`Disconnect ${brokerDisplay(conn.broker)} (${conn.account_name ?? conn.environment})?`)) {
+              onDisconnect(conn.id);
+            }
+          }}
+          disabled={busy}
+          className="p-2 rounded-lg text-[#A0A0A0] hover:text-[#E36363] hover:bg-[#E36363]/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Disconnect"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );
+}
 
-  const renderConnectionMethod = () => {
-    if (!selectedBroker) return null;
-    
-    const config = BROKER_CONFIGS[selectedBroker];
-    
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 mb-4">
-          <button
-            onClick={() => {
-              setSelectedBroker(null);
-              setConnectionMethod(null);
-              setUploadResult(null);
-            }}
-            className="text-[#A0A0A0] hover:text-[#F4F4F4]"
-          >
-            ← Back
-          </button>
-          <div className="flex-1">
-            <h3 className="text-[#F4F4F4] text-xl font-semibold">
-              {config.displayName}
-            </h3>
-          </div>
-        </div>
-        
-        {!connectionMethod ? (
-          <div className="space-y-3">
-            <p className="text-[#A0A0A0] text-sm font-light mb-4">
-              Choose how you want to connect:
-            </p>
-            
-            {config.features.oauth && (
-              <button
-                onClick={() => setConnectionMethod('oauth')}
-                className="w-full bg-[#0A0A0A] border rounded-[14px] p-4 hover:border-[#C9A646]/30 transition-all text-left"
-                style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#C9A646]/10 flex items-center justify-center">
-                    <LinkIcon className="w-5 h-5 text-[#C9A646]" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[#F4F4F4] font-medium">OAuth Connection</div>
-                    <div className="text-[#A0A0A0] text-xs mt-0.5">
-                      Auto-sync trades in real-time
-                    </div>
-                  </div>
-                </div>
-              </button>
-            )}
-            
-            {config.features.fileImport && (
-              <button
-                onClick={() => setConnectionMethod('csv')}
-                className="w-full bg-[#0A0A0A] border rounded-[14px] p-4 hover:border-[#C9A646]/30 transition-all text-left"
-                style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#4AD295]/10 flex items-center justify-center">
-                    <Upload className="w-5 h-5 text-[#4AD295]" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[#F4F4F4] font-medium">CSV Import</div>
-                    <div className="text-[#A0A0A0] text-xs mt-0.5">
-                      Upload broker statements manually
-                    </div>
-                  </div>
-                </div>
-              </button>
-            )}
-            
-            {config.features.webhook && (
-              <button
-                onClick={() => setConnectionMethod('webhook')}
-                className="w-full bg-[#0A0A0A] border rounded-[14px] p-4 hover:border-[#C9A646]/30 transition-all text-left"
-                style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#5B9BFF]/10 flex items-center justify-center">
-                    <Zap className="w-5 h-5 text-[#5B9BFF]" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[#F4F4F4] font-medium">Webhook</div>
-                    <div className="text-[#A0A0A0] text-xs mt-0.5">
-                      Receive trades via webhook URL
-                    </div>
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
-        ) : connectionMethod === 'oauth' ? (
-          <div className="space-y-4">
-            <div className="bg-[#0A0A0A] border rounded-[14px] p-4" style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}>
-              <div className="flex items-start gap-3 mb-4">
-                <Zap className="w-4 h-4 text-[#C9A646] mt-0.5 flex-shrink-0" />
-                <div>
-                  <div className="text-[#F4F4F4] text-sm font-medium mb-1">Secure OAuth Connection</div>
-                  <div className="text-[#A0A0A0] text-xs font-light leading-relaxed">
-                    You'll be redirected to {config.displayName} to authorize Finotaur. 
-                    Your credentials are never stored.
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <button
-              onClick={handleOAuthConnect}
-              className="w-full bg-gradient-to-r from-[#C9A646] to-[#B89635] text-[#0A0A0A] rounded-[12px] px-6 py-3 font-semibold hover:opacity-90 transition-opacity"
-            >
-              Connect {config.displayName}
-            </button>
-          </div>
-        ) : connectionMethod === 'csv' ? (
-          <div className="space-y-4">
-            {uploadResult ? (
-              <div className={`rounded-[14px] p-4 flex items-start gap-3 ${
-                uploadResult.success
-                  ? 'bg-[#4AD295]/10 border border-[#4AD295]/30'
-                  : 'bg-[#E36363]/10 border border-[#E36363]/30'
-              }`}>
-                {uploadResult.success ? (
-                  <CheckCircle2 className="w-5 h-5 text-[#4AD295] flex-shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-[#E36363] flex-shrink-0 mt-0.5" />
-                )}
-                <div className="flex-1">
-                  <div className={`font-medium ${uploadResult.success ? 'text-[#4AD295]' : 'text-[#E36363]'}`}>
-                    {uploadResult.success ? 'Import Successful!' : 'Import Failed'}
-                  </div>
-                  <div className="text-[#A0A0A0] text-sm mt-1">{uploadResult.message}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-[#0A0A0A] border rounded-[14px] p-4" style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}>
-                <div className="text-[#A0A0A0] text-xs font-light leading-relaxed mb-4">
-                  Download your trade history from {config.displayName} as a CSV file, 
-                  then upload it here. We'll automatically parse and import your trades.
-                </div>
-                
-                <label className="block">
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleCSVUpload}
-                    disabled={uploading}
-                    className="hidden"
-                  />
-                  <div className="w-full bg-gradient-to-r from-[#C9A646] to-[#B89635] text-[#0A0A0A] rounded-[12px] px-6 py-3 font-semibold hover:opacity-90 transition-opacity cursor-pointer text-center">
-                    {uploading ? 'Uploading...' : 'Choose CSV File'}
-                  </div>
-                </label>
-              </div>
-            )}
-          </div>
-        ) : null}
+// ── Re-authenticate row ──────────────────────────────────────────────
+function ReauthRow({
+  conn,
+  onReconnect,
+  onRemove,
+  busy,
+}: {
+  conn: BrokerConnection;
+  onReconnect: (id: string) => void;
+  onRemove: (id: string) => void;
+  busy: boolean;
+}) {
+  const envLabel = conn.environment ? ` · ${String(conn.environment).toUpperCase()}` : '';
+  return (
+    <div
+      className="bg-[#0A0A0A] border rounded-[14px] p-4 flex items-center gap-3 opacity-90"
+      style={{ borderColor: 'rgba(227,99,99,0.15)' }}
+    >
+      <div
+        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+        style={{ background: 'rgba(227,99,99,0.1)' }}
+      >
+        <AlertCircle className="w-5 h-5 text-[#E36363]" />
       </div>
-    );
+      <div className="flex-1 min-w-0">
+        <div className="text-[#F4F4F4] text-sm font-medium truncate">
+          {conn.connection_name || conn.account_name || brokerDisplay(conn.broker)}
+        </div>
+        <div className="text-[11px] text-[#A0A0A0] mt-0.5 flex items-center gap-2 flex-wrap">
+          <span>{brokerDisplay(conn.broker)}{envLabel}</span>
+          {conn.account_name && conn.connection_name !== conn.account_name && (
+            <span className="text-[#666]">· acct {conn.account_name}</span>
+          )}
+          <span className="text-[#E36363]">· {conn.last_error || 'token expired — reconnect required'}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button
+          onClick={() => onReconnect(conn.id)}
+          disabled={busy}
+          className="px-3 py-1.5 rounded-lg text-[12px] font-medium bg-[#C9A646] text-[#0A0A0A] hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Reconnect
+        </button>
+        <button
+          onClick={() => {
+            if (confirm(`Permanently remove ${brokerDisplay(conn.broker)} (${conn.account_name ?? conn.environment})? Portfolio history is preserved.`)) {
+              onRemove(conn.id);
+            }
+          }}
+          disabled={busy}
+          className="p-2 rounded-lg text-[#A0A0A0] hover:text-[#E36363] hover:bg-[#E36363]/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Remove permanently"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Broker grid card (Add New section) ───────────────────────────────
+function BrokerCard({
+  broker,
+  onPick,
+}: {
+  broker: BrokerName;
+  onPick: (b: BrokerName) => void;
+}) {
+  const config = BROKER_CONFIGS[broker];
+  const enabled = config.status === 'available' || config.status === 'beta';
+  return (
+    <button
+      onClick={() => enabled && onPick(broker)}
+      disabled={!enabled}
+      className={`bg-[#0A0A0A] border rounded-[16px] p-4 text-left transition-all duration-300 ${
+        enabled ? 'hover:border-[#C9A646]/30 cursor-pointer' : 'opacity-40 cursor-not-allowed'
+      }`}
+      style={{ borderColor: BORDER_LIGHT }}
+    >
+      <div className="flex items-center gap-3 mb-3">
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-xs font-mono"
+          style={{ background: `${config.color}20`, color: config.color }}
+        >
+          {config.displayName.substring(0, 2).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[#F4F4F4] text-sm font-medium truncate">{config.displayName}</div>
+          {config.status === 'beta' && (
+            <span className="text-[10px] text-[#C9A646] uppercase tracking-wider">Beta</span>
+          )}
+          {config.status === 'coming_soon' && (
+            <span className="text-[10px] text-[#A0A0A0] uppercase tracking-wider">Coming Soon</span>
+          )}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {config.features.oauth && (
+          <span className="text-[9px] bg-[#C9A646]/10 text-[#C9A646] px-2 py-0.5 rounded">OAuth</span>
+        )}
+        {config.features.fileImport && (
+          <span className="text-[9px] bg-[#4AD295]/10 text-[#4AD295] px-2 py-0.5 rounded">CSV</span>
+        )}
+        {config.features.webhook && (
+          <span className="text-[9px] bg-[#5B9BFF]/10 text-[#5B9BFF] px-2 py-0.5 rounded">Webhook</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
+  const { user } = useAuth();
+  const { connections: active, isLoading: loadingActive, syncNow, disconnect } =
+    useBrokerConnections({ active: true });
+  const { connections: inactive, isLoading: loadingInactive, reconnect, remove } =
+    useBrokerConnections({ active: false });
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [showTradovateConnect, setShowTradovateConnect] = useState(false);
+
+  if (!isOpen) return null;
+
+  const ibkrEnabled = import.meta.env.VITE_ENABLE_IBKR === 'true';
+  const visibleBrokers = (Object.keys(BROKER_CONFIGS) as BrokerName[]).filter(
+    (b) => b !== 'manual' && (b !== 'interactive_brokers' || ibkrEnabled),
+  );
+
+  const wrapBusy =
+    <T,>(fn: (id: string) => Promise<T>) =>
+    async (id: string) => {
+      setBusyId(id);
+      try {
+        await fn(id);
+      } finally {
+        setBusyId(null);
+      }
+    };
+
+  const handlePickBroker = (broker: BrokerName) => {
+    if (broker === 'tradovate') {
+      setShowTradovateConnect(true);
+      return;
+    }
+    if (broker === 'interactive_brokers' && user) {
+      window.location.href = getIBAuthorizationUrl(user.id);
+      return;
+    }
+    // Fallback: other brokers not implemented yet — caller already disabled them.
   };
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-[#141414] border rounded-[20px] p-8 max-w-2xl w-full shadow-[0_0_50px_rgba(201,166,70,0.2)] animate-fadeIn max-h-[90vh] overflow-y-auto"
-        style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
-        onClick={(e) => e.stopPropagation()}
+    <>
+      <div
+        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+        onClick={onClose}
       >
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex-1">
-            {selectedBroker ? renderConnectionMethod() : renderBrokerSelection()}
+        <div
+          className="bg-[#141414] border rounded-[20px] p-6 sm:p-8 max-w-2xl w-full shadow-[0_0_50px_rgba(201,166,70,0.2)] animate-fadeIn max-h-[90vh] overflow-y-auto"
+          style={{ borderColor: BORDER_LIGHT }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-[#F4F4F4] text-xl font-semibold">Broker Connections</h3>
+              <p className="text-[#A0A0A0] text-xs font-light mt-1">
+                Manage how Finotaur receives your trades.
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-[#A0A0A0] hover:text-[#F4F4F4] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button 
-            onClick={onClose}
-            className="text-[#A0A0A0] hover:text-[#F4F4F4] transition-colors ml-4"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          {/* Section 1: Active */}
+          <section className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle2 className="w-4 h-4 text-[#4AD295]" />
+              <h4 className="text-[#F4F4F4] text-sm font-semibold uppercase tracking-wider">
+                Active Connections
+              </h4>
+              <span className="text-[11px] text-[#A0A0A0]">({active.length})</span>
+            </div>
+            {loadingActive ? (
+              <div className="text-[#A0A0A0] text-sm py-4">Loading...</div>
+            ) : active.length === 0 ? (
+              <div
+                className="bg-[#0A0A0A] border rounded-[14px] p-4 text-[#A0A0A0] text-sm text-center"
+                style={{ borderColor: BORDER_LIGHT }}
+              >
+                No active connections. Add one below.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {active.map((c) => (
+                  <ActiveConnectionRow
+                    key={c.id}
+                    conn={c}
+                    onSync={wrapBusy(syncNow)}
+                    onDisconnect={wrapBusy(disconnect)}
+                    busy={busyId === c.id}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Section 2: Re-authenticate Required (only if any) */}
+          {!loadingInactive && inactive.length > 0 && (
+            <section className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-[#E36363]" />
+                <h4 className="text-[#F4F4F4] text-sm font-semibold uppercase tracking-wider">
+                  Re-authenticate Required
+                </h4>
+                <span className="text-[11px] text-[#A0A0A0]">({inactive.length})</span>
+              </div>
+              <div className="space-y-2">
+                {inactive.map((c) => (
+                  <ReauthRow
+                    key={c.id}
+                    conn={c}
+                    onReconnect={wrapBusy(reconnect)}
+                    onRemove={wrapBusy(remove)}
+                    busy={busyId === c.id}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Section 3: Add New */}
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Plus className="w-4 h-4 text-[#C9A646]" />
+              <h4 className="text-[#F4F4F4] text-sm font-semibold uppercase tracking-wider">
+                Add New Broker
+              </h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {visibleBrokers.map((b) => (
+                <BrokerCard key={b} broker={b} onPick={handlePickBroker} />
+              ))}
+            </div>
+            <p className="text-[10px] text-[#666] mt-3 flex items-start gap-1.5">
+              <LinkIcon className="w-3 h-3 mt-0.5 flex-shrink-0" />
+              <span>
+                Auto-sync updates trades in real time. CSV import is available from
+                "Import Trades" in the dashboard header.
+              </span>
+            </p>
+          </section>
         </div>
       </div>
-    </div>
+
+      {/* Tradovate connect form (existing component, opened on demand) */}
+      {showTradovateConnect && (
+        <TradovateConnectModal
+          initialStep="credentials"
+          onClose={() => setShowTradovateConnect(false)}
+        />
+      )}
+    </>
   );
 }
