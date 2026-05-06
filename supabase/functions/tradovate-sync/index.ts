@@ -117,7 +117,7 @@ async function getContractInfo(
 // Short flow: Sell=open SHORT entry, Buy=close SHORT
 async function processFill(
   fill: TradovateFill,
-  cred: { id: string; user_id: string; account_id: number },
+  cred: { id: string; user_id: string; account_id: number; environment: 'live' | 'demo' },
   symbol: string,
   multiplier: number,
   base: string,
@@ -189,9 +189,10 @@ async function processFill(
     .from('trades')
     .insert({
       user_id:              cred.user_id,
-      // NOTE: cred is from tradovate_credentials, NOT broker_connections.
-      //       broker_connection_id / broker_account_id intentionally omitted
-      //       (NULL) — types don't match. J2 will add lookup. See OQ-22.
+      // NOTE (post-F1.A): cred now comes from broker_connections (not tradovate_credentials).
+      //       broker_connection_id / broker_account_id still intentionally omitted (NULL)
+      //       in F1.A — wiring trades.broker_connection_id to broker_connections(id) is
+      //       J2 / OQ-23 scope. See MASTER_PLAN.
       external_id:          `tradovate::fill::${fill.id}`,
       broker_trade_id:      String(fill.id),
       idempotency_key:      `tradovate::${cred.user_id}::${cred.environment}::${fill.id}`,
@@ -236,19 +237,31 @@ async function processFill(
 }
 
 // ─── Sync one credential ───────────────────────────────────────
+// `cred` now comes from broker_connections. account_id is TEXT in the new
+// schema (was BIGINT in tradovate_credentials) — parse once and use number
+// for downstream Tradovate API calls + tradovate_position_state/sync_state
+// queries which still expect numeric account_id.
 async function syncCredential(cred: {
   id: string;
   user_id: string;
   environment: 'live' | 'demo';
-  vault_secret_id: string;
-  account_id: number;
+  connection_data: { vault_secret_id?: string } | null;
+  account_id: string;
 }): Promise<{ inserted: number; errors: number }> {
   const base = TRADOVATE_URLS[cred.environment];
   let inserted = 0;
   let errors = 0;
 
-  // 1. Get access token
-  const accessToken = await getAccessToken(cred.vault_secret_id);
+  // Coerce account_id TEXT → number for Tradovate API + numeric DB queries
+  const accountIdNum = parseInt(cred.account_id, 10);
+  if (!Number.isFinite(accountIdNum)) {
+    throw new Error(`Invalid account_id (not numeric): ${cred.account_id}`);
+  }
+
+  // 1. Get access token — vault_secret_id lives in connection_data jsonb
+  const vaultSecretId = cred.connection_data?.vault_secret_id;
+  if (!vaultSecretId) throw new Error(`No vault_secret_id in connection_data for ${cred.id}`);
+  const accessToken = await getAccessToken(vaultSecretId);
 
   // 2. Get sync cursor
   const { data: syncState } = await supabaseAdmin
@@ -256,17 +269,18 @@ async function syncCredential(cred: {
     .select('last_fill_id, fills_processed')
     .eq('user_id', cred.user_id)
     .eq('environment', cred.environment)
-    .eq('account_id', cred.account_id)
+    .eq('account_id', accountIdNum)
     .single();
 
   const lastFillId = syncState?.last_fill_id ?? 0;
 
   // 3. Fetch new fills
-  const fills = await fetchFills(base, accessToken, cred.account_id, lastFillId);
+  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId);
   if (fills.length === 0) {
     // Update last_sync_at even when no new fills
-    await supabaseAdmin.from('tradovate_credentials').update({
-      last_sync_at: new Date().toISOString(),
+    await supabaseAdmin.from('broker_connections').update({
+      last_sync_at:            new Date().toISOString(),
+      last_successful_sync_at: new Date().toISOString(),
     }).eq('id', cred.id);
     return { inserted: 0, errors: 0 };
   }
@@ -274,6 +288,10 @@ async function syncCredential(cred: {
   // 4. Insert fills as trades (dedup via UNIQUE index)
   // Batch contract lookups (cache per contractId)
   const contractCache: Record<number, { name: string; fullPointValue: number }> = {};
+
+  // processFill expects numeric account_id (matches tradovate_position_state schema).
+  // environment is also passed for the idempotency_key formula (see processFill body).
+  const credForFill = { id: cred.id, user_id: cred.user_id, account_id: accountIdNum, environment: cred.environment };
 
   for (const fill of fills) {
     try {
@@ -285,7 +303,7 @@ async function syncCredential(cred: {
       const contract = contractCache[fill.contractId];
 
       const result = await processFill(
-        fill, cred,
+        fill, credForFill,
         contract.name, contract.fullPointValue,
         base, accessToken
       );
@@ -304,18 +322,20 @@ async function syncCredential(cred: {
   await supabaseAdmin.from('tradovate_sync_state').upsert({
     user_id:         cred.user_id,
     environment:     cred.environment,
-    account_id:      cred.account_id,
+    account_id:      accountIdNum,
     last_fill_id:    maxFillId,
     last_sync_at:    new Date().toISOString(),
     fills_processed: (syncState?.fills_processed ?? 0) + inserted,
   }, { onConflict: 'user_id,environment,account_id' });
 
-  // 6. Update credential metadata
-  await supabaseAdmin.from('tradovate_credentials').update({
-    last_sync_at:       new Date().toISOString(),
-    sync_error_count:   errors > 0 ? (syncState?.fills_processed ?? 0) + 1 : 0,
-    sync_error_message: errors > 0 ? `${errors} fills failed to insert` : null,
-    status:             'connected',
+  // 6. Update broker_connections metadata
+  await supabaseAdmin.from('broker_connections').update({
+    last_sync_at:            new Date().toISOString(),
+    last_successful_sync_at: errors === 0 ? new Date().toISOString() : null,
+    error_count:             errors > 0 ? errors : 0,
+    last_error:              errors > 0 ? `${errors} fills failed to insert` : null,
+    last_error_at:           errors > 0 ? new Date().toISOString() : null,
+    status:                  errors > 0 ? 'error' : 'connected',
   }).eq('id', cred.id);
 
   return { inserted, errors };
@@ -337,9 +357,10 @@ Deno.serve(async (req: Request) => {
     const mode: string = body.mode ?? 'manual';
 
     let credentialsQuery = supabaseAdmin
-      .from('tradovate_credentials')
-      .select('id, user_id, environment, vault_secret_id, account_id')
-      .eq('status', 'connected');
+      .from('broker_connections')
+      .select('id, user_id, environment, connection_data, account_id')
+      .eq('broker', 'tradovate')
+      .eq('is_active', true);
 
     // Single user (manual / initial)
     if (mode !== 'cron' && body.userId) {
@@ -364,16 +385,20 @@ Deno.serve(async (req: Request) => {
         synced++;
       } catch (err: unknown) {
         const msg = String(err);
-        console.error(`[tradovate-sync] cred ${cred.id}:`, msg);
+        console.error(`[tradovate-sync] connection ${cred.id}:`, msg);
 
-        // Mark as expired if token invalid
-                if (msg.includes('TOKEN_EXPIRED')) {
-          await supabaseAdmin.from('tradovate_credentials').update({
-            status: 'expired',
-            sync_error_message: 'Token expired — auto-refresh triggered',
+        if (msg.includes('TOKEN_EXPIRED')) {
+          // Token dead — flip is_active=false so the row moves to "Re-auth Required"
+          // ('expired' is not a valid broker_connections.status — coerce to 'disconnected')
+          await supabaseAdmin.from('broker_connections').update({
+            status:          'disconnected',
+            is_active:       false,
+            last_error:      'Token expired — auto-refresh triggered',
+            last_error_at:   new Date().toISOString(),
+            disconnected_at: new Date().toISOString(),
           }).eq('id', cred.id);
 
-          // טריגר refresh אוטומטי מיידי
+          // Fire-and-forget refresh attempt — may revive the row to is_active=true
           fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
             method: 'POST',
             headers: {
@@ -381,11 +406,13 @@ Deno.serve(async (req: Request) => {
               'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
             },
             body: JSON.stringify({ mode: 'refresh' }),
-          }).catch(() => {}); // fire and forget
+          }).catch(() => {});
         } else {
-          await supabaseAdmin.from('tradovate_credentials').update({
-            sync_error_count: 1,
-            sync_error_message: msg.slice(0, 200),
+          await supabaseAdmin.from('broker_connections').update({
+            status:        'error',
+            error_count:   1,
+            last_error:    msg.slice(0, 500),
+            last_error_at: new Date().toISOString(),
           }).eq('id', cred.id);
         }
         totalErrors++;

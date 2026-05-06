@@ -1,7 +1,7 @@
 // lib/brokers/types.ts
 // Unified trade interface that all brokers map to
 
-export type BrokerName = 
+export type BrokerName =
   | 'interactive_brokers'
   | 'td_ameritrade'
   | 'alpaca'
@@ -9,22 +9,48 @@ export type BrokerName =
   | 'mt4'
   | 'mt5'
   | 'ninja_trader'
+  | 'tradovate'
   | 'manual';
 
 export type BrokerStatus = 'connected' | 'disconnected' | 'error' | 'pending';
+export type BrokerEnvironment = 'live' | 'demo';
 
+/**
+ * Mirrors public.broker_connections (prod schema, post-F1.A).
+ * Fields without a native column on broker_connections (vault_secret_id,
+ * account_spec, access_token_hash) live inside `connection_data` jsonb.
+ * Tokens themselves live in Supabase Vault (Tradovate pattern).
+ */
 export interface BrokerConnection {
   id: string;
   user_id: string;
   broker: BrokerName;
   status: BrokerStatus;
-  account_id?: string;
-  account_name?: string;
-  connected_at: string;
-  last_sync_at?: string;
-  error_message?: string;
-  // OAuth token expiry (plaintext columns dropped; tokens stored encrypted-only)
-  expires_at?: string;
+  is_active: boolean;
+  account_id?: string | null;        // TEXT in DB; numeric for Tradovate; coerce as needed
+  account_name?: string | null;
+  environment?: BrokerEnvironment | string | null;
+  connection_name?: string | null;   // user-given label (was tradovate_credentials.connection_label)
+  connected_at?: string | null;
+  disconnected_at?: string | null;
+  last_sync_at?: string | null;
+  last_successful_sync_at?: string | null;
+  error_count?: number | null;
+  last_error?: string | null;
+  last_error_at?: string | null;
+  token_expires_at?: string | null;
+  connection_data?: BrokerConnectionData | null;  // jsonb
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/** Tradovate-specific shape stuffed into broker_connections.connection_data. */
+export interface BrokerConnectionData {
+  vault_secret_id?: string;
+  account_spec?: string;
+  access_token_hash?: string;
+  // Future per-broker fields land here.
+  [key: string]: unknown;
 }
 
 export interface BrokerTrade {
@@ -181,6 +207,21 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
       realtime: true,
     },
     status: 'coming_soon',
+  },
+  tradovate: {
+    broker: 'tradovate',
+    displayName: 'Tradovate',
+    logo: '/brokers/tradovate.png',
+    color: '#1F8FFF',
+    features: {
+      oauth: true,
+      apiKey: false,
+      webhook: false,
+      fileImport: true,
+      realtime: true,
+    },
+    status: 'available',
+    documentation: 'https://api.tradovate.com/',
   },
   manual: {
     broker: 'manual',
