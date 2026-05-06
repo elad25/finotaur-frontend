@@ -157,14 +157,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   // ===============================================
   'forex': [
     { label: 'Dashboard', path: '/app/forex/overview', icon: LayoutDashboard },
-    { label: 'Currency Strength', path: '/app/forex/strength', icon: Activity },
-    { label: 'Correlation Map', path: '/app/forex/correlation', icon: Map },
+    { label: 'Pair Page', path: '/app/forex/pairs', icon: Globe },
     { label: 'Economic Calendar', path: '/app/forex/calendar', icon: Calendar },
-    { label: 'Major/Cross Pairs', path: '/app/forex/pairs', icon: Globe },
-    { label: 'Interest Rates', path: '/app/forex/rates', icon: LineChart },
-    { label: 'Macro Reports', path: '/app/forex/deep-analysis', icon: FileText },
-    { label: 'Alerts & Watchlists', path: '/app/forex/alerts', icon: Bell },
-    { label: 'News', path: '/app/forex/news', icon: Newspaper },
+    { label: 'Currency Strength', path: '/app/forex/strength', icon: Activity },
+    { label: 'CB Watch', path: '/app/forex/cb-watch', icon: LineChart },
+    { label: 'COT', path: '/app/forex/cot', icon: FileText },
+    { label: 'Correlation Map', path: '/app/forex/correlation', icon: Map },
   ],
 
   // ===============================================

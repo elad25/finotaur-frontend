@@ -193,10 +193,8 @@ const ForexStrength = lazy(() => import("@/pages/app/forex/Strength"));
 const ForexCorrelation = lazy(() => import("@/pages/app/forex/Correlation"));
 const ForexCalendar = lazy(() => import("@/pages/app/forex/Calendar"));
 const ForexPairs = lazy(() => import("@/pages/app/forex/Pairs"));
-const ForexRates = lazy(() => import("@/pages/app/forex/Rates"));
-const ForexDeepAnalysis = lazy(() => import("@/pages/app/forex/DeepAnalysis"));
-const ForexAlerts = lazy(() => import("@/pages/app/forex/Alerts"));
-const ForexNews = lazy(() => import("@/pages/app/forex/News"));
+const ForexCBWatch = lazy(() => import("@/pages/app/forex/CBWatch"));
+const ForexCOT = lazy(() => import("@/pages/app/forex/COT"));
 
 // Commodities
 const CommoditiesOverview = lazy(() => import("@/pages/app/commodities/Overview"));
@@ -394,10 +392,8 @@ function AppContent() {
           <Route path="forex/correlation" element={<LockedRoute domainId="forex"><ForexCorrelation /></LockedRoute>} />
           <Route path="forex/calendar" element={<LockedRoute domainId="forex"><ForexCalendar /></LockedRoute>} />
           <Route path="forex/pairs" element={<LockedRoute domainId="forex"><ForexPairs /></LockedRoute>} />
-          <Route path="forex/rates" element={<LockedRoute domainId="forex"><ForexRates /></LockedRoute>} />
-          <Route path="forex/deep-analysis" element={<LockedRoute domainId="forex"><ForexDeepAnalysis /></LockedRoute>} />
-          <Route path="forex/alerts" element={<LockedRoute domainId="forex"><ForexAlerts /></LockedRoute>} />
-          <Route path="forex/news" element={<LockedRoute domainId="forex"><ForexNews /></LockedRoute>} />
+          <Route path="forex/cb-watch" element={<LockedRoute domainId="forex"><ForexCBWatch /></LockedRoute>} />
+          <Route path="forex/cot" element={<LockedRoute domainId="forex"><ForexCOT /></LockedRoute>} />
           
           {/* COMMODITIES */}
           <Route path="commodities/overview" element={<LockedRoute domainId="commodities"><CommoditiesOverview /></LockedRoute>} />
