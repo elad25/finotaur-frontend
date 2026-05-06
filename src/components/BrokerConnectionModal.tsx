@@ -13,7 +13,6 @@ import {
   CheckCircle2, Clock, Plus,
 } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
-import { getIBAuthorizationUrl } from '@/lib/brokers/ib/ib-oauth';
 import { useAuth } from '@/hooks/useAuth';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import TradovateConnectModal from '@/components/TradovateConnectModal';
@@ -271,12 +270,13 @@ export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
       }
     };
 
-  const handlePickBroker = (broker: BrokerName) => {
+  const handlePickBroker = async (broker: BrokerName) => {
     if (broker === 'tradovate') {
       setShowTradovateConnect(true);
       return;
     }
     if (broker === 'interactive_brokers' && user) {
+      const { getIBAuthorizationUrl } = await import('@/lib/brokers/ib/ib-oauth');
       window.location.href = getIBAuthorizationUrl(user.id);
       return;
     }
@@ -319,6 +319,14 @@ export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
               </h4>
               <span className="text-[11px] text-[#A0A0A0]">({active.length})</span>
             </div>
+            {!loadingActive && active.length > 0 && (
+              <p className="text-[10px] text-[#A0A0A0]/70 mb-2 flex items-start gap-1.5">
+                <Clock className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                <span>
+                  Auto-sync coming soon — click <RefreshCw className="w-3 h-3 inline-block align-text-bottom" /> Sync Now after each trade for now.
+                </span>
+              </p>
+            )}
             {loadingActive ? (
               <div className="text-[#A0A0A0] text-sm py-4">Loading...</div>
             ) : active.length === 0 ? (
