@@ -17,7 +17,7 @@ const LABEL_MAP: Record<string, string> = {
   commodities: "Commodities",
   options: "Options",
   macro: "Macro & News",
-  ai: "AI Insights",
+  ai: "AI Arena",
   journal: "Journal",
   "copy-trade": "Copy Trade",
   funding: "Funding",

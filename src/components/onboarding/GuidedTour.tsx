@@ -41,7 +41,7 @@ const TOUR_STEPS = [
   {
     path: '/app/ai/stock-analyzer',
     title: 'AI Suite',
-    tabLabel: 'AI Insights',
+    tabLabel: 'AI Arena',
     description: 'Institutional-grade AI analysis in 30 seconds. Stock analyzer, sector scanner, macro insights — what takes analysts hours, AI delivers instantly.',
     tooltipSide: 'center' as const,
   },

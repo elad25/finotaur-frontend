@@ -198,7 +198,7 @@ export const domains: Record<string, Domain> = {
 
 ai: {
   id: 'ai',
-  label: 'AI Insights',
+  label: 'AI Arena',
   locked: false,
   beta: false,
   defaultPath: '/app/ai/my-portfolio',

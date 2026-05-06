@@ -344,7 +344,7 @@ const ENVIRONMENT_HEADERS: Record<EnvironmentType, { icon: any; label: string; b
   'commodities': { icon: Flame, label: 'Commodities', bgColor: 'bg-amber-500/5', textColor: 'text-amber-400' },
   'options': { icon: Target, label: 'Options', bgColor: 'bg-pink-500/5', textColor: 'text-pink-400' },
   'macro': { icon: Globe, label: 'Macro & News', bgColor: 'bg-emerald-500/5', textColor: 'text-emerald-400' },
-  'ai': { icon: Brain, label: 'AI Insights', bgColor: 'bg-violet-500/5', textColor: 'text-violet-400' },
+  'ai': { icon: Brain, label: 'AI Arena', bgColor: 'bg-violet-500/5', textColor: 'text-violet-400' },
   'journal': { icon: BookOpen, label: 'Journal', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
   'backtest': { icon: FlaskConical, label: 'Backtest', bgColor: 'bg-purple-500/5', textColor: 'text-purple-400' },
   'copy-trade': { icon: Users, label: 'Copy Trade', bgColor: 'bg-teal-500/5', textColor: 'text-teal-400' },

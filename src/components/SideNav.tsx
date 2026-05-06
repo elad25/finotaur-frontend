@@ -71,7 +71,7 @@ const MENU: Record<Category, { title: string; items: { label: string; href?: str
     ],
   },
   ai: {
-    title: "AI Insights",
+    title: "AI Arena",
     items: [
       { label: "Daily Summary" },
       { label: "Weekly Digest" },

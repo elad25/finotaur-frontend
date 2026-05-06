@@ -151,7 +151,7 @@ export const domains: Record<string, Domain> = {
 
   ai: {
     id: 'ai',
-    label: 'AI Insights',
+    label: 'AI Arena',
     subNav: [
       { label: 'Overview', path: '/app/ai/overview' },
     ],
