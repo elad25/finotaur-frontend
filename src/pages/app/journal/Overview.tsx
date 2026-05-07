@@ -65,7 +65,11 @@ const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPo
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
 const ImportTradesPopup = lazy(() => import("@/components/Importtradespopup"));
-const BrokerConnectionModal = lazy(() => import("@/components/BrokerConnectionModal"));
+const AddBrokerPopup = lazy(() => import("@/components/broker/AddBrokerPopup"));
+import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
+import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
+import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import { Button } from '@/components/ds/Button';
 import { useImportTrades } from '@/hooks/useImportTrades';
 import { useTradovate } from '@/hooks/useTradovate';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
@@ -1028,7 +1032,12 @@ function JournalOverviewContent() {
   } = usePortfolioContext();
   const [showFreeUserTooltip, setShowFreeUserTooltip] = useState(false);
   const [showImportPopup, setShowImportPopup] = useState(false);
-  const [showBrokerModal, setShowBrokerModal] = useState(false);
+  const [showAddBroker, setShowAddBroker] = useState(false);
+
+  // F2.5: aggregate dot color for the compact "Connect Broker" button
+  // (OQ-47 — global broker status indicator outside the popover).
+  const { connections: allBrokerConnections } = useBrokerConnections();
+  const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
   
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1288,51 +1297,44 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             )}
             
 
-            {/* F1.A: Connect Broker — opens unified BrokerConnectionModal (3 sections) */}
-            <button
-              onClick={() => setShowBrokerModal(true)}
-              className="flex items-center gap-3 bg-gradient-to-r from-[#1A1A1A] to-[#242424] hover:from-[#242424] hover:to-[#2A2A2A] border rounded-[16px] px-5 py-3 shadow-[0_0_30px_rgba(201,166,70,0.08)] transition-all duration-300 group relative overflow-hidden"
-              style={BORDER_STYLE}
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-[#C9A646]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Link2 className="w-5 h-5 text-[#C9A646]" />
-                </div>
-                <div className="text-left">
-                  <div className="text-[10px] text-[#A0A0A0] uppercase tracking-wider font-light">
-                    Brokers
-                  </div>
-                  <div className="text-sm font-semibold text-[#F4F4F4] group-hover:text-[#C9A646] transition-colors">
-                    Connect Broker
-                  </div>
-                </div>
-              </div>
-            </button>
+            {/* F2.5: Connect Broker — compact, opens BrokerConnectionsPopover.
+                The Popover handles the connections list + "+ Add new connection"
+                CTA, which calls setShowAddBroker(true) to mount AddBrokerPopup. */}
+            <BrokerConnectionsPopover onAddConnection={() => setShowAddBroker(true)}>
+              <Button
+                variant="goldOutline"
+                size="compact"
+                className="relative gap-2"
+                aria-label="Connect Broker"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Connect Broker
+                {brokerDotColor && (
+                  <span
+                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-[#0A0A0A] ${
+                      brokerDotColor === 'red'
+                        ? 'bg-[#E36363]'
+                        : brokerDotColor === 'yellow'
+                        ? 'bg-[#C9A646]'
+                        : 'bg-[#4AD295]'
+                    }`}
+                    aria-label={`Broker status: ${brokerDotColor}`}
+                  />
+                )}
+              </Button>
+            </BrokerConnectionsPopover>
 
-            {/* ✅ NEW: Import Trades Button (replaces Trader Tier) */}
-            <button
+            {/* F2.5: Import Trades — compact (handler unchanged) */}
+            <Button
               onClick={() => setShowImportPopup(true)}
-              className="flex items-center gap-3 bg-gradient-to-r from-[#1A1A1A] to-[#242424] hover:from-[#242424] hover:to-[#2A2A2A] border rounded-[16px] px-5 py-3 shadow-[0_0_30px_rgba(201,166,70,0.08)] transition-all duration-300 group relative overflow-hidden"
-              style={BORDER_STYLE}
+              variant="goldOutline"
+              size="compact"
+              className="gap-2"
+              aria-label="Import Trades"
             >
-              {/* Subtle glow effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-[#C9A646]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                  <Upload className="w-5 h-5 text-[#C9A646]" />
-                </div>
-                <div className="text-left">
-                  <div className="text-[10px] text-[#A0A0A0] uppercase tracking-wider font-light">
-                    Migrate Data
-                  </div>
-                  <div className="text-sm font-semibold text-[#F4F4F4] group-hover:text-[#C9A646] transition-colors">
-                    Import Trades
-                  </div>
-                </div>
-              </div>
-            </button>
+              <Upload className="w-3.5 h-3.5" />
+              Import Trades
+            </Button>
           </div>
         </div>
 
@@ -1521,14 +1523,13 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         </ErrorBoundary>
       )}
 
-      {/* F1.A: Unified Broker Connections Modal (Active / Re-auth / Add New) */}
-      {showBrokerModal && (
+      {/* F2.5: Add New Broker popup (Dialog with picker / form swap).
+          The connections list lives inside BrokerConnectionsPopover, anchored
+          to the "Connect Broker" button above. Disconnect / Remove UI is OQ-57. */}
+      {showAddBroker && (
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <BrokerConnectionModal
-              isOpen={showBrokerModal}
-              onClose={() => setShowBrokerModal(false)}
-            />
+            <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
           </Suspense>
         </ErrorBoundary>
       )}

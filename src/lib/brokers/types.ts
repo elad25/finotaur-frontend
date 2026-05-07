@@ -109,7 +109,7 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
   interactive_brokers: {
     broker: 'interactive_brokers',
     displayName: 'Interactive Brokers',
-    logo: '/brokers/ib.png',
+    logo: '/brokers/ibkr.png',
     color: '#0055AA',
     features: {
       oauth: true,
@@ -118,7 +118,7 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
       fileImport: true,
       realtime: true,
     },
-    status: 'beta',
+    status: 'available',
     documentation: 'https://www.interactivebrokers.com/api/doc.html',
   },
   td_ameritrade: {
