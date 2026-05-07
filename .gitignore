@@ -10,3 +10,9 @@ supabase/migrations_v2/
 *.dump
 *.sql.dump
 db_export_*.sql
+
+# Performance audit data (S1.5 perf-bottleneck-resolution session)
+.perf-baseline/
+.perf-after/
+.perf-after-desktop/
+.perf-revert/
