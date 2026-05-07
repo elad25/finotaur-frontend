@@ -16,6 +16,7 @@ import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/type
 import { useAuth } from '@/hooks/useAuth';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import TradovateConnectModal from '@/components/TradovateConnectModal';
+import { statusBadge } from '@/components/broker/brokerStatusBadge';
 
 interface Props {
   isOpen: boolean;
@@ -42,20 +43,6 @@ function brokerDisplay(broker: string): string {
 
 function brokerColor(broker: string): string {
   return BROKER_CONFIGS[broker as BrokerName]?.color ?? '#C9A646';
-}
-
-function statusBadge(conn: BrokerConnection): { label: string; color: string; bg: string } {
-  switch (conn.status) {
-    case 'connected':
-      return { label: 'Connected', color: '#4AD295', bg: 'rgba(74,210,149,0.1)' };
-    case 'error':
-      return { label: 'Error', color: '#E36363', bg: 'rgba(227,99,99,0.1)' };
-    case 'pending':
-      return { label: 'Pending', color: '#C9A646', bg: 'rgba(201,166,70,0.1)' };
-    case 'disconnected':
-    default:
-      return { label: 'Disconnected', color: '#A0A0A0', bg: 'rgba(160,160,160,0.1)' };
-  }
 }
 
 // ── Active connection row ────────────────────────────────────────────
