@@ -6,6 +6,7 @@ import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
+import '@/styles/app.css';  // App-only styles (custom scrollbars, ticker, sidebar). Landing's import graph excluded.
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
