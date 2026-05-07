@@ -149,7 +149,7 @@ function ReauthRow({
           {conn.account_name && conn.connection_name !== conn.account_name && (
             <span className="text-[#666]">· acct {conn.account_name}</span>
           )}
-          <span className="text-[#E36363]">· {conn.last_error || 'token expired — reconnect required'}</span>
+          <span className="text-[#E36363]">· {conn.last_error ?? 'Reconnecting...'}</span>
         </div>
       </div>
       <div className="flex items-center gap-1.5 flex-shrink-0">
