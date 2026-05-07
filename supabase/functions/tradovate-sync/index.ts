@@ -16,6 +16,41 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// ─── Retry helper for transient Tradovate API errors ─────────
+// Retries on 5xx and 429. Returns immediately on 401 (token expiry
+// handled by caller) and other 4xx (client errors, not retriable).
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: { maxAttempts?: number }
+): Promise<Response> {
+  const max = opts?.maxAttempts ?? 3;
+  const delays = [1000, 2000, 4000]; // ms — used for attempts 1→2, 2→3
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= max; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      // 401 → don't retry, signal token expiry
+      if (res.status === 401) return res;
+      // 4xx (other than 401/429) → don't retry, client error
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
+      // 5xx and 429 → retry
+      if (res.status >= 500 || res.status === 429) {
+        if (attempt === max) return res;
+        await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
+        continue;
+      }
+      // 2xx/3xx → success
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (attempt === max) throw err;
+      await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
+    }
+  }
+  throw lastErr ?? new Error('fetchWithRetry: exhausted attempts');
+}
+
 const TRADOVATE_URLS = {
   live: 'https://live.tradovateapi.com/v1',
   demo: 'https://demo.tradovateapi.com/v1',
@@ -45,7 +80,7 @@ async function fetchFills(
   lastFillId: number
 ): Promise<TradovateFill[]> {
   const url = `${base}/fill/ldeps?masterids=${accountId}`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
@@ -78,7 +113,7 @@ async function getContractInfo(
   contractId: number
 ): Promise<{ name: string; fullPointValue: number }> {
   // Step 1: contract/item → get name + contractMaturityId
-  const contractRes = await fetch(`${base}/contract/item?id=${contractId}`, {
+  const contractRes = await fetchWithRetry(`${base}/contract/item?id=${contractId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!contractRes.ok) return { name: 'UNKNOWN', fullPointValue: 1 };
@@ -86,7 +121,7 @@ async function getContractInfo(
 
   // Step 2: contractMaturity/item → get productId
   if (!contract.contractMaturityId) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
-  const maturityRes = await fetch(`${base}/contractMaturity/item?id=${contract.contractMaturityId}`, {
+  const maturityRes = await fetchWithRetry(`${base}/contractMaturity/item?id=${contract.contractMaturityId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!maturityRes.ok) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
@@ -94,7 +129,7 @@ async function getContractInfo(
 
   // Step 3: product/item → get fullPointValue
   if (!maturity.productId) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
-  const productRes = await fetch(`${base}/product/item?id=${maturity.productId}`, {
+  const productRes = await fetchWithRetry(`${base}/product/item?id=${maturity.productId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!productRes.ok) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
@@ -247,8 +282,9 @@ async function syncCredential(cred: {
   environment: 'live' | 'demo';
   connection_data: { vault_secret_id?: string } | null;
   account_id: string;
-}): Promise<{ inserted: number; errors: number }> {
+}, syncMode = 'cron'): Promise<{ inserted: number; errors: number }> {
   const base = TRADOVATE_URLS[cred.environment];
+  const syncStartedAt = new Date();
   let inserted = 0;
   let errors = 0;
 
@@ -282,6 +318,31 @@ async function syncCredential(cred: {
       last_sync_at:            new Date().toISOString(),
       last_successful_sync_at: new Date().toISOString(),
     }).eq('id', cred.id);
+
+    // Log skipped sync (no new fills to process)
+    try {
+      const completedAt = new Date();
+      await supabaseAdmin.from('broker_sync_logs').insert({
+        connection_id:   cred.id,
+        account_id:      null, // numeric Tradovate account_id; broker_accounts UUID not available here
+        user_id:         cred.user_id,
+        sync_type:       'fills',
+        sync_trigger:    syncMode,
+        status:          'success',
+        records_fetched: 0,
+        records_created: 0,
+        records_updated: 0,
+        records_skipped: 0,
+        records_failed:  0,
+        started_at:      syncStartedAt.toISOString(),
+        completed_at:    completedAt.toISOString(),
+        duration_ms:     completedAt.getTime() - syncStartedAt.getTime(),
+        sync_details:    { reason: 'no_new_fills' },
+      });
+    } catch (logErr) {
+      console.error('[tradovate-sync] broker_sync_logs insert failed (skipped path):', logErr);
+    }
+
     return { inserted: 0, errors: 0 };
   }
 
@@ -338,6 +399,32 @@ async function syncCredential(cred: {
     status:                  errors > 0 ? 'error' : 'connected',
   }).eq('id', cred.id);
 
+  // 7. Write observability log — non-critical, never blocks the sync
+  try {
+    const completedAt = new Date();
+    const logStatus = errors === 0 ? 'success' : inserted > 0 ? 'partial' : 'failed';
+    await supabaseAdmin.from('broker_sync_logs').insert({
+      connection_id:   cred.id,
+      account_id:      null, // broker_accounts UUID not available at this layer; fill in OQ-23 scope
+      user_id:         cred.user_id,
+      sync_type:       'fills',
+      sync_trigger:    syncMode,
+      status:          logStatus,
+      records_fetched: fills.length,
+      records_created: inserted,
+      records_updated: 0,
+      records_skipped: fills.length - inserted - errors,
+      records_failed:  errors,
+      error_message:   errors > 0 ? `${errors} fills failed to insert` : null,
+      started_at:      syncStartedAt.toISOString(),
+      completed_at:    completedAt.toISOString(),
+      duration_ms:     completedAt.getTime() - syncStartedAt.getTime(),
+      sync_details:    { fills_fetched: fills.length, max_fill_id: maxFillId },
+    });
+  } catch (logErr) {
+    console.error('[tradovate-sync] broker_sync_logs insert failed:', logErr);
+  }
+
   return { inserted, errors };
 }
 
@@ -379,7 +466,7 @@ Deno.serve(async (req: Request) => {
 
     for (const cred of credentials ?? []) {
       try {
-        const result = await syncCredential(cred as any);
+        const result = await syncCredential(cred as any, mode);
         totalInserted += result.inserted;
         totalErrors   += result.errors;
         synced++;
