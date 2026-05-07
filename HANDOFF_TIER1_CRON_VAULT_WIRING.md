@@ -15,7 +15,7 @@ Open **Supabase Studio → SQL Editor** for project `xsgbtptkueabylkxibly`. Run:
 ```sql
 SELECT name, created_at
 FROM vault.secrets
-WHERE name IN ('supabase_url', 'service_role_key')
+WHERE name IN ('supabase_url', 'secret_api_key')
 ORDER BY name;
 ```
 
@@ -30,7 +30,7 @@ If you see only 1 of the 2 → tell me, we'll create the missing one only.
 
 ## Step 2A — Create the Vault secrets (only if Step 1 returned 0 rows)
 
-⚠️ **DO NOT paste the service-role key into chat.** Get it from Supabase Dashboard → Project Settings → API → `service_role` key (secret). Copy and use directly in the SQL block below.
+⚠️ **DO NOT paste the secret API key into chat.** Get it from Supabase Dashboard → Project Settings → API → "Secret API keys" → Reveal (format: `sb_secret_...`). The legacy `service_role` JWT also works but `sb_secret_*` is the current recommended format.
 
 ```sql
 SELECT vault.create_secret(
@@ -42,7 +42,7 @@ SELECT vault.create_secret(
 -- Run this line separately so the key never lives in your shell history.
 SELECT vault.create_secret(
   '<PASTE_SERVICE_ROLE_KEY_HERE>',
-  'service_role_key'
+  'secret_api_key'
 );
 ```
 
@@ -51,10 +51,10 @@ SELECT vault.create_secret(
 ```sql
 SELECT name, length(decrypted_secret) AS secret_length, created_at
 FROM vault.decrypted_secrets
-WHERE name IN ('supabase_url', 'service_role_key');
+WHERE name IN ('supabase_url', 'secret_api_key');
 ```
 
-**Expected:** 2 rows. `supabase_url` length should be ~40 chars. `service_role_key` length should be ~200+ chars (JWT format).
+**Expected:** 2 rows. `supabase_url` length should be ~40 chars. `secret_api_key` length should be ~200+ chars (JWT format).
 
 ---
 
@@ -68,7 +68,7 @@ SELECT cron.alter_job(
       url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url') || '/functions/v1/tradovate-sync',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'secret_api_key')
       ),
       body := '{"mode":"cron"}'::jsonb
     );
@@ -90,7 +90,7 @@ SELECT cron.alter_job(
       url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url') || '/functions/v1/tradovate-auth',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'secret_api_key')
       ),
       body := '{"mode":"refresh"}'::jsonb
     );
@@ -123,7 +123,7 @@ SELECT net.http_post(
   url := (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'supabase_url') || '/functions/v1/tradovate-sync',
   headers := jsonb_build_object(
     'Content-Type', 'application/json',
-    'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'service_role_key')
+    'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'secret_api_key')
   ),
   body := '{"mode":"cron"}'::jsonb
 );
