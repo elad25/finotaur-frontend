@@ -1,36 +1,7 @@
 // vite.config.ts - WORKING VERSION (object syntax)
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
-
-/**
- * deferCssPlugin — B-light optimization (S1.5 perf-bottleneck-resolution).
- *
- * Production-only. Transforms render-blocking <link rel="stylesheet"> tags
- * into non-blocking ones using the media="print" + onload swap pattern.
- * Adds a <noscript> fallback so users without JS still receive styles.
- *
- * Effect: browser fetches CSS but does NOT block first paint on it.
- * Trade-off: brief FOUC (Flash of Unstyled Content) until CSS loads.
- *
- * Lighthouse baseline (2026-05-07): index-*.css render-blocks 1660ms.
- * This plugin eliminates that block, expected ~1450ms LCP improvement.
- */
-function deferCssPlugin(): Plugin {
-  return {
-    name: 'defer-css',
-    apply: 'build',
-    transformIndexHtml(html) {
-      return html.replace(
-        /<link rel="stylesheet"([^>]*)>/g,
-        (_match, attrs) => {
-          return `<link rel="stylesheet"${attrs} media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet"${attrs}></noscript>`;
-        }
-      );
-    },
-  };
-}
 
 export default defineConfig(({ mode }) => {
   // Read VITE_PROXY_TARGET from .env / .env.local / OS env so dev can be pointed
@@ -41,7 +12,7 @@ export default defineConfig(({ mode }) => {
   const proxySecure = proxyTarget.startsWith('https://')
 
   return {
-  plugins: [react(), deferCssPlugin()],
+  plugins: [react()],
 
   resolve: {
     alias: {
