@@ -334,10 +334,12 @@ Deno.serve(async (req: Request) => {
         connected_at:     new Date().toISOString(),
       }).eq('id', cred.id);
 
-      // Kick off sync
-      supabaseAdmin.functions.invoke('tradovate-sync', {
-        body: { userId: cred.user_id, environment: env, mode: 'initial' },
-      }).catch(() => {});
+      // Note: previously fired tradovate-sync here as fire-and-forget.
+      // Removed because if sync fails (e.g. 401 from a still-propagating token,
+      // or a Tradovate-side permission issue), it stomps the freshly-set
+      // is_active=true back to disconnected within 1-2s. The cron tick (5 min)
+      // picks up sync naturally; users see a stable "connected" status
+      // immediately and trades arrive shortly after.
 
       return json({ success: true });
     }
