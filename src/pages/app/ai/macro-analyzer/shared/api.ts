@@ -10,7 +10,16 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app/api/macro-analyzer';
+// Robust against both VITE_API_URL conventions:
+//   - Set to bare host (e.g. https://finotaur-server-production.up.railway.app) → we append /api/macro-analyzer
+//   - Set to host + /api/macro-analyzer (legacy) → kept as-is (idempotent)
+// This fixes the production 404 where VITE_API_URL was the bare host but every fetch
+// below appends just `/overview`, `/indicators`, etc. — producing /overview at Railway,
+// which 404s at the catch-all.
+const _apiHost = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+const API_BASE = _apiHost.endsWith('/api/macro-analyzer')
+  ? _apiHost
+  : `${_apiHost.replace(/\/$/, '')}/api/macro-analyzer`;
 
 // =====================================================
 // GENERIC FETCHER
