@@ -73,13 +73,19 @@ async function getAccessToken(vaultSecretId: string): Promise<string> {
 }
 
 // ─── Fetch fills from Tradovate ───────────────────────────────
+// We use /fill/list (NOT /fill/ldeps) because the FINOTAUR app's API key
+// permissions don't grant /fill/ldeps even with Orders=Full Access. /fill/list
+// returns fills scoped to the authenticated token. Verified end-to-end via
+// 13-endpoint diagnostic on 2026-05-08. Tradovate doesn't include accountId
+// in /fill/list rows so we cannot filter by account here — accept that for
+// single-account users, address multi-account in a separate sprint.
 async function fetchFills(
   base: string,
   accessToken: string,
-  accountId: number,
+  _accountId: number,
   lastFillId: number
 ): Promise<TradovateFill[]> {
-  const url = `${base}/fill/ldeps?masterids=${accountId}`;
+  const url = `${base}/fill/list`;
   const res = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -228,8 +234,9 @@ async function processFill(
       //       broker_connection_id / broker_account_id still intentionally omitted (NULL)
       //       in F1.A — wiring trades.broker_connection_id to broker_connections(id) is
       //       J2 / OQ-23 scope. See MASTER_PLAN.
+      // NOTE: broker_trade_id column does not exist in trades schema —
+      // external_id (`tradovate::fill::${fill.id}`) IS the broker trade ref.
       external_id:          `tradovate::fill::${fill.id}`,
-      broker_trade_id:      String(fill.id),
       idempotency_key:      `tradovate::${cred.user_id}::${cred.environment}::${fill.id}`,
       symbol,
       side:                 fillSide,
