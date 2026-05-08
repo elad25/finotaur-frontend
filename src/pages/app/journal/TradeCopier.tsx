@@ -14,6 +14,7 @@ import {
   TrendingUp, AlertOctagon, ArrowLeftRight, Search, X,
 } from 'lucide-react';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
+import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import TradovateConnectModal from '@/components/TradovateConnectModal';
@@ -225,6 +226,23 @@ const SyncBadge = memo(({ type, label }: { type: string; label: string }) => {
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {label}
     </span>
+  );
+});
+
+// ─── Copy Engine Health Pill ──────────────────────────────────
+const EnginePill = memo(function EnginePill({ alive, sessions }: { alive: boolean; sessions: number }) {
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${
+        alive
+          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+          : 'bg-zinc-700/30 border-zinc-600/40 text-zinc-500'
+      }`}
+      title={alive ? `Copy engine live · ${sessions} session${sessions === 1 ? '' : 's'}` : 'Copy engine not running'}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-emerald-400' : 'bg-zinc-500'} ${alive ? 'animate-pulse' : ''}`} />
+      Engine {alive ? `· ${sessions}` : 'down'}
+    </div>
   );
 });
 
@@ -978,6 +996,7 @@ export default function TradeCopier() {
     hasAnyConnection, syncStatus, isLoading,
     disconnect, triggerSync,
   } = useTradovate();
+  const { alive: engineAlive, sessions: engineSessions } = useCopyEngineHealth();
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showModal, setShowModal] = useState(false);
@@ -1008,7 +1027,10 @@ export default function TradeCopier() {
               Configure your leader account, instrument and follower settings in real-time.
             </p>
           </div>
-          <SyncBadge type={syncStatus.type} label={syncStatus.label} />
+          <div className="flex items-center gap-2">
+            <EnginePill alive={engineAlive} sessions={engineSessions} />
+            <SyncBadge type={syncStatus.type} label={syncStatus.label} />
+          </div>
         </div>
 
         {/* ── Section 1: Connection Status ── */}
