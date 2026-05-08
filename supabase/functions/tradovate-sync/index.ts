@@ -73,13 +73,17 @@ async function getAccessToken(vaultSecretId: string): Promise<string> {
 }
 
 // ─── Fetch fills from Tradovate ───────────────────────────────
+// We use /fill/list (not /fill/ldeps) because the FINOTAUR app's API key
+// permissions don't grant access to /fill/ldeps even with Orders=Full Access
+// in the Tradovate Developer Portal. /fill/list returns ALL fills the token
+// can read, so we filter client-side by accountId.
 async function fetchFills(
   base: string,
   accessToken: string,
   accountId: number,
   lastFillId: number
 ): Promise<TradovateFill[]> {
-  const url = `${base}/fill/ldeps?masterids=${accountId}`;
+  const url = `${base}/fill/list`;
   const res = await fetchWithRetry(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -89,14 +93,16 @@ async function fetchFills(
 
   const fills: TradovateFill[] = await res.json();
 
-  // Only fills newer than last cursor
-  return fills.filter(f => f.id > lastFillId);
+  // Filter to this account only (token may see fills across multiple accounts)
+  // AND only fills newer than the last cursor.
+  return fills.filter(f => f.accountId === accountId && f.id > lastFillId);
 }
 
 interface TradovateFill {
   id: number;
   orderId: number;
   contractId: number;
+  accountId: number;
   timestamp: string;
   tradeDate: { year: number; month: number; day: number };
   action: 'Buy' | 'Sell';
