@@ -3,6 +3,7 @@
 // snapshots (positions, balances, PnL). Designed to mount/unmount with the
 // Copy Trading Dashboard tab — React Query handles cache + cleanup.
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 export interface PositionEntry {
@@ -38,23 +39,26 @@ interface AccountsResponse {
   fetchedAt: string;
 }
 
-async function fetchAccounts(): Promise<AccountsResponse> {
-  const res = await fetch('/api/copy-engine/accounts');
+async function fetchAccounts(signal?: AbortSignal): Promise<AccountsResponse> {
+  const res = await fetch('/api/copy-engine/accounts', { signal });
   if (!res.ok) throw new Error(`accounts fetch ${res.status}`);
   return res.json();
 }
 
 export function useAccountSnapshots() {
   const { data, isLoading, error } = useQuery<AccountsResponse, Error>({
-    queryKey:       ['copy-engine-accounts'],
-    queryFn:        fetchAccounts,
+    queryKey:        ['copy-engine-accounts'],
+    queryFn:         ({ signal }) => fetchAccounts(signal),
     refetchInterval: 2000, // 2 s — live-ish without hammering
-    staleTime:      0,
-    retry:          1,
+    staleTime:       0,
+    retry:           1,
   });
 
-  const byCredentialId = new Map<string, AccountState>();
-  for (const a of data?.accounts ?? []) byCredentialId.set(a.credentialId, a);
+  const byCredentialId = useMemo(() => {
+    const map = new Map<string, AccountState>();
+    for (const a of data?.accounts ?? []) map.set(a.credentialId, a);
+    return map;
+  }, [data?.accounts]);
 
   return {
     accounts:       data?.accounts ?? [],
