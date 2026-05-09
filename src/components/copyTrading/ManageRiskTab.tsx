@@ -1,43 +1,78 @@
 // src/components/copyTrading/ManageRiskTab.tsx
 // ═══════════════════════════════════════════════════════════════
-// Manage Risk tab — per-rule risk limits (kill switch, max contracts,
-// max daily loss, max position size) with dirty-state save button.
+// Manage Risk tab — per-portfolio risk limits (kill switch, max
+// contracts, max daily loss, max position size) with dirty-state
+// save button. Works for ALL accounts, including a lone leader.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, memo } from 'react';
 import { Shield, Save, AlertOctagon } from 'lucide-react';
-import { useCopyRules, type CopyRule } from '@/hooks/useCopyRules';
-import { usePortfolios } from '@/hooks/usePortfolios';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
 import { toast } from 'sonner';
+
+// ─── Portfolio risk patch shape ───────────────────────────────
+
+interface PortfolioRiskPatch {
+  kill_switch_active:      boolean;
+  max_daily_loss_usd:      number | null;
+  max_position_size:       number | null;
+  max_contracts_per_trade: number | null;
+}
+
+// ─── Portfolio risk mutation ───────────────────────────────────
+
+function usePortfolioRisk() {
+  const qc = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (input: { id: string; patch: PortfolioRiskPatch }) => {
+      const { data, error } = await supabase
+        .from('portfolios')
+        .update(input.patch)
+        .eq('id', input.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolios'] }),
+  });
+
+  return {
+    updatePortfolioRisk: mutation.mutateAsync,
+    isUpdating:          mutation.isPending,
+  };
+}
 
 // ─── Main tab component ───────────────────────────────────────
 
 export const ManageRiskTab = memo(function ManageRiskTab() {
-  const { rules, isLoading, updateRule, isUpdating } = useCopyRules();
-  const { portfolios } = usePortfolios();
+  const { portfolios, isLoading } = usePortfolios();
+  const { updatePortfolioRisk, isUpdating } = usePortfolioRisk();
 
-  const portfolioName = (id: string): string => {
-    const p = portfolios.find(x => x.id === id);
-    return p?.account_name ?? p?.tradovate_account_spec ?? id.slice(0, 8);
-  };
+  const tradovatePortfolios = portfolios.filter(
+    (p) => p.source === 'tradovate' && p.is_active,
+  );
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-ds-8">
-        <p className="text-sm text-ink-secondary">Loading rules…</p>
+        <p className="text-sm text-ink-secondary">Loading accounts…</p>
       </div>
     );
   }
 
-  if (rules.length === 0) {
+  if (tradovatePortfolios.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
         <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
           <Shield className="w-6 h-6 text-gold-primary" />
         </div>
-        <h3 className="text-base font-semibold text-ink-primary">No copy rules yet</h3>
+        <h3 className="text-base font-semibold text-ink-primary">No connected accounts</h3>
         <p className="text-sm text-ink-secondary text-center max-w-md">
-          Set up at least one source→target copy rule in the Copy Trading tab, then come back here to configure risk limits.
+          Connect a broker to manage risk limits per account.
         </p>
       </div>
     );
@@ -45,13 +80,11 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
 
   return (
     <div className="space-y-ds-3">
-      {rules.map(rule => (
-        <RiskCard
-          key={rule.id}
-          rule={rule}
-          sourceName={portfolioName(rule.source_portfolio_id)}
-          targetName={portfolioName(rule.target_portfolio_id)}
-          onSave={(patch) => updateRule({ id: rule.id, patch })}
+      {tradovatePortfolios.map((p) => (
+        <PortfolioRiskCard
+          key={p.id}
+          portfolio={p}
+          onSave={(patch) => updatePortfolioRisk({ id: p.id, patch })}
           isSaving={isUpdating}
         />
       ))}
@@ -59,33 +92,37 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   );
 });
 
-// ─── Per-rule card ────────────────────────────────────────────
+// ─── Per-portfolio card ───────────────────────────────────────
 
-interface RiskCardProps {
-  rule:       CopyRule;
-  sourceName: string;
-  targetName: string;
-  onSave:     (patch: Partial<CopyRule>) => Promise<CopyRule>;
-  isSaving:   boolean;
+interface PortfolioRiskCardProps {
+  portfolio: Portfolio;
+  onSave:    (patch: PortfolioRiskPatch) => Promise<unknown>;
+  isSaving:  boolean;
 }
 
-const RiskCard = memo(function RiskCard({
-  rule,
-  sourceName,
-  targetName,
+const PortfolioRiskCard = memo(function PortfolioRiskCard({
+  portfolio,
   onSave,
   isSaving,
-}: RiskCardProps) {
-  const [maxContracts,    setMaxContracts]    = useState<string>(rule.max_contracts?.toString()      ?? '');
-  const [maxDailyLossUsd, setMaxDailyLossUsd] = useState<string>(rule.max_daily_loss_usd?.toString() ?? '');
-  const [maxPositionSize, setMaxPositionSize] = useState<string>(rule.max_position_size?.toString()  ?? '');
-  const [killSwitch,      setKillSwitch]      = useState<boolean>(rule.kill_switch_active);
+}: PortfolioRiskCardProps) {
+  const [maxContractsPerTrade, setMaxContractsPerTrade] = useState<string>(
+    portfolio.max_contracts_per_trade?.toString() ?? '',
+  );
+  const [maxDailyLossUsd, setMaxDailyLossUsd] = useState<string>(
+    portfolio.max_daily_loss_usd?.toString() ?? '',
+  );
+  const [maxPositionSize, setMaxPositionSize] = useState<string>(
+    portfolio.max_position_size?.toString() ?? '',
+  );
+  const [killSwitch, setKillSwitch] = useState<boolean>(
+    portfolio.kill_switch_active ?? false,
+  );
 
   const dirty =
-    (maxContracts    || null) !== (rule.max_contracts?.toString()      ?? null) ||
-    (maxDailyLossUsd || null) !== (rule.max_daily_loss_usd?.toString() ?? null) ||
-    (maxPositionSize || null) !== (rule.max_position_size?.toString()  ?? null) ||
-    killSwitch !== rule.kill_switch_active;
+    (maxContractsPerTrade || null) !== (portfolio.max_contracts_per_trade?.toString() ?? null) ||
+    (maxDailyLossUsd      || null) !== (portfolio.max_daily_loss_usd?.toString()      ?? null) ||
+    (maxPositionSize      || null) !== (portfolio.max_position_size?.toString()        ?? null) ||
+    killSwitch !== (portfolio.kill_switch_active ?? false);
 
   const handleSave = async () => {
     const parseNum = (s: string): number | null => {
@@ -95,11 +132,11 @@ const RiskCard = memo(function RiskCard({
       if (Number.isNaN(n) || n < 0) return null;
       return n;
     };
-    const patch: Partial<CopyRule> = {
-      max_contracts:      parseNum(maxContracts),
-      max_daily_loss_usd: parseNum(maxDailyLossUsd),
-      max_position_size:  parseNum(maxPositionSize),
-      kill_switch_active: killSwitch,
+    const patch: PortfolioRiskPatch = {
+      kill_switch_active:      killSwitch,
+      max_daily_loss_usd:      parseNum(maxDailyLossUsd),
+      max_position_size:       parseNum(maxPositionSize),
+      max_contracts_per_trade: parseNum(maxContractsPerTrade),
     };
     try {
       await onSave(patch);
@@ -109,22 +146,45 @@ const RiskCard = memo(function RiskCard({
     }
   };
 
-  return (
-    <div className={`rounded-lg bg-surface-1 border p-ds-4 ${killSwitch ? 'border-num-negative/40' : 'border-border-ds-subtle'}`}>
+  // Title: account name + environment badge
+  const accountTitle =
+    portfolio.tradovate_account_spec ??
+    portfolio.name ??
+    portfolio.id.slice(0, 8);
+  const envLabel = portfolio.environment ?? 'unknown';
 
-      {/* ── Card header: rule label + kill switch ── */}
+  return (
+    <div
+      className={`rounded-lg bg-surface-1 border p-ds-4 ${
+        killSwitch ? 'border-num-negative/40' : 'border-border-ds-subtle'
+      }`}
+    >
+      {/* ── Card header: account label + kill switch ── */}
       <div className="flex items-center justify-between mb-ds-3 gap-ds-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-ink-primary truncate">
-            {sourceName} → {targetName}
+          <div className="flex items-center gap-ds-2">
+            <span className="text-sm font-semibold text-ink-primary truncate">
+              {accountTitle}
+            </span>
+            <span
+              className={`text-[9px] uppercase px-1.5 py-0.5 rounded-sm border ${
+                envLabel === 'live'
+                  ? 'bg-status-success/10 border-status-success/30 text-status-success'
+                  : 'bg-surface-base border-border-ds-default text-ink-tertiary'
+              }`}
+            >
+              {envLabel}
+            </span>
           </div>
-          <div className="text-[11px] text-ink-secondary mt-0.5">
-            Ratio {rule.ratio}× · {rule.is_active ? 'Active' : 'Paused'}
-          </div>
+          {portfolio.connection_label && (
+            <div className="text-[11px] text-ink-secondary mt-0.5">
+              {portfolio.connection_label}
+            </div>
+          )}
         </div>
 
         <button
-          onClick={() => setKillSwitch(v => !v)}
+          onClick={() => setKillSwitch((v) => !v)}
           className={`flex items-center gap-1.5 px-ds-3 py-1.5 rounded-md border transition-colors duration-base ${
             killSwitch
               ? 'bg-num-negative/10 border-num-negative/40 text-num-negative'
@@ -133,7 +193,9 @@ const RiskCard = memo(function RiskCard({
           aria-label="Toggle kill switch"
         >
           <AlertOctagon className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">{killSwitch ? 'Kill switch ON' : 'Kill switch'}</span>
+          <span className="text-xs font-medium">
+            {killSwitch ? 'Kill switch ON' : 'Kill switch'}
+          </span>
         </button>
       </div>
 
@@ -142,8 +204,8 @@ const RiskCard = memo(function RiskCard({
         <NumericField
           label="Max contracts/trade"
           hint="Per-trade hard cap"
-          value={maxContracts}
-          onChange={setMaxContracts}
+          value={maxContractsPerTrade}
+          onChange={setMaxContractsPerTrade}
         />
         <NumericField
           label="Max daily loss ($)"
