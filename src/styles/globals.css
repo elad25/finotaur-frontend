@@ -116,6 +116,7 @@ All colors MUST be HSL.
     --status-warning: #eab308;
     --status-error: #E24B4A;
     --status-success: #10b981;
+    --status-offline: #1a1a1a; /* near-black for "not connected" status dots */
 
     /* ---------- Typography: families ---------- */
     --font-sans: 'Inter', -apple-system, 'SF Pro Text', BlinkMacSystemFont, sans-serif;
