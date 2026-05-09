@@ -19,6 +19,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { authenticate } from '../_shared/dualAuth.ts';
 
 // ─── Tradovate official REST API base URLs ────────────────────
 const TRADOVATE_URLS = {
@@ -199,6 +200,22 @@ Deno.serve(async (req: Request) => {
         'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
       },
     });
+  }
+
+  // OQ-37+38: dual-auth (cron shared-secret OR user JWT). verify_jwt:false at
+  // gateway means the Edge Function itself must reject unauthorized callers.
+  const auth = await authenticate(req, supabaseAdmin);
+  if (!auth.ok) {
+    return new Response(
+      JSON.stringify({ error: auth.message }),
+      {
+        status: auth.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+      },
+    );
   }
 
   try {
