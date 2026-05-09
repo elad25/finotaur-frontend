@@ -1,12 +1,12 @@
 // src/components/copyTrading/ManageRiskTab.tsx
 // ═══════════════════════════════════════════════════════════════
-// Manage Risk tab — per-portfolio risk limits (kill switch, max
-// contracts, max daily loss, max position size) with dirty-state
-// save button. Works for ALL accounts, including a lone leader.
+// Manage Risk tab — per-portfolio risk limits in a compact 2-line
+// luxury layout. Row 1: identity + actions. Row 2: 5 inputs grouped
+// as Daily | Per-trade. All hints surface as tooltips on hover.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState, memo } from 'react';
-import { Shield, Save, AlertOctagon } from 'lucide-react';
+import { Shield, AlertOctagon, Check } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { usePortfolios, type Portfolio } from '@/hooks/usePortfolios';
@@ -69,7 +69,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   if (tradovatePortfolios.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
-        <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+        <div className="w-12 h-12 rounded-[12px] bg-gold-primary/10 border border-gold-border flex items-center justify-center">
           <Shield className="w-6 h-6 text-gold-primary" />
         </div>
         <h3 className="text-base font-semibold text-ink-primary">No connected accounts</h3>
@@ -81,7 +81,7 @@ export const ManageRiskTab = memo(function ManageRiskTab() {
   }
 
   return (
-    <div className="space-y-ds-3">
+    <div className="flex flex-col gap-ds-2">
       {tradovatePortfolios.map((p) => (
         <PortfolioRiskCard
           key={p.id}
@@ -158,148 +158,182 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
     }
   };
 
-  // Title: account name + environment badge
   const accountTitle =
     portfolio.tradovate_account_spec ??
     portfolio.name ??
     portfolio.id.slice(0, 8);
   const envLabel = portfolio.environment ?? 'unknown';
+  const isLive = envLabel === 'live';
+
+  // Card border: subtle by default, red when kill is on, gold when dirty
+  const borderClass = killSwitch
+    ? 'border-num-negative/40'
+    : dirty
+      ? 'border-gold-border'
+      : 'border-border-ds-subtle';
 
   return (
     <div
-      className={`rounded-lg bg-surface-1 border p-ds-4 ${
-        killSwitch ? 'border-num-negative/40' : 'border-border-ds-subtle'
-      }`}
+      className={`rounded-[12px] bg-surface-1 border ${borderClass} px-ds-4 py-ds-3 transition-colors duration-base`}
     >
-      {/* ── Card header: account label + kill switch ── */}
-      <div className="flex items-center justify-between mb-ds-3 gap-ds-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-ds-2">
-            <span className="text-sm font-semibold text-ink-primary truncate">
-              {accountTitle}
-            </span>
-            <span
-              className={`text-[9px] uppercase px-1.5 py-0.5 rounded-sm border ${
-                envLabel === 'live'
-                  ? 'bg-status-success/10 border-status-success/30 text-status-success'
-                  : 'bg-surface-base border-border-ds-default text-ink-tertiary'
-              }`}
-            >
-              {envLabel}
-            </span>
-          </div>
+      {/* ── Row 1: identity + actions ── */}
+      <div className="flex items-center justify-between gap-ds-4">
+        {/* Left: gold dot + account label + env badge + connection label */}
+        <div className="flex items-center gap-ds-3 min-w-0">
+          {/* Gold accent dot — luxury detail, denser than a full avatar */}
+          <span
+            className={`flex-shrink-0 w-1.5 h-6 rounded-sm ${
+              isLive ? 'bg-gradient-gold shadow-[0_0_8px_rgba(201,166,70,0.4)]' : 'bg-ink-secondary/30'
+            }`}
+            aria-hidden
+          />
+
+          <span className="text-sm font-mono tabular-nums font-medium text-ink-primary truncate">
+            {accountTitle}
+          </span>
+
+          <span
+            className={`flex-shrink-0 text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm border ${
+              isLive
+                ? 'bg-gold-primary/10 border-gold-border text-gold-primary'
+                : 'bg-surface-base border-border-ds-default text-ink-tertiary'
+            }`}
+          >
+            {envLabel}
+          </span>
+
           {portfolio.connection_label && (
-            <div className="text-[11px] text-ink-secondary mt-0.5">
-              {portfolio.connection_label}
-            </div>
+            <span className="text-xs text-ink-tertiary truncate">
+              · {portfolio.connection_label}
+            </span>
           )}
         </div>
 
-        <button
-          onClick={() => setKillSwitch((v) => !v)}
-          className={`flex items-center gap-1.5 px-ds-3 py-1.5 rounded-md border transition-colors duration-base ${
-            killSwitch
-              ? 'bg-num-negative/10 border-num-negative/40 text-num-negative'
-              : 'bg-surface-base border-border-ds-default text-ink-secondary hover:text-ink-primary'
-          }`}
-          aria-label="Toggle kill switch"
-        >
-          <AlertOctagon className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">
-            {killSwitch ? 'Kill switch ON' : 'Kill switch'}
-          </span>
-        </button>
-      </div>
+        {/* Right: kill switch + save */}
+        <div className="flex items-center gap-ds-2 flex-shrink-0">
+          <button
+            onClick={() => setKillSwitch((v) => !v)}
+            title={killSwitch ? 'Kill switch is ON — copies blocked' : 'Activate kill switch to block all copies'}
+            className={`flex items-center gap-1.5 px-ds-3 py-1.5 rounded-md border text-xs font-medium transition-all duration-base ${
+              killSwitch
+                ? 'bg-num-negative/15 border-num-negative/50 text-num-negative shadow-[0_0_12px_rgba(226,75,74,0.25)]'
+                : 'bg-surface-base border-border-ds-default text-ink-secondary hover:border-num-negative/40 hover:text-num-negative'
+            }`}
+            aria-label="Toggle kill switch"
+          >
+            <AlertOctagon className="w-3.5 h-3.5" />
+            <span>{killSwitch ? 'Kill ON' : 'Kill switch'}</span>
+          </button>
 
-      {/* ── Risk fields ── */}
-      <div className="space-y-ds-3 mb-ds-3">
-        {/* Section: Daily limits */}
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-ink-secondary mb-ds-2">Daily limits</div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-ds-3">
-            <NumericField
-              label="Max daily loss ($) — soft"
-              hint="Pauses new copies when realized loss hits"
-              value={maxDailyLossUsd}
-              onChange={setMaxDailyLossUsd}
-            />
-            <NumericField
-              label="Daily stop loss ($) — hard"
-              hint="Auto-flattens when total daily loss hits"
-              value={dailyStopLossUsd}
-              onChange={setDailyStopLossUsd}
-            />
-          </div>
-        </div>
-
-        {/* Section: Per-trade limits */}
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-ink-secondary mb-ds-2">Per-trade limits</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-ds-3">
-            <NumericField
-              label="Max loss per trade ($) — hard"
-              hint="Auto-flattens when open loss hits"
-              value={maxLossPerTradeUsd}
-              onChange={setMaxLossPerTradeUsd}
-            />
-            <NumericField
-              label="Max contracts/trade"
-              hint="Quantity cap per copy"
-              value={maxContractsPerTrade}
-              onChange={setMaxContractsPerTrade}
-            />
-            <NumericField
-              label="Max position size"
-              hint="Total open contracts"
-              value={maxPositionSize}
-              onChange={setMaxPositionSize}
-            />
-          </div>
+          <button
+            onClick={handleSave}
+            disabled={!dirty || isSaving}
+            title={dirty ? 'Save risk limit changes' : 'No changes to save'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-ds-3 py-1.5 text-xs font-medium transition-all duration-base disabled:opacity-30 disabled:cursor-not-allowed ${
+              dirty
+                ? 'border border-gold-border text-gold-primary hover:bg-gold-primary/10 hover:border-gold-primary'
+                : 'border border-border-ds-subtle text-ink-tertiary'
+            }`}
+          >
+            <Check className="w-3.5 h-3.5" />
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
         </div>
       </div>
 
-      {/* ── Save button ── */}
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={!dirty || isSaving}
-          className="inline-flex items-center gap-1.5 rounded-md bg-gold-primary hover:bg-[var(--gold-hover)] text-ink-on-gold px-ds-3 py-1.5 text-xs font-medium transition-colors duration-base disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Save className="w-3.5 h-3.5" />
-          {isSaving ? 'Saving…' : 'Save changes'}
-        </button>
+      {/* ── Row 2: 5 inputs in a single horizontal cluster ── */}
+      <div className="flex items-center gap-ds-2 mt-ds-3 flex-wrap">
+        <GroupLabel>Daily</GroupLabel>
+        <RiskInput
+          label="Soft"
+          prefix="$"
+          tooltip="Max daily loss (soft) — pauses new copies when realized loss hits"
+          value={maxDailyLossUsd}
+          onChange={setMaxDailyLossUsd}
+        />
+        <RiskInput
+          label="Hard"
+          prefix="$"
+          tooltip="Daily stop loss (hard) — auto-flattens when total daily loss hits"
+          value={dailyStopLossUsd}
+          onChange={setDailyStopLossUsd}
+        />
+
+        <Divider />
+
+        <GroupLabel>Per-trade</GroupLabel>
+        <RiskInput
+          label="Loss"
+          prefix="$"
+          tooltip="Max loss per trade (hard) — auto-flattens when open loss hits"
+          value={maxLossPerTradeUsd}
+          onChange={setMaxLossPerTradeUsd}
+        />
+        <RiskInput
+          label="Cont"
+          tooltip="Max contracts per trade — quantity cap per copy"
+          value={maxContractsPerTrade}
+          onChange={setMaxContractsPerTrade}
+        />
+        <RiskInput
+          label="Pos"
+          tooltip="Max position size — total open contracts"
+          value={maxPositionSize}
+          onChange={setMaxPositionSize}
+        />
       </div>
     </div>
   );
 });
 
-// ─── Numeric input field ──────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────
 
-const NumericField = memo(function NumericField({
-  label,
-  hint,
-  value,
-  onChange,
-}: {
+const GroupLabel = memo(function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] uppercase tracking-[1.5px] text-gold-muted font-medium flex-shrink-0">
+      {children}
+    </span>
+  );
+});
+
+const Divider = memo(function Divider() {
+  return <span className="h-5 w-px bg-border-ds-subtle mx-ds-1 flex-shrink-0" aria-hidden />;
+});
+
+interface RiskInputProps {
   label:    string;
-  hint:     string;
+  prefix?:  string;
+  tooltip:  string;
   value:    string;
   onChange: (v: string) => void;
-}) {
+}
+
+const RiskInput = memo(function RiskInput({
+  label,
+  prefix,
+  tooltip,
+  value,
+  onChange,
+}: RiskInputProps) {
   return (
-    <div>
-      <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
+    <label
+      title={tooltip}
+      className="group flex items-center gap-1.5 pl-ds-2 pr-1 py-1 rounded-md bg-surface-base border border-border-ds-subtle hover:border-border-ds-default focus-within:border-gold-border focus-within:shadow-[0_0_0_3px_rgba(201,166,70,0.08)] transition-all duration-base cursor-text"
+    >
+      <span className="text-[10px] uppercase tracking-wider text-ink-tertiary font-medium select-none">
         {label}
-      </label>
+      </span>
+      {prefix && (
+        <span className="text-xs font-mono text-ink-tertiary select-none">{prefix}</span>
+      )}
       <input
         type="text"
         inputMode="numeric"
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ''))}
         placeholder="—"
-        className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm font-mono tabular-nums text-ink-primary placeholder:text-ink-tertiary focus:border-gold-border outline-none transition-colors duration-base"
+        className="w-16 bg-transparent text-sm font-mono tabular-nums text-ink-primary placeholder:text-ink-tertiary outline-none"
       />
-      <div className="text-[10px] text-ink-tertiary mt-1">{hint}</div>
-    </div>
+    </label>
   );
 });
