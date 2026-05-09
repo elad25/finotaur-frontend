@@ -11,15 +11,20 @@ import { useState, useCallback, memo, useMemo, useRef, useEffect } from 'react';
 import {
   Link2, RefreshCw, AlertCircle, Clock,
   Copy, History, Zap, Shield, WifiOff,
-  TrendingUp, AlertOctagon, ArrowLeftRight, Search, X,
+  TrendingUp, AlertOctagon, ArrowLeftRight, Search, X, Plus,
 } from 'lucide-react';
-import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
+import { useTradovate } from '@/hooks/useTradovate';
 import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import TradovateConnectModal from '@/components/TradovateConnectModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
+import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import { useEngineSessions } from '@/hooks/useEngineSessions';
+import { BrokerAccordion } from '@/components/copyTrading/BrokerAccordion';
+import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
+import type { BrokerConnection } from '@/lib/brokers/types';
 
 // ─────────────────────────────────────────────────────────────
 // FUTURES CONTRACT EXPIRY LOGIC
@@ -235,113 +240,17 @@ const EnginePill = memo(function EnginePill({ alive, sessions }: { alive: boolea
     <div
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${
         alive
-          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-          : 'bg-zinc-700/30 border-zinc-600/40 text-zinc-500'
+          ? 'bg-gold-primary/10 border-gold-border text-gold-primary'
+          : 'bg-surface-1 border-border-ds-subtle text-ink-tertiary'
       }`}
       title={alive ? `Copy engine live · ${sessions} session${sessions === 1 ? '' : 's'}` : 'Copy engine not running'}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-emerald-400' : 'bg-zinc-500'} ${alive ? 'animate-pulse' : ''}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-gold-primary animate-pulse' : 'bg-ink-tertiary'}`} />
       Engine {alive ? `· ${sessions}` : 'down'}
     </div>
   );
 });
 
-// ─── Connection Card ──────────────────────────────────────────
-const ConnectionCard = memo(({
-  env, credential, onConnect, onSync, onDisconnect, isLoading,
-}: {
-  env: TradovateEnv;
-  credential: any;
-  onConnect: () => void;
-  onSync: () => void;
-  onDisconnect: () => void;
-  isLoading: boolean;
-}) => {
-  const isConnected = credential?.status === 'connected';
-  const hasError    = credential?.status === 'error' || credential?.status === 'expired';
-
-  return (
-    <div className={`
-      relative flex flex-col gap-3 p-4 rounded-xl border transition-all duration-200
-      ${isConnected
-        ? 'bg-emerald-500/[0.04] border-emerald-500/20'
-        : hasError
-        ? 'bg-red-500/[0.04] border-red-500/20'
-        : 'bg-zinc-900/40 border-zinc-800/60'
-      }
-    `}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-            env === 'live' ? 'bg-[#C9A646]/10 text-[#C9A646]' : 'bg-blue-500/10 text-blue-400'
-          }`}>
-            {env === 'live' ? 'L' : 'D'}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white capitalize">{env} Account</p>
-            {credential?.account_name && (
-              <p className="text-[11px] text-zinc-500">{credential.account_name}</p>
-            )}
-          </div>
-        </div>
-        <SyncBadge
-          type={credential?.status ?? 'disconnected'}
-          label={
-            credential?.status === 'connected' ? 'Connected'   :
-            credential?.status === 'error'     ? 'Error'       :
-            credential?.status === 'expired'   ? 'Expired'     :
-            credential?.status === 'pending'   ? 'Pending'     :
-            'Not connected'
-          }
-        />
-      </div>
-
-      {credential?.last_sync_at && (
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-600">
-          <Clock className="w-3 h-3" />
-          Last sync: {format(new Date(credential.last_sync_at), 'MMM d, HH:mm')}
-        </div>
-      )}
-
-      {(credential?.sync_error_message && !isConnected) && (
-        <div className="flex items-start gap-2 text-[11px] text-red-400 bg-red-500/5 border border-red-500/10 rounded-lg px-2.5 py-2">
-          <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-          {credential.sync_error_message}
-        </div>
-      )}
-
-      <div className="flex gap-2">
-        {isConnected ? (
-          <>
-            <button
-              onClick={onSync}
-              disabled={isLoading}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/20 text-[#C9A646] text-xs font-medium hover:bg-[#C9A646]/20 transition-all disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              Sync Now
-            </button>
-            <button
-              onClick={onDisconnect}
-              disabled={isLoading}
-              className="flex-1 py-2 rounded-xl bg-red-500/5 border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-all disabled:opacity-50"
-            >
-              Disconnect
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={onConnect}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black text-xs font-bold hover:opacity-90 transition-all"
-          >
-            <Link2 className="w-3.5 h-3.5" />
-            Connect {env === 'live' ? 'Live' : 'Demo'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-});
 
 // ─── Instrument Search Input ──────────────────────────────────
 // Smart typeahead: suggests futures from catalogue, shows active contract month.
@@ -992,22 +901,30 @@ export default function TradeCopier() {
   const isPremiumUser = isPremium || isAdmin;
 
   const {
-    liveCredential, demoCredential,
     hasAnyConnection, syncStatus, isLoading,
-    disconnect, triggerSync,
+    disconnect,
   } = useTradovate();
   const { alive: engineAlive, sessions: engineSessions } = useCopyEngineHealth();
 
+  const { connections, disconnect: disconnectBroker } = useBrokerConnections({ active: true });
+  const { liveCredentialIds } = useEngineSessions();
+
+  const byBroker = useMemo(() => {
+    const m = new Map<BrokerName, BrokerConnection[]>();
+    for (const b of (Object.keys(BROKER_CONFIGS) as BrokerName[])) {
+      if (b === 'manual') continue;
+      if (BROKER_CONFIGS[b].status !== 'available') continue;
+      m.set(b, connections.filter((c: BrokerConnection) => c.broker === b));
+    }
+    return m;
+  }, [connections]);
+
+  const nonEmptyBrokerCount = [...byBroker.values()].filter(v => v.length > 0).length;
+
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showModal, setShowModal] = useState(false);
-  const [connectEnv, setConnectEnv] = useState<TradovateEnv>('live');
 
   if (!isPremiumUser) return <PremiumGate />;
-
-  const openConnect = useCallback((env: TradovateEnv) => {
-    setConnectEnv(env);
-    setShowModal(true);
-  }, []);
 
   // Only real broker accounts — no manual portfolios
   const brokerPortfolios = useMemo(
@@ -1033,55 +950,44 @@ export default function TradeCopier() {
           </div>
         </div>
 
-        {/* ── Section 1: Connection Status ── */}
+        {/* ── Section 1: Broker Connections ── */}
         <SectionCard>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center">
-              <Link2 className="w-4.5 h-4.5 text-[#C9A646]" />
+          <div className="flex items-center justify-between mb-ds-4">
+            <div className="flex items-center gap-ds-3">
+              <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                <Link2 className="w-4 h-4 text-gold-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
+                <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-white">Broker Connection</h2>
-              <p className="text-[11px] text-zinc-500">Tradovate live &amp; demo environments</p>
-            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-ds-2 rounded-lg bg-gold-primary hover:bg-[var(--gold-hover)] text-ink-on-gold px-ds-3 py-ds-2 text-sm font-medium transition-colors duration-base"
+            >
+              <Plus className="w-4 h-4" />
+              Connect new broker
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 mb-4 bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-3 py-2">
-            <Shield className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-            <span className="text-xs text-emerald-400">
+          <div className="flex items-center gap-ds-2 mb-ds-4 bg-surface-1 border border-border-ds-subtle rounded-md px-ds-3 py-ds-2">
+            <Shield className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
+            <span className="text-xs text-ink-secondary">
               Credentials encrypted with AES-256 — we never store plaintext passwords.
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ConnectionCard
-              env="live"
-              credential={liveCredential}
-              onConnect={() => openConnect('live')}
-              onSync={() => triggerSync('live')}
-              onDisconnect={() => disconnect('live')}
-              isLoading={isLoading}
-            />
-            <ConnectionCard
-              env="demo"
-              credential={demoCredential}
-              onConnect={() => openConnect('demo')}
-              onSync={() => triggerSync('demo')}
-              onDisconnect={() => disconnect('demo')}
-              isLoading={isLoading}
-            />
-          </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-            {[
-              { icon: Link2,      label: 'Connect',   desc: 'Enter credentials once'  },
-              { icon: RefreshCw,  label: 'Auto-sync', desc: 'Every 5 minutes'          },
-              { icon: TrendingUp, label: 'Analyze',   desc: 'Trades in your journal'   },
-            ].map(({ icon: Icon, label, desc }) => (
-              <div key={label} className="bg-zinc-900/40 rounded-xl p-3 border border-zinc-800/60">
-                <Icon className="w-4 h-4 text-[#C9A646] mx-auto mb-1.5" />
-                <p className="text-xs font-semibold text-white">{label}</p>
-                <p className="text-[10px] text-zinc-600 mt-0.5">{desc}</p>
-              </div>
+          <div className="space-y-ds-2">
+            {[...byBroker.entries()].map(([broker, conns]) => (
+              <BrokerAccordion
+                key={broker}
+                broker={broker}
+                connections={conns}
+                liveCredentialIds={liveCredentialIds}
+                defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
+                onDisconnect={disconnectBroker}
+              />
             ))}
           </div>
         </SectionCard>
@@ -1116,7 +1022,6 @@ export default function TradeCopier() {
 
       {showModal && (
         <TradovateConnectModal
-          env={connectEnv}
           onClose={() => setShowModal(false)}
         />
       )}
