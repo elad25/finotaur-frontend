@@ -2,9 +2,10 @@
 // ═══════════════════════════════════════════════════════════════
 // Confirmation dialog for the FLATTEN ALL / Flatten single destructive action.
 // Uses DS tokens only. Renders as a fixed overlay with a red danger button.
+// Requires user to type "FLATTEN" before confirming.
 // ═══════════════════════════════════════════════════════════════
 
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { AlertOctagon, X } from 'lucide-react';
 
 interface FlattenConfirmDialogProps {
@@ -28,14 +29,22 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
   onCancel,
   isLoading,
 }: FlattenConfirmDialogProps) {
+  const [confirmText, setConfirmText] = useState('');
+  const canConfirm = confirmText === 'FLATTEN';
+
+  // Reset input whenever the dialog opens or closes
+  useEffect(() => {
+    if (!open) setConfirmText('');
+  }, [open]);
+
   if (!open) return null;
 
   const title =
     scope === 'all' ? 'FLATTEN ALL POSITIONS' : `Flatten ${accountName ?? 'account'}`;
   const subtitle =
     scope === 'all'
-      ? `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} across ${accountsCount} account${accountsCount === 1 ? '' : 's'}.`
-      : `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} on ${accountName}.`;
+      ? `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} across ${accountsCount} account${accountsCount === 1 ? '' : 's'}, plus cancel ALL pending orders.`
+      : `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} on ${accountName}, plus cancel its pending orders.`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-base/80 backdrop-blur-sm">
@@ -61,8 +70,23 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
         <div className="rounded-md bg-num-negative/5 border border-num-negative/20 p-ds-3 mb-ds-4">
           <p className="text-xs text-num-negative font-medium">
             ⚠ This sends market orders immediately. Realized P&amp;L impact is irreversible.
-            Pending orders are not cancelled (use &ldquo;Cancel all orders&rdquo; separately).
+            All pending orders will be cancelled.
           </p>
+        </div>
+
+        {/* Type FLATTEN to confirm */}
+        <div className="mb-ds-3">
+          <label className="block text-[10px] uppercase tracking-wider text-num-negative mb-1 font-semibold">
+            Type FLATTEN to confirm
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="FLATTEN"
+            className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-num-negative/30 text-sm font-mono text-ink-primary placeholder:text-ink-tertiary focus:border-num-negative outline-none transition-colors duration-base"
+            autoComplete="off"
+          />
         </div>
 
         <div className="flex gap-ds-2">
@@ -75,10 +99,10 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 px-ds-4 py-ds-2 rounded-md bg-num-negative text-white font-semibold text-sm hover:bg-num-negative/80 transition-colors duration-base disabled:opacity-50"
+            disabled={isLoading || !canConfirm}
+            className="flex-1 px-ds-4 py-ds-2 rounded-md bg-num-negative text-ink-primary font-semibold text-sm hover:bg-num-negative/80 transition-colors duration-base disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Flattening…' : scope === 'all' ? 'Flatten All' : 'Flatten'}
+            {isLoading ? 'Flattening…' : (scope === 'all' ? 'Flatten All' : 'Flatten')}
           </button>
         </div>
       </div>

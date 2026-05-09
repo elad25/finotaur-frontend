@@ -19,6 +19,7 @@ export interface CopyRule {
   max_daily_loss_usd:   number | null;
   max_position_size:    number | null;
   kill_switch_active:   boolean;
+  cross_to_micro:       boolean;
   created_at:           string;
 }
 

@@ -1,9 +1,7 @@
 // src/components/copyTrading/CopyTradingDashboard.tsx
 // ═══════════════════════════════════════════════════════════════
-// Copy Trading Dashboard — Sprint #3b
-// TradeSyncer-style table: leader crown, asset selector,
-// summary bar, FLATTEN ALL placeholder.
-// Live data and per-row actions wire in Sprint 3c/3d.
+// Copy Trading Dashboard — Sprint #4a
+// Leader dropdown, inline Ratio/Cross editing, FLATTEN double-check.
 // ═══════════════════════════════════════════════════════════════
 
 import { memo, useMemo, useState } from 'react';
@@ -16,6 +14,8 @@ import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
 import type { PositionEntry } from '@/hooks/useAccountSnapshots';
 import { FlattenConfirmDialog } from './FlattenConfirmDialog';
 import { useFlattenActions } from '@/hooks/useFlattenActions';
+import { useCopyRules } from '@/hooks/useCopyRules';
+import type { CopyRule } from '@/hooks/useCopyRules';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -28,32 +28,36 @@ interface AccountRowData {
   issue: boolean;
   position: number | null;
   balance: number | null;
-  avgPrice: number | null;
   dayPnL: number | null;
   openPnL: number | null;
   qty: number | null;
-  ratio: number | null;
-  crossSymbol: string | null;
   following: boolean;
+  portfolioId: string | null;
 }
 
 // ─── Table column grid (shared by header + rows) ──────────────
+// 13 cols: crown · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
 
 const GRID_COLS =
-  'grid-cols-[40px_60px_120px_minmax(160px,1fr)_80px_90px_100px_100px_100px_100px_60px_60px_60px_80px]';
+  'grid-cols-[40px_60px_120px_minmax(160px,1fr)_80px_80px_60px_90px_100px_100px_100px_60px_80px]';
 
-// ─── Internal AccountRow (named CopyAccountRow to avoid collision
-//     with existing copyTrading/AccountRow.tsx) ─────────────────
+// ─── Internal AccountRow ──────────────────────────────────────
 
 const CopyAccountRow = memo(function CopyAccountRow({
   row,
   isLeader,
+  rule,
   onFlatten,
+  onUpdateRule,
 }: {
   row: AccountRowData;
   isLeader: boolean;
+  rule: CopyRule | null;
   onFlatten: () => void;
+  onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
 }) {
+  const ratioValue = rule?.ratio ?? 1;
+
   return (
     <div
       className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-3 border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2 transition-colors duration-base`}
@@ -63,7 +67,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {isLeader && <Crown className="w-4 h-4 text-gold-primary" />}
       </div>
 
-      {/* Follow toggle (placeholder — only shown for followers) */}
+      {/* Follow toggle */}
       <div className="flex items-center">
         {!isLeader && (
           <button
@@ -113,6 +117,55 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {row.symbol ?? '—'}
       </div>
 
+      {/* Ratio — inline editable for followers, empty for leader */}
+      <div className="flex items-center">
+        {isLeader ? (
+          <span className="text-sm font-mono tabular-nums text-ink-tertiary">—</span>
+        ) : (
+          <input
+            type="text"
+            inputMode="decimal"
+            defaultValue={String(ratioValue)}
+            key={`ratio-${rule?.id ?? row.id}`}
+            onBlur={async (e) => {
+              const newRatio = Number(e.target.value);
+              if (!Number.isNaN(newRatio) && newRatio > 0 && rule) {
+                await onUpdateRule({ ratio: newRatio });
+              }
+            }}
+            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs font-mono tabular-nums text-ink-primary text-center focus:border-gold-border outline-none"
+          />
+        )}
+      </div>
+
+      {/* Cross toggle — for followers only */}
+      <div className="flex items-center">
+        {isLeader ? (
+          <span className="text-sm font-mono tabular-nums text-ink-tertiary">—</span>
+        ) : (
+          <button
+            onClick={async () => {
+              if (rule) {
+                await onUpdateRule({ cross_to_micro: !rule.cross_to_micro });
+              }
+            }}
+            disabled={!rule}
+            className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
+              rule?.cross_to_micro
+                ? 'bg-status-success'
+                : 'bg-status-offline border border-border-ds-default'
+            } disabled:opacity-30`}
+            aria-label="Cross-to-micro toggle"
+          >
+            <span
+              className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
+                rule?.cross_to_micro ? 'translate-x-[18px]' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        )}
+      </div>
+
       {/* Position */}
       <div
         className={`text-sm font-mono tabular-nums text-right ${
@@ -125,11 +178,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Balance */}
       <div className="text-sm font-mono tabular-nums text-right text-ink-primary">
         {row.balance != null ? `$${row.balance.toFixed(2)}` : '—'}
-      </div>
-
-      {/* Avg Price */}
-      <div className="text-sm font-mono tabular-nums text-right text-ink-primary">
-        {row.avgPrice != null ? row.avgPrice.toFixed(2) : '—'}
       </div>
 
       {/* Day PnL */}
@@ -159,16 +207,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
         {row.qty ?? '—'}
       </div>
 
-      {/* Ratio */}
-      <div className="text-sm font-mono tabular-nums text-right text-ink-primary">
-        {isLeader ? '—' : `${row.ratio ?? 1}×`}
-      </div>
-
-      {/* Cross */}
-      <div className="text-sm font-mono tabular-nums text-ink-secondary truncate">
-        {row.crossSymbol ?? '—'}
-      </div>
-
       {/* Actions */}
       <div className="flex items-center justify-start">
         <button
@@ -191,6 +229,7 @@ export function CopyTradingDashboard() {
   const { snapshotFor } = useAccountSnapshots();
   const [instrument, setInstrument] = useState('NQ');
   const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
+  const { rules, updateRule } = useCopyRules();
   const [flattenDialog, setFlattenDialog] = useState<{
     open: boolean;
     scope: 'all' | 'single';
@@ -198,22 +237,48 @@ export function CopyTradingDashboard() {
     accountName?: string;
   } | null>(null);
 
-  // Build rows from broker_connections filtered to tradovate + portfolios.
-  // Live fields (position, balance, avgPrice, dayPnL, openPnL, qty) wired
-  // from /api/copy-engine/accounts snapshot in Sprint 3c.
+  // Leader: user-controlled via dropdown, defaults to first tradovate connection
+  const tradovateConnections = connections.filter(
+    (c) => c.broker === 'tradovate' && c.is_active,
+  );
+  const [leaderId, setLeaderId] = useState<string | null>(
+    tradovateConnections[0]?.id ?? null,
+  );
+
+  // Resolve leader's portfolio id for copy-rule lookup
+  const leaderConnection = connections.find((c) => c.id === leaderId);
+  const leaderPortfolio = portfolios.find(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (p) => (p as any).tradovate_account_id?.toString() === leaderConnection?.account_id,
+  );
+  const leaderPortfolioId = leaderPortfolio?.id ?? null;
+
+  // Helper: find rule for a given follower portfolio
+  function ruleFor(targetPortfolioId: string | null): CopyRule | null {
+    if (!leaderPortfolioId || !targetPortfolioId) return null;
+    return (
+      rules.find(
+        (r) =>
+          r.source_portfolio_id === leaderPortfolioId &&
+          r.target_portfolio_id === targetPortfolioId,
+      ) ?? null
+    );
+  }
+
+  // Build rows from broker_connections filtered to tradovate + portfolios
   const rows = useMemo<AccountRowData[]>(() => {
     return connections
       .filter((c) => c.broker === 'tradovate')
       .map((c) => {
-        // Cast: Portfolio.tradovate_account_id is a number, c.account_id is string
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const port = portfolios.find(
           (p) =>
             p.id === c.id ||
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (p as any).tradovate_account_id?.toString() === c.account_id,
-          // (p as any) needed because Portfolio type predates broker_connections join field
         );
-        void port; // Sprint 3c-extension will use portfolio fields
+        const portfolioId = port?.id ?? null;
+
         const tokenExpired = c.token_expires_at
           ? new Date(c.token_expires_at) < new Date()
           : false;
@@ -222,8 +287,6 @@ export function CopyTradingDashboard() {
 
         const snap = snapshotFor(c.id);
 
-        // Pick position matching the selected instrument (case-insensitive contains).
-        // When no instrument typed, use the largest absolute position.
         let activePosition: PositionEntry | null = null;
         if (snap?.positions?.length) {
           if (instrument) {
@@ -247,31 +310,26 @@ export function CopyTradingDashboard() {
           symbol:         activePosition?.contractName ?? instrument,
           live,
           issue,
-          position:    activePosition?.netPos   ?? null,
-          balance:     snap?.cashBalance        ?? null,
-          avgPrice:    activePosition?.avgPrice ?? null,
-          dayPnL:      snap?.realizedPnL        ?? null,
-          openPnL:     snap?.openPnL            ?? null,
+          position:    activePosition?.netPos ?? null,
+          balance:     snap?.cashBalance     ?? null,
+          dayPnL:      snap?.realizedPnL     ?? null,
+          openPnL:     snap?.openPnL         ?? null,
           qty:
             activePosition && activePosition.netPos != null
               ? Math.abs(activePosition.netPos)
               : null,
-          ratio:       1,    // TODO Sprint 3c-extension: read from copy_rules
-          crossSymbol: null, // TODO Sprint 3c-extension
           following:   c.is_active,
+          portfolioId,
         };
       });
   }, [connections, liveCredentialIds, portfolios, snapshotFor, instrument]);
 
-  // Leader heuristic: first connection by created_at (server returns ascending order).
-  // Sprint 3c will read leader_portfolio_id from copy_rules instead.
-  const leaderId = rows[0]?.id ?? null;
-
-  // Summary bar — derived from live snapshots
+  // Summary bar
   const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
   const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
   const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
   const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
+  const accountsWithPositions = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // ── Flatten handlers ──────────────────────────────────────────
   const handleFlattenAll = () => {
@@ -302,11 +360,9 @@ export function CopyTradingDashboard() {
     setFlattenDialog(null);
   };
 
-  // openPositionsCount (above) doubles as the positionsTotal for the flatten dialog.
-
   return (
     <div>
-      {/* ── 1. Asset selector bar ── */}
+      {/* ── 1. Asset selector + action bar ── */}
       <div className="flex items-center justify-between mb-ds-4 gap-ds-4">
         <div className="flex items-center gap-ds-3">
           <span className="text-xs text-ink-secondary uppercase tracking-wider">
@@ -325,15 +381,23 @@ export function CopyTradingDashboard() {
         </div>
 
         <div className="flex items-center gap-ds-2">
-          <button className="px-ds-3 py-ds-2 rounded-md text-sm border border-border-ds-default text-ink-secondary hover:text-ink-primary hover:bg-surface-2 transition-colors duration-base">
-            Change leader
-          </button>
-          <button className="px-ds-3 py-ds-2 rounded-md text-sm border border-border-ds-default text-ink-secondary hover:text-ink-primary hover:bg-surface-2 transition-colors duration-base">
-            Enable all
-          </button>
-          <button className="px-ds-3 py-ds-2 rounded-md text-sm border border-border-ds-default text-ink-secondary hover:text-ink-primary hover:bg-surface-2 transition-colors duration-base">
-            Cancel all orders
-          </button>
+          {/* Leader dropdown */}
+          <div className="flex items-center gap-ds-2">
+            <span className="text-[10px] uppercase tracking-wider text-ink-secondary">Leader</span>
+            <select
+              value={leaderId ?? ''}
+              onChange={(e) => setLeaderId(e.target.value || null)}
+              className="px-ds-3 py-1.5 rounded-md bg-surface-1 border border-border-ds-subtle text-sm text-ink-primary focus:border-gold-border outline-none transition-colors duration-base min-w-[180px]"
+            >
+              {tradovateConnections.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.account_name ?? c.account_id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* FLATTEN ALL */}
           <button
             onClick={handleFlattenAll}
             className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md bg-num-negative/10 border border-num-negative/30 text-num-negative hover:bg-num-negative/20 transition-colors duration-base font-semibold text-sm"
@@ -397,26 +461,34 @@ export function CopyTradingDashboard() {
           <div>Connection</div>
           <div>Account</div>
           <div>Symbol</div>
+          <div>Ratio</div>
+          <div>Cross</div>
           <div className="text-right">Position</div>
           <div className="text-right">Balance</div>
-          <div className="text-right">Avg Price</div>
           <div className="text-right">Day PnL</div>
           <div className="text-right">Open PnL</div>
           <div className="text-right">Qty</div>
-          <div className="text-right">Ratio</div>
-          <div>Cross</div>
           <div>Actions</div>
         </div>
 
         {/* Rows */}
-        {rows.map((row) => (
-          <CopyAccountRow
-            key={row.id}
-            row={row}
-            isLeader={row.id === leaderId}
-            onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
-          />
-        ))}
+        {rows.map((row) => {
+          const rule = ruleFor(row.portfolioId);
+          return (
+            <CopyAccountRow
+              key={row.id}
+              row={row}
+              isLeader={row.id === leaderId}
+              rule={rule}
+              onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
+              onUpdateRule={async (patch) => {
+                if (rule) {
+                  await updateRule({ id: rule.id, patch });
+                }
+              }}
+            />
+          );
+        })}
 
         {/* Empty state */}
         {rows.length === 0 && (
@@ -442,7 +514,7 @@ export function CopyTradingDashboard() {
                 ? 1
                 : 0
           }
-          accountsCount={flattenDialog.scope === 'all' ? openPositionsCount : 1}
+          accountsCount={flattenDialog.scope === 'all' ? accountsWithPositions : 1}
           onConfirm={handleConfirmFlatten}
           onCancel={() => setFlattenDialog(null)}
           isLoading={flattenLoading}
