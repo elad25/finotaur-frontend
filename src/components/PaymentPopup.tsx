@@ -46,17 +46,17 @@ interface PaymentPopupProps {
 const planDetails = {
   basic: {
     name: 'Basic',
-    monthlyPrice: 19.99,
-    yearlyPrice: 149,
-    yearlyMonthlyEquivalent: 12.42,
+    monthlyPrice: 24.99,
+    yearlyPrice: 229,
+    yearlyMonthlyEquivalent: 19.08,
     maxTrades: 25,
     trialDays: 14,  // 🔥 14-day trial
   },
   premium: {
     name: 'Premium',
-    monthlyPrice: 39.99,
-    yearlyPrice: 299,
-    yearlyMonthlyEquivalent: 24.92,
+    monthlyPrice: 44.99,
+    yearlyPrice: 409,
+    yearlyMonthlyEquivalent: 34.08,
     maxTrades: 'Unlimited',
     trialDays: 0,   // 🔥 No trial
   }

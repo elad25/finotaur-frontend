@@ -720,12 +720,12 @@ const [allUsersPagination, setAllUsersPagination] = useState<AllUsersPagination>
           pending_cancellation: 0,
         },
         revenue: {
-          // Journal MRR - Basic: $19.99/mo or $149/yr ($12.42/mo), Premium: $39.99/mo or $299/yr ($24.92/mo)
-          journal_mrr: 
-            users.filter(u => u.account_type === 'basic' && u.whop_membership_id && !u.is_in_trial && u.subscription_interval === 'monthly').length * 19.99 +
-            users.filter(u => u.account_type === 'basic' && u.whop_membership_id && u.subscription_interval === 'yearly').length * 12.42 +
-            users.filter(u => u.account_type === 'premium' && u.whop_membership_id && !u.is_in_trial && u.subscription_interval === 'monthly').length * 39.99 +
-            users.filter(u => u.account_type === 'premium' && u.whop_membership_id && u.subscription_interval === 'yearly').length * 24.92,
+          // Journal MRR - Basic: $24.99/mo or $229/yr ($19.08/mo), Premium: $44.99/mo or $409/yr ($34.08/mo)
+          journal_mrr:
+            users.filter(u => u.account_type === 'basic' && u.whop_membership_id && !u.is_in_trial && u.subscription_interval === 'monthly').length * 24.99 +
+            users.filter(u => u.account_type === 'basic' && u.whop_membership_id && u.subscription_interval === 'yearly').length * 19.08 +
+            users.filter(u => u.account_type === 'premium' && u.whop_membership_id && !u.is_in_trial && u.subscription_interval === 'monthly').length * 44.99 +
+            users.filter(u => u.account_type === 'premium' && u.whop_membership_id && u.subscription_interval === 'yearly').length * 34.08,
           // Newsletter MRR - $69.99/mo or $699/yr ($58.25/mo), with TopSecret discount: $30/mo
           newsletter_mrr: 
             users.filter(u => u.newsletter_whop_membership_id && u.newsletter_status === 'active' && !u.top_secret_enabled).length * 69.99 +
@@ -1968,10 +1968,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
       // === PRICING CONSTANTS (FROM DB - ACCURATE!) ===
       const PRICES = {
         journal: {
-          basic_monthly: 19.99,
-          basic_yearly_monthly: 12.42,  // $149/12
-          premium_monthly: 39.99,
-          premium_yearly_monthly: 24.92,  // $299/12
+          basic_monthly: 24.99,
+          basic_yearly_monthly: 19.08,  // $229/12
+          premium_monthly: 44.99,
+          premium_yearly_monthly: 34.08,  // $409/12
         },
         newsletter: {
           monthly: 69.99,
@@ -3247,7 +3247,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     {loading ? '—' : stats?.journal.basic.total || 0}
                   </p>
                   <p className="text-xs text-[#808080] mt-1 font-medium">Basic</p>
-                  <p className="text-[10px] text-cyan-400/50 mt-0.5">$19.99/mo</p>
+                  <p className="text-[10px] text-cyan-400/50 mt-0.5">$24.99/mo</p>
                 </div>
                 {/* Premium */}
                 <div className="p-4 bg-gradient-to-br from-[#1A1A1A] to-[#252525] rounded-xl text-center border border-[#2A2A2A] hover:border-blue-500/30 transition-all duration-300 group">
@@ -3255,7 +3255,7 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     {loading ? '—' : stats?.journal.premium.total || 0}
                   </p>
                   <p className="text-xs text-[#808080] mt-1 font-medium">Premium</p>
-                  <p className="text-[10px] text-blue-400/50 mt-0.5">$39.99/mo</p>
+                  <p className="text-[10px] text-blue-400/50 mt-0.5">$44.99/mo</p>
                 </div>
                 {/* War Zone */}
                 <div className="p-4 bg-gradient-to-br from-[#1A1A1A] to-[#252525] rounded-xl text-center border border-[#2A2A2A] hover:border-orange-500/30 transition-all duration-300 group">
@@ -4289,19 +4289,19 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                       <div className="mt-3 space-y-1 text-xs">
                         <div className="flex justify-between text-[#808080]">
                           <span>Basic Monthly</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.basic_monthly} × $19.99</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.basic_monthly} × $24.99</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Basic Yearly</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.basic_yearly} × $12.42</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.basic_yearly} × $19.08</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Premium Monthly</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.premium_monthly} × $39.99</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.premium_monthly} × $44.99</span>
                         </div>
                         <div className="flex justify-between text-[#808080]">
                           <span>Premium Yearly</span>
-                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.premium_yearly} × $24.92</span>
+                          <span className="text-[#A0A0A0]">{kpiMetrics.journal_subscribers.premium_yearly} × $34.08</span>
                         </div>
                         <div className="flex justify-between text-orange-400 pt-1 border-t border-[#2A2A2A]">
                           <span>In Trial</span>
@@ -4763,10 +4763,10 @@ const handleBulkSoftDelete = async (userIds: string[]) => {
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">
                       <p className="text-blue-400 font-medium mb-2">Journal</p>
                       <div className="space-y-1 text-[#808080]">
-                        <p>Basic Monthly: $19.99</p>
-                        <p>Basic Yearly: $149.00 ($12.42/mo)</p>
-                        <p>Premium Monthly: $39.99</p>
-                        <p>Premium Yearly: $299.00 ($24.92/mo)</p>
+                        <p>Basic Monthly: $24.99</p>
+                        <p>Basic Yearly: $229.00 ($19.08/mo)</p>
+                        <p>Premium Monthly: $44.99</p>
+                        <p>Premium Yearly: $409.00 ($34.08/mo)</p>
                       </div>
                     </div>
                     <div className="p-3 bg-[#1A1A1A] rounded-lg">

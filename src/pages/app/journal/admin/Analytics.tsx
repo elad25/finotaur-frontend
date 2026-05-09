@@ -324,8 +324,8 @@ function UserAnalytics({ stats }: { stats: AdminStats }) {
 // ============================================
 function RevenueAnalytics({ stats }: { stats: AdminStats }) {
   const PRICING = useMemo(() => ({
-    basic: { monthly: 19.99, yearly: 12.42 },
-    premium: { monthly: 39.99, yearly: 24.92 },
+    basic: { monthly: 24.99, yearly: 19.08 },
+    premium: { monthly: 44.99, yearly: 34.08 },
   }), []);
 
   // ⚡ Memoize all revenue calculations

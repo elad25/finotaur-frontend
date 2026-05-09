@@ -82,12 +82,12 @@ export interface ActiveImpersonationSession {
 
 const PRICING = {
   basic: {
-    monthly: 19.99,
-    yearly: 12.42,
+    monthly: 24.99,
+    yearly: 19.08,
   },
   premium: {
-    monthly: 39.99,
-    yearly: 24.92,
+    monthly: 44.99,
+    yearly: 34.08,
   },
   newsletter: {
     monthly: 49,
@@ -1041,10 +1041,10 @@ export async function getSubscriberStats(): Promise<SubscriberStats> {
       const premiumMonthly = premiumSubs.filter(s => s.subscription_interval === 'monthly').length;
       const premiumYearly = premiumSubs.filter(s => s.subscription_interval === 'yearly').length;
 
-      const BASIC_MONTHLY_PRICE = 19.99;
-      const BASIC_YEARLY_PRICE = 149;
-      const PREMIUM_MONTHLY_PRICE = 39.99;
-      const PREMIUM_YEARLY_PRICE = 299;
+      const BASIC_MONTHLY_PRICE = 24.99;
+      const BASIC_YEARLY_PRICE = 229;
+      const PREMIUM_MONTHLY_PRICE = 44.99;
+      const PREMIUM_YEARLY_PRICE = 409;
       const NEWSLETTER_MONTHLY_PRICE = 49;
       const NEWSLETTER_YEARLY_PRICE = 397;
       const TOP_SECRET_MONTHLY_PRICE = 70;
@@ -1132,10 +1132,10 @@ export async function getSubscribersList(): Promise<Subscriber[]> {
 
       if (error) throw error;
 
-      const BASIC_MONTHLY = 19.99;
-      const BASIC_YEARLY = 149;
-      const PREMIUM_MONTHLY = 39.99;
-      const PREMIUM_YEARLY = 299;
+      const BASIC_MONTHLY = 24.99;
+      const BASIC_YEARLY = 229;
+      const PREMIUM_MONTHLY = 44.99;
+      const PREMIUM_YEARLY = 409;
       const NEWSLETTER_MONTHLY = 49;
       const NEWSLETTER_YEARLY = 397;
       const TOP_SECRET_MONTHLY = 70;

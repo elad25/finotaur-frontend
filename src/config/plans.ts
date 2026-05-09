@@ -38,9 +38,9 @@ export const PLANS: Plan[] = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 19.99,
-    yearlyPrice: 149,
-    yearlyMonthlyEquivalent: 12.42,
+    price: 24.99,
+    yearlyPrice: 229,
+    yearlyMonthlyEquivalent: 19.08,
     description: 'Essential tools + automatic broker sync',
     trialDays: 14, // 🔥 14-day free trial
     maxTrades: 25,
@@ -59,9 +59,9 @@ export const PLANS: Plan[] = [
   {
     id: 'premium',
     name: 'Premium',
-    price: 39.99,
-    yearlyPrice: 299,
-    yearlyMonthlyEquivalent: 24.92,
+    price: 44.99,
+    yearlyPrice: 409,
+    yearlyMonthlyEquivalent: 34.08,
     description: 'Unlimited everything + AI intelligence',
     trialDays: 0, // 🔥 NO trial - payment from day 0
     maxTrades: 'unlimited',
@@ -156,16 +156,16 @@ export type PlanId = 'basic' | 'premium';
 
 export const PRICING = {
   basic: {
-    monthly: 19.99,
-    yearly: 149,
-    yearlyMonthly: 12.42,
+    monthly: 24.99,
+    yearly: 229,
+    yearlyMonthly: 19.08,
     trialDays: 14,
     maxTrades: 25,
   },
   premium: {
-    monthly: 39.99,
-    yearly: 299,
-    yearlyMonthly: 24.92,
+    monthly: 44.99,
+    yearly: 409,
+    yearlyMonthly: 34.08,
     trialDays: 0,
     maxTrades: Infinity,
   },

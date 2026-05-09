@@ -130,13 +130,13 @@ export function BasicLimitReachedModal({
           {/* Price Comparison */}
           <div className="flex items-center justify-center gap-4 py-2">
             <div className="text-center opacity-50">
-              <p className="text-xs text-zinc-500 line-through">Basic $19.99</p>
+              <p className="text-xs text-zinc-500 line-through">Basic $24.99</p>
             </div>
             <ArrowRight className="h-4 w-4 text-zinc-600" />
             <div className="text-center">
-              <span className="text-3xl font-black text-[#C9A646]">$24.92</span>
+              <span className="text-3xl font-black text-[#C9A646]">$34.08</span>
               <span className="text-zinc-400">/mo</span>
-              <p className="text-xs text-emerald-400 mt-0.5">Only $4.93 more!</p>
+              <p className="text-xs text-emerald-400 mt-0.5">Only $9.09 more!</p>
             </div>
           </div>
 

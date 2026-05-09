@@ -354,16 +354,16 @@ type BillingInterval = 'monthly' | 'yearly';
 
 const plans = [
   {
-    id: "basic", name: "Basic", monthlyPrice: "$19.99", yearlyPrice: "$149", yearlyMonthlyEquivalent: "$12.42",
+    id: "basic", name: "Basic", monthlyPrice: "$24.99", yearlyPrice: "$229", yearlyMonthlyEquivalent: "$19.08",
     description: "Essential tools + automatic broker sync", trialDays: 14,
     features: ["14-day free trial", "Broker sync (12,000+ brokers) - Coming soon", "25 trades/month (manual + auto-sync)", "Full performance analytics", "Strategy builder & tracking", "Calendar & trading sessions", "Advanced statistics & metrics", "Equity curve & charts", "Trade screenshots & notes", "Email support"],
-    cta: "Start 14-Day Free Trial", featured: false, savings: "Save 38%",
+    cta: "Start 14-Day Free Trial", featured: false, savings: "Save 24%",
   },
   {
-    id: "premium", name: "Premium", monthlyPrice: "$39.99", yearlyPrice: "$299", yearlyMonthlyEquivalent: "$24.92",
+    id: "premium", name: "Premium", monthlyPrice: "$44.99", yearlyPrice: "$409", yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited everything + AI intelligence",
     features: ["Everything in Basic, plus:", "Unlimited trades", "AI-powered insights & coach", "Advanced AI analysis", "Pattern recognition", "Custom AI reports", "Behavioral risk alerts", "Backtesting system", "Priority support", "Early access to new features", "🔜 Coming Soon: Auto broker sync"],
-    cta: "Get Premium", featured: true, savings: "Save 38%",
+    cta: "Get Premium", featured: true, savings: "Save 24%",
   },
 ];
 
@@ -416,7 +416,7 @@ const PricingSection = () => {
             <div className="inline-flex items-center gap-3 bg-[#111111] border border-gray-800 rounded-full p-1.5 shadow-xl">
               <button onClick={() => setBillingInterval('monthly')} className={`px-6 py-2.5 rounded-full font-medium transition-all duration-300 ${billingInterval === 'monthly' ? 'bg-[#C9A646] text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}>Monthly</button>
               <button onClick={() => setBillingInterval('yearly')} className={`px-6 py-2.5 rounded-full font-medium transition-all duration-300 flex items-center gap-2 ${billingInterval === 'yearly' ? 'bg-[#C9A646] text-black shadow-lg' : 'text-gray-400 hover:text-white'}`}>
-                Yearly <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">Save up to 38%</span>
+                Yearly <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">Save up to 24%</span>
               </button>
             </div>
           </div>
