@@ -19,6 +19,8 @@ interface PortfolioRiskPatch {
   max_daily_loss_usd:      number | null;
   max_position_size:       number | null;
   max_contracts_per_trade: number | null;
+  max_loss_per_trade_usd:  number | null;
+  daily_stop_loss_usd:     number | null;
 }
 
 // ─── Portfolio risk mutation ───────────────────────────────────
@@ -117,11 +119,19 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
   const [killSwitch, setKillSwitch] = useState<boolean>(
     portfolio.kill_switch_active ?? false,
   );
+  const [maxLossPerTradeUsd, setMaxLossPerTradeUsd] = useState<string>(
+    portfolio.max_loss_per_trade_usd?.toString() ?? '',
+  );
+  const [dailyStopLossUsd, setDailyStopLossUsd] = useState<string>(
+    portfolio.daily_stop_loss_usd?.toString() ?? '',
+  );
 
   const dirty =
     (maxContractsPerTrade || null) !== (portfolio.max_contracts_per_trade?.toString() ?? null) ||
     (maxDailyLossUsd      || null) !== (portfolio.max_daily_loss_usd?.toString()      ?? null) ||
     (maxPositionSize      || null) !== (portfolio.max_position_size?.toString()        ?? null) ||
+    (maxLossPerTradeUsd   || null) !== (portfolio.max_loss_per_trade_usd?.toString()  ?? null) ||
+    (dailyStopLossUsd     || null) !== (portfolio.daily_stop_loss_usd?.toString()     ?? null) ||
     killSwitch !== (portfolio.kill_switch_active ?? false);
 
   const handleSave = async () => {
@@ -137,6 +147,8 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
       max_daily_loss_usd:      parseNum(maxDailyLossUsd),
       max_position_size:       parseNum(maxPositionSize),
       max_contracts_per_trade: parseNum(maxContractsPerTrade),
+      max_loss_per_trade_usd:  parseNum(maxLossPerTradeUsd),
+      daily_stop_loss_usd:     parseNum(dailyStopLossUsd),
     };
     try {
       await onSave(patch);
@@ -200,25 +212,50 @@ const PortfolioRiskCard = memo(function PortfolioRiskCard({
       </div>
 
       {/* ── Risk fields ── */}
-      <div className="grid grid-cols-3 gap-ds-3 mb-ds-3">
-        <NumericField
-          label="Max contracts/trade"
-          hint="Per-trade hard cap"
-          value={maxContractsPerTrade}
-          onChange={setMaxContractsPerTrade}
-        />
-        <NumericField
-          label="Max daily loss ($)"
-          hint="Pauses copies if hit"
-          value={maxDailyLossUsd}
-          onChange={setMaxDailyLossUsd}
-        />
-        <NumericField
-          label="Max position size"
-          hint="Total open contracts"
-          value={maxPositionSize}
-          onChange={setMaxPositionSize}
-        />
+      <div className="space-y-ds-3 mb-ds-3">
+        {/* Section: Daily limits */}
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-secondary mb-ds-2">Daily limits</div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-ds-3">
+            <NumericField
+              label="Max daily loss ($) — soft"
+              hint="Pauses new copies when realized loss hits"
+              value={maxDailyLossUsd}
+              onChange={setMaxDailyLossUsd}
+            />
+            <NumericField
+              label="Daily stop loss ($) — hard"
+              hint="Auto-flattens when total daily loss hits"
+              value={dailyStopLossUsd}
+              onChange={setDailyStopLossUsd}
+            />
+          </div>
+        </div>
+
+        {/* Section: Per-trade limits */}
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-ink-secondary mb-ds-2">Per-trade limits</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-ds-3">
+            <NumericField
+              label="Max loss per trade ($) — hard"
+              hint="Auto-flattens when open loss hits"
+              value={maxLossPerTradeUsd}
+              onChange={setMaxLossPerTradeUsd}
+            />
+            <NumericField
+              label="Max contracts/trade"
+              hint="Quantity cap per copy"
+              value={maxContractsPerTrade}
+              onChange={setMaxContractsPerTrade}
+            />
+            <NumericField
+              label="Max position size"
+              hint="Total open contracts"
+              value={maxPositionSize}
+              onChange={setMaxPositionSize}
+            />
+          </div>
+        </div>
       </div>
 
       {/* ── Save button ── */}
