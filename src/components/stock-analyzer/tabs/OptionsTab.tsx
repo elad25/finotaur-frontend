@@ -133,7 +133,7 @@ async function fetchOptionsChain(ticker: string, expiration: string): Promise<Op
     const url = expiration
       ? `/api/options/chain/${ticker}?expiration=${expiration}`
       : `/api/options/chain/${ticker}`;
-    const res = await fetch(url);
+    const res = await authFetch(url);
     if (!res.ok) return [];
     const data = await res.json();
     return data.chain || [];
