@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
+import { authFetch } from '@/utils/authFetch';
 import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader } from '../ui';
 import { isValid, fmtBig, fmtPct } from '@/utils/stock-analyzer.utils';
@@ -684,7 +685,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
     if (!force) {
       try {
         const serverCached = prefetchedData || await (async () => {
-          const res = await fetch(`/api/stock-cache/${ticker}/wallstreet`);
+          const res = await authFetch(`/api/stock-cache/${ticker}/wallstreet`);
           if (!res.ok) return null;
           const json = await res.json();
           return (json.success && json.cached && json.data) ? json.data : null;
@@ -710,7 +711,7 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
       wallStreetCache.set(ticker, { data: result, generatedAt: new Date().toISOString() });
       // Save to server for next user!
       try {
-        await fetch(`/api/stock-cache/${ticker}/wallstreet`, {
+        await authFetch(`/api/stock-cache/${ticker}/wallstreet`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallStreetData: result, earningsDate: data.nextEarningsDate || null }),

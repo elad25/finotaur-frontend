@@ -13,6 +13,7 @@
 // =====================================================
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { authFetch } from '@/utils/authFetch';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { fetchAllStockData } from '@/services/stock-analyzer.api';
 
@@ -66,7 +67,7 @@ interface ServerCacheBundle {
 
 async function fetchAllServerCache(ticker: string): Promise<ServerCacheBundle> {
   try {
-    const res = await fetch(`/api/stock-cache/${ticker}/all`);
+    const res = await authFetch(`/api/stock-cache/${ticker}/all`);
     if (!res.ok) return { brief: null, valuation: null, wallstreet: null, earnings: null, quarterly: null, data: null };
     const json = await res.json();
     if (!json.success) return { brief: null, valuation: null, wallstreet: null, earnings: null, quarterly: null, data: null };
@@ -320,7 +321,7 @@ export function useStockOrchestrator(): OrchestratorReturn {
     for (const tab of tabs) {
       // Invalidate server cache first
       try {
-        await fetch(`/api/stock-cache/${state.stockData!.ticker}/${tab}`, { method: 'DELETE' });
+        await authFetch(`/api/stock-cache/${state.stockData!.ticker}/${tab}`, { method: 'DELETE' });
       } catch { /* ok */ }
 
       const result = await generateTabAI(tab, state.stockData);
