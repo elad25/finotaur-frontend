@@ -8,6 +8,7 @@
 // =====================================================
 
 import { useQuery } from '@tanstack/react-query';
+import { authFetch } from '@/utils/authFetch';
 
 // =====================================================
 // TYPES (inline to avoid import path issues)
@@ -140,7 +141,7 @@ export function useSectors() {
   return useQuery<Sector[]>({
     queryKey: ['sectors', 'all'],
     queryFn: async (): Promise<Sector[]> => {
-      const res = await fetch(`${API_BASE}/api/sectors/all`);
+      const res = await authFetch(`${API_BASE}/api/sectors/all`);
       if (!res.ok) {
         throw new Error(`Failed to fetch sectors: ${res.status} ${res.statusText}`);
       }
@@ -174,7 +175,7 @@ export function useSectorHoldings(sectorId: string | null | undefined) {
   return useQuery<SectorHoldingLive[]>({
     queryKey: ['sector-holdings', sectorId],
     queryFn: async (): Promise<SectorHoldingLive[]> => {
-      const res = await fetch(`${API_BASE}/api/sectors/${sectorId}/holdings`);
+      const res = await authFetch(`${API_BASE}/api/sectors/${sectorId}/holdings`);
       if (!res.ok) {
         throw new Error(`Failed to fetch holdings: ${res.status}`);
       }
@@ -205,7 +206,7 @@ export function useRefreshStatus() {
   return useQuery<RefreshStatus>({
     queryKey: ['sector-refresh-status'],
     queryFn: async (): Promise<RefreshStatus> => {
-      const res = await fetch(`${API_BASE}/api/sectors/meta/refresh-status`);
+      const res = await authFetch(`${API_BASE}/api/sectors/meta/refresh-status`);
       if (!res.ok) throw new Error('Failed to fetch refresh status');
       return res.json();
     },

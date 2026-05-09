@@ -17,6 +17,7 @@ import type {
   OptionsData, DeepDiveData, SqueezeDetectorData, OverviewChartsData,
 } from '../types/options-ai.types';
 import { CACHE_TTL_MS, API_RETRY_COUNT, API_RETRY_DELAY_MS } from '../constants/options-ai.constants';
+import { authFetch } from '@/utils/authFetch';
 
 // ╔══════════════════════════════════════════════════════╗
 // ║  CONFIG                                              ║
@@ -66,7 +67,10 @@ export function invalidateCache(k?: string) {
 
 async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
   const url = `${OAI_BASE}${path}`;
-  const res = await fetch(url, {
+  // Use authFetch so Authorization: Bearer <supabase_token> is auto-injected.
+  // Without it, userTier middleware sees no Bearer header and sets req.userTier='free',
+  // causing aiGate to refuse `pro+`-tier options-ai endpoints with 403.
+  const res = await authFetch(url, {
     headers: { Accept: 'application/json' },
     signal,
   });
