@@ -11,6 +11,8 @@ import { AlertOctagon, Crown, Search, Users } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { usePortfolios } from '@/hooks/usePortfolios';
+import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
+import type { PositionEntry } from '@/hooks/useAccountSnapshots';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -183,11 +185,12 @@ export function CopyTradingDashboard() {
   const { connections } = useBrokerConnections({ active: true });
   const { liveCredentialIds } = useEngineSessions();
   const { portfolios } = usePortfolios();
+  const { snapshotFor } = useAccountSnapshots();
   const [instrument, setInstrument] = useState('NQ');
 
   // Build rows from broker_connections filtered to tradovate + portfolios.
-  // All live fields (position, balance, avgPrice, dayPnL, openPnL, qty) are
-  // null placeholders — wired from Tradovate WS in Sprint 3c.
+  // Live fields (position, balance, avgPrice, dayPnL, openPnL, qty) wired
+  // from /api/copy-engine/accounts snapshot in Sprint 3c.
   const rows = useMemo<AccountRowData[]>(() => {
     return connections
       .filter((c) => c.broker === 'tradovate')
@@ -200,41 +203,65 @@ export function CopyTradingDashboard() {
             (p as any).tradovate_account_id?.toString() === c.account_id,
           // (p as any) needed because Portfolio type predates broker_connections join field
         );
-        void port; // Sprint 3c will use portfolio fields
+        void port; // Sprint 3c-extension will use portfolio fields
         const tokenExpired = c.token_expires_at
           ? new Date(c.token_expires_at) < new Date()
           : false;
         const live = liveCredentialIds.has(c.id);
-        const issue = !live && (c.is_active || tokenExpired);
+        const issue = !live && ((c.is_active && c.status === 'connected') || tokenExpired);
+
+        const snap = snapshotFor(c.id);
+
+        // Pick position matching the selected instrument (case-insensitive contains).
+        // When no instrument typed, use the largest absolute position.
+        let activePosition: PositionEntry | null = null;
+        if (snap?.positions?.length) {
+          if (instrument) {
+            activePosition =
+              snap.positions.find((p) =>
+                p.contractName?.toUpperCase().includes(instrument.toUpperCase()),
+              ) ?? null;
+          }
+          if (!activePosition) {
+            activePosition =
+              [...snap.positions].sort(
+                (a, b) => Math.abs(b.netPos ?? 0) - Math.abs(a.netPos ?? 0),
+              )[0] ?? null;
+          }
+        }
+
         return {
           id: c.id,
           connectionName: c.connection_name ?? c.broker,
-          accountName: c.account_name ?? c.account_id,
-          symbol: instrument,
+          accountName:    c.account_name ?? c.account_id,
+          symbol:         activePosition?.contractName ?? instrument,
           live,
           issue,
-          position: null,   // Sprint 3c: live from Tradovate WS
-          balance:  null,   // Sprint 3c
-          avgPrice: null,   // Sprint 3c
-          dayPnL:   null,   // Sprint 3c
-          openPnL:  null,   // Sprint 3c
-          qty:      null,   // Sprint 3c
-          ratio:    1,
-          crossSymbol: null,
-          following: c.is_active,
+          position:    activePosition?.netPos   ?? null,
+          balance:     snap?.cashBalance        ?? null,
+          avgPrice:    activePosition?.avgPrice ?? null,
+          dayPnL:      snap?.realizedPnL        ?? null,
+          openPnL:     snap?.openPnL            ?? null,
+          qty:
+            activePosition && activePosition.netPos != null
+              ? Math.abs(activePosition.netPos)
+              : null,
+          ratio:       1,    // TODO Sprint 3c-extension: read from copy_rules
+          crossSymbol: null, // TODO Sprint 3c-extension
+          following:   c.is_active,
         };
       });
-  }, [connections, liveCredentialIds, portfolios, instrument]);
+  }, [connections, liveCredentialIds, portfolios, snapshotFor, instrument]);
 
   // Leader heuristic: first connection by created_at (server returns ascending order).
   // Sprint 3c will read leader_portfolio_id from copy_rules instead.
   const leaderId = rows[0]?.id ?? null;
 
-  // Summary placeholders — all wired from Tradovate WS in Sprint 3c
-  const totalDayPnL = 0;
-  const totalOpenPnL = 0;
-  const totalBalance = 0;
-  const openPositionsCount = 0;
+  // Summary bar — derived from live snapshots
+  const totalDayPnL        = rows.reduce((s, r) => s + (r.dayPnL  ?? 0), 0);
+  const totalOpenPnL       = rows.reduce((s, r) => s + (r.openPnL ?? 0), 0);
+  const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
+  const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // FLATTEN ALL placeholder — Sprint 3d wires confirmation dialog + POST /api/copy-engine/flatten-all
   const handleFlattenAll = () => {
