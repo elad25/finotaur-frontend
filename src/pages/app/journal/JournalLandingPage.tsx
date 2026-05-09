@@ -576,9 +576,9 @@ const plans = [
   {
     id: "basic",
     name: "Basic",
-    monthlyPrice: "$19.99",
-    yearlyPrice: "$149",
-    yearlyMonthlyEquivalent: "$12.42",
+    monthlyPrice: "$24.99",
+    yearlyPrice: "$229",
+    yearlyMonthlyEquivalent: "$19.08",
     description: "Essential tools + automatic broker sync",
     trialDays: 14,
     features: [
@@ -595,14 +595,14 @@ const plans = [
     ],
     cta: "Start 14-Day Free Trial",
     featured: false,
-    savings: "Save 38%",
+    savings: "Save 24%",
   },
   {
     id: "premium",
     name: "Premium",
-    monthlyPrice: "$39.99",
-    yearlyPrice: "$299",
-    yearlyMonthlyEquivalent: "$24.92",
+    monthlyPrice: "$44.99",
+    yearlyPrice: "$409",
+    yearlyMonthlyEquivalent: "$34.08",
     description: "Unlimited everything + AI intelligence",
     features: [
       "Everything in Basic, plus:",
@@ -619,7 +619,7 @@ const plans = [
     ],
     cta: "Get Premium",
     featured: true,
-    savings: "Save 38%",
+    savings: "Save 24%",
   },
 ];
 
@@ -732,7 +732,7 @@ const PricingSection = () => {
                 }`}
               >
                 Yearly
-                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">Save up to 38%</span>
+                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">Save up to 24%</span>
               </button>
             </div>
           </div>

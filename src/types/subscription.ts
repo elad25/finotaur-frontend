@@ -114,15 +114,15 @@ export interface TradeAuditLog {
 
 export const SUBSCRIPTION_PRICES = {
   basic: {
-    monthly: 19.99,
-    yearly: 12.42,
-    yearlyTotal: 149,
+    monthly: 24.99,
+    yearly: 19.08,
+    yearlyTotal: 229,
     trialDays: 14,
   },
   premium: {
-    monthly: 39.99,
-    yearly: 24.92,
-    yearlyTotal: 299,
+    monthly: 44.99,
+    yearly: 34.08,
+    yearlyTotal: 409,
     trialDays: 0,
   },
 } as const;
@@ -132,8 +132,8 @@ export const SUBSCRIPTION_PRICES = {
 // ============================================
 
 export const YEARLY_SAVINGS = {
-  basic: Math.round(((19.99 - 12.42) / 19.99) * 100),
-  premium: Math.round(((39.99 - 24.92) / 39.99) * 100),
+  basic: Math.round(((SUBSCRIPTION_PRICES.basic.monthly - SUBSCRIPTION_PRICES.basic.yearly) / SUBSCRIPTION_PRICES.basic.monthly) * 100),
+  premium: Math.round(((SUBSCRIPTION_PRICES.premium.monthly - SUBSCRIPTION_PRICES.premium.yearly) / SUBSCRIPTION_PRICES.premium.monthly) * 100),
 } as const;
 
 // ============================================
