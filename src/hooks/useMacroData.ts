@@ -3,6 +3,7 @@
 // Connects to /api/macro/snapshot endpoint with caching and auto-refresh
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { authFetch } from '@/utils/authFetch';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -115,7 +116,7 @@ export function useMacroData(options?: {
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE}/macro/snapshot`, {
+      const response = await authFetch(`${API_BASE}/macro/snapshot`, {
         signal: abortControllerRef.current.signal,
         headers: {
           'Content-Type': 'application/json',

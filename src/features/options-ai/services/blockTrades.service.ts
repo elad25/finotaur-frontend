@@ -8,6 +8,7 @@
 // =====================================================
 
 import type { BlockTrade } from '../types/options-ai.types';
+import { authFetch } from '@/utils/authFetch';
 
 // ── Types from backend ──
 interface BackendBlock {
@@ -72,7 +73,9 @@ async function fetchWithRetry<T>(path: string, signal?: AbortSignal, retries = 2
   for (let i = 0; i <= retries; i++) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
     try {
-      const res = await fetch(`${API_BASE}${path}`, {
+      // Use authFetch so Authorization: Bearer <supabase_token> is auto-injected
+      // (otherwise userTier middleware → 'free' → aiGate refuses tier-gated routes).
+      const res = await authFetch(`${API_BASE}${path}`, {
         headers: { Accept: 'application/json' },
         signal,
       });
