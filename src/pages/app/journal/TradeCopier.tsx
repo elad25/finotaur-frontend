@@ -895,6 +895,21 @@ const CopyHistorySection = memo(() => {
   );
 });
 
+// ─── Manage Risk Placeholder (Tab 3) ─────────────────────────
+const ManageRiskPlaceholder = memo(function ManageRiskPlaceholder() {
+  return (
+    <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
+      <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+        <Shield className="w-6 h-6 text-gold-primary" />
+      </div>
+      <h3 className="text-base font-semibold text-ink-primary">Manage Risk</h3>
+      <p className="text-sm text-ink-secondary text-center max-w-md">
+        Per-account risk controls coming in the next iteration: max daily loss, max position size, kill switches, and time-based limits.
+      </p>
+    </div>
+  );
+});
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function TradeCopier() {
   const { isPremium, isAdmin } = useSubscription();
@@ -923,6 +938,7 @@ export default function TradeCopier() {
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'connections' | 'copy-trading' | 'manage-risk'>('connections');
 
   if (!isPremiumUser) return <PremiumGate />;
 
@@ -933,14 +949,14 @@ export default function TradeCopier() {
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="min-h-screen bg-surface-base text-ink-primary">
+      <div className="w-full max-w-[1600px] mx-auto px-ds-5 py-ds-6 space-y-ds-5">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Copy Trading</h1>
-            <p className="text-zinc-500 text-sm mt-1">
+            <h1 className="text-2xl font-bold text-ink-primary">Copy Trading</h1>
+            <p className="text-sm text-ink-secondary mt-1">
               Configure your leader account, instrument and follower settings in real-time.
             </p>
           </div>
@@ -950,74 +966,107 @@ export default function TradeCopier() {
           </div>
         </div>
 
-        {/* ── Section 1: Broker Connections ── */}
-        <SectionCard>
-          <div className="flex items-center justify-between mb-ds-4">
-            <div className="flex items-center gap-ds-3">
-              <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-                <Link2 className="w-4 h-4 text-gold-primary" />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
-                <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
-              </div>
-            </div>
+        {/* ── Tab Navigation Bar ── */}
+        <div className="flex items-center gap-ds-1 p-1 rounded-lg bg-surface-1 border border-border-ds-subtle w-fit">
+          {([
+            { id: 'connections',  label: 'Connections',  icon: Link2  },
+            { id: 'copy-trading', label: 'Copy Trading', icon: Copy   },
+            { id: 'manage-risk',  label: 'Manage Risk',  icon: Shield },
+          ] as const).map(tab => (
             <button
-              onClick={() => setShowModal(true)}
-              className="inline-flex items-center gap-ds-2 rounded-lg bg-gold-primary hover:bg-[var(--gold-hover)] text-ink-on-gold px-ds-3 py-ds-2 text-sm font-medium transition-colors duration-base"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-ds-2 px-ds-4 py-ds-2 rounded-md text-sm font-medium transition-colors duration-base ${
+                activeTab === tab.id
+                  ? 'bg-gold-primary text-ink-on-gold'
+                  : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-2'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              Connect new broker
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          <div className="flex items-center gap-ds-2 mb-ds-4 bg-surface-1 border border-border-ds-subtle rounded-md px-ds-3 py-ds-2">
-            <Shield className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
-            <span className="text-xs text-ink-secondary">
-              Credentials encrypted with AES-256 — we never store plaintext passwords.
-            </span>
-          </div>
-
-          <div className="space-y-ds-2">
-            {[...byBroker.entries()].map(([broker, conns]) => (
-              <BrokerAccordion
-                key={broker}
-                broker={broker}
-                connections={conns}
-                liveCredentialIds={liveCredentialIds}
-                defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
-                onDisconnect={disconnectBroker}
-              />
-            ))}
-          </div>
-        </SectionCard>
-
-        {/* ── Section 2: Copy Panel ── */}
-        {hasAnyConnection && (
+        {/* ── Tab 1: Broker Connections ── */}
+        {activeTab === 'connections' && (
           <SectionCard>
-            <CopyPanel portfolios={brokerPortfolios} />
-          </SectionCard>
-        )}
-
-        {/* ── Section 3: Copy History ── */}
-        {hasAnyConnection && (
-          <SectionCard>
-            <CopyHistorySection />
-          </SectionCard>
-        )}
-
-        {/* ── Not connected state ── */}
-        {!hasAnyConnection && (
-          <div className="text-center py-16 space-y-4">
-            <WifiOff className="w-12 h-12 text-zinc-700 mx-auto" />
-            <div>
-              <p className="text-zinc-400 font-medium">No accounts connected</p>
-              <p className="text-zinc-600 text-sm mt-1">
-                Connect a Tradovate account above to enable copy trading.
-              </p>
+            <div className="flex items-center justify-between mb-ds-4">
+              <div className="flex items-center gap-ds-3">
+                <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                  <Link2 className="w-4 h-4 text-gold-primary" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-ink-primary">Broker Connections</h2>
+                  <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModal(true)}
+                className="inline-flex items-center gap-ds-2 rounded-lg bg-gold-primary hover:bg-[var(--gold-hover)] text-ink-on-gold px-ds-3 py-ds-2 text-sm font-medium transition-colors duration-base"
+              >
+                <Plus className="w-4 h-4" />
+                Connect new broker
+              </button>
             </div>
-          </div>
+
+            <div className="flex items-center gap-ds-2 mb-ds-4 bg-surface-1 border border-border-ds-subtle rounded-md px-ds-3 py-ds-2">
+              <Shield className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
+              <span className="text-xs text-ink-secondary">
+                Credentials encrypted with AES-256 — we never store plaintext passwords.
+              </span>
+            </div>
+
+            <div className="space-y-ds-2">
+              {[...byBroker.entries()].map(([broker, conns]) => (
+                <BrokerAccordion
+                  key={broker}
+                  broker={broker}
+                  connections={conns}
+                  liveCredentialIds={liveCredentialIds}
+                  defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
+                  onDisconnect={disconnectBroker}
+                />
+              ))}
+            </div>
+          </SectionCard>
         )}
+
+        {/* ── Tab 2: Copy Trading ── */}
+        {activeTab === 'copy-trading' && (
+          <>
+            {hasAnyConnection ? (
+              <>
+                <SectionCard>
+                  <CopyPanel portfolios={brokerPortfolios} />
+                </SectionCard>
+                <SectionCard>
+                  <CopyHistorySection />
+                </SectionCard>
+              </>
+            ) : (
+              <SectionCard>
+                <div className="text-center py-16 space-y-4">
+                  <WifiOff className="w-12 h-12 text-zinc-700 mx-auto" />
+                  <div>
+                    <p className="text-ink-secondary font-medium">No accounts connected</p>
+                    <p className="text-ink-secondary text-sm mt-1">
+                      Connect a broker in the Connections tab to enable copy trading.
+                    </p>
+                  </div>
+                </div>
+              </SectionCard>
+            )}
+          </>
+        )}
+
+        {/* ── Tab 3: Manage Risk ── */}
+        {activeTab === 'manage-risk' && (
+          <SectionCard>
+            <ManageRiskPlaceholder />
+          </SectionCard>
+        )}
+
       </div>
 
       {showModal && (
