@@ -24,6 +24,7 @@ import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { BrokerAccordion } from '@/components/copyTrading/BrokerAccordion';
 import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
+import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
 import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 
@@ -896,21 +897,6 @@ const CopyHistorySection = memo(() => {
   );
 });
 
-// ─── Manage Risk Placeholder (Tab 3) ─────────────────────────
-const ManageRiskPlaceholder = memo(function ManageRiskPlaceholder() {
-  return (
-    <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
-      <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
-        <Shield className="w-6 h-6 text-gold-primary" />
-      </div>
-      <h3 className="text-base font-semibold text-ink-primary">Manage Risk</h3>
-      <p className="text-sm text-ink-secondary text-center max-w-md">
-        Per-account risk controls coming in the next iteration: max daily loss, max position size, kill switches, and time-based limits.
-      </p>
-    </div>
-  );
-});
-
 // ─── Main Page ────────────────────────────────────────────────
 export default function TradeCopier() {
   const { isPremium, isAdmin } = useSubscription();
@@ -1073,7 +1059,7 @@ export default function TradeCopier() {
         {/* ── Tab 3: Manage Risk ── */}
         {activeTab === 'manage-risk' && (
           <SectionCard>
-            <ManageRiskPlaceholder />
+            <ManageRiskTab />
           </SectionCard>
         )}
 
