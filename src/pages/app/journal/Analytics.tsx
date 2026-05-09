@@ -1,14 +1,16 @@
 import { useState, useMemo, memo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { 
+import {
   TrendingUp, TrendingDown, Target, Award, Calendar,
   Activity, Brain, Zap, Clock, DollarSign, Percent,
-  AlertTriangle, CheckCircle, XCircle, BarChart3, PieChart, 
-  LineChart, Info, Sparkles, ArrowUpRight, ArrowDownRight, 
-  Shield, AlertCircle, ChevronUp, ChevronDown, Lightbulb, 
+  AlertTriangle, CheckCircle, XCircle, BarChart3, PieChart,
+  LineChart, Info, Sparkles, ArrowUpRight, ArrowDownRight,
+  Shield, AlertCircle, ChevronUp, ChevronDown, Lightbulb,
   Heart, Focus, Filter, Download, RefreshCw,
   Flame, BarChart2, Users, Layers, Grid3x3, TrendingUpIcon
 } from "lucide-react";
+import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
+import JournalGauge from '@/components/journal/ds/JournalGauge';
 import { useAnalyticsData } from "@/hooks/useAnalyticsData";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useTimezone } from "@/contexts/TimezoneContext";
@@ -194,60 +196,75 @@ function OverviewTab({
 }) {
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatBoxCompact
+      {/* Row 1 — 4-up primary KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <JournalKpiCard
           label="Total Trades"
           value={stats.totalTrades.toString()}
-          color="#EAEAEA"
-          icon={<BarChart3 className="w-4 h-4" />}
+          hint={`${stats.wins}W / ${stats.losses}L`}
+          accent="blue"
+          icon={BarChart3}
         />
-<StatBoxCompact
+        {/* TODO: add trend prop to JournalKpiCard for Win Rate change indicator (was: change={changes?.winRateChange}) */}
+        <JournalKpiCard
           label="Win Rate"
           value={`${stats.winRate.toFixed(0)}%`}
-          color={stats.winRate >= 50 ? '#00C46C' : '#E44545'}
-          icon={<Target className="w-4 h-4" />}
-          change={changes?.winRateChange}
-          trend={changes && changes.winRateChange > 0 ? 'up' : changes && changes.winRateChange < 0 ? 'down' : undefined}
-          gaugeData={{ wins: stats.wins, losses: stats.losses, breakeven: stats.breakeven }}
+          hint={`${stats.wins} / ${stats.totalTrades} trades`}
+          accent={stats.winRate >= 50 ? 'green' : 'red'}
+          icon={Target}
+          gauge={
+            <JournalGauge
+              mode="winRate"
+              wins={stats.wins}
+              losses={stats.losses}
+              breakeven={stats.breakeven}
+            />
+          }
         />
-        <StatBoxCompact
+        {/* TODO: add trend prop to JournalKpiCard for Net P&L change indicator (was: change={changes?.pnlChange}) */}
+        <JournalKpiCard
           label="Net P&L"
           value={`$${stats.netPnL.toFixed(0)}`}
-          color={stats.netPnL >= 0 ? '#00C46C' : '#E44545'}
-          icon={<DollarSign className="w-4 h-4" />}
-          change={changes?.pnlChange}
-          trend={changes && changes.pnlChange > 0 ? 'up' : changes && changes.pnlChange < 0 ? 'down' : undefined}
+          hint="Total profit/loss"
+          accent="gold"
+          icon={DollarSign}
+          valueSize="lg"
         />
-        <StatBoxCompact
+        <JournalKpiCard
           label="Avg R:R"
           value={stats.avgRR.toFixed(2)}
-          color="#C9A646"
-          icon={<Zap className="w-4 h-4" />}
+          hint="Win/loss ratio"
+          accent="purple"
+          icon={Zap}
         />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatBoxCompact
+      {/* Row 2 — 4-up secondary KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* TODO: add trend prop to JournalKpiCard for Expectancy change indicator (was: change={changes?.avgRChange}) */}
+        <JournalKpiCard
           label="Expectancy"
           value={`${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`}
-          color={stats.expectancy >= 0 ? '#00C46C' : '#E44545'}
-          sublabel="Per trade"
-          change={changes?.avgRChange}
+          hint="Per trade"
+          accent={stats.expectancy >= 0 ? 'green' : 'red'}
         />
-        <StatBoxCompact
+        <JournalKpiCard
           label="Profit Factor"
           value={stats.profitFactor.toFixed(2)}
-          color={stats.profitFactor >= 1.5 ? '#00C46C' : stats.profitFactor >= 1 ? '#C9A646' : '#E44545'}
+          hint="Wins / losses"
+          accent={stats.profitFactor >= 1.5 ? 'green' : stats.profitFactor >= 1 ? 'gold' : 'red'}
         />
-        <StatBoxCompact
+        <JournalKpiCard
           label="Max Drawdown"
-          value={`${stats.maxDrawdown?.toFixed(1) || 0}R`}
-          color="#E44545"
+          value={`${stats.maxDrawdown?.toFixed(1) ?? 0}R`}
+          hint="From peak"
+          accent="red"
         />
-        <StatBoxCompact
+        <JournalKpiCard
           label="Win/Loss Streak"
-          value={`${stats.maxConsecutiveWins || 0}/${stats.maxConsecutiveLosses || 0}`}
-          color="#C9A646"
+          value={`${stats.maxConsecutiveWins ?? 0}/${stats.maxConsecutiveLosses ?? 0}`}
+          hint="Best win / loss run"
+          accent="gold"
         />
       </div>
 
@@ -1652,176 +1669,8 @@ function PsychologyTab({ stats, trades }: { stats: StrategyStats; trades: Trade[
 // HELPER COMPONENTS
 // ==========================================
 
-function AnalyticsGauge({ wins, losses, breakeven = 0 }: { wins: number; losses: number; breakeven?: number }) {
-  const total = wins + losses + breakeven;
-  const winPercent = total > 0 ? (wins / total) * 100 : 0;
-
-  const cx = 54; const cy = 50;
-  const R = 38; const SW = 9;
-  const startAngle = Math.PI;
-  const endAngle = 0;
-  const arcLen = Math.PI * R;
-
-  const x1 = cx + R * Math.cos(startAngle);
-  const y1 = cy + R * Math.sin(startAngle);
-  const x2 = cx + R * Math.cos(endAngle);
-  const y2 = cy + R * Math.sin(endAngle);
-
-  const needleAngle = Math.PI - (winPercent / 100) * Math.PI;
-  const needleLen = R - 4;
-  const nx = cx + needleLen * Math.cos(needleAngle);
-  const ny = cy + needleLen * Math.sin(needleAngle);
-
-  const gradId = `ag-grad-${wins}-${losses}`;
-  const glowId = `ag-glow-${wins}-${losses}`;
-
-  return (
-    <div className="flex flex-col items-center" style={{ width: 108 }}>
-      <svg width={108} height={62} viewBox="0 0 108 62">
-        <defs>
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   stopColor="#E36363" />
-            <stop offset="45%"  stopColor="#C9A646" />
-            <stop offset="100%" stopColor="#4AD295" />
-          </linearGradient>
-          <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="2.5" result="blur" />
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        <path
-          d={`M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`}
-          fill="none"
-          stroke="rgba(255,255,255,0.07)"
-          strokeWidth={SW}
-          strokeLinecap="round"
-        />
-
-        {total > 0 && (
-          <path
-            d={`M ${x1} ${y1} A ${R} ${R} 0 0 1 ${x2} ${y2}`}
-            fill="none"
-            stroke={`url(#${gradId})`}
-            strokeWidth={SW}
-            strokeLinecap="round"
-            strokeDasharray={`${(winPercent / 100) * arcLen} ${arcLen}`}
-            filter={`url(#${glowId})`}
-            style={{ transition: 'stroke-dasharray 1s ease-out' }}
-          />
-        )}
-      </svg>
-
-      <div className="flex justify-between w-full px-1 -mt-1">
-        <div className="flex items-center gap-0.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#4AD295]" />
-          <span className="text-[9px] font-semibold text-[#4AD295]">{wins}W</span>
-        </div>
-        {breakeven > 0 && (
-          <div className="flex items-center gap-0.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#C9A646]" />
-            <span className="text-[9px] font-semibold text-[#C9A646]">{breakeven}BE</span>
-          </div>
-        )}
-        <div className="flex items-center gap-0.5">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#E36363]" />
-          <span className="text-[9px] font-semibold text-[#E36363]">{losses}L</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatBoxCompact({ 
-  label, 
-  value, 
-  color, 
-  sublabel,
-  icon,
-  change,
-  trend,
-  gaugeData
-}: { 
-  label: string; 
-  value: string; 
-  color: string; 
-  sublabel?: string;
-  icon?: React.ReactNode;
-  change?: number;
-  trend?: 'up' | 'down';
-  gaugeData?: { wins: number; losses: number; breakeven?: number };
-}) {
-  return (
-    <div 
-      className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group"
-      style={{
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-        border: `1px solid ${color}22`,
-        boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
-        backdropFilter: 'blur(12px)',
-      }}
-    >
-      {/* Ambient glow */}
-      <div 
-        className="absolute -top-6 -left-6 w-20 h-20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-        style={{ background: `${color}22`, filter: 'blur(20px)' }}
-      />
-      {/* Bottom glow line */}
-      <div 
-        className="absolute bottom-0 left-4 right-4 h-px opacity-30"
-        style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }}
-      />
-
-      <div className={`relative p-4 ${gaugeData ? 'flex items-center justify-between gap-2' : ''}`}>
-        <div className={gaugeData ? 'flex-1 min-w-0' : ''}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5">
-              {icon && (
-                <div 
-                  className="inline-flex items-center justify-center w-7 h-7 rounded-lg"
-                  style={{ background: `${color}18`, border: `1px solid ${color}30` }}
-                >
-                  <div style={{ color }}>{icon}</div>
-                </div>
-              )}
-              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6A6A6A' }}>
-                {label}
-              </p>
-            </div>
-            {!gaugeData && trend && change !== undefined && (
-              <div className="flex items-center gap-1" style={{ color }}>
-                {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                <span className="text-xs font-semibold">{Math.abs(change).toFixed(1)}</span>
-              </div>
-            )}
-          </div>
-          
-          <p className="text-3xl font-bold tracking-tight" style={{ color }}>
-            {value}
-          </p>
-          
-          {sublabel && (
-            <p className="text-xs mt-1" style={{ color: '#6A6A6A' }}>
-              {sublabel}
-            </p>
-          )}
-          {gaugeData && trend && change !== undefined && (
-            <div className="flex items-center gap-1 mt-1" style={{ color }}>
-              {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              <span className="text-[10px] font-semibold">{Math.abs(change).toFixed(1)}%</span>
-            </div>
-          )}
-        </div>
-
-        {gaugeData && (
-          <div className="flex-shrink-0 opacity-90 group-hover:opacity-100 transition-opacity">
-            <AnalyticsGauge wins={gaugeData.wins} losses={gaugeData.losses} breakeven={gaugeData.breakeven} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// AnalyticsGauge removed — replaced by JournalGauge (token-based colours, no hardcoded hex).
+// StatBoxCompact removed — replaced by JournalKpiCard throughout OverviewTab.
 
 function MetricCardCompact({
   label,
