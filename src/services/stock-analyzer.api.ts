@@ -16,6 +16,7 @@
 
 import type { StockData, NewsItem } from '@/types/stock-analyzer.types';
 import { stockCache, getNextEarningsDate } from './stock-analyzer.cache';
+import { authFetch } from '@/utils/authFetch';
 
 const API_BASE = `${import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app'}/api/market-data`;
 // =====================================================
@@ -44,7 +45,7 @@ export async function saveToServerCache(
 ) {
   try {
     const BASE = import.meta.env.VITE_API_URL || '';
-await fetch(`${BASE}/api/stock-cache/${ticker}/${type}`, {      method: 'POST',
+await authFetch(`${BASE}/api/stock-cache/${ticker}/${type}`, {      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data, earningsDate: earningsDate || null }),
     });
@@ -57,7 +58,7 @@ export async function getServerCache<T>(
 ): Promise<T | null> {
   try {
     const BASE = import.meta.env.VITE_API_URL || '';
-const res = await fetch(`${BASE}/api/stock-cache/${ticker}/${type}`);    if (!res.ok) return null;
+const res = await authFetch(`${BASE}/api/stock-cache/${ticker}/${type}`);    if (!res.ok) return null;
     const json = await res.json();
     return json.success && json.cached && json.data ? json.data : null;
   } catch {

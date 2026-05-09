@@ -13,6 +13,7 @@
 // =====================================================
 
 import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { authFetch } from '@/utils/authFetch';
 import {
   Scale, Info, Sparkles, TrendingUp, TrendingDown,
   Shield, AlertTriangle, Loader2, RefreshCw,
@@ -144,7 +145,7 @@ const valuationCache = new Map<string, { data: ValuationAIData; generatedAt: str
 
 async function checkServerValuationCache(ticker: string): Promise<ValuationAIData | null> {
   try {
-    const res = await fetch(`/api/stock-cache/${ticker}/valuation`);
+    const res = await authFetch(`/api/stock-cache/${ticker}/valuation`);
     if (!res.ok) return null;
     const json = await res.json();
     return json.success && json.cached && json.data ? json.data : null;
@@ -155,7 +156,7 @@ async function saveServerValuationCache(
   ticker: string, data: ValuationAIData, earningsDate?: string | null
 ) {
   try {
-    await fetch(`/api/stock-cache/${ticker}/valuation`, {
+    await authFetch(`/api/stock-cache/${ticker}/valuation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ valuationData: data, earningsDate: earningsDate || null }),

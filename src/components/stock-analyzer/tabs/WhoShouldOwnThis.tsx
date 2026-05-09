@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { Card } from '../ui';
+import { authFetch } from '@/utils/authFetch';
 
 // ─── Types ───────────────────────────────────────────
 
@@ -78,7 +79,7 @@ const API_BASE = (import.meta as any).env?.VITE_API_URL
 
 async function checkServerCache(ticker: string): Promise<InvestorProfile | null> {
   try {
-    const res = await fetch(`${API_BASE}/api/stock-cache/${ticker}/investor-profile`);
+    const res = await authFetch(`${API_BASE}/api/stock-cache/${ticker}/investor-profile`);
     if (!res.ok) return null;
     const j = await res.json();
     return j.success && j.cached && j.data ? j.data : null;
@@ -87,7 +88,7 @@ async function checkServerCache(ticker: string): Promise<InvestorProfile | null>
 
 async function saveServerCache(ticker: string, profile: InvestorProfile, earningsDate?: string | null) {
   try {
-    await fetch(`${API_BASE}/api/stock-cache/${ticker}/investor-profile`, {
+    await authFetch(`${API_BASE}/api/stock-cache/${ticker}/investor-profile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileData: profile, earningsDate: earningsDate || null }),

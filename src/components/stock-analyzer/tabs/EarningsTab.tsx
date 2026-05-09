@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
+import { authFetch } from '@/utils/authFetch';
 import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader } from '../ui';
 import { fmtBig, isValid } from '@/utils/stock-analyzer.utils';
@@ -937,7 +938,7 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
     if (!force) {
       try {
         const serverCached = prefetchedData || await (async () => {
-          const res = await fetch(`/api/stock-cache/${data.ticker}/earnings-tab`);
+          const res = await authFetch(`/api/stock-cache/${data.ticker}/earnings-tab`);
           if (!res.ok) return null;
           const json = await res.json();
           return (json.success && json.cached && json.data) ? json.data : null;

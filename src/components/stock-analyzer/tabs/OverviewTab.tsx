@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { StockData } from '@/types/stock-analyzer.types';
+import { authFetch } from '@/utils/authFetch';
 import { Card, MetricBox, SectionHeader, FactRow } from '../ui';
 import { fmtBig, fmtPrice, fmt, isValid, generateSignal, generateInvestmentThesis } from '@/utils/stock-analyzer.utils';
 import { saveToServerCache } from '@/services/stock-analyzer.api';
@@ -679,7 +680,7 @@ interface ServerBriefData {
 
 async function checkServerBriefCache(ticker: string): Promise<ServerBriefData | null> {
   try {
-    const res = await fetch(`/api/stock-cache/${ticker}/brief`);
+    const res = await authFetch(`/api/stock-cache/${ticker}/brief`);
     if (!res.ok) return null;
     const json = await res.json();
     if (json.success && json.cached && json.data) return json.data;
@@ -697,7 +698,7 @@ async function saveServerBriefCache(
   earningsDate?: string | null
 ): Promise<void> {
   try {
-    await fetch(`/api/stock-cache/${ticker}/brief`, {
+    await authFetch(`/api/stock-cache/${ticker}/brief`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
