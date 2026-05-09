@@ -116,6 +116,78 @@ const earningsCacheMap = new Map<string, { data: EarningsData; generatedAt: stri
 const secFilingCacheMap = new Map<string, string>(); // ticker -> filing URL
 
 // =====================================================
+// ANTHROPIC EARNINGS — Feature flag + types
+// =====================================================
+
+const ANTHROPIC_EARNINGS_ENABLED =
+  import.meta.env.VITE_ENABLE_ANTHROPIC_STOCK_ANALYZER === 'true' ||
+  import.meta.env.VITE_ENABLE_ANTHROPIC_EARNINGS === 'true';
+
+interface AnthropicEarningsResult {
+  quarter?: string;
+  quarterRange?: string;
+  reportDate?: string;
+  verdict?: 'beat' | 'miss' | 'mixed';
+  verdictSummary?: string;
+  metrics?: Array<{ label: string; actual?: string|number; estimate?: string|number; surprise?: string; status?: string }>;
+  segments?: Array<{ name: string; revenue?: string|number; yoy?: string|number; yoyPositive?: boolean; margin?: string|number; vsEstimate?: string; color?: string; pct?: number }>;
+  guidance?: Array<{ label: string; low?: string|number; high?: string|number; consensus?: string|number; signal?: string }>;
+  guidanceAnalysis?: string;
+  thesis_impact?: string;
+  key_takeaways?: string[];
+  aiBottomLine?: string;
+  nextEarnings?: string;
+  impliedMove?: string;
+  rating?: 'BUY' | 'HOLD' | 'SELL';
+  meta?: { cache_hits: number; total_cost_usd: number; models_used: string[] };
+}
+
+function normalizeAnthropicEarnings(result: AnthropicEarningsResult): EarningsData {
+  return {
+    quarter: result.quarter ?? '',
+    quarterRange: result.quarterRange ?? '',
+    reportDate: result.reportDate ?? '',
+    verdict: result.verdict ?? 'mixed',
+    verdictSummary: result.verdictSummary ?? '',
+    metrics: result.metrics ?? [],
+    segments: result.segments ?? [],
+    guidance: result.guidance ?? [],
+    guidanceAnalysis: result.guidanceAnalysis ?? '',
+    highlights: [],
+    priceAction: [],
+    quarterlyComparison: undefined,
+    aiBottomLine: result.aiBottomLine ?? result.thesis_impact ?? '',
+    nextEarnings: result.nextEarnings ?? '',
+    impliedMove: result.impliedMove ?? '',
+    rating: result.rating ?? 'HOLD',
+  } as EarningsData;
+}
+
+async function fetchEarningsAnalysisAI(
+  data: StockData,
+  signal?: AbortSignal,
+): Promise<EarningsData> {
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+  const res = await authFetch(`${API_BASE}/api/anthropic/stock-analyzer/earnings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ticker: data.ticker,
+      name: data.name,
+      sector: data.sector,
+      industry: data.industry,
+      marketCap: data.marketCap,
+    }),
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`Anthropic earnings analysis failed: ${res.status}`);
+  }
+  const json = await res.json();
+  return normalizeAnthropicEarnings(json as AnthropicEarningsResult);
+}
+
+// =====================================================
 // AI PROMPT
 // =====================================================
 
@@ -961,9 +1033,11 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
     setError(null);
 
     try {
-      const result = await fetchEarningsData(data, controller.signal);
-      setEarningsData(result);
-      earningsCacheMap.set(data.ticker, { data: result, generatedAt: new Date().toISOString() });
+      const earnings = ANTHROPIC_EARNINGS_ENABLED
+        ? await fetchEarningsAnalysisAI(data, controller.signal)
+        : await fetchEarningsData(data, controller.signal);
+      setEarningsData(earnings);
+      earningsCacheMap.set(data.ticker, { data: earnings, generatedAt: new Date().toISOString() });
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         console.error('Earnings fetch error:', err);
