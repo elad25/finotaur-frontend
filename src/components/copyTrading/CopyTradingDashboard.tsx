@@ -8,11 +8,14 @@
 
 import { memo, useMemo, useState } from 'react';
 import { AlertOctagon, Crown, Search, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
 import type { PositionEntry } from '@/hooks/useAccountSnapshots';
+import { FlattenConfirmDialog } from './FlattenConfirmDialog';
+import { useFlattenActions } from '@/hooks/useFlattenActions';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -45,9 +48,11 @@ const GRID_COLS =
 const CopyAccountRow = memo(function CopyAccountRow({
   row,
   isLeader,
+  onFlatten,
 }: {
   row: AccountRowData;
   isLeader: boolean;
+  onFlatten: () => void;
 }) {
   return (
     <div
@@ -167,9 +172,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Actions */}
       <div className="flex items-center justify-start">
         <button
-          onClick={() => {
-            /* TODO Sprint 3d: per-row flatten */
-          }}
+          onClick={onFlatten}
           className="text-xs text-num-negative hover:text-num-negative/80 transition-colors duration-base"
         >
           Flatten
@@ -187,6 +190,13 @@ export function CopyTradingDashboard() {
   const { portfolios } = usePortfolios();
   const { snapshotFor } = useAccountSnapshots();
   const [instrument, setInstrument] = useState('NQ');
+  const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
+  const [flattenDialog, setFlattenDialog] = useState<{
+    open: boolean;
+    scope: 'all' | 'single';
+    credentialId?: string;
+    accountName?: string;
+  } | null>(null);
 
   // Build rows from broker_connections filtered to tradovate + portfolios.
   // Live fields (position, balance, avgPrice, dayPnL, openPnL, qty) wired
@@ -263,10 +273,36 @@ export function CopyTradingDashboard() {
   const totalBalance       = rows.reduce((s, r) => s + (r.balance ?? 0), 0);
   const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
-  // FLATTEN ALL placeholder — Sprint 3d wires confirmation dialog + POST /api/copy-engine/flatten-all
+  // ── Flatten handlers ──────────────────────────────────────────
   const handleFlattenAll = () => {
-    alert('FLATTEN ALL — coming in Sprint 3d');
+    setFlattenDialog({ open: true, scope: 'all' });
   };
+
+  const handleFlattenSingle = (credentialId: string, accountName: string) => {
+    setFlattenDialog({ open: true, scope: 'single', credentialId, accountName });
+  };
+
+  const handleConfirmFlatten = async () => {
+    if (!flattenDialog) return;
+    const result =
+      flattenDialog.scope === 'all'
+        ? await flattenAll()
+        : await flattenCredential(flattenDialog.credentialId!);
+
+    if (result.ok) {
+      toast.success(
+        `Flattened ${result.positionsFlattened ?? 0} position${(result.positionsFlattened ?? 0) === 1 ? '' : 's'} across ${result.accountsAffected ?? 0} account${(result.accountsAffected ?? 0) === 1 ? '' : 's'}.`,
+      );
+      if (result.errors?.length) {
+        toast.warning(`${result.errors.length} error${result.errors.length === 1 ? '' : 's'} during flatten.`);
+      }
+    } else {
+      toast.error(result.error ?? 'Flatten failed.');
+    }
+    setFlattenDialog(null);
+  };
+
+  // openPositionsCount (above) doubles as the positionsTotal for the flatten dialog.
 
   return (
     <div>
@@ -374,7 +410,12 @@ export function CopyTradingDashboard() {
 
         {/* Rows */}
         {rows.map((row) => (
-          <CopyAccountRow key={row.id} row={row} isLeader={row.id === leaderId} />
+          <CopyAccountRow
+            key={row.id}
+            row={row}
+            isLeader={row.id === leaderId}
+            onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
+          />
         ))}
 
         {/* Empty state */}
@@ -387,6 +428,26 @@ export function CopyTradingDashboard() {
           </div>
         )}
       </div>
+
+      {/* ── 4. Flatten confirm dialog ── */}
+      {flattenDialog && (
+        <FlattenConfirmDialog
+          open={flattenDialog.open}
+          scope={flattenDialog.scope}
+          accountName={flattenDialog.accountName}
+          positionsCount={
+            flattenDialog.scope === 'all'
+              ? openPositionsCount
+              : (rows.find((r) => r.id === flattenDialog.credentialId)?.position ?? 0) !== 0
+                ? 1
+                : 0
+          }
+          accountsCount={flattenDialog.scope === 'all' ? openPositionsCount : 1}
+          onConfirm={handleConfirmFlatten}
+          onCancel={() => setFlattenDialog(null)}
+          isLoading={flattenLoading}
+        />
+      )}
     </div>
   );
 }
