@@ -920,6 +920,82 @@ const cancelResult = await cancelMembership(warZoneMembershipId, 'at_period_end'
 }
 
 // ============================================
+// BROKER CONNECTION LIFECYCLE HELPERS
+// ============================================
+
+async function markBrokerConnectionsCanceled(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<{ updated: number }> {
+  // status='canceled' is valid once migration 2026-05-09_broker_connections_retry_columns.sql
+  // deploys (it drops the old CHECK and adds one that includes 'canceled').
+  const { data, error } = await admin
+    .from('broker_connections')
+    .update({
+      status: 'canceled',
+      is_active: false,
+      disconnected_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .neq('status', 'canceled') // idempotent guard — skip rows already canceled
+    .select('id');
+  if (error) {
+    console.error('[whop-webhook] markBrokerConnectionsCanceled error:', error);
+    return { updated: 0 };
+  }
+  console.info(`[whop-webhook] canceled ${data?.length ?? 0} broker connections for user ${userId}`);
+  return { updated: data?.length ?? 0 };
+}
+
+async function reactivateBrokerConnections(
+  admin: SupabaseClient,
+  userId: string,
+): Promise<{ attempted: number; succeeded: number }> {
+  // Only target rows this lifecycle set to 'canceled' — payment.succeeded fires on first
+  // payment too, and we don't want to reconnect rows that were never canceled by this
+  // lifecycle (e.g. rows the user manually disconnected).
+  const { data: canceled, error } = await admin
+    .from('broker_connections')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'canceled');
+  if (error) {
+    console.error('[whop-webhook] reactivateBrokerConnections fetch error:', error);
+    return { attempted: 0, succeeded: 0 };
+  }
+  if (!canceled || canceled.length === 0) {
+    return { attempted: 0, succeeded: 0 };
+  }
+
+  let succeeded = 0;
+  for (const row of canceled) {
+    try {
+      const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
+        body: JSON.stringify({
+          mode: 'reconnect',
+          credentialId: row.id,
+          userId,
+          source: 'whop_resume',
+        }),
+      });
+      if (res.ok) succeeded++;
+      else console.warn(`[whop-webhook] reconnect failed for ${row.id}: ${res.status}`);
+    } catch (e) {
+      console.error(`[whop-webhook] reconnect exception for ${row.id}:`, (e as Error).message);
+    }
+  }
+
+  console.info(`[whop-webhook] reactivated ${succeeded}/${canceled.length} broker connections for user ${userId}`);
+  return { attempted: canceled.length, succeeded };
+}
+
+// ============================================
 // MAIN HANDLER
 // ============================================
 
@@ -1035,9 +1111,14 @@ serve(async (req: Request) => {
     const clickId = extractClickId(payload.data);
 
     switch (eventType) {
-      case "payment.succeeded":
+      case "payment.succeeded": {
         result = await handlePaymentSucceeded(supabase, payload, commissionConfig, finotaurUserId, finotaurEmail, clickId);
+        // Broker lifecycle: payment success after a prior cancel — attempt to reconnect broker
+        if (finotaurUserId) {
+          await reactivateBrokerConnections(supabase, finotaurUserId);
+        }
         break;
+      }
         
       case "membership.activated":
       case "membership.went_valid":
@@ -1047,16 +1128,39 @@ serve(async (req: Request) => {
       case "membership.deactivated":
       case "membership.went_invalid":
       case "membership.canceled":
+      case "membership.expired": {
         result = await handleMembershipDeactivated(supabase, payload, finotaurUserId);
+        // Broker lifecycle: terminal subscription event — disconnect broker connections
+        if (finotaurUserId) {
+          await markBrokerConnectionsCanceled(supabase, finotaurUserId);
+        } else {
+          console.info('[whop-webhook] broker cancel skipped — no finotaur_user_id for event:', eventType);
+        }
         break;
+      }
 
       case "membership.cancel_at_period_end_changed":
         result = await handleCancelAtPeriodEndChanged(supabase, payload, finotaurUserId, finotaurEmail);
         break;
 
-      case "payment.failed":
+      case "payment.failed": {
+        // payment.failed fires on every retry attempt — NOT a terminal event.
+        // Terminal subscription death is signaled by membership.went_invalid (below).
+        // No broker mutation here.
         result = { success: true, message: `Payment failure logged` };
         break;
+      }
+
+      case "membership.resumed": {
+        result = { success: true, message: `Membership resumed acknowledged` };
+        // Broker lifecycle: subscription resumed — attempt to reconnect broker
+        if (finotaurUserId) {
+          await reactivateBrokerConnections(supabase, finotaurUserId);
+        } else {
+          console.info('[whop-webhook] broker reactivate skipped — no finotaur_user_id for event: membership.resumed');
+        }
+        break;
+      }
 
       default:
         result = { success: true, message: `Event type ${eventType} acknowledged` };

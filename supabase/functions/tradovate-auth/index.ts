@@ -20,6 +20,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
+import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
 
 // ─── Tradovate official REST API base URLs ────────────────────
 const TRADOVATE_URLS = {
@@ -284,23 +285,16 @@ Deno.serve(async (req: Request) => {
               access_token_hash: newToken.slice(0, 8),
             },
             token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-            status:           'connected',
-            is_active:        true,
             error_count:      0,
-            last_error:       null,
           }).eq('id', cred.id);
+          // Clear retry state — token refresh succeeded (sets status='connected')
+          await clearRetry(supabaseAdmin, cred.id);
 
           refreshed++;
         } catch (err) {
           console.error(`[tradovate-auth] refresh failed for connection ${cred.id}:`, err);
-          // 'expired' is not a valid broker_connections.status — coerce to 'disconnected' + is_active=false
-          await supabaseAdmin.from('broker_connections').update({
-            status:          'disconnected',
-            is_active:       false,
-            last_error:      String(err).slice(0, 500),
-            last_error_at:   new Date().toISOString(),
-            disconnected_at: new Date().toISOString(),
-          }).eq('id', cred.id);
+          // Schedule silent retry — never flip is_active (owned by whop-webhook)
+          await scheduleRetry(supabaseAdmin, cred.id, String(err).slice(0, 500));
         }
       }
 
@@ -308,11 +302,19 @@ Deno.serve(async (req: Request) => {
     }
 
     // ══════════════════════════════════════════════════════════
-    // mode: reconnect — re-login for a specific credential using stored vault creds
+    // mode: reconnect — re-login for a specific credential using stored vault creds.
+    // source: 'user_click' (default) | 'whop_resume' (called by whop-webhook on sub resume)
     // ══════════════════════════════════════════════════════════
     if (mode === 'reconnect') {
-      const { credentialId } = body;
+      const { credentialId, source = 'user_click' } = body as {
+        credentialId?: string;
+        source?: 'user_click' | 'whop_resume';
+      };
       if (!credentialId) return json({ error: 'Missing credentialId' }, 400);
+
+      if (source === 'whop_resume') {
+        console.info('[tradovate-auth] reconnect via whop_resume', { credentialId });
+      }
 
       const { data: cred } = await supabaseAdmin
         .from('broker_connections')
@@ -321,13 +323,29 @@ Deno.serve(async (req: Request) => {
         .eq('broker', 'tradovate')
         .single();
 
-      if (!cred) return json({ error: 'Connection not found' }, 404);
+      if (!cred) return json({ ok: false, source, status: 'not_found', error: 'Connection not found' }, 404);
 
       const cdata = (cred.connection_data ?? {}) as { vault_secret_id?: string; account_spec?: string; access_token_hash?: string };
-      if (!cdata.vault_secret_id) return json({ error: 'No vault_secret_id in connection_data' }, 400);
+
+      // Vault read failure — not transient, do not scheduleRetry
+      if (!cdata.vault_secret_id) {
+        console.error('[tradovate-auth] reconnect: no vault_secret_id in connection_data', { credentialId, source });
+        await supabaseAdmin.from('broker_connections').update({
+          last_error: 'vault_creds_missing',
+          status:     'canceled',
+        }).eq('id', cred.id);
+        return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
+      }
 
       const secret = await readFromVault(cdata.vault_secret_id);
-      if (!secret) return json({ error: 'No vault secret found for this connection' }, 400);
+      if (!secret) {
+        console.error('[tradovate-auth] reconnect: vault read returned null', { credentialId, source });
+        await supabaseAdmin.from('broker_connections').update({
+          last_error: 'vault_creds_missing',
+          status:     'canceled',
+        }).eq('id', cred.id);
+        return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
+      }
 
       const { username, password } = JSON.parse(secret);
       const env = cred.environment as 'live' | 'demo';
@@ -337,6 +355,8 @@ Deno.serve(async (req: Request) => {
 
       const newVaultId = await storeInVault(cred.user_id, env, username, password, accessToken);
 
+      // is_active=true: this is the ONE place where is_active is re-enabled
+      // (Whop subscription just resumed, or user explicitly clicked Reconnect).
       await supabaseAdmin.from('broker_connections').update({
         connection_data: {
           ...cdata,
@@ -344,19 +364,23 @@ Deno.serve(async (req: Request) => {
           access_token_hash: accessToken.slice(0, 8),
         },
         token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
-        status:           'connected',
         is_active:        true,
         error_count:      0,
-        last_error:       null,
         connected_at:     new Date().toISOString(),
       }).eq('id', cred.id);
+      // Clear any retry backoff state — reconnect succeeded (sets status='connected')
+      await clearRetry(supabaseAdmin, cred.id);
+
+      if (source === 'whop_resume') {
+        console.info('[tradovate-auth] reconnect via whop_resume succeeded', { credentialId });
+      }
 
       // Kick off sync
       supabaseAdmin.functions.invoke('tradovate-sync', {
         body: { userId: cred.user_id, environment: env, mode: 'initial' },
       }).catch(() => {});
 
-      return json({ success: true });
+      return json({ ok: true, source, status: 'connected' });
     }
 
     // ══════════════════════════════════════════════════════════

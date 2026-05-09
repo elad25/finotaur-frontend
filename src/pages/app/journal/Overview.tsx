@@ -69,7 +69,6 @@ const AddBrokerPopup = lazy(() => import("@/components/broker/AddBrokerPopup"));
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
-import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { Button } from '@/components/ds/Button';
 import { useImportTrades } from '@/hooks/useImportTrades';
 import { useTradovate } from '@/hooks/useTradovate';
@@ -1037,27 +1036,9 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, reconnect: brokerReconnect } = useBrokerConnections();
+  const { connections: allBrokerConnections } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
 
-  // OQ-1C: track which disconnected connections the user has dismissed in this
-  // session, so we don't auto-reopen the Modal after dismiss until the
-  // connection state genuinely changes (reconnect succeeds → row removed from
-  // disconnected list → can re-fire if it disconnects again).
-  const [dismissedReconnectIds, setDismissedReconnectIds] = useState<Set<string>>(new Set());
-
-  // First tradovate connection in disconnected state that hasn't been dismissed.
-  // We surface one at a time — multi-account UX deferred to F2.5/A7.
-  const disconnectedTradovate = useMemo(() => {
-    return (allBrokerConnections ?? []).find(
-      (c) =>
-        c.broker === 'tradovate' &&
-        !c.is_active &&
-        c.status === 'disconnected' &&
-        !dismissedReconnectIds.has(c.id),
-    );
-  }, [allBrokerConnections, dismissedReconnectIds]);
-  
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -1540,32 +1521,6 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             />
           </Suspense>
         </ErrorBoundary>
-      )}
-
-      {/* OQ-1C: auto-popup re-auth modal when a Tradovate connection drops.
-          Triggered automatically by the Realtime subscription in
-          useBrokerConnections — no manual wiring needed. User can dismiss
-          (adds to dismissedReconnectIds) or click Reconnect (invokes
-          brokerReconnect, which calls tradovate-auth?mode=reconnect). */}
-      {disconnectedTradovate && (
-        <BrokerReconnectModal
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) {
-              setDismissedReconnectIds((prev) => {
-                const next = new Set(prev);
-                next.add(disconnectedTradovate.id);
-                return next;
-              });
-            }
-          }}
-          brokerName={disconnectedTradovate.connection_name ?? 'Tradovate'}
-          lastError={disconnectedTradovate.last_error}
-          onReconnect={async () => {
-            const result = await brokerReconnect(disconnectedTradovate.id);
-            return { success: result.success, error: result.error };
-          }}
-        />
       )}
 
       {/* F2.5: Add New Broker popup (Dialog with picker / form swap).
