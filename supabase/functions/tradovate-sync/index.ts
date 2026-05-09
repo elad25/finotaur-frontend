@@ -16,6 +16,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
+import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
 
 // ─── Retry helper for transient Tradovate API errors ─────────
 // Retries on 5xx and 429. Returns immediately on 401 (token expiry
@@ -379,6 +380,8 @@ async function syncCredential(cred: {
       last_sync_at:            new Date().toISOString(),
       last_successful_sync_at: new Date().toISOString(),
     }).eq('id', cred.id);
+    // Clear any pending retry state — successful sync means the connection is healthy
+    await clearRetry(supabaseAdmin, cred.id);
 
     // Log skipped sync (no new fills to process)
     try {
@@ -455,10 +458,15 @@ async function syncCredential(cred: {
     last_sync_at:            new Date().toISOString(),
     last_successful_sync_at: errors === 0 ? new Date().toISOString() : null,
     error_count:             errors > 0 ? errors : 0,
-    last_error:              errors > 0 ? `${errors} fills failed to insert` : null,
-    last_error_at:           errors > 0 ? new Date().toISOString() : null,
-    status:                  errors > 0 ? 'error' : 'connected',
   }).eq('id', cred.id);
+
+  if (errors === 0) {
+    // Successful sync — clear any pending retry state (sets status='connected')
+    await clearRetry(supabaseAdmin, cred.id);
+  } else {
+    // Partial fill errors — schedule retry backoff
+    await scheduleRetry(supabaseAdmin, cred.id, `${errors} fills failed to insert`);
+  }
 
   // 7. Write observability log — non-critical, never blocks the sync
   try {
@@ -534,6 +542,13 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Cron: skip rows still within their backoff window.
+    // Manual/initial paths skip this filter — user clicked Sync Now, they want to retry immediately.
+    if (mode === 'cron') {
+      const nowIso = new Date().toISOString();
+      credentialsQuery = credentialsQuery.or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`);
+    }
+
     const { data: credentials, error } = await credentialsQuery;
     if (error) throw error;
 
@@ -552,17 +567,10 @@ Deno.serve(async (req: Request) => {
         console.error(`[tradovate-sync] connection ${cred.id}:`, msg);
 
         if (msg.includes('TOKEN_EXPIRED')) {
-          // Token dead — flip is_active=false so the row moves to "Re-auth Required"
-          // ('expired' is not a valid broker_connections.status — coerce to 'disconnected')
-          await supabaseAdmin.from('broker_connections').update({
-            status:          'disconnected',
-            is_active:       false,
-            last_error:      'Token expired — auto-refresh triggered',
-            last_error_at:   new Date().toISOString(),
-            disconnected_at: new Date().toISOString(),
-          }).eq('id', cred.id);
+          // Schedule silent retry — never flip is_active (that column is owned by whop-webhook)
+          await scheduleRetry(supabaseAdmin, cred.id, 'Token expired — auto-refresh triggered');
 
-          // Fire-and-forget refresh attempt — may revive the row to is_active=true
+          // Fire-and-forget refresh attempt — may revive the token in the background
           fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
             method: 'POST',
             headers: {
@@ -572,12 +580,8 @@ Deno.serve(async (req: Request) => {
             body: JSON.stringify({ mode: 'refresh' }),
           }).catch(() => {});
         } else {
-          await supabaseAdmin.from('broker_connections').update({
-            status:        'error',
-            error_count:   1,
-            last_error:    msg.slice(0, 500),
-            last_error_at: new Date().toISOString(),
-          }).eq('id', cred.id);
+          // Generic failure — schedule silent retry backoff
+          await scheduleRetry(supabaseAdmin, cred.id, msg.slice(0, 500));
         }
         totalErrors++;
       }

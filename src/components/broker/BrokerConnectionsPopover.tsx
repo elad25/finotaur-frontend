@@ -18,6 +18,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { statusBadge } from '@/components/broker/brokerStatusBadge';
+import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
+import { Button } from '@/components/ds/Button';
 
 const BORDER_LIGHT = 'rgba(255, 215, 0, 0.08)';
 
@@ -52,15 +54,19 @@ function ConnectionRow({
   busy,
   onSync,
   onReconnect,
+  onCanceled,
 }: {
   conn: BrokerConnection;
   busy: boolean;
   onSync?: (id: string) => void;
   onReconnect?: (id: string) => void;
+  /** Called when the "Reconnect now" button is clicked for a canceled connection. */
+  onCanceled?: (conn: BrokerConnection) => void;
 }) {
   const badge = statusBadge(conn);
   const envLabel = conn.environment ? ` · ${String(conn.environment).toUpperCase()}` : '';
-  const isReauth = !!onReconnect;
+  const isCanceled = conn.status === 'canceled';
+  const isReauth = !!onReconnect && !isCanceled;
 
   const handleRowClick = () => {
     if (isReauth && onReconnect && !busy) onReconnect(conn.id);
@@ -72,7 +78,7 @@ function ConnectionRow({
       className={`bg-[#0A0A0A] border rounded-[12px] p-3 flex items-center gap-3 ${
         isReauth ? 'cursor-pointer hover:border-[#E36363]/40 transition-colors' : ''
       }`}
-      style={{ borderColor: isReauth ? 'rgba(227,99,99,0.15)' : BORDER_LIGHT }}
+      style={{ borderColor: isReauth || isCanceled ? 'rgba(227,99,99,0.15)' : BORDER_LIGHT }}
       title={isReauth ? 'Click to reconnect' : undefined}
     >
       <div
@@ -94,12 +100,14 @@ function ConnectionRow({
           <span>{brokerDisplay(conn.broker)}{envLabel}</span>
           {isReauth ? (
             <span className="text-[#E36363]"> · {conn.last_error || 'click to reconnect'}</span>
+          ) : isCanceled ? (
+            <span className="text-[#E36363]"> · subscription canceled</span>
           ) : (
             <span className="text-[#666]"> · last sync {timeAgo(conn.last_sync_at)}</span>
           )}
         </div>
       </div>
-      {!isReauth && onSync && (
+      {!isReauth && !isCanceled && onSync && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -114,6 +122,18 @@ function ConnectionRow({
       )}
       {isReauth && (
         <AlertCircle className="w-4 h-4 text-[#E36363] flex-shrink-0" />
+      )}
+      {isCanceled && onCanceled && (
+        <Button
+          variant="gold"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCanceled(conn);
+          }}
+        >
+          Reconnect now
+        </Button>
       )}
     </div>
   );
@@ -133,6 +153,8 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
   } = useBrokerConnections({ active: false });
 
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Drives the opt-in BrokerReconnectModal for canceled connections
+  const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
 
   const wrapBusy =
     <T,>(fn: (id: string) => Promise<T>) =>
@@ -190,6 +212,7 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
               conn={c}
               busy={busyId === c.id}
               onReconnect={wrapBusy(reconnect)}
+              onCanceled={setReconnectFor}
             />
           ))}
         </section>
@@ -228,6 +251,20 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
             after each trade for now.
           </span>
         </p>
+      )}
+
+      {/* Opt-in reconnect modal — only surfaces for connections in status='canceled' */}
+      {reconnectFor && (
+        <BrokerReconnectModal
+          open={!!reconnectFor}
+          onOpenChange={(open) => { if (!open) setReconnectFor(null); }}
+          brokerName={reconnectFor.connection_name ?? reconnectFor.broker ?? 'Broker'}
+          lastError={reconnectFor.last_error}
+          onReconnect={async () => {
+            const result = await reconnect(reconnectFor.id);
+            return { success: result.success, error: result.error };
+          }}
+        />
       )}
     </div>
   );

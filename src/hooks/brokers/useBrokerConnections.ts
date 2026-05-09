@@ -299,51 +299,9 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, qc, opts]);
 
-  // ── Tier 3a: Auto-reconnect on is_active transition ──────────────────
-  // Watches for tradovate connections that flip from active → inactive and
-  // fires a single reconnect attempt per connection lifetime.
-  const prevConnectionsRef = useRef<BrokerConnection[]>([]);
-  const attemptedReconnectIds = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    const prev = prevConnectionsRef.current;
-    prevConnectionsRef.current = connections;
-
-    if (!userId || prev.length === 0) return;
-
-    for (const curr of connections) {
-      if (curr.broker !== 'tradovate') continue;
-      if (curr.is_active) continue; // still active — nothing to do
-
-      const prevConn = prev.find((p) => p.id === curr.id);
-      if (!prevConn?.is_active) continue; // was already inactive — no transition
-
-      // Detected active→inactive transition for this connection
-      if (attemptedReconnectIds.current.has(curr.id)) continue;
-      attemptedReconnectIds.current.add(curr.id);
-
-      // Invoke the edge function directly so we can use a separate toast path
-      // instead of the manual "Reconnected — syncing trades..." from reconnect().
-      supabase.functions
-        .invoke('tradovate-auth', {
-          body: { mode: 'reconnect', credentialId: curr.id, userId },
-        })
-        .then(({ error: e }) => {
-          if (e) {
-            toast.error(
-              `Auto-reconnect failed for ${curr.connection_name ?? curr.broker} — please reconnect manually`,
-            );
-            return;
-          }
-          invalidate();
-          qc.invalidateQueries({ queryKey: ['trades'] });
-          qc.invalidateQueries({ queryKey: ['dashboard'] });
-          toast.success(
-            `Auto-reconnected to ${curr.connection_name ?? curr.broker}`,
-          );
-        });
-    }
-  }, [connections, userId, invalidate, qc]);
+  // Tier 3a auto-reconnect removed: the server (whop-webhook + retry queue)
+  // owns reconnection now. The "Reconnect now" button in BrokerConnectionsPopover
+  // is the only way to trigger a manual reconnect from the frontend.
 
   return {
     connections,

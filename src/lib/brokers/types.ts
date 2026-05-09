@@ -12,7 +12,14 @@ export type BrokerName =
   | 'tradovate'
   | 'manual';
 
-export type BrokerStatus = 'connected' | 'disconnected' | 'error' | 'pending';
+export type BrokerStatus =
+  | 'connected'
+  | 'disconnected'
+  | 'error'
+  | 'pending'
+  | 'renewing'   // silent retry in progress — treated as connected visually
+  | 'degraded'   // retry ongoing but degraded — yellow indicator
+  | 'canceled';  // Whop subscription canceled — terminal; requires explicit user reconnect
 export type BrokerEnvironment = 'live' | 'demo';
 
 /**

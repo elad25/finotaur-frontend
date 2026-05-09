@@ -13,6 +13,13 @@ export function statusBadge(conn: BrokerConnection): { label: string; color: str
   switch (conn.status) {
     case 'connected':
       return { label: 'Connected', color: '#4AD295', bg: 'rgba(74,210,149,0.1)' };
+    case 'renewing':
+      // Silent retry — visually identical to connected so the user isn't alarmed
+      return { label: 'Connected', color: '#4AD295', bg: 'rgba(74,210,149,0.1)' };
+    case 'degraded':
+      return { label: 'Reconnecting', color: '#C9A646', bg: 'rgba(201,166,70,0.1)' };
+    case 'canceled':
+      return { label: 'Subscription canceled', color: '#E36363', bg: 'rgba(227,99,99,0.1)' };
     case 'error':
       return { label: 'Error', color: '#E36363', bg: 'rgba(227,99,99,0.1)' };
     case 'pending':
@@ -37,8 +44,8 @@ export function statusDotColor(conn: BrokerConnection): string {
 export type AggregateDotColor = 'red' | 'yellow' | 'green' | null;
 
 export function aggregateStatusDotColor(connections: BrokerConnection[]): AggregateDotColor {
-  if (connections.some((c) => c.status === 'error')) return 'red';
-  if (connections.some((c) => c.status === 'pending')) return 'yellow';
-  if (connections.some((c) => c.status === 'connected')) return 'green';
+  if (connections.some((c) => c.status === 'error' || c.status === 'canceled')) return 'red';
+  if (connections.some((c) => c.status === 'pending' || c.status === 'degraded')) return 'yellow';
+  if (connections.some((c) => c.status === 'connected' || c.status === 'renewing')) return 'green';
   return null;
 }
