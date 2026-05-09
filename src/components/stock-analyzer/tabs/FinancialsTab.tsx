@@ -21,6 +21,7 @@ import type { StockData } from '@/types/stock-analyzer.types';
 import { C } from '@/constants/stock-analyzer.constants';
 import { Card, MetricBox, SectionHeader, BarMeter, ROCCircle } from '../ui';
 import { fmtPct, fmtBig, isValid } from '@/utils/stock-analyzer.utils';
+import { authFetch } from '@/utils/authFetch';
 
 // =====================================================
 // TYPES — Quarterly Financial Data
@@ -143,7 +144,7 @@ function useQuarterlyData(ticker: string, prefetchedData?: any) {
 
     try {
       // Fetch 16 quarters from Polygon via backend
-      const res = await fetch(`/api/market-data/quarterly-financials/${ticker}`);
+      const res = await authFetch(`/api/market-data/quarterly-financials/${ticker}`);
       const contentType = res.headers.get('content-type') || '';
       if (!res.ok || !contentType.includes('application/json')) {
         const text = await res.text();
@@ -154,7 +155,7 @@ function useQuarterlyData(ticker: string, prefetchedData?: any) {
 
       if (!json.results?.length) {
         // Fallback: try fetching directly from financials endpoint with more results
-        const fallbackRes = await fetch(`/api/market-data/financials/${ticker}?quarters=16`);
+        const fallbackRes = await authFetch(`/api/market-data/financials/${ticker}?quarters=16`);
         if (fallbackRes.ok) {
           const fallbackJson = await fallbackRes.json();
           if (fallbackJson.results?.length) {

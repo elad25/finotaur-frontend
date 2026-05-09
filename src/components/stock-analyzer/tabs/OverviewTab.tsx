@@ -272,7 +272,7 @@ async function callAI(
   useWebSearch: boolean,
   signal?: AbortSignal
 ): Promise<{ content: string; searchUsed: boolean }> {
-  const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/ai-proxy/chat`, {
+  const response = await authFetch(`${import.meta.env.VITE_API_URL || ''}/api/ai-proxy/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
@@ -335,7 +335,7 @@ interface IsmMacroContext {
 
 async function fetchIsmContext(sector: string): Promise<IsmMacroContext | null> {
   try {
-    const res = await fetch(`/api/stock-analysis/ism-macro/${encodeURIComponent(sector)}`);
+    const res = await authFetch(`/api/stock-analysis/ism-macro/${encodeURIComponent(sector)}`);
     if (!res.ok) return null;
     const json = await res.json();
     return json.success && json.data ? json.data : null;

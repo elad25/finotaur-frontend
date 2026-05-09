@@ -26,6 +26,7 @@ import type { StockData } from '@/types/stock-analyzer.types';
 import { C, cardStyle } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader } from '../ui';
 import { fmtBig, isValid } from '@/utils/stock-analyzer.utils';
+import { authFetch } from '@/utils/authFetch';
 import { stockCache, getNextEarningsDate } from '@/services/stock-analyzer.cache';
 import { AlgoFlowChart } from '../AlgoFlowChart';
 import { GammaExposureChart } from '../GammaExposureChart';
@@ -120,7 +121,7 @@ const CACHE_TTL = 15 * 60 * 1000; // 15 min
 
 async function fetchExpirations(ticker: string): Promise<string[]> {
   try {
-    const res = await fetch(`/api/options/expirations/${ticker}`);
+    const res = await authFetch(`/api/options/expirations/${ticker}`);
     if (!res.ok) return [];
     const data = await res.json();
     return data.expirations || [];
@@ -132,7 +133,7 @@ async function fetchOptionsChain(ticker: string, expiration: string): Promise<Op
     const url = expiration
       ? `/api/options/chain/${ticker}?expiration=${expiration}`
       : `/api/options/chain/${ticker}`;
-    const res = await fetch(url);
+    const res = await authFetch(url);
     if (!res.ok) return [];
     const data = await res.json();
     return data.chain || [];
@@ -141,7 +142,7 @@ async function fetchOptionsChain(ticker: string, expiration: string): Promise<Op
 
 async function fetchUnusualActivity(ticker: string): Promise<UnusualActivity[]> {
   try {
-    const res = await fetch(`/api/options/unusual?symbols=${ticker}&min_volume=500&min_vol_oi=0.3`);
+    const res = await authFetch(`/api/options/unusual?symbols=${ticker}&min_volume=500&min_vol_oi=0.3`);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.results || data.uoa || []).sort((a: UnusualActivity, b: UnusualActivity) => b.volOiRatio - a.volOiRatio);
@@ -182,7 +183,7 @@ Return ONLY a valid JSON with NO markdown:
 }`;
 
   try {
-    const res = await fetch('/api/ai-proxy', {
+    const res = await authFetch('/api/ai-proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

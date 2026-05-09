@@ -179,7 +179,7 @@ async function fetchWallStreetData(
 ): Promise<WallStreetAIData> {
   const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
-  const response = await fetch(`${API_BASE}/api/ai-proxy/chat`, {
+  const response = await authFetch(`${API_BASE}/api/ai-proxy/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
