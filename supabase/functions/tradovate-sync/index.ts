@@ -112,39 +112,92 @@ interface TradovateFill {
   finallyPaired: boolean;
 }
 
+// ─── Hardcoded futures multipliers (fallback when /product/item returns null/0) ──
+// Source: Tradovate / CME contract specs as of 2026-05-09. Maintain when CME adds contracts.
+// Used only when fullPointValue from Tradovate API is missing/zero — preferred path is still API.
+const KNOWN_FUTURES_MULTIPLIERS: Record<string, number> = {
+  // E-mini index futures
+  ES: 50,    // E-mini S&P 500
+  NQ: 20,    // E-mini Nasdaq-100
+  RTY: 50,   // E-mini Russell 2000
+  YM: 5,     // E-mini Dow
+  // Micro index futures
+  MES: 5,    // Micro E-mini S&P 500
+  MNQ: 2,    // Micro E-mini Nasdaq-100
+  MRTY: 5,   // Micro E-mini Russell 2000  (a.k.a. M2K on some symbol maps)
+  M2K: 5,    // Alias for MRTY
+  MYM: 0.5,  // Micro E-mini Dow
+  // Commodity / metal / energy
+  CL: 1000,  // Crude oil
+  GC: 100,   // Gold
+  SI: 5000,  // Silver
+  HG: 25000, // Copper
+  NG: 10000, // Natural gas
+  // Treasuries
+  ZN: 1000,  // 10-Year T-Note
+  ZB: 1000,  // 30-Year T-Bond
+  ZF: 1000,  // 5-Year T-Note
+};
+
+// Extract the base symbol prefix from a contract name like "MNQM6" → "MNQ", "ESZ5" → "ES".
+// Returns null if no leading-letter prefix found.
+function extractBaseSymbol(contractName: string): string | null {
+  if (!contractName) return null;
+  const match = contractName.match(/^([A-Z]+)\d/);
+  return match ? match[1] : null;
+}
+
 // ─── Fetch contract info ──────────────────────────────────────
 async function getContractInfo(
   base: string,
   accessToken: string,
   contractId: number
 ): Promise<{ name: string; fullPointValue: number }> {
+  // Helper: returns API value if usable (>0), otherwise tries hardcoded table by base symbol.
+  // Always logs which source produced the multiplier — observability for Lesson 13 verification.
+  const finalize = (name: string, apiValue: number | null | undefined): { name: string; fullPointValue: number } => {
+    if (apiValue && apiValue > 0) {
+      return { name, fullPointValue: apiValue };
+    }
+    const baseSymbol = extractBaseSymbol(name);
+    if (baseSymbol && KNOWN_FUTURES_MULTIPLIERS[baseSymbol]) {
+      const fallback = KNOWN_FUTURES_MULTIPLIERS[baseSymbol];
+      console.warn(
+        `[tradovate-sync] multiplier_hardcoded_fallback: contractId=${contractId} name=${name} baseSymbol=${baseSymbol} → ${fallback} (API returned ${apiValue ?? 'null'})`
+      );
+      return { name, fullPointValue: fallback };
+    }
+    console.warn(
+      `[tradovate-sync] multiplier_unknown: contractId=${contractId} name=${name} baseSymbol=${baseSymbol ?? 'null'} → defaulting to 1 (PnL will be wrong)`
+    );
+    return { name, fullPointValue: 1 };
+  };
+
   // Step 1: contract/item → get name + contractMaturityId
   const contractRes = await fetchWithRetry(`${base}/contract/item?id=${contractId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!contractRes.ok) return { name: 'UNKNOWN', fullPointValue: 1 };
+  if (!contractRes.ok) return finalize('UNKNOWN', null);
   const contract = await contractRes.json();
+  const contractName = contract.name ?? 'UNKNOWN';
 
   // Step 2: contractMaturity/item → get productId
-  if (!contract.contractMaturityId) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
+  if (!contract.contractMaturityId) return finalize(contractName, null);
   const maturityRes = await fetchWithRetry(`${base}/contractMaturity/item?id=${contract.contractMaturityId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!maturityRes.ok) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
+  if (!maturityRes.ok) return finalize(contractName, null);
   const maturity = await maturityRes.json();
 
   // Step 3: product/item → get fullPointValue
-  if (!maturity.productId) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
+  if (!maturity.productId) return finalize(contractName, null);
   const productRes = await fetchWithRetry(`${base}/product/item?id=${maturity.productId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!productRes.ok) return { name: contract.name ?? 'UNKNOWN', fullPointValue: 1 };
+  if (!productRes.ok) return finalize(contractName, null);
   const product = await productRes.json();
 
-  return {
-    name: contract.name ?? 'UNKNOWN',
-    fullPointValue: product.fullPointValue ?? 1,
-  };
+  return finalize(contractName, product.fullPointValue);
 }
 
 // ─── Map fills to trade rows ───────────────────────────────────
