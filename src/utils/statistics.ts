@@ -190,10 +190,32 @@ export function calculateWinRate(trades: Trade[], excludeBE: boolean = false): n
 
 /**
  * Calculate Average R:R
+ *
+ * OQ-15 enforcement (Elad decision 2026-05-05): trades with `stop_price IS NULL`
+ * MUST be excluded from R-based aggregates — fake R is worse than no R.
+ *
+ * Two-layer enforcement:
+ *   1. DB trigger `handle_trade_changes_unified()` skips R computation when
+ *      `stop_price IS NULL` (so `rr` ends up NULL on those rows). Real
+ *      enforcement happens there.
+ *   2. This function is the safety net — it filters EXPLICITLY by stop_price
+ *      so any caller passing rows that bypassed the trigger (e.g., legacy
+ *      manual imports pre-trigger) still gets correct aggregates.
+ *
+ * Note: `calculateAvgRR` is currently used internally (statistics.ts +
+ * tradeInsights.ts). The Dashboard reads `rr` straight from the DB row in
+ * useDashboardStats — it does NOT call this function. Filtering here keeps
+ * future UI consumers safe.
  */
 export function calculateAvgRR(trades: Trade[]): number {
-  const closed = trades.filter((t) => t.exit_price);
-  const rrList = closed.map((t) => computeRR(t)).filter((rr) => rr !== 0);
+  const eligible = trades.filter(
+    (t) =>
+      t.exit_price !== null &&
+      t.exit_price !== undefined &&
+      t.stop_price !== null &&
+      t.stop_price !== undefined,
+  );
+  const rrList = eligible.map((t) => computeRR(t)).filter((rr) => rr !== 0);
 
   if (rrList.length === 0) return 0;
   return rrList.reduce((sum, rr) => sum + rr, 0) / rrList.length;
