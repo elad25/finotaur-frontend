@@ -25,6 +25,9 @@ export interface Portfolio {
   max_daily_loss_usd:      number | null;
   max_position_size:       number | null;
   max_contracts_per_trade: number | null;
+  // Sprint 4c: hard-stop fields
+  max_loss_per_trade_usd:  number | null;
+  daily_stop_loss_usd:     number | null;
 }
 
 // ── Virtual MANUAL portfolio ID — stable, never conflicts with real UUIDs ──
@@ -34,7 +37,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // ── 1. Try portfolios table first ──────────────────────────
   const { data, error } = await supabase
     .from('portfolios')
-    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade')
+    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade,max_loss_per_trade_usd,daily_stop_loss_usd')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('created_at', { ascending: true });
@@ -85,6 +88,8 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         max_daily_loss_usd: null,
         max_position_size: null,
         max_contracts_per_trade: null,
+        max_loss_per_trade_usd: null,
+        daily_stop_loss_usd: null,
       }));
     }
   }
@@ -121,6 +126,8 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         max_daily_loss_usd: null,
         max_position_size: null,
         max_contracts_per_trade: null,
+        max_loss_per_trade_usd: null,
+        daily_stop_loss_usd: null,
       },
       ...portfolios,
     ];
