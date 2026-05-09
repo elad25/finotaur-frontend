@@ -20,29 +20,29 @@ export const AccountRow = memo(function AccountRow({
     ? new Date(connection.token_expires_at) < new Date()
     : false;
 
-  const status: 'live' | 'engine-offline' | 'expired' | 'disconnected' =
-    tokenExpired                                                 ? 'expired' :
-    isLive                                                       ? 'live' :
-    (connection.is_active && connection.status === 'connected')  ? 'engine-offline' :
-    'disconnected';
+  // 3-state model (per Elad's spec, 2026-05-09): green / yellow / black only.
+  //   connected   = engine has live session AND token valid
+  //   issue       = communication problem (token expired OR engine offline despite DB connected)
+  //   disconnected = not connected at all
+  const status: 'connected' | 'issue' | 'disconnected' =
+    isLive && !tokenExpired                                                       ? 'connected' :
+    (connection.is_active && connection.status === 'connected') || tokenExpired   ? 'issue' :
+                                                                                    'disconnected';
 
   const dotClass =
-    status === 'live'           ? 'bg-gold-primary animate-pulse' :
-    status === 'engine-offline' ? 'bg-status-warning' :
-    status === 'expired'        ? 'bg-num-negative' :
-                                  'bg-ink-tertiary';
+    status === 'connected' ? 'bg-status-success animate-pulse' :
+    status === 'issue'     ? 'bg-status-warning' :
+                             'bg-status-offline border border-border-ds-default';
 
   const textClass =
-    status === 'live'           ? 'text-gold-primary' :
-    status === 'engine-offline' ? 'text-status-warning' :
-    status === 'expired'        ? 'text-num-negative' :
-                                  'text-ink-tertiary';
+    status === 'connected' ? 'text-status-success' :
+    status === 'issue'     ? 'text-status-warning' :
+                             'text-ink-tertiary';
 
   const statusLabel =
-    status === 'live'           ? 'Live' :
-    status === 'engine-offline' ? 'Engine offline' :
-    status === 'expired'        ? 'Token expired' :
-                                  'Disconnected';
+    status === 'connected' ? 'Connected' :
+    status === 'issue'     ? (tokenExpired ? 'Token expired' : 'Engine offline') :
+                             'Disconnected';
 
   return (
     <div className="flex items-center gap-ds-3 py-ds-2 px-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">

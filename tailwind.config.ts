@@ -70,6 +70,7 @@ export default {
           warning: "#eab308",
           error: "#E24B4A",
           success: "#10b981",
+          offline: 'var(--status-offline)',
         },
         emerald: {
           DEFAULT: "#4AD295",

@@ -240,12 +240,12 @@ const EnginePill = memo(function EnginePill({ alive, sessions }: { alive: boolea
     <div
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium ${
         alive
-          ? 'bg-gold-primary/10 border-gold-border text-gold-primary'
-          : 'bg-surface-1 border-border-ds-subtle text-ink-tertiary'
+          ? 'bg-status-success/10 border-status-success/30 text-status-success'
+          : 'bg-status-offline border-border-ds-default text-ink-secondary'
       }`}
       title={alive ? `Copy engine live · ${sessions} session${sessions === 1 ? '' : 's'}` : 'Copy engine not running'}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-gold-primary animate-pulse' : 'bg-ink-tertiary'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${alive ? 'bg-status-success animate-pulse' : 'bg-status-offline border border-border-ds-default'}`} />
       Engine {alive ? `· ${sessions}` : 'down'}
     </div>
   );
