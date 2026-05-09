@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useUserProfile } from './useUserProfile';
 
-export type PlanType = 'free' | 'pro' | 'elite';
+export type PlanType = 'free' | 'pro' | 'finotaur' | 'elite';
 
 interface UsePlanReturn {
   plan: PlanType;
@@ -13,60 +13,60 @@ interface UsePlanReturn {
 const PLAN_HIERARCHY: Record<PlanType, number> = {
   free: 0,
   pro: 1,
-  elite: 2,
+  finotaur: 2,
+  elite: 3,
 };
 
+/**
+ * Maps profiles.platform_plan → PlanType (Phase B, 2026-05-09).
+ * Mirrors the server-side mapPlatformPlanToTier() in userTier.js.
+ *
+ * Mapping:
+ *   null / 'free'                          → 'free'
+ *   'core' / 'platform_core'               → 'pro'
+ *   'finotaur' / 'platform_finotaur'       → 'finotaur'
+ *   'enterprise' / 'platform_enterprise'   → 'elite'
+ *   unknown                                 → 'free' (fail-safe)
+ *
+ * Journal tier (profiles.account_type basic/premium) is intentionally
+ * NOT consulted here — Journal is a separate pricing track ($19.99/$39.99)
+ * and does not include AI Arena features.
+ */
+function mapPlatformPlanToPlanType(platform_plan: string | null | undefined): PlanType {
+  if (!platform_plan || platform_plan === 'free') return 'free';
+  if (platform_plan === 'core' || platform_plan === 'platform_core') return 'pro';
+  if (platform_plan === 'finotaur' || platform_plan === 'platform_finotaur') return 'finotaur';
+  if (platform_plan === 'enterprise' || platform_plan === 'platform_enterprise') return 'elite';
+  return 'free';
+}
+
+/**
+ * Real-backend hook: derives the user's plan from profiles.platform_plan
+ * (and role for super_admin override). Replaces the previous localStorage
+ * mock as of Sprint B Phase B (2026-05-09).
+ *
+ * Plan changes are driven by Whop webhook → profiles.platform_plan UPDATE.
+ * `updatePlan` and `toggleAddon` are now no-ops kept for back-compat with
+ * older callsites that destructured them; do not call them — they no
+ * longer write anywhere.
+ */
 export const usePlan = (): UsePlanReturn => {
-  // Mock data - stored in localStorage for persistence
-  const [plan, setPlan] = useState<PlanType>(() => {
-    const stored = localStorage.getItem('finotaur_plan');
-    return (stored as PlanType) || 'free';
-  });
+  const { data: profile } = useUserProfile();
 
-  const [addons, setAddons] = useState<string[]>(() => {
-    const stored = localStorage.getItem('finotaur_addons');
-    return stored ? JSON.parse(stored) : [];
-  });
+  const plan: PlanType = profile?.role === 'super_admin'
+    ? 'elite'
+    : mapPlatformPlanToPlanType(profile?.platform_plan);
 
-  useEffect(() => {
-    localStorage.setItem('finotaur_plan', plan);
-  }, [plan]);
-
-  useEffect(() => {
-    localStorage.setItem('finotaur_addons', JSON.stringify(addons));
-  }, [addons]);
-
-  const hasAccess = (requiredPlan?: PlanType, requiredAddon?: string): boolean => {
-    // Check plan requirement
-    if (requiredPlan) {
-      const currentLevel = PLAN_HIERARCHY[plan];
-      const requiredLevel = PLAN_HIERARCHY[requiredPlan];
-      if (currentLevel < requiredLevel) return false;
-    }
-
-    // Check addon requirement
-    if (requiredAddon && !addons.includes(requiredAddon)) {
-      return false;
-    }
-
-    return true;
-  };
-
-  const updatePlan = (newPlan: PlanType) => {
-    setPlan(newPlan);
-  };
-
-  const toggleAddon = (addon: string) => {
-    setAddons((prev) =>
-      prev.includes(addon) ? prev.filter((a) => a !== addon) : [...prev, addon]
-    );
+  const hasAccess = (requiredPlan?: PlanType, _requiredAddon?: string): boolean => {
+    if (!requiredPlan) return true;
+    return PLAN_HIERARCHY[plan] >= PLAN_HIERARCHY[requiredPlan];
   };
 
   return {
     plan,
-    addons,
+    addons: [],
     hasAccess,
-    updatePlan,
-    toggleAddon,
+    updatePlan: () => {},
+    toggleAddon: () => {},
   };
 };
