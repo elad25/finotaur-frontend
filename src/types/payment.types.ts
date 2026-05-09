@@ -107,7 +107,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'basic',
     name: 'Basic',
-    price: 19.99,
+    price: 24.99,
     currency: 'USD',
     interval: 'month',
     maxTrades: 50,
@@ -124,7 +124,7 @@ export const PRICING_PLANS: PricingPlan[] = [
   {
     id: 'premium',
     name: 'Premium',
-    price: 24.92,
+    price: 44.99,
     currency: 'USD',
     interval: 'month',
     maxTrades: -1, // unlimited
@@ -136,7 +136,7 @@ export const PRICING_PLANS: PricingPlan[] = [
       'AI insights',
       'Priority support',
       'Early access to new features',
-      'Save 38% (billed $299/year)'
+      'Save 24% (billed $409/year)'
     ]
   }
 ];

@@ -29,7 +29,7 @@ const PLAN_HIERARCHY: Record<PlanType, number> = {
  *   unknown                                 → 'free' (fail-safe)
  *
  * Journal tier (profiles.account_type basic/premium) is intentionally
- * NOT consulted here — Journal is a separate pricing track ($19.99/$39.99)
+ * NOT consulted here — Journal is a separate pricing track ($24.99/$44.99)
  * and does not include AI Arena features.
  */
 function mapPlatformPlanToPlanType(platform_plan: string | null | undefined): PlanType {
