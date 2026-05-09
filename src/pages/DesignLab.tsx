@@ -10,6 +10,9 @@
 import { Button } from "@/components/ds/Button";
 import { Card, Eyebrow } from "@/components/ds/Card";
 import { Price, Change, Quote } from "@/components/ds/NumberDisplay";
+import { JournalKpiCard } from "@/components/journal/ds/JournalKpiCard";
+import { JournalGauge } from "@/components/journal/ds/JournalGauge";
+import { Target, TrendingUp, DollarSign, Award } from "lucide-react";
 
 export default function DesignLab() {
   return (
@@ -137,6 +140,55 @@ export default function DesignLab() {
                 <Change value={-2.47} format="plain" decimals={2} />
               </div>
             </Card>
+          </div>
+        </section>
+
+        {/* ----- Journal Cards ----- */}
+        <section className="mb-ds-9">
+          <Eyebrow>Journal Cards</Eyebrow>
+          <h2 className="mt-ds-2 mb-ds-5 font-serif text-h2">Journal-grade Glass KPI Cards</h2>
+          <p className="mb-ds-5 text-body text-ink-secondary max-w-xl">
+            The single primitive used across every journal page (Overview, MyTrades, TradeDetail,
+            Strategies, Scenarios, Analytics). Pairs glass background with a coloured bottom-edge
+            sliver and an icon top-right.
+          </p>
+          <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2 lg:grid-cols-4">
+            <JournalKpiCard
+              label="Total Trades"
+              value="9"
+              hint="6W / 3L / 0BE"
+              icon={Target}
+              accent="blue"
+            />
+            <JournalKpiCard
+              label="Win Rate"
+              value="66.7%"
+              hint="6 / 9 trades"
+              icon={TrendingUp}
+              accent="green"
+              gauge={<JournalGauge mode="winRate" wins={6} losses={3} breakeven={0} />}
+            />
+            <JournalKpiCard
+              label="Net P&L"
+              value="+$16,825.00"
+              hint="Profit"
+              icon={DollarSign}
+              accent="gold"
+              valueSize="lg"
+            />
+            <JournalKpiCard
+              label="Avg R"
+              value="+8.76R"
+              hint="Per trade"
+              icon={Award}
+              accent="purple"
+            />
+          </div>
+
+          <h3 className="mt-ds-7 mb-ds-3 font-serif text-h3">Journal Gauge — standalone</h3>
+          <div className="flex gap-ds-5">
+            <JournalGauge mode="winRate" wins={6} losses={3} breakeven={0} />
+            <JournalGauge mode="winLossRatio" avgWin={3271} avgLoss={934} />
           </div>
         </section>
 
