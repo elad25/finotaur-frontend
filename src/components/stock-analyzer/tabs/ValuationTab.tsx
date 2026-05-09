@@ -30,6 +30,127 @@ import { saveToServerCache } from '@/services/stock-analyzer.api';
 import { WhoShouldOwnThis } from './WhoShouldOwnThis';
 
 // =====================================================
+// ANTHROPIC VALUATION — Feature flag + types
+// =====================================================
+
+const ANTHROPIC_VALUATION_ENABLED = import.meta.env.VITE_ENABLE_ANTHROPIC_VALUATION === 'true';
+
+interface AnthropicValuationComp {
+  ticker: string;
+  name: string;
+  pe_fwd: number;
+  ev_ebitda: number;
+  ev_sales: number;
+  peg: number;
+}
+
+interface AnthropicValuationResult {
+  dcf_thesis: string;
+  sensitivity_matrix: number[][];
+  comps: AnthropicValuationComp[];
+  fair_value: { bear: number; base: number; bull: number };
+  sources: { title: string; url: string }[];
+  meta: { cache_hits: number; total_cost_usd: number; models_used: string[] };
+}
+
+// Map Anthropic server response → ValuationAIData fields that can be derived.
+// Fields not present in the Anthropic response are left undefined so the
+// existing OpenAI sub-components simply don't render (graceful degradation).
+function normalizeAnthropicValuation(
+  result: AnthropicValuationResult,
+  currentPrice: number,
+): Partial<ValuationAIData> {
+  const { bear, base, bull } = result.fair_value;
+  const weighted = bear * 0.2 + base * 0.5 + bull * 0.3;
+
+  const mkScenario = (
+    label: string,
+    fairValue: number,
+    probability: number,
+  ): DCFScenario => ({
+    label,
+    probability,
+    growthRate: 0,        // not provided by Anthropic endpoint
+    terminalGrowth: 0,
+    wacc: 0,
+    fairValue,
+    upside: currentPrice > 0 ? ((fairValue - currentPrice) / currentPrice) * 100 : 0,
+  });
+
+  return {
+    dcfScenarios: [
+      mkScenario('Bear', bear, 0.2),
+      mkScenario('Base', base, 0.5),
+      mkScenario('Bull', bull, 0.3),
+    ],
+    weightedFairValue: Math.round(weighted),
+    valuationVerdict: {
+      label:
+        weighted > currentPrice * 1.1
+          ? 'Undervalued'
+          : weighted < currentPrice * 0.9
+          ? 'Overvalued'
+          : 'Fairly Valued',
+      confidence: 'Medium',
+      summary: result.dcf_thesis,
+    },
+    // Comps are stored as sector comparison rows for rendering
+    sectorComparison: result.comps.map((c) => ({
+      metric: `${c.name} (${c.ticker}) Fwd P/E`,
+      company: c.pe_fwd,
+      sectorAvg: c.ev_ebitda,   // closest available peer multiple
+      verdict: `EV/Sales: ${c.ev_sales}x | PEG: ${c.peg}x`,
+    })),
+  };
+}
+
+async function fetchValuationAnalysisAI(
+  data: StockData,
+  signal?: AbortSignal,
+): Promise<AnthropicValuationResult | null> {
+  if (!ANTHROPIC_VALUATION_ENABLED) return null;
+
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+  try {
+    const response = await authFetch(`${API_BASE}/api/anthropic/stock-analyzer/valuation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        ticker:    data.ticker,
+        name:      data.name,
+        sector:    data.sector,
+        industry:  data.industry,
+        marketCap: data.marketCap,
+        price:     data.price,
+        financials: {
+          pe:               data.pe,
+          forwardPe:        data.forwardPe,
+          pb:               data.pb,
+          ps:               data.ps,
+          evEbitda:         data.evEbitda,
+          pegRatio:         data.pegRatio,
+          revenueGrowth:    data.revenueGrowth,
+          epsGrowth:        data.epsGrowth,
+          grossMargin:      data.grossMargin,
+          netMargin:        data.netMargin,
+          roe:              data.roe,
+          roic:             data.roic,
+          debtToEquity:     data.debtToEquity,
+          fcfYield:         data.fcfYield,
+        },
+      }),
+    });
+
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+// =====================================================
 // TYPES
 // =====================================================
 
@@ -837,13 +958,32 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
       } catch { /* continue to generate */ }
     }
 
-    // 3. Generate fresh with AI
+    // 3. Generate fresh with AI — try Anthropic pipeline first when flag is on
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setIsLoading(true);
     setError(null);
     try {
+      // Try Anthropic server-side pipeline first
+      if (ANTHROPIC_VALUATION_ENABLED) {
+        const anthropicResult = await fetchValuationAnalysisAI(data, controller.signal);
+        if (anthropicResult) {
+          const normalized = normalizeAnthropicValuation(anthropicResult, data.price);
+          // Merge with any existing cached OpenAI data (or empty shell)
+          const merged: ValuationAIData = {
+            ...(valuationCache.get(ticker)?.data ?? {} as ValuationAIData),
+            ...normalized,
+            // Stash raw Anthropic fields so the sensitivity matrix renderer can use them
+            _anthropicRaw: anthropicResult,
+          } as ValuationAIData & { _anthropicRaw: AnthropicValuationResult };
+          valuationCache.set(ticker, { data: merged, generatedAt: new Date().toISOString() });
+          if (tickerRef.current === ticker) setAiData(merged);
+          return;
+        }
+      }
+
+      // Fall back to existing OpenAI/aiProxy path
       const result = await fetchValuationData(data, controller.signal);
       valuationCache.set(ticker, { data: result, generatedAt: new Date().toISOString() });
       // Save to server for next user!
@@ -1014,6 +1154,80 @@ export const ValuationTab = memo(({ data, prefetchedValuation }: { data: StockDa
           </div>
         </Card>
       )}
+
+      {/* ============================================= */}
+      {/* 3b. Sensitivity Matrix (Anthropic only)      */}
+      {/* ============================================= */}
+      {(() => {
+        // _anthropicRaw is present only when the Anthropic pipeline ran
+        const raw = (aiData as any)?._anthropicRaw as AnthropicValuationResult | undefined;
+        const matrix = raw?.sensitivity_matrix;
+        if (!matrix || !Array.isArray(matrix) || matrix.length === 0) return null;
+
+        // Validate rows are non-empty arrays; filter out degenerate ones
+        const rows = matrix.filter(
+          (r): r is number[] => Array.isArray(r) && r.length > 0
+        );
+        if (rows.length === 0) return null;
+
+        const cols = rows[0].length;
+        // Guard: every row must have the same column count
+        const uniform = rows.every((r) => r.length === cols);
+
+        return (
+          <Card>
+            <div className="p-6">
+              <SectionHeader
+                icon={BarChart3}
+                title="Sensitivity Matrix"
+                subtitle="Fair value across growth & discount-rate scenarios"
+                badge="FINOTAUR AI"
+              />
+              <div className="overflow-x-auto mt-4">
+                <table className="w-full text-xs text-center border-collapse">
+                  <tbody>
+                    {rows.map((row, ri) => (
+                      <tr key={ri}>
+                        {(uniform ? row : row.slice(0, cols)).map((cell, ci) => {
+                          const val = Number(cell) || 0;
+                          const isHighlight = ri === Math.floor(rows.length / 2) && ci === Math.floor(cols / 2);
+                          const color =
+                            val > data.price * 1.1
+                              ? '#22C55E'
+                              : val < data.price * 0.9
+                              ? '#EF4444'
+                              : '#C9A646';
+                          return (
+                            <td
+                              key={ci}
+                              className="px-3 py-2 rounded"
+                              style={{
+                                background: isHighlight
+                                  ? 'rgba(201,166,70,0.12)'
+                                  : 'rgba(255,255,255,0.02)',
+                                border: isHighlight
+                                  ? '1px solid rgba(201,166,70,0.3)'
+                                  : '1px solid rgba(255,255,255,0.04)',
+                                color,
+                                fontWeight: isHighlight ? 700 : 500,
+                              }}
+                            >
+                              ${val.toFixed(0)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-[#6B6B6B] mt-3 text-center">
+                Center cell = base scenario. Green = above current price, Red = below.
+              </p>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* ============================================= */}
       {/* 4. Reverse DCF */}
