@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useSmartRefresh } from "@/hooks/useSmartRefresh";
 import { useNavigate, useParams } from "react-router-dom";
-import { 
+import {
   Plus, X, Upload, TrendingUp, Target, Shield, Brain, ChevronRight, ChevronLeft,
   Settings, Trash2, Edit2, BarChart3, Activity, List, TrendingDown, Award,
-  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info
+  Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
+import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
+import JournalGauge from '@/components/journal/ds/JournalGauge';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
 import { 
@@ -352,111 +354,64 @@ const strategyTrades = useMemo(() => {
         </div>
 
         {stats.totalTrades > 0 && (
-          <div 
-            className="group relative overflow-hidden mb-10 p-8 rounded-2xl opacity-0 animate-fadeIn"
-            style={{ 
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.06) 0%, rgba(201,166,70,0.02) 40%, rgba(255,255,255,0.015) 100%)',
-              border: '1px solid rgba(201,166,70,0.12)',
-              boxShadow: '0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(201,166,70,0.08)',
-              backdropFilter: 'blur(16px)',
-              animationDelay: '0.2s',
-              animationFillMode: 'forwards'
-            }}
-          >
-            {/* Top gold gradient line */}
-            <div 
-              className="absolute top-0 left-8 right-8 h-px pointer-events-none"
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
-            />
-            {/* Gold ambient glow top-left */}
-            <div 
-              className="absolute -top-12 -left-12 w-48 h-48 rounded-full pointer-events-none"
-              style={{ background: 'rgba(201,166,70,0.06)', filter: 'blur(40px)' }}
-            />
-            {/* Emerald ambient glow bottom-right */}
-            <div 
-              className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full pointer-events-none"
-              style={{ background: 'rgba(52,211,153,0.04)', filter: 'blur(32px)' }}
-            />
-            {/* Bottom accent line */}
-            <div 
-              className="absolute bottom-0 left-8 right-8 h-px opacity-30 pointer-events-none"
-              style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }}
-            />
-
-            <div className="relative flex items-center gap-2.5 mb-6">
-              <div 
-                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ 
-                  background: 'rgba(201,166,70,0.12)', 
-                  border: '1px solid rgba(201,166,70,0.25)' 
-                }}
-              >
-                <Award className="w-4 h-4" style={{ color: '#C9A646' }} />
-              </div>
-              <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#C9A646' }}>Quick Stats</h3>
-            </div>
-
-            <div className="relative flex items-center justify-between">
-              {[
-                { 
-                  icon: Percent, 
-                  label: 'Win Rate', 
-                  value: `${stats.winRate.toFixed(0)}%`,
-                  color: stats.winRate >= 50 ? '#34D399' : '#E44545',
-                  tooltip: 'Percentage of winning trades'
-                },
-                { 
-                  icon: TrendingUp, 
-                  label: 'Avg R', 
-                  value: `${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`,
-                  color: stats.avgR >= 0 ? '#34D399' : '#E44545',
-                  tooltip: 'Average R multiple per trade'
-                },
-                { 
-                  icon: DollarSign, 
-                  label: 'Net P&L', 
-                  value: `$${stats.netPnL >= 0 ? '+' : ''}${stats.netPnL.toFixed(0)}`,
-                  color: stats.netPnL >= 0 ? '#34D399' : '#E44545',
-                  tooltip: 'Total profit/loss in dollars'
-                },
-                { 
-                  icon: Zap, 
-                  label: 'Profit Factor', 
-                  value: stats.profitFactor.toFixed(2),
-                  color: stats.profitFactor >= 1.5 ? '#34D399' : stats.profitFactor >= 1 ? '#C9A646' : '#E44545',
-                  tooltip: 'Total wins ÷ Total losses'
-                },
-                { 
-                  icon: Target, 
-                  label: 'Expectancy', 
-                  value: `${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`,
-                  color: stats.expectancy >= 0 ? '#34D399' : '#E44545',
-                  tooltip: 'Expected R per trade'
-                },
-                { 
-                  icon: TrendingDown, 
-                  label: 'Max DD', 
-                  value: `${stats.maxDrawdown.toFixed(1)}R`,
-                  color: '#E44545',
-                  tooltip: 'Maximum drawdown from peak equity'
-                },
-              ].map((kpi, i, arr) => (
-                <Tooltip key={i} content={kpi.tooltip}>
-                  <div className="flex items-center">
-                    <div className="flex flex-col items-center text-center px-4">
-                      <kpi.icon className="w-5 h-5 mb-2" style={{ color: '#C9A646' }} />
-                      <div className="text-2xl font-bold mb-1" style={{ color: kpi.color }}>
-                        {kpi.value}
-                      </div>
-                      <div className="text-[11px] font-medium" style={{ color: '#7A7A7A' }}>{kpi.label}</div>
-                    </div>
-                    {i < arr.length - 1 && (
-                      <div className="w-px h-12 flex-shrink-0" style={{ background: 'rgba(201,166,70,0.15)' }} />
-                    )}
-                  </div>
-                </Tooltip>
-              ))}
+          <div className="mb-10 opacity-0 animate-fadeIn" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <Tooltip content="Percentage of winning trades">
+                <JournalKpiCard
+                  label="Win Rate"
+                  value={`${stats.winRate.toFixed(0)}%`}
+                  hint={`${stats.wins}W / ${stats.losses}L`}
+                  accent={stats.winRate >= 50 ? 'green' : 'red'}
+                  icon={Percent}
+                  valueSize="xl"
+                />
+              </Tooltip>
+              <Tooltip content="Average R multiple per trade">
+                <JournalKpiCard
+                  label="Avg R"
+                  value={`${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
+                  hint="Per trade"
+                  accent={stats.avgR >= 0 ? 'green' : 'red'}
+                  icon={TrendingUp}
+                />
+              </Tooltip>
+              <Tooltip content="Total profit/loss in dollars">
+                <JournalKpiCard
+                  label="Net P&L"
+                  value={`${stats.netPnL >= 0 ? '+' : ''}$${Math.abs(stats.netPnL).toFixed(0)}`}
+                  hint="Total"
+                  accent="gold"
+                  icon={DollarSign}
+                  valueSize="lg"
+                />
+              </Tooltip>
+              <Tooltip content="Total wins ÷ Total losses">
+                <JournalKpiCard
+                  label="Profit Factor"
+                  value={stats.profitFactor.toFixed(2)}
+                  hint="Win / Loss"
+                  accent={stats.profitFactor >= 1.5 ? 'gold' : 'red'}
+                  icon={Zap}
+                />
+              </Tooltip>
+              <Tooltip content="Expected R per trade">
+                <JournalKpiCard
+                  label="Expectancy"
+                  value={`${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`}
+                  hint="Expected R"
+                  accent={stats.expectancy >= 0 ? 'green' : 'red'}
+                  icon={Brain}
+                />
+              </Tooltip>
+              <Tooltip content="Maximum drawdown from peak equity">
+                <JournalKpiCard
+                  label="Max Drawdown"
+                  value={`${stats.maxDrawdown.toFixed(1)}R`}
+                  hint="From peak"
+                  accent="red"
+                  icon={ChevronDown}
+                />
+              </Tooltip>
             </div>
           </div>
         )}
@@ -494,87 +449,123 @@ const strategyTrades = useMemo(() => {
             ========================================== */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-4 gap-6">
-              {[
-                { label: 'Total Trades', value: stats.totalTrades, color: '#EAEAEA', icon: List, iconBg: 'rgba(234,234,234,0.1)', iconBorder: 'rgba(234,234,234,0.3)' },
-                { label: 'Win Rate', value: `${stats.winRate.toFixed(1)}%`, color: stats.winRate >= 50 ? '#00C46C' : '#E44545', icon: Percent, iconBg: stats.winRate >= 50 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.winRate >= 50 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
-                { label: 'Total R', value: `${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`, color: stats.totalR >= 0 ? '#00C46C' : '#E44545', icon: TrendingUp, iconBg: stats.totalR >= 0 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.totalR >= 0 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
-                { label: 'Net P&L', value: `$${stats.netPnL >= 0 ? '+' : ''}${stats.netPnL.toFixed(2)}`, color: stats.netPnL >= 0 ? '#00C46C' : '#E44545', icon: DollarSign, iconBg: stats.netPnL >= 0 ? 'rgba(0,196,108,0.1)' : 'rgba(228,69,69,0.1)', iconBorder: stats.netPnL >= 0 ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)' },
-              ].map((stat, i) => (
-                <div
-                  key={i}
-                  className="group relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] opacity-0 animate-fadeIn"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
-                    backdropFilter: 'blur(12px)',
-                    animationDelay: `${0.3 + i * 0.1}s`,
-                    animationFillMode: 'forwards'
-                  }}
-                >
-                  <div 
-                    className="absolute -top-10 -left-10 w-32 h-32 rounded-full opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none"
-                    style={{ background: stat.color, filter: 'blur(32px)' }}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <JournalKpiCard
+                label="Total Trades"
+                value={String(stats.totalTrades)}
+                hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
+                accent="blue"
+                icon={Target}
+                className="opacity-0 animate-fadeIn"
+              />
+              <JournalKpiCard
+                label="Win Rate"
+                value={`${stats.winRate.toFixed(1)}%`}
+                hint={`${stats.wins} / ${stats.totalTrades} trades`}
+                accent={stats.winRate >= 50 ? 'green' : 'red'}
+                icon={Percent}
+                gauge={
+                  <JournalGauge
+                    mode="winRate"
+                    wins={stats.wins}
+                    losses={stats.losses}
+                    breakeven={stats.breakeven}
                   />
-                  <div 
-                    className="absolute bottom-0 left-4 right-4 h-px opacity-30 pointer-events-none"
-                    style={{ background: `linear-gradient(90deg, transparent, ${stat.color}, transparent)` }}
-                  />
-                  <div className="relative p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.15em]" style={{ color: '#6A6A6A' }}>
-                        {stat.label}
-                      </div>
-                      <div 
-                        className="w-8 h-8 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                        style={{ background: stat.iconBg, border: `1px solid ${stat.iconBorder}` }}
-                      >
-                        <stat.icon className="w-4 h-4" style={{ color: stat.color }} strokeWidth={1.8} />
-                      </div>
-                    </div>
-                    <p className="text-3xl font-bold tracking-tight leading-none" style={{ color: stat.color }}>{stat.value}</p>
-                  </div>
-                </div>
-              ))}
+                }
+                className="opacity-0 animate-fadeIn"
+              />
+              <JournalKpiCard
+                label="Total R"
+                value={`${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`}
+                hint="Cumulative"
+                accent={stats.totalR >= 0 ? 'green' : 'red'}
+                icon={TrendingUp}
+                className="opacity-0 animate-fadeIn"
+              />
+              <JournalKpiCard
+                label="Net P&L"
+                value={`${stats.netPnL >= 0 ? '+' : ''}$${Math.abs(stats.netPnL).toFixed(2)}`}
+                hint="Total profit/loss"
+                accent="gold"
+                icon={DollarSign}
+                valueSize="lg"
+                className="opacity-0 animate-fadeIn"
+              />
             </div>
 
-            <div className="grid grid-cols-3 gap-6">
-              {[
-                { label: 'Avg R per Trade', value: stats.avgR.toFixed(2) + 'R', icon: Target, tooltip: 'Average R multiple across all trades' },
-                { label: 'Avg Win', value: stats.avgWinR.toFixed(2) + 'R', icon: TrendingUp, tooltip: 'Average R on winning trades' },
-                { label: 'Avg Loss', value: stats.avgLossR.toFixed(2) + 'R', icon: TrendingDown, tooltip: 'Average R on losing trades' },
-                { label: 'Best Trade', value: stats.largestWin.toFixed(2) + 'R', icon: Award, tooltip: 'Largest winning trade' },
-                { label: 'Worst Trade', value: stats.largestLoss.toFixed(2) + 'R', icon: X, tooltip: 'Largest losing trade' },
-                { label: 'Profit Factor', value: stats.profitFactor.toFixed(2), icon: Zap, tooltip: 'Total Win / Total Loss' },
-                { label: 'Expectancy', value: stats.expectancy.toFixed(2) + 'R', icon: Brain, tooltip: 'Expected return per trade' },
-                { label: 'Consistency', value: stats.consistency.toFixed(2), icon: Activity, tooltip: 'Risk-adjusted return' },
-                { label: 'Win Streak', value: `${stats.winStreak} trades`, icon: TrendingUp, tooltip: 'Longest winning streak' },
-              ].map((stat, i) => (
-                <Tooltip key={i} content={stat.tooltip}>
-                  <div
-                    className="group relative overflow-hidden p-5 rounded-2xl transition-all duration-300 hover:scale-[1.02] opacity-0 animate-fadeIn"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      boxShadow: '0 2px 16px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
-                      backdropFilter: 'blur(12px)',
-                      animationDelay: `${0.7 + i * 0.05}s`,
-                      animationFillMode: 'forwards'
-                    }}
-                  >
-                    <div 
-                      className="absolute -top-6 -right-6 w-20 h-20 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                      style={{ background: 'rgba(201,166,70,0.08)', filter: 'blur(20px)' }}
-                    />
-                    <div className="relative flex items-center gap-2 mb-1">
-                      <stat.icon className="w-4 h-4" style={{ color: '#C9A646' }} />
-                      <p className="text-xs" style={{ color: '#6A6A6A' }}>{stat.label}</p>
-                    </div>
-                    <p className="relative text-xl font-bold" style={{ color: '#EAEAEA' }}>{stat.value}</p>
-                  </div>
-                </Tooltip>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <Tooltip content="Average R multiple across all trades">
+                <JournalKpiCard
+                  label="Avg R per Trade"
+                  value={`${stats.avgR.toFixed(2)}R`}
+                  icon={Target}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Average R on winning trades">
+                <JournalKpiCard
+                  label="Avg Win"
+                  value={`${stats.avgWinR.toFixed(2)}R`}
+                  icon={TrendingUp}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Average R on losing trades">
+                <JournalKpiCard
+                  label="Avg Loss"
+                  value={`${stats.avgLossR.toFixed(2)}R`}
+                  icon={TrendingDown}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Largest winning trade">
+                <JournalKpiCard
+                  label="Best Trade"
+                  value={`${stats.largestWin.toFixed(2)}R`}
+                  icon={Award}
+                  accent="green"
+                />
+              </Tooltip>
+              <Tooltip content="Largest losing trade">
+                <JournalKpiCard
+                  label="Worst Trade"
+                  value={`${stats.largestLoss.toFixed(2)}R`}
+                  icon={X}
+                  accent="red"
+                />
+              </Tooltip>
+              <Tooltip content="Total Win / Total Loss">
+                <JournalKpiCard
+                  label="Profit Factor"
+                  value={stats.profitFactor.toFixed(2)}
+                  icon={Zap}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Expected return per trade">
+                <JournalKpiCard
+                  label="Expectancy"
+                  value={`${stats.expectancy.toFixed(2)}R`}
+                  icon={Brain}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Risk-adjusted return">
+                <JournalKpiCard
+                  label="Consistency"
+                  value={stats.consistency.toFixed(2)}
+                  icon={Activity}
+                  accent="neutral"
+                />
+              </Tooltip>
+              <Tooltip content="Longest winning streak">
+                <JournalKpiCard
+                  label="Win Streak"
+                  value={`${stats.winStreak} trades`}
+                  icon={TrendingUp}
+                  accent="neutral"
+                />
+              </Tooltip>
             </div>
 
             {stats.totalTrades > 0 && (
