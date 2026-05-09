@@ -1,7 +1,7 @@
 // MacroAnalyzer.tsx
 // =====================================================
 // 🌐 MACRO ANALYZER - MAIN CONTAINER
-// Handles tab navigation & lazy-loads tab content
+// Handles tab navigation & eagerly mounts all tab content
 // =====================================================
 
 import React, {
@@ -9,26 +9,30 @@ import React, {
   useCallback,
   useEffect,
   memo,
-  lazy,
-  Suspense,
   startTransition
 } from 'react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
-import { LazyMotion, domAnimation, AnimatePresence, m } from 'framer-motion';
+import { LazyMotion, domAnimation, m } from 'framer-motion';
 import {
   BarChart3, Activity, FileText, Banknote, Globe, Brain
 } from 'lucide-react';
 import { Skeleton, SectionSkeleton, GlobalStyles } from './shared/ui';
 import type { TabType } from './shared/types';
 
-// Lazy-load tab components for code splitting
-const OverviewTab = lazy(() => import('./tabs/OverviewTab'));
-const IndicatorsTab = lazy(() => import('./tabs/IndicatorsTab'));
-const ReportsTab = lazy(() => import('./tabs/ReportsTab'));
-const FedWatchTab = lazy(() => import('./tabs/FedWatchTab'));
-const GlobalTab = lazy(() => import('./tabs/GlobalTab'));
-const AITab = lazy(() => import('./tabs/AITab'));
+// IMPORTANT: Tabs are statically imported (NOT lazy-loaded) so that all 6 tab
+// hooks (useOverview, useIndicators, useRegime, useFedData, useGlobal, useServerAI)
+// fire their useEffect fetches IN PARALLEL on Macro Analyzer mount. Server-side
+// caches populate eagerly; tab switches are instant (just CSS display toggle).
+// Trade-off: slightly larger initial JS bundle for the macro page (worth it for
+// "millions of users" scale where tab-switch latency hurts much more than first-
+// paint cost).
+import OverviewTab from './tabs/OverviewTab';
+import IndicatorsTab from './tabs/IndicatorsTab';
+import ReportsTab from './tabs/ReportsTab';
+import FedWatchTab from './tabs/FedWatchTab';
+import GlobalTab from './tabs/GlobalTab';
+import AITab from './tabs/AITab';
 
 // =====================================================
 // TAB CONFIG
@@ -85,21 +89,6 @@ const NavigationTabs = memo(({ active, onChange }: { active: TabType; onChange: 
   </div>
 ));
 NavigationTabs.displayName = 'NavigationTabs';
-
-// =====================================================
-// TAB LOADING FALLBACK
-// =====================================================
-
-const TabFallback = memo(() => (
-  <div className="space-y-6">
-    <SectionSkeleton height="h-80" />
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <SectionSkeleton height="h-64" />
-      <SectionSkeleton height="h-64" />
-    </div>
-  </div>
-));
-TabFallback.displayName = 'TabFallback';
 
 // =====================================================
 // LOADING SKELETON (initial load)
@@ -203,26 +192,35 @@ export default function MacroAnalyzer() {
           {/* Navigation */}
           <NavigationTabs active={activeTab} onChange={handleTabChange} />
 
-          {/* Tab Content */}
+          {/* Tab Content — all 6 tabs mount simultaneously; CSS display:none hides inactive tabs.
+              This ensures all tab hooks fire their useEffect fetches in parallel on initial mount. */}
           <LazyMotion features={domAnimation}>
-            <AnimatePresence mode="wait">
-              <m.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Suspense fallback={<TabFallback />}>
-                  {activeTab === 'overview' && <OverviewTab />}
-                  {activeTab === 'indicators' && <IndicatorsTab />}
-                  {activeTab === 'reports' && <ReportsTab />}
-                  {activeTab === 'fed' && <FedWatchTab />}
-                  {activeTab === 'global' && <GlobalTab />}
-                  {activeTab === 'ai' && <AITab />}
-                </Suspense>
-              </m.div>
-            </AnimatePresence>
+            <m.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="tab-container">
+                <div style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
+                  <OverviewTab />
+                </div>
+                <div style={{ display: activeTab === 'indicators' ? 'block' : 'none' }}>
+                  <IndicatorsTab />
+                </div>
+                <div style={{ display: activeTab === 'reports' ? 'block' : 'none' }}>
+                  <ReportsTab />
+                </div>
+                <div style={{ display: activeTab === 'fed' ? 'block' : 'none' }}>
+                  <FedWatchTab />
+                </div>
+                <div style={{ display: activeTab === 'global' ? 'block' : 'none' }}>
+                  <GlobalTab />
+                </div>
+                <div style={{ display: activeTab === 'ai' ? 'block' : 'none' }}>
+                  <AITab />
+                </div>
+              </div>
+            </m.div>
           </LazyMotion>
 
           {/* Footer */}
