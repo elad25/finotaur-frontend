@@ -22,6 +22,20 @@ enabled = true
 verify_jwt = false  # ← Webhooks don't send JWT
 
 # ============================================
+# 🔥 TRADOVATE FUNCTIONS — verify_jwt:false + in-function dual-auth (OQ-37+38, 2026-05-09)
+# ============================================
+# Cron sends sb_secret_* (not JWT format) → would 401 with verify_jwt:true.
+# Frontend sends user JWT. Both validated by _shared/dualAuth.ts inside the function.
+
+[functions.tradovate-sync]
+enabled = true
+verify_jwt = false  # ← OQ-37+38: dual-auth via _shared/dualAuth.ts
+
+[functions.tradovate-auth]
+enabled = true
+verify_jwt = false  # ← OQ-37+38: dual-auth via _shared/dualAuth.ts
+
+# ============================================
 # 🔒 CHECKOUT FUNCTIONS - Require Auth
 # ============================================
 
