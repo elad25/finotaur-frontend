@@ -5,6 +5,7 @@
 import { FlowItem, FlowType, SectorFlow, FlowStats, FlowTypeFilter, DirectionFilter } from './types';
 import { flowCache, sectorCache, statsCache, CACHE_KEYS } from './cache';
 import { CACHE_TTL } from './constants';
+import { authFetch } from '@/utils/authFetch';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -12,7 +13,10 @@ async function apiFetch<T>(path: string, timeoutMs = 8000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
+    // Use authFetch so Authorization: Bearer <supabase_token> is auto-injected.
+    // Without it, userTier middleware sees no Bearer header and sets req.userTier='free',
+    // causing aiGate to refuse `pro+`-tier flow_scanner endpoints with 403.
+    const res = await authFetch(`${API_BASE}${path}`, {
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
     });

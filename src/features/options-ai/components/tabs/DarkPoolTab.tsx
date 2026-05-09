@@ -23,6 +23,7 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { Card, SectionHeader, Skeleton, SkeletonCard } from '../ui';
+import { authFetch } from '@/utils/authFetch';
 
 // ╔══════════════════════════════════════════════════════╗
 // ║  TYPES                                                ║
@@ -176,7 +177,7 @@ function useDarkPool(): UseDarkPoolResult {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/options-ai/dark-pool`, {
+      const res = await authFetch(`${API_BASE}/api/options-ai/dark-pool`, {
         headers: { Accept: 'application/json' },
         signal: abortRef.current.signal,
       });

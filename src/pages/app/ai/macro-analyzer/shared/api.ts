@@ -9,6 +9,7 @@
 // =====================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { authFetch } from '@/utils/authFetch';
 
 // Robust against both VITE_API_URL conventions:
 //   - Set to bare host (e.g. https://finotaur-server-production.up.railway.app) → we append /api/macro-analyzer
@@ -26,7 +27,10 @@ const API_BASE = _apiHost.endsWith('/api/macro-analyzer')
 // =====================================================
 
 async function apiFetch<T>(endpoint: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`);
+  // Use authFetch so Authorization: Bearer <supabase_token> is auto-injected.
+  // Without it, userTier middleware sees no Bearer header and sets req.userTier='free',
+  // causing aiGate to refuse `pro/finotaur/elite`-tier macro_analyzer endpoints with 403.
+  const res = await authFetch(`${API_BASE}${endpoint}`);
   if (!res.ok) {
     throw new Error(`API Error: ${res.status} ${res.statusText}`);
   }
@@ -110,7 +114,7 @@ export const fetchISMIntelligence = () => apiFetch<ISMIntelligenceData>('/ism/in
 // AI endpoints (server-cached)
 export const fetchAIAnalysis = () => apiFetch<AIAnalysisData>('/ai-analysis');
 export const generateAISection = async (section: 'regime' | 'positioning' | 'risk') => {
-  const res = await fetch(`${API_BASE}/ai-generate/${section}`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/ai-generate/${section}`, { method: 'POST' });
   if (!res.ok) throw new Error(`AI generate failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'AI generation failed');
@@ -124,7 +128,7 @@ export const fetchISMSectorAI = () => apiFetch<AIResult | null>('/ism/ai-sector-
 export const fetchGDPIntelligence = () => apiFetch<GDPIntelligenceData>('/gdp/intelligence');
 
 export const generateGDPIntelligence = async () => {
-  const res = await fetch(`${API_BASE}/gdp/intelligence`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/gdp/intelligence`, { method: 'POST' });
   if (!res.ok) throw new Error(`GDP AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'GDP AI generation failed');
@@ -134,7 +138,7 @@ export const generateGDPIntelligence = async () => {
 // CPI Deep Intelligence (cached server-side, 1 call/2hrs for 10K users)
 export const fetchCPIIntelligence = () => apiFetch<CPIIntelligenceData>('/cpi/intelligence');
 export const generateCPIIntelligence = async () => {
-  const res = await fetch(`${API_BASE}/cpi/intelligence`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/cpi/intelligence`, { method: 'POST' });
   if (!res.ok) throw new Error(`CPI AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'CPI AI generation failed');
@@ -144,7 +148,7 @@ export const generateCPIIntelligence = async () => {
 // PPI Deep Intelligence (cached server-side, 1 call/2hrs for 10K users)
 export const fetchPPIIntelligence = () => apiFetch<PPIIntelligenceData>('/ppi/intelligence');
 export const generatePPIIntelligence = async () => {
-  const res = await fetch(`${API_BASE}/ppi/intelligence`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/ppi/intelligence`, { method: 'POST' });
   if (!res.ok) throw new Error(`PPI AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'PPI AI generation failed');
@@ -152,7 +156,7 @@ export const generatePPIIntelligence = async () => {
 };
 
 export const generateISMSectorAI = async () => {
-  const res = await fetch(`${API_BASE}/ism/ai-sector-analysis`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/ism/ai-sector-analysis`, { method: 'POST' });
   if (!res.ok) throw new Error(`ISM AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'ISM AI generation failed');
@@ -162,7 +166,7 @@ export const generateISMSectorAI = async () => {
 // FOMC Minutes Intelligence (cached server-side, 1 call/24h for 10K users)
 export const fetchFOMCMinutes = () => apiFetch<AIResult | null>('/fed/fomc-minutes');
 export const generateFOMCMinutes = async () => {
-  const res = await fetch(`${API_BASE}/fed/fomc-minutes`, { method: 'POST' });
+  const res = await authFetch(`${API_BASE}/fed/fomc-minutes`, { method: 'POST' });
   if (!res.ok) throw new Error(`FOMC Minutes analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'FOMC Minutes generation failed');
@@ -170,7 +174,7 @@ export const generateFOMCMinutes = async () => {
 };
 
 export const refreshAllData = async () => {
-  await fetch(`${API_BASE}/refresh`, { method: 'POST' });
+  await authFetch(`${API_BASE}/refresh`, { method: 'POST' });
 };
 
 // =====================================================
