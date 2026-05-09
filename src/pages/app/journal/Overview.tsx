@@ -74,6 +74,7 @@ import { useImportTrades } from '@/hooks/useImportTrades';
 import { useTradovate } from '@/hooks/useTradovate';
 import { usePortfolioContext } from '@/contexts/PortfolioContext';
 import { AccountSwitcher } from '@/components/AccountSwitcher';
+import { AccountFilterDropdown } from '@/components/journal/AccountFilterDropdown';
 import type { FinotaurTrade } from '@/utils/importUtils';
 
 // ================================================
@@ -639,101 +640,6 @@ const Shortcut = React.memo(({
   </Link>
 ));
 Shortcut.displayName = 'Shortcut';
-
-const BestWorstTrades = React.memo(({ stats, timezone }: { stats: DashboardStats; timezone: string }) => {
-  if (!stats.bestTrade || !stats.worstTrade) return null;
-
-  const cardBase = {
-    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
-    backdropFilter: 'blur(12px)',
-  };
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* BEST TRADE */}
-      <div
-        className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
-        style={{ ...cardBase, border: '1px solid rgba(74,210,149,0.2)' }}
-      >
-        <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-          style={{ background: 'rgba(74,210,149,0.12)', filter: 'blur(28px)' }} />
-        <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
-          style={{ background: 'linear-gradient(90deg, transparent, #4AD295, transparent)' }} />
-
-        <div className="relative p-5">
-          <div className="flex items-center gap-1.5 mb-3">
-            <TrendingUp className="w-4 h-4 text-[#4AD295]" />
-            <span className="text-[10px] text-[#4AD295] font-semibold uppercase tracking-widest">
-              Best Trade
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold tracking-tight text-[#4AD295]" style={{ letterSpacing: '-0.02em' }}>
-              {formatCurrency(stats.bestTrade.pnl)}
-            </span>
-            {stats.bestTrade.rr && (
-              <span className="text-sm text-[#4AD295]/70 font-light">
-                ({stats.bestTrade.rr.toFixed(1)}R)
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {stats.bestTrade.session && (
-              <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.bestTrade.session)}`}>
-                {formatSessionDisplay(stats.bestTrade.session)}
-              </span>
-            )}
-            <span className="text-[10px] font-medium" style={{ color: '#5A5A5A' }}>
-              {stats.bestTrade.symbol} • {formatTradeDate(stats.bestTrade.open_at, timezone)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* WORST TRADE */}
-      <div
-        className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
-        style={{ ...cardBase, border: '1px solid rgba(227,99,99,0.2)' }}
-      >
-        <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-          style={{ background: 'rgba(227,99,99,0.12)', filter: 'blur(28px)' }} />
-        <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
-          style={{ background: 'linear-gradient(90deg, transparent, #E36363, transparent)' }} />
-
-        <div className="relative p-5">
-          <div className="flex items-center gap-1.5 mb-3">
-            <TrendingDown className="w-4 h-4 text-[#E36363]" />
-            <span className="text-[10px] text-[#E36363] font-semibold uppercase tracking-widest">
-              Worst Trade
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <span className="text-3xl font-bold tracking-tight text-[#E36363]" style={{ letterSpacing: '-0.02em' }}>
-              {formatCurrency(stats.worstTrade.pnl)}
-            </span>
-            {stats.worstTrade.rr && (
-              <span className="text-sm text-[#E36363]/70 font-light">
-                ({stats.worstTrade.rr.toFixed(1)}R)
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {stats.worstTrade.session && (
-              <span className={`px-2 py-0.5 rounded text-xs ${getSessionColor(stats.worstTrade.session)}`}>
-                {formatSessionDisplay(stats.worstTrade.session)}
-              </span>
-            )}
-            <span className="text-[10px] font-medium" style={{ color: '#5A5A5A' }}>
-              {stats.worstTrade.symbol} • {formatTradeDate(stats.worstTrade.open_at, timezone)}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-BestWorstTrades.displayName = 'BestWorstTrades';
 
 const AIInsight = React.memo(({ stats }: { stats: DashboardStats }) => {
   const insight = useMemo(() => {
@@ -1347,6 +1253,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
           />
 
+          <AccountFilterDropdown
+            onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+          />
+
           <div className="ml-auto flex items-center gap-3">
             <button
               onClick={handleGeneratePDF}
@@ -1360,40 +1270,41 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         </div>
 
         {isLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <CardSkeleton key={i} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[1, 2, 3, 4, 5, 6].map(i => <CardSkeleton key={i} />)}
           </div>
         )}
 
         {stats && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <DashboardKpiCard 
-                label="Net P&L" 
-                value={formatCurrency(stats.netPnl)} 
+            {/* Single-row stats grid: 4 KPI cards + Best/Worst trade — all 6 in one row on desktop */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <DashboardKpiCard
+                label="Net P&L"
+                value={formatCurrency(stats.netPnl)}
                 color={getPnLColor(stats.netPnl)}
                 hint={`${stats.closedTrades} closed trades`}
                 tooltip="Total profit or loss from all closed trades"
                 accentBg="linear-gradient(135deg, rgba(0,196,108,0.08) 0%, rgba(0,196,108,0.03) 100%)"
               />
-              
-              <DashboardKpiCard 
-                label="Win Rate" 
-                value={formatPercentage(stats.winrate)} 
+
+              <DashboardKpiCard
+                label="Win Rate"
+                value={formatPercentage(stats.winrate)}
                 hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
                 color="text-[#C9A646]"
                 tooltip="Percentage of winning trades vs total trades"
                 accentBg="linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)"
                 showGauge={true}
-                gaugeData={{ 
-                  wins: stats.wins, 
-                  losses: stats.losses, 
-                  breakeven: stats.breakeven 
+                gaugeData={{
+                  wins: stats.wins,
+                  losses: stats.losses,
+                  breakeven: stats.breakeven
                 }}
               />
-              
-              <DashboardKpiCard 
-                label="Profit Factor" 
+
+              <DashboardKpiCard
+                label="Profit Factor"
                 value={
                   stats.profitFactor != null && !isNaN(stats.profitFactor) && isFinite(stats.profitFactor)
                     ? stats.profitFactor.toFixed(2)
@@ -1407,9 +1318,9 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 tooltip="Gross profit divided by gross loss. >1 means profitable"
                 accentBg="linear-gradient(135deg, rgba(74,210,149,0.08) 0%, rgba(74,210,149,0.03) 100%)"
               />
-              
-              <DashboardKpiCard 
-                label="Avg Win/Loss Trade" 
+
+              <DashboardKpiCard
+                label="Avg Win/Loss Trade"
                 value={
                   stats.avgWin && stats.avgLoss
                     ? `${(stats.avgWin / Math.abs(stats.avgLoss)).toFixed(2)}`
@@ -1420,15 +1331,104 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 tooltip="Average size of winning trades vs losing trades"
                 accentBg="linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.03) 100%)"
                 showGauge={true}
-                gaugeData={{ 
-                  avgWin: stats.avgWin || 0, 
-                  avgLoss: stats.avgLoss || 0 
+                gaugeData={{
+                  avgWin: stats.avgWin || 0,
+                  avgLoss: stats.avgLoss || 0
                 }}
               />
-            </div>
 
-            {/* ✅ UPDATED: Best/Worst trades with timezone and session */}
-            <BestWorstTrades stats={stats} timezone={timezone} />
+              {/* Best Trade — inline in the unified grid, compact to fit one cell */}
+              {stats.bestTrade && (
+                <div
+                  className="relative overflow-hidden rounded-2xl min-w-0 transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(74,210,149,0.2)',
+                  }}
+                >
+                  <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                    style={{ background: 'rgba(74,210,149,0.12)', filter: 'blur(28px)' }} />
+                  <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+                    style={{ background: 'linear-gradient(90deg, transparent, #4AD295, transparent)' }} />
+                  <div className="relative p-4">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#4AD295] shrink-0" />
+                      <span className="text-[10px] text-[#4AD295] font-semibold uppercase tracking-widest truncate">
+                        Best Trade
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mb-2 min-w-0">
+                      <span className="text-xl font-bold tracking-tight text-[#4AD295] truncate" style={{ letterSpacing: '-0.02em' }}>
+                        {formatCurrency(stats.bestTrade.pnl)}
+                      </span>
+                      {stats.bestTrade.rr && (
+                        <span className="text-xs text-[#4AD295]/70 font-light shrink-0">
+                          ({stats.bestTrade.rr.toFixed(1)}R)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {stats.bestTrade.session && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] shrink-0 ${getSessionColor(stats.bestTrade.session)}`}>
+                          {formatSessionDisplay(stats.bestTrade.session)}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-medium truncate" style={{ color: '#5A5A5A' }}>
+                        {stats.bestTrade.symbol} • {formatTradeDate(stats.bestTrade.open_at, timezone)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Worst Trade — inline in the unified grid, compact to fit one cell */}
+              {stats.worstTrade && (
+                <div
+                  className="relative overflow-hidden rounded-2xl min-w-0 transition-all duration-300 hover:scale-[1.02] group animate-fadeIn"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                    backdropFilter: 'blur(12px)',
+                    border: '1px solid rgba(227,99,99,0.2)',
+                  }}
+                >
+                  <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                    style={{ background: 'rgba(227,99,99,0.12)', filter: 'blur(28px)' }} />
+                  <div className="absolute bottom-0 left-4 right-4 h-px opacity-40 pointer-events-none"
+                    style={{ background: 'linear-gradient(90deg, transparent, #E36363, transparent)' }} />
+                  <div className="relative p-4">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <TrendingDown className="w-3.5 h-3.5 text-[#E36363] shrink-0" />
+                      <span className="text-[10px] text-[#E36363] font-semibold uppercase tracking-widest truncate">
+                        Worst Trade
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1.5 mb-2 min-w-0">
+                      <span className="text-xl font-bold tracking-tight text-[#E36363] truncate" style={{ letterSpacing: '-0.02em' }}>
+                        {formatCurrency(stats.worstTrade.pnl)}
+                      </span>
+                      {stats.worstTrade.rr && (
+                        <span className="text-xs text-[#E36363]/70 font-light shrink-0">
+                          ({stats.worstTrade.rr.toFixed(1)}R)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {stats.worstTrade.session && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] shrink-0 ${getSessionColor(stats.worstTrade.session)}`}>
+                          {formatSessionDisplay(stats.worstTrade.session)}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-medium truncate" style={{ color: '#5A5A5A' }}>
+                        {stats.worstTrade.symbol} • {formatTradeDate(stats.worstTrade.open_at, timezone)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <ErrorBoundary fallback={
               <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
