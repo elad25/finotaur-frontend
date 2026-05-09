@@ -27,7 +27,7 @@ export interface FinotaurTradeData {
   quantity: number;
   entry_price: number;
   stop_price: number | null;         // B2: NULL when no real stop captured from broker
-  risk_estimated: boolean;           // B2: TRUE when stop_price is estimated/missing
+  risk_estimated: boolean;           // B2/OQ-15: FALSE when stop_price is null (broker did not report stop). The UI shows "—" + tooltip until user adds a real stop. Aggregates exclude these trades from R-based stats.
   open_at: string;                   // ISO timestamp
 
   // === OPTIONAL/NULLABLE FIELDS ===
@@ -228,12 +228,15 @@ class TradovateTradeMapperService {
     // Get multiplier (valuePerPoint is the $ value per point movement)
     const multiplier = product.valuePerPoint;
 
-    // B2: Tradovate fills do not include stop orders. We send NULL stop_price
-    // and flag the trade as risk_estimated=true so the user can fill in the
-    // real stop manually. Without a real stop, the trigger leaves R-multiples
-    // NULL — which is correct (R is meaningless without a real stop).
+    // B2/OQ-15 (Elad decision 2026-05-05): Tradovate fills do not include stop
+    // orders. We send NULL stop_price and risk_estimated=FALSE (NOT true).
+    // Rationale: R-multiple is the most meaningful trader stat — fake R is
+    // worse than no R. Frontend renders "—" with tooltip "Add stop price to
+    // calculate R" wherever R-multiple/risk_usd would normally display.
+    // Aggregated stats (Avg R, Profit Factor) EXCLUDE trades with stop=NULL,
+    // shown as "Based on X of Y trades (Z without stop)".
     const stopPrice: number | null = null;
-    const riskEstimated = true;
+    const riskEstimated = false;
 
     // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
@@ -321,10 +324,11 @@ class TradovateTradeMapperService {
     const quantity = Math.abs(position.netPos);
     const multiplier = product.valuePerPoint;
 
-    // B2: Open positions from Tradovate API do not expose stop orders.
-    // Send NULL + risk_estimated=true so the user can supply the real stop.
+    // B2/OQ-15: Open positions from Tradovate API do not expose stop orders.
+    // Send NULL + risk_estimated=FALSE per Elad's 2026-05-05 decision.
+    // (See closed-trade block above for full rationale.)
     const stopPrice: number | null = null;
-    const riskEstimated = true;
+    const riskEstimated = false;
 
     // Convert direction to UPPERCASE for DB constraint
     const sideUppercase: 'LONG' | 'SHORT' = direction.toUpperCase() as 'LONG' | 'SHORT';
