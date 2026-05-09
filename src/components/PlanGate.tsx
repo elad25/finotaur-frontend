@@ -5,6 +5,12 @@ import { Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PLANS, ADDONS } from '@/config/plans';
 
+const PLAN_DISPLAY_NAMES: Record<string, string> = {
+  pro: 'Pro',
+  finotaur: 'Finotaur',
+  elite: 'Elite',
+};
+
 interface PlanGateProps {
   children: React.ReactNode;
   required?: PlanType;
@@ -59,10 +65,13 @@ export const PlanGate = ({ children, required, addon }: PlanGateProps) => {
           </div>
 
           <Button
-            onClick={() => navigate('/settings')}
+            onClick={() => {
+              const target = required ? `/settings?upgrade=${required}` : '/settings';
+              navigate(target);
+            }}
             className="bg-gold text-base-900 hover:bg-gold-600"
           >
-            View Plans & Upgrade
+            {required ? `Upgrade to ${PLAN_DISPLAY_NAMES[required] ?? 'Premium'}` : 'View Plans & Upgrade'}
           </Button>
         </div>
       </Card>
