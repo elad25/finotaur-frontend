@@ -2,14 +2,42 @@
 // New broker-connection modal — TradeSyncer-inspired, restrained.
 // Only Tradovate is functional. Other brokers render as disabled placeholders.
 
-import { useState, memo } from 'react';
-import { X, Plus, Link2 } from 'lucide-react';
+import { useState, memo, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
 import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
 
 interface AddConnectionModalProps {
   onClose: () => void;
+}
+
+// External broker brand colors — DS tokens don't apply to 3rd-party identity.
+const BROKER_LOGO: Record<string, { letter: string; bg: string; fg: string }> = {
+  tradovate:           { letter: 'T',  bg: '#1d4ed8', fg: '#ffffff' },
+  rithmic:             { letter: 'R',  bg: '#16a34a', fg: '#ffffff' },
+  ninja_trader:        { letter: 'N',  bg: '#dc2626', fg: '#ffffff' },
+  dxfeed:              { letter: 'D',  bg: '#f97316', fg: '#ffffff' },
+  projectx:            { letter: 'X',  bg: '#7c3aed', fg: '#ffffff' },
+  interactive_brokers: { letter: 'IB', bg: '#dc2626', fg: '#ffffff' },
+  alpaca:              { letter: 'A',  bg: '#fbbf24', fg: '#0a0a0a' },
+  tradingview:         { letter: 'TV', bg: '#1e293b', fg: '#ffffff' },
+};
+
+function BrokerLogo({ broker }: { broker: string }) {
+  const cfg = BROKER_LOGO[broker] ?? {
+    letter: broker[0]?.toUpperCase() ?? '?',
+    bg: '#475569',
+    fg: '#ffffff',
+  };
+  return (
+    <div
+      className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold"
+      style={{ backgroundColor: cfg.bg, color: cfg.fg }}
+    >
+      {cfg.letter}
+    </div>
+  );
 }
 
 // The 5 brokers shown in the grid — ordered by relevance for trade copier.
@@ -42,6 +70,14 @@ export const AddConnectionModal = memo(function AddConnectionModal({
   const [error, setError] = useState<string | null>(null);
 
   const usedCount = connections.length;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isConnecting) onClose();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isConnecting, onClose]);
 
   const handleConnect = async () => {
     setError(null);
@@ -83,18 +119,14 @@ export const AddConnectionModal = memo(function AddConnectionModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-base/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-[440px] mx-ds-4 rounded-lg bg-surface-1 border border-border-ds-subtle shadow-2xl">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          disabled={isConnecting}
-          className="absolute top-ds-3 right-ds-3 text-ink-tertiary hover:text-ink-primary transition-colors duration-base disabled:opacity-40"
-          aria-label="Close"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-surface-base/80 backdrop-blur-sm"
+      onClick={(e) => { if (e.target === e.currentTarget && !isConnecting) onClose(); }}
+    >
+      <div
+        className="relative w-full max-w-[440px] mx-ds-4 rounded-lg bg-surface-1 border border-border-ds-subtle shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-ds-5 pt-ds-5 pb-ds-3">
           <h3 className="text-base font-semibold text-ink-primary">Add Connection</h3>
@@ -153,7 +185,7 @@ export const AddConnectionModal = memo(function AddConnectionModal({
                         : 'bg-surface-base/50 border-border-ds-subtle text-ink-muted opacity-40 cursor-not-allowed',
                     ].join(' ')}
                   >
-                    <Link2 className="w-4 h-4 flex-shrink-0" />
+                    <BrokerLogo broker={broker} />
                     <span className="text-[10px] font-medium truncate w-full text-center leading-tight">
                       {config.displayName}
                     </span>
