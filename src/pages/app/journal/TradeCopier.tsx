@@ -23,6 +23,7 @@ import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
 import { BrokerAccordion } from '@/components/copyTrading/BrokerAccordion';
+import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
 import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
 
@@ -1038,7 +1039,7 @@ export default function TradeCopier() {
             {hasAnyConnection ? (
               <>
                 <SectionCard>
-                  <CopyPanel portfolios={brokerPortfolios} />
+                  <CopyTradingDashboard />
                 </SectionCard>
                 <SectionCard>
                   <CopyHistorySection />
