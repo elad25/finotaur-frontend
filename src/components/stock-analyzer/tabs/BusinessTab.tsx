@@ -209,6 +209,8 @@ interface CompetitorData {
   threat: 'HIGH THREAT' | 'MEDIUM' | 'LOW';
 }
 
+const ANTHROPIC_BUSINESS_ENABLED = import.meta.env.VITE_ENABLE_ANTHROPIC_BUSINESS === 'true';
+
 const competitorCache = new Map<string, { data: CompetitorData[]; timestamp: number }>();
 const COMPETITOR_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -273,6 +275,88 @@ Rules:
     throw new Error('No valid competitors');
   } catch {
     return []; // Return empty — UI will handle gracefully
+  }
+}
+
+// =====================================================
+// ANTHROPIC BUSINESS ANALYSIS — Server-side pipeline
+// =====================================================
+// Returns the full analysis from the 3-step Anthropic pipeline,
+// or null if the flag is off, the request fails, or the key is missing.
+// Callers must fall back to fetchCompetitorsAI on null.
+// =====================================================
+
+interface AnthropicCompetitor {
+  name: string;
+  ticker: string;
+  threat: 'high' | 'medium' | 'low';
+  revenue_usd_m: number | null;
+  growth_pct: number | null;
+  comments: string;
+}
+
+interface AnthropicBusinessResult {
+  sector_context: string;
+  competitors: AnthropicCompetitor[];
+  moat: {
+    factors: { name: string; score: number; rationale: string }[];
+    overall_score: number;
+    narrative: string;
+  };
+  sources: { title: string; url: string }[];
+  meta: {
+    cache_hits: { sector: boolean; competitors: boolean; moat: boolean };
+    total_cost_usd: number;
+    models_used: string[];
+  };
+}
+
+// Map Anthropic server shape (lowercase threat, `comments`) → existing CompetitorData
+// (uppercase threat enum, `description`) so the rest of the BusinessTab UI stays unchanged.
+function normalizeAnthropicCompetitor(c: AnthropicCompetitor): CompetitorData {
+  const threatMap: Record<AnthropicCompetitor['threat'], CompetitorData['threat']> = {
+    high:   'HIGH THREAT',
+    medium: 'MEDIUM',
+    low:    'LOW',
+  };
+  return {
+    name:        c.name,
+    ticker:      c.ticker,
+    description: c.comments,
+    threat:      threatMap[c.threat] ?? 'MEDIUM',
+  };
+}
+
+async function fetchBusinessAnalysisAI(
+  data: StockData,
+  signal?: AbortSignal,
+): Promise<AnthropicBusinessResult | null> {
+  if (!ANTHROPIC_BUSINESS_ENABLED) return null;
+
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+  try {
+    const response = await authFetch(`${API_BASE}/api/anthropic/stock-analyzer/business`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        ticker:    data.ticker,
+        name:      data.name,
+        sector:    data.sector,
+        industry:  data.industry,
+        marketCap: data.marketCap,
+        financials: {
+          grossMargin: data.grossMargin,
+          roe:         data.roe,
+        },
+      }),
+    });
+
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
   }
 }
 
@@ -592,9 +676,25 @@ export const BusinessTab = memo(({ data }: { data: StockData }) => {
   useEffect(() => {
     const controller = new AbortController();
     setCompetitorsLoading(true);
-    fetchCompetitorsAI(data, controller.signal)
-      .then(setCompetitors)
-      .finally(() => setCompetitorsLoading(false));
+
+    (async () => {
+      try {
+        // Try Anthropic pipeline first when feature flag is on
+        if (ANTHROPIC_BUSINESS_ENABLED) {
+          const anthropicResult = await fetchBusinessAnalysisAI(data, controller.signal);
+          if (anthropicResult?.competitors && anthropicResult.competitors.length > 0) {
+            setCompetitors(anthropicResult.competitors.map(normalizeAnthropicCompetitor));
+            return;
+          }
+        }
+        // Fall back to existing OpenAI/aiProxy path
+        const fallback = await fetchCompetitorsAI(data, controller.signal);
+        setCompetitors(fallback);
+      } finally {
+        setCompetitorsLoading(false);
+      }
+    })();
+
     return () => controller.abort();
   }, [data.ticker]);
 
