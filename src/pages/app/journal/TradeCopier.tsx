@@ -17,7 +17,7 @@ import { useTradovate } from '@/hooks/useTradovate';
 import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
-import TradovateConnectModal from '@/components/TradovateConnectModal';
+import { AddConnectionModal } from '@/components/copyTrading/AddConnectionModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -929,13 +929,13 @@ export default function TradeCopier() {
     const m = new Map<BrokerName, BrokerConnection[]>();
     for (const b of (Object.keys(BROKER_CONFIGS) as BrokerName[])) {
       if (b === 'manual') continue;
-      if (BROKER_CONFIGS[b].status !== 'available') continue;
-      m.set(b, connections.filter((c: BrokerConnection) => c.broker === b));
+      const conns = connections.filter((c: BrokerConnection) => c.broker === b);
+      if (conns.length > 0) m.set(b, conns);
     }
     return m;
   }, [connections]);
 
-  const nonEmptyBrokerCount = [...byBroker.values()].filter(v => v.length > 0).length;
+  const nonEmptyBrokerCount = byBroker.size;
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showModal, setShowModal] = useState(false);
@@ -1004,32 +1004,41 @@ export default function TradeCopier() {
               </div>
               <button
                 onClick={() => setShowModal(true)}
-                className="inline-flex items-center gap-ds-2 rounded-lg bg-gold-primary hover:bg-[var(--gold-hover)] text-ink-on-gold px-ds-3 py-ds-2 text-sm font-medium transition-colors duration-base"
+                className="inline-flex items-center gap-1.5 rounded-md bg-transparent border border-gold-border hover:bg-gold-primary/10 hover:border-gold-primary text-gold-primary px-ds-3 py-1.5 text-xs font-medium transition-all duration-base"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Connect new broker
               </button>
             </div>
 
-            <div className="flex items-center gap-ds-2 mb-ds-4 bg-surface-1 border border-border-ds-subtle rounded-md px-ds-3 py-ds-2">
-              <Shield className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
-              <span className="text-xs text-ink-secondary">
-                Credentials encrypted with AES-256 — we never store plaintext passwords.
-              </span>
-            </div>
-
-            <div className="space-y-ds-2">
-              {[...byBroker.entries()].map(([broker, conns]) => (
-                <BrokerAccordion
-                  key={broker}
-                  broker={broker}
-                  connections={conns}
-                  liveCredentialIds={liveCredentialIds}
-                  defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
-                  onDisconnect={disconnectBroker}
-                />
-              ))}
-            </div>
+            {byBroker.size === 0 ? (
+              <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
+                <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
+                  <Link2 className="w-5 h-5 text-gold-primary" />
+                </div>
+                <p className="text-sm text-ink-secondary">No broker connected yet.</p>
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-transparent border border-gold-border hover:bg-gold-primary/10 hover:border-gold-primary text-gold-primary px-ds-3 py-1.5 text-xs font-medium transition-all duration-base"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Connect a broker
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-ds-2">
+                {[...byBroker.entries()].map(([broker, conns]) => (
+                  <BrokerAccordion
+                    key={broker}
+                    broker={broker}
+                    connections={conns}
+                    liveCredentialIds={liveCredentialIds}
+                    defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
+                    onDisconnect={disconnectBroker}
+                  />
+                ))}
+              </div>
+            )}
           </SectionCard>
         )}
 
@@ -1071,9 +1080,7 @@ export default function TradeCopier() {
       </div>
 
       {showModal && (
-        <TradovateConnectModal
-          onClose={() => setShowModal(false)}
-        />
+        <AddConnectionModal onClose={() => setShowModal(false)} />
       )}
     </div>
   );
