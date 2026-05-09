@@ -20,6 +20,11 @@ export interface Portfolio {
   is_active: boolean;
   created_at: string;
   connection_label: string | null;
+  // Risk fields (may be null if not yet set)
+  kill_switch_active:      boolean | null;
+  max_daily_loss_usd:      number | null;
+  max_position_size:       number | null;
+  max_contracts_per_trade: number | null;
 }
 
 // ── Virtual MANUAL portfolio ID — stable, never conflicts with real UUIDs ──
@@ -29,7 +34,7 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
   // ── 1. Try portfolios table first ──────────────────────────
   const { data, error } = await supabase
     .from('portfolios')
-    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label')
+    .select('id,name,description,tradovate_account_id,tradovate_account_spec,environment,source,is_active,created_at,connection_label,kill_switch_active,max_daily_loss_usd,max_position_size,max_contracts_per_trade')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('created_at', { ascending: true });
@@ -76,6 +81,10 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         is_active: true,
         created_at: new Date().toISOString(),
         connection_label: c.connection_label ?? null,
+        kill_switch_active: null,
+        max_daily_loss_usd: null,
+        max_position_size: null,
+        max_contracts_per_trade: null,
       }));
     }
   }
@@ -108,6 +117,10 @@ async function fetchPortfolios(userId: string): Promise<Portfolio[]> {
         is_active: true,
         created_at: new Date().toISOString(),
         connection_label: null,
+        kill_switch_active: null,
+        max_daily_loss_usd: null,
+        max_position_size: null,
+        max_contracts_per_trade: null,
       },
       ...portfolios,
     ];

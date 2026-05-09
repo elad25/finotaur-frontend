@@ -4,8 +4,8 @@
 // Leader dropdown, inline Ratio/Cross editing, FLATTEN double-check.
 // ═══════════════════════════════════════════════════════════════
 
-import { memo, useMemo, useState } from 'react';
-import { AlertOctagon, Crown, Search, Users } from 'lucide-react';
+import { memo, useMemo, useState, useEffect, useRef } from 'react';
+import { AlertOctagon, ChevronDown, Crown, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
@@ -34,6 +34,29 @@ interface AccountRowData {
   following: boolean;
   portfolioId: string | null;
 }
+
+// ─── Popular futures contracts for autocomplete ───────────────
+
+const POPULAR_CONTRACTS = [
+  { symbol: 'NQ',  name: 'E-Mini Nasdaq 100' },
+  { symbol: 'MNQ', name: 'Micro E-Mini Nasdaq 100' },
+  { symbol: 'ES',  name: 'E-Mini S&P 500' },
+  { symbol: 'MES', name: 'Micro E-Mini S&P 500' },
+  { symbol: 'RTY', name: 'E-Mini Russell 2000' },
+  { symbol: 'M2K', name: 'Micro E-Mini Russell 2000' },
+  { symbol: 'YM',  name: 'E-Mini Dow' },
+  { symbol: 'MYM', name: 'Micro E-Mini Dow' },
+  { symbol: 'GC',  name: 'Gold Futures' },
+  { symbol: 'MGC', name: 'Micro Gold' },
+  { symbol: 'SI',  name: 'Silver Futures' },
+  { symbol: 'SIL', name: 'Micro Silver' },
+  { symbol: 'CL',  name: 'Crude Oil' },
+  { symbol: 'MCL', name: 'Micro Crude Oil' },
+  { symbol: 'NG',  name: 'Natural Gas' },
+  { symbol: 'BTC', name: 'Bitcoin Futures' },
+  { symbol: 'MBT', name: 'Micro Bitcoin' },
+  { symbol: 'ETH', name: 'Ether Futures' },
+] as const;
 
 // ─── Table column grid (shared by header + rows) ──────────────
 // 13 cols: crown · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
@@ -228,6 +251,7 @@ export function CopyTradingDashboard() {
   const { portfolios } = usePortfolios();
   const { snapshotFor } = useAccountSnapshots();
   const [instrument, setInstrument] = useState('NQ');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
   const { rules, updateRule } = useCopyRules();
   const [flattenDialog, setFlattenDialog] = useState<{
@@ -244,6 +268,20 @@ export function CopyTradingDashboard() {
   const [leaderId, setLeaderId] = useState<string | null>(
     tradovateConnections[0]?.id ?? null,
   );
+  const [leaderOpen, setLeaderOpen] = useState(false);
+  const leaderRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside handler for leader popover
+  useEffect(() => {
+    if (!leaderOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (leaderRef.current && !leaderRef.current.contains(e.target as Node)) {
+        setLeaderOpen(false);
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [leaderOpen]);
 
   // Resolve leader's portfolio id for copy-rule lookup
   const leaderConnection = connections.find((c) => c.id === leaderId);
@@ -252,6 +290,11 @@ export function CopyTradingDashboard() {
     (p) => (p as any).tradovate_account_id?.toString() === leaderConnection?.account_id,
   );
   const leaderPortfolioId = leaderPortfolio?.id ?? null;
+
+  const leaderName = useMemo(() => {
+    const c = connections.find((conn) => conn.id === leaderId);
+    return c?.account_name ?? c?.account_id ?? 'Select leader';
+  }, [connections, leaderId]);
 
   // Helper: find rule for a given follower portfolio
   function ruleFor(targetPortfolioId: string | null): CopyRule | null {
@@ -331,6 +374,13 @@ export function CopyTradingDashboard() {
   const openPositionsCount = rows.filter((r) => (r.position ?? 0) !== 0).length;
   const accountsWithPositions = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
+  // ── Contract autocomplete suggestions ─────────────────────────
+  const filteredContracts = POPULAR_CONTRACTS.filter(
+    (c) =>
+      instrument.length === 0 ||
+      c.symbol.toUpperCase().includes(instrument.toUpperCase()),
+  ).slice(0, 8);
+
   // ── Flatten handlers ──────────────────────────────────────────
   const handleFlattenAll = () => {
     setFlattenDialog({ open: true, scope: 'all' });
@@ -364,37 +414,104 @@ export function CopyTradingDashboard() {
     <div>
       {/* ── 1. Asset selector + action bar ── */}
       <div className="flex items-center justify-between mb-ds-4 gap-ds-4">
+        {/* ── Active Contract with typeahead ── */}
         <div className="flex items-center gap-ds-3">
           <span className="text-xs text-ink-secondary uppercase tracking-wider">
             Active Contract
           </span>
-          <div className="flex items-center gap-1.5 px-ds-3 py-ds-2 rounded-md bg-surface-1 border border-border-ds-subtle">
-            <Search className="w-3.5 h-3.5 text-ink-tertiary" />
-            <input
-              type="text"
-              value={instrument}
-              onChange={(e) => setInstrument(e.target.value.toUpperCase())}
-              placeholder="NQ, ES, GC..."
-              className="bg-transparent border-0 outline-none text-sm text-ink-primary w-24 placeholder:text-ink-tertiary"
-            />
+          <div className="relative">
+            <div className="flex items-center gap-1.5 px-ds-3 py-ds-2 rounded-md bg-surface-1 border border-border-ds-subtle min-w-[180px]">
+              <Search className="w-3.5 h-3.5 text-ink-tertiary" />
+              <input
+                type="text"
+                value={instrument}
+                onChange={(e) => {
+                  setInstrument(e.target.value.toUpperCase());
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                placeholder="NQ, ES, GC..."
+                className="bg-transparent border-0 outline-none text-sm font-mono tabular-nums text-ink-primary w-24 placeholder:text-ink-tertiary"
+              />
+            </div>
+
+            {showSuggestions && filteredContracts.length > 0 && (
+              <div className="absolute top-full mt-1 left-0 z-10 w-[280px] rounded-md bg-surface-1 border border-border-ds-subtle shadow-2xl overflow-hidden">
+                {filteredContracts.map((c) => (
+                  <button
+                    key={c.symbol}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setInstrument(c.symbol);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full flex items-center justify-between px-ds-3 py-ds-2 hover:bg-surface-2 transition-colors duration-base text-left"
+                  >
+                    <span className="text-sm font-mono tabular-nums text-ink-primary">
+                      {c.symbol}
+                    </span>
+                    <span className="text-[11px] text-ink-secondary truncate ml-ds-2">
+                      {c.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex items-center gap-ds-2">
-          {/* Leader dropdown */}
-          <div className="flex items-center gap-ds-2">
+          {/* ── Leader custom dropdown ── */}
+          <div className="flex items-center gap-ds-2" ref={leaderRef}>
             <span className="text-[10px] uppercase tracking-wider text-ink-secondary">Leader</span>
-            <select
-              value={leaderId ?? ''}
-              onChange={(e) => setLeaderId(e.target.value || null)}
-              className="px-ds-3 py-1.5 rounded-md bg-surface-1 border border-border-ds-subtle text-sm text-ink-primary focus:border-gold-border outline-none transition-colors duration-base min-w-[180px]"
-            >
-              {tradovateConnections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.account_name ?? c.account_id}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                onClick={() => setLeaderOpen((v) => !v)}
+                className="flex items-center gap-ds-2 px-ds-3 py-ds-2 rounded-lg bg-gold-primary/5 border border-gold-border hover:bg-gold-primary/10 transition-colors duration-base min-w-[200px]"
+              >
+                <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
+                <span className="text-sm text-ink-primary truncate flex-1 text-left">
+                  {leaderName}
+                </span>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-ink-secondary transition-transform duration-base ${
+                    leaderOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {leaderOpen && (
+                <div className="absolute top-full mt-1 left-0 z-10 w-[280px] rounded-lg bg-surface-1 border border-border-ds-subtle shadow-2xl overflow-hidden">
+                  {tradovateConnections.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        setLeaderId(c.id);
+                        setLeaderOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-ds-2 px-ds-3 py-ds-2 hover:bg-surface-2 transition-colors duration-base text-left ${
+                        c.id === leaderId ? 'bg-gold-primary/10' : ''
+                      }`}
+                    >
+                      {c.id === leaderId && (
+                        <Crown className="w-3 h-3 text-gold-primary flex-shrink-0" />
+                      )}
+                      <span
+                        className={`text-sm text-ink-primary truncate flex-1 ${
+                          c.id !== leaderId ? 'ml-[18px]' : ''
+                        }`}
+                      >
+                        {c.account_name ?? c.account_id}
+                      </span>
+                      <span className="text-[10px] uppercase tracking-wider text-ink-tertiary flex-shrink-0">
+                        {c.environment}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* FLATTEN ALL */}
