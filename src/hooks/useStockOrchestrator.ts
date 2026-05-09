@@ -94,7 +94,7 @@ async function generateTabAI(
   signal?: AbortSignal
 ): Promise<any> {
   try {
-    const res = await fetch(`/api/stock-analysis/${stockData.ticker}/${tabType}`, {
+    const res = await authFetch(`/api/stock-analysis/${stockData.ticker}/${tabType}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal,
@@ -291,7 +291,7 @@ export function useStockOrchestrator(): OrchestratorReturn {
   const refreshPrice = useCallback(async () => {
     if (!state.stockData?.ticker) return;
     try {
-      const res = await fetch(`/api/shared-quote/${state.stockData.ticker}`);
+      const res = await authFetch(`/api/shared-quote/${state.stockData.ticker}`);
       if (!res.ok) return;
       const json = await res.json();
       if (json.success && json.data) {

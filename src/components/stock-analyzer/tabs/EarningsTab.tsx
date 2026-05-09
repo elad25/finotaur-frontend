@@ -228,7 +228,7 @@ async function fetchEarningsData(
 ): Promise<EarningsData> {
   const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
-  const response = await fetch(`${API_BASE}/api/earnings-analysis/${data.ticker}`, {
+  const response = await authFetch(`${API_BASE}/api/earnings-analysis/${data.ticker}`, {
     method: 'GET',
     headers: { 'Content-Type': 'application/json' },
     signal,
@@ -911,7 +911,7 @@ export const EarningsTab = memo(({ data, prefetchedData }: { data: StockData; pr
     (async () => {
       try {
         // Try 10-Q first (quarterly), then 10-K (annual)
-        const res = await fetch(`${API_BASE}/api/sec/filings?symbol=${data.ticker}&forms=10-Q,10-K&limit=1`);
+        const res = await authFetch(`${API_BASE}/api/sec/filings?symbol=${data.ticker}&forms=10-Q,10-K&limit=1`);
         if (!res.ok) return;
         const json = await res.json();
         const filing = json?.filings?.[0];

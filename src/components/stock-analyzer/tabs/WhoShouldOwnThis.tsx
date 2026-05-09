@@ -132,7 +132,7 @@ investorTypes: use ONLY from ["Defensive", "Income", "Value", "GARP", "Growth", 
 timeHorizon: "Short-term" | "Medium-term" | "Long-term"
 idealFor: 2 items max. notFor: 2 items max. profileSummary: 1 sentence. No asterisks, no bold.`;
 
-  const res = await fetch(`${API_BASE}/api/ai-proxy/chat`, {
+  const res = await authFetch(`${API_BASE}/api/ai-proxy/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,

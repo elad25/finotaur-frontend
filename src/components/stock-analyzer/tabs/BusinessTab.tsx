@@ -21,6 +21,7 @@ import type { StockData } from '@/types/stock-analyzer.types';
 import { C } from '@/constants/stock-analyzer.constants';
 import { Card, SectionHeader, BarMeter } from '../ui';
 import { fmtPct, fmtBig, isValid, getBusinessModelType } from '@/utils/stock-analyzer.utils';
+import { authFetch } from '@/utils/authFetch';
 
 // =====================================================
 // FINOTAUR AI BADGE
@@ -239,7 +240,7 @@ Rules:
 - Do NOT include ${data.ticker} itself`;
 
   try {
-    const response = await fetch(`${API_BASE}/api/ai-proxy/chat`, {
+    const response = await authFetch(`${API_BASE}/api/ai-proxy/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal,
@@ -427,7 +428,7 @@ function useCompetitorLogo(ticker: string): { logoUrl: string | null; loading: b
 
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/market-data/company/${ticker}`);
+        const res = await authFetch(`${API_BASE}/api/market-data/company/${ticker}`);
         if (!res.ok) throw new Error('fetch failed');
         const data = await res.json();
         const logo = data?.logo || null;
