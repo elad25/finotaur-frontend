@@ -72,14 +72,21 @@ const CopyAccountRow = memo(function CopyAccountRow({
   rule,
   onFlatten,
   onUpdateRule,
+  onToggleFollow,
+  canFollow,
 }: {
   row: AccountRowData;
   isLeader: boolean;
   rule: CopyRule | null;
   onFlatten: () => void;
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
+  onToggleFollow: () => Promise<void>;
+  canFollow: boolean;
 }) {
   const ratioValue = rule?.ratio ?? 1;
+  // I.4: visual state binds to the rule, not the broker connection. row.following
+  // (= broker_connections.is_active) was incorrect — toggle reflects copy state.
+  const isFollowing = rule?.is_active ?? false;
 
   return (
     <div
@@ -94,19 +101,19 @@ const CopyAccountRow = memo(function CopyAccountRow({
       <div className="flex items-center">
         {!isLeader && (
           <button
-            onClick={() => {
-              /* TODO Sprint 3c */
-            }}
+            onClick={onToggleFollow}
+            disabled={!canFollow}
             className={`w-9 h-5 rounded-full transition-colors duration-base ${
-              row.following
+              isFollowing
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            }`}
+            } disabled:opacity-30 disabled:cursor-not-allowed`}
             aria-label="Toggle follow"
+            title={canFollow ? undefined : 'Select a leader account first'}
           >
             <span
               className={`block w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
-                row.following ? 'translate-x-5' : 'translate-x-1'
+                isFollowing ? 'translate-x-5' : 'translate-x-1'
               }`}
             />
           </button>
@@ -253,7 +260,7 @@ export function CopyTradingDashboard() {
   const [instrument, setInstrument] = useState('NQ');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
-  const { rules, updateRule } = useCopyRules();
+  const { rules, updateRule, createRule } = useCopyRules();
   const [flattenDialog, setFlattenDialog] = useState<{
     open: boolean;
     scope: 'all' | 'single';
@@ -590,17 +597,33 @@ export function CopyTradingDashboard() {
 
         {/* Rows */}
         {rows.map((row) => {
-          const rule = ruleFor(row.portfolioId);
+          const rule    = ruleFor(row.portfolioId);
+          const canFollow = !!leaderPortfolioId && !!row.portfolioId && row.id !== leaderId;
           return (
             <CopyAccountRow
               key={row.id}
               row={row}
               isLeader={row.id === leaderId}
               rule={rule}
+              canFollow={canFollow}
               onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
               onUpdateRule={async (patch) => {
                 if (rule) {
                   await updateRule({ id: rule.id, patch });
+                }
+              }}
+              onToggleFollow={async () => {
+                // I.4: toggle follow. If a rule exists for this (leader → target)
+                // pair, flip is_active. If not, create one with is_active=true.
+                if (rule) {
+                  await updateRule({ id: rule.id, patch: { is_active: !rule.is_active } });
+                } else if (leaderPortfolioId && row.portfolioId) {
+                  await createRule({
+                    source_portfolio_id: leaderPortfolioId,
+                    target_portfolio_id: row.portfolioId,
+                    is_active:           true,
+                    ratio:               1,
+                  });
                 }
               }}
             />
