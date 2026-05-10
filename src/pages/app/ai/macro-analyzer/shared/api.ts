@@ -22,6 +22,13 @@ const API_BASE = _apiHost.endsWith('/api/macro-analyzer')
   ? _apiHost
   : `${_apiHost.replace(/\/$/, '')}/api/macro-analyzer`;
 
+// Anthropic mirror base — same host, /api/anthropic/macro-analyzer prefix.
+// Used when a per-feature flag enables the Anthropic path (Phase 5 N1.5).
+const _bareHost = _apiHost.replace(/\/api\/macro-analyzer$/, '').replace(/\/$/, '');
+const ANTHROPIC_MACRO_BASE = `${_bareHost}/api/anthropic/macro-analyzer`;
+const ANTHROPIC_MACRO_MASTER =
+  import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_ANALYZER === 'true';
+
 // =====================================================
 // GENERIC FETCHER
 // =====================================================
@@ -128,7 +135,12 @@ export const fetchISMSectorAI = () => apiFetch<AIResult | null>('/ism/ai-sector-
 export const fetchGDPIntelligence = () => apiFetch<GDPIntelligenceData>('/gdp/intelligence');
 
 export const generateGDPIntelligence = async () => {
-  const res = await authFetch(`${API_BASE}/gdp/intelligence`, { method: 'POST' });
+  const useAnthropic = ANTHROPIC_MACRO_MASTER ||
+    import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_GDP === 'true';
+  const url = useAnthropic
+    ? `${ANTHROPIC_MACRO_BASE}/gdp/intelligence`
+    : `${API_BASE}/gdp/intelligence`;
+  const res = await authFetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`GDP AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'GDP AI generation failed');
@@ -138,7 +150,12 @@ export const generateGDPIntelligence = async () => {
 // CPI Deep Intelligence (cached server-side, 1 call/2hrs for 10K users)
 export const fetchCPIIntelligence = () => apiFetch<CPIIntelligenceData>('/cpi/intelligence');
 export const generateCPIIntelligence = async () => {
-  const res = await authFetch(`${API_BASE}/cpi/intelligence`, { method: 'POST' });
+  const useAnthropic = ANTHROPIC_MACRO_MASTER ||
+    import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_CPI === 'true';
+  const url = useAnthropic
+    ? `${ANTHROPIC_MACRO_BASE}/cpi/intelligence`
+    : `${API_BASE}/cpi/intelligence`;
+  const res = await authFetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`CPI AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'CPI AI generation failed');
@@ -148,7 +165,12 @@ export const generateCPIIntelligence = async () => {
 // PPI Deep Intelligence (cached server-side, 1 call/2hrs for 10K users)
 export const fetchPPIIntelligence = () => apiFetch<PPIIntelligenceData>('/ppi/intelligence');
 export const generatePPIIntelligence = async () => {
-  const res = await authFetch(`${API_BASE}/ppi/intelligence`, { method: 'POST' });
+  const useAnthropic = ANTHROPIC_MACRO_MASTER ||
+    import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_PPI === 'true';
+  const url = useAnthropic
+    ? `${ANTHROPIC_MACRO_BASE}/ppi/intelligence`
+    : `${API_BASE}/ppi/intelligence`;
+  const res = await authFetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`PPI AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'PPI AI generation failed');
@@ -156,7 +178,12 @@ export const generatePPIIntelligence = async () => {
 };
 
 export const generateISMSectorAI = async () => {
-  const res = await authFetch(`${API_BASE}/ism/ai-sector-analysis`, { method: 'POST' });
+  const useAnthropic = ANTHROPIC_MACRO_MASTER ||
+    import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_ISM === 'true';
+  const url = useAnthropic
+    ? `${ANTHROPIC_MACRO_BASE}/ism/ai-sector-analysis`
+    : `${API_BASE}/ism/ai-sector-analysis`;
+  const res = await authFetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`ISM AI analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'ISM AI generation failed');
@@ -166,7 +193,12 @@ export const generateISMSectorAI = async () => {
 // FOMC Minutes Intelligence (cached server-side, 1 call/24h for 10K users)
 export const fetchFOMCMinutes = () => apiFetch<AIResult | null>('/fed/fomc-minutes');
 export const generateFOMCMinutes = async () => {
-  const res = await authFetch(`${API_BASE}/fed/fomc-minutes`, { method: 'POST' });
+  const useAnthropic = ANTHROPIC_MACRO_MASTER ||
+    import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_FOMC === 'true';
+  const url = useAnthropic
+    ? `${ANTHROPIC_MACRO_BASE}/fed/fomc-minutes`
+    : `${API_BASE}/fed/fomc-minutes`;
+  const res = await authFetch(url, { method: 'POST' });
   if (!res.ok) throw new Error(`FOMC Minutes analysis failed: ${res.status}`);
   const json = await res.json();
   if (!json.success) throw new Error(json.error || 'FOMC Minutes generation failed');
