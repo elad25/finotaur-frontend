@@ -55,11 +55,39 @@ export function useCopyRules() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio-copy-rules'] }),
   });
 
+  // I.4 (2026-05-10): create a new copy rule. Used by the follow toggle when
+  // no rule exists for a (leader → follower) pair yet. user_id is left out:
+  // RLS + the table default fill it from auth.uid().
+  const createRule = useMutation({
+    mutationFn: async (input: {
+      source_portfolio_id: string;
+      target_portfolio_id: string;
+      ratio?:              number;
+      is_active?:          boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from('portfolio_copy_rules')
+        .insert({
+          source_portfolio_id: input.source_portfolio_id,
+          target_portfolio_id: input.target_portfolio_id,
+          ratio:               input.ratio     ?? 1,
+          is_active:           input.is_active ?? true,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as CopyRule;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio-copy-rules'] }),
+  });
+
   return {
     rules:      data ?? [],
     isLoading,
     error,
     updateRule: updateRule.mutateAsync,
     isUpdating: updateRule.isPending,
+    createRule: createRule.mutateAsync,
+    isCreating: createRule.isPending,
   };
 }
