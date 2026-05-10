@@ -1,13 +1,14 @@
 // src/hooks/useFlattenActions.ts
 // ═══════════════════════════════════════════════════════════════
 // Hook for calling the FLATTEN ALL / flatten-single endpoints.
-// Auth: currently uses ENGINE_SECRET (x-engine-secret header) via the
-// Vite proxy — the server router guards with requireSecret.
-// TODO: switch to Supabase user JWT Bearer once user JWT middleware is
-// wired into copy-engine routes (security review needed).
+// Auth: Supabase user JWT (Bearer) via authFetch. Server I.3 (2026-05-10,
+// PR #15) added requireAuth + per-user rate limit + ownership check on
+// broker_connections.user_id; ENGINE_SECRET path is now admin-only at
+// /api/copy-engine/admin/flatten-all.
 // ═══════════════════════════════════════════════════════════════
 
 import { useState } from 'react';
+import { authFetch } from '@/utils/authFetch';
 
 interface FlattenResult {
   ok: boolean;
@@ -24,10 +25,9 @@ export function useFlattenActions() {
   async function callEndpoint(path: string): Promise<FlattenResult> {
     setIsLoading(true);
     try {
-      const res = await fetch(path, {
+      const res = await authFetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // TODO: add Authorization Bearer once user JWT middleware is wired
       });
       const data: FlattenResult = await res.json();
       setLastResult(data);
