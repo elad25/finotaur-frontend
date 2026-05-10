@@ -635,10 +635,23 @@ function AITab() {
   const positioning = useServerAI('positioning');
   const risk = useServerAI('risk');
 
-  // Auto-generate regime analysis when data is ready and no cached response
+  // Auto-generate all three AI sections on mount when data is ready and cache is empty.
+  // Backend cache (1h TTL) ensures only 1 Anthropic call per section per hour for all users.
   useEffect(() => {
     if (overview && !regime.response && !regime.isLoading && !regime.error) {
       regime.generate();
+    }
+  }, [overview]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (overview && !positioning.response && !positioning.isLoading && !positioning.error) {
+      positioning.generate();
+    }
+  }, [overview]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (overview && !risk.response && !risk.isLoading && !risk.error) {
+      risk.generate();
     }
   }, [overview]); // eslint-disable-line react-hooks/exhaustive-deps
 

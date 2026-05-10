@@ -207,21 +207,16 @@ export default function StockAnalyzer() {
                 <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
               </div>
 
+              {/* All tabs mount simultaneously so their useEffect fetches fire in parallel.
+                  CSS hidden keeps inactive tabs invisible without unmounting them.
+                  OptionsTab is excluded from pre-load (no AI fetch on mount; access-gated). */}
               <div className="min-h-[400px]">
-                {activeTab === 'overview' && <OverviewTab data={stockData} />}
-                {activeTab === 'business' && <BusinessTab data={stockData} />}
-                {activeTab === 'financials' && (
-                  <FinancialsTab data={stockData} />
-                )}
-                {activeTab === 'valuation' && (
-                  <ValuationTab data={stockData} />
-                )}
-                {activeTab === 'wallstreet' && (
-                  <WallStreetTab data={stockData} />
-                )}
-                {activeTab === 'earnings' && (
-                  <EarningsTab data={stockData} />
-                )}
+                <div hidden={activeTab !== 'overview'}><OverviewTab data={stockData} /></div>
+                <div hidden={activeTab !== 'business'}><BusinessTab data={stockData} /></div>
+                <div hidden={activeTab !== 'financials'}><FinancialsTab data={stockData} /></div>
+                <div hidden={activeTab !== 'valuation'}><ValuationTab data={stockData} /></div>
+                <div hidden={activeTab !== 'wallstreet'}><WallStreetTab data={stockData} /></div>
+                <div hidden={activeTab !== 'earnings'}><EarningsTab data={stockData} /></div>
                 {activeTab === 'options' && (() => {
                   const optionsAccess = canAccessPage('options_tab');
                   if (!optionsAccess.hasAccess) {
