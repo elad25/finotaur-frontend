@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import dayjs from "dayjs";
 import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
+import { normalizeSymbol } from "@/utils/normalizeSymbol";
 import {
   calculateStatistics,
   groupBySymbol,
@@ -247,9 +248,9 @@ export default function StatisticsPage() {
     loadTrades();
   }, []);
 
-  // Extract filter options
+  // Extract filter options — group futures by root (MNQM6/MNQU6 → MNQ)
   const symbols = useMemo(() => {
-    return Array.from(new Set(trades.map((t) => t.symbol))).sort();
+    return Array.from(new Set(trades.map((t) => normalizeSymbol(t.symbol) || t.symbol))).sort();
   }, [trades]);
 
   const strategies = useMemo(() => {
@@ -270,9 +271,9 @@ export default function StatisticsPage() {
       filtered = filtered.filter((t) => dayjs(t.open_at).isAfter(minDate));
     }
 
-    // Symbol
+    // Symbol — match against normalized root so MNQ filter catches MNQM6/MNQU6/etc
     if (selectedSymbol !== "ALL") {
-      filtered = filtered.filter((t) => t.symbol === selectedSymbol);
+      filtered = filtered.filter((t) => normalizeSymbol(t.symbol) === selectedSymbol);
     }
 
     // Strategy
@@ -716,7 +717,8 @@ function DetailedCutsTab({ trades }: { trades: Trade[] }) {
 
 function AssetsTab({ trades }: { trades: Trade[] }) {
   const symbolData = useMemo(() => {
-    const data = groupBySymbol(trades);
+    const tradesWithRoot = trades.map((t) => ({ ...t, symbol: normalizeSymbol(t.symbol) || t.symbol }));
+    const data = groupBySymbol(tradesWithRoot);
     return data.sort((a, b) => b.netPnL - a.netPnL);
   }, [trades]);
 

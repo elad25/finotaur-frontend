@@ -188,13 +188,26 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       // L4 (F2): inspect business-level result. HTTP 200 ≠ business success —
       // tradovate-sync returns {synced, totalInserted, totalErrors} and a non-zero
       // totalErrors means the function caught an exception (e.g. TOKEN_EXPIRED).
-      const body = (data ?? {}) as { totalErrors?: number; totalInserted?: number };
+      // synced === 0 means the credentials query found 0 active broker_connections rows
+      // for this user+environment — i.e. the connection was deactivated (is_active=false)
+      // server-side without the frontend cache catching up. Treat as silent-fail and
+      // prompt for reconnect rather than the misleading "no new trades" success toast.
+      const body = (data ?? {}) as {
+        totalErrors?: number;
+        totalInserted?: number;
+        synced?: number;
+      };
       const totalErrors = body.totalErrors ?? 0;
       const totalInserted = body.totalInserted ?? 0;
+      const synced = body.synced ?? 0;
 
       if (totalErrors > 0) {
         toast.error('Sync failed — please reconnect your broker.');
         return { success: false, error: 'Connection requires re-authentication' };
+      }
+      if (synced === 0) {
+        toast.error('Sync failed — broker connection not active. Please reconnect.');
+        return { success: false, error: 'No active broker connection found' };
       }
       if (totalInserted > 0) {
         toast.success(`Sync complete — ${totalInserted} new trade${totalInserted === 1 ? '' : 's'} imported`);

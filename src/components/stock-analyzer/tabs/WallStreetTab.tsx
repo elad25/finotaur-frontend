@@ -65,6 +65,116 @@ interface WallStreetAIData {
 }
 
 // =====================================================
+// ANTHROPIC WALL STREET — Feature flag + types
+// =====================================================
+
+const ANTHROPIC_WALLSTREET_ENABLED = import.meta.env.VITE_ENABLE_ANTHROPIC_WALLSTREET === 'true';
+
+interface AnthropicAnalystOpinion {
+  firm: string;
+  analyst?: string;
+  rating: string;
+  price_target?: number;
+  date?: string;
+  summary: string;
+}
+
+interface AnthropicWallStreetResult {
+  bull_case: string;
+  bear_case: string;
+  thesis_tracker: {
+    consensus_shift_30d: string;
+    rating_changes: unknown[];
+    price_target_changes: unknown[];
+  };
+  finotaur_score_explanation: string;
+  analyst_opinions: AnthropicAnalystOpinion[];
+  sources: { title: string; url: string }[];
+  meta: { cache_hits: number; total_cost_usd: number; models_used: string[] };
+}
+
+// Map Anthropic server response → WallStreetAIData fields.
+// Fields the Anthropic endpoint doesn't cover (sentimentTrend, surpriseHistory,
+// score breakdown bars) remain undefined — the existing UI skips them gracefully.
+function normalizeAnthropicWallStreet(
+  result: AnthropicWallStreetResult,
+): Partial<WallStreetAIData> {
+  const ratingMap: Record<string, AnalystDetail['rating']> = {
+    buy:          'Buy',
+    'strong buy': 'Strong Buy',
+    outperform:   'Overweight',
+    overweight:   'Overweight',
+    hold:         'Hold',
+    neutral:      'Hold',
+    underperform: 'Underweight',
+    underweight:  'Underweight',
+    sell:         'Sell',
+    'strong sell': 'Strong Sell',
+  };
+
+  const analysts: AnalystDetail[] = result.analyst_opinions.map((op) => ({
+    firm:           op.firm,
+    analyst:        op.analyst ?? '',
+    rating:         ratingMap[op.rating.toLowerCase()] ?? 'Hold',
+    priceTarget:    op.price_target ?? 0,
+    previousTarget: null,
+    date:           op.date ?? '',
+    change:         'reiterated' as const,
+  }));
+
+  return {
+    analysts,
+    // Populate topBull / topBear from the narrative fields
+    topBull: {
+      firm:   'FINOTAUR AI',
+      target: 0,
+      thesis: result.bull_case,
+    },
+    topBear: {
+      firm:   'FINOTAUR AI',
+      target: 0,
+      thesis: result.bear_case,
+    },
+    consensusShift: result.thesis_tracker.consensus_shift_30d as WallStreetAIData['consensusShift'],
+    // Stash raw for the score explanation + analyst_opinions disclaimer rendering
+    _anthropicRaw: result,
+  } as Partial<WallStreetAIData> & { _anthropicRaw: AnthropicWallStreetResult };
+}
+
+async function fetchWallStreetAnalysisAI(
+  data: StockData,
+  signal?: AbortSignal,
+): Promise<AnthropicWallStreetResult | null> {
+  if (!ANTHROPIC_WALLSTREET_ENABLED) return null;
+
+  const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+
+  try {
+    const response = await authFetch(`${API_BASE}/api/anthropic/stock-analyzer/wallstreet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        ticker:   data.ticker,
+        name:     data.name,
+        sector:   data.sector,
+        industry: data.industry,
+        price:    data.price,
+        analystBreakdown: data.analystBreakdown,
+        analystRating:    data.analystRating,
+        numberOfAnalysts: data.numberOfAnalysts,
+        priceTarget:      data.priceTarget,
+      }),
+    });
+
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+// =====================================================
 // CACHE
 // =====================================================
 
@@ -707,6 +817,22 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
     setError(null);
 
     try {
+      // Try Anthropic server-side pipeline first when feature flag is on
+      if (ANTHROPIC_WALLSTREET_ENABLED) {
+        const anthropicResult = await fetchWallStreetAnalysisAI(data, controller.signal);
+        if (anthropicResult) {
+          const normalized = normalizeAnthropicWallStreet(anthropicResult);
+          const merged: WallStreetAIData = {
+            ...(wallStreetCache.get(ticker)?.data ?? {} as WallStreetAIData),
+            ...normalized,
+          } as WallStreetAIData;
+          wallStreetCache.set(ticker, { data: merged, generatedAt: new Date().toISOString() });
+          if (tickerRef.current === ticker) setAiData(merged);
+          return;
+        }
+      }
+
+      // Fall back to existing OpenAI/aiProxy path
       const result = await fetchWallStreetData(data, controller.signal);
       wallStreetCache.set(ticker, { data: result, generatedAt: new Date().toISOString() });
       // Save to server for next user!
@@ -925,6 +1051,24 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
                 <p className="text-[13px] text-[#A0A0A0] leading-[1.85]">{aiData.score.rationale}</p>
               </div>
             )}
+
+            {/* FINOTAUR Score Explanation — Anthropic pipeline only */}
+            {(() => {
+              const raw = (aiData as any)?._anthropicRaw as AnthropicWallStreetResult | undefined;
+              if (!raw?.finotaur_score_explanation) return null;
+              return (
+                <div
+                  className="mt-4 p-4 rounded-xl"
+                  style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-[#C9A646]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#C9A646]">FINOTAUR AI Score Explanation</span>
+                  </div>
+                  <p className="text-[13px] text-[#A0A0A0] leading-[1.85]">{raw.finotaur_score_explanation}</p>
+                </div>
+              );
+            })()}
           </div>
         </Card>
       )}
@@ -1012,6 +1156,89 @@ export const WallStreetTab = memo(({ data, prefetchedData }: { data: StockData; 
           </div>
         </Card>
       )}
+
+      {/* ============================================= */}
+      {/* 5b. Analyst Opinions (Anthropic pipeline)    */}
+      {/* ============================================= */}
+      {(() => {
+        const raw = (aiData as any)?._anthropicRaw as AnthropicWallStreetResult | undefined;
+        const opinions = raw?.analyst_opinions;
+        if (!opinions || opinions.length === 0) return null;
+
+        const ratingColor: Record<string, string> = {
+          Buy: '#22C55E', 'Strong Buy': '#166534', Outperform: '#22C55E', Overweight: '#22C55E',
+          Hold: '#F59E0B', Neutral: '#F59E0B',
+          Sell: '#EF4444', 'Strong Sell': '#991B1B', Underperform: '#EF4444', Underweight: '#EF4444',
+        };
+
+        return (
+          <Card>
+            <div className="p-6">
+              <SectionHeader
+                icon={Users}
+                title="Analyst Opinions"
+                subtitle={`${opinions.length} analyst views — FINOTAUR AI`}
+              />
+
+              <div className="rounded-xl overflow-hidden mt-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                {/* Column headers */}
+                <div className="px-3 py-2 grid grid-cols-12 text-[10px] font-semibold uppercase tracking-wider text-[#6B6B6B] border-b border-white/[0.06]">
+                  <span className="col-span-3">Firm</span>
+                  <span className="col-span-2 text-center">Rating</span>
+                  <span className="col-span-2 text-center">Price Target</span>
+                  <span className="col-span-2 text-center">Date</span>
+                  <span className="col-span-3">Summary</span>
+                </div>
+
+                {opinions.slice(0, 8).map((op, i) => {
+                  const color = ratingColor[op.rating] || '#8B8B8B';
+                  return (
+                    <div
+                      key={i}
+                      className="px-3 py-3 grid grid-cols-12 gap-1 items-start border-b border-white/[0.04] last:border-0"
+                    >
+                      <div className="col-span-3 flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-white/[0.04]">
+                          <Building2 className="w-3.5 h-3.5 text-[#6B6B6B]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-white truncate">{op.firm}</p>
+                          {op.analyst && (
+                            <p className="text-[10px] text-[#6B6B6B] truncate">{op.analyst}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-span-2 flex justify-center items-start pt-0.5">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold text-center"
+                          style={{ background: `${color}18`, color, border: `1px solid ${color}25` }}
+                        >
+                          {op.rating}
+                        </span>
+                      </div>
+                      <div className="col-span-2 text-center text-xs font-semibold text-white pt-0.5">
+                        {op.price_target ? `$${op.price_target}` : '—'}
+                      </div>
+                      <div className="col-span-2 text-center text-[10px] text-[#6B6B6B] pt-0.5">
+                        {op.date || '—'}
+                      </div>
+                      <div className="col-span-3 text-[11px] text-[#8B8B8B] leading-relaxed pt-0.5">
+                        {op.summary}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Data freshness disclaimer */}
+              <p className="mt-3 text-[10px] text-[#5A5A6E] leading-relaxed">
+                Analyst data is sourced from FINOTAUR AI and may reflect training cutoff dates.
+                Live rating-change feeds are in progress — verify with your broker for the most current views.
+              </p>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* ============================================= */}
       {/* 6. Analyst Sentiment Trend */}

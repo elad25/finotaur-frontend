@@ -22,8 +22,8 @@ export const SUBSCRIPTION_LIMITS = {
     name: 'Basic',
     displayName: 'Basic Plan',
     reset: 'monthly' as const,
-    price_monthly: 19.99,
-    price_yearly: 149.00,
+    price_monthly: 24.99,
+    price_yearly: 229.00,
     trial_days: 14,
     features: [
       'Up to 25 trades per month',
@@ -41,8 +41,8 @@ export const SUBSCRIPTION_LIMITS = {
     name: 'Premium',
     displayName: 'Premium Plan',
     reset: 'never' as const,
-    price_monthly: 39.99,
-    price_yearly: 299.00,
+    price_monthly: 44.99,
+    price_yearly: 409.00,
     trial_days: 0, // No trial - payment from day 0
     features: [
       'Everything in Basic, plus:',

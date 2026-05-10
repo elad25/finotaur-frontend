@@ -50,9 +50,9 @@ const plans: Plan[] = [
   {
     id: "basic",
     name: "Basic",
-    monthlyPrice: 19.99,
-    yearlyPrice: 149,
-    yearlyMonthlyEquivalent: 12.42,
+    monthlyPrice: 24.99,
+    yearlyPrice: 229,
+    yearlyMonthlyEquivalent: 19.08,
     description: "Essential tools + automatic broker sync",
     trialDays: 14, // 🔥 14-day free trial
     features: [
@@ -67,7 +67,7 @@ const plans: Plan[] = [
     ],
     cta: "Start Free Trial",
     featured: false,
-    savings: "Save 38%",
+    savings: "Save 24%",
     tier: 1,
     badge: {
       text: "14-Day Free Trial",
@@ -77,9 +77,9 @@ const plans: Plan[] = [
   {
     id: "premium",
     name: "Premium",
-    monthlyPrice: 39.99,
-    yearlyPrice: 299,
-    yearlyMonthlyEquivalent: 24.92,
+    monthlyPrice: 44.99,
+    yearlyPrice: 409,
+    yearlyMonthlyEquivalent: 34.08,
     description: "Unlimited everything + AI intelligence",
     trialDays: 0, // 🔥 No trial - payment from day 0
     features: [
@@ -95,7 +95,7 @@ const plans: Plan[] = [
     ],
     cta: "Upgrade to Premium",
     featured: true,
-    savings: "Save 38%",
+    savings: "Save 24%",
     tier: 2,
   }
 ];
@@ -327,7 +327,7 @@ const UpgradePlanModal = ({
     if (plan.id === currentPlan) {
       // Same plan but different interval — allow upgrade to yearly
       if (currentBillingInterval === 'monthly' && billingInterval === 'yearly') {
-        return { type: 'upgrade', label: `Upgrade to Yearly (Save ${(plan.savings || '38%').replace(/^Save\s*/i, '')})` };
+        return { type: 'upgrade', label: `Upgrade to Yearly (Save ${(plan.savings || '24%').replace(/^Save\s*/i, '')})` };
       }
       // Same plan, yearly viewing monthly — block (no downgrade)
       if (currentBillingInterval === 'yearly' && billingInterval === 'monthly') {
@@ -542,7 +542,7 @@ const UpgradePlanModal = ({
               >
                 Yearly
                 <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-semibold">
-                  Save up to 38%
+                  Save up to 24%
                 </span>
               </button>
             </div>

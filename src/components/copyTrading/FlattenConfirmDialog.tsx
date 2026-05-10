@@ -37,6 +37,16 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
     if (!open) setConfirmText('');
   }, [open]);
 
+  // Close on ESC (only while open)
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onCancel]);
+
   if (!open) return null;
 
   const title =

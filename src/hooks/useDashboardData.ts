@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 
 // ================================================
@@ -41,6 +42,7 @@ export interface Trade {
   multiplier: number | null;
   session?: TradingSession;
   input_mode?: 'summary' | 'risk-only';
+  tags?: string[] | null;
 }
 
 export interface DashboardStats {
@@ -270,7 +272,7 @@ function computeStats(trades: any[]): DashboardStats {
       bestTrade = {
         pnl,
         rr: calculatedRR,
-        symbol: trade.symbol || 'N/A',
+        symbol: normalizeSymbol(trade.symbol) || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
         session: trade.session,
       };
@@ -279,7 +281,7 @@ function computeStats(trades: any[]): DashboardStats {
       worstTrade = {
         pnl,
         rr: calculatedRR,
-        symbol: trade.symbol || 'N/A',
+        symbol: normalizeSymbol(trade.symbol) || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
         session: trade.session,
       };
@@ -406,8 +408,8 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .from('trades')
         .select(`
           id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
-          open_at, close_at, stop_price, entry_price, quantity, exit_price, 
-          multiplier, session, input_mode
+          open_at, close_at, stop_price, entry_price, quantity, exit_price,
+          multiplier, session, input_mode, tags
         `)
         .eq('user_id', userId)
         .order('open_at', { ascending: true, nullsFirst: false });

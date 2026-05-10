@@ -146,8 +146,13 @@ export const aiCopilotApi = {
     } = options;
     
     const headers = await getAuthHeaders();
-    
-    const response = await fetch(`${API_BASE}/api/ai/chat/stream`, {
+
+    // Phase 5 N3 — flag-gated Anthropic chat path (no tools, prompt caching on system block).
+    // Default OFF; the legacy OpenAI orchestrator path (tools + RAG) remains the production behaviour.
+    const useAnthropic = import.meta.env.VITE_ENABLE_ANTHROPIC_AIASSISTANT === 'true';
+    const chatPath = useAnthropic ? '/api/ai/chat/stream-anthropic' : '/api/ai/chat/stream';
+
+    const response = await fetch(`${API_BASE}${chatPath}`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
