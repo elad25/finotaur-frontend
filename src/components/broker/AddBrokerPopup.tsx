@@ -438,12 +438,38 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
           </div>
 
           {/* Error */}
-          {error && (
-            <div className="mb-3 flex items-center gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              <span className="text-[11px] text-red-400">{error}</span>
-            </div>
-          )}
+          {error && (() => {
+            const lower = error.toLowerCase();
+            const isCredentialError =
+              lower.includes('credential') ||
+              lower.includes('invalid') ||
+              lower.includes('password') ||
+              lower.includes('username') ||
+              lower.includes('errortext') ||
+              lower.includes('401');
+            return (
+              <div className="mb-3 flex items-start gap-2 bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-[1px]" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] text-red-400 block">{error}</span>
+                  {isCredentialError && selectedBroker === 'tradovate' && (
+                    <span className="text-[10px] text-[#A0A0A0] block mt-1">
+                      Double-check your Tradovate username and password. Account locked? Reset at{' '}
+                      <a
+                        href="https://trader.tradovate.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-[#C9A646]"
+                      >
+                        trader.tradovate.com
+                      </a>
+                      .
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Buttons */}
           <div className="flex gap-2">

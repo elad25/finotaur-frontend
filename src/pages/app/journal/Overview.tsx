@@ -69,6 +69,7 @@ const AddBrokerPopup = lazy(() => import("@/components/broker/AddBrokerPopup"));
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
+import { JournalEmptyState } from '@/components/journal/JournalEmptyState';
 import { Button } from '@/components/ds/Button';
 import { useImportTrades } from '@/hooks/useImportTrades';
 import { useTradovate } from '@/hooks/useTradovate';
@@ -1037,8 +1038,18 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // First-visit onboarding: auto-open AddBrokerPopup once for users with zero brokers.
+  // Persisted in localStorage so refreshing or returning later does not re-trigger.
+  useEffect(() => {
+    if (brokersLoading) return;
+    if (allBrokerConnections.length > 0) return;
+    if (localStorage.getItem('finotaur_journal_onboarding_done') === 'true') return;
+    setShowAddBroker(true);
+    localStorage.setItem('finotaur_journal_onboarding_done', 'true');
+  }, [brokersLoading, allBrokerConnections.length]);
 
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1370,7 +1381,18 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {stats && (
+        {!brokersLoading && allBrokerConnections.length === 0 && (
+          <JournalEmptyState
+            variant="no-broker"
+            onConnectBroker={() => setShowAddBroker(true)}
+          />
+        )}
+
+        {!brokersLoading && allBrokerConnections.length > 0 && !isLoading && stats && (!stats.trades || stats.trades.length === 0) && (
+          <JournalEmptyState variant="no-trades" />
+        )}
+
+        {stats && stats.trades && stats.trades.length > 0 && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <DashboardKpiCard
