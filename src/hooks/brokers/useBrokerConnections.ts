@@ -12,7 +12,7 @@
 //     useBrokerConnections({ active: false });  // Re-auth section
 // ─────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
@@ -245,72 +245,6 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       supabase.removeChannel(channel);
     };
   }, [userId, qc]);
-
-  // ── Tier 2b: Proactive token-expiry refresh (every 60 s) ─────────────
-  // Reads the cached connections (no network call) and refreshes any
-  // Tradovate token that is active but expires within 5 minutes.
-  // Silent on first failure; Realtime (Tier 2a) catches the resulting
-  // UPDATE regardless.
-  const recentRefreshIds = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const FIVE_MIN_MS = 5 * 60 * 1000;
-
-    const handle = setInterval(() => {
-      const cached = qc.getQueryData<BrokerConnection[]>(
-        queryKey(userId, opts),
-      );
-      if (!cached) return;
-
-      const now = Date.now();
-
-      for (const conn of cached) {
-        if (conn.broker !== 'tradovate') continue;
-        if (!conn.is_active) continue;
-        if (!conn.token_expires_at) continue;
-
-        const expiresAt = new Date(conn.token_expires_at).getTime();
-        const msUntilExpiry = expiresAt - now;
-
-        // Only act when: 0 < msUntilExpiry < 5 min
-        if (msUntilExpiry <= 0 || msUntilExpiry >= FIVE_MIN_MS) continue;
-
-        // Dedupe: skip if we already attempted a refresh this interval cycle
-        if (recentRefreshIds.current.has(conn.id)) continue;
-        recentRefreshIds.current.add(conn.id);
-
-        // Fire-and-forget; intentionally not awaited inside setInterval
-        supabase.functions
-          .invoke('tradovate-auth', {
-            body: { mode: 'refresh', credentialId: conn.id, userId },
-          })
-          .then(({ error: e }) => {
-            if (e) {
-              console.warn(
-                `[useBrokerConnections] Proactive token refresh failed for ${conn.id}:`,
-                e.message,
-              );
-              return;
-            }
-            // Realtime will catch the UPDATE, but invalidate here too as
-            // a fallback for environments where Realtime is unavailable.
-            qc.invalidateQueries({ queryKey: ['broker_connections', userId] });
-          });
-      }
-
-      // Reset dedupe set each interval so the next tick can retry if needed
-      recentRefreshIds.current = new Set();
-    }, 60_000);
-
-    return () => {
-      clearInterval(handle);
-    };
-    // opts is a stable object reference at the call site; including it keeps
-    // the interval aligned with the currently filtered query key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, qc, opts]);
 
   // Tier 3a auto-reconnect removed: the server (whop-webhook + retry queue)
   // owns reconnection now. The "Reconnect now" button in BrokerConnectionsPopover
