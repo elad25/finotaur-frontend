@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { BarChart3 } from "lucide-react";
 import { type Trade } from "@/hooks/useDashboardData";
+import { normalizeSymbol } from "@/utils/normalizeSymbol";
 
 // ------------------------------------------------
 // Types
@@ -51,7 +52,7 @@ function groupTrades(trades: Trade[], tab: TabKey): Map<string, GroupRow> {
     let key: string;
 
     if (tab === "symbol") {
-      key = t.symbol || "(unknown)";
+      key = normalizeSymbol(t.symbol) || "(unknown)";
     } else if (tab === "strategy") {
       // TODO: wire this to trade.tags[0] when the tags column lands in the DB query
       // Currently the Trade type has no `tags` field — every trade falls to '(untagged)'
