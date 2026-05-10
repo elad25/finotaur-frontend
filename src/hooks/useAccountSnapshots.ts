@@ -1,10 +1,11 @@
 // src/hooks/useAccountSnapshots.ts
-// Polls /api/copy-engine/accounts every 2 s and returns per-credential
+// Polls /api/copy-engine/accounts every 3 s and returns per-credential
 // snapshots (positions, balances, PnL). Designed to mount/unmount with the
 // Copy Trading Dashboard tab — React Query handles cache + cleanup.
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { authFetch } from '@/utils/authFetch';
 
 export interface PositionEntry {
   contractId:     number;
@@ -40,7 +41,9 @@ interface AccountsResponse {
 }
 
 async function fetchAccounts(signal?: AbortSignal): Promise<AccountsResponse> {
-  const res = await fetch('/api/copy-engine/accounts', { signal });
+  // Tier 0a (2026-05-10): use authFetch so Supabase Bearer token reaches the
+  // server. Plain fetch() returned 401 from /accounts after I.3 hardening.
+  const res = await authFetch('/api/copy-engine/accounts', { signal });
   if (!res.ok) throw new Error(`accounts fetch ${res.status}`);
   return res.json();
 }
@@ -49,7 +52,10 @@ export function useAccountSnapshots() {
   const { data, isLoading, error } = useQuery<AccountsResponse, Error>({
     queryKey:        ['copy-engine-accounts'],
     queryFn:         ({ signal }) => fetchAccounts(signal),
-    refetchInterval: 2000, // 2 s — live-ish without hammering
+    // Tier 0b (2026-05-10): 3 s gives 33% headroom under server's 30 req/60s
+    // per-user rate limit. 2 s was at exactly the limit and tripped 429 on
+    // any retry/jitter.
+    refetchInterval: 3000,
     staleTime:       0,
     retry:           1,
   });
