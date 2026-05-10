@@ -717,7 +717,8 @@ function DetailedCutsTab({ trades }: { trades: Trade[] }) {
 
 function AssetsTab({ trades }: { trades: Trade[] }) {
   const symbolData = useMemo(() => {
-    const data = groupBySymbol(trades);
+    const tradesWithRoot = trades.map((t) => ({ ...t, symbol: normalizeSymbol(t.symbol) || t.symbol }));
+    const data = groupBySymbol(tradesWithRoot);
     return data.sort((a, b) => b.netPnL - a.netPnL);
   }, [trades]);
 
