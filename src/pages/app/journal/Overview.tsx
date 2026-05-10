@@ -60,6 +60,8 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 
 const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
+const BreakdownPanel = lazy(() => import("@/components/journal/BreakdownPanel"));
+const CalendarHeatmap = lazy(() => import("@/components/journal/CalendarHeatmap"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
@@ -1459,13 +1461,31 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             {/* ✅ UPDATED: Charts with lock logic for Trade Duration */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <TradeTimePerformanceChart data={tradeTimeData} />
-              <TradeDurationPerformanceChart 
+              <TradeDurationPerformanceChart
                 data={tradeDurationData}
                 isLocked={isDurationChartLocked}
               />
             </div>
 
-            
+            {/* === BREAKDOWN PANEL (Symbol / Strategy / Session) === */}
+            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
+              Failed to load breakdown. Please refresh.
+            </div>}>
+              <Suspense fallback={<ChartSkeleton />}>
+                <BreakdownPanel trades={stats.trades || []} />
+              </Suspense>
+            </ErrorBoundary>
+
+            {/* === CALENDAR HEATMAP === */}
+            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
+              Failed to load calendar. Please refresh.
+            </div>}>
+              <Suspense fallback={<ChartSkeleton />}>
+                <CalendarHeatmap trades={stats.trades || []} />
+              </Suspense>
+            </ErrorBoundary>
+
+
           </>
         )}
       </div>
