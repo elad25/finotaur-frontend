@@ -35,6 +35,32 @@ import {
   type OverviewData, type GlobalData, type FedData,
   type IndicatorData, type RegimeData, type AIResult
 } from '../shared/api';
+import { authFetch } from '@/utils/authFetch';
+
+// =====================================================
+// ANTHROPIC FLAG + FETCHER (Phase 5 N1 — flag OFF in prod)
+// Master flag covers all macro-analyzer Anthropic features;
+// per-section flag isolates AI Strategist for cohort soft-launch.
+// =====================================================
+
+const ANTHROPIC_AI_STRATEGIST_ENABLED =
+  import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_ANALYZER === 'true' ||
+  import.meta.env.VITE_ENABLE_ANTHROPIC_MACRO_AI_STRATEGIST === 'true';
+
+async function generateAISectionAnthropic(
+  section: 'regime' | 'positioning' | 'risk',
+): Promise<AIResult> {
+  const apiHost = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+  const url = `${apiHost.replace(/\/$/, '')}/api/anthropic/macro-analyzer/ai-generate/${section}`;
+  const res = await authFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Anthropic macro ${section} failed: ${res.status}`);
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || 'Anthropic macro AI generation failed');
+  return json.data as AIResult;
+}
 
 // =====================================================
 // SERVER AI HOOK (uses backend cache, NOT client AI)
@@ -92,7 +118,9 @@ function useServerAI(section: 'regime' | 'positioning' | 'risk'): UseServerAIRes
     setRateLimited(false);
 
     try {
-      const result: AIResult = await generateAISection(section);
+      const result: AIResult = ANTHROPIC_AI_STRATEGIST_ENABLED
+        ? await generateAISectionAnthropic(section)
+        : await generateAISection(section);
       if (!mountedRef.current) return;
 
       if (result.rateLimited) {
