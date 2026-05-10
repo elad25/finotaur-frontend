@@ -497,6 +497,13 @@ async function syncCredential(cred: {
   return { inserted, errors };
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+const BATCH_SIZE = 20;
+const STAGGER_MS = 200;
+
 // ─── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -556,35 +563,97 @@ Deno.serve(async (req: Request) => {
     let totalErrors   = 0;
     let synced        = 0;
 
-    for (const cred of credentials ?? []) {
-      try {
-        const result = await syncCredential(cred as any, mode);
-        totalInserted += result.inserted;
-        totalErrors   += result.errors;
-        synced++;
-      } catch (err: unknown) {
-        const msg = String(err);
-        console.error(`[tradovate-sync] connection ${cred.id}:`, msg);
+    const activeConnections = credentials ?? [];
+    const runStart = Date.now();
+    let totalProcessed = 0;
+    let totalSuccess   = 0;
+    let totalFailed    = 0;
+    let totalSynced    = 0;
+    let batchCount     = 0;
 
-        if (msg.includes('TOKEN_EXPIRED')) {
-          // Schedule silent retry — never flip is_active (that column is owned by whop-webhook)
-          await scheduleRetry(supabaseAdmin, cred.id, 'Token expired — auto-refresh triggered');
+    for (let i = 0; i < activeConnections.length; i += BATCH_SIZE) {
+      const batch = activeConnections.slice(i, i + BATCH_SIZE);
+      batchCount++;
 
-          // Fire-and-forget refresh attempt — may revive the token in the background
-          fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            },
-            body: JSON.stringify({ mode: 'refresh' }),
-          }).catch(() => {});
+      const results = await Promise.allSettled(
+        batch.map(cred => syncCredential(cred as any, mode))
+      );
+
+      for (let j = 0; j < results.length; j++) {
+        const cred = batch[j];
+        const outcome = results[j];
+        totalProcessed++;
+
+        if (outcome.status === 'fulfilled') {
+          const result = outcome.value;
+          totalInserted += result.inserted;
+          totalErrors   += result.errors;
+          synced++;
+          totalSuccess++;
+          totalSynced += result.inserted;
         } else {
-          // Generic failure — schedule silent retry backoff
-          await scheduleRetry(supabaseAdmin, cred.id, msg.slice(0, 500));
+          const err = outcome.reason;
+          const msg = String(err);
+          console.error(`[tradovate-sync] connection ${cred.id}:`, msg);
+
+          if (msg.includes('TOKEN_EXPIRED')) {
+            // Schedule silent retry — never flip is_active (that column is owned by whop-webhook)
+            await scheduleRetry(supabaseAdmin, cred.id, 'Token expired — auto-refresh triggered');
+
+            // Fire-and-forget refresh attempt — may revive the token in the background
+            fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              },
+              body: JSON.stringify({ mode: 'refresh' }),
+            }).catch(() => {});
+          } else {
+            // Generic failure — schedule silent retry backoff
+            await scheduleRetry(supabaseAdmin, cred.id, msg.slice(0, 500));
+          }
+          totalErrors++;
+          totalFailed++;
         }
-        totalErrors++;
       }
+
+      if (i + BATCH_SIZE < activeConnections.length) {
+        await sleep(STAGGER_MS);
+      }
+    }
+
+    const durationMs = Date.now() - runStart;
+    console.log(JSON.stringify({
+      event: "tradovate_sync_run_complete",
+      totalProcessed,
+      totalSuccess,
+      totalFailed,
+      totalSynced,
+      durationMs,
+      batchCount,
+      batchSize: BATCH_SIZE,
+      staggerMs: STAGGER_MS,
+    }));
+
+    // Cron heartbeat — last successful run timestamp for external monitoring.
+    const heartbeatStatus = totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : 'failed');
+    try {
+      await supabaseAdmin.from('cron_heartbeat').upsert({
+        job_name: 'tradovate-sync',
+        last_run_at: new Date().toISOString(),
+        last_status: heartbeatStatus,
+        last_duration_ms: durationMs,
+        last_payload: {
+          totalProcessed,
+          totalSuccess,
+          totalFailed,
+          totalSynced,
+          batchCount,
+        },
+      }, { onConflict: 'job_name' });
+    } catch (hbErr) {
+      console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
     }
 
     return json({ synced, totalInserted, totalErrors });

@@ -28,7 +28,7 @@ export async function scheduleRetry(
 ): Promise<void> {
   const { data } = await admin
     .from('broker_connections')
-    .select('retry_attempt_count')
+    .select('retry_attempt_count, status, broker, environment, user_id')
     .eq('id', connectionId)
     .single();
 
@@ -45,6 +45,25 @@ export async function scheduleRetry(
     last_error:           errorMsg.slice(0, 500),
     last_error_at:        new Date().toISOString(),
   }).eq('id', connectionId);
+
+  // OQ-59: notify customer when connection transitions to 'degraded' or 'canceled'
+  const prevStatus = (data?.status ?? null) as string | null;
+  const transitioned = prevStatus !== newStatus && (newStatus === 'degraded' || newStatus === 'canceled');
+
+  if (transitioned) {
+    void admin.functions.invoke('broker-state-change-notify', {
+      body: {
+        connection_id: connectionId,
+        user_id:       data?.user_id,
+        broker:        data?.broker,
+        environment:   data?.environment,
+        new_status:    newStatus,
+        last_error:    errorMsg.slice(0, 200),
+      },
+    }).catch((err: unknown) => {
+      console.error('[retryQueue] notify dispatch failed:', String(err).slice(0, 200));
+    });
+  }
 
   console.warn(
     `[retryQueue] scheduleRetry: connectionId=${connectionId}` +
