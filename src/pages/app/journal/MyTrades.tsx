@@ -928,7 +928,7 @@ const stats = useMemo<Stats>(() => {
             )}
           </div>
         ) : (
-          <Table>
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><Table>
             <TableHeader>
   <TableRow className="border-zinc-800 hover:bg-transparent">
     <TableHead className="text-zinc-500">Date</TableHead>
@@ -957,7 +957,7 @@ const stats = useMemo<Stats>(() => {
                 />
               ))}
             </TableBody>
-          </Table>
+          </Table></div>
         )}
       </div>
 

@@ -44,25 +44,38 @@ export const ASSET_MULTIPLIERS: Record<string, { class: string; mult: number }> 
   MBT: { class: "futures", mult: 0.1 },
 } as const;
 
-// Helper: Get multiplier for symbol
+import { normalizeSymbol } from './normalizeSymbol';
+
+// Helper: Get multiplier for symbol.
+// Tries the exact symbol first, then falls back to the futures root
+// (e.g. "MNQM6" → "MNQ") so contracts with expiry suffixes resolve correctly.
 export function getAssetMultiplier(symbol: string): number {
   if (!symbol) return 1;
   const symbolUpper = symbol.toUpperCase().trim();
-  return ASSET_MULTIPLIERS[symbolUpper]?.mult || 1;
+  if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].mult;
+  const root = normalizeSymbol(symbolUpper);
+  if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].mult;
+  return 1;
 }
 
-// Helper: Get asset class for symbol
+// Helper: Get asset class for symbol (with futures-root fallback).
 export function getAssetClass(symbol: string): string {
   if (!symbol) return 'stocks';
   const symbolUpper = symbol.toUpperCase().trim();
-  return ASSET_MULTIPLIERS[symbolUpper]?.class || 'stocks';
+  if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].class;
+  const root = normalizeSymbol(symbolUpper);
+  if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].class;
+  return 'stocks';
 }
 
-// Helper: Detect asset class from symbol (auto-detection)
+// Helper: Detect asset class from symbol (auto-detection, with root fallback).
 export function detectAssetClass(symbol: string): string | null {
   if (!symbol) return null;
   const symbolUpper = symbol.toUpperCase().trim();
-  return ASSET_MULTIPLIERS[symbolUpper]?.class || null;
+  if (ASSET_MULTIPLIERS[symbolUpper]) return ASSET_MULTIPLIERS[symbolUpper].class;
+  const root = normalizeSymbol(symbolUpper);
+  if (root && root !== symbolUpper && ASSET_MULTIPLIERS[root]) return ASSET_MULTIPLIERS[root].class;
+  return null;
 }
 
 // ================================================================
