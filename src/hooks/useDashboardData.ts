@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 
 // ================================================
@@ -271,7 +272,7 @@ function computeStats(trades: any[]): DashboardStats {
       bestTrade = {
         pnl,
         rr: calculatedRR,
-        symbol: trade.symbol || 'N/A',
+        symbol: normalizeSymbol(trade.symbol) || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
         session: trade.session,
       };
@@ -280,7 +281,7 @@ function computeStats(trades: any[]): DashboardStats {
       worstTrade = {
         pnl,
         rr: calculatedRR,
-        symbol: trade.symbol || 'N/A',
+        symbol: normalizeSymbol(trade.symbol) || 'N/A',
         open_at: trade.open_at || trade.close_at || '',
         session: trade.session,
       };
