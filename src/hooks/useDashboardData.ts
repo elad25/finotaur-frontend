@@ -41,6 +41,7 @@ export interface Trade {
   multiplier: number | null;
   session?: TradingSession;
   input_mode?: 'summary' | 'risk-only';
+  tags?: string[] | null;
 }
 
 export interface DashboardStats {
@@ -406,8 +407,8 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .from('trades')
         .select(`
           id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
-          open_at, close_at, stop_price, entry_price, quantity, exit_price, 
-          multiplier, session, input_mode
+          open_at, close_at, stop_price, entry_price, quantity, exit_price,
+          multiplier, session, input_mode, tags
         `)
         .eq('user_id', userId)
         .order('open_at', { ascending: true, nullsFirst: false });
