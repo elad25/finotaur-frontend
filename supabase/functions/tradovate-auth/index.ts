@@ -360,6 +360,19 @@ Deno.serve(async (req: Request) => {
           last_error: 'vault_creds_missing',
           status:     'canceled',
         }).eq('id', cred.id);
+        // OQ-59: notify customer of broker disconnection
+        void supabaseAdmin.functions.invoke('broker-state-change-notify', {
+          body: {
+            connection_id: cred.id,
+            user_id:       cred.user_id,
+            broker:        cred.broker ?? 'tradovate',
+            environment:   cred.environment ?? 'unknown',
+            new_status:    'canceled',
+            last_error:    'vault_creds_missing',
+          },
+        }).catch((err: unknown) => {
+          console.error('[tradovate-auth] cancel notify dispatch failed:', String(err).slice(0, 200));
+        });
         return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
       }
 
@@ -370,6 +383,19 @@ Deno.serve(async (req: Request) => {
           last_error: 'vault_creds_missing',
           status:     'canceled',
         }).eq('id', cred.id);
+        // OQ-59: notify customer of broker disconnection
+        void supabaseAdmin.functions.invoke('broker-state-change-notify', {
+          body: {
+            connection_id: cred.id,
+            user_id:       cred.user_id,
+            broker:        cred.broker ?? 'tradovate',
+            environment:   cred.environment ?? 'unknown',
+            new_status:    'canceled',
+            last_error:    'vault_creds_missing',
+          },
+        }).catch((err: unknown) => {
+          console.error('[tradovate-auth] cancel notify dispatch failed:', String(err).slice(0, 200));
+        });
         return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
       }
 
