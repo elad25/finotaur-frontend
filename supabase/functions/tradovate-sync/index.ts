@@ -636,6 +636,26 @@ Deno.serve(async (req: Request) => {
       staggerMs: STAGGER_MS,
     }));
 
+    // Cron heartbeat — last successful run timestamp for external monitoring.
+    const heartbeatStatus = totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : 'failed');
+    try {
+      await supabaseAdmin.from('cron_heartbeat').upsert({
+        job_name: 'tradovate-sync',
+        last_run_at: new Date().toISOString(),
+        last_status: heartbeatStatus,
+        last_duration_ms: durationMs,
+        last_payload: {
+          totalProcessed,
+          totalSuccess,
+          totalFailed,
+          totalSynced,
+          batchCount,
+        },
+      }, { onConflict: 'job_name' });
+    } catch (hbErr) {
+      console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+    }
+
     return json({ synced, totalInserted, totalErrors });
 
   } catch (err: unknown) {

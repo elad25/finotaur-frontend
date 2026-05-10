@@ -230,6 +230,7 @@ Deno.serve(async (req: Request) => {
     // full re-login only if renewal fails.
     // ══════════════════════════════════════════════════════════
     if (mode === 'refresh') {
+      const refreshStart = Date.now();
       // Find active broker_connections whose token expires within RENEW_AHEAD_MS
       const { data: connected } = await supabaseAdmin
         .from('broker_connections')
@@ -239,8 +240,12 @@ Deno.serve(async (req: Request) => {
         .lt('token_expires_at', new Date(Date.now() + RENEW_AHEAD_MS).toISOString());
 
       let refreshed = 0;
+      let refreshProcessed = 0;
+      let refreshSucceeded = 0;
+      let refreshFailed = 0;
 
       for (const cred of connected ?? []) {
+        refreshProcessed++;
         try {
           // Read stored credentials from Vault — vault_secret_id lives in connection_data jsonb.
           // F1.A note: rows backfilled from tradovate_credentials have empty connection_data
@@ -291,11 +296,32 @@ Deno.serve(async (req: Request) => {
           await clearRetry(supabaseAdmin, cred.id);
 
           refreshed++;
+          refreshSucceeded++;
         } catch (err) {
           console.error(`[tradovate-auth] refresh failed for connection ${cred.id}:`, err);
           // Schedule silent retry — never flip is_active (owned by whop-webhook)
           await scheduleRetry(supabaseAdmin, cred.id, String(err).slice(0, 500));
+          refreshFailed++;
         }
+      }
+
+      // Cron heartbeat for token refresh job.
+      const refreshDurationMs = Date.now() - refreshStart;
+      const heartbeatStatus = refreshFailed === 0 ? 'ok' : (refreshSucceeded > 0 ? 'partial' : 'failed');
+      try {
+        await supabaseAdmin.from('cron_heartbeat').upsert({
+          job_name: 'tradovate-token-refresh',
+          last_run_at: new Date().toISOString(),
+          last_status: heartbeatStatus,
+          last_duration_ms: refreshDurationMs,
+          last_payload: {
+            processed: refreshProcessed,
+            succeeded: refreshSucceeded,
+            failed: refreshFailed,
+          },
+        }, { onConflict: 'job_name' });
+      } catch (hbErr) {
+        console.error('[tradovate-auth][refresh] heartbeat upsert failed:', String(hbErr).slice(0, 300));
       }
 
       return json({ refreshed });
