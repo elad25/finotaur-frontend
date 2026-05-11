@@ -61,7 +61,6 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const BreakdownPanel = lazy(() => import("@/components/journal/BreakdownPanel"));
-const CalendarHeatmap = lazy(() => import("@/components/journal/CalendarHeatmap"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
@@ -1097,7 +1096,6 @@ function JournalOverviewContent() {
     });
     return unsubscribe;
   }, [queryClient, refetchStats]);
-  const connections: any[] = []; const connectionsLoading = false;
   const { importTrades: saveToSupabase } = useImportTrades();
 
   
@@ -1106,12 +1104,6 @@ function JournalOverviewContent() {
   
   const tier = useMemo(() => stats?.tier, [stats]);
   
-  const hasActiveConnection = useMemo(() => 
-    connections?.some(c => c.status === 'CONNECTED'), 
-    [connections]
-  );
-  
-  const isCheckingConnection = connectionsLoading || subscriptionLoading;
   const isFreeUser = limits?.account_type === 'free';
   const isLockedForFree = isFreeUser && !canUseSnapTrade;
   
@@ -1127,7 +1119,13 @@ function JournalOverviewContent() {
   }, [stats]);
   
   // ✅ Check if Trade Duration chart should be locked
-  const isDurationChartLocked = isFreeUser || !hasActiveConnection;
+  // Gate by actual trade-duration data (per Elad 2026-05-11): chart unlocks when
+  // there are closed trades with measurable duration. getTradeDurationData filters
+  // for open_at && close_at && pnl != null, so an empty array = nothing to plot.
+  // Previous gate checked a hardcoded empty `connections` array (SnapTrade-era
+  // dead stub) which kept the chart permanently locked even for paying users
+  // with valid trades and a connected broker. See OQ-67.
+  const isDurationChartLocked = isFreeUser || tradeDurationData.length === 0;
   
   // ✅ Determine where to send user when clicking upgrade
   const handleDurationUpgrade = useCallback(() => {
@@ -1498,15 +1496,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Suspense>
             </ErrorBoundary>
 
-            {/* === CALENDAR HEATMAP === */}
-            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-              Failed to load calendar. Please refresh.
-            </div>}>
-              <Suspense fallback={<ChartSkeleton />}>
-                <CalendarHeatmap trades={stats.trades || []} />
-              </Suspense>
-            </ErrorBoundary>
-
+            {/* Calendar heatmap lives in its dedicated Calendar tab — removed
+                from Overview 2026-05-11 (was showing a 12-week window that
+                missed Elad's actual trading days; the dedicated tab covers
+                the full date range with proper controls). */}
 
           </>
         )}
