@@ -13,6 +13,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 const STALE_THRESHOLDS_MS: Record<string, number> = {
   'tradovate-sync':          12 * 60 * 1000,   // schedule: */5 * * * * → 12 min (2.4× buffer)
   'tradovate-token-refresh': 90 * 60 * 1000,   // schedule: */75 * * * * (actually hourly @:00 — cron minute field caps at 59) → 90 min (1.5× buffer)
+  'copy-engine-railway':      3 * 60 * 1000,   // heartbeat every 60s from Railway engine → 3 min (3× buffer)
 };
 const DEFAULT_THRESHOLD_MS = 15 * 60 * 1000;
 
@@ -64,7 +65,7 @@ Deno.serve(async (req: Request) => {
 
   const anyStale = jobs.some(j => j.stale);
   const anyFailed = jobs.some(j => j.last_status === 'failed');
-  const expectedJobs = ['tradovate-sync', 'tradovate-token-refresh'];
+  const expectedJobs = ['tradovate-sync', 'tradovate-token-refresh', 'copy-engine-railway'];
   const missingJobs = expectedJobs.filter(name => !jobs.some(j => j.job_name === name));
   const ok = !anyStale && !anyFailed && missingJobs.length === 0;
 
