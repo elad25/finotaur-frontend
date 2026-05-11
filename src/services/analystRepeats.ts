@@ -26,7 +26,7 @@ export async function fetchTopRepeats(opts?: { windowDays?: number; limit?: numb
   return r.json();
 }
 
-export async function fetchRecent(limit = 30): Promise<{ from: string; to: string; total: number; items: any[] }>{{
+export async function fetchRecent(limit = 30): Promise<{ from: string; to: string; total: number; items: any[] }> {
   const r = await fetch(`/api/analyst/upgrades/recent?limit=${encodeURIComponent(String(limit))}`, {
     headers: { "Accept": "application/json" },
   });
