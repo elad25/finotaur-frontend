@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Zap, Volume2, VolumeX } from "lucide-react";
 import { ReplayChart, ReplayChartRef } from "@/components/ReplayChart";
+import type { ReplaySpeed } from "@/components/ReplayChart/types";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { 
@@ -143,7 +144,7 @@ export function BacktestImmersiveMode({ onExit }: BacktestImmersiveModeProps) {
   const handleSpeedChange = (value: string) => {
     setPlaybackSpeed(value);
     if (chartRef.current) {
-      chartRef.current.setSpeed(parseFloat(value));
+      chartRef.current.setSpeed(parseFloat(value) as ReplaySpeed);
     }
   };
 
@@ -165,7 +166,7 @@ export function BacktestImmersiveMode({ onExit }: BacktestImmersiveModeProps) {
       const clickX = e.clientX - rect.left;
       const percentage = (clickX / rect.width) * 100;
       
-      chartRef.current.setReplayPoint(percentage);
+      chartRef.current.setCutPoint(percentage);
       setProgress([percentage]);
       setHasReplayPoint(true);
       setIsSelectingStart(false);

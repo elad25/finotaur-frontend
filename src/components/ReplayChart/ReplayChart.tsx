@@ -71,6 +71,7 @@ export interface ReplayChartProps {
   onTimeframeChange?: (timeframe: TimeframeConfig) => void;
   onDataLoad?: (data: CandlestickData[]) => void;
   onError?: (error: Error) => void;
+  onReplayEnd?: () => void;
 }
 
 export interface ReplayChartRef {
@@ -99,6 +100,10 @@ export interface ReplayChartRef {
   // Cut Point
   setCutPoint: (index: number) => void;
   clearCutPoint: () => void;
+
+  // Step
+  stepBackward: () => void;
+  stepForward: () => void;
 }
 
 // ===================================
@@ -555,6 +560,8 @@ export const ReplayChart = forwardRef<ReplayChartRef, ReplayChartProps>((
     },
     setCutPoint: handleSetCutPoint,
     clearCutPoint: handleClearCutPoint,
+    stepBackward,
+    stepForward,
   }), [
     loadData,
     symbol,
@@ -571,6 +578,8 @@ export const ReplayChart = forwardRef<ReplayChartRef, ReplayChartProps>((
     drawings,
     handleSetCutPoint,
     handleClearCutPoint,
+    stepBackward,
+    stepForward,
   ]);
 
   // ===================================

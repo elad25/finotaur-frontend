@@ -51,6 +51,9 @@ export interface ExecutiveSummary {
   timeHorizon: TimeHorizon;
   oneLineThesis: string;
   keyNumbers: KeyNumbers;
+  investmentStory: string;
+  whyLooking: string;
+  signalIdentified: string;
 }
 
 // =====================================================
@@ -69,6 +72,7 @@ export interface InstitutionalOwnership {
   totalPercent: number | null;
   totalInstitutions: number | null;
   top10Holders: InstitutionalHolder[];
+  netBuying: boolean | null;
 }
 
 // =====================================================

@@ -18,4 +18,5 @@ export const env = {
   COOKIE_SECURE: must('COOKIE_SECURE', 'false'),
   COOKIE_DOMAIN: must('COOKIE_DOMAIN', ''),
   DATABASE_URL: must('DATABASE_URL'),
+  MARKET_PROVIDER: must('MARKET_PROVIDER', 'mock'),
 };
