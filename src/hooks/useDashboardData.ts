@@ -84,6 +84,13 @@ export interface DashboardStats {
   trades: Trade[];
 }
 
+export interface DailyPnLRow {
+  trade_date: string;       // ISO date YYYY-MM-DD from view
+  portfolio_id: string | null;
+  day_trades: number;
+  day_pnl: number;
+}
+
 // ================================================
 // QUERY KEYS
 // ================================================
@@ -365,6 +372,234 @@ function computeStats(trades: any[]): DashboardStats {
 }
 
 // ================================================
+// AGGREGATED-PATH HELPERS (CHUNK 3 B.4 phase 2.A.bis/B/C)
+// ================================================
+
+async function fetchAggregatedStats(
+  client: typeof supabase,
+  userId: string,
+  portfolioIds: string[] | null,
+): Promise<{
+  user_id: string;
+  total_closed: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+  net_pnl: number;
+  sum_win_pnl: number;
+  sum_loss_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+  avg_rr: number;
+} | null> {
+  const { data, error } = await client.rpc('get_user_portfolio_stats', {
+    p_user_id: userId,
+    p_portfolio_ids: portfolioIds && portfolioIds.length > 0 ? portfolioIds : null,
+  });
+  if (error) {
+    console.error('get_user_portfolio_stats RPC error:', error.message);
+    throw error;
+  }
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const row = data[0] as any;
+  return {
+    user_id: row.user_id,
+    total_closed: Number(row.total_closed) || 0,
+    wins: Number(row.wins) || 0,
+    losses: Number(row.losses) || 0,
+    breakeven: Number(row.breakeven) || 0,
+    net_pnl: Number(row.net_pnl) || 0,
+    sum_win_pnl: Number(row.sum_win_pnl) || 0,
+    sum_loss_pnl: Number(row.sum_loss_pnl) || 0,
+    avg_win: Number(row.avg_win) || 0,
+    avg_loss: Number(row.avg_loss) || 0,
+    avg_rr: Number(row.avg_rr) || 0,
+  };
+}
+
+async function fetchBestWorst(
+  client: typeof supabase,
+  userId: string,
+  cutoffDate: string,
+  portfolioIds: string[] | null,
+): Promise<{
+  best: DashboardStats['bestTrade'];
+  worst: DashboardStats['worstTrade'];
+}> {
+  const baseSelect = 'id, pnl, open_at, close_at, symbol, session, rr, actual_r, actual_user_r, risk_usd, input_mode, stop_price, entry_price, quantity';
+  const buildBase = () => {
+    let q = client
+      .from('trades')
+      .select(baseSelect)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .in('outcome', ['WIN', 'LOSS', 'BE'])
+      .not('pnl', 'is', null)
+      .gte('open_at', cutoffDate);
+    if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+    return q;
+  };
+  const [bestRes, worstRes] = await Promise.all([
+    buildBase().order('pnl', { ascending: false }).limit(1).maybeSingle(),
+    buildBase().order('pnl', { ascending: true }).limit(1).maybeSingle(),
+  ]);
+  if (bestRes.error) console.error('fetchBestWorst best error:', bestRes.error.message);
+  if (worstRes.error) console.error('fetchBestWorst worst error:', worstRes.error.message);
+  const bestRow = bestRes.data as any;
+  const worstRow = worstRes.data as any;
+  const best = bestRow && Number(bestRow.pnl) > 0
+    ? {
+        pnl: Number(bestRow.pnl),
+        rr: calculateRR(bestRow),
+        symbol: normalizeSymbol(bestRow.symbol) || 'N/A',
+        open_at: bestRow.open_at || bestRow.close_at || '',
+        session: bestRow.session as TradingSession | undefined,
+      }
+    : null;
+  const worst = worstRow && Number(worstRow.pnl) < 0
+    ? {
+        pnl: Number(worstRow.pnl),
+        rr: calculateRR(worstRow),
+        symbol: normalizeSymbol(worstRow.symbol) || 'N/A',
+        open_at: worstRow.open_at || worstRow.close_at || '',
+        session: worstRow.session as TradingSession | undefined,
+      }
+    : null;
+  return { best, worst };
+}
+
+async function fetchDailyPnL(
+  client: typeof supabase,
+  userId: string,
+  cutoffDate: string,
+  portfolioIds: string[] | null,
+): Promise<DailyPnLRow[]> {
+  let q = client
+    .from('user_daily_pnl_v')
+    .select('trade_date, portfolio_id, day_trades, day_pnl')
+    .eq('user_id', userId)
+    .gte('trade_date', cutoffDate);
+  if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+  const { data, error } = await q.order('trade_date', { ascending: true });
+  if (error) {
+    console.error('user_daily_pnl_v query error:', error.message);
+    throw error;
+  }
+  return (data ?? []).map((row: any) => ({
+    trade_date: row.trade_date,
+    portfolio_id: row.portfolio_id,
+    day_trades: Number(row.day_trades) || 0,
+    day_pnl: Number(row.day_pnl) || 0,
+  }));
+}
+
+async function fetchTradesForOverview(
+  client: typeof supabase,
+  userId: string,
+  cutoffDate: string,
+  portfolioIds: string[] | null,
+): Promise<Trade[]> {
+  let q = client
+    .from('trades')
+    .select(`
+      id, symbol, pnl, rr, actual_r, actual_user_r, risk_usd, reward_usd,
+      open_at, close_at, stop_price, entry_price, quantity, exit_price,
+      multiplier, session, input_mode, tags
+    `)
+    .eq('user_id', userId)
+    .gte('open_at', cutoffDate)
+    .order('open_at', { ascending: true, nullsFirst: false });
+  if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
+  const { data, error } = await q;
+  if (error) {
+    console.error('fetchTradesForOverview error:', error.message);
+    throw error;
+  }
+  // Match the existing JS path: filter to closed trades + sort by close_at||open_at.
+  const closed = (data ?? []).filter(isTradeClosed);
+  return [...closed].sort(
+    (a: any, b: any) =>
+      new Date(a.close_at || a.open_at).getTime() -
+      new Date(b.close_at || b.open_at).getTime(),
+  ) as Trade[];
+}
+
+function composeAggregatedStats(
+  agg: Awaited<ReturnType<typeof fetchAggregatedStats>>,
+  bestWorst: Awaited<ReturnType<typeof fetchBestWorst>>,
+  dailyRows: DailyPnLRow[],
+  trades: Trade[],
+): DashboardStats {
+  if (!agg || agg.total_closed === 0) {
+    const zeroBase = {
+      netPnl: 0, winrate: 0, avgRR: 0, wins: 0, losses: 0, breakeven: 0,
+      closedTrades: 0, maxDrawdown: 0, profitFactor: 0, avgWin: 0, avgLoss: 0,
+      bestTrade: null, worstTrade: null, equitySeries: [], trades: [],
+    };
+    return { ...zeroBase, tier: calculateTier(zeroBase) };
+  }
+
+  const byDate = new Map<string, number>();
+  for (const row of dailyRows) {
+    byDate.set(row.trade_date, (byDate.get(row.trade_date) ?? 0) + row.day_pnl);
+  }
+  const sortedDates = [...byDate.keys()].sort();
+
+  const cacheKey = `agg-${sortedDates.length}-${sortedDates[0] ?? ''}-${sortedDates[sortedDates.length - 1] ?? ''}-${agg.net_pnl}`;
+  let equitySeries = equitySeriesCache.get(cacheKey);
+  let maxDrawdown = 0;
+
+  if (!equitySeries) {
+    equitySeries = [];
+    let running = 0;
+    let peak = 0;
+    for (const date of sortedDates) {
+      const dayPnl = byDate.get(date) ?? 0;
+      running += dayPnl;
+      if (running > peak) peak = running;
+      const dd = peak - running;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+      equitySeries.push({
+        date: dayjs(date).format('MMM DD'),
+        equity: running,
+        pnl: dayPnl,
+      });
+    }
+    equitySeriesCache.set(cacheKey, equitySeries);
+  } else {
+    let peak = 0;
+    for (const pt of equitySeries) {
+      if (pt.equity > peak) peak = pt.equity;
+      const dd = peak - pt.equity;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+    }
+  }
+
+  const winrate = agg.total_closed > 0 ? agg.wins / agg.total_closed : 0;
+  const profitFactor = agg.sum_loss_pnl > 0 ? agg.sum_win_pnl / agg.sum_loss_pnl : 0;
+
+  const baseStats = {
+    netPnl: agg.net_pnl,
+    winrate,
+    avgRR: isFinite(agg.avg_rr) ? agg.avg_rr : 0,
+    wins: agg.wins,
+    losses: agg.losses,
+    breakeven: agg.breakeven,
+    closedTrades: agg.total_closed,
+    maxDrawdown,
+    profitFactor: isFinite(profitFactor) ? profitFactor : 0,
+    avgWin: isFinite(agg.avg_win) ? agg.avg_win : 0,
+    avgLoss: isFinite(agg.avg_loss) ? agg.avg_loss : 0,
+    bestTrade: bestWorst.best,
+    worstTrade: bestWorst.worst,
+    equitySeries,
+    trades,
+  };
+
+  return { ...baseStats, tier: calculateTier(baseStats) };
+}
+
+// ================================================
 // REACT HOOKS WITH ADMIN MODE SUPPORT
 // ================================================
 
@@ -405,6 +640,24 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       }
 
       const client = shouldUseAdminClient ? supabaseAdmin! : supabase;
+
+      // CHUNK 3 B.4 phase 2.D — for "all-time" view (no daysBack or >= MAX_LOOKBACK_DAYS),
+      // use server-side aggregated path: RPC + view + 2 small SELECTs. Eliminates the
+      // unbounded trades fetch. JS path below remains for short lookbacks.
+      const isAllTimeView = !daysBack || daysBack >= MAX_LOOKBACK_DAYS;
+      if (isAllTimeView) {
+        const effectivePortfolioIds = portfolioIds && portfolioIds.length > 0
+          ? portfolioIds
+          : (portfolioId ? [portfolioId] : null);
+        const [agg, bestWorst, dailyRows, tradesForOverview] = await Promise.all([
+          fetchAggregatedStats(client, userId, effectivePortfolioIds),
+          fetchBestWorst(client, userId, cutoffDate, effectivePortfolioIds),
+          fetchDailyPnL(client, userId, cutoffDate, effectivePortfolioIds),
+          fetchTradesForOverview(client, userId, cutoffDate, effectivePortfolioIds),
+        ]);
+        devLog('✅ Aggregated path: RPC + view scalars + trades for Overview (2.D-2 will drop trades)');
+        return composeAggregatedStats(agg, bestWorst, dailyRows, tradesForOverview);
+      }
 
       // 🔥 CRITICAL FIX: Fetch ALL trades, then filter closed ones in computeStats
       // This supports both Summary mode (exit_price) and Risk-Only mode (pnl without exit_price)
