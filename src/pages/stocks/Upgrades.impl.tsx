@@ -1,5 +1,5 @@
 import React from "react";
-import { RepeatedSymbolsTable } from "@/components/Analyst/RepeatedSymbolsTable";
+import { RepeatedSymbolsTable } from "@/components/analyst/RepeatedSymbolsTable";
 
 async function fetchJSON(path: string) {
   const res = await fetch(path);

@@ -93,10 +93,10 @@ export default function FundamentalsWow(){
 
       <div>
         <div className="text-sm font-semibold mb-2">Key Ratios</div>
-        <RatiosTable rows={ratiosRows as any} />
+        <RatiosTable data={{ ratios: ratiosRows } as any} isLoading={loading} />
       </div>
 
-      <StatementsCompact rows={statementsMini as any} />
+      <StatementsCompact data={{ statements: statementsMini } as any} isLoading={loading} />
 
       {/* Comparison placeholder — you can feed it snapshots of peers and an averaged row */}
       {/* <ComparisonTable rows={[{ symbol: 'Industry Avg.', sectorAvg: true }]} /> */}

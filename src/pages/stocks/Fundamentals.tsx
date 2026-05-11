@@ -90,10 +90,10 @@ export default function FundamentalsPage(){
 
       <div>
         <div className="text-sm font-semibold mb-2">Key Ratios</div>
-        <RatiosTable rows={ratiosRows as any} />
+        <RatiosTable data={{ ratios: ratiosRows } as any} isLoading={loading} />
       </div>
 
-      <StatementsCompact rows={statementsMini as any} />
+      <StatementsCompact data={{ statements: statementsMini } as any} isLoading={loading} />
     </div>
   );
 }

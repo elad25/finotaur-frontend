@@ -6,14 +6,19 @@ import { useMemo } from 'react';
 
 const ORDER: MarketKey[] = ['stocks','crypto','futures','forex','commodities','indices'];
 
-export default function HeatmapPage() {
+interface HeatmapPageProps {
+  market?: MarketKey;
+}
+
+export default function HeatmapPage({ market: marketOverride }: HeatmapPageProps = {}) {
   const [params, setParams] = useSearchParams();
   const param = (params.get('m') || '').toLowerCase();
 
   const market = useMemo<MarketKey>(() => {
+    if (marketOverride && ORDER.includes(marketOverride)) return marketOverride;
     if (ORDER.includes(param as MarketKey)) return param as MarketKey;
     return 'indices';
-  }, [param]);
+  }, [param, marketOverride]);
 
   const onChange = (m: MarketKey) => {
     const next = new URLSearchParams(params);

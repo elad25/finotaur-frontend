@@ -1,11 +1,11 @@
 
 import React from "react";
-import PriceChart from "../../components/overview/PriceChart";
-import SnapshotCards from "../../components/overview/SnapshotCards";
-import AnalystSentiment from "../../components/overview/AnalystSentiment";
-import NewsPreview from "../../components/overview/NewsPreview";
-import CompanyOverviewCard from "../../components/overview/CompanyOverview";
-import { useOverviewData } from "../../hooks/useOverviewData";
+import PriceChart from "../../../components/overview/PriceChart";
+import SnapshotCards from "../../../components/overview/SnapshotCards";
+import AnalystSentiment from "../../../components/overview/AnalystSentiment";
+import NewsPreview from "../../../components/overview/NewsPreview";
+import CompanyOverviewCard from "../../../components/overview/CompanyOverview";
+import { useOverviewData } from "../../../hooks/useOverviewData";
 
 type Props = { symbol: string };
 

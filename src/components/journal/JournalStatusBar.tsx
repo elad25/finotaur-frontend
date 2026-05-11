@@ -1,5 +1,5 @@
 import React from "react";
-import { AutoSaveState } from "@/hooks/useAutoSave";
+type AutoSaveState = "idle" | "saving" | "saved" | "error";
 
 interface Props {
   pl: number;
