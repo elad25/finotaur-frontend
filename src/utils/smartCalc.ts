@@ -8,18 +8,21 @@ export type AssetClass = "stocks"|"futures"|"forex"|"crypto"|"options";
 const formatCache = new Map<string, string>();
 const MAX_CACHE_SIZE = 1000;
 
-export function formatNumber(n: number, fractionDigits=2): string {
-  if (!isFinite(n)) return "—";
-  
+export function formatNumber(n: number | null | undefined, fractionDigits=2): string {
+  // Global isFinite() coerces null to 0 (returns true), so we must guard nullish first.
+  // Was crashing in production at MyTrades trade-detail modal when stop_price/take_profit_price
+  // were null on open trades — `null.toLocaleString()` throws TypeError.
+  if (n == null || !isFinite(n)) return "—";
+
   const cacheKey = `${n}-${fractionDigits}`;
-  
+
   if (formatCache.has(cacheKey)) {
     return formatCache.get(cacheKey)!;
   }
-  
-  const formatted = n.toLocaleString(undefined, { 
-    minimumFractionDigits: fractionDigits, 
-    maximumFractionDigits: fractionDigits 
+
+  const formatted = n.toLocaleString(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
   });
   
   if (formatCache.size < MAX_CACHE_SIZE) {
