@@ -1097,7 +1097,6 @@ function JournalOverviewContent() {
     });
     return unsubscribe;
   }, [queryClient, refetchStats]);
-  const connections: any[] = []; const connectionsLoading = false;
   const { importTrades: saveToSupabase } = useImportTrades();
 
   
@@ -1106,12 +1105,6 @@ function JournalOverviewContent() {
   
   const tier = useMemo(() => stats?.tier, [stats]);
   
-  const hasActiveConnection = useMemo(() => 
-    connections?.some(c => c.status === 'CONNECTED'), 
-    [connections]
-  );
-  
-  const isCheckingConnection = connectionsLoading || subscriptionLoading;
   const isFreeUser = limits?.account_type === 'free';
   const isLockedForFree = isFreeUser && !canUseSnapTrade;
   
@@ -1127,7 +1120,13 @@ function JournalOverviewContent() {
   }, [stats]);
   
   // ✅ Check if Trade Duration chart should be locked
-  const isDurationChartLocked = isFreeUser || !hasActiveConnection;
+  // Gate by actual trade-duration data (per Elad 2026-05-11): chart unlocks when
+  // there are closed trades with measurable duration. getTradeDurationData filters
+  // for open_at && close_at && pnl != null, so an empty array = nothing to plot.
+  // Previous gate checked a hardcoded empty `connections` array (SnapTrade-era
+  // dead stub) which kept the chart permanently locked even for paying users
+  // with valid trades and a connected broker. See OQ-67.
+  const isDurationChartLocked = isFreeUser || tradeDurationData.length === 0;
   
   // ✅ Determine where to send user when clicking upgrade
   const handleDurationUpgrade = useCallback(() => {
