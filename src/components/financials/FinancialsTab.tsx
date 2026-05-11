@@ -91,7 +91,7 @@ export default function FinancialsTab() {
         const found = b.series.find(p => p.date === d);
         return found?.value ?? "";
       });
-      rows.push([b.name, *values]);
+      rows.push([b.name, ...values]);
     });
     downloadCSV(rows, `${symbol}_${tf}_${statement}.csv`);
   }

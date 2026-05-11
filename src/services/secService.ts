@@ -160,9 +160,12 @@ export async function getCompanyFilings(req: Request, res: Response) {
     const prev = buckets[key];
     if (!prev || (prev.filingDate || '') < (row.filingDate || '')) buckets[key] = row;
   }
-}&accessionNumber=${encodeURIComponent(filings.accessionNumber[i])}&primaryDocument=${encodeURIComponent(filings.primaryDocument?.[i] || '')}``
-        });
       }
+    }
+    // Flush bucketed quarterly entries (latest-filing-per-quarter wins) to result.
+    // Was implicitly dropped before — bug from initial commit, fixed alongside CI unblock.
+    for (const key of Object.keys(buckets)) {
+      result.push(buckets[key]);
     }
     const payload = { symbol, cik, filings: result };
     cache[cacheKey] = { ts: Date.now(), payload };

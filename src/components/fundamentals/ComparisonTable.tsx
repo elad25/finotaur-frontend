@@ -16,12 +16,12 @@ const ComparisonTable:React.FC<{ rows: Row[] }> = ({ rows }) => {
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className={\`border-t border-zinc-800/60 \${r.sectorAvg ? 'bg-zinc-900/30' : ''}\`}>
+            <tr key={i} className={`border-t border-zinc-800/60 ${r.sectorAvg ? 'bg-zinc-900/30' : ''}`}>
               <td className="p-3">{r.sectorAvg ? 'Industry Avg.' : r.symbol}</td>
               <td className="p-3">{r.marketCap ? r.marketCap.toLocaleString() : '—'}</td>
               <td className="p-3">{r.pe ?? '—'}</td>
-              <td className="p-3">{r.dividend!=null ? \`\${r.dividend.toFixed(2)}%\` : '—'}</td>
-              <td className="p-3">{r.netMargin!=null ? \`\${r.netMargin.toFixed(1)}%\` : '—'}</td>
+              <td className="p-3">{r.dividend!=null ? `${r.dividend.toFixed(2)}%` : '—'}</td>
+              <td className="p-3">{r.netMargin!=null ? `${r.netMargin.toFixed(1)}%` : '—'}</td>
             </tr>
           ))}
         </tbody>
