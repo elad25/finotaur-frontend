@@ -144,21 +144,27 @@ async function renewTradovateToken(
 }
 
 // ─── Vault: store/update secret (via public wrapper RPC) ──────
-// Calls public.tradovate_vault_upsert(p_name TEXT, p_secret TEXT) → UUID
-// That wrapper function calls vault.create_secret / UPDATE vault.secrets internally.
+// Calls public.tradovate_vault_upsert_atomic(p_connection_id UUID, p_name TEXT, p_secret TEXT) → UUID
+// Atomically mutates vault.secrets AND realigns broker_connections.connection_data.vault_secret_id
+// in one PL/pgSQL transaction. Uses vault.update_secret() for true in-place update (same UUID
+// across refreshes). Pass connectionId=null only on the first-connect path (login) where the
+// broker_connections row does not yet exist; the caller then upserts the row with the returned id.
+// Fixes OQ-VAULT-DRIFT (2026-05-11).
 async function storeInVault(
   userId: string,
   environment: string,
   username: string,
   password: string,
-  accessToken: string
+  accessToken: string,
+  connectionId: string | null = null
 ): Promise<string> {
   const payload    = JSON.stringify({ username, password, accessToken });
   const secretName = `tradovate_${userId}_${environment}`;
 
-  const { data, error } = await supabaseAdmin.rpc('tradovate_vault_upsert', {
-    p_name:   secretName,
-    p_secret: payload,
+  const { data, error } = await supabaseAdmin.rpc('tradovate_vault_upsert_atomic', {
+    p_connection_id: connectionId,
+    p_name:          secretName,
+    p_secret:        payload,
   });
 
   if (error || !data) {
@@ -278,15 +284,24 @@ Deno.serve(async (req: Request) => {
             newToken = result.accessToken;
           }
 
-          // Update vault with refreshed token
+          // Update vault AND realign broker_connections.vault_secret_id atomically (single txn).
+          // OQ-VAULT-DRIFT fix: the RPC writes both vault.secrets and the pointer; no drift window.
           const newVaultId = await storeInVault(
-            cred.user_id, cred.environment, username, password, newToken
+            cred.user_id, cred.environment, username, password, newToken, cred.id
           );
+
+          // Post-RPC metadata update. Re-read connection_data so the pointer just written by
+          // the atomic RPC isn't clobbered by a stale `cdata` snapshot from before the RPC.
+          const { data: freshConn } = await supabaseAdmin
+            .from('broker_connections')
+            .select('connection_data')
+            .eq('id', cred.id)
+            .maybeSingle();
+          const freshCdata = (freshConn?.connection_data ?? {}) as Record<string, unknown>;
 
           await supabaseAdmin.from('broker_connections').update({
             connection_data: {
-              ...cdata,
-              vault_secret_id:   newVaultId,
+              ...freshCdata,
               access_token_hash: newToken.slice(0, 8),
             },
             token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
@@ -405,14 +420,23 @@ Deno.serve(async (req: Request) => {
       // Full re-login with stored credentials
       const { accessToken } = await tradovateLogin(env, username, password);
 
-      const newVaultId = await storeInVault(cred.user_id, env, username, password, accessToken);
+      // OQ-VAULT-DRIFT fix: atomic vault + pointer alignment via the RPC (single txn).
+      await storeInVault(cred.user_id, env, username, password, accessToken, cred.id);
+
+      // Re-read fresh connection_data so the pointer just written by the atomic RPC
+      // isn't clobbered by the stale `cdata` snapshot.
+      const { data: freshConn } = await supabaseAdmin
+        .from('broker_connections')
+        .select('connection_data')
+        .eq('id', cred.id)
+        .maybeSingle();
+      const freshCdata = (freshConn?.connection_data ?? {}) as Record<string, unknown>;
 
       // is_active=true: this is the ONE place where is_active is re-enabled
       // (Whop subscription just resumed, or user explicitly clicked Reconnect).
       await supabaseAdmin.from('broker_connections').update({
         connection_data: {
-          ...cdata,
-          vault_secret_id:   newVaultId,
+          ...freshCdata,
           access_token_hash: accessToken.slice(0, 8),
         },
         token_expires_at: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
@@ -458,8 +482,10 @@ Deno.serve(async (req: Request) => {
     const { accessToken, accounts } = await tradovateLogin(env, username, password);
 
     // 2. Persist credentials in Vault (encrypted)
+    // First-connect path: broker_connections row doesn't exist yet → pass null for
+    // p_connection_id (the upsert below sets vault_secret_id atomically with the rest).
     console.log('[tradovate-auth] storing in vault...');
-    const vaultId = await storeInVault(userId, env, username, password, accessToken);
+    const vaultId = await storeInVault(userId, env, username, password, accessToken, null);
     console.log('[tradovate-auth] vault stored:', vaultId);
 
     // 3. Primary account = first active, else first in list
@@ -563,13 +589,60 @@ function json(data: unknown, status = 200): Response {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// REQUIRED SQL — run once in Supabase SQL Editor before deploying
-// (add to WHOP_DB or a dedicated migration file)
+// REQUIRED SQL — applied via Supabase migration
+//   • Live RPC used by this function: public.tradovate_vault_upsert_atomic
+//     (see supabase/migrations/2026-05-11_vault_drift_fix_atomic_upsert.sql)
+//   • Legacy RPC public.tradovate_vault_upsert: still defined in DB, no longer
+//     called by this edge function. To be dropped in a follow-up migration.
+//   • Reader: public.tradovate_vault_read (unchanged).
 // ═══════════════════════════════════════════════════════════════
 /*
 
--- Upsert a secret by name. Returns the secret UUID.
--- Uses vault.create_secret for new secrets, UPDATE for existing ones.
+-- NEW (live as of 2026-05-11) — atomic vault upsert + pointer alignment.
+-- See migration file for the canonical definition.
+CREATE OR REPLACE FUNCTION public.tradovate_vault_upsert_atomic(
+  p_connection_id UUID,
+  p_name          TEXT,
+  p_secret        TEXT
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault
+AS $$
+DECLARE
+  v_id UUID;
+BEGIN
+  SELECT id INTO v_id FROM vault.secrets WHERE name = p_name LIMIT 1;
+
+  IF v_id IS NULL THEN
+    SELECT vault.create_secret(p_secret, p_name) INTO v_id;
+  ELSE
+    PERFORM vault.update_secret(v_id, p_secret, NULL, NULL, NULL);
+  END IF;
+
+  IF p_connection_id IS NOT NULL THEN
+    UPDATE broker_connections
+    SET connection_data = jsonb_set(
+      COALESCE(connection_data, '{}'::jsonb),
+      '{vault_secret_id}',
+      to_jsonb(v_id::text),
+      true
+    )
+    WHERE id = p_connection_id;
+  END IF;
+
+  RETURN v_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.tradovate_vault_upsert_atomic(UUID, TEXT, TEXT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.tradovate_vault_upsert_atomic(UUID, TEXT, TEXT) FROM authenticated, anon;
+
+
+-- LEGACY (still defined, no longer called by this edge function).
+-- Kept for backwards-compat during transition; safe to DROP after 1 cron cycle confirms
+-- the atomic RPC is exercised exclusively.
 CREATE OR REPLACE FUNCTION public.tradovate_vault_upsert(
   p_name   TEXT,
   p_secret TEXT
@@ -582,17 +655,10 @@ AS $$
 DECLARE
   v_id UUID;
 BEGIN
-  -- Update if name already exists
-  UPDATE vault.secrets
-  SET secret = p_secret::bytea
-  WHERE name = p_name
-  RETURNING id INTO v_id;
-
-  -- Insert if not found
+  UPDATE vault.secrets SET secret = p_secret::bytea WHERE name = p_name RETURNING id INTO v_id;
   IF v_id IS NULL THEN
     SELECT vault.create_secret(p_secret, p_name) INTO v_id;
   END IF;
-
   RETURN v_id;
 END;
 $$;
@@ -600,7 +666,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.tradovate_vault_upsert(TEXT, TEXT) TO service_role;
 REVOKE EXECUTE ON FUNCTION public.tradovate_vault_upsert(TEXT, TEXT) FROM authenticated, anon;
 COMMENT ON FUNCTION public.tradovate_vault_upsert IS
-'Upserts a Tradovate credential into Supabase Vault. service_role only.';
+'LEGACY: Upserts a Tradovate credential into Supabase Vault. service_role only. Replaced by tradovate_vault_upsert_atomic (2026-05-11).';
 
 
 -- Read a secret by its UUID. Returns decrypted text or NULL.
