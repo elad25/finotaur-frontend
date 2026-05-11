@@ -910,27 +910,32 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
       }
     }
 
-    // ── STEP 1-7: Generate deep brief sections ──
-    for (let i = 0; i < AI_SECTIONS_CONFIG.length; i++) {
-      if (controller.signal.aborted) break;
-      const config = AI_SECTIONS_CONFIG[i];
-      try {
-        // For macro_bridge, inject ISM data into the prompt
-        const prompt = config.id === 'macro_bridge'
-          ? config.prompt(data, ismDataBlock)
-          : config.prompt(data);
-        const { content, searchUsed } = await callAI(prompt, config.useWebSearch, controller.signal);
-        const verdictInfo = extractVerdict(content, config.id);
-        if (!controller.signal.aborted) {
-          setSections(prev => prev.map(s => s.id === config.id ? { ...s, content, searchUsed, verdict: verdictInfo?.verdict || null, verdictColor: verdictInfo?.color || null, isLoading: false, error: null } : s));
+    // ── STEP 1-7: Generate deep brief sections IN PARALLEL ──
+    // Each section is an independent AI call (no inter-dependencies between sections;
+    // ISM data was already pre-fetched above and injected only into macro_bridge).
+    // Running them in parallel cuts total time from O(n) to O(1) single-call latency
+    // (~15s vs ~135s for 9 sections). Each section updates its own slice of state
+    // independently so they appear as soon as each one resolves.
+    await Promise.allSettled(
+      AI_SECTIONS_CONFIG.map(async (config) => {
+        if (controller.signal.aborted) return;
+        try {
+          const prompt = config.id === 'macro_bridge'
+            ? config.prompt(data, ismDataBlock)
+            : config.prompt(data);
+          const { content, searchUsed } = await callAI(prompt, config.useWebSearch, controller.signal);
+          const verdictInfo = extractVerdict(content, config.id);
+          if (!controller.signal.aborted) {
+            setSections(prev => prev.map(s => s.id === config.id ? { ...s, content, searchUsed, verdict: verdictInfo?.verdict || null, verdictColor: verdictInfo?.color || null, isLoading: false, error: null } : s));
+          }
+        } catch (err: any) {
+          if (err.name === 'AbortError') return;
+          if (!controller.signal.aborted) {
+            setSections(prev => prev.map(s => s.id === config.id ? { ...s, content: null, verdict: null, verdictColor: null, isLoading: false, error: err.message || 'Analysis failed', searchUsed: false } : s));
+          }
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') break;
-        if (!controller.signal.aborted) {
-          setSections(prev => prev.map(s => s.id === config.id ? { ...s, content: null, verdict: null, verdictColor: null, isLoading: false, error: err.message || 'Analysis failed', searchUsed: false } : s));
-        }
-      }
-    }
+      })
+    );
 
     if (!controller.signal.aborted) {
       const genAt = new Date().toISOString();
