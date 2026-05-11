@@ -61,7 +61,6 @@ import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessio
 const EquityChart = lazy(() => import("@/components/charts/EquityChart"));
 const DailyPnLChart = lazy(() => import("@/components/charts/DailyPnLChart"));
 const BreakdownPanel = lazy(() => import("@/components/journal/BreakdownPanel"));
-const CalendarHeatmap = lazy(() => import("@/components/journal/CalendarHeatmap"));
 const AffiliatePopup = lazy(() => import("@/components/AffiliatePopup"));
 const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPopup"));
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
@@ -1497,15 +1496,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Suspense>
             </ErrorBoundary>
 
-            {/* === CALENDAR HEATMAP === */}
-            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
-              Failed to load calendar. Please refresh.
-            </div>}>
-              <Suspense fallback={<ChartSkeleton />}>
-                <CalendarHeatmap trades={stats.trades || []} />
-              </Suspense>
-            </ErrorBoundary>
-
+            {/* Calendar heatmap lives in its dedicated Calendar tab — removed
+                from Overview 2026-05-11 (was showing a 12-week window that
+                missed Elad's actual trading days; the dedicated tab covers
+                the full date range with proper controls). */}
 
           </>
         )}
