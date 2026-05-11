@@ -390,11 +390,15 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         await enableAdminMode();
       }
 
-      const cutoffDate = daysBack && daysBack > 0
-        ? dayjs().subtract(daysBack, 'days').toISOString()
-        : null;
+      // SAFETY BACKSTOP — caller passes `daysBack=null` for "all time".
+      // We still cap lookback at MAX_LOOKBACK_DAYS to prevent unbounded
+      // SELECT on `trades` (CHUNK 3 B.4 phase-1 frontend hardening).
+      // Older trades require explicit dateStart/dateEnd in the UI.
+      const MAX_LOOKBACK_DAYS = 365;
+      const effectiveLookbackDays = daysBack && daysBack > 0 ? daysBack : MAX_LOOKBACK_DAYS;
+      const cutoffDate = dayjs().subtract(effectiveLookbackDays, 'days').toISOString();
 
-      devLog('🔑 Dashboard query config:', { userId, isImpersonating, cutoffDate });
+      devLog('🔑 Dashboard query config:', { userId, isImpersonating, cutoffDate, effectiveLookbackDays });
 
       if (isImpersonating && !supabaseAdmin) {
         throw new Error('Admin client not configured. Add VITE_SUPABASE_SERVICE_ROLE_KEY to .env file.');
@@ -421,10 +425,9 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         queryBuilder = queryBuilder.eq('portfolio_id', portfolioId);
       }
 
-      if (cutoffDate) {
-        // 🔥 Use open_at for date filtering (works for both modes)
-        queryBuilder = queryBuilder.gte('open_at', cutoffDate);
-      }
+      // Cutoff is always set (defaults to MAX_LOOKBACK_DAYS for "all time").
+      // 🔥 Use open_at for date filtering (works for both modes).
+      queryBuilder = queryBuilder.gte('open_at', cutoffDate);
 
       const { data, error } = await queryBuilder;
 
