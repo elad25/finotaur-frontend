@@ -268,8 +268,11 @@ export function useWarZoneData(): UseWarZoneDataReturn {
           }) || null;
         }
 
-        // Today's report - show only if AFTER 9 AM AND report exists
-        const currentReport = isBeforeReportTime ? null : (todayReport || null);
+        // Today's report — trust the DB. If today's live report exists, show it
+        // regardless of the clock. The previous logic suppressed it for ~3 minutes
+        // around 9 AM ET (cron writes the row ~3 min after 9:00) and for any user
+        // whose local-time-derived nyHour read drifted below 9.
+        const currentReport = todayReport || null;
 
         console.log('[WAR ZONE] 📌 Daily Assignment:', {
           current: currentReport?.id || 'WAITING',
