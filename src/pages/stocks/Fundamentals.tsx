@@ -69,8 +69,8 @@ export default function FundamentalsPage(){
         <input className="px-3 py-2 rounded-lg bg-transparent border border-zinc-700 w-48" value={symbol} onChange={(e)=>setSymbol(e.target.value.toUpperCase())} placeholder="Ticker (e.g., AAPL)" />
         <button className="px-3 py-2 rounded-lg border border-zinc-700 hover:bg-zinc-800" onClick={()=>loadAll(symbol,period)}>Load</button>
         <div className="ml-auto flex gap-2">
-          <button className={\`px-3 py-2 rounded-lg border \${period==='annual'?'border-yellow-600':'border-zinc-700'}\`} onClick={()=>{setPeriod('annual');loadAll(symbol,'annual');}}>Annual</button>
-          <button className={\`px-3 py-2 rounded-lg border \${period==='quarterly'?'border-yellow-600':'border-zinc-700'}\`} onClick={()=>{setPeriod('quarterly');loadAll(symbol,'quarterly');}}>Quarterly</button>
+          <button className={`px-3 py-2 rounded-lg border ${period==='annual'?'border-yellow-600':'border-zinc-700'}`} onClick={()=>{setPeriod('annual');loadAll(symbol,'annual');}}>Annual</button>
+          <button className={`px-3 py-2 rounded-lg border ${period==='quarterly'?'border-yellow-600':'border-zinc-700'}`} onClick={()=>{setPeriod('quarterly');loadAll(symbol,'quarterly');}}>Quarterly</button>
           <button className="px-3 py-2 rounded-lg border border-zinc-700 hover:bg-zinc-800" onClick={()=>window.print()}>Export PDF</button>
           <button className="px-3 py-2 rounded-lg border border-zinc-700 hover:bg-zinc-800" onClick={exportCSV}>Export CSV</button>
         </div>
