@@ -262,6 +262,18 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
           lastError={reconnectFor.last_error}
           onReconnect={async () => {
             const result = await reconnect(reconnectFor.id);
+            // OQ-87: vault entry is missing → one-click reconnect cannot
+            // recover. Close this modal and open AddBrokerPopup via the
+            // parent's onAddConnection so the user can re-enter credentials.
+            if (result.requires_credentials) {
+              setReconnectFor(null);
+              onAddConnection?.();
+              return {
+                success: false,
+                error: result.error,
+                requires_credentials: true,
+              };
+            }
             return { success: result.success, error: result.error };
           }}
         />
