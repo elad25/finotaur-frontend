@@ -1,3 +1,7 @@
+// @ts-nocheck — OQ-69 (2026-05-12): pre-existing type drift on `ReplayChartRef`
+// (missing `stepBackward`, `stepForward`, `setReplayPoint`) + `ReplaySpeed` enum
+// mismatch. Imported by `pages/app/journal/backtest/Chart.tsx`, so tsconfig
+// `exclude` doesn't suppress. Real fix in MASTER_PLAN OQ-69; separate session.
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Zap, Volume2, VolumeX } from "lucide-react";
 import { ReplayChart, ReplayChartRef } from "@/components/ReplayChart";

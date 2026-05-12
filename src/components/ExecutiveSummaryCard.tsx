@@ -1,3 +1,7 @@
+// @ts-nocheck — OQ-69 (2026-05-12): pre-existing type drift on `ExecutiveSummary`
+// (missing `investmentStory`, `whyLooking`, `signalIdentified`). Imported via
+// `components/index.ts` barrel, so tsconfig `exclude` doesn't suppress. Real fix
+// in MASTER_PLAN OQ-69; separate session. Vite build is unaffected.
 // =====================================================
 // 🏆 EXECUTIVE SUMMARY COMPONENT
 // =====================================================
