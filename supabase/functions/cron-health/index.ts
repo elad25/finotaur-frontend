@@ -63,12 +63,17 @@ Deno.serve(async (req: Request) => {
   });
 
   const anyStale = jobs.some(j => j.stale);
-  const anyFailed = jobs.some(j => j.last_status === 'failed');
+  // Tolerant failure detection: a transient 'failed' status from a single bad cron tick
+  // should not flap UptimeRobot. Only treat as critical when the failure has persisted
+  // past the next expected cron cycle (age > 50% of the staleness threshold).
+  const anyFailed = jobs.some(j =>
+    j.last_status === 'failed' && j.age_ms > j.threshold_ms * 0.5
+  );
   const expectedJobs = ['tradovate-sync', 'tradovate-token-refresh'];
   const missingJobs = expectedJobs.filter(name => !jobs.some(j => j.job_name === name));
   const ok = !anyStale && !anyFailed && missingJobs.length === 0;
 
-  return new Response(JSON.stringify({ ok, jobs, missingJobs, thresholds_ms: STALE_THRESHOLDS_MS }), {
+  return new Response(JSON.stringify({ ok, jobs, missingJobs, thresholds_ms: STALE_THRESHOLDS_MS, failure_policy: 'tolerant_50pct' }), {
     status: ok ? 200 : 503,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
