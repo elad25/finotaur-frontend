@@ -717,6 +717,7 @@ export default function New() {
   const setScreenshotFiles = st.setScreenshotFiles;
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showExitDatePicker, setShowExitDatePicker] = useState(false);
   const [autoSession, setAutoSession] = useState(true);
   
   // 🔥 Partial Exits State
@@ -908,6 +909,7 @@ const {
           st.setFees(trade.fees || 0);
           st.setFeesMode(trade.fees_mode || 'auto');
           st.setOpenAt(trade.open_at || new Date().toISOString());
+          if (trade.close_at) st.setCloseAt(trade.close_at);
           st.setSession(trade.session || '');
           st.setStrategy(trade.strategy_id || undefined);
           st.setSetup(trade.setup || '');
@@ -1440,8 +1442,8 @@ if (hasResult && directRiskUSD > 0) {
           // TIMESTAMPS
           // ═══════════════════════════════════════════
           open_at: st.openAt || new Date().toISOString(),
-          close_at: hasResult ? new Date().toISOString() : null,
-          
+          close_at: hasResult ? (st.closeAt || new Date().toISOString()) : null,
+
           // ═══════════════════════════════════════════
           // OPTIONAL TRADE FIELDS
           // ═══════════════════════════════════════════
@@ -1568,7 +1570,7 @@ if (hasResult && directRiskUSD > 0) {
           // TIMESTAMPS
           // ═══════════════════════════════════════════
           open_at: st.openAt || new Date().toISOString(),
-          close_at: hasExitPrice ? new Date().toISOString() : null,
+          close_at: hasExitPrice ? (st.closeAt || new Date().toISOString()) : null,
           
           // ═══════════════════════════════════════════
           // OPTIONAL TRADE FIELDS
@@ -2442,6 +2444,33 @@ if (hasResult && directRiskUSD > 0) {
                   </div>
                 </div>
 
+                {/* Exit Time — shown only when exit price is set */}
+                {(st.exitPrice && st.exitPrice > 0) && (
+                  <div className="mb-6">
+                    <Label className="text-xs text-zinc-400 mb-2 block">Exit Time</Label>
+                    <button
+                      type="button"
+                      onClick={() => setShowExitDatePicker(true)}
+                      className="w-full bg-[#0E0E0E] border border-yellow-200/15 rounded-xl h-12 text-zinc-200 px-4 flex items-center justify-between hover:border-yellow-200/30 transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium">
+                          {st.closeAt ? formatTradeDate(new Date(st.closeAt), timezone).split(',')[0] : 'Select Date'}
+                        </span>
+                        <span className="text-yellow-400">•</span>
+                        <span className="text-sm font-medium tabular-nums">
+                          {st.closeAt ? new Date(st.closeAt).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                          }) : '--:--'}
+                        </span>
+                      </div>
+                      <Clock className="w-4 h-4 text-zinc-500" />
+                    </button>
+                  </div>
+                )}
+
                 {/* DYNAMIC R:R BAR - Trade Summary Mode */}
                 <div className="mt-8 pt-6 border-t-2 border-yellow-200/10">
                   <div className="bg-gradient-to-br from-zinc-900/50 to-zinc-800/30 rounded-xl p-5 border border-yellow-200/20">
@@ -3020,6 +3049,15 @@ if (hasResult && directRiskUSD > 0) {
         onClose={() => setShowDatePicker(false)}
         value={st.openAt}
         onChange={(value) => st.setOpenAt(value)}
+        timezone={timezone}
+      />
+
+      {/* 🎨 Exit Date/Time Picker Modal */}
+      <DateTimePickerModal
+        isOpen={showExitDatePicker}
+        onClose={() => setShowExitDatePicker(false)}
+        value={st.closeAt}
+        onChange={(value) => st.setCloseAt(value)}
         timezone={timezone}
       />
 
