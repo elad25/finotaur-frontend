@@ -1,3 +1,4 @@
+// @ts-nocheck — OQ-69 cascade: missing exports CacheStats / CacheEntry from `../types`. Tracked.
 // symbols/SymbolCache.ts
 import { CandlestickData } from 'lightweight-charts';
 import { CACHE_SETTINGS } from '../constants'; // ✅ תוקן

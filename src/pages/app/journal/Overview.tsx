@@ -67,6 +67,9 @@ const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectMo
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
 const ImportTradesPopup = lazy(() => import("@/components/Importtradespopup"));
 const AddBrokerPopup = lazy(() => import("@/components/broker/AddBrokerPopup"));
+const BrokerReconnectModal = lazy(() =>
+  import("@/components/broker/BrokerReconnectModal").then((m) => ({ default: m.BrokerReconnectModal })),
+);
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -1039,8 +1042,17 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, isLoading: brokersLoading } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
+  // Resolves OQ-72: previously a user whose Tradovate session went degraded
+  // (e.g. Vault read failure) had no in-journal path back. They sat in 24h
+  // backoff silently until manually navigating to the broker popover.
+  const degradedConnection = allBrokerConnections.find(
+    (c) => c.status === 'degraded' || c.status === 'canceled',
+  );
+  const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
 
   // First-visit onboarding: auto-open AddBrokerPopup once for users with zero brokers.
   // Persisted in localStorage so refreshing or returning later does not re-trigger.
@@ -1381,6 +1393,33 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
+        {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections. */}
+        {!brokersLoading && degradedConnection && (
+          <div className="rounded-2xl border border-[#E36363]/30 bg-[#E36363]/8 px-5 py-4 mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#E36363]/15 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-[#E36363]" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'} connection needs attention
+                </p>
+                <p className="text-xs text-[#A0A0A0] mt-0.5">
+                  {degradedConnection.last_error
+                    ? `Last error: ${degradedConnection.last_error.slice(0, 100)}`
+                    : 'Auto-recovery failed — reconnect to resume syncing trades.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setReconnectModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-[#C9A646] text-black text-sm font-semibold hover:bg-[#D4B255] transition-colors whitespace-nowrap"
+            >
+              Reconnect now
+            </button>
+          </div>
+        )}
+
         {!brokersLoading && allBrokerConnections.length === 0 && (
           <JournalEmptyState
             variant="no-broker"
@@ -1571,6 +1610,24 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         <ErrorBoundary>
           <Suspense fallback={null}>
             <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+
+      {/* Phase 1B.4 — BrokerReconnectModal driven by the degraded-connection banner above. */}
+      {reconnectModalOpen && degradedConnection && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <BrokerReconnectModal
+              open={reconnectModalOpen}
+              onOpenChange={setReconnectModalOpen}
+              brokerName={degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'}
+              lastError={degradedConnection.last_error}
+              onReconnect={async () => {
+                const result = await brokerReconnect(degradedConnection.id);
+                return { success: result.success, error: result.error };
+              }}
+            />
           </Suspense>
         </ErrorBoundary>
       )}

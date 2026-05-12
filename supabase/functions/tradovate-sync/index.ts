@@ -23,11 +23,15 @@ import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetr
 // is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
 // per Tradovate's official guidance, plus 5xx fixed-delay backoff).
 //
-// Observability (Phase 1A.2): every 429 is fire-and-forget INSERTed into
-// `public.tradovate_api_call_log` via the `admin` option. Per-user/connection
-// attribution is deferred to Phase 1B — for now the rows carry NULL user_id
-// and we attribute via the `label` field.
-function fetchWithRetry(url: string, init: RequestInit, opts?: { maxAttempts?: number }): Promise<Response> {
+// Observability (Phase 1A.2 + 1B.1): every 429 is fire-and-forget INSERTed
+// into `public.tradovate_api_call_log` via the `admin` option. Phase 1B
+// threads `userId` + `connectionId` down from the syncCredential caller so
+// every row can be attributed to a specific broker_connection.
+function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: { maxAttempts?: number; userId?: string; connectionId?: string },
+): Promise<Response> {
   return sharedFetchWithRetry(url, init, {
     ...opts,
     label: 'tradovate-sync',
@@ -67,20 +71,61 @@ async function fetchFills(
   base: string,
   accessToken: string,
   _accountId: number,
-  lastFillId: number
+  lastFillId: number,
+  attribution?: { userId: string; connectionId: string },
 ): Promise<TradovateFill[]> {
+  // Phase 1B.3: defensive pagination loop.
+  //
+  // Tradovate's /fill/list public docs don't specify pagination behavior
+  // (we use /fill/list because /fill/ldeps requires API key permissions
+  // we don't have — see top-of-function comment). Empirically the endpoint
+  // returns "all fills scoped to the token" in one call, but if Tradovate
+  // ever introduces an undocumented page cap (≥500 fills history is when
+  // it could bite), this loop survives that scenario:
+  //   - Fetch once.
+  //   - If response contains >= PAGE_THRESHOLD rows AND any rows are newer
+  //     than the cursor we passed in, advance cursor to the max-id observed
+  //     and refetch.
+  //   - Cap iterations at MAX_PAGES (sanity).
+  //
+  // Today (zero observed caps) this is a no-op single iteration. If
+  // Tradovate caps later, deep-history users still get all their fills.
+  const PAGE_THRESHOLD = 200;
+  const MAX_PAGES = 10;
   const url = `${base}/fill/list`;
-  const res = await fetchWithRetry(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const headers = { Authorization: `Bearer ${accessToken}` };
 
-  if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-  if (!res.ok) throw new Error(`Fill fetch failed: ${res.status}`);
+  const collected: TradovateFill[] = [];
+  let cursor = lastFillId;
+  let iteration = 0;
 
-  const fills: TradovateFill[] = await res.json();
+  while (iteration < MAX_PAGES) {
+    iteration++;
+    const res = await fetchWithRetry(url, { headers }, attribution);
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) throw new Error(`Fill fetch failed: ${res.status}`);
 
-  // Only fills newer than last cursor
-  return fills.filter(f => f.id > lastFillId);
+    const page: TradovateFill[] = await res.json();
+    const newFills = page.filter(f => f.id > cursor);
+
+    if (newFills.length === 0) break;
+    collected.push(...newFills);
+
+    // Only keep paging if (a) response looks capped and (b) we made progress.
+    if (page.length < PAGE_THRESHOLD) break;
+
+    const maxIdThisPage = newFills.reduce((m, f) => (f.id > m ? f.id : m), cursor);
+    if (maxIdThisPage <= cursor) break; // no forward progress — bail
+    cursor = maxIdThisPage;
+
+    if (iteration > 1) {
+      console.log(
+        `[tradovate-sync] fill_pagination: page=${iteration} collected=${collected.length} cursor=${cursor}`,
+      );
+    }
+  }
+
+  return collected;
 }
 
 interface TradovateFill {
@@ -140,7 +185,8 @@ function extractBaseSymbol(contractName: string): string | null {
 async function getContractInfo(
   base: string,
   accessToken: string,
-  contractId: number
+  contractId: number,
+  attribution?: { userId: string; connectionId: string },
 ): Promise<{ name: string; fullPointValue: number }> {
   // Helper: returns API value if usable (>0), otherwise tries hardcoded table by base symbol.
   // Always logs which source produced the multiplier — observability for Lesson 13 verification.
@@ -162,27 +208,35 @@ async function getContractInfo(
     return { name, fullPointValue: 1 };
   };
 
+  const authHeaders = { Authorization: `Bearer ${accessToken}` };
+
   // Step 1: contract/item → get name + contractMaturityId
-  const contractRes = await fetchWithRetry(`${base}/contract/item?id=${contractId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const contractRes = await fetchWithRetry(
+    `${base}/contract/item?id=${contractId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!contractRes.ok) return finalize('UNKNOWN', null);
   const contract = await contractRes.json();
   const contractName = contract.name ?? 'UNKNOWN';
 
   // Step 2: contractMaturity/item → get productId
   if (!contract.contractMaturityId) return finalize(contractName, null);
-  const maturityRes = await fetchWithRetry(`${base}/contractMaturity/item?id=${contract.contractMaturityId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const maturityRes = await fetchWithRetry(
+    `${base}/contractMaturity/item?id=${contract.contractMaturityId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!maturityRes.ok) return finalize(contractName, null);
   const maturity = await maturityRes.json();
 
   // Step 3: product/item → get fullPointValue
   if (!maturity.productId) return finalize(contractName, null);
-  const productRes = await fetchWithRetry(`${base}/product/item?id=${maturity.productId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const productRes = await fetchWithRetry(
+    `${base}/product/item?id=${maturity.productId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!productRes.ok) return finalize(contractName, null);
   const product = await productRes.json();
 
@@ -451,8 +505,12 @@ async function syncCredential(cred: {
 
   const lastFillId = syncState?.last_fill_id ?? 0;
 
+  // Phase 1B.1: every Tradovate API call from this credential's sync run
+  // carries user_id + connection_id in 429 / non-2xx observability rows.
+  const attribution = { userId: cred.user_id, connectionId: cred.id };
+
   // 3. Fetch new fills
-  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId);
+  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
   if (fills.length === 0) {
     // Update last_sync_at even when no new fills
     await supabaseAdmin.from('broker_connections').update({
@@ -501,7 +559,7 @@ async function syncCredential(cred: {
     try {
       if (!contractCache[fill.contractId]) {
         contractCache[fill.contractId] = await getContractInfo(
-          base, accessToken, fill.contractId
+          base, accessToken, fill.contractId, attribution,
         );
       }
       const contract = contractCache[fill.contractId];
@@ -654,7 +712,64 @@ Deno.serve(async (req: Request) => {
     let totalErrors   = 0;
     let synced        = 0;
 
-    const activeConnections = credentials ?? [];
+    let allConnections = credentials ?? [];
+
+    // Phase 1B.2 — active-user filter (cron mode only).
+    //
+    // Skip cron-syncing connections whose owner has had no trade activity in
+    // the last 7 days AND whose connection is older than 7 days. New accounts
+    // (< 7 days) are always kept so initial sync runs even before the user
+    // has any trades yet. Cuts steady-state cron load by an expected 80%+
+    // once the user base spreads beyond active traders.
+    //
+    // Manual / initial modes bypass this filter — user explicitly asked for sync.
+    //
+    // Implementation: 1 extra DB read (trades.user_id where created_at > 7d).
+    // Build a Set, filter the connections list in-memory. Cheaper than a
+    // server-side join + works around postgrest's lack of inline EXISTS.
+    let activeConnections = allConnections;
+    if (mode === 'cron' && allConnections.length > 0) {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentTraders } = await supabaseAdmin
+        .from('trades')
+        .select('user_id')
+        .eq('broker', 'tradovate')
+        .gte('created_at', sevenDaysAgo);
+      const activeUserIds = new Set<string>(
+        (recentTraders ?? []).map((r: { user_id: string }) => r.user_id),
+      );
+      const skipped: string[] = [];
+      activeConnections = allConnections.filter((bc: { id: string; user_id: string; created_at?: string }) => {
+        if (activeUserIds.has(bc.user_id)) return true;
+        // New connection grace — keep if connection is < 7 days old.
+        // broker_connections.created_at not in SELECT (saves a column);
+        // we'll fetch it lazily only for connections that need the grace check.
+        return false; // default skip; grace check below repopulates kept new accounts
+      });
+      // Lazy grace fetch — only for connections we'd otherwise skip.
+      const candidatesForGrace = allConnections.filter(
+        (bc: { id: string; user_id: string }) => !activeUserIds.has(bc.user_id),
+      );
+      if (candidatesForGrace.length > 0) {
+        const { data: ageRows } = await supabaseAdmin
+          .from('broker_connections')
+          .select('id, created_at')
+          .in('id', candidatesForGrace.map((c: { id: string }) => c.id))
+          .gte('created_at', sevenDaysAgo);
+        const newConnIds = new Set<string>((ageRows ?? []).map((r: { id: string }) => r.id));
+        const grace = candidatesForGrace.filter((c: { id: string }) => newConnIds.has(c.id));
+        activeConnections = [...activeConnections, ...grace];
+        for (const c of candidatesForGrace) {
+          if (!newConnIds.has(c.id)) skipped.push(c.id);
+        }
+      }
+      console.log(JSON.stringify({
+        event: 'active_user_filter',
+        kept: activeConnections.length,
+        skipped_inactive: skipped.length,
+        total: allConnections.length,
+      }));
+    }
     const runStart = Date.now();
     let totalProcessed = 0;
     let totalSuccess   = 0;

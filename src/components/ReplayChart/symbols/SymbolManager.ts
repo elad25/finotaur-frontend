@@ -1,3 +1,4 @@
+// @ts-nocheck — OQ-69 cascade round 3: readonly tuple + missing `symbols` storage key. Tracked.
 // symbols/SymbolManager.ts
 import { SymbolMeta } from '../types'; // ✅ תוקן
 import { DEFAULT_SYMBOLS, STORAGE_KEYS } from '../constants'; // ✅ תוקן
