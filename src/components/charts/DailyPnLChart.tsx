@@ -134,8 +134,8 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
       </div>
       
       <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer>
-          <BarChart 
+        <ResponsiveContainer debounce={150}>
+          <BarChart
             data={optimizedData}
             margin={{ top: 20, right: 20, left: 10, bottom: 30 }}
             barGap={3}

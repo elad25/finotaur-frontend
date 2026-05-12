@@ -104,7 +104,7 @@ const EquityChart = React.memo(({ data }: EquityChartProps) => {
       </div>
       
       <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer>
+        <ResponsiveContainer debounce={150}>
           <AreaChart data={optimizedData}>
             <defs>
               <linearGradient id="eqGradient" x1="0" y1="0" x2="1" y2="0">
