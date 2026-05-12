@@ -17,40 +17,22 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
 import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
+import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetry.ts';
 
-// ─── Retry helper for transient Tradovate API errors ─────────
-// Retries on 5xx and 429. Returns immediately on 401 (token expiry
-// handled by caller) and other 4xx (client errors, not retriable).
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  opts?: { maxAttempts?: number }
-): Promise<Response> {
-  const max = opts?.maxAttempts ?? 3;
-  const delays = [1000, 2000, 4000]; // ms — used for attempts 1→2, 2→3
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= max; attempt++) {
-    try {
-      const res = await fetch(url, init);
-      // 401 → don't retry, signal token expiry
-      if (res.status === 401) return res;
-      // 4xx (other than 401/429) → don't retry, client error
-      if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
-      // 5xx and 429 → retry
-      if (res.status >= 500 || res.status === 429) {
-        if (attempt === max) return res;
-        await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
-        continue;
-      }
-      // 2xx/3xx → success
-      return res;
-    } catch (err) {
-      lastErr = err;
-      if (attempt === max) throw err;
-      await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
-    }
-  }
-  throw lastErr ?? new Error('fetchWithRetry: exhausted attempts');
+// Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
+// is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
+// per Tradovate's official guidance, plus 5xx fixed-delay backoff).
+//
+// Observability (Phase 1A.2): every 429 is fire-and-forget INSERTed into
+// `public.tradovate_api_call_log` via the `admin` option. Per-user/connection
+// attribution is deferred to Phase 1B — for now the rows carry NULL user_id
+// and we attribute via the `label` field.
+function fetchWithRetry(url: string, init: RequestInit, opts?: { maxAttempts?: number }): Promise<Response> {
+  return sharedFetchWithRetry(url, init, {
+    ...opts,
+    label: 'tradovate-sync',
+    admin: supabaseAdmin,
+  });
 }
 
 const TRADOVATE_URLS = {
@@ -598,8 +580,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const BATCH_SIZE = 20;
-const STAGGER_MS = 200;
+// Phase 1A.4 (2026-05-12): smaller batch + larger stagger to reduce burst
+// rate against Tradovate's per-IP 80 req/min limit.
+//
+// Prior: BATCH_SIZE=20, STAGGER_MS=200 (10 parallel/sec from one IP).
+// Now:  BATCH_SIZE=10, STAGGER_MS=500 (~3-4 parallel/sec) — halves burst.
+//
+// Trade-off: cron tick takes ~2x longer at scale. At 1000 connections this
+// is ~4 min wall clock (still inside the 5-min cron window). Beyond 1000
+// connections we need sharded cron OR the WS streamer (Phase 2).
+//
+// Note: these are tuning knobs, not the scale-out solution. The real fix
+// for 10K+ users is event-driven WS ingestion (see MASTER_PLAN OQ-64).
+const BATCH_SIZE = 10;
+const STAGGER_MS = 500;
 
 // ─── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req: Request) => {

@@ -21,6 +21,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
 import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
+import { fetchWithRetry } from '../_shared/fetchWithRetry.ts';
+
+// Local wrapper preserving the existing call sites — the canonical retry
+// logic lives in `_shared/fetchWithRetry.ts`. Handles Tradovate's 429
+// (p-time + p-ticket) and 5xx with fixed-delay backoff. 401 still bubbles
+// up to the caller (renewal path or scheduleRetry).
+//
+// Observability (Phase 1A.2): every 429 is fire-and-forget INSERTed into
+// `public.tradovate_api_call_log` via the `admin` option. Per-user/connection
+// attribution is deferred to Phase 1B.
+function tradovateFetch(url: string, init: RequestInit): Promise<Response> {
+  return fetchWithRetry(url, init, { label: 'tradovate-auth', admin: supabaseAdmin });
+}
 
 // ─── Tradovate official REST API base URLs ────────────────────
 const TRADOVATE_URLS = {
@@ -69,7 +82,7 @@ async function tradovateLogin(
 ): Promise<LoginResult> {
   const base = TRADOVATE_URLS[environment];
 
-  const res = await fetch(`${base}/auth/accesstokenrequest`, {
+  const res = await tradovateFetch(`${base}/auth/accesstokenrequest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -101,7 +114,7 @@ async function tradovateLogin(
   }
 
   // Fetch account list with the new token
-  const accountsRes = await fetch(`${base}/account/list`, {
+  const accountsRes = await tradovateFetch(`${base}/account/list`, {
     headers: { Authorization: `Bearer ${data.accessToken}` },
   });
   const accounts: TradovateAccount[] = accountsRes.ok
@@ -126,7 +139,7 @@ async function renewTradovateToken(
   const base = TRADOVATE_URLS[environment];
 
   try {
-    const res = await fetch(`${base}/auth/renewaccesstoken`, {
+    const res = await tradovateFetch(`${base}/auth/renewaccesstoken`, {
       method: 'GET',
       headers: {
         'Content-Type':  'application/json',
@@ -250,8 +263,31 @@ Deno.serve(async (req: Request) => {
       let refreshSucceeded = 0;
       let refreshFailed = 0;
 
-      for (const cred of connected ?? []) {
-        refreshProcessed++;
+      // Phase 1A.3 (2026-05-12): batched parallel refresh.
+      //
+      // Previously this loop was sequential — at 1000 connections the
+      // refresh tick could exceed 10 minutes (1000 × ~600ms each), which
+      // approaches edge-function timeout limits and stalls retries.
+      //
+      // Now: process REFRESH_BATCH_SIZE connections in parallel via
+      // Promise.allSettled, with REFRESH_STAGGER_MS between batches to
+      // smooth the burst against Tradovate's per-IP 80 req/min limit.
+      // At 1000 connections + BATCH_SIZE=10 + STAGGER=500ms:
+      //   100 batches × ~600ms parallel = ~60s plus 100×500ms stagger = ~110s total.
+      // At 10K connections: ~1000 batches → ~18 min worst case. Still inside
+      // Tradovate's per-IP limit (10 parallel × 60 sec/min = 600 req/min spread).
+      const REFRESH_BATCH_SIZE = 10;
+      const REFRESH_STAGGER_MS = 500;
+
+      type ConnRow = {
+        id: string;
+        user_id: string;
+        environment: string;
+        connection_data: { vault_secret_id?: string } | null;
+        account_id: string;
+      };
+
+      const refreshOne = async (cred: ConnRow) => {
         try {
           // Read stored credentials from Vault — vault_secret_id lives in connection_data jsonb.
           // F1.A note: rows backfilled from tradovate_credentials have empty connection_data
@@ -263,12 +299,12 @@ Deno.serve(async (req: Request) => {
               `[tradovate-auth] skip refresh for connection ${cred.id}: no vault_secret_id ` +
               `in connection_data (likely an F1.A backfill row — user must re-auth via Modal).`
             );
-            continue;
+            return { status: 'skipped' as const };
           }
           const secret = await readFromVault(cdata.vault_secret_id);
           if (!secret) {
             console.warn(`[tradovate-auth] vault read returned null for connection ${cred.id}`);
-            continue;
+            return { status: 'skipped' as const };
           }
 
           const { username, password, accessToken: oldToken } = JSON.parse(secret);
@@ -286,7 +322,7 @@ Deno.serve(async (req: Request) => {
 
           // Update vault AND realign broker_connections.vault_secret_id atomically (single txn).
           // OQ-VAULT-DRIFT fix: the RPC writes both vault.secrets and the pointer; no drift window.
-          const newVaultId = await storeInVault(
+          await storeInVault(
             cred.user_id, cred.environment, username, password, newToken, cred.id
           );
 
@@ -310,13 +346,42 @@ Deno.serve(async (req: Request) => {
           // Clear retry state — token refresh succeeded (sets status='connected')
           await clearRetry(supabaseAdmin, cred.id);
 
-          refreshed++;
-          refreshSucceeded++;
+          return { status: 'succeeded' as const };
         } catch (err) {
           console.error(`[tradovate-auth] refresh failed for connection ${cred.id}:`, err);
           // Schedule silent retry — never flip is_active (owned by whop-webhook)
           await scheduleRetry(supabaseAdmin, cred.id, String(err).slice(0, 500));
-          refreshFailed++;
+          return { status: 'failed' as const };
+        }
+      };
+
+      const allCreds = connected ?? [];
+      for (let i = 0; i < allCreds.length; i += REFRESH_BATCH_SIZE) {
+        const batch = allCreds.slice(i, i + REFRESH_BATCH_SIZE);
+        const results = await Promise.allSettled(batch.map(refreshOne));
+
+        for (const result of results) {
+          refreshProcessed++;
+          if (result.status === 'fulfilled') {
+            switch (result.value.status) {
+              case 'succeeded':
+                refreshed++;
+                refreshSucceeded++;
+                break;
+              case 'failed':
+                refreshFailed++;
+                break;
+              // 'skipped' contributes to processed only
+            }
+          } else {
+            // Should not happen — refreshOne catches its own errors — but be defensive.
+            console.error('[tradovate-auth] refresh batch rejection:', result.reason);
+            refreshFailed++;
+          }
+        }
+
+        if (i + REFRESH_BATCH_SIZE < allCreds.length) {
+          await new Promise(r => setTimeout(r, REFRESH_STAGGER_MS));
         }
       }
 
