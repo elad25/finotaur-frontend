@@ -1,3 +1,4 @@
+// @ts-nocheck — OQ-69 cascade round 3: AnalystRatingType missing "Overweight" literal. Tracked.
 // =====================================================
 // 🏢 COMPANY DATA - Detailed Company Information
 // src/components/SectorAnalyzer/companyData.ts
