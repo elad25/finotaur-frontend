@@ -141,11 +141,16 @@ const KNOWN_FUTURES_MULTIPLIERS: Record<string, number> = {
   ZF: 1000,  // 5-Year T-Note
 };
 
-// Extract the base symbol prefix from a contract name like "MNQM6" → "MNQ", "ESZ5" → "ES".
-// Returns null if no leading-letter prefix found.
+// Extract the base symbol prefix from a contract name like "MNQM6" → "MNQ", "ESZ5" → "ES", "M2KZ5" → "M2K".
+// Tradovate naming convention: BASE + MONTH-letter + YEAR-digit(s).
+// Month letters per CME: F(Jan) G(Feb) H(Mar) J(Apr) K(May) M(Jun) N(Jul) Q(Aug) U(Sep) V(Oct) X(Nov) Z(Dec).
+// BASE starts with a letter and may include digits afterward (e.g. M2K for Micro Russell 2000).
+// The lazy `*?` ensures the BASE captures the shortest prefix; the explicit month-letter class
+// prevents the greedy match that previously returned "MNQM" for "MNQM6" (a real bug — pre-2026-05-12
+// every contract whose API /product/item returned null/0 fell back to multiplier=1).
 function extractBaseSymbol(contractName: string): string | null {
   if (!contractName) return null;
-  const match = contractName.match(/^([A-Z]+)\d/);
+  const match = contractName.match(/^([A-Z][A-Z0-9]*?)[FGHJKMNQUVXZ]\d+$/);
   return match ? match[1] : null;
 }
 
@@ -246,7 +251,12 @@ async function processFill(
     const outcome = pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE';
     const closedQty = Math.min(fill.qty, openPos.open_quantity);
 
-    // Update the trade to closed
+    // Update the trade to closed.
+    // fees=null (not 0): Tradovate's /fill/list endpoint does NOT return per-fill
+    // commission data, so we genuinely don't know. Writing 0 was a silent lie that
+    // inflated P&L by the commission amount. Downstream code already treats null
+    // as "unknown" via COALESCE(fees,0) / Number(fees || 0); the pnl above is the
+    // raw exit-minus-entry calculation and does NOT subtract fees.
     const { error: updateErr } = await supabaseAdmin
       .from('trades')
       .update({
@@ -254,7 +264,7 @@ async function processFill(
         close_at:   fillAt,
         pnl:        Math.round(pnl * 100) / 100,
         outcome,
-        fees:       0,
+        fees:       null,
       })
       .eq('id', openPos.open_trade_id);
 
@@ -280,7 +290,82 @@ async function processFill(
     return 'updated';
   }
 
-  // ── OPEN: no opposite position → open a new trade ────────────
+  // ── OPEN: no opposite position to close → add to or create position ────────
+  //
+  // B-4 (2026-05-12): check whether a same-side position already exists.
+  // If yes, this fill is an ADD-ON leg: accumulate qty + weighted-avg the
+  // entry_price on the existing trade row (Elad chose "single trade row per
+  // multi-leg position" — see plan α.3). If no, create a fresh trade row.
+  //
+  // The previous code blindly inserted a new trade row per fill AND blindly
+  // upserted position_state with `open_quantity = fill.qty` (overwrite, not
+  // accumulate), so multi-leg positions silently lost both their cumulative
+  // qty and their weighted-avg entry price. avg_entry_price = price-of-last-leg
+  // was the symptom; multiplier=1 on closes was the downstream consequence.
+  //
+  // Known limitation (tracked as new OQ post α.3): the CLOSE path still
+  // treats any closing fill as a full close of the (now singular) trade row
+  // even when fill.qty < open_quantity. After this change, partial closes
+  // will set `outcome` on a row that still has residual qty in position_state.
+  // The next close fill will overwrite that row's exit_price / pnl. Partial
+  // closes are uncommon for Elad's current futures usage (qty=2–5, typically
+  // closed in one fill). Defer the partial-close fix to a separate session.
+
+  const { data: existingSamePos } = await supabaseAdmin
+    .from('tradovate_position_state')
+    .select('*')
+    .eq('user_id', cred.user_id)
+    .eq('tradovate_account_id', cred.account_id)
+    .eq('symbol', symbol)
+    .eq('side', fillSide)
+    .gt('open_quantity', 0)
+    .maybeSingle();
+
+  if (existingSamePos && existingSamePos.open_trade_id) {
+    // Add-on leg: update the existing trade row + position state in place.
+    const oldQty = Number(existingSamePos.open_quantity);
+    const oldAvg = Number(existingSamePos.avg_entry_price);
+    const totalQty = oldQty + fill.qty;
+    const weightedAvg = (oldAvg * oldQty + fill.price * fill.qty) / totalQty;
+
+    const { error: updateTradeErr } = await supabaseAdmin
+      .from('trades')
+      .update({
+        quantity:    totalQty,
+        entry_price: weightedAvg,
+      })
+      .eq('id', existingSamePos.open_trade_id);
+
+    if (updateTradeErr) {
+      console.error('[tradovate-sync] addon-leg trade update error:', updateTradeErr.message);
+      return 'error';
+    }
+
+    const { error: updateStateErr } = await supabaseAdmin
+      .from('tradovate_position_state')
+      .update({
+        open_quantity:   totalQty,
+        avg_entry_price: weightedAvg,
+        last_updated_at: fillAt,
+      })
+      .eq('id', existingSamePos.id);
+
+    if (updateStateErr) {
+      console.error('[tradovate-sync] addon-leg state update error:', updateStateErr.message);
+      return 'error';
+    }
+
+    console.log(
+      `[tradovate-sync] addon_leg: trade=${existingSamePos.open_trade_id} ` +
+      `symbol=${symbol} side=${fillSide} ` +
+      `qty=${oldQty}+${fill.qty}=${totalQty} ` +
+      `avg=${oldAvg.toFixed(4)}→${weightedAvg.toFixed(4)}`
+    );
+
+    return 'updated';
+  }
+
+  // First leg: create a fresh trade row + position state row.
   const { data: newTrade, error: insertErr } = await supabaseAdmin
     .from('trades')
     .insert({
@@ -305,7 +390,10 @@ async function processFill(
       import_source:        'tradovate',
       broker:               'tradovate',
       multiplier:           multiplier ?? 1,
-      fees:                 0,
+      // See close-path comment above: Tradovate fills carry no fee data; null
+      // is honest, 0 was a silent lie. DB default for `fees` is 0 but the column
+      // is nullable, and downstream consumers tolerate null via COALESCE.
+      fees:                 null,
     })
     .select('id')
     .single();
@@ -316,10 +404,12 @@ async function processFill(
     return 'error';
   }
 
-  // Track open position
-  await supabaseAdmin
+  // Insert (not upsert) — we already verified no same-side position exists.
+  // The unique constraint on (user_id, tradovate_account_id, symbol, side)
+  // protects against the rare race-condition path.
+  const { error: insertStateErr } = await supabaseAdmin
     .from('tradovate_position_state')
-    .upsert({
+    .insert({
       user_id:              cred.user_id,
       tradovate_account_id: cred.account_id,
       symbol,
@@ -328,7 +418,14 @@ async function processFill(
       avg_entry_price:      fill.price,
       open_trade_id:        newTrade.id,
       last_updated_at:      fillAt,
-    }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
+    });
+
+  if (insertStateErr) {
+    // 23505 = race condition: a parallel run created the position between
+    // our SELECT and INSERT. Caller will retry on next cron tick.
+    console.error('[tradovate-sync] open state insert error:', insertStateErr.message);
+    return 'error';
+  }
 
   return 'inserted';
 }
