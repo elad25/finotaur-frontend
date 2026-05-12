@@ -52,6 +52,7 @@ export function useOptionsIntelligence() {
   const abortRef = useRef<AbortController | null>(null);
   const blockAbortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const retryCountRef = useRef(0);
 
   // ── Load main data ──
   const loadData = useCallback(async (isRefresh = false) => {
@@ -64,7 +65,14 @@ export function useOptionsIntelligence() {
       const result = isRefresh ? await refreshOptionsData(signal) : await fetchAllOptionsData(signal);
       if (mountedRef.current) setData(result);
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        // Abort race: schedule one retry if we are still mounted and have no data yet
+        if (mountedRef.current && !isRefresh && retryCountRef.current < 1) {
+          retryCountRef.current += 1;
+          setTimeout(() => { if (mountedRef.current) loadData(false); }, 100);
+        }
+        return;
+      }
       if (mountedRef.current) setLoadError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
       if (mountedRef.current) { setIsLoading(false); setIsRefreshing(false); }

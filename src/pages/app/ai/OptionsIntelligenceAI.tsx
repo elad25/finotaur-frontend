@@ -83,6 +83,22 @@ function OptionsIntelligenceContent() {
           </motion.div>
         )}
 
+        {/* Empty state — silent abort hole (request was cancelled mid-flight without setting an error) */}
+        {!isLoading && !data && !loadError && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-8 max-w-2xl mx-auto">
+            <Card>
+              <div className="p-8 text-center">
+                <RefreshCw className="h-12 w-12 text-[#C9A646]/50 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-white mb-2">No Data Loaded</h3>
+                <p className="text-[#8B8B8B] mb-6">The request was interrupted. Click to retry.</p>
+                <button onClick={handleRefresh} className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all hover:scale-105" style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', color: '#000' }}>
+                  <RefreshCw className="h-4 w-4" />Retry
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
         {/* Tab Content */}
         <AnimatePresence mode="wait">
           {data && !isLoading && (
