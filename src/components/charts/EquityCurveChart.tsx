@@ -68,8 +68,8 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
   return (
     <div className="relative w-full h-full">
       {/* Chart Container */}
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart 
+      <ResponsiveContainer width="100%" height="100%" debounce={150}>
+        <AreaChart
           data={chartData}
           margin={{ top: 20, right: 20, left: 10, bottom: 10 }}
         >
@@ -174,9 +174,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
             strokeWidth={2.5}
             fill={isProfitable ? 'url(#areaGradientPositive)' : 'url(#areaGradientNegative)'}
             filter="url(#lineGlow)"
-            isAnimationActive={true}
-            animationDuration={800}
-            animationEasing="ease-out"
+            isAnimationActive={false}
             dot={false}
             activeDot={{
               r: 5,
