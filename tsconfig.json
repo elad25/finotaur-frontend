@@ -71,6 +71,36 @@
     "src/components/OwnershipAnalysis.tsx",
     "src/components/ExecutiveSummaryCard.tsx",
     "src/components/BacktestImmersiveMode.tsx",
-    "src/adapters/market/index.ts"
+    "src/adapters/market/index.ts",
+    // OQ-69 part 2 (2026-05-12 PR #24 CI run):
+    // Additional pre-existing server-side files mistakenly committed to the
+    // frontend repo (OQ-68 working-tree hygiene). They reference `express`,
+    // `node-fetch`, or modules that don't exist in this repo. None are bundled
+    // by Vite (no import path from main.tsx → them). Excluding to unblock CI.
+    //
+    // Tradingview heatmap iframe components — props mismatch on `<AdvancedRealTimeChart>`.
+    "src/routes/HeatmapRoutes.tsx",
+    "src/routes/heatmap.ts",
+    "src/routes/heatmapRoutesArray.tsx",
+    // Express server routes (express + node-fetch imports — server-side junk).
+    "src/routes/macro.ts",
+    "src/routes/market.ts",
+    "src/routes/news.custom.ts",
+    "src/routes/news.ts",
+    "src/routes/orgs.ts",
+    "src/routes/overview.ts",
+    "src/routes/quote.ts",
+    "src/routes/quotes.ts",
+    // Frontend pages with broken imports (Skeletons module / overview module deleted).
+    "src/pages/app/stocks/OverviewTab.tsx",
+    "src/pages/stocks/Fundamentals.tsx",
+    "src/pages/stocks/FundamentalsWow.tsx",
+    "src/pages/stocks/Upgrades.impl.tsx",
+    // Transitively imports excluded modules; not in production routes.
+    "src/components/backtest/BacktestContainer.tsx",
+    "src/providers/news/newsdata.ts",
+    "src/providers/fundamentals/fmp.ts",
+    "src/providers/fred/fred.ts",
+    "src/utils/__tests__/tradeMath.test.ts"
   ]
 }
