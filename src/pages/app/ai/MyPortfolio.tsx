@@ -295,11 +295,10 @@ export default function MyPortfolio() {
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
               
-              {/* Timeline */}
+              {/* Status indicator */}
               <div className="flex items-center gap-3 text-sm">
                 <div className="w-2 h-2 rounded-full bg-[#C9A646] animate-pulse" />
-                <span className="text-[#6B6B6B]">Expected launch:</span>
-                <span className="text-[#C9A646] font-semibold">Q2 2026</span>
+                <span className="text-[#6B6B6B]">In active development</span>
               </div>
             </motion.div>
 
