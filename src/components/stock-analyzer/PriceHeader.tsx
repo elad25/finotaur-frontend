@@ -40,6 +40,8 @@ export const PriceHeader = memo(({ data, onPriceUpdate }: {
   onPriceUpdate?: (update: Partial<StockData>) => void;
 }) => {
   const [isHoveringRefresh, setIsHoveringRefresh] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const [logoRetried, setLogoRetried] = useState(false);
 
   // ── Price polling callback ──
   const handlePriceUpdate = useCallback((update: QuoteUpdate) => {
@@ -97,15 +99,18 @@ export const PriceHeader = memo(({ data, onPriceUpdate }: {
                 boxShadow: '0 8px 32px rgba(201,166,70,0.2)',
               }}
             >
-              {data.logo ? (
+              {data.logo && !logoFailed ? (
                 <img
-  src={data.logo}
-  alt={data.ticker}
-  className="w-full h-full object-contain p-1 rounded-2xl"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                    (e.target as HTMLImageElement).parentElement!.innerHTML =
-                      `<span class="text-[#C9A646] font-bold text-xl">${data.ticker.slice(0, 2)}</span>`;
+                  src={logoRetried ? `${data.logo}?retry=1` : data.logo}
+                  alt={data.ticker}
+                  loading="lazy"
+                  className="w-full h-full object-contain p-1 rounded-2xl"
+                  onError={() => {
+                    if (!logoRetried) {
+                      setLogoRetried(true);
+                      return;
+                    }
+                    setLogoFailed(true);
                   }}
                 />
               ) : (
