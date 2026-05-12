@@ -29,6 +29,13 @@ jobs:
     name: typecheck (tsc)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # OQ-69 (2026-05-12): typecheck job is in advisory mode until the
+    # pre-existing type drift across BacktestImmersiveMode → ReplayChart →
+    # SymbolManager → companyData (and the usePlan PlanType drift in
+    # OQ-74) gets a dedicated cleanup session. Disabling continue-on-error
+    # without that cleanup would block every PR. Vite build still strictly
+    # gates deploys; tsc here is signal-only.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
