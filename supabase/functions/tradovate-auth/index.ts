@@ -321,22 +321,30 @@ Deno.serve(async (req: Request) => {
       }
 
       // Cron heartbeat for token refresh job.
+      // Only write 'ok' or 'partial'. On total failure, SKIP the heartbeat entirely so
+      // cron-health's staleness check (not the brittle 'failed' status) drives alerting.
+      // Prevents UptimeRobot flapping on a single transient cron tick.
       const refreshDurationMs = Date.now() - refreshStart;
-      const heartbeatStatus = refreshFailed === 0 ? 'ok' : (refreshSucceeded > 0 ? 'partial' : 'failed');
-      try {
-        await supabaseAdmin.from('cron_heartbeat').upsert({
-          job_name: 'tradovate-token-refresh',
-          last_run_at: new Date().toISOString(),
-          last_status: heartbeatStatus,
-          last_duration_ms: refreshDurationMs,
-          last_payload: {
-            processed: refreshProcessed,
-            succeeded: refreshSucceeded,
-            failed: refreshFailed,
-          },
-        }, { onConflict: 'job_name' });
-      } catch (hbErr) {
-        console.error('[tradovate-auth][refresh] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+      const heartbeatStatus: 'ok' | 'partial' | null =
+        refreshFailed === 0 ? 'ok' : (refreshSucceeded > 0 ? 'partial' : null);
+      if (heartbeatStatus !== null) {
+        try {
+          await supabaseAdmin.from('cron_heartbeat').upsert({
+            job_name: 'tradovate-token-refresh',
+            last_run_at: new Date().toISOString(),
+            last_status: heartbeatStatus,
+            last_duration_ms: refreshDurationMs,
+            last_payload: {
+              processed: refreshProcessed,
+              succeeded: refreshSucceeded,
+              failed: refreshFailed,
+            },
+          }, { onConflict: 'job_name' });
+        } catch (hbErr) {
+          console.error('[tradovate-auth][refresh] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+        }
+      } else {
+        console.warn('[tradovate-auth][refresh] total failure — skipping heartbeat write to let staleness alert');
       }
 
       return json({ refreshed });

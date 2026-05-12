@@ -734,23 +734,31 @@ Deno.serve(async (req: Request) => {
     }));
 
     // Cron heartbeat — last successful run timestamp for external monitoring.
-    const heartbeatStatus = totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : 'failed');
-    try {
-      await supabaseAdmin.from('cron_heartbeat').upsert({
-        job_name: 'tradovate-sync',
-        last_run_at: new Date().toISOString(),
-        last_status: heartbeatStatus,
-        last_duration_ms: durationMs,
-        last_payload: {
-          totalProcessed,
-          totalSuccess,
-          totalFailed,
-          totalSynced,
-          batchCount,
-        },
-      }, { onConflict: 'job_name' });
-    } catch (hbErr) {
-      console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+    // Only write 'ok' or 'partial'. On total failure, SKIP the heartbeat entirely so
+    // cron-health's staleness check (not the brittle 'failed' status) drives alerting.
+    // Prevents UptimeRobot flapping on a single transient cron tick.
+    const heartbeatStatus: 'ok' | 'partial' | null =
+      totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : null);
+    if (heartbeatStatus !== null) {
+      try {
+        await supabaseAdmin.from('cron_heartbeat').upsert({
+          job_name: 'tradovate-sync',
+          last_run_at: new Date().toISOString(),
+          last_status: heartbeatStatus,
+          last_duration_ms: durationMs,
+          last_payload: {
+            totalProcessed,
+            totalSuccess,
+            totalFailed,
+            totalSynced,
+            batchCount,
+          },
+        }, { onConflict: 'job_name' });
+      } catch (hbErr) {
+        console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+      }
+    } else {
+      console.warn('[tradovate-sync] total failure — skipping heartbeat write to let staleness alert');
     }
 
     return json({ synced, totalInserted, totalErrors });
