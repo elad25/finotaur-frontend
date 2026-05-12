@@ -1625,6 +1625,19 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               lastError={degradedConnection.last_error}
               onReconnect={async () => {
                 const result = await brokerReconnect(degradedConnection.id);
+                // OQ-87: vault entry is missing → the one-click reconnect cannot
+                // recover. Close the reconnect modal and open AddBrokerPopup
+                // so the user can re-enter credentials; mode='login' will
+                // upsert on this same broker_connections row.
+                if (result.requires_credentials) {
+                  setReconnectModalOpen(false);
+                  setShowAddBroker(true);
+                  return {
+                    success: false,
+                    error: result.error,
+                    requires_credentials: true,
+                  };
+                }
                 return { success: result.success, error: result.error };
               }}
             />

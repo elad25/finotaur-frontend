@@ -432,7 +432,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: cred } = await supabaseAdmin
         .from('broker_connections')
-        .select('id, user_id, environment, account_id, connection_name, account_name, connection_data')
+        .select('id, user_id, broker, environment, account_id, connection_name, account_name, connection_data')
         .eq('id', credentialId)
         .eq('broker', 'tradovate')
         .single();
@@ -441,50 +441,64 @@ Deno.serve(async (req: Request) => {
 
       const cdata = (cred.connection_data ?? {}) as { vault_secret_id?: string; account_spec?: string; access_token_hash?: string };
 
-      // Vault read failure — not transient, do not scheduleRetry
-      if (!cdata.vault_secret_id) {
-        console.error('[tradovate-auth] reconnect: no vault_secret_id in connection_data', { credentialId, source });
+      // ─── Vault recovery path (OQ-87) ──────────────────────────────────────
+      // When the vault entry is missing or unreadable, the prior behavior was
+      // to mark the connection as `canceled` and notify — leaving the user
+      // with no in-app recovery short of "+ Add new connection". We now keep
+      // the connection in `degraded` and signal `requires_credentials: true`
+      // so the frontend can prompt for fresh credentials and call mode='login'
+      // (which upserts on the existing row via the `user_id+broker+account_id`
+      // unique constraint, repopulating vault atomically via tradovate_vault_upsert_atomic).
+      //
+      // For `whop_resume`-sourced reconnect attempts there is no human at the
+      // keyboard, so we still treat vault-miss as terminal: mark canceled +
+      // notify, exactly as before. The user_click path is the one we widen.
+      const handleVaultMiss = async (reason: 'no_vault_secret_id' | 'vault_read_null') => {
+        console.warn(`[tradovate-auth] reconnect: ${reason}`, { credentialId, source });
+        if (source === 'whop_resume') {
+          // No human in the loop — preserve the historical "mark canceled +
+          // notify" behavior so the cron-driven retry queue knows to stop.
+          await supabaseAdmin.from('broker_connections').update({
+            last_error: 'vault_creds_missing',
+            status:     'canceled',
+          }).eq('id', cred.id);
+          void supabaseAdmin.functions.invoke('broker-state-change-notify', {
+            body: {
+              connection_id: cred.id,
+              user_id:       cred.user_id,
+              broker:        cred.broker ?? 'tradovate',
+              environment:   cred.environment ?? 'unknown',
+              new_status:    'canceled',
+              last_error:    'vault_creds_missing',
+            },
+          }).catch((err: unknown) => {
+            console.error('[tradovate-auth] cancel notify dispatch failed:', String(err).slice(0, 200));
+          });
+          return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
+        }
+        // user_click: keep the row in `degraded` (do NOT mark canceled, do NOT
+        // notify) and ask the frontend to prompt for fresh credentials.
         await supabaseAdmin.from('broker_connections').update({
           last_error: 'vault_creds_missing',
-          status:     'canceled',
+          status:     'degraded',
         }).eq('id', cred.id);
-        // OQ-59: notify customer of broker disconnection
-        void supabaseAdmin.functions.invoke('broker-state-change-notify', {
-          body: {
-            connection_id: cred.id,
-            user_id:       cred.user_id,
-            broker:        cred.broker ?? 'tradovate',
-            environment:   cred.environment ?? 'unknown',
-            new_status:    'canceled',
-            last_error:    'vault_creds_missing',
-          },
-        }).catch((err: unknown) => {
-          console.error('[tradovate-auth] cancel notify dispatch failed:', String(err).slice(0, 200));
-        });
-        return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
+        return json({
+          ok: false,
+          source,
+          status: 'degraded',
+          error: 'vault_creds_missing',
+          requires_credentials: true,
+          environment: cred.environment ?? null,
+        }, 200);
+      };
+
+      if (!cdata.vault_secret_id) {
+        return await handleVaultMiss('no_vault_secret_id');
       }
 
       const secret = await readFromVault(cdata.vault_secret_id);
       if (!secret) {
-        console.error('[tradovate-auth] reconnect: vault read returned null', { credentialId, source });
-        await supabaseAdmin.from('broker_connections').update({
-          last_error: 'vault_creds_missing',
-          status:     'canceled',
-        }).eq('id', cred.id);
-        // OQ-59: notify customer of broker disconnection
-        void supabaseAdmin.functions.invoke('broker-state-change-notify', {
-          body: {
-            connection_id: cred.id,
-            user_id:       cred.user_id,
-            broker:        cred.broker ?? 'tradovate',
-            environment:   cred.environment ?? 'unknown',
-            new_status:    'canceled',
-            last_error:    'vault_creds_missing',
-          },
-        }).catch((err: unknown) => {
-          console.error('[tradovate-auth] cancel notify dispatch failed:', String(err).slice(0, 200));
-        });
-        return json({ ok: false, source, status: 'canceled', error: 'vault_creds_missing' }, 400);
+        return await handleVaultMiss('vault_read_null');
       }
 
       const { username, password } = JSON.parse(secret);

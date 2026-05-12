@@ -14,7 +14,18 @@ export interface BrokerReconnectModalProps {
   onOpenChange: (open: boolean) => void;
   brokerName: string;
   lastError?: string | null;
-  onReconnect: () => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Returns `{ success: true }` on a successful one-click reconnect via the
+   * stored vault credentials. Returns `{ success: false, requires_credentials: true }`
+   * when the vault entry is missing (OQ-87) and the parent should open the
+   * fresh-credentials modal (AddBrokerPopup). Returns `{ success: false, error }`
+   * for any other failure.
+   */
+  onReconnect: () => Promise<{
+    success: boolean;
+    error?: string;
+    requires_credentials?: boolean;
+  }>;
 }
 
 export function BrokerReconnectModal({
@@ -36,9 +47,15 @@ export function BrokerReconnectModal({
       const result = await onReconnect();
       if (result.success) {
         onOpenChange(false);
-      } else {
-        setInlineError(result.error ?? 'Reconnection failed. Please try again.');
+        return;
       }
+      // OQ-87: parent will swap to the credentials modal; close this one and
+      // suppress the inline error so the user doesn't see two error banners.
+      if (result.requires_credentials) {
+        onOpenChange(false);
+        return;
+      }
+      setInlineError(result.error ?? 'Reconnection failed. Please try again.');
     } finally {
       setLoading(false);
     }
