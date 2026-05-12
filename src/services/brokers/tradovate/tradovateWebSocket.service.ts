@@ -2,7 +2,6 @@
 // 🎯 V2.0 - FIXED: Dynamic WebSocket URL based on environment (demo/live)
 
 import {
-  TradovateWebSocketMessage,
   TradovateEventType,
   TradovateFill,
   TradovateOrder,
@@ -10,6 +9,12 @@ import {
   TradovateCashBalance,
   TradovateMarginSnapshot
 } from '@/types/brokers/tradovate/tradovate.types';
+import {
+  buildAuthFrame,
+  buildHeartbeatFrame,
+  decodeFrame,
+  TradovateMessage,
+} from './tradovateProtocol';
 
 type EventCallback = (data: any) => void;
 
@@ -190,17 +195,12 @@ class TradovateWebSocketService {
   }
 
   /**
-   * Authenticate the WebSocket connection after opening
+   * Authenticate the WebSocket connection after opening.
+   * Wire format: `authorize\n0\n\n<token>` (see tradovateProtocol.ts).
    */
   private authenticate(accessToken: string): void {
-    // Tradovate WebSocket requires authentication message
-    const authMessage = JSON.stringify({
-      op: 'authorize',
-      data: accessToken
-    });
-
     console.log('🔐 Sending WebSocket authentication...');
-    this.send(authMessage);
+    this.send(buildAuthFrame(accessToken));
   }
 
   private reconnect(): void {
@@ -233,8 +233,7 @@ class TradovateWebSocketService {
 
     this.heartbeatInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
-        // Tradovate heartbeat format
-        this.send('[]');
+        this.send(buildHeartbeatFrame());
       } else {
         console.warn('🔌 Heartbeat skipped - WebSocket not open');
       }
@@ -256,30 +255,29 @@ class TradovateWebSocketService {
   // ============================================================================
 
   private handleMessage(data: string): void {
-    try {
-      // Handle heartbeat response (empty array)
-      if (data === '[]' || data === '') {
+    const frame = decodeFrame(data);
+
+    switch (frame.type) {
+      case 'open':
+      case 'heartbeat':
         return;
-      }
-
-      // Parse message
-      const messages = JSON.parse(data);
-
-      // Tradovate sends array of messages
-      if (Array.isArray(messages)) {
-        for (const message of messages) {
+      case 'data':
+        for (const message of frame.messages) {
           this.processMessage(message);
         }
-      } else {
-        this.processMessage(messages);
-      }
-
-    } catch (error) {
-      console.error('🔌 Error parsing WebSocket message:', error, 'Raw:', data);
+        return;
+      case 'close':
+        console.log(
+          `🔌 Server close frame received (code: ${frame.code}, reason: ${frame.reason || 'none'})`,
+        );
+        return;
+      case 'unknown':
+        console.error('🔌 Unrecognized WebSocket frame. Raw:', frame.raw);
+        return;
     }
   }
 
-  private processMessage(message: TradovateWebSocketMessage): void {
+  private processMessage(message: TradovateMessage): void {
     if (!message.e || !message.d) {
       return;
     }
