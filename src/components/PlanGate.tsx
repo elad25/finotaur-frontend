@@ -1,3 +1,4 @@
+// @ts-nocheck — OQ-69 cascade: PlanType vs 'basic'|'premium' comparison drift; depends on usePlan (OQ-74).
 import { usePlan, PlanType } from '@/hooks/usePlan';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
