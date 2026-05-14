@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Tradovate mark</title>
+  <path fill="#0A84FF" d="M24 6 42 16.2 24 26.4 6 16.2 24 6Z"/>
+  <path fill="#1F6FFF" d="M6 18.8 22.4 28v14L6 32.8v-14Z"/>
+  <path fill="#40A2FF" d="M42 18.8 25.6 28v14L42 32.8v-14Z"/>
+  <path fill="#61B7FF" d="M24 6v20.4L6 16.2 24 6Z" opacity=".55"/>
+</svg>

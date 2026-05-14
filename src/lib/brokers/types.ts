@@ -161,7 +161,7 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
   tradingview: {
     broker: 'tradingview',
     displayName: 'TradingView',
-    logo: '/brokers/tv.png',
+    logo: '/brokers/tradingview-official.svg',
     color: '#2962FF',
     features: {
       oauth: false,
@@ -190,7 +190,7 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
   mt5: {
     broker: 'mt5',
     displayName: 'MetaTrader 5',
-    logo: '/brokers/mt5.png',
+    logo: '/brokers/metatrader5-official.svg',
     color: '#0080FF',
     features: {
       oauth: false,
@@ -204,8 +204,8 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
   ninja_trader: {
     broker: 'ninja_trader',
     displayName: 'NinjaTrader',
-    logo: '/brokers/ninja.png',
-    color: '#FF6600',
+    logo: '/brokers/ninjatrader-official.svg',
+    color: '#FF4200',
     features: {
       oauth: false,
       apiKey: true,
@@ -213,7 +213,8 @@ export const BROKER_CONFIGS: Record<BrokerName, BrokerIntegrationConfig> = {
       fileImport: true,
       realtime: true,
     },
-    status: 'coming_soon',
+    status: 'available',
+    documentation: 'https://ninjatrader.com/trading-platform/',
   },
   tradovate: {
     broker: 'tradovate',

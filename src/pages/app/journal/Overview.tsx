@@ -1328,14 +1328,14 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               <Button
                 variant="goldOutline"
                 size="compact"
-                className="relative gap-2"
+                className="gap-2"
                 aria-label="Connect Broker"
               >
                 <Link2 className="w-3.5 h-3.5" />
                 Connect Broker
                 {brokerDotColor && (
                   <span
-                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-[#0A0A0A] ${
+                    className={`ml-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[#0A0A0A] ${
                       brokerDotColor === 'red'
                         ? 'bg-[#E36363]'
                         : brokerDotColor === 'yellow'
@@ -1625,19 +1625,6 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               lastError={degradedConnection.last_error}
               onReconnect={async () => {
                 const result = await brokerReconnect(degradedConnection.id);
-                // OQ-87: vault entry is missing → the one-click reconnect cannot
-                // recover. Close the reconnect modal and open AddBrokerPopup
-                // so the user can re-enter credentials; mode='login' will
-                // upsert on this same broker_connections row.
-                if (result.requires_credentials) {
-                  setReconnectModalOpen(false);
-                  setShowAddBroker(true);
-                  return {
-                    success: false,
-                    error: result.error,
-                    requires_credentials: true,
-                  };
-                }
                 return { success: result.success, error: result.error };
               }}
             />
