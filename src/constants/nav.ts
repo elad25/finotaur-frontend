@@ -223,7 +223,7 @@ ai: {
     locked: false,
     beta: false,
     subNav: [
-      { label: 'Dashboard', path: '/app/journal/overview' },
+      { label: 'Journal', path: '/app/journal/overview' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
       { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
     ],

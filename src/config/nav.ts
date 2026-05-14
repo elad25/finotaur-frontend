@@ -172,7 +172,7 @@ export const domains: Record<string, Domain> = {
     id: 'journal',
     label: 'Journal',
     subNav: [
-      { label: 'Dashboard', path: '/app/journal/overview' },
+      { label: 'Journal', path: '/app/journal/overview' },
       { label: 'Add Trade', path: '/app/journal/new' },
       { label: 'Admin', path: '/app/journal/admin', adminOnly: true }, // 🔐 ADMIN ONLY
     ],
