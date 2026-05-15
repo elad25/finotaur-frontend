@@ -3,6 +3,9 @@ import * as d3 from 'd3';
 
 const LAND_DATA_URL =
   'https://raw.githubusercontent.com/martynafford/natural-earth-geojson/refs/heads/master/110m/physical/ne_110m_land.json';
+const MAX_LAND_DOTS = 900;
+const DOT_SPACING = 44;
+const FRAME_INTERVAL_MS = 48;
 
 type PolygonRing = [number, number][];
 type LandGeometry =
@@ -126,7 +129,9 @@ export function HolographicAICore({ width = 430, height = 318, className = '' }:
       return false;
     };
 
-    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = 16) => {
+    let lastFrameTime = 0;
+
+    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = DOT_SPACING, limit = MAX_LAND_DOTS) => {
       const dots: [number, number][] = [];
       const [[minLng, minLat], [maxLng, maxLat]] = d3.geoBounds(feature);
       const stepSize = dotSpacing * 0.08;
@@ -137,6 +142,7 @@ export function HolographicAICore({ width = 430, height = 318, className = '' }:
           if (pointInFeature(point, feature)) {
             dots.push(point);
           }
+          if (dots.length >= limit) return dots;
         }
       }
 
@@ -217,12 +223,14 @@ export function HolographicAICore({ width = 430, height = 318, className = '' }:
 
         landFeatures = (await response.json()) as LandFeatureCollection;
 
-        landFeatures.features.forEach((feature) => {
-          const dots = generateDotsInPolygon(feature, 16);
+        for (const feature of landFeatures.features) {
+          if (allDots.length >= MAX_LAND_DOTS) break;
+
+          const dots = generateDotsInPolygon(feature, DOT_SPACING, MAX_LAND_DOTS - allDots.length);
           dots.forEach(([lng, lat]) => {
             allDots.push({ lng, lat, visible: true });
           });
-        });
+        }
 
         if (!cancelled) {
           render();
@@ -239,7 +247,9 @@ export function HolographicAICore({ width = 430, height = 318, className = '' }:
     const rotation: [number, number] = [0, 0];
     const rotationSpeed = 0.5;
 
-    const rotate = () => {
+    const rotate = (elapsed: number) => {
+      if (elapsed - lastFrameTime < FRAME_INTERVAL_MS) return;
+      lastFrameTime = elapsed;
       rotation[0] += rotationSpeed;
       projection.rotate(rotation);
       render();
