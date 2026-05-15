@@ -3,10 +3,10 @@ import type { ElementType, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  CircleUserRound,
   Eye,
   Gauge,
   Layers3,
+  PlugZap,
   Radar,
   ShieldCheck,
   TrendingUp,
@@ -27,16 +27,24 @@ export function FinotaurCopilotDashboard() {
       <CircuitBackdrop />
 
       <main className="relative z-10 px-3 py-3 max-w-[1480px] mx-auto">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-          <div className="xl:col-span-7">
-            <p className="text-[13px] uppercase text-gold-primary">AI POWERED PORTFOLIO</p>
-            <p className="mt-1 text-[11px] uppercase text-ink-tertiary">OVERVIEW</p>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
+          <div className="xl:col-span-8">
+            <p className="text-[10px] uppercase tracking-[0.32em] text-gold-primary/75">Finotaur Intelligence Engine</p>
+            <h1 className="mt-1 text-[26px] font-semibold uppercase leading-none text-white">
+              AI Portfolio Command Center
+            </h1>
+            <p className="mt-2 max-w-[620px] text-[11px] uppercase tracking-[0.18em] text-ink-tertiary">
+              Real-time portfolio intelligence, opportunity detection, and risk signal overview
+            </p>
           </div>
-          <div className="xl:col-span-5 flex items-start justify-end gap-5">
-            <MarketStrip />
-            <div className="h-11 w-11 rounded-full border border-gold-primary/55 bg-black/50 flex items-center justify-center text-gold-primary shadow-[0_0_24px_rgba(201,166,70,0.22)]">
-              <CircleUserRound className="w-5 h-5" />
-            </div>
+          <div className="xl:col-span-4 flex items-start justify-start xl:justify-end">
+            <Link
+              to="/app/funding/brokers"
+              className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-gold-primary/35 bg-gold-primary/[0.09] px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary shadow-[0_0_26px_rgba(201,166,70,0.16)] transition hover:border-gold-primary/70 hover:bg-gold-primary/[0.14]"
+            >
+              <PlugZap className="h-4 w-4" />
+              Connect Broker
+            </Link>
           </div>
         </div>
 
@@ -87,29 +95,6 @@ function CircuitBackdrop() {
         }}
       />
     </>
-  );
-}
-
-function MarketStrip() {
-  const rows = [
-    ['MARKET STATUS', 'OPEN', 'text-gold-primary'],
-    ['S&P 500', '+0.72%', 'text-emerald-300'],
-    ['NASDAQ', '+1.18%', 'text-emerald-300'],
-    ['DOW JONES', '+0.33%', 'text-emerald-300'],
-  ];
-
-  return (
-    <div className="hidden lg:grid grid-cols-4 gap-5">
-      {rows.map(([label, value, color]) => (
-        <div key={label} className="min-w-[76px]">
-          <p className="text-[9px] text-ink-tertiary">{label}</p>
-          <div className="mt-1 flex items-center gap-1.5">
-            {label === 'MARKET STATUS' && <span className="h-1.5 w-1.5 rounded-full bg-gold-primary" />}
-            <span className={`text-[11px] font-mono ${color}`}>{value}</span>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
