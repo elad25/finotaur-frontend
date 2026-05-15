@@ -578,32 +578,32 @@ const FactorsSection = memo(({ positiveFactors, negativeFactors, isLoading }: {
 }) => {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-ds-6 md:grid-cols-2">
         {/* Positive skeleton */}
-        <div className="space-y-3">
+        <div className="space-y-ds-4">
           <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-[#22C55E]" />
-            <span className="text-sm font-bold text-[#22C55E] tracking-wider uppercase">Positive Factors</span>
+            <TrendingUp className="w-4 h-4 text-[#52C878]" />
+            <span className="text-[13px] font-semibold uppercase text-[#52C878]" style={{ letterSpacing: '0.14em' }}>Positive Factors</span>
           </div>
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(34,197,94,0.03)', border: '1px solid rgba(34,197,94,0.08)' }}>
-              <div className="h-4 w-3/4 rounded animate-pulse" style={{ background: 'rgba(34,197,94,0.1)', animationDelay: `${i * 200}ms` }} />
-              <div className="h-3 w-full rounded animate-pulse" style={{ background: 'rgba(34,197,94,0.05)', animationDelay: `${i * 200 + 100}ms` }} />
-              <div className="h-3 w-5/6 rounded animate-pulse" style={{ background: 'rgba(34,197,94,0.05)', animationDelay: `${i * 200 + 150}ms` }} />
+            <div key={i} className="space-y-2 rounded-[12px] border border-white/[0.065] bg-white/[0.024] p-ds-5">
+              <div className="h-4 w-3/4 animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.07)', animationDelay: `${i * 200}ms` }} />
+              <div className="h-3 w-full animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.045)', animationDelay: `${i * 200 + 100}ms` }} />
+              <div className="h-3 w-5/6 animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.045)', animationDelay: `${i * 200 + 150}ms` }} />
             </div>
           ))}
         </div>
         {/* Negative skeleton */}
-        <div className="space-y-3">
+        <div className="space-y-ds-4">
           <div className="flex items-center gap-2 mb-1">
-            <TrendingDown className="w-4 h-4 text-[#EF4444]" />
-            <span className="text-sm font-bold text-[#EF4444] tracking-wider uppercase">Negative Factors</span>
+            <TrendingDown className="w-4 h-4 text-num-negative" />
+            <span className="text-[13px] font-semibold uppercase text-num-negative" style={{ letterSpacing: '0.14em' }}>Negative Factors</span>
           </div>
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="rounded-xl p-4 space-y-2" style={{ background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.08)' }}>
-              <div className="h-4 w-3/4 rounded animate-pulse" style={{ background: 'rgba(239,68,68,0.1)', animationDelay: `${i * 200}ms` }} />
-              <div className="h-3 w-full rounded animate-pulse" style={{ background: 'rgba(239,68,68,0.05)', animationDelay: `${i * 200 + 100}ms` }} />
-              <div className="h-3 w-5/6 rounded animate-pulse" style={{ background: 'rgba(239,68,68,0.05)', animationDelay: `${i * 200 + 150}ms` }} />
+            <div key={i} className="space-y-2 rounded-[12px] border border-white/[0.065] bg-white/[0.024] p-ds-5">
+              <div className="h-4 w-3/4 animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.07)', animationDelay: `${i * 200}ms` }} />
+              <div className="h-3 w-full animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.045)', animationDelay: `${i * 200 + 100}ms` }} />
+              <div className="h-3 w-5/6 animate-pulse rounded-[4px]" style={{ background: 'rgba(255,255,255,0.045)', animationDelay: `${i * 200 + 150}ms` }} />
             </div>
           ))}
         </div>
@@ -614,22 +614,20 @@ const FactorsSection = memo(({ positiveFactors, negativeFactors, isLoading }: {
   if (!positiveFactors?.length && !negativeFactors?.length) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 gap-ds-6 md:grid-cols-2">
       {/* ── POSITIVE FACTORS ── */}
-      <div className="space-y-3">
+      <div className="space-y-ds-4">
         <div className="flex items-center gap-2 mb-1">
-          <TrendingUp className="w-4 h-4 text-[#22C55E]" />
-          <span className="text-sm font-bold text-[#22C55E] tracking-wider uppercase">Positive Factors</span>
+          <TrendingUp className="w-4 h-4 text-[#52C878]" />
+          <span className="text-[13px] font-semibold uppercase text-[#52C878]" style={{ letterSpacing: '0.14em' }}>Positive Factors</span>
         </div>
         {(positiveFactors || []).map((factor, i) => (
-          <div key={i} className="rounded-xl p-4 transition-all duration-200 hover:border-[#22C55E]/25" style={{
-            background: 'rgba(34,197,94,0.04)',
-            border: '1px solid rgba(34,197,94,0.12)',
-          }}>
-            <h4 className="text-[13px] font-bold text-white mb-2 leading-snug">
+          <div key={i} className="rounded-[12px] border border-white/[0.075] bg-white/[0.024] p-ds-5 transition-colors duration-200 hover:border-white/[0.12] hover:bg-white/[0.032]">
+            <div className="mb-ds-3 h-px w-full bg-gradient-to-r from-[#52C878]/35 via-white/[0.055] to-transparent" />
+            <h4 className="mb-ds-2 text-[14px] font-semibold leading-snug text-ink-primary">
               {factor.title}
             </h4>
-            <p className="text-[12.5px] text-[#9B9B9B] leading-[1.75]">
+            <p className="text-[13px] leading-[1.75] text-ink-secondary">
               {factor.description}
             </p>
           </div>
@@ -637,20 +635,18 @@ const FactorsSection = memo(({ positiveFactors, negativeFactors, isLoading }: {
       </div>
 
       {/* ── NEGATIVE FACTORS ── */}
-      <div className="space-y-3">
+      <div className="space-y-ds-4">
         <div className="flex items-center gap-2 mb-1">
-          <TrendingDown className="w-4 h-4 text-[#EF4444]" />
-          <span className="text-sm font-bold text-[#EF4444] tracking-wider uppercase">Negative Factors</span>
+          <TrendingDown className="w-4 h-4 text-num-negative" />
+          <span className="text-[13px] font-semibold uppercase text-num-negative" style={{ letterSpacing: '0.14em' }}>Negative Factors</span>
         </div>
         {(negativeFactors || []).map((factor, i) => (
-          <div key={i} className="rounded-xl p-4 transition-all duration-200 hover:border-[#EF4444]/25" style={{
-            background: 'rgba(239,68,68,0.04)',
-            border: '1px solid rgba(239,68,68,0.12)',
-          }}>
-            <h4 className="text-[13px] font-bold text-white mb-2 leading-snug">
+          <div key={i} className="rounded-[12px] border border-white/[0.075] bg-white/[0.024] p-ds-5 transition-colors duration-200 hover:border-white/[0.12] hover:bg-white/[0.032]">
+            <div className="mb-ds-3 h-px w-full bg-gradient-to-r from-[#E24B4A]/40 via-white/[0.055] to-transparent" />
+            <h4 className="mb-ds-2 text-[14px] font-semibold leading-snug text-ink-primary">
               {factor.title}
             </h4>
-            <p className="text-[12.5px] text-[#9B9B9B] leading-[1.75]">
+            <p className="text-[13px] leading-[1.75] text-ink-secondary">
               {factor.description}
             </p>
           </div>
@@ -718,70 +714,197 @@ async function saveServerBriefCache(
 }
 
 // =====================================================
+// HOT TAKEAWAYS - derived from existing AI content
+// =====================================================
+
+type HotTakeawayTone = 'positive' | 'negative' | 'warning' | 'neutral';
+
+interface HotTakeaway {
+  text: string;
+  tone: HotTakeawayTone;
+}
+
+function cleanAnalysisSentence(sentence: string): string {
+  return sentence
+    .replace(/\s+/g, ' ')
+    .replace(/^(Rating|Verdict|Financial Health Grade|Moat Rating|Macro Positioning|Risk Level|Key Date to Watch):\s*/i, '')
+    .trim();
+}
+
+function sentenceTone(sentence: string): HotTakeawayTone {
+  const lower = sentence.toLowerCase();
+  if (/(beat|beats|growth|expansion|strong|pricing power|tailwind|improving|wide|favorable|positive|upside)/.test(lower)) return 'positive';
+  if (/(risk|negative|miss|pressure|compress|decline|weak|fall|drop|concern|bear|unfavorable|lawsuit|debt|dilution)/.test(lower)) return 'negative';
+  if (/(watch|depends|execution|if|support|resistance|break|caution|valuation|high|elevated|cash flow|fcf)/.test(lower)) return 'warning';
+  return 'neutral';
+}
+
+function sentenceScore(sentence: string): number {
+  const lower = sentence.toLowerCase();
+  let score = 0;
+  if (/\d/.test(sentence)) score += 3;
+  if (/(revenue|margin|eps|fcf|cash flow|valuation|p\/e|target|support|resistance|debt|guidance|earnings)/.test(lower)) score += 3;
+  if (/(beat|miss|risk|growth|pressure|execution|watch|depends|break|negative|positive|strong|weak)/.test(lower)) score += 2;
+  if (sentence.length >= 45 && sentence.length <= 150) score += 1;
+  return score;
+}
+
+function extractHotTakeaways(content: string | null, verdict?: string | null): HotTakeaway[] {
+  if (!content) return [];
+
+  const cleaned = content
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const sentences = cleaned
+    .split(/(?<=[.!?])\s+/)
+    .map(cleanAnalysisSentence)
+    .filter(sentence => sentence.length > 24 && !/^(rating|verdict|financial health grade|moat rating|macro positioning|risk level|key date to watch)$/i.test(sentence));
+
+  const ranked = sentences
+    .map((sentence, index) => ({ sentence, index, score: sentenceScore(sentence) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 4)
+    .sort((a, b) => a.index - b.index)
+    .map(({ sentence }) => ({
+      text: sentence.length > 96 ? `${sentence.slice(0, 93).trim()}...` : sentence,
+      tone: sentenceTone(sentence),
+    }));
+
+  if (verdict && ranked.length < 4) {
+    ranked.push({
+      text: verdict.length > 96 ? `${verdict.slice(0, 93).trim()}...` : verdict,
+      tone: sentenceTone(verdict),
+    });
+  }
+
+  return ranked.slice(0, 4);
+}
+
+function TakeawayIcon({ tone }: { tone: HotTakeawayTone }) {
+  if (tone === 'positive') return <TrendingUp className="h-3.5 w-3.5 text-[#52C878]" />;
+  if (tone === 'negative') return <TrendingDown className="h-3.5 w-3.5 text-num-negative" />;
+  if (tone === 'warning') return <AlertTriangle className="h-3.5 w-3.5 text-gold-primary" />;
+  return <Activity className="h-3.5 w-3.5 text-ink-tertiary" />;
+}
+
+// =====================================================
 // AI SECTION CARD
 // =====================================================
 
 const AISectionCard = memo(({ section, isExpanded, onToggle }: { section: AISection; isExpanded: boolean; onToggle: () => void }) => {
   const Icon = section.icon;
   const hasContent = !!section.content;
+  const hotTakeaways = extractHotTakeaways(section.content, section.verdict);
+
   return (
-    <div className="rounded-xl border transition-all duration-300" style={{
-      background: hasContent ? 'rgba(201,166,70,0.02)' : 'rgba(255,255,255,0.01)',
-      borderColor: hasContent ? 'rgba(201,166,70,0.15)' : 'rgba(255,255,255,0.05)',
-    }}>
-      <div onClick={onToggle} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }} className="w-full flex items-center justify-between p-4 text-left hover:bg-[#C9A646]/[0.03] transition-colors rounded-xl cursor-pointer">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{
-            background: 'linear-gradient(135deg, rgba(201,166,70,0.12), rgba(244,217,123,0.06))',
-            border: '1px solid rgba(201,166,70,0.20)',
-            boxShadow: hasContent ? '0 0 12px rgba(201,166,70,0.08)' : 'none',
-          }}>
-            <Icon className="w-4 h-4 text-[#C9A646]" />
+    <div
+      className={cn(
+        'relative overflow-hidden rounded-[12px] border transition-colors duration-200',
+        hasContent ? 'border-gold-border/55 bg-white/[0.026]' : 'border-white/[0.07] bg-white/[0.018]',
+      )}
+      style={{
+        boxShadow: hasContent
+          ? '0 20px 58px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.055)'
+          : '0 14px 36px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.04)',
+      }}
+    >
+      <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-gold-primary/75 via-gold-primary/20 to-transparent" aria-hidden="true" />
+
+      <div
+        onClick={onToggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex w-full cursor-pointer items-center justify-between gap-ds-4 p-ds-5 text-left transition-colors duration-200 hover:bg-white/[0.022]"
+      >
+        <div className="flex min-w-0 items-start gap-ds-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-gold-border/70 bg-gold-primary/[0.055] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <Icon className="h-5 w-5 text-gold-primary" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold" style={{ color: hasContent ? '#F4D97B' : '#E8E8E8' }}>{section.title}</span>
-              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#C9A646]/10 text-[#C9A646] border border-[#C9A646]/20">{section.badge}</span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-ds-2">
+              <span className="text-[16px] font-semibold leading-tight text-ink-primary">{section.title}</span>
+              <span className="rounded-[4px] border border-gold-border/60 bg-gold-primary/[0.07] px-2 py-0.5 text-[10px] font-semibold uppercase text-gold-primary">
+                {section.badge}
+              </span>
               {section.searchUsed && (
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[#C9A646]/8 text-[#D4B855] border border-[#C9A646]/15 flex items-center gap-0.5">
-                  <Search className="w-2 h-2" />LIVE
+                <span className="flex items-center gap-1 rounded-[4px] border border-[#52C878]/25 bg-[#52C878]/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-[#52C878]">
+                  <Search className="h-2.5 w-2.5" /> Live
                 </span>
               )}
             </div>
             {section.verdict && (
-              <span className="text-[10px] font-semibold mt-0.5 inline-block" style={{ color: section.verdictColor || '#C9A646' }}>
+              <span className="mt-ds-1 inline-block text-[12px] font-semibold" style={{ color: section.verdictColor || '#C9A646' }}>
                 {section.verdict}
               </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex shrink-0 items-center gap-ds-2">
           {section.content && <CopyButton text={section.content} />}
           {section.isLoading ? (
-            <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin text-gold-primary" />
           ) : (
-            isExpanded ? <ChevronUp className="w-4 h-4 text-[#C9A646]/50" /> : <ChevronDown className="w-4 h-4 text-[#C9A646]/50" />
+            isExpanded ? <ChevronUp className="h-4 w-4 text-gold-primary/70" /> : <ChevronDown className="h-4 w-4 text-gold-primary/70" />
           )}
         </div>
       </div>
-      <div className={cn('overflow-hidden transition-all duration-300', isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0')}>
-        <div className="px-4 pb-4">
+
+      <div className={cn('overflow-hidden transition-all duration-300', isExpanded ? 'max-h-[2200px] opacity-100' : 'max-h-0 opacity-0')}>
+        <div className="px-ds-5 pb-ds-5">
           {section.isLoading && (
-            <div className="flex items-center gap-3 p-4 rounded-xl" style={{ background: 'rgba(201,166,70,0.03)', border: '1px solid rgba(201,166,70,0.08)' }}>
-              <div className="w-5 h-5 rounded-full border-2 border-[#C9A646]/30 border-t-[#C9A646] animate-spin" />
-              <span className="text-xs text-[#C9A646]/60">Analyzing with AI + real-time data...</span>
+            <div className="flex items-center gap-ds-3 rounded-[12px] border border-gold-border/35 bg-gold-primary/[0.035] p-ds-4">
+              <div className="h-5 w-5 rounded-full border-2 border-gold-primary/25 border-t-gold-primary animate-spin" />
+              <span className="text-[13px] text-gold-primary/75">Analyzing with AI + real-time data...</span>
             </div>
           )}
+
           {section.content && !section.isLoading && (
-            <div className="relative">
-              <div className="absolute top-0 left-0 w-[3px] h-full rounded-full" style={{ background: 'linear-gradient(to bottom, #C9A646, #C9A64620, transparent)' }} />
-              <div className="pl-4"><p className="text-[#C8C8C8] leading-[1.9] text-sm whitespace-pre-wrap">{section.content}</p></div>
+            <div className="grid grid-cols-1 gap-ds-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="relative border-l border-gold-border/55 pl-ds-5">
+                <p className="whitespace-pre-wrap text-[14px] leading-[1.85] text-ink-secondary">
+                  {section.content}
+                </p>
+              </div>
+
+              <aside className="rounded-[12px] border border-white/[0.075] bg-white/[0.022] p-ds-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.045)]">
+                <div className="mb-ds-4 flex items-center justify-between gap-ds-3">
+                  <h4 className="text-[13px] font-semibold text-gold-primary">Hot Takeaways</h4>
+                  <span className="text-[10px] uppercase text-ink-muted" style={{ letterSpacing: '0.12em' }}>from AI</span>
+                </div>
+                <div className="space-y-ds-3">
+                  {hotTakeaways.length > 0 ? hotTakeaways.map((takeaway, index) => (
+                    <div key={`${takeaway.text}-${index}`} className="flex gap-ds-3 border-b border-white/[0.055] pb-ds-3 last:border-0 last:pb-0">
+                      <div className="mt-0.5 shrink-0">
+                        <TakeawayIcon tone={takeaway.tone} />
+                      </div>
+                      <p className="text-[12px] leading-[1.55] text-ink-secondary">{takeaway.text}</p>
+                    </div>
+                  )) : (
+                    <p className="text-[12px] leading-relaxed text-ink-tertiary">
+                      Takeaways will appear as soon as the AI section finishes.
+                    </p>
+                  )}
+                </div>
+              </aside>
             </div>
           )}
+
           {section.error && (
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-[#EF4444]/5 border border-[#EF4444]/15">
-              <AlertTriangle className="w-4 h-4 text-[#EF4444] shrink-0" />
-              <div><p className="text-sm text-[#EF4444]/80">{section.error}</p><p className="text-xs text-[#EF4444]/50 mt-1">Click "Regenerate" to retry</p></div>
+            <div className="flex items-center gap-ds-3 rounded-[12px] border border-num-negative/15 bg-num-negative/5 p-ds-4">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-num-negative" />
+              <div>
+                <p className="text-sm text-num-negative/85">{section.error}</p>
+                <p className="mt-1 text-xs text-num-negative/55">Click "Regenerate" to retry</p>
+              </div>
             </div>
           )}
         </div>
@@ -1031,102 +1154,99 @@ export const OverviewTab = memo(({ data, prefetchedBrief }: { data: StockData; p
 
   return (
     <StockTabErrorBoundary>
-    <div className="space-y-6">
+    <div className="space-y-ds-7">
       {/* ========== INVESTMENT STORY — AI Enhanced ========== */}
       <Card highlight>
-        <div className="relative p-6">
-          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-[#C9A646] to-transparent" />
+        <div className="relative p-ds-6 md:p-ds-7">
           
           {/* Header with rating */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-ds-6 flex items-center justify-between gap-ds-4">
             <SectionHeader icon={Sparkles} title="The Investment Story" badge="AI Analysis" />
             {investmentStory?.rating && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{
-                background: investmentStory.rating.includes('Buy') ? 'rgba(34,197,94,0.1)' : investmentStory.rating === 'Hold' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                border: `1px solid ${investmentStory.rating.includes('Buy') ? 'rgba(34,197,94,0.25)' : investmentStory.rating === 'Hold' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+              <div className="flex items-center gap-2 rounded-[8px] px-ds-3 py-ds-2" style={{
+                background: 'rgba(201,166,70,0.055)',
+                border: '1px solid rgba(201,166,70,0.18)',
               }}>
-                <span className="text-xs font-bold tracking-wide" style={{
-                  color: investmentStory.rating.includes('Buy') ? '#22C55E' : investmentStory.rating === 'Hold' ? '#F59E0B' : '#EF4444',
-                }}>{investmentStory.rating.toUpperCase()}</span>
+                <span className="text-[12px] font-semibold tracking-[0.08em] text-gold-primary">{investmentStory.rating.toUpperCase()}</span>
               </div>
             )}
           </div>
 
           {/* Loading state */}
           {storyLoading && (
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="mb-ds-5 space-y-ds-3">
+              <div className="mb-ds-2 flex items-center gap-ds-2">
                 <Loader2 className="w-4 h-4 text-[#C9A646] animate-spin" />
-                <span className="text-xs text-[#C9A646]">Analyzing fundamentals, financials & options flow...</span>
+                <span className="text-[13px] text-gold-primary/80">Analyzing fundamentals, financials & options flow...</span>
               </div>
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-3 rounded-full animate-pulse" style={{ background: 'linear-gradient(90deg, rgba(201,166,70,0.05), rgba(201,166,70,0.12), rgba(201,166,70,0.05))', width: `${95 - i * 12}%`, animationDelay: `${i * 150}ms` }} />
+                <div key={i} className="h-3 animate-pulse rounded-[4px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.035), rgba(255,255,255,0.075), rgba(255,255,255,0.035))', width: `${95 - i * 12}%`, animationDelay: `${i * 150}ms` }} />
               ))}
             </div>
           )}
 
           {/* AI Summary */}
           {investmentStory ? (
-            <div className="space-y-3">
+            <div className="space-y-ds-6">
               {/* Main thesis */}
-              <div className="p-4 rounded-xl" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.15)' }}>
-                <p className="text-[#E8DCC4] leading-relaxed text-sm">{investmentStory.summary}</p>
+              <div className="rounded-[12px] border border-white/[0.07] bg-white/[0.024] p-ds-5 md:p-ds-6">
+                <p className="text-[15px] leading-[1.85] text-ink-primary/90 md:text-[16px]">{investmentStory.summary}</p>
               </div>
 
               {/* Bull / Bear / Options grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 overflow-hidden rounded-[12px] border border-white/[0.07] bg-white/[0.018] md:grid-cols-3">
                 {/* Bull Case */}
                 {investmentStory.bullCase && (
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.12)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#22C55E]" />
-                      <span className="text-xs font-semibold text-[#22C55E] tracking-wide">BULL CASE</span>
+                  <div className="border-b border-white/[0.07] p-ds-5 md:border-b-0 md:border-r">
+                    <div className="mb-ds-3 flex items-center gap-ds-2">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#52C878]" />
+                      <span className="text-[12px] font-semibold text-[#52C878]" style={{ letterSpacing: '0.12em' }}>BULL CASE</span>
                     </div>
-                    <p className="text-xs text-[#C8C8C8] leading-relaxed">{investmentStory.bullCase}</p>
+                    <p className="text-[13px] leading-[1.75] text-ink-secondary">{investmentStory.bullCase}</p>
                   </div>
                 )}
 
                 {/* Bear Case */}
                 {investmentStory.bearCase && (
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingDown className="w-3.5 h-3.5 text-[#EF4444]" />
-                      <span className="text-xs font-semibold text-[#EF4444] tracking-wide">BEAR CASE</span>
+                  <div className="border-b border-white/[0.07] p-ds-5 md:border-b-0 md:border-r">
+                    <div className="mb-ds-3 flex items-center gap-ds-2">
+                      <TrendingDown className="w-3.5 h-3.5 text-num-negative" />
+                      <span className="text-[12px] font-semibold text-num-negative" style={{ letterSpacing: '0.12em' }}>BEAR CASE</span>
                     </div>
-                    <p className="text-xs text-[#C8C8C8] leading-relaxed">{investmentStory.bearCase}</p>
+                    <p className="text-[13px] leading-[1.75] text-ink-secondary">{investmentStory.bearCase}</p>
                   </div>
                 )}
 
                 {/* Options Insight */}
                 {investmentStory.optionsInsight && (
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(168,85,247,0.04)', border: '1px solid rgba(168,85,247,0.12)' }}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <BarChart2 className="w-3.5 h-3.5 text-[#A855F7]" />
-                      <span className="text-xs font-semibold text-[#A855F7] tracking-wide">OPTIONS FLOW</span>
+                  <div className="p-ds-5">
+                    <div className="mb-ds-3 flex items-center gap-ds-2">
+                      <BarChart2 className="w-3.5 h-3.5 text-gold-primary" />
+                      <span className="text-[12px] font-semibold text-gold-primary" style={{ letterSpacing: '0.12em' }}>OPTIONS FLOW</span>
                     </div>
-                    <p className="text-xs text-[#C8C8C8] leading-relaxed">{investmentStory.optionsInsight}</p>
+                    <p className="text-[13px] leading-[1.75] text-ink-secondary">{investmentStory.optionsInsight}</p>
                   </div>
                 )}
               </div>
             </div>
           ) : !storyLoading ? (
             /* Fallback to static thesis when AI hasn't loaded */
-            <div className="p-4 rounded-xl mb-4" style={{ background: 'rgba(201,166,70,0.06)', border: '1px solid rgba(201,166,70,0.15)' }}>
-              <p className="text-[#E8DCC4] leading-relaxed italic text-sm">"{thesis}"</p>
+            <div className="mb-ds-5 rounded-[12px] border border-white/[0.07] bg-white/[0.024] p-ds-5">
+              <p className="text-[15px] italic leading-[1.85] text-ink-primary/90">"{thesis}"</p>
             </div>
           ) : null}
 
           {/* Signal + Wall Street */}
-          <div className="flex items-center gap-4 mt-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: `${signal.color}15`, border: `1px solid ${signal.color}30` }}>
+          <div className="mt-ds-6 flex flex-wrap items-center gap-ds-4 border-t border-white/[0.07] pt-ds-5">
+            <div className="flex items-center gap-ds-2 rounded-[8px] border border-gold-border/60 bg-gold-primary/[0.045] px-ds-3 py-ds-2">
               <div className="w-2 h-2 rounded-full" style={{ background: signal.color }} />
               <span className="text-sm font-medium" style={{ color: signal.color }}>{signal.signal}</span>
             </div>
             {data.analystRating && (
-              <span className="text-xs text-[#6B6B6B]">Wall Street: <span className={cn("font-medium", data.analystRating.includes('Buy') ? 'text-[#22C55E]' : data.analystRating === 'Hold' ? 'text-[#F59E0B]' : 'text-[#EF4444]')}>{data.analystRating}</span></span>
+              <span className="text-[13px] text-ink-tertiary">Wall Street: <span className="font-medium text-gold-primary">{data.analystRating}</span></span>
             )}
             {data.nextEarningsDate && (
-              <span className="text-xs text-[#6B6B6B]">Next Earnings: <span className="text-[#C9A646] font-medium">{new Date(data.nextEarningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></span>
+              <span className="text-[13px] text-ink-tertiary">Next Earnings: <span className="font-medium text-ink-primary">{new Date(data.nextEarningsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></span>
             )}
           </div>
         </div>

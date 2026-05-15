@@ -1,13 +1,14 @@
 // src/pages/app/ai/StockAnalyzer.tsx
 // =====================================================
-// 🚀 STOCK ANALYZER — Main Page (Thin Orchestrator)
+// 🚀 STOCK ANALYZER — Main Page (v2 — AI Arena Shell)
 // =====================================================
-// UPDATED: Replaced Dividends/News/Risks tabs with Earnings tab
+// 1A: Hero + Empty + Error via v2 components.
+//     Tabs, TabNav, StockLoadingSkeleton preserved unchanged.
 // =====================================================
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { Search, XCircle, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Lock } from 'lucide-react';
 
 import { useStockAnalyzer } from '@/hooks/useStockAnalyzer';
 import { POPULAR_TICKERS } from '@/constants/stock-analyzer.constants';
@@ -15,12 +16,15 @@ import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
 import { UsageBadge } from '@/components/access/UsageBadge';
 
-// Components
-import { Card } from '@/components/stock-analyzer/ui';
+import { AIArenaShell } from '@/components/ai-arena';
 import { SearchBar } from '@/components/stock-analyzer/SearchBar';
 import { StockLoadingSkeleton } from '@/components/stock-analyzer/StockLoadingSkeleton';
-import { PriceHeader } from '@/components/stock-analyzer/PriceHeader';
 import { TabNav } from '@/components/stock-analyzer/TabNav';
+import {
+  StockAnalyzerHero,
+  StockAnalyzerLandingHero,
+  StockErrorState,
+} from '@/components/stock-analyzer/v2';
 import {
   OverviewTab,
   BusinessTab,
@@ -36,15 +40,12 @@ export default function StockAnalyzer() {
   const {
     searchQuery,
     setSearchQuery,
-    suggestions,
     selectedTicker,
     handleSelectTicker: originalHandleSelectTicker,
     activeTab,
     setActiveTab,
     stockData,
-    news,
     isLoading,
-    isLoadingNews,
     loadError,
   } = useStockAnalyzer();
 
@@ -88,55 +89,49 @@ export default function StockAnalyzer() {
     );
   }
 
-  return (
-    <div
-      className="min-h-screen relative overflow-hidden"
-      style={{
-        background:
-          'linear-gradient(180deg, #0a0a0a 0%, #0d0b08 50%, #0a0a0a 100%)',
-      }}
-    >
-      {/* Background Effects */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div
-          className="absolute top-[10%] left-[5%] w-[800px] h-[800px] rounded-full blur-[180px]"
-          style={{ background: 'rgba(201,166,70,0.06)' }}
-        />
-        <div
-          className="absolute bottom-[10%] right-[5%] w-[700px] h-[700px] rounded-full blur-[160px]"
-          style={{ background: 'rgba(201,166,70,0.04)' }}
-        />
-        <div
-          className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[150px]"
-          style={{ background: 'rgba(244,217,123,0.03)' }}
-        />
-      </div>
+  // Choose what to show in shell hero
+  const customHero = stockData
+    ? <StockAnalyzerHero data={stockData} />
+    : (
+      <StockAnalyzerLandingHero
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSelectTicker={handleSelectTicker}
+        isLoading={isLoading}
+        suggestedTickers={POPULAR_TICKERS}
+      />
+    );
 
-      <div className="relative z-10 w-full px-6 lg:px-10 py-8 md:py-10">
-        {/* Header */}
+  return (
+    <AIArenaShell
+      eyebrow={undefined}
+      title={stockData ? undefined : 'Stock Analyzer'}
+      subtitle={stockData ? undefined : 'Institutional-grade deep research and AI-narrated analysis.'}
+      customHero={customHero}
+      beam={false}
+      goldHalo={false}
+      constructionMarkers={false}
+    >
+      {/* Usage badge */}
+      {stockData && (
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-10"
+          key={`stock-analysis-${stockData.ticker}`}
+          className="stock-analyzer-results relative mx-auto max-w-[1240px]"
+          initial={{ opacity: 0, x: 52, filter: 'blur(10px)' }}
+          animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+          transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h1 className="text-3xl md:text-4xl font-bold mb-3">
-            <span className="text-white">Stock </span>
-            <span
-              style={{
-                background:
-                  'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              Analyzer
-            </span>
-          </h1>
-          <p className="text-[#8B8B8B]">
-            Institutional-grade deep research and analysis
-          </p>
+          <div
+            className="pointer-events-none absolute left-1/2 top-[-96px] h-[220px] w-[58%] -translate-x-1/2 rounded-full blur-[92px]"
+            aria-hidden="true"
+            style={{
+              background:
+                'radial-gradient(ellipse at center, rgba(255,226,156,0.055) 0%, rgba(201,166,70,0.018) 44%, transparent 74%)',
+            }}
+          />
+
           {plan !== 'platform_enterprise' && (
-            <div className="mt-2">
+            <div className="relative z-10 mb-ds-5 flex justify-center">
               <UsageBadge
                 used={usage.stockAnalysisToday}
                 limit={usage.stockAnalysisLimit}
@@ -144,161 +139,111 @@ export default function StockAnalyzer() {
               />
             </div>
           )}
-        </motion.div>
 
-        {/* Search */}
+          <div className="relative z-10 mb-ds-8">
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              onSelect={handleSelectTicker}
+              isLoading={isLoading}
+              variant="hero"
+              showAnalyzeButton
+            />
+          </div>
+        </motion.div>
+      )}
+
+      {/* Loading */}
+      {isLoading && selectedTicker && <StockLoadingSkeleton />}
+
+      {/* Error */}
+      {loadError && !isLoading && (
+        <div className="mt-ds-6">
+          <StockErrorState message={loadError} />
+        </div>
+      )}
+
+      {/* Loaded — tabs */}
+      {stockData && !isLoading && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          key={`stock-analysis-body-${stockData.ticker}`}
+          className="stock-analyzer-results relative mx-auto mt-ds-8 max-w-[1240px] space-y-ds-7"
+          initial={{ opacity: 0, x: 72, scale: 0.985 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          transition={{ duration: 0.72, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
         >
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            onSelect={handleSelectTicker}
-            isLoading={isLoading}
+          <div
+            className="pointer-events-none absolute inset-x-[-24px] top-[-48px] h-[180px] rounded-full blur-[96px]"
+            aria-hidden="true"
+            style={{
+              background:
+                'radial-gradient(ellipse at 72% 0%, rgba(201,166,70,0.038) 0%, rgba(201,166,70,0.012) 40%, transparent 72%)',
+            }}
           />
+          <div className="relative z-10 overflow-x-auto pb-1">
+            <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
+          <div className="relative z-10 min-h-[400px]">
+            {/* All tabs mount simultaneously so their useEffect fetches fire in parallel.
+                CSS hidden keeps inactive tabs invisible without unmounting them.
+                OptionsTab is excluded from pre-load (no AI fetch on mount; access-gated). */}
+            <div hidden={activeTab !== 'overview'}><OverviewTab data={stockData} /></div>
+            <div hidden={activeTab !== 'business'}><BusinessTab data={stockData} /></div>
+            <div hidden={activeTab !== 'financials'}><FinancialsTab data={stockData} /></div>
+            <div hidden={activeTab !== 'valuation'}><ValuationTab data={stockData} /></div>
+            <div hidden={activeTab !== 'wallstreet'}><WallStreetTab data={stockData} /></div>
+            <div hidden={activeTab !== 'earnings'}><EarningsTab data={stockData} /></div>
+            {activeTab === 'options' && (() => {
+              const optionsAccess = canAccessPage('options_tab');
+              if (!optionsAccess.hasAccess) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-ds-9 gap-ds-3">
+                    <div
+                      className="w-16 h-16 rounded-[16px] flex items-center justify-center"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
+                        border: '1px solid rgba(201,166,70,0.3)',
+                      }}
+                    >
+                      <Lock className="w-8 h-8 text-gold-primary" aria-hidden="true" />
+                    </div>
+                    <h3 className="text-h4 font-medium text-ink-primary">Options Analysis</h3>
+                    <p className="text-small text-ink-tertiary text-center max-w-xs">
+                      Available from the <span className="text-gold-primary font-semibold">Core</span> plan and above.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/app/all-markets/pricing')}
+                      className="mt-ds-1 px-ds-5 py-ds-2 rounded-[16px] text-small font-semibold text-ink-on-gold"
+                      style={{
+                        background: 'var(--gradient-gold)',
+                        boxShadow: 'var(--glow-gold-resting)',
+                      }}
+                    >
+                      Upgrade to Core
+                    </button>
+                  </div>
+                );
+              }
+              return <OptionsTab data={stockData} />;
+            })()}
+          </div>
+          <style>{`
+            .stock-analyzer-results [style*="border: 1px solid rgba(201,166,70"] {
+              border-color: rgba(255,255,255,0.055) !important;
+            }
+
+            .stock-analyzer-results [style*="rgba(201,166,70,0.15)"] {
+              border-color: rgba(255,255,255,0.055) !important;
+            }
+
+            .stock-analyzer-results h2,
+            .stock-analyzer-results h3 {
+              letter-spacing: 0 !important;
+            }
+          `}</style>
         </motion.div>
-
-        {/* Loading */}
-        <AnimatePresence>
-          {isLoading && selectedTicker && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <StockLoadingSkeleton />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Error */}
-        {loadError && !isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-8 max-w-2xl mx-auto"
-          >
-            <Card>
-              <div className="p-8 text-center">
-                <XCircle className="h-12 w-12 text-[#EF4444]/50 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Data Not Found
-                </h3>
-                <p className="text-[#8B8B8B]">{loadError}</p>
-              </div>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Results */}
-        <AnimatePresence>
-          {stockData && !isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="mt-8 space-y-6"
-            >
-              <PriceHeader data={stockData} />
-
-              <div className="flex justify-center overflow-x-auto">
-                <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
-              </div>
-
-              {/* All tabs mount simultaneously so their useEffect fetches fire in parallel.
-                  CSS hidden keeps inactive tabs invisible without unmounting them.
-                  OptionsTab is excluded from pre-load (no AI fetch on mount; access-gated). */}
-              <div className="min-h-[400px]">
-                <div hidden={activeTab !== 'overview'}><OverviewTab data={stockData} /></div>
-                <div hidden={activeTab !== 'business'}><BusinessTab data={stockData} /></div>
-                <div hidden={activeTab !== 'financials'}><FinancialsTab data={stockData} /></div>
-                <div hidden={activeTab !== 'valuation'}><ValuationTab data={stockData} /></div>
-                <div hidden={activeTab !== 'wallstreet'}><WallStreetTab data={stockData} /></div>
-                <div hidden={activeTab !== 'earnings'}><EarningsTab data={stockData} /></div>
-                {activeTab === 'options' && (() => {
-                  const optionsAccess = canAccessPage('options_tab');
-                  if (!optionsAccess.hasAccess) {
-                    return (
-                      <div className="flex flex-col items-center justify-center py-24 gap-4">
-                        <div
-                          className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                          style={{
-                            background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
-                            border: '1px solid rgba(201,166,70,0.3)',
-                          }}
-                        >
-                          <Lock className="w-8 h-8" style={{ color: '#C9A646' }} />
-                        </div>
-                        <h3 className="text-xl font-bold text-white">Options Analysis</h3>
-                        <p className="text-[#8B8B8B] text-sm text-center max-w-xs">
-                          Available from the <span style={{ color: '#C9A646', fontWeight: 600 }}>Core</span> plan and above
-                        </p>
-                        <button
-                          onClick={() => navigate('/app/all-markets/pricing')}
-                          className="px-6 py-2.5 rounded-xl text-sm font-semibold text-black mt-2"
-                          style={{
-                            background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                            boxShadow: '0 4px 20px rgba(201,166,70,0.3)',
-                          }}
-                        >
-                          Upgrade to Core
-                        </button>
-                      </div>
-                    );
-                  }
-                  return <OptionsTab data={stockData} />;
-                })()}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Empty State */}
-        {!selectedTicker && !isLoading && !loadError && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="mt-16 text-center"
-          >
-            <div
-              className="w-24 h-24 mx-auto mb-6 rounded-2xl flex items-center justify-center"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
-                border: '2px solid rgba(201,166,70,0.2)',
-              }}
-            >
-              <Search className="h-10 w-10 text-[#C9A646]" />
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">
-              Search for a stock
-            </h2>
-            <p className="text-[#8B8B8B] mb-8">
-              Enter a ticker symbol or company name to begin analysis
-            </p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {POPULAR_TICKERS.slice(0, 8).map((stock) => (
-                <button
-                  key={stock.ticker}
-                  onClick={() => handleSelectTicker(stock.ticker)}
-                  className="px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, rgba(201,166,70,0.1), rgba(201,166,70,0.02))',
-                    border: '1px solid rgba(201,166,70,0.2)',
-                    color: '#C9A646',
-                  }}
-                >
-                  {stock.ticker}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </div>
-    </div>
+      )}
+    </AIArenaShell>
   );
 }

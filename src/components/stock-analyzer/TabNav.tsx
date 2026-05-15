@@ -11,7 +11,6 @@ import {
   Award, CalendarCheck, Target,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { cardStyle } from '@/constants/stock-analyzer.constants';
 import type { TabType } from '@/types/stock-analyzer.types';
 
 export const TAB_CONFIG: { id: TabType; label: string; icon: any }[] = [
@@ -33,8 +32,7 @@ export const TabNav = memo(
     onTabChange: (t: TabType) => void;
   }) => (
     <div
-      className="flex items-center gap-1 p-1.5 rounded-xl overflow-x-auto scrollbar-none"
-      style={cardStyle()}
+      className="flex w-full items-center gap-6 overflow-x-auto border-b border-white/[0.075] px-4 scrollbar-none"
     >
       {TAB_CONFIG.map((tab) => {
         const Icon = tab.icon;
@@ -44,21 +42,24 @@ export const TabNav = memo(
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
             className={cn(
-              'flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all duration-300 whitespace-nowrap',
-              isActive ? 'text-black' : 'text-[#8B8B8B] hover:text-[#C9A646]'
-            )}
-            style={
+              'relative flex items-center gap-2 whitespace-nowrap px-2 py-4 text-sm font-medium transition-colors duration-200',
               isActive
-                ? {
-                    background:
-                      'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    boxShadow: '0 4px 20px rgba(201,166,70,0.4)',
-                  }
-                : {}
-            }
+                ? 'text-ink-primary'
+                : 'text-ink-tertiary hover:text-ink-secondary'
+            )}
           >
-            <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline text-sm">{tab.label}</span>
+            <Icon className={cn('h-4 w-4', isActive ? 'text-ink-primary' : 'text-ink-tertiary')} />
+            <span className="hidden sm:inline">{tab.label}</span>
+            {isActive && (
+              <span
+                className="absolute inset-x-0 bottom-[-1px] h-px rounded-full"
+                style={{
+                  background:
+                    'linear-gradient(90deg, transparent, rgba(232,199,102,0.92), transparent)',
+                }}
+                aria-hidden="true"
+              />
+            )}
           </button>
         );
       })}

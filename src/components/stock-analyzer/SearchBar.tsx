@@ -1,17 +1,9 @@
 // src/components/stock-analyzer/SearchBar.tsx
 // =====================================================
-// 🔍 STOCK ANALYZER — Search Bar v2.0
-// =====================================================
-// v2.0 CHANGES:
-//   ✅ LOCAL SEARCH — No API calls, instant results
-//   ✅ SPY + QQQ + IWM universe (~1500 stocks)
-//   ✅ ETF/Index BLOCKING — Cannot search SPY, QQQ, XLF, etc.
-//   ✅ Index badges — Shows which indices the stock belongs to
-//   ✅ Sector filtering — Can type sector name to filter
-//   ❌ No ETFs, no sectors, no indices allowed
+// STOCK ANALYZER - Search Bar v2.1
 // =====================================================
 
-import { memo, useState, useMemo, useCallback } from 'react';
+import { memo, useState, useMemo, useCallback, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Loader2, ChevronRight, Ban } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,7 +12,6 @@ import {
   searchUniverse,
   isBlockedTicker,
   getIndexLabel,
-  type UniverseStock,
 } from '@/constants/stock-universe';
 
 interface SearchBarProps {
@@ -28,164 +19,243 @@ interface SearchBarProps {
   onChange: (v: string) => void;
   onSelect: (ticker: string) => void;
   isLoading: boolean;
+  variant?: 'default' | 'hero';
+  showAnalyzeButton?: boolean;
 }
 
-// Index badge colors
 const INDEX_COLORS: Record<string, { bg: string; text: string }> = {
-  'S&P 500':      { bg: 'rgba(59,130,246,0.15)', text: '#60A5FA' },
-  'NASDAQ-100':   { bg: 'rgba(168,85,247,0.15)', text: '#C084FC' },
-  'Russell 2000': { bg: 'rgba(34,197,94,0.15)',   text: '#4ADE80' },
+  'S&P 500': { bg: 'rgba(255,255,255,0.06)', text: 'var(--text-secondary)' },
+  'NASDAQ-100': { bg: 'rgba(201,166,70,0.10)', text: 'var(--gold-primary)' },
+  'Russell 2000': { bg: 'rgba(255,255,255,0.06)', text: 'rgba(255,255,255,0.65)' },
 };
 
-export const SearchBar = memo(({ value, onChange, onSelect, isLoading }: SearchBarProps) => {
+export const SearchBar = memo(({
+  value,
+  onChange,
+  onSelect,
+  isLoading,
+  variant = 'default',
+  showAnalyzeButton = false,
+}: SearchBarProps) => {
   const [isFocused, setIsFocused] = useState(false);
+  const trimmedValue = value.trim().toUpperCase();
+  const isHero = variant === 'hero';
 
-  // Local search — instant, no API calls
   const results = useMemo(() => {
     if (!value.trim() || value.trim().length < 1) return [];
     return searchUniverse(value, 10);
   }, [value]);
 
-  // Check if user is trying to search for a blocked ticker
   const isBlocked = useMemo(() => {
     return value.trim().length >= 2 && isBlockedTicker(value.trim());
   }, [value]);
 
   const handleSelect = useCallback((ticker: string) => {
     onSelect(ticker);
-    // Don't clear — let the parent handle it
   }, [onSelect]);
 
+  const handleAnalyze = useCallback(() => {
+    if (!trimmedValue || isBlocked || isLoading) return;
+    if (results[0]) {
+      handleSelect(results[0].t);
+      return;
+    }
+    handleSelect(trimmedValue);
+  }, [handleSelect, isBlocked, isLoading, results, trimmedValue]);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    handleAnalyze();
+  }, [handleAnalyze]);
+
   return (
-    <div className="relative w-full max-w-4xl mx-auto">
-      {/* Glow effect */}
+    <div className={cn('relative w-full mx-auto', isHero ? 'max-w-none stock-analyzer-premium-search' : 'max-w-4xl')}>
       <div
         className={cn(
           'absolute -inset-1 rounded-2xl transition-opacity duration-500',
-          isFocused ? 'opacity-100' : 'opacity-0'
+          isFocused ? 'opacity-100' : 'opacity-0',
+          isHero && (isFocused ? 'opacity-70' : 'opacity-35'),
         )}
         style={{
-          background:
-            'linear-gradient(135deg, rgba(201,166,70,0.3), rgba(244,217,123,0.1), rgba(201,166,70,0.3))',
-          filter: 'blur(20px)',
+          background: isHero
+            ? 'radial-gradient(ellipse at 28% 50%, rgba(255,255,255,0.045), transparent 48%), radial-gradient(ellipse at 82% 50%, rgba(201,166,70,0.055), transparent 50%)'
+            : 'linear-gradient(135deg, rgba(201,166,70,0.3), rgba(244,217,123,0.1), rgba(201,166,70,0.3))',
+          filter: isHero ? 'blur(38px)' : 'blur(20px)',
         }}
       />
 
-      {/* Input */}
       <div
         className={cn(
-          'relative flex items-center rounded-xl transition-all duration-300',
+          'relative flex items-center overflow-hidden rounded-[12px] transition-all duration-300',
+          isHero && 'min-h-[68px] shadow-[0_18px_46px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.075)]',
           isFocused
-            ? 'bg-[#151210] border-2 border-[#C9A646]/50'
-            : 'bg-[#0d0b08] border border-[#C9A646]/20 hover:border-[#C9A646]/40'
+            ? isHero
+              ? 'border border-white/[0.14] bg-white/[0.055]'
+              : 'border-2 border-gold-primary/50 bg-surface-2'
+            : isHero
+              ? 'border border-white/[0.075] bg-white/[0.035] hover:border-white/[0.12]'
+              : 'border border-gold-border bg-surface-1 hover:border-gold-primary/40',
         )}
+        style={isHero ? {
+          backdropFilter: 'blur(16px) saturate(130%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(130%)',
+        } : undefined}
       >
+        {isHero && (
+          <>
+            <div
+              className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
+              aria-hidden="true"
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              aria-hidden="true"
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(255,255,255,0.052) 0%, transparent 48%), radial-gradient(ellipse at 18% 50%, rgba(255,255,255,0.04) 0%, transparent 44%)',
+              }}
+            />
+          </>
+        )}
         <Search
           className={cn(
-            'absolute left-5 h-5 w-5 transition-colors',
-            isFocused ? 'text-[#C9A646]' : 'text-[#8B8B8B]'
+            'absolute z-10 h-5 w-5 transition-colors',
+            isHero ? 'left-6' : 'left-5',
+            isFocused ? 'text-gold-primary' : isHero ? 'text-ink-secondary' : 'text-ink-tertiary',
           )}
         />
         <input
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(event) => onChange(event.target.value)}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setTimeout(() => setIsFocused(false), 200)}
+          onKeyDown={handleKeyDown}
           placeholder="Search by ticker or company name..."
-          className="w-full bg-transparent py-5 pl-14 pr-5 text-white placeholder-[#6B6B6B] focus:outline-none text-lg"
+          className={cn(
+            'relative z-10 w-full bg-transparent text-ink-primary placeholder:text-ink-muted focus:outline-none',
+            isHero ? 'py-5 pl-[70px] pr-[142px] text-[16px] font-medium md:pr-[158px]' : 'py-5 pl-14 pr-5 text-lg',
+          )}
         />
         {isLoading && (
-          <Loader2 className="absolute right-5 h-5 w-5 text-[#C9A646] animate-spin" />
+          <Loader2
+            className={cn(
+              'absolute h-5 w-5 animate-spin text-gold-primary',
+              showAnalyzeButton ? 'right-[118px] md:right-[134px]' : 'right-5',
+            )}
+          />
+        )}
+        {showAnalyzeButton && (
+          <button
+            type="button"
+            onClick={handleAnalyze}
+            disabled={!trimmedValue || isBlocked || isLoading}
+            className={cn(
+              'absolute bottom-2 right-2 top-2 z-10 rounded-[12px] px-ds-5 text-small font-semibold text-ink-on-gold',
+              'transition-all duration-300 ease-out disabled:cursor-not-allowed disabled:opacity-50',
+              'hover:scale-[1.015] active:scale-[0.99] md:px-ds-6',
+            )}
+            style={{
+              background:
+                'linear-gradient(135deg, rgba(168,136,56,1) 0%, rgba(232,199,102,1) 48%, rgba(201,166,70,1) 100%)',
+              boxShadow:
+                  '0 8px 22px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.24), inset 0 -1px 0 rgba(0,0,0,0.22)',
+            }}
+          >
+            Analyze
+          </button>
         )}
       </div>
 
-      {/* Dropdown */}
+      {isHero && (
+        <style>{`
+          .stock-analyzer-premium-search input::selection {
+            background: rgba(201,166,70,0.28);
+          }
+        `}</style>
+      )}
+
       <AnimatePresence>
         {isFocused && (results.length > 0 || isBlocked) && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-full left-0 right-0 mt-3 rounded-xl overflow-hidden z-50"
+            className="absolute left-0 right-0 top-full z-50 mt-3 overflow-hidden rounded-[12px]"
             style={{ ...cardStyle(), boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)' }}
           >
-            {/* Blocked ticker message */}
             {isBlocked && (
-              <div className="flex items-center gap-3 px-5 py-4 text-[#EF4444]/80">
+              <div className="flex items-center gap-3 px-5 py-4 text-num-negative/80">
                 <Ban className="h-5 w-5 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-medium">
-                    {value.trim().toUpperCase()} is an ETF/Index — not available
+                    {trimmedValue} is an ETF/Index - not available
                   </p>
-                  <p className="text-xs text-[#8B8B8B] mt-0.5">
+                  <p className="mt-0.5 text-xs text-ink-tertiary">
                     Search for individual stocks within SPY, QQQ, or IWM
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Results */}
-            {results.map((stock, idx) => {
+            {results.map((stock, index) => {
               const indices = getIndexLabel(stock.i);
               return (
                 <button
                   key={stock.t}
+                  type="button"
                   onClick={() => handleSelect(stock.t)}
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[#C9A646]/10 transition-all text-left group"
+                  className="group flex w-full items-center gap-4 px-5 py-4 text-left transition-all hover:bg-gold-primary/10"
                   style={{
                     borderBottom:
-                      idx < results.length - 1
+                      index < results.length - 1
                         ? '1px solid rgba(201,166,70,0.1)'
                         : 'none',
                   }}
                 >
-                  {/* Ticker icon */}
                   <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-[12px]"
                     style={{
                       background:
                         'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
                       border: '1px solid rgba(201,166,70,0.2)',
                     }}
                   >
-                    <span className="text-[#C9A646] font-bold text-sm">
+                    <span className="text-sm font-bold text-gold-primary">
                       {stock.t.slice(0, 2)}
                     </span>
                   </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white group-hover:text-[#C9A646] transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-ink-primary transition-colors group-hover:text-gold-primary">
                         {stock.t}
                       </span>
-                      <span className="text-xs text-[#6B6B6B] px-2 py-0.5 rounded bg-white/5">
+                      <span className="rounded bg-white/5 px-2 py-0.5 text-xs text-ink-muted">
                         {stock.e}
                       </span>
-                      {/* Index badges */}
                       {indices.map((idx) => (
                         <span
                           key={idx}
-                          className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
                           style={{
                             background: INDEX_COLORS[idx]?.bg || 'rgba(255,255,255,0.05)',
-                            color: INDEX_COLORS[idx]?.text || '#8B8B8B',
+                            color: INDEX_COLORS[idx]?.text || 'rgba(255,255,255,0.45)',
                           }}
                         >
                           {idx}
                         </span>
                       ))}
                     </div>
-                    <p className="text-sm text-[#8B8B8B] truncate">{stock.n}</p>
+                    <p className="truncate text-sm text-ink-tertiary">{stock.n}</p>
                   </div>
 
-                  {/* Sector */}
-                  <span className="text-xs text-[#C9A646]/70 hidden md:block flex-shrink-0">
+                  <span className="hidden flex-shrink-0 text-xs text-gold-primary/70 md:block">
                     {stock.s}
                   </span>
 
-                  <ChevronRight className="h-4 w-4 text-[#6B6B6B] group-hover:text-[#C9A646] group-hover:translate-x-1 transition-all flex-shrink-0" />
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-ink-muted transition-all group-hover:translate-x-1 group-hover:text-gold-primary" />
                 </button>
               );
             })}

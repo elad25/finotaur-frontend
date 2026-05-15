@@ -9,7 +9,7 @@
 import { memo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { C, cardStyle } from '@/constants/stock-analyzer.constants';
+import { C } from '@/constants/stock-analyzer.constants';
 
 // =====================================================
 // 💀 SKELETON — Loading placeholder
@@ -21,8 +21,11 @@ interface SkeletonProps {
 
 export const Skeleton = memo<SkeletonProps>(({ className }) => (
   <div
-    className={cn('animate-pulse rounded-lg', className)}
-    style={{ background: 'rgba(201,166,70,0.08)' }}
+    className={cn('animate-pulse rounded-[8px]', className)}
+    style={{
+      background:
+        'linear-gradient(90deg, rgba(255,255,255,0.035), rgba(255,255,255,0.07), rgba(255,255,255,0.035))',
+    }}
   />
 ));
 Skeleton.displayName = 'Skeleton';
@@ -40,9 +43,22 @@ interface CardProps {
 
 export const Card = memo<CardProps>(({ children, className, highlight = false, gold = false }) => (
   <div
-    className={cn('rounded-2xl overflow-hidden', className)}
-    style={cardStyle(highlight || gold)}
+    className={cn(
+      'relative overflow-hidden rounded-[12px] border border-white/[0.075] bg-white/[0.026]',
+      'shadow-[0_18px_52px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.045)]',
+      'transition-colors duration-200 ease-out hover:border-white/[0.11] hover:bg-white/[0.032]',
+      className,
+    )}
+    style={{
+      background: highlight || gold
+        ? 'linear-gradient(145deg, rgba(255,255,255,0.044) 0%, rgba(255,255,255,0.024) 58%, rgba(201,166,70,0.018) 100%)'
+        : 'linear-gradient(145deg, rgba(255,255,255,0.033) 0%, rgba(255,255,255,0.018) 62%, rgba(0,0,0,0.10) 100%)',
+    }}
   >
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+      aria-hidden="true"
+    />
     {children}
   </div>
 ));
@@ -61,12 +77,11 @@ interface MetricBoxProps {
 
 export const MetricBox = memo<MetricBoxProps>(({ label, value, color, subtitle }) => (
   <div
-    className="p-4 rounded-xl"
-    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.06)' }}
+    className="rounded-[8px] border border-white/[0.055] bg-white/[0.022] p-5 shadow-[0_10px_28px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.035)] transition-colors duration-200 hover:bg-white/[0.032]"
   >
-    <p className="text-[10px] text-[#6B6B6B] mb-1 uppercase tracking-wider">{label}</p>
-    <p className={cn('text-lg font-semibold text-white', color)}>{value}</p>
-    {subtitle && <p className="text-[10px] text-[#6B6B6B] mt-0.5">{subtitle}</p>}
+    <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-tertiary">{label}</p>
+    <p className={cn('font-mono text-[20px] font-medium tabular-nums text-white', color)}>{value}</p>
+    {subtitle && <p className="mt-1 text-[11px] text-ink-muted">{subtitle}</p>}
   </div>
 ));
 MetricBox.displayName = 'MetricBox';
@@ -83,28 +98,27 @@ interface SectionHeaderProps {
 }
 
 export const SectionHeader = memo<SectionHeaderProps>(({ icon: Icon, title, subtitle, badge }) => (
-  <div className="flex items-center gap-3 mb-5">
+  <div className="mb-6 flex items-center gap-4">
     {Icon && (
       <div
-        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: 'rgba(201,166,70,0.12)', border: '1px solid rgba(201,166,70,0.2)' }}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-gold-border/55 bg-gold-primary/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)]"
       >
-        <Icon className="h-4.5 w-4.5 text-[#C9A646]" />
+        <Icon className="h-[18px] w-[18px] text-gold-primary" />
       </div>
     )}
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2">
-        <h3 className="text-base font-semibold text-white truncate">{title}</h3>
+        <h3 className="truncate text-[18px] font-semibold leading-tight text-ink-primary">{title}</h3>
         {badge && (
           <span
-            className="text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0"
-            style={{ background: 'rgba(201,166,70,0.12)', color: C.gold, border: '1px solid rgba(201,166,70,0.2)' }}
+            className="shrink-0 rounded-[4px] px-2 py-0.5 text-[10px] font-medium"
+            style={{ background: 'rgba(201,166,70,0.07)', color: C.gold, border: '1px solid rgba(201,166,70,0.13)' }}
           >
             {badge}
           </span>
         )}
       </div>
-      {subtitle && <p className="text-xs text-[#6B6B6B] mt-0.5">{subtitle}</p>}
+      {subtitle && <p className="mt-1 text-[13px] leading-relaxed text-ink-tertiary">{subtitle}</p>}
     </div>
   </div>
 ));
@@ -121,8 +135,8 @@ interface FactRowProps {
 }
 
 export const FactRow = memo<FactRowProps>(({ label, value, color }) => (
-  <div className="flex items-center justify-between py-2.5 border-b border-white/5 last:border-0">
-    <span className="text-sm text-[#8B8B8B]">{label}</span>
+  <div className="flex items-center justify-between py-2.5 border-b border-white/[0.045] last:border-0">
+    <span className="text-sm text-ink-tertiary">{label}</span>
     <span className={cn('text-sm font-medium text-white', color)}>{value}</span>
   </div>
 ));
@@ -255,11 +269,13 @@ const pct = displayPct;
   // Value arc endpoint
   const valAngle = -Math.PI + (pct / 100) * Math.PI;
   const valEnd = polar(cx, cy, R, valAngle);
-  const largeArc = pct > 50 ? 1 : 0;
+  // Value arc is always a portion of the 180deg semi-circle. largeArc=1
+  // makes SVG choose the long complementary arc and causes visual clipping.
+  const valueLargeArc = 0;
 
   // ── FIX: Only create arc path when hasValue and pct is meaningful ──
   const valPath = hasValue && pct > 0.1
-    ? `M ${bgStart.x} ${bgStart.y} A ${R} ${R} 0 ${largeArc} 1 ${valEnd.x} ${valEnd.y}`
+    ? `M ${bgStart.x} ${bgStart.y} A ${R} ${R} 0 ${valueLargeArc} 1 ${valEnd.x} ${valEnd.y}`
     : '';
 
   // Benchmark tick position
@@ -273,8 +289,8 @@ const pct = displayPct;
   const goldGradId = `roc-gold-${label}`;
 
   return (
-    <div className="flex flex-col items-center w-full">
-      <div className="relative w-full overflow-visible" style={{ maxWidth: W, height: 110 }}>
+    <div className="flex w-full min-w-0 flex-col items-center">
+      <div className="relative w-full overflow-hidden" style={{ maxWidth: W + PAD * 2, height: 116 }}>
 
         {/* Ambient radial glow — only when there's a value */}
         {hasValue && (
@@ -298,7 +314,7 @@ const pct = displayPct;
   viewBox={`${-PAD} -12 ${W + PAD * 2} 116`}
   className="relative"
   preserveAspectRatio="xMidYMid meet"
-  style={{ overflow: 'visible' }}
+  style={{ overflow: 'hidden' }}
 >
           <defs>
             {/* Clip to viewBox bounds */}

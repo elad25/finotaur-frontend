@@ -14,13 +14,13 @@
 //   ✅ NEW: Interactive hover tooltips on ALL charts
 // =====================================================
 
-import { memo, useState, useEffect, useCallback, useRef } from 'react';
+import { memo, useState, useEffect, useCallback, useRef, type ComponentType } from 'react';
 import { StockTabErrorBoundary } from '../StockTabErrorBoundary';
-import { BarChart3, TrendingUp, Shield, Activity, DollarSign, Loader2, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, Shield, Activity, DollarSign, Loader2, AlertTriangle, MoreVertical, ChevronDown, Info, Sparkles, Database, Cog, LineChart, ArrowDown, FileText, Target } from 'lucide-react';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { C } from '@/constants/stock-analyzer.constants';
-import { Card, MetricBox, SectionHeader, BarMeter, ROCCircle } from '../ui';
-import { fmtPct, fmtBig, isValid } from '@/utils/stock-analyzer.utils';
+import { Card, MetricBox, SectionHeader, ROCCircle } from '../ui';
+import { fmtPct, isValid } from '@/utils/stock-analyzer.utils';
 import { authFetch } from '@/utils/authFetch';
 
 // =====================================================
@@ -842,6 +842,360 @@ const QuarterlySummaryRow = memo(({ data }: { data: QuarterlyData[] }) => {
 QuarterlySummaryRow.displayName = 'QuarterlySummaryRow';
 
 // =====================================================
+// PREMIUM FINANCIALS PRESENTATION HELPERS
+// =====================================================
+
+function pctChange(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function ppChange(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null) return null;
+  return current - previous;
+}
+
+const TrendChip = memo(({ label, value, kind = 'pct' }: { label: string; value: number | null; kind?: 'pct' | 'pp' }) => {
+  const isPositive = value != null && value >= 0;
+  return (
+    <div className="flex items-center gap-ds-2 rounded-[8px] border border-white/[0.075] bg-white/[0.026] px-ds-4 py-ds-3">
+      <span className="text-[12px] text-ink-tertiary">{label}</span>
+      <span className={isPositive ? 'text-[13px] font-semibold text-[#52C878]' : 'text-[13px] font-semibold text-num-negative'}>
+        {value == null ? 'N/A' : `${isPositive ? '△' : '▽'} ${Math.abs(value).toFixed(1)}${kind === 'pp' ? 'pp' : '%'}`}
+      </span>
+    </div>
+  );
+});
+TrendChip.displayName = 'TrendChip';
+
+const SectionMenu = memo(({ quarters }: { quarters: number }) => (
+  <div className="ml-auto flex items-center gap-ds-3">
+    <button
+      type="button"
+      className="flex items-center gap-ds-2 rounded-[8px] border border-white/[0.10] bg-white/[0.025] px-ds-3 py-ds-2 text-[12px] text-ink-primary transition-colors hover:bg-white/[0.045]"
+    >
+      {quarters} Quarters
+      <ChevronDown className="h-3.5 w-3.5 text-ink-tertiary" aria-hidden="true" />
+    </button>
+    <button type="button" className="rounded-[8px] p-ds-2 text-ink-tertiary transition-colors hover:bg-white/[0.04] hover:text-ink-primary">
+      <MoreVertical className="h-4 w-4" aria-hidden="true" />
+    </button>
+  </div>
+));
+SectionMenu.displayName = 'SectionMenu';
+
+const FinancialSectionHeader = memo(({
+  icon: Icon,
+  title,
+  subtitle,
+  quarters,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+  quarters: number;
+}) => (
+  <div className="mb-ds-6 flex flex-wrap items-start gap-ds-4">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] border border-gold-border/70 bg-gold-primary/[0.045]">
+      <Icon className="h-6 w-6 text-gold-primary" />
+    </div>
+    <div className="min-w-0">
+      <h3 className="text-[20px] font-semibold leading-tight text-ink-primary">{title}</h3>
+      <p className="mt-1 text-[13px] text-ink-tertiary">{subtitle}</p>
+    </div>
+    <SectionMenu quarters={quarters} />
+  </div>
+));
+FinancialSectionHeader.displayName = 'FinancialSectionHeader';
+
+const MiniSparkline = memo(({ values, color = C.gold }: { values: Array<number | null>; color?: string }) => {
+  const clean = values.filter((v): v is number => v != null && isFinite(v));
+  if (clean.length < 2) return <div className="h-9" />;
+  const W = 116, H = 40, pad = 4;
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
+  const span = max - min || 1;
+  const pts = values
+    .map((v, i) => v == null ? null : ({
+      x: pad + (i / Math.max(1, values.length - 1)) * (W - pad * 2),
+      y: H - pad - ((v - min) / span) * (H - pad * 2),
+    }))
+    .filter((p): p is { x: number; y: number } => p != null);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-9 w-full">
+      <path d={buildSmooth(pts)} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" opacity="0.85" />
+      <path d={`${buildSmooth(pts)} L${pts[pts.length - 1].x},${H - pad} L${pts[0].x},${H - pad} Z`} fill={color} opacity="0.06" />
+    </svg>
+  );
+});
+MiniSparkline.displayName = 'MiniSparkline';
+
+const TrendPanel = memo(({
+  title,
+  dotColor,
+  summary,
+  children,
+}: {
+  title: string;
+  dotColor: string;
+  summary: React.ReactNode;
+  children: React.ReactNode;
+}) => (
+  <div className="grid grid-cols-1 overflow-hidden rounded-[12px] border border-white/[0.075] bg-white/[0.018] shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] lg:grid-cols-[220px_minmax(0,1fr)]">
+    <aside className="border-b border-white/[0.07] p-ds-5 lg:border-b-0 lg:border-r">
+      <div className="mb-ds-5 flex items-center gap-ds-2">
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: dotColor }} />
+        <h4 className="text-[15px] font-medium text-ink-primary">{title}</h4>
+      </div>
+      {summary}
+    </aside>
+    <div className="min-w-0 p-ds-4 md:p-ds-5">
+      {children}
+    </div>
+  </div>
+));
+TrendPanel.displayName = 'TrendPanel';
+
+const SummaryMetric = memo(({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) => (
+  <div className="mb-ds-5 last:mb-0">
+    <p className="mb-1 text-[12px] text-ink-tertiary">{label}</p>
+    <p className="font-mono text-[22px] font-medium leading-tight tabular-nums" style={{ color: color || 'var(--text-primary)' }}>{value}</p>
+    {sub && <p className="mt-1 text-[11px] text-ink-tertiary">{sub}</p>}
+  </div>
+));
+SummaryMetric.displayName = 'SummaryMetric';
+
+const CashFlowMetricPanel = memo(({
+  label,
+  value,
+  color,
+  growth,
+  sparkValues,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  growth: number | null;
+  sparkValues: Array<number | null>;
+}) => (
+  <div className="rounded-[12px] border border-white/[0.07] bg-white/[0.022] p-ds-5">
+    <div className="mb-ds-3 flex items-start justify-between gap-ds-3">
+      <div>
+        <p className="mb-ds-2 text-[11px] uppercase text-ink-tertiary" style={{ letterSpacing: '0.14em' }}>{label}</p>
+        <p className="font-mono text-[24px] font-medium tabular-nums" style={{ color }}>{value}</p>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] text-ink-tertiary">YoY Growth</p>
+        <p className={growth != null && growth >= 0 ? 'text-[13px] font-semibold text-[#52C878]' : 'text-[13px] font-semibold text-num-negative'}>
+          {growth == null ? 'N/A' : `${growth >= 0 ? '+' : ''}${growth.toFixed(1)}%`}
+        </p>
+      </div>
+    </div>
+    <MiniSparkline values={sparkValues} color={color} />
+  </div>
+));
+CashFlowMetricPanel.displayName = 'CashFlowMetricPanel';
+
+// =====================================================
+// PREMIUM PROFITABILITY ANALYSIS
+// =====================================================
+
+function fmtProfitPctValue(value: number | null | undefined): string {
+  return isValid(value) ? `${value!.toFixed(1)}%` : 'N/A';
+}
+
+function derivedPct(a: number | null | undefined, b: number | null | undefined): number | null {
+  if (!isValid(a) || !isValid(b)) return null;
+  return a! - b!;
+}
+
+const ProfitSparkline = memo(({ values, color }: { values: Array<number | null | undefined>; color: string }) => {
+  const clean = values.filter((v): v is number => v != null && isFinite(v));
+  if (clean.length < 2) return <div className="mt-ds-3 h-[42px] rounded-[8px] bg-white/[0.015]" />;
+
+  const W = 220;
+  const H = 42;
+  const pad = 4;
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
+  const span = max - min || 1;
+  const pts = values
+    .map((v, i) => v == null || !isFinite(v) ? null : ({
+      x: pad + (i / Math.max(1, values.length - 1)) * (W - pad * 2),
+      y: H - pad - ((v - min) / span) * (H - pad * 2),
+    }))
+    .filter((p): p is { x: number; y: number } => p != null);
+  const d = buildSmooth(pts);
+  const last = pts[pts.length - 1];
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="mt-ds-3 h-[42px] w-full overflow-visible" preserveAspectRatio="none">
+      <path d={`${d} L${last.x},${H - pad} L${pts[0].x},${H - pad} Z`} fill={color} opacity="0.10" />
+      <path d={d} fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" opacity="0.88" />
+      <circle cx={last.x} cy={last.y} r="2.6" fill={color} opacity="0.95" />
+      <circle cx={last.x} cy={last.y} r="8" fill={color} opacity="0.12" />
+    </svg>
+  );
+});
+ProfitSparkline.displayName = 'ProfitSparkline';
+
+const ProfitMetricCard = memo(({
+  label,
+  value,
+  color,
+  values,
+}: {
+  label: string;
+  value: number | null | undefined;
+  color: string;
+  values: Array<number | null | undefined>;
+}) => (
+  <div className="group relative overflow-hidden rounded-[12px] border border-white/[0.07] bg-[linear-gradient(145deg,rgba(255,255,255,0.04),rgba(255,255,255,0.016)_58%,rgba(0,0,0,0.18))] p-ds-5 shadow-[0_18px_48px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.055)] transition duration-300 hover:-translate-y-0.5 hover:border-white/[0.12] hover:bg-white/[0.04]">
+    <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/18 to-transparent" />
+    <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full opacity-0 blur-3xl transition duration-500 group-hover:opacity-35" style={{ backgroundColor: color }} />
+    <p className="text-[12px] font-semibold uppercase text-gold-primary" style={{ letterSpacing: '0.12em' }}>{label}</p>
+    <p className="mt-ds-3 font-mono text-[34px] font-medium leading-none text-ink-primary tabular-nums">{fmtProfitPctValue(value)}</p>
+    <ProfitSparkline values={values} color={color} />
+  </div>
+));
+ProfitMetricCard.displayName = 'ProfitMetricCard';
+
+const ProfitFlowNode = memo(({
+  label,
+  value,
+  color,
+  icon: Icon,
+  tone = 'primary',
+}: {
+  label: string;
+  value: number | null | undefined;
+  color: string;
+  icon: ComponentType<{ className?: string }>;
+  tone?: 'primary' | 'muted' | 'purple';
+}) => (
+  <div
+    className={[
+      'relative z-10 min-h-[142px] rounded-[12px] border bg-[linear-gradient(145deg,rgba(255,255,255,0.06),rgba(255,255,255,0.024)_62%,rgba(0,0,0,0.20))] p-ds-5',
+      'shadow-[0_22px_56px_rgba(0,0,0,0.32),inset_0_1px_0_rgba(255,255,255,0.06)]',
+      tone === 'primary' ? 'border-white/[0.10]' : 'border-white/[0.075]',
+    ].join(' ')}
+    style={{ borderRightColor: `${color}80`, boxShadow: `0 22px 56px rgba(0,0,0,0.32), inset -5px 0 0 ${color}AA, inset 0 1px 0 rgba(255,255,255,0.06)` }}
+  >
+    <p className="text-[12px] font-semibold uppercase text-ink-tertiary" style={{ letterSpacing: '0.12em' }}>{label}</p>
+    <p className="mt-ds-3 font-mono text-[29px] font-medium leading-none tabular-nums" style={{ color }}>
+      {fmtProfitPctValue(value)}
+    </p>
+    <p className="mt-ds-3 text-[13px] text-ink-tertiary">of Revenue</p>
+    <Icon className="absolute bottom-ds-5 right-ds-5 h-5 w-5 opacity-45" style={{ color }} aria-hidden="true" />
+  </div>
+));
+ProfitFlowNode.displayName = 'ProfitFlowNode';
+
+const ProfitFlowRibbon = memo(({ className, color, variant = 'solid' }: { className: string; color: string; variant?: 'solid' | 'fade' }) => (
+  <div
+    className={`pointer-events-none absolute hidden rounded-full blur-[0.2px] lg:block ${className}`}
+    style={{
+      background: variant === 'solid'
+        ? `linear-gradient(90deg, ${color}12, ${color}52, ${color}18)`
+        : `linear-gradient(90deg, rgba(255,255,255,0.04), ${color}25, rgba(255,255,255,0.03))`,
+      boxShadow: `0 0 32px ${color}16`,
+    }}
+  />
+));
+ProfitFlowRibbon.displayName = 'ProfitFlowRibbon';
+
+const ProfitFlowDiagram = memo(({
+  grossMargin,
+  operatingMargin,
+  netMargin,
+  fcfYield,
+}: {
+  grossMargin: number | null | undefined;
+  operatingMargin: number | null | undefined;
+  netMargin: number | null | undefined;
+  fcfYield: number | null | undefined;
+}) => {
+  const cogs = isValid(grossMargin) ? 100 - grossMargin! : null;
+  const operatingExpenses = derivedPct(grossMargin, operatingMargin);
+  const taxesOther = derivedPct(operatingMargin, netMargin);
+  const nonCashItems = derivedPct(netMargin, fcfYield);
+
+  return (
+    <div className="relative overflow-hidden rounded-[12px] border border-white/[0.07] bg-[radial-gradient(circle_at_28%_18%,rgba(201,166,70,0.08),transparent_34%),linear-gradient(145deg,rgba(255,255,255,0.032),rgba(255,255,255,0.014)_60%,rgba(0,0,0,0.20))] p-ds-5 md:p-ds-6">
+      <div className="mb-ds-8 flex items-start justify-between gap-ds-4">
+        <div>
+          <div className="flex items-center gap-ds-2">
+            <h4 className="text-[20px] font-semibold leading-tight text-ink-primary">Revenue to Profit Flow</h4>
+            <Info className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
+          </div>
+          <p className="mt-1 text-[14px] text-ink-tertiary">How revenue is converted into profit</p>
+        </div>
+      </div>
+
+      <div className="relative min-h-[430px]">
+        <ProfitFlowRibbon className="left-[12%] top-[138px] h-24 w-[24%]" color={C.blue} />
+        <ProfitFlowRibbon className="left-[29%] top-[132px] h-24 w-[26%]" color={C.green} />
+        <ProfitFlowRibbon className="left-[49%] top-[132px] h-24 w-[25%]" color={C.gold} />
+        <ProfitFlowRibbon className="left-[68%] top-[132px] h-24 w-[21%]" color="#A78BFA" variant="fade" />
+        <ProfitFlowRibbon className="left-[12%] top-[252px] h-24 w-[24%]" color="#9CA3AF" variant="fade" />
+        <ProfitFlowRibbon className="left-[49%] top-[252px] h-24 w-[25%]" color="#9CA3AF" variant="fade" />
+        <ProfitFlowRibbon className="left-[68%] top-[252px] h-24 w-[21%]" color="#9CA3AF" variant="fade" />
+
+        <div className="grid grid-cols-1 gap-ds-4 lg:grid-cols-[1.16fr_1fr_1fr_1fr_0.98fr] lg:grid-rows-2 lg:gap-x-ds-7 lg:gap-y-ds-7">
+          <div className="lg:row-span-2 lg:flex lg:items-center">
+            <div className="w-full">
+              <ProfitFlowNode label="Revenue" value={100} color={C.blue} icon={LineChart} tone="primary" />
+            </div>
+          </div>
+
+          <ProfitFlowNode label="Gross Profit" value={grossMargin} color={C.green} icon={Database} />
+          <ProfitFlowNode label="Operating Income" value={operatingMargin} color="#F59E0B" icon={Cog} />
+          <ProfitFlowNode label="Net Profit" value={netMargin} color={C.gold} icon={LineChart} />
+          <ProfitFlowNode label="FCF" value={fcfYield} color="#A78BFA" icon={Target} tone="purple" />
+
+          <ProfitFlowNode label="Cost of Goods Sold" value={cogs} color="#A7ADB7" icon={ArrowDown} tone="muted" />
+          <ProfitFlowNode label="Operating Expenses" value={operatingExpenses} color={C.gold} icon={ArrowDown} tone="muted" />
+          <ProfitFlowNode label="Taxes & Other" value={taxesOther} color="#A7ADB7" icon={ArrowDown} tone="muted" />
+          <ProfitFlowNode label="Non-Cash Items" value={nonCashItems} color="#A7ADB7" icon={FileText} tone="muted" />
+        </div>
+      </div>
+    </div>
+  );
+});
+ProfitFlowDiagram.displayName = 'ProfitFlowDiagram';
+
+const ProfitabilityInsight = memo(({
+  grossMargin,
+  operatingMargin,
+  netMargin,
+  fcfYield,
+}: {
+  grossMargin: number | null | undefined;
+  operatingMargin: number | null | undefined;
+  netMargin: number | null | undefined;
+  fcfYield: number | null | undefined;
+}) => {
+  const fcfText = isValid(fcfYield) && fcfYield! < 0
+    ? 'FCF is negative due to higher capital investments and working capital changes.'
+    : 'FCF remains positive, supporting cash conversion and balance sheet flexibility.';
+
+  return (
+    <div className="flex flex-col gap-ds-4 rounded-[12px] border border-white/[0.07] bg-[linear-gradient(145deg,rgba(255,255,255,0.035),rgba(255,255,255,0.016)_68%,rgba(201,166,70,0.018))] p-ds-5 shadow-[0_18px_44px_rgba(0,0,0,0.24),inset_0_1px_0_rgba(255,255,255,0.05)] sm:flex-row sm:items-center">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-gold-border/70 bg-gold-primary/[0.09] shadow-[0_0_34px_rgba(201,166,70,0.16)]">
+        <Sparkles className="h-6 w-6 text-gold-primary" aria-hidden="true" />
+      </div>
+      <div className="min-w-0">
+        <h4 className="text-[16px] font-semibold text-gold-primary">Key Insight</h4>
+        <p className="mt-1 text-[15px] leading-relaxed text-ink-secondary">
+          {fmtProfitPctValue(grossMargin)} of revenue is converted to gross profit, {fmtProfitPctValue(operatingMargin)} to operating income, and {fmtProfitPctValue(netMargin)} to net profit. {fcfText}
+        </p>
+      </div>
+    </div>
+  );
+});
+ProfitabilityInsight.displayName = 'ProfitabilityInsight';
+
+// =====================================================
 // FCF QUALITY ASSESSMENT
 // =====================================================
 
@@ -900,26 +1254,58 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
   return (
     <StockTabErrorBoundary>
     <div className="space-y-6">
-      {/* ====== Profitability Analysis (existing) ====== */}
+      {/* ====== Profitability Analysis ====== */}
       <Card>
-        <div className="p-6">
-          <SectionHeader icon={BarChart3} title="Profitability Analysis" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <MetricBox label="Gross Margin" value={fmtPct(data.grossMargin)} />
-            <MetricBox label="Operating Margin" value={fmtPct(data.operatingMargin)} />
-            <MetricBox label="Net Margin" value={fmtPct(data.netMargin)} />
-            <MetricBox label="FCF Yield" value={isValid(data.fcfYield) ? fmtPct(data.fcfYield) : 'N/A'} />
-          </div>
-          {(isValid(data.grossMargin) || isValid(data.operatingMargin) || isValid(data.netMargin)) && (
-            <div className="p-4 rounded-xl bg-white/[0.02]">
-              <p className="text-sm text-[#8B8B8B] mb-4">Revenue to Profit Flow</p>
-              <div className="space-y-3">
-                <BarMeter value={100} color={C.blue} label="Revenue" />
-                {isValid(data.grossMargin) && <BarMeter value={data.grossMargin!} color={C.green} label="Gross Profit" />}
-                {isValid(data.operatingMargin) && <BarMeter value={data.operatingMargin!} color={C.amber} label="Operating Income" />}
-                {isValid(data.netMargin) && <BarMeter value={data.netMargin!} color={C.gold} label="Net Profit" />}
-              </div>
+        <div className="space-y-ds-6 p-ds-5 md:p-ds-6">
+          <div className="flex items-center gap-ds-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] border border-gold-border/70 bg-gold-primary/[0.055] shadow-[0_18px_44px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <BarChart3 className="h-7 w-7 text-gold-primary" aria-hidden="true" />
             </div>
+            <h3 className="text-[26px] font-semibold leading-tight text-ink-primary md:text-[30px]">Profitability Analysis</h3>
+          </div>
+
+          <div className="grid grid-cols-1 gap-ds-5 md:grid-cols-2 xl:grid-cols-4">
+            <ProfitMetricCard
+              label="Gross Margin"
+              value={data.grossMargin}
+              color={C.gold}
+              values={quarterlyData.length ? quarterlyData.map(q => q.grossMargin) : [data.grossMargin, data.grossMargin]}
+            />
+            <ProfitMetricCard
+              label="Operating Margin"
+              value={data.operatingMargin}
+              color={C.gold}
+              values={quarterlyData.length ? quarterlyData.map(q => q.operatingMargin) : [data.operatingMargin, data.operatingMargin]}
+            />
+            <ProfitMetricCard
+              label="Net Margin"
+              value={data.netMargin}
+              color={C.gold}
+              values={quarterlyData.length ? quarterlyData.map(q => q.netMargin) : [data.netMargin, data.netMargin]}
+            />
+            <ProfitMetricCard
+              label="FCF Yield"
+              value={data.fcfYield}
+              color="#A78BFA"
+              values={quarterlyData.length ? quarterlyData.map(q => q.freeCashFlow != null && q.revenue ? (q.freeCashFlow / q.revenue) * 100 : null) : [data.fcfYield, data.fcfYield]}
+            />
+          </div>
+
+          {(isValid(data.grossMargin) || isValid(data.operatingMargin) || isValid(data.netMargin) || isValid(data.fcfYield)) && (
+            <>
+              <ProfitFlowDiagram
+                grossMargin={data.grossMargin}
+                operatingMargin={data.operatingMargin}
+                netMargin={data.netMargin}
+                fcfYield={data.fcfYield}
+              />
+              <ProfitabilityInsight
+                grossMargin={data.grossMargin}
+                operatingMargin={data.operatingMargin}
+                netMargin={data.netMargin}
+                fcfYield={data.fcfYield}
+              />
+            </>
           )}
         </div>
       </Card>
@@ -928,15 +1314,15 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
       <Card>
         <div className="p-6">
           <SectionHeader icon={TrendingUp} title="Return on Capital" subtitle="Green zone = Good range for sector" />
-          <div className="w-full overflow-x-auto">
-            <div className="flex justify-around w-full min-w-[480px]">
-              <div className="flex-1 min-w-[160px] max-w-[220px]">
+          <div className="w-full overflow-hidden">
+            <div className="grid w-full grid-cols-1 gap-ds-6 sm:grid-cols-3">
+              <div className="min-w-0">
                 <ROCCircle label="ROE" value={data.roe} benchmark={15} />
               </div>
-              <div className="flex-1 min-w-[160px] max-w-[220px]">
+              <div className="min-w-0">
                 <ROCCircle label="ROA" value={data.roa} benchmark={8} />
               </div>
-              <div className="flex-1 min-w-[160px] max-w-[220px]">
+              <div className="min-w-0">
                 <ROCCircle label="ROIC" value={data.roic} benchmark={12} />
               </div>
             </div>
@@ -961,11 +1347,12 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
 
       {/* ====== NEW: Financial Trends ====== */}
       <Card>
-        <div className="p-6">
-          <SectionHeader
+        <div className="p-ds-5 md:p-ds-6">
+          <FinancialSectionHeader
             icon={Activity}
             title="Financial Trends"
             subtitle={quarterlyData.length > 0 ? `${quarterlyData.length} quarters · ${quarterlyData[0]?.quarter} → ${quarterlyData[quarterlyData.length - 1]?.quarter}` : 'Quarterly performance trends'}
+            quarters={quarterlyData.length || 0}
           />
 
           {loading && (
@@ -983,46 +1370,85 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
           )}
 
           {!loading && !error && quarterlyData.length >= 2 && (
-            <div className="space-y-8">
-              {/* Q/Q Summary Badges */}
-              <QuarterlySummaryRow data={quarterlyData} />
+            <div className="space-y-ds-5">
+              {(() => {
+                const latest = quarterlyData[quarterlyData.length - 1];
+                const prev = quarterlyData[quarterlyData.length - 2];
+                const yoyBase = quarterlyData.length >= 5 ? quarterlyData[quarterlyData.length - 5] : null;
+                const revenueQoq = pctChange(latest.revenue, prev.revenue);
+                const revenueYoy = pctChange(latest.revenue, yoyBase?.revenue ?? null);
+                const grossPp = ppChange(latest.grossMargin, prev.grossMargin);
+                const opPp = ppChange(latest.operatingMargin, prev.operatingMargin);
+                const netPp = ppChange(latest.netMargin, prev.netMargin);
+                const epsYoy = pctChange(latest.eps, yoyBase?.eps ?? null);
 
-              {/* Revenue Trend */}
-              <div>
-                <p className="text-sm text-[#8B8B8B] mb-3 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: C.green }} />
-                  Quarterly Revenue
-                </p>
-                <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                  <RevenueBarChart data={quarterlyData} />
-                </div>
-              </div>
+                return (
+                  <>
+                    <div className="flex flex-wrap gap-ds-3">
+                      <TrendChip label="Gross Margin" value={grossPp} kind="pp" />
+                      <TrendChip label="Op. Margin" value={opPp} kind="pp" />
+                      <TrendChip label="Net Margin" value={netPp} kind="pp" />
+                      <TrendChip label="Revenue QoQ" value={revenueQoq} />
+                    </div>
 
-              {/* Margin Trends */}
-              <div>
-                <p className="text-sm text-[#8B8B8B] mb-3">Margin Evolution</p>
-                <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                  <MarginTrendChart data={quarterlyData} />
-                  <ChartLegend items={[
-                    { color: C.green, label: 'Gross Margin' },
-                    { color: C.amber, label: 'Operating Margin' },
-                    { color: C.gold, label: 'Net Margin' },
-                  ]} />
-                </div>
-              </div>
+                    <TrendPanel
+                      title="Quarterly Revenue"
+                      dotColor="#52C878"
+                      summary={(
+                        <div>
+                          <SummaryMetric label="Latest Quarter" value={latest.revenue != null ? compactNum(latest.revenue) : 'N/A'} sub={latest.quarter} />
+                          <SummaryMetric label="YoY Growth" value={revenueYoy != null ? `${revenueYoy >= 0 ? '+' : ''}${revenueYoy.toFixed(1)}%` : 'N/A'} color={revenueYoy != null && revenueYoy >= 0 ? '#52C878' : C.red} />
+                          <SummaryMetric label="QoQ Growth" value={revenueQoq != null ? `${revenueQoq >= 0 ? '+' : ''}${revenueQoq.toFixed(1)}%` : 'N/A'} color={revenueQoq != null && revenueQoq >= 0 ? '#52C878' : C.red} />
+                          <MiniSparkline values={quarterlyData.map(q => q.revenue)} color={C.gold} />
+                        </div>
+                      )}
+                    >
+                      <div className="min-w-0 overflow-hidden">
+                        <RevenueBarChart data={quarterlyData} />
+                      </div>
+                    </TrendPanel>
 
-              {/* EPS Trend */}
-              {quarterlyData.some(q => q.eps != null) && (
-                <div>
-                  <p className="text-sm text-[#8B8B8B] mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: C.gold }} />
-                    Earnings Per Share (EPS)
-                  </p>
-                  <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                    <EPSTrendChart data={quarterlyData} />
-                  </div>
-                </div>
-              )}
+                    <TrendPanel
+                      title="Margin Evolution"
+                      dotColor={C.gold}
+                      summary={(
+                        <div>
+                          <SummaryMetric label="Gross Margin" value={latest.grossMargin != null ? `${latest.grossMargin.toFixed(1)}%` : 'N/A'} color="#52C878" />
+                          <SummaryMetric label="Operating Margin" value={latest.operatingMargin != null ? `${latest.operatingMargin.toFixed(1)}%` : 'N/A'} color={C.amber} />
+                          <SummaryMetric label="Net Margin" value={latest.netMargin != null ? `${latest.netMargin.toFixed(1)}%` : 'N/A'} color="#F59E0B" />
+                        </div>
+                      )}
+                    >
+                      <div className="min-w-0 overflow-hidden">
+                        <MarginTrendChart data={quarterlyData} />
+                        <ChartLegend items={[
+                          { color: C.green, label: 'Gross Margin' },
+                          { color: C.amber, label: 'Operating Margin' },
+                          { color: C.gold, label: 'Net Margin' },
+                        ]} />
+                      </div>
+                    </TrendPanel>
+
+                    {quarterlyData.some(q => q.eps != null) && (
+                      <TrendPanel
+                        title="Earnings Per Share (EPS)"
+                        dotColor={C.gold}
+                        summary={(
+                          <div>
+                            <SummaryMetric label="Latest Quarter" value={latest.eps != null ? `$${latest.eps.toFixed(2)}` : 'N/A'} sub={latest.quarter} />
+                            <SummaryMetric label="YoY Growth" value={epsYoy != null ? `${epsYoy >= 0 ? '+' : ''}${epsYoy.toFixed(1)}%` : 'N/A'} color={epsYoy != null && epsYoy >= 0 ? '#52C878' : C.red} />
+                            <MiniSparkline values={quarterlyData.map(q => q.eps)} color={C.gold} />
+                          </div>
+                        )}
+                      >
+                        <div className="min-w-0 overflow-hidden">
+                          <EPSTrendChart data={quarterlyData} />
+                        </div>
+                      </TrendPanel>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -1036,47 +1462,52 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
 
       {/* ====== NEW: Cash Flow Statement ====== */}
       <Card>
-        <div className="p-6">
-          <SectionHeader
+        <div className="p-ds-5 md:p-ds-6">
+          <FinancialSectionHeader
             icon={DollarSign}
             title="Cash Flow Analysis"
             subtitle="Quarterly operating cash flow, capital expenditures & free cash flow"
+            quarters={quarterlyData.length || 0}
           />
 
           {loading && <ChartSkeleton />}
 
           {!loading && !error && quarterlyData.length >= 2 && (
-            <div className="space-y-4">
-              {/* Cash Flow Latest Quarter Summary */}
+            <div className="space-y-ds-4">
               {(() => {
                 const latest = quarterlyData[quarterlyData.length - 1];
+                const yoyBase = quarterlyData.length >= 5 ? quarterlyData[quarterlyData.length - 5] : null;
                 return (
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <MetricBox
+                  <div className="grid grid-cols-1 gap-ds-4 lg:grid-cols-3">
+                    <CashFlowMetricPanel
                       label="Operating Cash Flow"
                       value={latest.operatingCashFlow != null ? compactNum(latest.operatingCashFlow) : 'N/A'}
-                      color={latest.operatingCashFlow != null && latest.operatingCashFlow > 0 ? 'text-[#3B82F6]' : undefined}
+                      color={C.blue}
+                      growth={pctChange(latest.operatingCashFlow, yoyBase?.operatingCashFlow ?? null)}
+                      sparkValues={quarterlyData.map(q => q.operatingCashFlow)}
                     />
-                    <MetricBox
+                    <CashFlowMetricPanel
                       label="Capital Expenditures"
                       value={latest.capex != null ? compactNum(Math.abs(latest.capex)) : 'N/A'}
-                      color="text-[#EF4444]"
+                      color={C.red}
+                      growth={pctChange(latest.capex, yoyBase?.capex ?? null)}
+                      sparkValues={quarterlyData.map(q => q.capex)}
                     />
-                    <MetricBox
+                    <CashFlowMetricPanel
                       label="Free Cash Flow"
                       value={latest.freeCashFlow != null ? compactNum(latest.freeCashFlow) : 'N/A'}
-                      color={latest.freeCashFlow != null && latest.freeCashFlow > 0 ? 'text-[#22C55E]' : latest.freeCashFlow != null ? 'text-[#EF4444]' : undefined}
+                      color={C.green}
+                      growth={pctChange(latest.freeCashFlow, yoyBase?.freeCashFlow ?? null)}
+                      sparkValues={quarterlyData.map(q => q.freeCashFlow)}
                     />
                   </div>
                 );
               })()}
 
-              {/* Cash Flow Chart */}
-              <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.015)', border: '1px solid rgba(255,255,255,0.03)' }}>
+              <div className="overflow-hidden rounded-[12px] border border-white/[0.075] bg-white/[0.018] p-ds-4 md:p-ds-5">
                 <CashFlowChart data={quarterlyData} />
               </div>
 
-              {/* FCF Quality Assessment */}
               <FCFQualityBadge data={quarterlyData} />
             </div>
           )}
@@ -1088,6 +1519,7 @@ export const FinancialsTab = memo(({ data, prefetchedQuarterly }: { data: StockD
           )}
         </div>
       </Card>
+
     </div>
     </StockTabErrorBoundary>
   );
