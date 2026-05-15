@@ -202,9 +202,11 @@ ai: {
   locked: false,
   beta: false,
   defaultPath: '/app/ai/copilot',
-  subNav: [],
+  subNav: [
+    { label: 'AI Analytics', path: '/app/ai/stock-analyzer' },
+    { label: 'FINOTAUR Copilot', path: '/app/ai/copilot' },
+  ],
   sidebar: [
-    { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
     { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
     { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
     { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },

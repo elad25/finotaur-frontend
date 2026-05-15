@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -14,6 +14,8 @@ import {
 import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { HoldingsTable } from './components/HoldingsTable';
 import { usePortfolioMockData } from './hooks/usePortfolioMockData';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 
 const opportunities = [
   ['NVDA', 'NVIDIA Corporation', 'AI infrastructure momentum', '92', '+18.4%'],
@@ -162,6 +164,22 @@ function CopilotPageShell({
   icon: LucideIcon;
   children: ReactNode;
 }) {
+  const { hasBetaAccess, isLoading: adminLoading } = useAdminAuth();
+  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const hasSubscriberAccess = hasBetaAccess || canAccessPage('my_portfolio').hasAccess;
+
+  if (adminLoading || accessLoading) {
+    return (
+      <div className="min-h-screen bg-[#030302] flex items-center justify-center text-ink-primary">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+      </div>
+    );
+  }
+
+  if (!hasSubscriberAccess) {
+    return <Navigate to="/app/ai/copilot" replace />;
+  }
+
   return (
     <div className="min-h-screen bg-[#030302] px-3 py-4 text-ink-primary">
       <main className="mx-auto max-w-[1480px]">

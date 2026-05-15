@@ -7,6 +7,7 @@
 // the Coming Soon landing page.
 // =====================================================
 
+import { useState } from 'react';
 import type { HTMLAttributes } from 'react';
 import {
   Brain,
@@ -19,9 +20,15 @@ import {
   AlertTriangle,
   Zap,
   ChevronRight,
+  Ban,
+  BadgeCheck,
+  Settings,
 } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
+
+type CopilotPreviewMode = 'landing' | 'subscriber' | 'admin';
 
 type StaticMotionProps<T> = HTMLAttributes<T> & {
   initial?: unknown;
@@ -40,9 +47,14 @@ const motion = {
 };
 
 export default function MyPortfolio() {
-  const { hasBetaAccess, isLoading } = useAdminAuth();
+  const { isAdmin, hasBetaAccess, isLoading: adminLoading } = useAdminAuth();
+  const { canAccessPage, loading: accessLoading } = usePlatformAccess();
+  const [previewMode, setPreviewMode] = useState<CopilotPreviewMode>('admin');
+  const canPreview = isAdmin || hasBetaAccess;
+  const hasSubscriberAccess = hasBetaAccess || canAccessPage('my_portfolio').hasAccess;
+  const effectiveMode: CopilotPreviewMode = canPreview ? previewMode : hasSubscriberAccess ? 'subscriber' : 'landing';
 
-  if (isLoading) {
+  if ((adminLoading || accessLoading) && !canPreview) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
@@ -50,19 +62,66 @@ export default function MyPortfolio() {
     );
   }
 
-  if (hasBetaAccess) {
-    return <FinotaurCopilotDashboard />;
+  if (effectiveMode === 'subscriber' || effectiveMode === 'admin') {
+    return (
+      <>
+        {canPreview && <CopilotViewToggle mode={previewMode} onChange={setPreviewMode} />}
+        <FinotaurCopilotDashboard />
+      </>
+    );
   }
 
-  return <ComingSoonPortfolio />;
+  return (
+    <>
+      {canPreview && <CopilotViewToggle mode={previewMode} onChange={setPreviewMode} />}
+      <CopilotLanding />
+    </>
+  );
+}
+
+function CopilotViewToggle({
+  mode,
+  onChange,
+}: {
+  mode: CopilotPreviewMode;
+  onChange: (mode: CopilotPreviewMode) => void;
+}) {
+  const options = [
+    { id: 'landing' as const, label: 'Landing', icon: Ban },
+    { id: 'subscriber' as const, label: 'Subscriber', icon: BadgeCheck },
+    { id: 'admin' as const, label: 'Admin', icon: Settings },
+  ];
+
+  return (
+    <div className="fixed right-4 top-28 z-50 flex items-center gap-1 rounded-xl border border-gold-primary/45 bg-black/90 p-1 shadow-[0_18px_45px_rgba(0,0,0,0.45),0_0_24px_rgba(201,166,70,0.16)] backdrop-blur-md">
+      {options.map(({ id, label, icon: Icon }) => {
+        const active = mode === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onChange(id)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+              active
+                ? 'bg-gradient-to-r from-gold-deep via-gold-primary to-gold-bright text-black shadow-[0_0_18px_rgba(201,166,70,0.28)]'
+                : 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright'
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // =====================================================
-// Coming Soon — shown to non-beta users
+// Landing page shown to non-subscribers.
 // (Restored from the pre-beta-gating implementation.)
 // =====================================================
 
-function ComingSoonPortfolio() {
+function CopilotLanding() {
   const features = [
     {
       icon: Brain,
@@ -186,13 +245,13 @@ function ComingSoonPortfolio() {
                 }}
               >
                 <Sparkles className="w-4 h-4" />
-                Coming Soon
+                FINOTAUR Copilot
               </span>
             </motion.div>
 
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
               <h1 className="text-4xl md:text-5xl font-bold mb-3">
-                <span className="text-white">Portfolio </span>
+                <span className="text-white">AI Portfolio </span>
                 <span
                   style={{
                     background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
@@ -200,7 +259,7 @@ function ComingSoonPortfolio() {
                     WebkitTextFillColor: 'transparent',
                   }}
                 >
-                  Brain
+                  Command
                 </span>
               </h1>
               <p className="text-xl text-[#8B8B8B]">Your Personal AI Risk Manager</p>
@@ -212,8 +271,8 @@ function ComingSoonPortfolio() {
               transition={{ delay: 0.4 }}
               className="text-[#6B6B6B] max-w-xl mx-auto leading-relaxed"
             >
-              We're building an intelligent portfolio analysis system that will help you understand your holdings,
-              identify hidden risks, and make smarter investment decisions.
+              FINOTAUR Copilot turns holdings, macro pressure, risk exposure, and opportunity signals into one
+              private command center for serious portfolio decisions.
             </motion.p>
 
             <motion.div
@@ -279,13 +338,13 @@ function ComingSoonPortfolio() {
                 }}
               >
                 <Bell className="w-5 h-5" />
-                Notify Me When Ready
+                Unlock FINOTAUR Copilot
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
               <div className="flex items-center gap-3 text-sm">
                 <div className="w-2 h-2 rounded-full bg-[#C9A646] animate-pulse" />
-                <span className="text-[#6B6B6B]">In active development</span>
+                <span className="text-[#6B6B6B]">Subscriber access required</span>
               </div>
             </motion.div>
 

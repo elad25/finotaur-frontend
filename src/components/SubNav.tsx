@@ -156,6 +156,15 @@ export const SubNav = () => {
   // 🔥 Enhanced active detection
   const isTabActive = useCallback((itemPath: string): boolean => {
     if (location.pathname === itemPath) return true;
+
+    if (itemPath === '/app/ai/stock-analyzer') {
+      return location.pathname.startsWith('/app/ai') &&
+             !location.pathname.startsWith('/app/ai/copilot');
+    }
+
+    if (itemPath === '/app/ai/copilot') {
+      return location.pathname.startsWith('/app/ai/copilot');
+    }
     
     // SITE DASHBOARD - Exact matching
     if (itemPath === '/app/all-markets/admin/site-dashboard') {
@@ -343,7 +352,14 @@ export const SubNav = () => {
                   borderBottom: isBetaItem ? '2px solid #f97316' : '2px solid #C9A646'
                 } : {}}
               >
-                {item.label}
+                {item.label === 'FINOTAUR Copilot' ? (
+                  <span className="relative z-10">
+                    <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
+                      FINOTAUR
+                    </span>{' '}
+                    <span className="font-semibold text-ink-primary">Copilot</span>
+                  </span>
+                ) : item.label}
                 {locked && <Lock className="h-3 w-3 opacity-60" />}
                 
                 {/* 🔥 Beta badge */}

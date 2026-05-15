@@ -6,7 +6,6 @@ import {
   Eye,
   Gauge,
   Layers3,
-  PlugZap,
   Radar,
   ShieldCheck,
   TrendingUp,
@@ -27,28 +26,23 @@ export function FinotaurCopilotDashboard() {
       <CircuitBackdrop />
 
       <main className="relative z-10 px-3 py-3 max-w-[1480px] mx-auto">
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-start">
-          <div className="xl:col-span-8">
-            <p className="text-[10px] uppercase tracking-[0.32em] text-gold-primary/75">Finotaur Intelligence Engine</p>
-            <h1 className="mt-1 text-[26px] font-semibold uppercase leading-none text-white">
-              AI Portfolio Command Center
-            </h1>
-            <p className="mt-2 max-w-[620px] text-[11px] uppercase tracking-[0.18em] text-ink-tertiary">
-              Real-time portfolio intelligence, opportunity detection, and risk signal overview
-            </p>
-          </div>
-          <div className="xl:col-span-4 flex items-start justify-start xl:justify-end">
-            <Link
-              to="/app/funding/brokers"
-              className="inline-flex h-11 items-center gap-2 rounded-[6px] border border-gold-primary/35 bg-gold-primary/[0.09] px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-primary shadow-[0_0_26px_rgba(201,166,70,0.16)] transition hover:border-gold-primary/70 hover:bg-gold-primary/[0.14]"
-            >
-              <PlugZap className="h-4 w-4" />
-              Connect Broker
-            </Link>
-          </div>
+        <div className="relative overflow-hidden border-b border-gold-primary/12 pb-5 pt-1">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
+          <p className="text-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/72">
+            Finotaur Intelligence System
+          </p>
+          <h1 className="mx-auto mt-3 max-w-[980px] text-center text-[36px] font-semibold uppercase leading-[0.95] text-white md:text-[52px]">
+            <span className="block bg-gradient-to-r from-gold-deep via-gold-bright to-gold-primary bg-clip-text text-transparent">
+              FINOTAUR Copilot
+            </span>
+            <span className="mt-2 block text-ink-primary">Portfolio Command Center</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-[860px] text-center text-[11px] uppercase tracking-[0.18em] text-ink-tertiary">
+            Institutional-grade market intelligence, portfolio signals, and autonomous risk awareness
+          </p>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
           <PortfolioValuePanel className="xl:col-span-4" range={range} />
           <AiBrainPanel className="xl:col-span-4" />
           <InsightsPanel className="xl:col-span-4" />
