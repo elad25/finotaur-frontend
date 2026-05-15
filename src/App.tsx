@@ -251,15 +251,6 @@ const CopilotHoldingsPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSec
 const CopilotRisksPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotRisksPage })));
 const CopilotAIChatPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIChatPage })));
 
-// Copy Trade
-const CopyTradeOverview = lazy(() => import("@/pages/app/copy-trade/Overview"));
-const CopyTradeTopTraders = lazy(() => import("@/pages/app/copy-trade/TopTraders"));
-const CopyTradeStrategies = lazy(() => import("@/pages/app/copy-trade/Strategies"));
-const CopyTradePortfolios = lazy(() => import("@/pages/app/copy-trade/Portfolios"));
-const CopyTradeLeaderboard = lazy(() => import("@/pages/app/copy-trade/Leaderboard"));
-const CopyTradeMyCopying = lazy(() => import("@/pages/app/copy-trade/MyCopying"));
-const CopyTradeInsights = lazy(() => import("@/pages/app/copy-trade/Insights"));
-
 // Funding
 const FundingOverview = lazy(() => import("@/pages/app/funding/Overview"));
 const FundingBrokers = lazy(() => import("@/pages/app/funding/Brokers"));
@@ -462,8 +453,8 @@ function AppContent() {
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
-<Route path="journal/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
-<Route path="journal/copy-trading" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+<Route path="journal/trade-copier" element={<Navigate to="/app/copy-trade/overview" replace />} />
+<Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
@@ -526,14 +517,16 @@ function AppContent() {
           <Route path="backtest/optimization" element={<BacktestRoute><BacktestOptimization /></BacktestRoute>} />
           <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
-          {/* COPY TRADE */}
-          <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><CopyTradeOverview /></LockedRoute>} />
-          <Route path="copy-trade/top-traders" element={<LockedRoute domainId="copy-trade"><CopyTradeTopTraders /></LockedRoute>} />
-          <Route path="copy-trade/strategies" element={<LockedRoute domainId="copy-trade"><CopyTradeStrategies /></LockedRoute>} />
-          <Route path="copy-trade/portfolios" element={<LockedRoute domainId="copy-trade"><CopyTradePortfolios /></LockedRoute>} />
-          <Route path="copy-trade/leaderboard" element={<LockedRoute domainId="copy-trade"><CopyTradeLeaderboard /></LockedRoute>} />
-          <Route path="copy-trade/my-copying" element={<LockedRoute domainId="copy-trade"><CopyTradeMyCopying /></LockedRoute>} />
-          <Route path="copy-trade/insights" element={<LockedRoute domainId="copy-trade"><CopyTradeInsights /></LockedRoute>} />
+          {/* TRADE COPIER */}
+          <Route path="copy-trade/overview" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/manage-risk" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/leaderboard" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/my-copying" element={<Navigate to="/app/copy-trade/overview" replace />} />
+          <Route path="copy-trade/insights" element={<Navigate to="/app/copy-trade/overview" replace />} />
           
           {/* FUNDING */}
           <Route path="funding/overview" element={<LockedRoute domainId="funding"><FundingOverview /></LockedRoute>} />

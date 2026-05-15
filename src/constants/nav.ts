@@ -234,7 +234,6 @@ ai: {
       { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
       { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
       { label: 'Gameplan', path: '/app/journal/scenarios', icon: ListChecks },
-      { label: 'Trade Copier', path: '/app/journal/trade-copier', icon: Copy },
       { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
       { label: 'Settings', path: '/app/journal/settings', icon: SettingsIcon },
     ],
@@ -292,21 +291,16 @@ ai: {
 
   'copy-trade': {
     id: 'copy-trade',
-    label: 'Copy Trade',
-    locked: true,
+    label: 'Trade Copier',
+    locked: false,
     beta: false,
     subNav: [
-      { label: 'Overview', path: '/app/copy-trade/overview' },
-      { label: 'Top Traders', path: '/app/copy-trade/top-traders' },
+      { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
     sidebar: [
-      { label: 'Overview', path: '/app/copy-trade/overview', icon: LayoutDashboard },
-      { label: 'Top Traders', path: '/app/copy-trade/top-traders', icon: Users },
-      { label: 'Strategies', path: '/app/copy-trade/strategies', icon: Target },
-      { label: 'Portfolios', path: '/app/copy-trade/portfolios', icon: Wallet },
-      { label: 'Leaderboard', path: '/app/copy-trade/leaderboard', icon: Award },
-      { label: 'My Copying', path: '/app/copy-trade/my-copying', icon: Activity },
-      { label: 'Trader Insights', path: '/app/copy-trade/insights', icon: BarChart3 },
+      { label: 'Connections', path: '/app/copy-trade/overview', icon: Link },
+      { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
+      { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
     ],
   },
 

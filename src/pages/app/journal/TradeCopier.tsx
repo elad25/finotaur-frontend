@@ -3,7 +3,7 @@
 // Trade Copier — FINOTAUR design
 //   1. Broker Connection Status (Tradovate live/demo)
 //   2. Copy Panel: Leader + Instrument (smart futures) + Followers table
-//   3. Copy Trade History (audit log)
+//   3. Trade Copier History (audit log)
 // Premium-only page. Consistent glassmorphism design.
 // ═══════════════════════════════════════════════════════════════
 
@@ -27,6 +27,7 @@ import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashbo
 import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
 import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
+import { useLocation } from 'react-router-dom';
 
 // ─────────────────────────────────────────────────────────────
 // FUTURES CONTRACT EXPIRY LOGIC
@@ -193,7 +194,7 @@ function PremiumGate() {
         </div>
         <h2 className="text-xl font-bold text-white">Premium Feature</h2>
         <p className="text-zinc-400 text-sm">
-          Auto-sync &amp; Copy Trading requires a Premium subscription.
+          Auto-sync &amp; Trade Copier requires a Premium subscription.
         </p>
         <a
           href="/app/journal/pricing"
@@ -705,7 +706,7 @@ const CopyPanel = memo(({ portfolios }: { portfolios: { id: string; name: string
           <Copy className="w-4 h-4 text-[#C9A646]" />
         </div>
         <div>
-          <h3 className="text-sm font-semibold text-white">Copy Trading Panel</h3>
+          <h3 className="text-sm font-semibold text-white">Trade Copier Panel</h3>
           <p className="text-[11px] text-zinc-500">
             Configure leader account, instrument &amp; follower settings
           </p>
@@ -899,6 +900,7 @@ const CopyHistorySection = memo(() => {
 
 // ─── Main Page ────────────────────────────────────────────────
 export default function TradeCopier() {
+  const location = useLocation();
   const { isPremium, isAdmin } = useSubscription();
   const isPremiumUser = isPremium || isAdmin;
 
@@ -925,7 +927,11 @@ export default function TradeCopier() {
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showModal, setShowModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'connections' | 'copy-trading' | 'manage-risk'>('connections');
+  const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
+    ? 'manage-risk'
+    : location.pathname.endsWith('/trade-copier')
+      ? 'copy-trading'
+      : 'connections';
 
   if (!isPremiumUser) return <PremiumGate />;
 
@@ -942,7 +948,7 @@ export default function TradeCopier() {
         {/* ── Header ── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-ink-primary">Copy Trading</h1>
+            <h1 className="text-2xl font-bold text-ink-primary">Trade Copier</h1>
             <p className="text-sm text-ink-secondary mt-1">
               Configure your leader account, instrument and follower settings in real-time.
             </p>
@@ -951,28 +957,6 @@ export default function TradeCopier() {
             <EnginePill alive={engineAlive} sessions={engineSessions} />
             <SyncBadge type={syncStatus.type} label={syncStatus.label} />
           </div>
-        </div>
-
-        {/* ── Tab Navigation Bar ── */}
-        <div className="flex items-center gap-ds-1 p-1 rounded-lg bg-surface-1 border border-border-ds-subtle w-fit">
-          {([
-            { id: 'connections',  label: 'Connections',  icon: Link2  },
-            { id: 'copy-trading', label: 'Copy Trading', icon: Copy   },
-            { id: 'manage-risk',  label: 'Manage Risk',  icon: Shield },
-          ] as const).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-ds-2 px-ds-4 py-ds-2 rounded-md text-sm font-medium transition-colors duration-base ${
-                activeTab === tab.id
-                  ? 'bg-gold-primary text-ink-on-gold'
-                  : 'text-ink-secondary hover:text-ink-primary hover:bg-surface-2'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
         </div>
 
         {/* ── Tab 1: Broker Connections ── */}
@@ -1028,7 +1012,7 @@ export default function TradeCopier() {
           </SectionCard>
         )}
 
-        {/* ── Tab 2: Copy Trading ── */}
+        {/* ── Tab 2: Trade Copier ── */}
         {activeTab === 'copy-trading' && (
           <>
             {hasAnyConnection ? (
@@ -1047,7 +1031,7 @@ export default function TradeCopier() {
                   <div>
                     <p className="text-ink-secondary font-medium">No accounts connected</p>
                     <p className="text-ink-secondary text-sm mt-1">
-                      Connect a broker in the Connections tab to enable copy trading.
+                      Connect a broker in the Connections tab to enable Trade Copier.
                     </p>
                   </div>
                 </div>

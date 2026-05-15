@@ -262,7 +262,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
-    { label: 'Trade Copier', path: '/app/journal/copy-trading', icon: Copy },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
@@ -285,16 +284,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 👥 COPY TRADE
+  // 👥 TRADE COPIER
   // ===============================================
   'copy-trade': [
-    { label: 'Overview', path: '/app/copy-trade/overview', icon: LayoutDashboard },
-    { label: 'Top Traders', path: '/app/copy-trade/top-traders', icon: Users },
-    { label: 'Strategies', path: '/app/copy-trade/strategies', icon: Target },
-    { label: 'Portfolios', path: '/app/copy-trade/portfolios', icon: Wallet },
-    { label: 'Leaderboard', path: '/app/copy-trade/leaderboard', icon: Award },
-    { label: 'My Copying', path: '/app/copy-trade/my-copying', icon: Activity },
-    { label: 'Trader Insights', path: '/app/copy-trade/insights', icon: BarChart3 },
+    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link },
+    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
+    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
   ],
 
   // ===============================================
@@ -365,7 +360,7 @@ const ENVIRONMENT_HEADERS: Record<EnvironmentType, { icon: any; label: string; b
   'ai': { icon: Brain, label: 'AI Arena', bgColor: 'bg-violet-500/5', textColor: 'text-violet-400' },
   'journal': { icon: BookOpen, label: 'Journal', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
   'backtest': { icon: FlaskConical, label: 'Backtest', bgColor: 'bg-purple-500/5', textColor: 'text-purple-400' },
-  'copy-trade': { icon: Users, label: 'Copy Trade', bgColor: 'bg-teal-500/5', textColor: 'text-teal-400' },
+  'copy-trade': { icon: Copy, label: 'Trade Copier', bgColor: 'bg-teal-500/5', textColor: 'text-teal-400' },
   'funding': { icon: Wallet, label: 'Funding', bgColor: 'bg-lime-500/5', textColor: 'text-lime-400' },
   'admin': { icon: Shield, label: 'Admin Panel', bgColor: 'bg-[#D4AF37]/5', textColor: 'text-[#D4AF37]' },
   'affiliate': { icon: Award, label: 'Affiliate Center', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
