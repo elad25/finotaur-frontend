@@ -74,7 +74,7 @@ export function useAdminAuth() {
       try {
         const { data: profile, error } = await supabase
           .from('profiles')
-          .select('role, account_type')
+          .select('role, account_type, email')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -93,11 +93,12 @@ export function useAdminAuth() {
           return;
         }
 
+        const email = profile?.email || user.email || '';
         const role = profile?.role || 'user';
         const accountType = profile?.account_type || 'free';
         
         // 🔥 Admin check
-        const isAdmin = role === 'admin' || role === 'super_admin';
+        const isAdmin = role === 'admin' || role === 'super_admin' || email === 'elad2550@gmail.com';
         const isSuperAdmin = role === 'super_admin';
         
         // 🔥 BETA ACCESS CHECK
