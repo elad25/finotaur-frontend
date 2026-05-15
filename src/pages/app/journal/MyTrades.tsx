@@ -27,6 +27,7 @@ import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
 import { useTrades, useDeleteTrade, useUpdateTrade } from "@/hooks/useTradesData";
+import { useStrategiesOptimized } from "@/hooks/useStrategies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +35,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown } from "lucide-react";
+import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
@@ -109,6 +110,11 @@ interface Trade {
   };
 }
 
+interface StrategyOption {
+  id: string;
+  name: string;
+}
+
 interface Stats {
   totalTrades: number;
   winRate: number;
@@ -118,6 +124,27 @@ interface Stats {
   losses: number;
   breakeven: number;
 }
+
+interface DaySummary {
+  key: string;
+  label: string;
+  trades: Trade[];
+  totalTrades: number;
+  closedTrades: number;
+  winners: number;
+  losers: number;
+  breakeven: number;
+  netPnl: number;
+  grossPnl: number;
+  commissions: number;
+  volume: number;
+  winRate: number;
+  profitFactor: number | null;
+  topSymbols: string[];
+  sessions: string[];
+}
+
+type SummaryPeriod = "day" | "week";
 
 // 🔥 UPDATED: Now calculates R based on global 1R from settings
 const getTradeData = (trade: Trade, oneR: number) => {
@@ -216,6 +243,213 @@ const calculateDuration = (openAt: string, closeAt?: string): string => {
   return `${seconds}s`;
 };
 
+const formatSignedCurrency = (value: number, fractionDigits = 2): string => {
+  const sign = value >= 0 ? "+" : "−";
+  return `${sign}$${formatNumber(Math.abs(value), fractionDigits)}`;
+};
+
+const getTradeDayKey = (date: string, timezone: string): string => {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(date));
+  } catch {
+    return new Date(date).toISOString().slice(0, 10);
+  }
+};
+
+const getTradeWeekKey = (date: string, timezone: string): string => {
+  const dayKey = getTradeDayKey(date, timezone);
+  const [year, month, day] = dayKey.split("-").map(Number);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const weekday = utcDate.getUTCDay();
+  const daysFromMonday = (weekday + 6) % 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() - daysFromMonday);
+  return utcDate.toISOString().slice(0, 10);
+};
+
+const formatDayLabel = (date: string, timezone: string): string => {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    }).format(new Date(date));
+  } catch {
+    return new Date(date).toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+    });
+  }
+};
+
+const formatWeekLabel = (weekStartKey: string): string => {
+  const [year, month, day] = weekStartKey.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, day));
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  const sameMonth = sameYear && start.getUTCMonth() === end.getUTCMonth();
+  const startOptions: Intl.DateTimeFormatOptions = sameMonth
+    ? { month: "short", day: "2-digit", timeZone: "UTC" }
+    : { month: "short", day: "2-digit", year: sameYear ? undefined : "numeric", timeZone: "UTC" };
+  const endOptions: Intl.DateTimeFormatOptions = { month: sameMonth ? undefined : "short", day: "2-digit", year: "numeric", timeZone: "UTC" };
+
+  return `${new Intl.DateTimeFormat("en-US", startOptions).format(start)} - ${new Intl.DateTimeFormat("en-US", endOptions).format(end)}`;
+};
+
+const formatTradeTime = (date: string, timezone: string): string => {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(date));
+  } catch {
+    return new Date(date).toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+};
+
+const formatTradeStamp = (date: string, timezone: string): string => {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date(date));
+  } catch {
+    return `${new Date(date).toLocaleDateString("en-US", { month: "short", day: "2-digit" })} ${formatTradeTime(date, timezone)}`;
+  }
+};
+
+const buildDayChart = (trades: Trade[], oneR: number) => {
+  const closedTrades = trades.filter((trade) => getTradeData(trade, oneR).isClosed);
+  const source = closedTrades.length > 0 ? closedTrades : trades;
+  const cumulative = source.reduce<number[]>((points, trade) => {
+    const { pnl, isClosed } = getTradeData(trade, oneR);
+    const previous = points[points.length - 1] ?? 0;
+    points.push(previous + (isClosed ? pnl : 0));
+    return points;
+  }, [0]);
+
+  const min = Math.min(...cumulative, 0);
+  const max = Math.max(...cumulative, 0);
+  const range = Math.max(max - min, 1);
+  const width = 560;
+  const height = 190;
+  const padX = 8;
+  const padY = 12;
+  const xStep = (width - padX * 2) / Math.max(cumulative.length - 1, 1);
+
+  const points = cumulative.map((value, index) => {
+    const x = padX + index * xStep;
+    const y = padY + (height - padY * 2) - ((value - min) / range) * (height - padY * 2);
+    return { x, y, value };
+  });
+
+  return {
+    width,
+    height,
+    min,
+    max,
+    zeroY: padY + (height - padY * 2) - ((0 - min) / range) * (height - padY * 2),
+    path: points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" "),
+    areaPath: points.length
+      ? `${points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ")} L ${(points[points.length - 1]?.x ?? padX).toFixed(1)} ${height - padY} L ${padX} ${height - padY} Z`
+      : "",
+    lastPoint: points[points.length - 1],
+  };
+};
+
+const buildTradeSummaries = (
+  trades: Trade[],
+  oneR: number,
+  timezone: string,
+  period: SummaryPeriod,
+): DaySummary[] => {
+  const groups = new Map<string, { label: string; trades: Trade[] }>();
+
+  trades.forEach((trade) => {
+    const periodKey = period === "week"
+      ? getTradeWeekKey(trade.open_at, timezone)
+      : getTradeDayKey(trade.open_at, timezone);
+    const key = `${period}:${periodKey}`;
+    const label = period === "week" ? formatWeekLabel(periodKey) : formatDayLabel(trade.open_at, timezone);
+    const existing = groups.get(key) ?? { label, trades: [] };
+    existing.trades.push(trade);
+    groups.set(key, existing);
+  });
+
+  return Array.from(groups.entries())
+    .map(([key, group]) => {
+      const sortedTrades = [...group.trades].sort((a, b) => new Date(a.open_at).getTime() - new Date(b.open_at).getTime());
+      let winners = 0;
+      let losers = 0;
+      let breakeven = 0;
+      let netPnl = 0;
+      let commissions = 0;
+      let volume = 0;
+      let grossProfit = 0;
+      let grossLoss = 0;
+      let closedTrades = 0;
+      const symbols = new Set<string>();
+      const sessions = new Set<string>();
+
+      sortedTrades.forEach((trade) => {
+        const { pnl, outcome, isClosed } = getTradeData(trade, oneR);
+        symbols.add(trade.symbol);
+        if (trade.session) sessions.add(formatSessionDisplay(trade.session));
+        volume += Number(trade.quantity) || 0;
+        commissions += Number(trade.fees) || 0;
+
+        if (!isClosed) return;
+        closedTrades += 1;
+        netPnl += pnl;
+        if (outcome === "WIN") winners += 1;
+        if (outcome === "LOSS") losers += 1;
+        if (outcome === "BE") breakeven += 1;
+        if (pnl > 0) grossProfit += pnl;
+        if (pnl < 0) grossLoss += Math.abs(pnl);
+      });
+
+      return {
+        key,
+        label: group.label,
+        trades: sortedTrades,
+        totalTrades: sortedTrades.length,
+        closedTrades,
+        winners,
+        losers,
+        breakeven,
+        netPnl,
+        grossPnl: netPnl + commissions,
+        commissions,
+        volume,
+        winRate: closedTrades > 0 ? (winners / closedTrades) * 100 : 0,
+        profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? null : 0,
+        topSymbols: Array.from(symbols).slice(0, 4),
+        sessions: Array.from(sessions).slice(0, 3),
+      };
+    })
+    .sort((a, b) => b.key.localeCompare(a.key));
+};
+
 // 🚀 OPTIMIZATION: Memoized StatsCard Component
 const StatsCard = memo(({ 
   icon: Icon, 
@@ -291,16 +525,20 @@ const TradeRow = memo(({
   trade,
   oneR,
   timezone,
+  strategies,
   onOpen, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onAssignStrategy,
 }: { 
   trade: Trade;
   oneR: number;
   timezone: string;
+  strategies: StrategyOption[];
   onOpen: (trade: Trade) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onAssignStrategy: (trade: Trade, strategyId: string) => void;
 }) => {
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
     () => getTradeData(trade, oneR), 
@@ -316,6 +554,9 @@ const TradeRow = memo(({
     e.stopPropagation();
     onDelete(trade.id);
   }, [trade.id, onDelete]);
+  const handleAssignStrategy = useCallback((strategyId: string) => {
+    onAssignStrategy(trade, strategyId);
+  }, [trade, onAssignStrategy]);
 
   return (
     <TableRow 
@@ -341,7 +582,10 @@ const TradeRow = memo(({
       <TableCell>
         <Badge 
           variant={trade.side === "LONG" ? "outline" : "destructive"}
-          className={trade.side === "LONG" ? "text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : "text-xs"}
+          className={trade.side === "LONG"
+            ? "text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+            : "text-xs border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20"
+          }
         >
           {trade.side}
         </Badge>
@@ -449,6 +693,26 @@ const TradeRow = memo(({
           <span className="text-yellow-400/90 text-sm font-medium">
             {trade.strategy_name}
           </span>
+        ) : strategies.length > 0 ? (
+          <div
+            className="w-[150px]"
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <Select onValueChange={handleAssignStrategy}>
+              <SelectTrigger className="h-8 w-[150px] rounded-md border-zinc-700/70 bg-zinc-950/70 px-2 text-xs text-zinc-300 hover:border-[#C9A646]/60 hover:text-white focus:ring-[#C9A646]/30">
+                <CheckSquare className="mr-1.5 h-3.5 w-3.5 text-[#C9A646]" />
+                <SelectValue placeholder="Assign strategy" />
+              </SelectTrigger>
+              <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
+                {strategies.map((strategy) => (
+                  <SelectItem key={strategy.id} value={strategy.id}>
+                    {strategy.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : (
           <span className="text-zinc-500">—</span>
         )}
@@ -493,6 +757,206 @@ const TradeRow = memo(({
 
 TradeRow.displayName = 'TradeRow';
 
+const DaySummaryCard = memo(({
+  day,
+  oneR,
+  timezone,
+  period,
+  expanded,
+  onToggle,
+  onOpenTrade,
+}: {
+  day: DaySummary;
+  oneR: number;
+  timezone: string;
+  period: SummaryPeriod;
+  expanded: boolean;
+  onToggle: () => void;
+  onOpenTrade: (trade: Trade) => void;
+}) => {
+  const isLossDay = day.netPnl < 0;
+  const chart = useMemo(() => buildDayChart(day.trades, oneR), [day.trades, oneR]);
+  const pnlTone = isLossDay ? "text-num-negative" : "text-emerald-400";
+  const chartTone = isLossDay ? "text-num-negative" : "text-emerald-400";
+  const gradientId = `day-chart-${day.key.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const Metric = ({
+    icon: Icon,
+    label,
+    value,
+    valueClassName = "text-ink-primary",
+  }: {
+    icon: any;
+    label: string;
+    value: React.ReactNode;
+    valueClassName?: string;
+  }) => (
+    <div className="border-l border-border-ds-subtle pl-ds-3">
+      <div className="flex items-center gap-ds-2 text-xs text-ink-secondary">
+        <Icon className="h-3.5 w-3.5 text-gold-primary" strokeWidth={1.7} />
+        <span>{label}</span>
+      </div>
+      <div className={`mt-0.5 text-lg font-semibold leading-tight tabular-nums ${valueClassName}`}>
+        {value}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={`group mx-ds-3 my-ds-2 overflow-hidden rounded-[10px] border bg-black p-ds-3 shadow-lg transition-colors duration-base ${isLossDay ? "border-border-ds-subtle" : "border-emerald-500/35"}`}>
+      <div className="mb-ds-3 flex flex-wrap items-start justify-between gap-ds-3">
+        <div className="flex min-w-0 items-start gap-ds-3">
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border-ds-subtle bg-surface-base text-gold-primary transition-colors duration-base hover:border-gold-primary/50"
+            aria-label={`${expanded ? "Hide" : "Show"} trades from ${period === "week" ? "week" : "day"} ${day.label}`}
+          >
+            <ChevronDown className={`h-4 w-4 transition-transform duration-base ${expanded ? "" : "-rotate-90"}`} />
+          </button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-ds-2">
+              <CalendarDays className="h-4 w-4 text-gold-primary" strokeWidth={1.7} />
+              <h3 className="text-lg font-semibold leading-tight text-ink-primary">{day.label}</h3>
+              <span className="h-1.5 w-1.5 rounded-full bg-gold-primary" />
+              <span className="text-xs text-ink-secondary">Net P&amp;L</span>
+            </div>
+            <div className={`mt-1 text-3xl font-semibold leading-none tabular-nums ${pnlTone}`}>
+              {formatSignedCurrency(day.netPnl, 1)}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-ds-2">
+          <button
+            type="button"
+            disabled
+            className="inline-flex h-9 items-center gap-ds-2 rounded-[10px] border border-border-ds-default bg-surface-2 px-ds-3 text-sm font-medium text-ink-muted"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add note
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-ds-3 xl:grid-cols-[minmax(300px,0.8fr)_1.2fr]">
+        <div className={`relative h-[165px] rounded-[10px] border border-border-ds-subtle bg-surface-base/70 p-ds-3 ${chartTone}`}>
+          <svg viewBox={`0 0 ${chart.width} ${chart.height}`} className="h-[122px] w-full overflow-visible">
+            <defs>
+              <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {[0.25, 0.5, 0.75].map((ratio) => (
+              <line key={ratio} x1="0" x2={chart.width} y1={chart.height * ratio} y2={chart.height * ratio} className="stroke-border-ds-default" strokeDasharray="3 5" strokeWidth="1" />
+            ))}
+            <line x1="0" x2={chart.width} y1={chart.zeroY} y2={chart.zeroY} className="stroke-border-ds-strong" strokeDasharray="3 5" strokeWidth="1" />
+            {chart.areaPath && <path d={chart.areaPath} fill={`url(#${gradientId})`} />}
+            <path d={chart.path} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+            {chart.lastPoint && <circle cx={chart.lastPoint.x} cy={chart.lastPoint.y} r="6" fill="currentColor" />}
+          </svg>
+          <div className="pointer-events-none absolute left-ds-3 top-ds-3 flex h-[122px] flex-col justify-between text-[11px] text-ink-secondary tabular-nums">
+            <span>{formatSignedCurrency(chart.max, 0)}</span>
+            <span>$0</span>
+            <span>{formatSignedCurrency(chart.min, 0)}</span>
+          </div>
+          <div className="flex justify-between px-ds-3 text-[11px] text-ink-secondary">
+            {(period === "week" ? ["Mon", "Tue", "Wed", "Thu", "Fri"] : ["09:30", "11:00", "12:30", "14:00", "16:00"]).map((label) => (
+              <span key={label}>{label}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid content-center gap-ds-3">
+          <div className="grid grid-cols-2 gap-y-ds-3 md:grid-cols-4">
+            <Metric icon={ArrowRightLeft} label="Total Trades" value={day.totalTrades} />
+            <Metric icon={BadgeDollarSign} label="Gross P&L" value={formatSignedCurrency(day.grossPnl, 1)} valueClassName={day.grossPnl < 0 ? "text-num-negative" : "text-emerald-400"} />
+            <Metric icon={Trophy} label="Winners / Losers" value={<><span className="text-emerald-400">{day.winners}</span><span className="text-ink-secondary"> / </span><span className={day.losers > 0 ? "text-num-negative" : "text-ink-primary"}>{day.losers}</span></>} />
+            <Metric icon={Percent} label="Commissions" value={`$${formatNumber(day.commissions, 1)}`} />
+          </div>
+          <div className="h-px bg-border-ds-subtle" />
+          <div className="grid grid-cols-2 gap-y-ds-3 md:grid-cols-3">
+            <Metric icon={Target} label="Win Rate" value={`${formatNumber(day.winRate, 1)}%`} />
+            <Metric icon={BarChart3} label="Volume" value={formatNumber(day.volume, 0)} />
+            <Metric icon={Scale} label="Profit Factor" value={day.profitFactor === null ? "-" : formatNumber(day.profitFactor, 2)} />
+          </div>
+          <div className="flex flex-wrap gap-ds-2">
+            {day.topSymbols.map((symbol) => (
+              <span key={symbol} className="rounded-sm border border-border-ds-subtle bg-surface-base px-ds-2 py-1 font-mono text-xs text-ink-primary">
+                {symbol}
+              </span>
+            ))}
+            {day.sessions.map((session) => (
+              <span key={session} className="rounded-sm border border-gold-primary/20 bg-gold-primary/10 px-ds-2 py-1 text-xs text-gold-primary">
+                {session}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-ds-3 border-t border-border-ds-subtle pt-ds-3">
+          <div className="mb-ds-2 flex items-center justify-between gap-ds-3">
+            <div className="text-xs font-semibold uppercase text-ink-secondary">Trades this {period}</div>
+            <div className="text-xs text-ink-muted">{day.totalTrades} trades</div>
+          </div>
+          <div className="overflow-x-auto rounded-[8px] border border-border-ds-subtle">
+            <div className="min-w-[820px]">
+              <div className="grid grid-cols-[112px_1fr_88px_110px_92px_92px_100px_72px] border-b border-border-ds-subtle bg-surface-base/80 px-ds-3 py-ds-2 text-xs font-medium text-ink-muted">
+                <span>{period === "week" ? "Opened" : "Time"}</span>
+                <span>Symbol</span>
+                <span>Side</span>
+                <span>Session</span>
+                <span>Entry</span>
+                <span>Exit</span>
+                <span>P&amp;L</span>
+                <span>R</span>
+              </div>
+              {day.trades.map((trade) => {
+                const { pnl, actualR, outcome, isClosed } = getTradeData(trade, oneR);
+                const pnlClass = pnl >= 0 ? "text-emerald-400" : "text-num-negative";
+
+                return (
+                  <button
+                    key={trade.id}
+                    type="button"
+                    onClick={() => onOpenTrade(trade)}
+                    className="grid w-full grid-cols-[112px_1fr_88px_110px_92px_92px_100px_72px] items-center border-b border-border-ds-subtle px-ds-3 py-ds-2 text-left text-sm text-ink-primary transition-colors duration-base last:border-b-0 hover:bg-surface-1"
+                  >
+                    <span className="text-xs text-ink-secondary tabular-nums">{period === "week" ? formatTradeStamp(trade.open_at, timezone) : formatTradeTime(trade.open_at, timezone)}</span>
+                    <span className="min-w-0 truncate font-semibold text-ink-primary">
+                      {trade.symbol}
+                      {trade.strategy_name && <span className="ml-ds-2 text-xs font-normal text-ink-muted">{trade.strategy_name}</span>}
+                    </span>
+                    <span className={trade.side === "LONG" ? "text-emerald-400" : "text-num-negative"}>{trade.side}</span>
+                    <span className="truncate text-xs text-ink-secondary">
+                      {trade.session ? formatSessionDisplay(trade.session) : "-"}
+                    </span>
+                    <span className="tabular-nums text-ink-secondary">${formatNumber(trade.entry_price, 2)}</span>
+                    <span className="tabular-nums text-ink-secondary">
+                      {trade.exit_price && Number(trade.exit_price) > 0 ? `$${formatNumber(trade.exit_price, 2)}` : "-"}
+                    </span>
+                    <span className={`font-semibold tabular-nums ${isClosed ? pnlClass : "text-ink-muted"}`}>
+                      {isClosed ? formatSignedCurrency(pnl, 2) : "-"}
+                    </span>
+                    <span className="tabular-nums text-ink-secondary">
+                      {actualR !== null && actualR !== undefined ? formatRValue(actualR) : outcome}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+DaySummaryCard.displayName = 'DaySummaryCard';
+
 export default function MyTrades() {
   // ✅ 1. ALL HOOKS MUST BE AT THE TOP (Rules of Hooks!)
   const navigate = useNavigate();
@@ -511,14 +975,17 @@ export default function MyTrades() {
   // This ensures we load the correct user's trades when admin impersonates
   const { effectivePortfolioId, activePortfolio } = usePortfolioContext();
   const { data: trades = [], isLoading, error } = useTrades(userId, effectivePortfolioId);
+  const { data: strategies = [] } = useStrategiesOptimized(userId);
   
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
-  const { mutate: updateTradeMutation } = useUpdateTrade();
+  const { mutateAsync: updateTradeMutation } = useUpdateTrade();
   
   // ✅ 2. All useState together
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterType, setFilterType] = useState("all");
+  const [viewMode, setViewMode] = useState<"trades" | "days">("trades");
+  const [summaryPeriod, setSummaryPeriod] = useState<SummaryPeriod>("day");
+  const [expandedDayKeys, setExpandedDayKeys] = useState<Set<string>>(() => new Set());
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -613,32 +1080,36 @@ const stats = useMemo<Stats>(() => {
     const query = searchQuery.toLowerCase();
     
     return trades.filter(trade => {
-      const matchesSearch = 
+      return (
         trade.symbol.toLowerCase().includes(query) ||
         (trade.strategy_name && trade.strategy_name.toLowerCase().includes(query)) ||
         trade.setup?.toLowerCase().includes(query) ||
         trade.notes?.toLowerCase().includes(query) ||
-        (trade.session && formatSessionDisplay(trade.session).toLowerCase().includes(query));
-      
-      if (!matchesSearch) return false;
-      
-      if (filterType === "all") return true;
-      
-      const { outcome } = getTradeData(trade, oneR);
-      
-      switch (filterType) {
-        case "wins": return outcome === "WIN";
-        case "losses": return outcome === "LOSS";
-        case "open": return outcome === "OPEN";
-        default: return true;
-      }
+        (trade.session && formatSessionDisplay(trade.session).toLowerCase().includes(query))
+      );
     });
-  }, [trades, searchQuery, filterType, oneR]);
+  }, [trades, searchQuery]);
+
+  const periodSummaries = useMemo<DaySummary[]>(() => (
+    buildTradeSummaries(filteredTrades, oneR, timezone, summaryPeriod)
+  ), [filteredTrades, oneR, timezone, summaryPeriod]);
 
   // ✅ 6. All useCallback handlers
   const openTrade = useCallback((trade: Trade) => {
     setSelectedTrade(trade);
     setDrawerOpen(true);
+  }, []);
+
+  const toggleDayExpanded = useCallback((dayKey: string) => {
+    setExpandedDayKeys((previous) => {
+      const next = new Set(previous);
+      if (next.has(dayKey)) {
+        next.delete(dayKey);
+      } else {
+        next.add(dayKey);
+      }
+      return next;
+    });
   }, []);
 
   const handleEditTrade = useCallback((tradeId: string) => {
@@ -652,6 +1123,24 @@ const stats = useMemo<Stats>(() => {
   }, []);
 
   // 🔥 NEW: Using centralized deleteTrade from @/lib/trades
+  const handleAssignStrategy = useCallback(async (trade: Trade, strategyId: string) => {
+    if (!strategyId || trade.strategy_id === strategyId) return;
+
+    const strategy = strategies.find((item) => item.id === strategyId);
+
+    try {
+      await updateTradeMutation({
+        id: trade.id,
+        data: { strategy_id: strategyId },
+      });
+
+      toast.success(strategy?.name ? `Assigned to ${strategy.name}` : "Strategy assigned");
+    } catch (error: any) {
+      console.error('Assign strategy error:', error);
+      toast.error(error?.message || "Failed to assign strategy");
+    }
+  }, [strategies, updateTradeMutation]);
+
   const confirmDeleteTrade = useCallback(async () => {
     if (!tradeToDelete) return;
 
@@ -860,15 +1349,14 @@ const stats = useMemo<Stats>(() => {
                 className="pl-10 bg-zinc-900/50 border-zinc-800"
               />
             </div>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-32 bg-zinc-900/50 border-zinc-800">
-                <SelectValue placeholder="Filter" />
+            <Select value={viewMode} onValueChange={(value) => setViewMode(value as "trades" | "days")}>
+              <SelectTrigger className="h-11 w-40 rounded-[12px] border-gold-primary/70 bg-surface-base text-ink-primary shadow-glow-gold-active">
+                <CalendarDays className="mr-ds-2 h-4 w-4 text-gold-primary" />
+                <SelectValue placeholder="View" />
               </SelectTrigger>
-              <SelectContent className="bg-zinc-900 border-zinc-800">
-                <SelectItem value="all">All Trades</SelectItem>
-                <SelectItem value="wins">Wins Only</SelectItem>
-                <SelectItem value="losses">Losses Only</SelectItem>
-                <SelectItem value="open">Open Trades</SelectItem>
+              <SelectContent className="border-border-ds-subtle bg-surface-base text-ink-primary">
+                <SelectItem value="trades">By Trades</SelectItem>
+                <SelectItem value="days">By Days</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -927,6 +1415,73 @@ const stats = useMemo<Stats>(() => {
               </Button>
             )}
           </div>
+        ) : viewMode === "days" ? (
+          <div className="min-w-0">
+            <div className="border-b border-border-ds-subtle bg-surface-base px-ds-4 py-ds-4">
+              <div className="mb-ds-4 flex flex-wrap items-center justify-between gap-ds-3">
+                <div className="inline-flex overflow-hidden rounded-[10px] border border-border-ds-default bg-surface-1">
+                  <button
+                    type="button"
+                    onClick={() => setSummaryPeriod("day")}
+                    className={`border-r border-gold-primary/35 px-ds-4 py-ds-2 text-sm font-semibold transition-colors duration-base ${
+                      summaryPeriod === "day"
+                        ? "bg-gold-primary/10 text-gold-primary shadow-glow-gold-active"
+                        : "text-ink-muted hover:text-ink-primary"
+                    }`}
+                  >
+                    Day
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSummaryPeriod("week")}
+                    className={`px-ds-4 py-ds-2 text-sm font-semibold transition-colors duration-base ${
+                      summaryPeriod === "week"
+                        ? "bg-gold-primary/10 text-gold-primary shadow-glow-gold-active"
+                        : "text-ink-muted hover:text-ink-primary"
+                    }`}
+                  >
+                    Week
+                  </button>
+                </div>
+                <div className="flex items-center gap-ds-2">
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center rounded-[10px] border border-gold-primary/40 bg-black px-ds-4 text-sm font-semibold text-gold-primary transition-colors duration-base hover:border-gold-primary"
+                  >
+                    Start my day
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-ds-default bg-surface-1 text-gold-primary transition-colors duration-base hover:border-gold-primary/50"
+                    aria-label="Daily view settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-ds-3">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase text-gold-primary">{summaryPeriod === "week" ? "Weekly Performance" : "Daily Performance"}</div>
+                  <div className="mt-1 text-sm text-ink-secondary">
+                    {periodSummaries.length} {summaryPeriod === "week" ? "trading weeks" : "trading days"} from {filteredTrades.length} matching trades
+                  </div>
+                </div>
+                <div className="text-sm text-ink-secondary tabular-nums">Net {formatSignedCurrency(periodSummaries.reduce((sum, day) => sum + day.netPnl, 0), 2)}</div>
+              </div>
+            </div>
+            {periodSummaries.map((day) => (
+              <DaySummaryCard
+                key={day.key}
+                day={day}
+                oneR={oneR}
+                timezone={timezone}
+                period={summaryPeriod}
+                expanded={expandedDayKeys.has(day.key)}
+                onToggle={() => toggleDayExpanded(day.key)}
+                onOpenTrade={openTrade}
+              />
+            ))}
+          </div>
         ) : (
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><Table>
             <TableHeader>
@@ -951,9 +1506,11 @@ const stats = useMemo<Stats>(() => {
                   trade={trade}
                   oneR={oneR}
                   timezone={timezone}
+                  strategies={strategies}
                   onOpen={openTrade}
                   onEdit={handleEditTrade}
                   onDelete={handleDeleteClick}
+                  onAssignStrategy={handleAssignStrategy}
                 />
               ))}
             </TableBody>
