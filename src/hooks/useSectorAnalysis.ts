@@ -68,6 +68,7 @@ export interface SectorSnapshot {
   top_holdings: any[];
   sub_sectors: any[];
   vs_market: any[];
+  vsMarket?: any[];
   fundamentals: any;
   money_flow: any;
   correlations: any[];
@@ -221,6 +222,7 @@ function transformSnapshot(row: any): SectorSnapshot {
     sector_verdict: row.verdict,
     // DB: ai_generated_at → Component: generated_at
     generated_at: row.ai_generated_at,
+    vsMarket: row.vs_market || [],
   };
 }
 
