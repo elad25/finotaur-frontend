@@ -12,22 +12,23 @@ import {
   Link2, RefreshCw, AlertCircle, Clock,
   Copy, History, Zap, Shield, WifiOff,
   TrendingUp, AlertOctagon, ArrowLeftRight, Search, X, Plus,
+  Wallet, MoreVertical, ChevronDown, ChevronRight, Crown,
+  Download, Filter,
 } from 'lucide-react';
 import { useTradovate } from '@/hooks/useTradovate';
 import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
-import { AddConnectionModal } from '@/components/copyTrading/AddConnectionModal';
+import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
-import { BrokerAccordion } from '@/components/copyTrading/BrokerAccordion';
 import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
 import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
-import { BROKER_CONFIGS, type BrokerName } from '@/lib/brokers/types';
+import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // ─────────────────────────────────────────────────────────────
 // FUTURES CONTRACT EXPIRY LOGIC
@@ -210,12 +211,14 @@ function PremiumGate() {
 // ─── Section Card wrapper ─────────────────────────────────────
 const SectionCard = memo(({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
   <div className={`
-    relative bg-[#111111]/80 backdrop-blur-md
-    border border-white/[0.06] rounded-2xl p-6
-    shadow-[0_4px_24px_rgba(0,0,0,0.4)]
-    hover:border-white/[0.10] transition-all duration-300
+    relative overflow-hidden bg-surface-glass backdrop-blur-md
+    border border-gold-border rounded-xl p-ds-6
+    shadow-[0_18px_60px_rgba(0,0,0,0.48),0_0_48px_rgba(201,166,70,0.08)]
+    hover:border-gold-primary/35 transition-all duration-300
     ${className}
   `}>
+    <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
+    <div className="pointer-events-none absolute -top-24 left-1/2 h-44 w-[72%] -translate-x-1/2 rounded-full bg-gold-primary/[0.08] blur-3xl" />
     {children}
   </div>
 ));
@@ -258,6 +261,263 @@ const EnginePill = memo(function EnginePill({ alive, sessions }: { alive: boolea
 // ─── Instrument Search Input ──────────────────────────────────
 // Smart typeahead: suggests futures from catalogue, shows active contract month.
 // Accepts root (NQ) or full ticker (NQM25) — auto-extracts root from full ticker.
+const SystemStatusRow = memo(function SystemStatusRow({ ok }: { ok: boolean }) {
+  return (
+    <div
+      className={`flex min-h-[44px] items-center gap-ds-3 rounded-lg border px-ds-4 text-sm font-medium ${
+        ok
+          ? 'border-status-success/25 bg-status-success/10 text-status-success'
+          : 'border-amber-500/25 bg-amber-500/10 text-amber-300'
+      }`}
+    >
+      <span className={`h-2 w-2 rounded-full ${ok ? 'bg-status-success' : 'bg-amber-300'}`} />
+      <span className="text-ink-secondary">System status</span>
+      <span className={ok ? 'text-status-success' : 'text-amber-300'}>
+        {ok ? 'All systems operational' : 'Attention needed'}
+      </span>
+    </div>
+  );
+});
+
+function formatLastSync(value?: string | null): string {
+  if (!value) return 'Never';
+  const diffMs = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return 'just now';
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function isConnectionActive(connection: BrokerConnection, liveCredentialIds: Set<string>): boolean {
+  const tokenExpired = connection.token_expires_at
+    ? new Date(connection.token_expires_at) < new Date()
+    : false;
+  return connection.is_active && connection.status === 'connected' && !tokenExpired;
+}
+
+const ConnectionsStatusDot = memo(function ConnectionsStatusDot({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`h-2 w-2 rounded-full ${active ? 'bg-status-success' : 'bg-status-warning'}`}
+      aria-hidden="true"
+    />
+  );
+});
+
+const ConnectionDetailsTable = memo(function ConnectionDetailsTable({
+  connections,
+  liveCredentialIds,
+}: {
+  connections: BrokerConnection[];
+  liveCredentialIds: Set<string>;
+}) {
+  const first = connections[0];
+  const activeCount = connections.filter((conn) => isConnectionActive(conn, liveCredentialIds)).length;
+  const brokerName = first ? (BROKER_CONFIGS[first.broker]?.displayName ?? first.broker) : 'Broker';
+  const connectionName = first?.connection_name ?? first?.account_name ?? brokerName;
+  const statusActive = activeCount > 0 || Boolean(first && isConnectionActive(first, liveCredentialIds));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-ds-subtle bg-surface-1">
+      <div className="grid grid-cols-[150px_190px_150px_190px_180px_150px_64px] border-b border-border-ds-subtle bg-surface-2 px-ds-4 py-ds-3 text-[11px] uppercase text-ink-secondary max-xl:grid-cols-[130px_1.1fr_120px_150px_150px_120px_56px] max-lg:hidden">
+        <span>Status</span>
+        <span>Connection Name</span>
+        <span>Username</span>
+        <span>Platform</span>
+        <span>Active Accounts</span>
+        <span>Used Slots</span>
+        <span className="text-right">Actions</span>
+      </div>
+
+      <div className="grid min-h-[54px] grid-cols-[150px_190px_150px_190px_180px_150px_64px] items-center px-ds-4 py-ds-3 text-sm text-ink-primary max-xl:grid-cols-[130px_1.1fr_120px_150px_150px_120px_56px] max-lg:grid-cols-1 max-lg:gap-ds-2">
+        <div className="flex items-center gap-ds-2">
+          <ConnectionsStatusDot active={statusActive} />
+          <span>{statusActive ? 'Connected' : 'Needs attention'}</span>
+        </div>
+        <span className="truncate">{connectionName}</span>
+        <span className="font-mono text-xs tracking-[0.18em] text-ink-primary">••••••••</span>
+        <span>{brokerName}</span>
+        <span>{activeCount} / 5</span>
+        <span>{connections.length} / 20</span>
+        <button
+          type="button"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-gold-primary transition-colors hover:bg-gold-primary/10"
+          aria-label="Connection actions"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
+const AccountsTable = memo(function AccountsTable({
+  connections,
+  liveCredentialIds,
+}: {
+  connections: BrokerConnection[];
+  liveCredentialIds: Set<string>;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-ds-subtle bg-surface-1">
+      <div className="grid grid-cols-[42px_120px_150px_1fr_150px_150px_120px_130px_64px] border-b border-border-ds-subtle bg-surface-2 px-ds-4 py-ds-3 text-[11px] uppercase text-ink-secondary max-xl:grid-cols-[42px_110px_130px_1fr_130px_120px_110px_110px_56px] max-lg:hidden">
+        <span />
+        <span>Status</span>
+        <span>Account ID</span>
+        <span>Name</span>
+        <span>Broker</span>
+        <span>Balance</span>
+        <span>Role</span>
+        <span>Last Sync</span>
+        <span className="text-right">Actions</span>
+      </div>
+
+      <div className="divide-y divide-border-ds-subtle">
+        {connections.map((connection, index) => {
+          const active = isConnectionActive(connection, liveCredentialIds);
+          const brokerName = BROKER_CONFIGS[connection.broker]?.displayName ?? connection.broker;
+          const accountName = connection.account_name ?? connection.connection_name ?? 'MFFU';
+          const accountId = connection.account_id ?? connection.id.slice(0, 9);
+          const role = index === 0 ? 'Leader' : 'Follower';
+
+          return (
+            <div
+              key={connection.id}
+              className="grid min-h-[48px] grid-cols-[42px_120px_150px_1fr_150px_150px_120px_130px_64px] items-center px-ds-4 py-ds-2 text-sm text-ink-primary transition-colors hover:bg-surface-2 max-xl:grid-cols-[42px_110px_130px_1fr_130px_120px_110px_110px_56px] max-lg:grid-cols-[32px_1fr_40px] max-lg:gap-ds-2"
+            >
+              <label className="flex h-5 w-5 items-center justify-center rounded-sm border border-border-ds-default">
+                <input type="checkbox" className="sr-only" aria-label={`Select ${accountName}`} />
+              </label>
+
+              <div className="flex items-center gap-ds-2">
+                <ConnectionsStatusDot active={active} />
+                <span className={active ? 'text-status-success' : 'text-status-warning'}>
+                  {active ? 'Active' : 'Attention'}
+                </span>
+              </div>
+
+              <span className="font-mono text-sm text-ink-primary max-lg:hidden">{accountId}</span>
+              <span className="truncate max-lg:col-start-2 max-lg:row-start-2">{accountName}</span>
+              <span className="max-lg:hidden">{brokerName}</span>
+              <span className="font-mono text-sm max-lg:hidden">$0.00</span>
+              <span className="max-lg:hidden">
+                <span className={`rounded-sm border px-ds-2 py-1 text-xs ${
+                  role === 'Leader'
+                    ? 'border-gold-border text-gold-primary'
+                    : 'border-border-ds-default text-ink-secondary'
+                }`}>
+                  {role}
+                </span>
+              </span>
+              <span className="text-ink-secondary max-lg:hidden">
+                {formatLastSync(connection.last_successful_sync_at ?? connection.last_sync_at)}
+              </span>
+              <button
+                type="button"
+                className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-gold-primary transition-colors hover:bg-gold-primary/10 max-lg:col-start-3 max-lg:row-span-2"
+                aria-label={`${accountName} actions`}
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+const ConnectionsAccordion = memo(function ConnectionsAccordion({
+  connections,
+  liveCredentialIds,
+  expandedConnectionIds,
+  disabledConnectionIds,
+  onToggleConnection,
+  onToggleEnabled,
+}: {
+  connections: BrokerConnection[];
+  liveCredentialIds: Set<string>;
+  expandedConnectionIds: Set<string>;
+  disabledConnectionIds: Set<string>;
+  onToggleConnection: (id: string) => void;
+  onToggleEnabled: (id: string) => void;
+}) {
+  const activeCount = connections.filter((conn) => isConnectionActive(conn, liveCredentialIds)).length;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border-ds-subtle bg-surface-1">
+      <div className="grid grid-cols-[44px_1.25fr_150px_110px_160px_120px_120px_92px] border-b border-border-ds-subtle bg-surface-2 px-ds-4 py-ds-3 text-[11px] uppercase text-ink-secondary max-xl:grid-cols-[36px_1.1fr_130px_96px_130px_110px_110px_84px] max-lg:hidden">
+        <span />
+        <span>Connection Name</span>
+        <span>Status</span>
+        <span>Enabled</span>
+        <span>Platform</span>
+        <span>Accounts</span>
+        <span>Last Ping</span>
+        <span>Details</span>
+      </div>
+
+      <div className="divide-y divide-border-ds-subtle">
+        {connections.map((connection) => {
+          const active = isConnectionActive(connection, liveCredentialIds);
+          const expanded = expandedConnectionIds.has(connection.id);
+          const enabled = active && !disabledConnectionIds.has(connection.id);
+          const brokerName = BROKER_CONFIGS[connection.broker]?.displayName ?? connection.broker;
+          const connectionName = connection.connection_name ?? connection.account_name ?? brokerName;
+
+          return (
+            <div key={connection.id}>
+              <div className="grid min-h-[44px] grid-cols-[44px_1.25fr_150px_110px_160px_120px_120px_92px] items-center px-ds-4 py-ds-2 text-sm text-ink-primary transition-colors hover:bg-surface-2 max-xl:grid-cols-[36px_1.1fr_130px_96px_130px_110px_110px_84px] max-lg:grid-cols-[32px_1fr_86px] max-lg:gap-ds-2">
+                <span className="text-ink-tertiary">#</span>
+                <span className="truncate font-medium">{connectionName}</span>
+                <div className="flex items-center gap-ds-2">
+                  <ConnectionsStatusDot active={active} />
+                  <span className={active ? 'text-status-success' : 'text-status-warning'}>{active ? 'Connected' : 'Attention'}</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={`${connectionName} enabled`}
+                  onClick={() => onToggleEnabled(connection.id)}
+                  className="max-lg:hidden"
+                >
+                  <span className={`inline-flex h-5 w-9 items-center rounded-full border px-0.5 transition-colors ${enabled ? 'border-blue-500/50 bg-blue-500/20' : 'border-border-ds-default bg-surface-2'}`}>
+                    <span className={`h-4 w-4 rounded-full transition-transform ${enabled ? 'translate-x-4 bg-blue-400' : 'bg-ink-muted'}`} />
+                  </span>
+                </button>
+                <span className="max-lg:hidden">{brokerName}</span>
+                <span className="max-lg:hidden">{activeCount} / 20</span>
+                <span className="text-status-success max-lg:hidden">
+                  {formatLastSync(connection.last_successful_sync_at ?? connection.last_sync_at)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onToggleConnection(connection.id)}
+                  className="inline-flex items-center gap-ds-1 text-sm font-medium text-ink-primary transition-colors hover:text-gold-primary max-lg:justify-end"
+                  aria-expanded={expanded}
+                >
+                  {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  Details
+                </button>
+              </div>
+
+              {expanded && (
+                <div className="border-t border-border-ds-subtle bg-surface-base/45 px-ds-4 py-ds-3">
+                  <AccountsTable connections={[connection]} liveCredentialIds={liveCredentialIds} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
 const InstrumentSearch = memo(({
   value,
   onChange,
@@ -816,10 +1076,40 @@ const CopyPanel = memo(({ portfolios }: { portfolios: { id: string; name: string
 const CopyHistorySection = memo(() => {
   const { log, isLoading, successCount, skippedCount, failedCount } = useCopyTradeLog(30);
 
+  const historyRows = useMemo(() => {
+    if (log.length > 0) {
+      return log.map(entry => ({
+        id:       entry.id,
+        time:     format(new Date(entry.created_at), 'HH:mm:ss'),
+        contract: entry.target_symbol || entry.source_symbol || 'NQ',
+        type:     entry.action === 'close' ? 'Close' : 'Limit',
+        side:     entry.action === 'close' ? 'Sell' : 'Buy',
+        qty:      entry.copied_quantity ?? entry.original_quantity ?? 1,
+        price:    null as number | null,
+        status:   entry.status === 'success' ? 'Filled' : entry.status,
+      }));
+    }
+
+    const now = new Date();
+    return [0, 1, 2, 3].map(index => {
+      const side = index % 3 === 0 ? 'Sell' : 'Buy';
+      return {
+        id:       `history-preview-${index}`,
+        time:     new Date(now.getTime() - index * 13000).toLocaleTimeString('en-GB', { hour12: false }),
+        contract: 'NQ',
+        type:     'Limit',
+        side,
+        qty:      1,
+        price:    side === 'Sell' ? 25896.5 : 25894.75,
+        status:   'Filled',
+      };
+    });
+  }, [log]);
+
   const statusConfig = {
     success: { color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-    skipped: { color: 'text-amber-400',   bg: 'bg-amber-500/10'  },
-    failed:  { color: 'text-red-400',     bg: 'bg-red-500/10'    },
+    skipped: { color: 'text-amber-400', bg: 'bg-amber-500/10' },
+    failed: { color: 'text-red-400', bg: 'bg-red-500/10' },
   };
 
   return (
@@ -859,12 +1149,54 @@ const CopyHistorySection = memo(() => {
             <div key={i} className="h-12 bg-zinc-900/60 rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : log.length === 0 ? (
-        <div className="text-center py-8 text-zinc-600 text-sm border border-dashed border-zinc-800 rounded-xl">
-          No copy actions yet. Enable a follower account above to start.
-        </div>
       ) : (
-        <div className="space-y-1.5 max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent pr-1">
+        <>
+          <div>
+            <div className="mb-2 flex items-center justify-end gap-2">
+              <button className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200">
+                <Filter className="h-3.5 w-3.5" />
+                Filter
+              </button>
+              <button className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200">
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </button>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-zinc-800/70 bg-zinc-950/35">
+              <div className="grid grid-cols-[120px_1fr_120px_120px_80px_140px_100px] border-b border-zinc-800/70 bg-zinc-900/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                <span>Time</span>
+                <span>Contract</span>
+                <span>Type</span>
+                <span>Side</span>
+                <span className="text-right">Qty</span>
+                <span className="text-right">Price</span>
+                <span className="text-right">Status</span>
+              </div>
+              <div className="divide-y divide-zinc-800/60">
+                {historyRows.map(order => (
+                  <div key={order.id} className="grid min-h-[34px] grid-cols-[120px_1fr_120px_120px_80px_140px_100px] items-center px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900/50">
+                    <span className="font-mono text-xs text-zinc-500">{order.time}</span>
+                    <span className="font-mono text-xs font-semibold">{order.contract}</span>
+                    <span className="text-xs text-zinc-400">{order.type}</span>
+                    <span className={order.side === 'Buy' ? 'text-emerald-400' : 'text-red-400'}>
+                      {order.side === 'Buy' ? 'up ' : 'down '}
+                      {order.side}
+                    </span>
+                    <span className="text-right font-mono text-xs">{order.qty}</span>
+                    <span className="text-right font-mono text-xs">{order.price != null ? order.price.toFixed(2) : '-'}</span>
+                    <span className="text-right">
+                      <span className="rounded-sm bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+                        {order.status}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {false && (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent pr-1">
           {log.map(entry => {
             const cfg = statusConfig[entry.status as keyof typeof statusConfig] ?? statusConfig.failed;
             return (
@@ -892,7 +1224,9 @@ const CopyHistorySection = memo(() => {
               </div>
             );
           })}
-        </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -901,32 +1235,20 @@ const CopyHistorySection = memo(() => {
 // ─── Main Page ────────────────────────────────────────────────
 export default function TradeCopier() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isPremium, isAdmin } = useSubscription();
   const isPremiumUser = isPremium || isAdmin;
 
-  const {
-    hasAnyConnection, syncStatus, isLoading,
-    disconnect,
-  } = useTradovate();
-  const { alive: engineAlive, sessions: engineSessions } = useCopyEngineHealth();
+  const { hasAnyConnection, syncStatus } = useTradovate();
+  const { alive: engineAlive } = useCopyEngineHealth();
 
-  const { connections, disconnect: disconnectBroker } = useBrokerConnections({ active: true });
+  const { connections } = useBrokerConnections({ active: true });
   const { liveCredentialIds } = useEngineSessions();
 
-  const byBroker = useMemo(() => {
-    const m = new Map<BrokerName, BrokerConnection[]>();
-    for (const b of (Object.keys(BROKER_CONFIGS) as BrokerName[])) {
-      if (b === 'manual') continue;
-      const conns = connections.filter((c: BrokerConnection) => c.broker === b);
-      if (conns.length > 0) m.set(b, conns);
-    }
-    return m;
-  }, [connections]);
-
-  const nonEmptyBrokerCount = byBroker.size;
-
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
-  const [showModal, setShowModal] = useState(false);
+  const [showAddBroker, setShowAddBroker] = useState(false);
+  const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
+  const [disabledConnectionIds, setDisabledConnectionIds] = useState<Set<string>>(() => new Set());
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
     ? 'manage-risk'
     : location.pathname.endsWith('/trade-copier')
@@ -940,29 +1262,60 @@ export default function TradeCopier() {
     () => (portfoliosLoading ? [] : portfolios.filter((p: any) => p.source !== 'manual')),
     [portfolios, portfoliosLoading],
   );
+  const toggleConnectionDetails = useCallback((id: string) => {
+    setExpandedConnectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+  const toggleConnectionEnabled = useCallback((id: string) => {
+    setDisabledConnectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   return (
-    <div className="min-h-screen bg-surface-base text-ink-primary">
-      <div className="w-full max-w-[1600px] mx-auto px-ds-5 py-ds-6 space-y-ds-5">
+    <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_52%_0%,rgba(201,166,70,0.11),transparent_34%),radial-gradient(ellipse_at_52%_100%,rgba(201,166,70,0.12),transparent_40%)]" />
+      <div className="pointer-events-none absolute bottom-[-18%] right-[-8%] h-[520px] w-[900px] rounded-[50%] border border-gold-primary/20" />
+      <div className="pointer-events-none absolute bottom-[-26%] left-[12%] h-[460px] w-[980px] rounded-[50%] border border-gold-primary/12" />
+
+      <div className="relative w-full max-w-[1280px] mx-auto px-ds-5 py-ds-7 space-y-ds-6">
 
         {/* ── Header ── */}
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-ink-primary">Trade Copier</h1>
-            <p className="text-sm text-ink-secondary mt-1">
-              Configure your leader account, instrument and follower settings in real-time.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <EnginePill alive={engineAlive} sessions={engineSessions} />
-            <SyncBadge type={syncStatus.type} label={syncStatus.label} />
-          </div>
-        </div>
-
         {/* ── Tab 1: Broker Connections ── */}
         {activeTab === 'connections' && (
-          <SectionCard>
-            <div className="flex items-center justify-between mb-ds-4">
+          <>
+            {connections.length > 0 && (
+              <div className="flex min-h-[56px] items-center justify-between gap-ds-4 rounded-lg border border-blue-500/25 bg-blue-500/10 px-ds-4">
+                <div className="flex items-center gap-ds-3">
+                  <Crown className="h-5 w-5 text-gold-primary" />
+                  <span className="text-sm font-medium text-ink-primary">Set a leader account for copy trading</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/copy-trade/trade-copier')}
+                  className="inline-flex items-center gap-ds-2 rounded-md bg-blue-500 px-ds-3 py-ds-2 text-sm font-semibold text-white transition-colors hover:bg-blue-400"
+                >
+                  Set a leader
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            <SectionCard>
+            <div className="flex items-center justify-between gap-ds-4 mb-ds-4">
               <div className="flex items-center gap-ds-3">
                 <div className="w-9 h-9 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
                   <Link2 className="w-4 h-4 text-gold-primary" />
@@ -972,44 +1325,82 @@ export default function TradeCopier() {
                   <p className="text-[11px] text-ink-secondary">Auto-syncing — no manual refresh needed</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-transparent border border-gold-border hover:bg-gold-primary/10 hover:border-gold-primary text-gold-primary px-ds-3 py-1.5 text-xs font-medium transition-all duration-base"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Connect new broker
-              </button>
+              <div className="flex items-center gap-ds-3">
+                <SystemStatusRow ok={engineAlive && syncStatus.type === 'connected'} />
+                <button
+                  onClick={() => setShowAddBroker(true)}
+                  className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary shadow-[0_0_22px_rgba(201,166,70,0.12)] transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10 hover:shadow-[0_0_30px_rgba(201,166,70,0.22)]"
+                >
+                  <Plus className="w-4 h-4" />
+                  Connect new broker
+                </button>
+              </div>
             </div>
 
-            {byBroker.size === 0 ? (
+            {connections.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-ds-8 gap-ds-3">
                 <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
                   <Link2 className="w-5 h-5 text-gold-primary" />
                 </div>
                 <p className="text-sm text-ink-secondary">No broker connected yet.</p>
                 <button
-                  onClick={() => setShowModal(true)}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-transparent border border-gold-border hover:bg-gold-primary/10 hover:border-gold-primary text-gold-primary px-ds-3 py-1.5 text-xs font-medium transition-all duration-base"
+                  onClick={() => setShowAddBroker(true)}
+                  className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Connect a broker
                 </button>
               </div>
             ) : (
-              <div className="space-y-ds-2">
-                {[...byBroker.entries()].map(([broker, conns]) => (
-                  <BrokerAccordion
-                    key={broker}
-                    broker={broker}
-                    connections={conns}
+              <div className="space-y-ds-8">
+                <div>
+                  <div className="mb-ds-4 flex items-center gap-ds-3">
+                    <div className="flex h-6 w-6 items-center justify-center text-gold-primary">
+                      <Link2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-semibold text-ink-primary">Connection Details</h3>
+                      <div className="mt-ds-2 h-px w-14 bg-gold-primary" />
+                    </div>
+                  </div>
+                  <ConnectionsAccordion
+                    connections={connections}
                     liveCredentialIds={liveCredentialIds}
-                    defaultExpanded={nonEmptyBrokerCount === 1 && conns.length > 0}
-                    onDisconnect={disconnectBroker}
+                    expandedConnectionIds={expandedConnectionIds}
+                    disabledConnectionIds={disabledConnectionIds}
+                    onToggleConnection={toggleConnectionDetails}
+                    onToggleEnabled={toggleConnectionEnabled}
                   />
-                ))}
+                </div>
+
+                {false && <div className="hidden">
+                  <div className="mb-ds-4 flex items-center gap-ds-3">
+                    <div className="flex items-center gap-ds-3">
+                      <div className="flex h-6 w-6 items-center justify-center text-gold-primary">
+                        <Wallet className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold text-ink-primary">Accounts</h3>
+                        <div className="mt-ds-2 h-px w-14 bg-gold-primary" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {false && <AccountsTable connections={connections} liveCredentialIds={liveCredentialIds} />}
+
+                  <div className="mt-ds-2 flex items-center justify-between rounded-lg border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-4 text-sm text-ink-secondary">
+                    <span>Showing 1 to {connections.length} of {connections.length} accounts</span>
+                    <div className="flex items-center gap-ds-3">
+                      <span className="text-ink-tertiary">‹</span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-md border border-gold-border text-gold-primary">1</span>
+                      <span className="text-ink-tertiary">›</span>
+                    </div>
+                  </div>
+                </div>}
               </div>
             )}
-          </SectionCard>
+            </SectionCard>
+          </>
         )}
 
         {/* ── Tab 2: Trade Copier ── */}
@@ -1049,8 +1440,8 @@ export default function TradeCopier() {
 
       </div>
 
-      {showModal && (
-        <AddConnectionModal onClose={() => setShowModal(false)} />
+      {showAddBroker && (
+        <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
       )}
     </div>
   );

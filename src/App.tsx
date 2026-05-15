@@ -22,6 +22,7 @@ import JournalPublicPage from "@/pages/JournalPublicPage";
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
 import { BacktestRoute } from "@/components/routes/BacktestRoute";
 import { AffiliateRoute } from "@/components/routes/AffiliateRoute";
+import { BetaRoute } from "@/components/routes/BetaRoute";
 
 // 🎯 Guided Tour
 import GuidedTour from "@/components/onboarding/GuidedTour";
@@ -518,9 +519,9 @@ function AppContent() {
           <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
-          <Route path="copy-trade/overview" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
-          <Route path="copy-trade/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
-          <Route path="copy-trade/manage-risk" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/overview" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
+          <Route path="copy-trade/trade-copier" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
+          <Route path="copy-trade/manage-risk" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
           <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />

@@ -293,7 +293,7 @@ ai: {
     id: 'copy-trade',
     label: 'Trade Copier',
     locked: false,
-    beta: false,
+    beta: true,
     subNav: [
       { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
