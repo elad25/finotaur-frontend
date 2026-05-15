@@ -19,7 +19,7 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, HelpCircle } from 'lucide-react';
 import { CHART_COLORS } from '@/constants/dashboard';
 
 interface DailyPnLData {
@@ -79,16 +79,17 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
   // ✅ Empty state
   if (!data || data.length === 0) {
     return (
-      <div 
-        className="rounded-[20px] border p-6 shadow-[0_0_30px_rgba(201,166,70,0.05)]"
-        style={{ 
-          borderColor: 'rgba(255, 215, 0, 0.08)',
-          background: 'linear-gradient(135deg, #0A0A0A 0%, #0F0F0F 100%)'
-        }}
-      >
+      <div className="rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-[#F4F4F4] font-semibold text-lg tracking-tight">Net Daily P&L</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[#F4F4F4] font-semibold text-lg tracking-tight">Net Daily P&L</h3>
+              <HelpCircle
+                className="h-3.5 w-3.5 cursor-help text-white/38 transition-colors hover:text-[#E8C766]"
+                aria-label="Shows net profit or loss grouped by trading day."
+                title="Shows net profit or loss grouped by trading day."
+              />
+            </div>
             <p className="text-[#A0A0A0] text-sm font-light">Daily performance tracking</p>
           </div>
         </div>
@@ -108,34 +109,36 @@ const DailyPnLChart = React.memo(({ data, trades }: DailyPnLChartProps) => {
 
   return (
     <div 
-      className="rounded-[20px] border p-6 shadow-[0_0_30px_rgba(201,166,70,0.05)] animate-fadeIn"
-      style={{ 
-        borderColor: 'rgba(255, 215, 0, 0.08)',
-        background: 'linear-gradient(135deg, #0A0A0A 0%, #0F0F0F 100%)'
-      }}
+      className="animate-fadeIn rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-3 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-[#F4F4F4] font-semibold text-lg tracking-tight">Net Daily P&L</h3>
+            <h3 className="text-[14px] font-semibold tracking-normal text-white">Net Daily P&L</h3>
+            <HelpCircle
+              className="h-3.5 w-3.5 cursor-help text-white/38 transition-colors hover:text-[#E8C766]"
+              aria-label="Shows one bar per day with that day's net closed-trade P&L."
+              title="Shows one bar per day with that day's net closed-trade P&L."
+            />
           </div>
-          <p className="text-[#A0A0A0] text-sm font-light">Daily performance tracking (one bar per day)</p>
+          <p className="text-[11px] font-normal text-white/58">Daily performance tracking (one bar per day)</p>
         </div>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-4 text-[11px]">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-[#4ADE80]"></div>
-            <span className="text-[#A0A0A0] font-light">Profit</span>
+            <div className="h-2 w-2 rounded-sm bg-[#3BC76E]"></div>
+            <span className="font-normal text-white/62">Profit</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm bg-[#EF4444]"></div>
-            <span className="text-[#A0A0A0] font-light">Loss</span>
+            <div className="h-2 w-2 rounded-sm bg-[#EF4444]"></div>
+            <span className="font-normal text-white/62">Loss</span>
           </div>
+          <button className="ml-3 rounded-md border border-white/[0.08] px-3 py-1.5 text-[11px] text-white/78">Daily</button>
         </div>
       </div>
       
-      <div style={{ width: "100%", height: 340 }}>
-        <ResponsiveContainer debounce={150}>
-          <BarChart
+      <div style={{ width: "100%", height: 210 }}>
+        <ResponsiveContainer>
+          <BarChart 
             data={optimizedData}
             margin={{ top: 20, right: 20, left: 10, bottom: 30 }}
             barGap={3}

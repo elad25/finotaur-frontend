@@ -2,7 +2,7 @@
 // Compact broker/account selector anchored to the journal dashboard broker button.
 
 import { useMemo, useState } from 'react';
-import { AlertCircle, Check, ChevronDown, ChevronUp, Plus, RefreshCw } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -19,6 +19,7 @@ const BORDER_LIGHT = 'rgba(255, 215, 0, 0.08)';
 interface Props {
   children: React.ReactNode;
   onAddConnection?: () => void;
+  onManage?: () => void;
 }
 
 function timeAgo(iso: string | null | undefined): string {
@@ -149,27 +150,27 @@ function AccountListRow({
       aria-selected={checked}
       onClick={() => onToggle(portfolio.id)}
       className={cn(
-        'group flex w-full items-center gap-2 rounded-[7px] px-2.5 py-1 text-left transition-all duration-150',
+        'group flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left transition-all duration-150',
         checked
-          ? 'bg-[#C9A646]/[0.07]'
-          : 'hover:bg-[#101010]',
+          ? 'bg-[#C9A646]/[0.08]'
+          : 'hover:bg-white/[0.035]',
       )}
     >
       <CheckboxMark checked={checked} compact />
 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-[11px] font-semibold leading-tight text-[#EDEDED]">
+          <span className="truncate text-[12px] font-semibold leading-tight text-[#EDEDED]">
             {portfolio.name}
           </span>
           {environment && (
-            <span className="rounded-sm border border-[#C9A646]/20 bg-[#C9A646]/[0.08] px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-wide text-[#C9A646]">
+            <span className="rounded-[4px] border border-[#C9A646]/24 bg-[#C9A646]/[0.08] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[#C9A646]">
               {environment}
             </span>
           )}
         </div>
         {connection?.last_sync_at && (
-          <div className="flex min-w-0 items-center gap-1.5 text-[8px] leading-tight text-[#777]">
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] leading-tight text-[#777]">
             <span className="shrink-0">synced {timeAgo(connection.last_sync_at)}</span>
           </div>
         )}
@@ -196,6 +197,47 @@ function AccountListRow({
           <AlertCircle className="h-3.5 w-3.5" />
         </button>
       )}
+    </button>
+  );
+}
+
+function SimpleAccountRow({
+  portfolio,
+  checked,
+  onToggle,
+}: {
+  portfolio: Portfolio;
+  checked: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const badge = portfolio.source === 'manual'
+    ? 'Manual'
+    : portfolio.environment === 'live'
+      ? 'Live'
+      : 'Demo';
+  const badgeClass = portfolio.source === 'manual'
+    ? 'bg-zinc-700/50 text-zinc-500'
+    : portfolio.environment === 'live'
+      ? 'bg-emerald-400/10 text-emerald-400'
+      : 'bg-yellow-400/10 text-yellow-400';
+
+  return (
+    <button
+      role="option"
+      aria-selected={checked}
+      onClick={() => onToggle(portfolio.id)}
+      className={cn(
+        'group flex w-full items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors duration-100',
+        checked
+          ? 'bg-[#C9A646]/5 text-[#C9A646]'
+          : 'text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100',
+      )}
+    >
+      <CheckboxMark checked={checked} compact />
+      <span className="min-w-0 flex-1 truncate text-left">{portfolio.name}</span>
+      <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-semibold', badgeClass)}>
+        {badge}
+      </span>
     </button>
   );
 }
@@ -300,7 +342,124 @@ function ConnectionGroupSection({
   );
 }
 
-function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
+function ConnectionGroupSectionClean({
+  group,
+  connectionFor,
+  selectedPortfolioIds,
+  isShowingAll,
+  isOpen,
+  onToggle,
+  onToggleOpen,
+  onReconnect,
+}: {
+  group: ConnectionGroup;
+  connectionFor: (portfolio: Portfolio) => BrokerConnection | undefined;
+  selectedPortfolioIds: string[];
+  isShowingAll: boolean;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  onToggleOpen: (id: string) => void;
+  onReconnect: (conn: BrokerConnection) => void;
+}) {
+  const badge = group.connection ? statusBadge(group.connection) : null;
+  const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
+  const connectionTitle = group.title || `FINOTAUR - ${group.broker === 'manual' ? 'MANUAL' : brokerName.toUpperCase()}`;
+  const connectionStatus = badge?.label ?? (group.broker === 'manual' ? 'Manual' : 'Connected');
+  const hasConnectionIssue = group.connection
+    && group.connection.status !== 'connected'
+    && group.connection.status !== 'renewing';
+
+  return (
+    <section className="border-t border-white/[0.08] pt-3 first:border-t-0 first:pt-0">
+      <div className="rounded-[12px] border border-white/[0.055] bg-black/[0.16]">
+        <div className="flex items-center gap-3 px-3 py-3">
+          <BrokerLogo broker={group.broker} />
+
+          <button
+            type="button"
+            onClick={() => onToggleOpen(group.id)}
+            className="min-w-0 flex-1 text-left"
+            aria-expanded={isOpen}
+          >
+            <div className="truncate text-[12px] font-semibold uppercase leading-tight tracking-[0.03em] text-[#E5E5E5]">
+              {connectionTitle}
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-[#7A7A7A]">
+              <span>{brokerName}</span>
+              <span className="h-1 w-1 rounded-full bg-white/20" />
+              <span>{group.portfolios.length} account{group.portfolios.length === 1 ? '' : 's'}</span>
+            </div>
+          </button>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {badge && (
+              <span className="flex items-center gap-1.5 rounded-[6px] border border-white/[0.07] bg-white/[0.035] px-2 py-1 text-[9px] font-semibold text-[#A0A0A0]">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: badge.color, boxShadow: `0 0 8px ${badge.color}` }}
+                  aria-label={badge.label}
+                />
+                {connectionStatus}
+              </span>
+            )}
+
+            {hasConnectionIssue && group.connection && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onReconnect(group.connection!);
+                }}
+                className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-2 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+                aria-label={`Reconnect ${group.title}`}
+              >
+                <RefreshCw className="h-3 w-3" />
+                Reconnect
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onToggleOpen(group.id)}
+              className="rounded-md p-1 text-[#A0A0A0] transition-colors hover:bg-white/[0.05] hover:text-[#C9A646]"
+              aria-label={isOpen ? 'Collapse connection' : 'Expand connection'}
+            >
+              {isOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="border-t border-white/[0.055] px-2 py-2">
+            {group.portfolios.map((portfolio) => (
+              <AccountListRow
+                key={portfolio.id}
+                portfolio={portfolio}
+                broker={group.broker}
+                connection={connectionFor(portfolio)}
+                checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                onToggle={onToggle}
+                onReconnect={onReconnect}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PopoverBody({
+  onAddConnection,
+  onManage,
+}: {
+  onAddConnection?: () => void;
+  onManage?: () => void;
+}) {
   const {
     connections: active,
     isLoading: loadingActive,
@@ -384,6 +543,10 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
   }, [tradovatePortfolios, manualPortfolios, connectionForPortfolio]);
 
   const showLoading = loadingActive || loadingInactive || loadingPortfolios;
+  const handleManage = () => {
+    if (onManage) onManage();
+    else onAddConnection?.();
+  };
 
   return (
     <div className="flex flex-col gap-2.5" role="listbox" aria-multiselectable="true">
@@ -397,36 +560,71 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
       {showLoading ? (
         <div className="py-2 text-center text-xs text-[#A0A0A0]">Loading...</div>
       ) : (
-        <>
-          <AllAccountsRow
-            checked={isShowingAll}
-            total={portfolios.length}
-            onSelect={() => setSelectedPortfolioIds([ALL_PORTFOLIOS_ID])}
-          />
+        <div className="overflow-hidden rounded-[12px] border border-[#C9A646]/20 bg-[#141414]">
+          <button
+            type="button"
+            role="option"
+            aria-selected={isShowingAll}
+            onClick={() => setSelectedPortfolioIds([ALL_PORTFOLIOS_ID])}
+            className={cn(
+              'flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors',
+              isShowingAll
+                ? 'bg-[#C9A646]/5 text-[#C9A646]'
+                : 'text-zinc-300 hover:bg-zinc-800/50',
+            )}
+          >
+            <CheckboxMark checked={isShowingAll} compact />
+            <span className="flex-1 text-left">All accounts</span>
+          </button>
 
-          {connectionGroups.map((group) => (
-            <ConnectionGroupSection
-              key={group.id}
-              group={group}
-              connectionFor={connectionForPortfolio}
-              selectedPortfolioIds={selectedPortfolioIds}
-              isShowingAll={isShowingAll}
-              isOpen={!collapsedGroups.has(group.id)}
-              onToggle={togglePortfolioSelection}
-              onToggleOpen={toggleGroupOpen}
-              onReconnect={setReconnectFor}
-            />
-          ))}
-        </>
+          {portfolios.length > 0 && (
+            <>
+              <div className="mx-2 border-t border-zinc-800/60" />
+              <div className="px-3 pb-0.5 pt-2">
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
+                  My accounts
+                </span>
+              </div>
+
+              {tradovatePortfolios.map((portfolio) => (
+                <SimpleAccountRow
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
+
+              {manualPortfolios.map((portfolio) => (
+                <SimpleAccountRow
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
+            </>
+          )}
+
+          <div className="mx-2 mt-1 border-t border-zinc-800/60" />
+          <div className="grid grid-cols-2 gap-2 p-2">
+            <button
+              onClick={onAddConnection}
+              className="flex items-center justify-center gap-2 rounded-[10px] border border-[#C9A646]/30 px-3 py-2 text-xs font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/50 hover:bg-[#C9A646]/10"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add connection
+            </button>
+            <button
+              onClick={handleManage}
+              className="flex items-center justify-center gap-2 rounded-[10px] border border-zinc-700/70 px-3 py-2 text-xs font-medium text-zinc-400 transition-colors hover:border-[#C9A646]/35 hover:bg-zinc-800/50 hover:text-[#C9A646]"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Manage
+            </button>
+          </div>
+        </div>
       )}
-
-      <button
-        onClick={onAddConnection}
-        className="flex w-full items-center justify-center gap-2 rounded-[10px] border border-[#C9A646]/30 px-4 py-2 text-xs font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/50 hover:bg-[#C9A646]/10"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Add new connection
-      </button>
 
       {reconnectFor && (
         <BrokerReconnectModal
@@ -444,7 +642,7 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
   );
 }
 
-export default function BrokerConnectionsPopover({ children, onAddConnection }: Props) {
+export default function BrokerConnectionsPopover({ children, onAddConnection, onManage }: Props) {
   const isMobile = useIsMobile();
 
   if (isMobile) {
@@ -456,7 +654,7 @@ export default function BrokerConnectionsPopover({ children, onAddConnection }: 
           className="max-h-[85vh] overflow-y-auto rounded-t-[20px] border-t bg-[#141414] p-4"
           style={{ borderColor: BORDER_LIGHT }}
         >
-          <PopoverBody onAddConnection={onAddConnection} />
+          <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
         </SheetContent>
       </Sheet>
     );
@@ -471,7 +669,7 @@ export default function BrokerConnectionsPopover({ children, onAddConnection }: 
         className="w-[360px] rounded-[16px] border bg-[#141414] p-3 shadow-[0_0_30px_rgba(201,166,70,0.15)]"
         style={{ borderColor: BORDER_LIGHT }}
       >
-        <PopoverBody onAddConnection={onAddConnection} />
+        <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
       </PopoverContent>
     </Popover>
   );
