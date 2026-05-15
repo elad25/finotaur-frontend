@@ -388,6 +388,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
     return saved !== 'false';
   });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // Auto-collapse on AI Assistant, restore on other pages
   useEffect(() => {
