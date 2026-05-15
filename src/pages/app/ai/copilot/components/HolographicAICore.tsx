@@ -23,29 +23,38 @@ interface LandFeatureCollection {
 interface DotData {
   lng: number;
   lat: number;
+  visible: boolean;
 }
 
-export function HolographicAICore({ className = '' }: { className?: string }) {
+interface HolographicAICoreProps {
+  className?: string;
+  width?: number;
+  height?: number;
+}
+
+const GOLD = '#d8b451';
+const GOLD_BRIGHT = '#ffe4a0';
+const GOLD_DOT = '#c9a646';
+
+export function HolographicAICore({ width = 430, height = 318, className = '' }: HolographicAICoreProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvasRef.current) return;
 
+    const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     if (!context) return;
 
     let cancelled = false;
-    let landFeatures: LandFeatureCollection | null = null;
-    const allDots: DotData[] = [];
 
-    const containerWidth = 360;
-    const containerHeight = 276;
-    const radius = Math.min(containerWidth, containerHeight) / 2.45;
+    const containerWidth = Math.min(width, window.innerWidth - 40);
+    const containerHeight = Math.min(height, window.innerHeight - 100);
+    const radius = Math.min(containerWidth, containerHeight) / 2.5;
+
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-
     canvas.width = containerWidth * dpr;
     canvas.height = containerHeight * dpr;
     canvas.style.width = `${containerWidth}px`;
@@ -59,7 +68,6 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
       .clipAngle(90);
 
     const path = d3.geoPath().projection(projection).context(context);
-    const graticule = d3.geoGraticule();
 
     const pointInPolygon = (point: [number, number], polygon: PolygonRing): boolean => {
       const [x, y] = point;
@@ -81,10 +89,16 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
       const geometry = feature.geometry;
 
       if (geometry.type === 'Polygon') {
-        if (!pointInPolygon(point, geometry.coordinates[0])) return false;
+        const coordinates = geometry.coordinates;
 
-        for (let i = 1; i < geometry.coordinates.length; i++) {
-          if (pointInPolygon(point, geometry.coordinates[i])) return false;
+        if (!pointInPolygon(point, coordinates[0])) {
+          return false;
+        }
+
+        for (let i = 1; i < coordinates.length; i++) {
+          if (pointInPolygon(point, coordinates[i])) {
+            return false;
+          }
         }
 
         return true;
@@ -92,24 +106,27 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
 
       if (geometry.type === 'MultiPolygon') {
         for (const polygon of geometry.coordinates) {
-          if (!pointInPolygon(point, polygon[0])) continue;
+          if (pointInPolygon(point, polygon[0])) {
+            let inHole = false;
 
-          let inHole = false;
-          for (let i = 1; i < polygon.length; i++) {
-            if (pointInPolygon(point, polygon[i])) {
-              inHole = true;
-              break;
+            for (let i = 1; i < polygon.length; i++) {
+              if (pointInPolygon(point, polygon[i])) {
+                inHole = true;
+                break;
+              }
+            }
+
+            if (!inHole) {
+              return true;
             }
           }
-
-          if (!inHole) return true;
         }
       }
 
       return false;
     };
 
-    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = 17) => {
+    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = 16) => {
       const dots: [number, number][] = [];
       const [[minLng, minLat], [maxLng, maxLat]] = d3.geoBounds(feature);
       const stepSize = dotSpacing * 0.08;
@@ -117,115 +134,77 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
       for (let lng = minLng; lng <= maxLng; lng += stepSize) {
         for (let lat = minLat; lat <= maxLat; lat += stepSize) {
           const point: [number, number] = [lng, lat];
-          if (pointInFeature(point, feature)) dots.push(point);
+          if (pointInFeature(point, feature)) {
+            dots.push(point);
+          }
         }
       }
 
       return dots;
     };
 
-    const drawGoldGlow = (cx: number, cy: number, currentScale: number) => {
-      const glow = context.createRadialGradient(cx, cy, currentScale * 0.24, cx, cy, currentScale * 1.34);
-      glow.addColorStop(0, 'rgba(255, 226, 143, 0.18)');
-      glow.addColorStop(0.5, 'rgba(201, 166, 70, 0.08)');
-      glow.addColorStop(1, 'rgba(201, 166, 70, 0)');
-
-      context.save();
-      context.globalCompositeOperation = 'screen';
-      context.fillStyle = glow;
-      context.beginPath();
-      context.arc(cx, cy, currentScale * 1.36, 0, 2 * Math.PI);
-      context.fill();
-      context.restore();
-    };
+    const allDots: DotData[] = [];
+    let landFeatures: LandFeatureCollection | null = null;
 
     const render = () => {
       context.clearRect(0, 0, containerWidth, containerHeight);
 
-      const cx = containerWidth / 2;
-      const cy = containerHeight / 2;
       const currentScale = projection.scale();
       const scaleFactor = currentScale / radius;
-
-      drawGoldGlow(cx, cy, currentScale);
-
-      const sphere = context.createRadialGradient(
-        cx - currentScale * 0.34,
-        cy - currentScale * 0.38,
-        currentScale * 0.12,
-        cx,
-        cy,
-        currentScale,
-      );
-      sphere.addColorStop(0, 'rgba(255, 229, 155, 0.13)');
-      sphere.addColorStop(0.3, 'rgba(62, 45, 16, 0.72)');
-      sphere.addColorStop(0.68, 'rgba(4, 4, 3, 0.96)');
-      sphere.addColorStop(1, 'rgba(0, 0, 0, 1)');
-
-      context.beginPath();
-      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
-      context.fillStyle = sphere;
-      context.fill();
+      const cx = containerWidth / 2;
+      const cy = containerHeight / 2;
 
       context.save();
+      context.shadowColor = 'rgba(216, 180, 81, 0.34)';
+      context.shadowBlur = 22;
       context.beginPath();
       context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
-      context.clip();
+      context.fillStyle = '#000000';
+      context.fill();
+      context.strokeStyle = GOLD_BRIGHT;
+      context.lineWidth = 2 * scaleFactor;
+      context.stroke();
+      context.restore();
 
       if (landFeatures) {
+        const graticule = d3.geoGraticule();
+
         context.beginPath();
         path(graticule());
-        context.strokeStyle = 'rgba(255, 218, 126, 0.16)';
-        context.lineWidth = 0.7 * scaleFactor;
+        context.strokeStyle = GOLD;
+        context.lineWidth = 1 * scaleFactor;
+        context.globalAlpha = 0.22;
         context.stroke();
+        context.globalAlpha = 1;
 
         context.beginPath();
         landFeatures.features.forEach((feature) => {
           path(feature);
         });
-        context.strokeStyle = 'rgba(255, 226, 143, 0.48)';
-        context.lineWidth = 0.8 * scaleFactor;
+        context.strokeStyle = GOLD_BRIGHT;
+        context.lineWidth = 1 * scaleFactor;
+        context.globalAlpha = 0.72;
         context.stroke();
+        context.globalAlpha = 1;
 
         allDots.forEach((dot) => {
           const projected = projection([dot.lng, dot.lat]);
           if (
             projected &&
-            projected[0] >= cx - currentScale &&
-            projected[0] <= cx + currentScale &&
-            projected[1] >= cy - currentScale &&
-            projected[1] <= cy + currentScale
+            projected[0] >= 0 &&
+            projected[0] <= containerWidth &&
+            projected[1] >= 0 &&
+            projected[1] <= containerHeight
           ) {
             context.beginPath();
-            context.arc(projected[0], projected[1], 1.05 * scaleFactor, 0, 2 * Math.PI);
-            context.fillStyle = 'rgba(255, 214, 118, 0.68)';
+            context.arc(projected[0], projected[1], 1.2 * scaleFactor, 0, 2 * Math.PI);
+            context.fillStyle = GOLD_DOT;
+            context.globalAlpha = 0.82;
             context.fill();
+            context.globalAlpha = 1;
           }
         });
       }
-
-      const reflection = context.createLinearGradient(cx - currentScale, cy - currentScale, cx, cy);
-      reflection.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
-      reflection.addColorStop(0.42, 'rgba(255, 225, 150, 0.035)');
-      reflection.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      context.fillStyle = reflection;
-      context.beginPath();
-      context.ellipse(cx - currentScale * 0.28, cy - currentScale * 0.32, currentScale * 0.34, currentScale * 0.13, -0.58, 0, 2 * Math.PI);
-      context.fill();
-
-      context.restore();
-
-      context.beginPath();
-      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
-      context.strokeStyle = 'rgba(255, 225, 145, 0.76)';
-      context.lineWidth = 1.3 * scaleFactor;
-      context.stroke();
-
-      context.beginPath();
-      context.arc(cx, cy, currentScale + 7, 0, 2 * Math.PI);
-      context.strokeStyle = 'rgba(201, 166, 70, 0.16)';
-      context.lineWidth = 0.8;
-      context.stroke();
     };
 
     const loadWorldData = async () => {
@@ -237,9 +216,11 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
         if (!response.ok) throw new Error('Failed to load land data');
 
         landFeatures = (await response.json()) as LandFeatureCollection;
+
         landFeatures.features.forEach((feature) => {
-          generateDotsInPolygon(feature).forEach(([lng, lat]) => {
-            allDots.push({ lng, lat });
+          const dots = generateDotsInPolygon(feature, 16);
+          dots.forEach(([lng, lat]) => {
+            allDots.push({ lng, lat, visible: true });
           });
         });
 
@@ -255,12 +236,16 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
       }
     };
 
-    const rotation: [number, number] = [0, -8];
-    const rotationTimer = d3.timer(() => {
-      rotation[0] += 0.42;
+    const rotation: [number, number] = [0, 0];
+    const rotationSpeed = 0.5;
+
+    const rotate = () => {
+      rotation[0] += rotationSpeed;
       projection.rotate(rotation);
       render();
-    });
+    };
+
+    const rotationTimer = d3.timer(rotate);
 
     void loadWorldData();
 
@@ -268,29 +253,30 @@ export function HolographicAICore({ className = '' }: { className?: string }) {
       cancelled = true;
       rotationTimer.stop();
     };
-  }, []);
+  }, [width, height]);
+
+  if (error) {
+    return (
+      <div className={`relative z-10 flex h-[318px] w-[430px] max-w-full items-center justify-center rounded-[8px] bg-black/10 ${className}`}>
+        <p className="text-center text-[10px] uppercase tracking-[0.22em] text-gold-primary/70">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`relative z-10 mt-[-12px] flex h-[286px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
+      className={`relative z-10 mt-[-16px] flex h-[318px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
       role="img"
-      aria-label="Gold rotating financial market globe"
+      aria-label="Gold rotating market Earth visualization"
     >
-      <div className="absolute left-1/2 top-1/2 h-[235px] w-[235px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,226,143,0.18),rgba(201,166,70,0.07)_40%,rgba(0,0,0,0)_70%)] blur-lg" />
-      <div className="absolute bottom-[18px] left-1/2 h-[24px] w-[230px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(255,221,133,0.18)_0%,rgba(201,166,70,0.06)_50%,rgba(0,0,0,0)_76%)] blur-[10px]" />
       <canvas
         ref={canvasRef}
-        className="relative z-10 block max-w-full"
-        aria-hidden="true"
+        className="block h-auto max-w-full rounded-[8px] bg-transparent"
+        style={{ maxWidth: '100%', height: 'auto' }}
       />
       {isLoading && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/70">
+        <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/70">
           Loading market globe
-        </div>
-      )}
-      {error && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-gold-primary/70">
-          {error}
         </div>
       )}
     </div>
