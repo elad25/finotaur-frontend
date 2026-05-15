@@ -76,9 +76,9 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
           <defs>
             {/* Gradient for positive */}
             <linearGradient id="areaGradientPositive" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00C46C" stopOpacity={0.4} />
-              <stop offset="50%" stopColor="#00C46C" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="#00C46C" stopOpacity={0} />
+              <stop offset="0%" stopColor="#C9A646" stopOpacity={0.4} />
+              <stop offset="50%" stopColor="#C9A646" stopOpacity={0.15} />
+              <stop offset="100%" stopColor="#C9A646" stopOpacity={0} />
             </linearGradient>
 
             {/* Gradient for negative */}
@@ -156,7 +156,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
               marginBottom: '4px',
             }}
             itemStyle={{
-              color: isProfitable ? '#00C46C' : '#E44545',
+              color: isProfitable ? '#C9A646' : '#E44545',
               fontSize: '13px',
               fontWeight: '600',
             }}
@@ -170,7 +170,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
           <Area
             type="monotone"
             dataKey="r"
-            stroke={isProfitable ? '#00C46C' : '#E44545'}
+            stroke={isProfitable ? '#C9A646' : '#E44545'}
             strokeWidth={2.5}
             fill={isProfitable ? 'url(#areaGradientPositive)' : 'url(#areaGradientNegative)'}
             filter="url(#lineGlow)"
@@ -178,7 +178,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
             dot={false}
             activeDot={{
               r: 5,
-              fill: isProfitable ? '#00C46C' : '#E44545',
+              fill: isProfitable ? '#C9A646' : '#E44545',
               stroke: '#0A0A0A',
               strokeWidth: 2,
             }}
@@ -192,8 +192,8 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
         style={{
           background: 'rgba(15,15,15,0.95)',
           backdropFilter: 'blur(12px)',
-          border: `1px solid ${isProfitable ? 'rgba(0,196,108,0.3)' : 'rgba(228,69,69,0.3)'}`,
-          boxShadow: `0 4px 12px ${isProfitable ? 'rgba(0,196,108,0.15)' : 'rgba(228,69,69,0.15)'}`,
+          border: `1px solid ${isProfitable ? 'rgba(201,166,70,0.3)' : 'rgba(228,69,69,0.3)'}`,
+          boxShadow: `0 4px 12px ${isProfitable ? 'rgba(201,166,70,0.15)' : 'rgba(228,69,69,0.15)'}`,
         }}
       >
         <div 
@@ -209,7 +209,7 @@ const EquityCurveChart = memo(({ rValues }: EquityCurveChartProps) => {
         <div 
           className="text-xl font-bold"
           style={{ 
-            color: isProfitable ? '#00C46C' : '#E44545',
+            color: isProfitable ? '#C9A646' : '#E44545',
             letterSpacing: '-0.5px',
           }}
         >

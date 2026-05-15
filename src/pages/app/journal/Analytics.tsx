@@ -2,7 +2,7 @@ import { useState, useMemo, memo, lazy, Suspense } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Target, Award, Calendar,
-  Activity, Brain, Zap, Clock, DollarSign, Percent,
+  Activity, Zap, Clock, DollarSign, Percent,
   AlertTriangle, CheckCircle, XCircle, BarChart3, PieChart,
   LineChart, Info, Sparkles, ArrowUpRight, ArrowDownRight,
   AlertCircle, ChevronUp, ChevronDown,
@@ -34,7 +34,6 @@ import {
 } from "@/utils/statsCalculations";
 
 const LazyAdvancedTab = lazy(() => import('./AnalyticsAdvancedTab'));
-const LazyPsychologyTab = lazy(() => import('./AnalyticsPsychologyTab'));
 
 type TimeRange = '7D' | '30D' | '90D' | 'ALL';
 
@@ -44,7 +43,8 @@ type TimeRange = '7D' | '30D' | '90D' | 'ALL';
 
 export default function AnalyticsDashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'overview';
+  const requestedTab = searchParams.get('tab') || 'overview';
+  const activeTab = requestedTab === 'psychology' ? 'overview' : requestedTab;
   const [timeRange, setTimeRange] = useState<TimeRange>('ALL');
 
   // 🚀 שימוש ב-useEffectiveUser במקום useAuth
@@ -116,7 +116,6 @@ export default function AnalyticsDashboard() {
             { id: 'overview', label: 'Overview', icon: <Activity className="w-4 h-4" /> },
             { id: 'breakdown', label: 'Breakdown', icon: <BarChart3 className="w-4 h-4" /> },
             { id: 'advanced', label: 'Advanced', icon: <LineChart className="w-4 h-4" /> },
-            { id: 'psychology', label: 'Psychology', icon: <Brain className="w-4 h-4" /> },
           ].map(tab => (
             <button
               key={tab.id}
@@ -167,14 +166,6 @@ export default function AnalyticsDashboard() {
           </Suspense>
         )}
 
-        {activeTab === 'psychology' && (
-          <Suspense fallback={<div className="py-12 text-center" style={{ color: '#9A9A9A' }}>Loading...</div>}>
-            <LazyPsychologyTab
-              stats={analytics.stats}
-              trades={analytics.filteredTrades as Trade[]}
-            />
-          </Suspense>
-        )}
       </div>
     </div>
   );

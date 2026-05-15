@@ -8,7 +8,6 @@ import {
   Calendar, Clock, Zap, PieChart, DollarSign, Percent, Info, ChevronDown
 } from "lucide-react";
 import JournalKpiCard from '@/components/journal/ds/JournalKpiCard';
-import JournalGauge from '@/components/journal/ds/JournalGauge';
 import { useTrades } from "@/hooks/useTradesData";
 import EquityCurveChart from '@/components/charts/EquityCurveChart';
 import { 
@@ -355,7 +354,16 @@ const strategyTrades = useMemo(() => {
 
         {stats.totalTrades > 0 && (
           <div className="mb-10 opacity-0 animate-fadeIn" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Tooltip content="Average R multiple per trade">
+                <JournalKpiCard
+                  label="Average R"
+                  value={`${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
+                  hint="Per trade"
+                  accent={stats.avgR >= 0 ? 'green' : 'red'}
+                  icon={TrendingUp}
+                />
+              </Tooltip>
               <Tooltip content="Percentage of winning trades">
                 <JournalKpiCard
                   label="Win Rate"
@@ -366,21 +374,12 @@ const strategyTrades = useMemo(() => {
                   valueSize="xl"
                 />
               </Tooltip>
-              <Tooltip content="Average R multiple per trade">
-                <JournalKpiCard
-                  label="Avg R"
-                  value={`${stats.avgR >= 0 ? '+' : ''}${stats.avgR.toFixed(2)}R`}
-                  hint="Per trade"
-                  accent={stats.avgR >= 0 ? 'green' : 'red'}
-                  icon={TrendingUp}
-                />
-              </Tooltip>
               <Tooltip content="Total profit/loss in dollars">
                 <JournalKpiCard
-                  label="Net P&L"
+                  label="Total P&L"
                   value={`${stats.netPnL >= 0 ? '+' : ''}$${Math.abs(stats.netPnL).toFixed(0)}`}
                   hint="Total"
-                  accent="gold"
+                  accent={stats.netPnL >= 0 ? 'green' : 'red'}
                   icon={DollarSign}
                   valueSize="lg"
                 />
@@ -390,26 +389,8 @@ const strategyTrades = useMemo(() => {
                   label="Profit Factor"
                   value={stats.profitFactor.toFixed(2)}
                   hint="Win / Loss"
-                  accent={stats.profitFactor >= 1.5 ? 'gold' : 'red'}
+                  accent={stats.profitFactor >= 1.5 ? 'green' : 'red'}
                   icon={Zap}
-                />
-              </Tooltip>
-              <Tooltip content="Expected R per trade">
-                <JournalKpiCard
-                  label="Expectancy"
-                  value={`${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`}
-                  hint="Expected R"
-                  accent={stats.expectancy >= 0 ? 'green' : 'red'}
-                  icon={Brain}
-                />
-              </Tooltip>
-              <Tooltip content="Maximum drawdown from peak equity">
-                <JournalKpiCard
-                  label="Max Drawdown"
-                  value={`${stats.maxDrawdown.toFixed(1)}R`}
-                  hint="From peak"
-                  accent="red"
-                  icon={ChevronDown}
                 />
               </Tooltip>
             </div>
@@ -420,8 +401,6 @@ const strategyTrades = useMemo(() => {
           {[
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'trades', label: 'Trades', icon: List },
-            { id: 'analytics', label: 'Analytics', icon: Activity },
-            { id: 'insights', label: 'Insights', icon: Brain },
           ].map(tab => (
             <button
               key={tab.id}
@@ -448,173 +427,81 @@ const strategyTrades = useMemo(() => {
             📋 TAB: OVERVIEW
             ========================================== */}
         {activeTab === 'overview' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <JournalKpiCard
-                label="Total Trades"
-                value={String(stats.totalTrades)}
-                hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
-                accent="blue"
-                icon={Target}
-                className="opacity-0 animate-fadeIn"
-              />
-              <JournalKpiCard
-                label="Win Rate"
-                value={`${stats.winRate.toFixed(1)}%`}
-                hint={`${stats.wins} / ${stats.totalTrades} trades`}
-                accent={stats.winRate >= 50 ? 'green' : 'red'}
-                icon={Percent}
-                gauge={
-                  <JournalGauge
-                    mode="winRate"
-                    wins={stats.wins}
-                    losses={stats.losses}
-                    breakeven={stats.breakeven}
-                  />
-                }
-                className="opacity-0 animate-fadeIn"
-              />
-              <JournalKpiCard
-                label="Total R"
-                value={`${stats.totalR >= 0 ? '+' : ''}${stats.totalR.toFixed(2)}R`}
-                hint="Cumulative"
-                accent={stats.totalR >= 0 ? 'green' : 'red'}
-                icon={TrendingUp}
-                className="opacity-0 animate-fadeIn"
-              />
-              <JournalKpiCard
-                label="Net P&L"
-                value={`${stats.netPnL >= 0 ? '+' : ''}$${Math.abs(stats.netPnL).toFixed(2)}`}
-                hint="Total profit/loss"
-                accent="gold"
-                icon={DollarSign}
-                valueSize="lg"
-                className="opacity-0 animate-fadeIn"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <Tooltip content="Average R multiple across all trades">
-                <JournalKpiCard
-                  label="Avg R per Trade"
-                  value={`${stats.avgR.toFixed(2)}R`}
-                  icon={Target}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Average R on winning trades">
-                <JournalKpiCard
-                  label="Avg Win"
-                  value={`${stats.avgWinR.toFixed(2)}R`}
-                  icon={TrendingUp}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Average R on losing trades">
-                <JournalKpiCard
-                  label="Avg Loss"
-                  value={`${stats.avgLossR.toFixed(2)}R`}
-                  icon={TrendingDown}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Largest winning trade">
-                <JournalKpiCard
-                  label="Best Trade"
-                  value={`${stats.largestWin.toFixed(2)}R`}
-                  icon={Award}
-                  accent="green"
-                />
-              </Tooltip>
-              <Tooltip content="Largest losing trade">
-                <JournalKpiCard
-                  label="Worst Trade"
-                  value={`${stats.largestLoss.toFixed(2)}R`}
-                  icon={X}
-                  accent="red"
-                />
-              </Tooltip>
-              <Tooltip content="Total Win / Total Loss">
-                <JournalKpiCard
-                  label="Profit Factor"
-                  value={stats.profitFactor.toFixed(2)}
-                  icon={Zap}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Expected return per trade">
-                <JournalKpiCard
-                  label="Expectancy"
-                  value={`${stats.expectancy.toFixed(2)}R`}
-                  icon={Brain}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Risk-adjusted return">
-                <JournalKpiCard
-                  label="Consistency"
-                  value={stats.consistency.toFixed(2)}
-                  icon={Activity}
-                  accent="neutral"
-                />
-              </Tooltip>
-              <Tooltip content="Longest winning streak">
-                <JournalKpiCard
-                  label="Win Streak"
-                  value={`${stats.winStreak} trades`}
-                  icon={TrendingUp}
-                  accent="neutral"
-                />
-              </Tooltip>
-            </div>
-
-            {stats.totalTrades > 0 && (
-              <div className="grid grid-cols-2 gap-6">
-                <div 
+          <div className="space-y-4">
+            {stats.totalTrades > 0 ? (
+              <>
+                <div
                   className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
                   style={{
                     background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
                     border: '1px solid rgba(255,255,255,0.08)',
                     boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
                     backdropFilter: 'blur(12px)',
-                    animationDelay: '1.2s',
-                    animationFillMode: 'forwards'
+                    animationDelay: '0.35s',
+                    animationFillMode: 'forwards',
                   }}
                 >
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
-                    <PieChart className="w-5 h-5" style={{ color: '#C9A646' }} />
-                    Win/Loss Distribution
+                  <h3 className="text-lg font-bold mb-5 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
+                    <Activity className="w-5 h-5" style={{ color: '#C9A646' }} />
+                    Equity Curve
                   </h3>
-                  <SimplePieChart wins={stats.wins} losses={stats.losses} />
-                  <div className="mt-4 flex justify-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ background: '#00C46C' }} />
-                      <span className="text-sm" style={{ color: '#9A9A9A' }}>Wins: {stats.wins}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ background: '#E44545' }} />
-                      <span className="text-sm" style={{ color: '#9A9A9A' }}>Losses: {stats.losses}</span>
-                    </div>
+                  <div className="relative h-[360px]">
+                    <EquityCurveChart rValues={stats.rDistribution} />
                   </div>
                 </div>
 
-                <div 
-                  className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
-                    backdropFilter: 'blur(12px)',
-                    animationDelay: '1.3s',
-                    animationFillMode: 'forwards'
-                  }}
-                >
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
-                    <BarChart3 className="w-5 h-5" style={{ color: '#C9A646' }} />
-                    R Distribution
-                  </h3>
-                  <RDistributionChart rValues={stats.rDistribution} />
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div
+                    className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(12px)',
+                      animationDelay: '0.45s',
+                      animationFillMode: 'forwards',
+                    }}
+                  >
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
+                      <PieChart className="w-5 h-5" style={{ color: '#C9A646' }} />
+                      Win/Loss Distribution
+                    </h3>
+                    <SimplePieChart wins={stats.wins} losses={stats.losses} />
+                    <div className="mt-4 flex justify-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ background: '#00C46C' }} />
+                        <span className="text-sm" style={{ color: '#9A9A9A' }}>Wins: {stats.wins}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ background: '#E44545' }} />
+                        <span className="text-sm" style={{ color: '#9A9A9A' }}>Losses: {stats.losses}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="group relative overflow-hidden p-6 rounded-2xl opacity-0 animate-fadeIn"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      boxShadow: '0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      backdropFilter: 'blur(12px)',
+                      animationDelay: '0.55s',
+                      animationFillMode: 'forwards',
+                    }}
+                  >
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2" style={{ color: '#EAEAEA' }}>
+                      <BarChart3 className="w-5 h-5" style={{ color: '#C9A646' }} />
+                      R Distribution
+                    </h3>
+                    <RDistributionChart rValues={stats.rDistribution} />
+                  </div>
                 </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <BarChart3 className="w-12 h-12 mx-auto mb-4" style={{ color: '#9A9A9A' }} />
+                <p style={{ color: '#9A9A9A' }}>No trades for this strategy yet.</p>
               </div>
             )}
           </div>
@@ -701,9 +588,11 @@ const strategyTrades = useMemo(() => {
   const isLoss = outcome === 'LOSS';
 
   return (
-    <div
+    <button
       key={trade.id || index}
-      className="grid grid-cols-8 gap-4 p-4 text-sm hover:bg-white/[0.03] transition-all duration-200 cursor-pointer"
+      type="button"
+      onClick={() => trade.id && navigate(`/app/journal/${trade.id}`)}
+      className="grid w-full grid-cols-8 gap-4 p-4 text-left text-sm hover:bg-white/[0.03] transition-all duration-200 cursor-pointer"
       style={{ color: '#EAEAEA' }}
     >
       {/* ✅ Date עם Timezone Support */}
@@ -749,7 +638,7 @@ const strategyTrades = useMemo(() => {
                               {outcome}
                             </span>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
