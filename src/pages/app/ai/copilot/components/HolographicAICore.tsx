@@ -1,123 +1,298 @@
-const pulseDots = [
-  { left: '18%', top: '42%', delay: '0s' },
-  { left: '31%', top: '29%', delay: '1.1s' },
-  { left: '68%', top: '33%', delay: '0.7s' },
-  { left: '78%', top: '55%', delay: '1.8s' },
-  { left: '47%', top: '72%', delay: '1.4s' },
-  { left: '58%', top: '20%', delay: '2.2s' },
-];
+import { useEffect, useRef, useState } from 'react';
+import * as d3 from 'd3';
 
-const verticalTicks = Array.from({ length: 28 }, (_, index) => {
-  const height = 12 + ((index * 17) % 31);
-  return { height, delay: `${index * 0.08}s` };
-});
+const LAND_DATA_URL =
+  'https://raw.githubusercontent.com/martynafford/natural-earth-geojson/refs/heads/master/110m/physical/ne_110m_land.json';
+
+type PolygonRing = [number, number][];
+type LandGeometry =
+  | { type: 'Polygon'; coordinates: PolygonRing[] }
+  | { type: 'MultiPolygon'; coordinates: PolygonRing[][] };
+
+interface LandFeature {
+  type: 'Feature';
+  geometry: LandGeometry;
+  properties?: Record<string, unknown>;
+}
+
+interface LandFeatureCollection {
+  type: 'FeatureCollection';
+  features: LandFeature[];
+}
+
+interface DotData {
+  lng: number;
+  lat: number;
+}
 
 export function HolographicAICore({ className = '' }: { className?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    let cancelled = false;
+    let landFeatures: LandFeatureCollection | null = null;
+    const allDots: DotData[] = [];
+
+    const containerWidth = 360;
+    const containerHeight = 276;
+    const radius = Math.min(containerWidth, containerHeight) / 2.45;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    canvas.width = containerWidth * dpr;
+    canvas.height = containerHeight * dpr;
+    canvas.style.width = `${containerWidth}px`;
+    canvas.style.height = `${containerHeight}px`;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const projection = d3
+      .geoOrthographic()
+      .scale(radius)
+      .translate([containerWidth / 2, containerHeight / 2])
+      .clipAngle(90);
+
+    const path = d3.geoPath().projection(projection).context(context);
+    const graticule = d3.geoGraticule();
+
+    const pointInPolygon = (point: [number, number], polygon: PolygonRing): boolean => {
+      const [x, y] = point;
+      let inside = false;
+
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [xi, yi] = polygon[i];
+        const [xj, yj] = polygon[j];
+
+        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+          inside = !inside;
+        }
+      }
+
+      return inside;
+    };
+
+    const pointInFeature = (point: [number, number], feature: LandFeature): boolean => {
+      const geometry = feature.geometry;
+
+      if (geometry.type === 'Polygon') {
+        if (!pointInPolygon(point, geometry.coordinates[0])) return false;
+
+        for (let i = 1; i < geometry.coordinates.length; i++) {
+          if (pointInPolygon(point, geometry.coordinates[i])) return false;
+        }
+
+        return true;
+      }
+
+      if (geometry.type === 'MultiPolygon') {
+        for (const polygon of geometry.coordinates) {
+          if (!pointInPolygon(point, polygon[0])) continue;
+
+          let inHole = false;
+          for (let i = 1; i < polygon.length; i++) {
+            if (pointInPolygon(point, polygon[i])) {
+              inHole = true;
+              break;
+            }
+          }
+
+          if (!inHole) return true;
+        }
+      }
+
+      return false;
+    };
+
+    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = 17) => {
+      const dots: [number, number][] = [];
+      const [[minLng, minLat], [maxLng, maxLat]] = d3.geoBounds(feature);
+      const stepSize = dotSpacing * 0.08;
+
+      for (let lng = minLng; lng <= maxLng; lng += stepSize) {
+        for (let lat = minLat; lat <= maxLat; lat += stepSize) {
+          const point: [number, number] = [lng, lat];
+          if (pointInFeature(point, feature)) dots.push(point);
+        }
+      }
+
+      return dots;
+    };
+
+    const drawGoldGlow = (cx: number, cy: number, currentScale: number) => {
+      const glow = context.createRadialGradient(cx, cy, currentScale * 0.24, cx, cy, currentScale * 1.34);
+      glow.addColorStop(0, 'rgba(255, 226, 143, 0.18)');
+      glow.addColorStop(0.5, 'rgba(201, 166, 70, 0.08)');
+      glow.addColorStop(1, 'rgba(201, 166, 70, 0)');
+
+      context.save();
+      context.globalCompositeOperation = 'screen';
+      context.fillStyle = glow;
+      context.beginPath();
+      context.arc(cx, cy, currentScale * 1.36, 0, 2 * Math.PI);
+      context.fill();
+      context.restore();
+    };
+
+    const render = () => {
+      context.clearRect(0, 0, containerWidth, containerHeight);
+
+      const cx = containerWidth / 2;
+      const cy = containerHeight / 2;
+      const currentScale = projection.scale();
+      const scaleFactor = currentScale / radius;
+
+      drawGoldGlow(cx, cy, currentScale);
+
+      const sphere = context.createRadialGradient(
+        cx - currentScale * 0.34,
+        cy - currentScale * 0.38,
+        currentScale * 0.12,
+        cx,
+        cy,
+        currentScale,
+      );
+      sphere.addColorStop(0, 'rgba(255, 229, 155, 0.13)');
+      sphere.addColorStop(0.3, 'rgba(62, 45, 16, 0.72)');
+      sphere.addColorStop(0.68, 'rgba(4, 4, 3, 0.96)');
+      sphere.addColorStop(1, 'rgba(0, 0, 0, 1)');
+
+      context.beginPath();
+      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
+      context.fillStyle = sphere;
+      context.fill();
+
+      context.save();
+      context.beginPath();
+      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
+      context.clip();
+
+      if (landFeatures) {
+        context.beginPath();
+        path(graticule());
+        context.strokeStyle = 'rgba(255, 218, 126, 0.16)';
+        context.lineWidth = 0.7 * scaleFactor;
+        context.stroke();
+
+        context.beginPath();
+        landFeatures.features.forEach((feature) => {
+          path(feature);
+        });
+        context.strokeStyle = 'rgba(255, 226, 143, 0.48)';
+        context.lineWidth = 0.8 * scaleFactor;
+        context.stroke();
+
+        allDots.forEach((dot) => {
+          const projected = projection([dot.lng, dot.lat]);
+          if (
+            projected &&
+            projected[0] >= cx - currentScale &&
+            projected[0] <= cx + currentScale &&
+            projected[1] >= cy - currentScale &&
+            projected[1] <= cy + currentScale
+          ) {
+            context.beginPath();
+            context.arc(projected[0], projected[1], 1.05 * scaleFactor, 0, 2 * Math.PI);
+            context.fillStyle = 'rgba(255, 214, 118, 0.68)';
+            context.fill();
+          }
+        });
+      }
+
+      const reflection = context.createLinearGradient(cx - currentScale, cy - currentScale, cx, cy);
+      reflection.addColorStop(0, 'rgba(255, 255, 255, 0.16)');
+      reflection.addColorStop(0.42, 'rgba(255, 225, 150, 0.035)');
+      reflection.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      context.fillStyle = reflection;
+      context.beginPath();
+      context.ellipse(cx - currentScale * 0.28, cy - currentScale * 0.32, currentScale * 0.34, currentScale * 0.13, -0.58, 0, 2 * Math.PI);
+      context.fill();
+
+      context.restore();
+
+      context.beginPath();
+      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
+      context.strokeStyle = 'rgba(255, 225, 145, 0.76)';
+      context.lineWidth = 1.3 * scaleFactor;
+      context.stroke();
+
+      context.beginPath();
+      context.arc(cx, cy, currentScale + 7, 0, 2 * Math.PI);
+      context.strokeStyle = 'rgba(201, 166, 70, 0.16)';
+      context.lineWidth = 0.8;
+      context.stroke();
+    };
+
+    const loadWorldData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const response = await fetch(LAND_DATA_URL);
+        if (!response.ok) throw new Error('Failed to load land data');
+
+        landFeatures = (await response.json()) as LandFeatureCollection;
+        landFeatures.features.forEach((feature) => {
+          generateDotsInPolygon(feature).forEach(([lng, lat]) => {
+            allDots.push({ lng, lat });
+          });
+        });
+
+        if (!cancelled) {
+          render();
+          setIsLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setError('Failed to load market globe');
+          setIsLoading(false);
+        }
+      }
+    };
+
+    const rotation: [number, number] = [0, -8];
+    const rotationTimer = d3.timer(() => {
+      rotation[0] += 0.42;
+      projection.rotate(rotation);
+      render();
+    });
+
+    void loadWorldData();
+
+    return () => {
+      cancelled = true;
+      rotationTimer.stop();
+    };
+  }, []);
+
   return (
     <div
-      className={`relative z-10 mt-[-8px] flex h-[278px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
+      className={`relative z-10 mt-[-12px] flex h-[286px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
       role="img"
-      aria-label="Minimal AI signal hub with financial waveform and market pulses"
+      aria-label="Gold rotating financial market globe"
     >
-      <div className="absolute inset-x-[8%] top-1/2 h-px bg-gradient-to-r from-transparent via-[#d8b451]/30 to-transparent" />
-      <div className="absolute left-1/2 top-1/2 h-[178px] w-[178px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#d8b451]/22 shadow-[0_0_34px_rgba(216,180,81,0.08)] animate-[aiHubRotate_18s_linear_infinite]" />
-      <div className="absolute left-1/2 top-1/2 h-[132px] w-[132px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-dashed border-[#ffe4a0]/18 animate-[aiHubRotateReverse_24s_linear_infinite]" />
-      <div className="absolute left-1/2 top-1/2 h-[86px] w-[86px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#7a5c1d]/28 bg-[radial-gradient(circle,rgba(216,180,81,0.11)_0%,rgba(216,180,81,0.035)_46%,rgba(0,0,0,0)_72%)]" />
-
-      <div className="absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#ffe4a0] shadow-[0_0_18px_rgba(255,228,160,0.55)] animate-[aiHubBreathe_3.8s_ease-in-out_infinite]" />
-      <div className="absolute left-1/2 top-1/2 h-[34px] w-[34px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#d8b451]/24 animate-[aiHubBreathe_4.6s_ease-in-out_infinite]" />
-
-      <svg
-        className="absolute left-1/2 top-1/2 h-[188px] w-[188px] -translate-x-1/2 -translate-y-1/2 overflow-visible animate-[aiHubRotate_28s_linear_infinite]"
-        viewBox="0 0 188 188"
+      <div className="absolute left-1/2 top-1/2 h-[235px] w-[235px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,226,143,0.18),rgba(201,166,70,0.07)_40%,rgba(0,0,0,0)_70%)] blur-lg" />
+      <div className="absolute bottom-[18px] left-1/2 h-[24px] w-[230px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(255,221,133,0.18)_0%,rgba(201,166,70,0.06)_50%,rgba(0,0,0,0)_76%)] blur-[10px]" />
+      <canvas
+        ref={canvasRef}
+        className="relative z-10 block max-w-full"
         aria-hidden="true"
-      >
-        <defs>
-          <linearGradient id="aiHubGoldWave" x1="0%" y1="50%" x2="100%" y2="50%">
-            <stop offset="0%" stopColor="#d8b451" stopOpacity="0" />
-            <stop offset="18%" stopColor="#d8b451" stopOpacity="0.18" />
-            <stop offset="50%" stopColor="#ffe4a0" stopOpacity="0.74" />
-            <stop offset="82%" stopColor="#d8b451" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#d8b451" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path
-          d="M18 94 C28 91, 34 98, 42 94 S56 84, 66 94 S80 109, 92 94 S108 78, 121 94 S137 111, 150 94 S164 83, 170 94"
-          fill="none"
-          stroke="url(#aiHubGoldWave)"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          className="animate-[aiHubWave_5s_ease-in-out_infinite]"
-        />
-        <path
-          d="M25 109 C43 104, 52 112, 67 108 S94 96, 112 106 S139 119, 163 105"
-          fill="none"
-          stroke="#ffffff"
-          strokeOpacity="0.16"
-          strokeWidth="0.8"
-          strokeLinecap="round"
-          className="animate-[aiHubWaveSoft_6.5s_ease-in-out_infinite]"
-        />
-      </svg>
-
-      <div className="absolute left-1/2 top-[54%] flex h-[54px] -translate-x-1/2 items-end gap-[3px] opacity-55">
-        {verticalTicks.map((tick, index) => (
-          <span
-            key={index}
-            className="w-px rounded-full bg-gradient-to-t from-[#7a5c1d]/0 via-[#d8b451]/42 to-[#ffe4a0]/70 animate-[aiHubTick_2.8s_ease-in-out_infinite]"
-            style={{ height: `${tick.height}px`, animationDelay: tick.delay }}
-          />
-        ))}
-      </div>
-
-      {pulseDots.map((dot, index) => (
-        <span
-          key={index}
-          className="absolute h-1.5 w-1.5 rounded-full bg-[#d8b451]/80 shadow-[0_0_12px_rgba(216,180,81,0.34)] animate-[aiHubPulse_4.8s_ease-in-out_infinite]"
-          style={{ left: dot.left, top: dot.top, animationDelay: dot.delay }}
-        />
-      ))}
-
-      <div className="absolute bottom-[18px] left-1/2 h-[18px] w-[210px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(216,180,81,0.15)_0%,rgba(216,180,81,0.04)_48%,rgba(0,0,0,0)_74%)] blur-[10px]" />
-      <div className="absolute left-1/2 top-1/2 h-[230px] w-[230px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(216,180,81,0.055)_0%,rgba(216,180,81,0.02)_34%,rgba(0,0,0,0)_66%)]" />
-
-      <style>{`
-        @keyframes aiHubRotate {
-          from { transform: translate(-50%, -50%) rotate(0deg); }
-          to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-
-        @keyframes aiHubRotateReverse {
-          from { transform: translate(-50%, -50%) rotate(360deg); }
-          to { transform: translate(-50%, -50%) rotate(0deg); }
-        }
-
-        @keyframes aiHubBreathe {
-          0%, 100% { opacity: 0.76; filter: brightness(0.94); }
-          50% { opacity: 1; filter: brightness(1.16); }
-        }
-
-        @keyframes aiHubWave {
-          0%, 100% { transform: translateX(-5px); opacity: 0.58; }
-          50% { transform: translateX(5px); opacity: 0.9; }
-        }
-
-        @keyframes aiHubWaveSoft {
-          0%, 100% { transform: translateX(6px); opacity: 0.15; }
-          50% { transform: translateX(-6px); opacity: 0.28; }
-        }
-
-        @keyframes aiHubPulse {
-          0%, 100% { opacity: 0.18; transform: scale(0.72); }
-          42% { opacity: 0.78; transform: scale(1); }
-          68% { opacity: 0.28; transform: scale(1.45); }
-        }
-
-        @keyframes aiHubTick {
-          0%, 100% { opacity: 0.24; transform: scaleY(0.72); }
-          50% { opacity: 0.72; transform: scaleY(1); }
-        }
-      `}</style>
+      />
+      {isLoading && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/70">
+          Loading market globe
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center text-[10px] uppercase tracking-[0.22em] text-gold-primary/70">
+          {error}
+        </div>
+      )}
     </div>
   );
 }
