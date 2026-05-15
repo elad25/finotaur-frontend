@@ -1,294 +1,52 @@
-import { useEffect, useRef, useState } from 'react';
-import * as d3 from 'd3';
-
-const LAND_DATA_URL =
-  'https://raw.githubusercontent.com/martynafford/natural-earth-geojson/refs/heads/master/110m/physical/ne_110m_land.json';
-const MAX_LAND_DOTS = 900;
-const DOT_SPACING = 44;
-const FRAME_INTERVAL_MS = 48;
-
-type PolygonRing = [number, number][];
-type LandGeometry =
-  | { type: 'Polygon'; coordinates: PolygonRing[] }
-  | { type: 'MultiPolygon'; coordinates: PolygonRing[][] };
-
-interface LandFeature {
-  type: 'Feature';
-  geometry: LandGeometry;
-  properties?: Record<string, unknown>;
-}
-
-interface LandFeatureCollection {
-  type: 'FeatureCollection';
-  features: LandFeature[];
-}
-
-interface DotData {
-  lng: number;
-  lat: number;
-  visible: boolean;
-}
-
-interface HolographicAICoreProps {
-  className?: string;
-  width?: number;
-  height?: number;
-}
-
-const GOLD = '#d8b451';
-const GOLD_BRIGHT = '#ffe4a0';
-const GOLD_DOT = '#c9a646';
-
-export function HolographicAICore({ width = 430, height = 318, className = '' }: HolographicAICoreProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    let cancelled = false;
-
-    const containerWidth = Math.min(width, window.innerWidth - 40);
-    const containerHeight = Math.min(height, window.innerHeight - 100);
-    const radius = Math.min(containerWidth, containerHeight) / 2.5;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = containerWidth * dpr;
-    canvas.height = containerHeight * dpr;
-    canvas.style.width = `${containerWidth}px`;
-    canvas.style.height = `${containerHeight}px`;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const projection = d3
-      .geoOrthographic()
-      .scale(radius)
-      .translate([containerWidth / 2, containerHeight / 2])
-      .clipAngle(90);
-
-    const path = d3.geoPath().projection(projection).context(context);
-
-    const pointInPolygon = (point: [number, number], polygon: PolygonRing): boolean => {
-      const [x, y] = point;
-      let inside = false;
-
-      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const [xi, yi] = polygon[i];
-        const [xj, yj] = polygon[j];
-
-        if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-          inside = !inside;
-        }
-      }
-
-      return inside;
-    };
-
-    const pointInFeature = (point: [number, number], feature: LandFeature): boolean => {
-      const geometry = feature.geometry;
-
-      if (geometry.type === 'Polygon') {
-        const coordinates = geometry.coordinates;
-
-        if (!pointInPolygon(point, coordinates[0])) {
-          return false;
-        }
-
-        for (let i = 1; i < coordinates.length; i++) {
-          if (pointInPolygon(point, coordinates[i])) {
-            return false;
-          }
-        }
-
-        return true;
-      }
-
-      if (geometry.type === 'MultiPolygon') {
-        for (const polygon of geometry.coordinates) {
-          if (pointInPolygon(point, polygon[0])) {
-            let inHole = false;
-
-            for (let i = 1; i < polygon.length; i++) {
-              if (pointInPolygon(point, polygon[i])) {
-                inHole = true;
-                break;
-              }
-            }
-
-            if (!inHole) {
-              return true;
-            }
-          }
-        }
-      }
-
-      return false;
-    };
-
-    let lastFrameTime = 0;
-
-    const generateDotsInPolygon = (feature: LandFeature, dotSpacing = DOT_SPACING, limit = MAX_LAND_DOTS) => {
-      const dots: [number, number][] = [];
-      const [[minLng, minLat], [maxLng, maxLat]] = d3.geoBounds(feature);
-      const stepSize = dotSpacing * 0.08;
-
-      for (let lng = minLng; lng <= maxLng; lng += stepSize) {
-        for (let lat = minLat; lat <= maxLat; lat += stepSize) {
-          const point: [number, number] = [lng, lat];
-          if (pointInFeature(point, feature)) {
-            dots.push(point);
-          }
-          if (dots.length >= limit) return dots;
-        }
-      }
-
-      return dots;
-    };
-
-    const allDots: DotData[] = [];
-    let landFeatures: LandFeatureCollection | null = null;
-
-    const render = () => {
-      context.clearRect(0, 0, containerWidth, containerHeight);
-
-      const currentScale = projection.scale();
-      const scaleFactor = currentScale / radius;
-      const cx = containerWidth / 2;
-      const cy = containerHeight / 2;
-
-      context.save();
-      context.shadowColor = 'rgba(216, 180, 81, 0.34)';
-      context.shadowBlur = 22;
-      context.beginPath();
-      context.arc(cx, cy, currentScale, 0, 2 * Math.PI);
-      context.fillStyle = '#000000';
-      context.fill();
-      context.strokeStyle = GOLD_BRIGHT;
-      context.lineWidth = 2 * scaleFactor;
-      context.stroke();
-      context.restore();
-
-      if (landFeatures) {
-        const graticule = d3.geoGraticule();
-
-        context.beginPath();
-        path(graticule());
-        context.strokeStyle = GOLD;
-        context.lineWidth = 1 * scaleFactor;
-        context.globalAlpha = 0.22;
-        context.stroke();
-        context.globalAlpha = 1;
-
-        context.beginPath();
-        landFeatures.features.forEach((feature) => {
-          path(feature);
-        });
-        context.strokeStyle = GOLD_BRIGHT;
-        context.lineWidth = 1 * scaleFactor;
-        context.globalAlpha = 0.72;
-        context.stroke();
-        context.globalAlpha = 1;
-
-        allDots.forEach((dot) => {
-          const projected = projection([dot.lng, dot.lat]);
-          if (
-            projected &&
-            projected[0] >= 0 &&
-            projected[0] <= containerWidth &&
-            projected[1] >= 0 &&
-            projected[1] <= containerHeight
-          ) {
-            context.beginPath();
-            context.arc(projected[0], projected[1], 1.2 * scaleFactor, 0, 2 * Math.PI);
-            context.fillStyle = GOLD_DOT;
-            context.globalAlpha = 0.82;
-            context.fill();
-            context.globalAlpha = 1;
-          }
-        });
-      }
-    };
-
-    const loadWorldData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(LAND_DATA_URL);
-        if (!response.ok) throw new Error('Failed to load land data');
-
-        landFeatures = (await response.json()) as LandFeatureCollection;
-
-        for (const feature of landFeatures.features) {
-          if (allDots.length >= MAX_LAND_DOTS) break;
-
-          const dots = generateDotsInPolygon(feature, DOT_SPACING, MAX_LAND_DOTS - allDots.length);
-          dots.forEach(([lng, lat]) => {
-            allDots.push({ lng, lat, visible: true });
-          });
-        }
-
-        if (!cancelled) {
-          render();
-          setIsLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Failed to load market globe');
-          setIsLoading(false);
-        }
-      }
-    };
-
-    const rotation: [number, number] = [0, 0];
-    const rotationSpeed = 0.5;
-
-    const rotate = (elapsed: number) => {
-      if (elapsed - lastFrameTime < FRAME_INTERVAL_MS) return;
-      lastFrameTime = elapsed;
-      rotation[0] += rotationSpeed;
-      projection.rotate(rotation);
-      render();
-    };
-
-    const rotationTimer = d3.timer(rotate);
-
-    void loadWorldData();
-
-    return () => {
-      cancelled = true;
-      rotationTimer.stop();
-    };
-  }, [width, height]);
-
-  if (error) {
-    return (
-      <div className={`relative z-10 flex h-[318px] w-[430px] max-w-full items-center justify-center rounded-[8px] bg-black/10 ${className}`}>
-        <p className="text-center text-[10px] uppercase tracking-[0.22em] text-gold-primary/70">{error}</p>
-      </div>
-    );
-  }
+export function HolographicAICore({ className = '' }: { className?: string }) {
+  const bars = [18, 30, 22, 44, 28, 52, 34, 46, 24, 38, 20, 32];
 
   return (
     <div
-      className={`relative z-10 mt-[-16px] flex h-[318px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
+      className={`relative z-10 mt-[-8px] flex h-[278px] w-[500px] max-w-full items-center justify-center overflow-visible ${className}`}
       role="img"
-      aria-label="Gold rotating market Earth visualization"
+      aria-label="Lightweight AI portfolio signal core"
     >
-      <canvas
-        ref={canvasRef}
-        className="block h-auto max-w-full rounded-[8px] bg-transparent"
-        style={{ maxWidth: '100%', height: 'auto' }}
-      />
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center text-[10px] uppercase tracking-[0.28em] text-gold-primary/70">
-          Loading market globe
-        </div>
-      )}
+      <div className="absolute left-1/2 top-1/2 h-[196px] w-[196px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-gold-primary/20 bg-black/24 shadow-[0_0_42px_rgba(201,166,70,0.12)]" />
+      <div className="absolute left-1/2 top-1/2 h-[138px] w-[138px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-gold-primary/14" />
+      <div className="absolute left-1/2 top-1/2 h-[74px] w-[74px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-gold-primary/28 bg-[radial-gradient(circle,rgba(244,217,123,0.22)_0%,rgba(201,166,70,0.08)_44%,rgba(0,0,0,0)_72%)]" />
+
+      <div className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold-primary shadow-[0_0_18px_rgba(244,217,123,0.42)]" />
+
+      <svg
+        className="absolute left-1/2 top-1/2 h-[172px] w-[172px] -translate-x-1/2 -translate-y-1/2 overflow-visible"
+        viewBox="0 0 172 172"
+        aria-hidden="true"
+      >
+        <circle cx="86" cy="86" r="70" fill="none" stroke="rgba(201,166,70,0.13)" strokeWidth="1" />
+        <circle cx="86" cy="86" r="48" fill="none" stroke="rgba(244,217,123,0.12)" strokeWidth="1" strokeDasharray="2 8" />
+        <path
+          d="M24 88 C36 82, 43 96, 54 88 S75 74, 86 88 S107 103, 119 88 S139 78, 148 88"
+          fill="none"
+          stroke="rgba(244,217,123,0.72)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+        <path
+          d="M34 104 C52 96, 69 111, 86 102 S117 92, 139 100"
+          fill="none"
+          stroke="rgba(255,255,255,0.14)"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
+      </svg>
+
+      <div className="absolute left-1/2 top-[55%] flex h-[58px] -translate-x-1/2 items-end gap-[4px] opacity-70">
+        {bars.map((height, index) => (
+          <span
+            key={index}
+            className="w-px rounded-full bg-gradient-to-t from-gold-primary/0 via-gold-primary/42 to-[#ffe4a0]/78"
+            style={{ height }}
+          />
+        ))}
+      </div>
+
+      <div className="absolute bottom-[20px] left-1/2 h-[18px] w-[220px] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(201,166,70,0.13)_0%,rgba(201,166,70,0.04)_52%,rgba(0,0,0,0)_76%)] blur-[10px]" />
     </div>
   );
 }
