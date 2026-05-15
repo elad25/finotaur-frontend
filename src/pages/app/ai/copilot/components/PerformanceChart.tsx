@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { Card } from '@/components/ds/Card';
 import { PerformancePoint } from '../hooks/usePortfolioMockData';
 import { cn } from '@/lib/utils';
@@ -10,17 +9,48 @@ interface Props {
 
 type Mode = 'dollar' | 'percent';
 
+const CHART_WIDTH = 760;
+const CHART_HEIGHT = 286;
+const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
+
 export function PerformanceChart({ series }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
 
-  const data = useMemo(() => {
-    if (series.length === 0) return [];
+  const chart = useMemo(() => {
+    if (series.length === 0) {
+      return { path: '', areaPath: '', ticks: [] as number[], min: 0, max: 0 };
+    }
+
     const start = series[0].value;
-    return series.map(p => ({
-      date: p.date,
-      value: mode === 'dollar' ? p.value : ((p.value - start) / start) * 100,
-    }));
+    const values = series.map((point) =>
+      mode === 'dollar' ? point.value : ((point.value - start) / start) * 100
+    );
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
+    const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+
+    const coords = values.map((value, index) => {
+      const x = PADDING.left + (index / Math.max(values.length - 1, 1)) * innerWidth;
+      const y = PADDING.top + (1 - (value - min) / range) * innerHeight;
+      return [x, y] as const;
+    });
+
+    const path = coords.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    const first = coords[0];
+    const last = coords[coords.length - 1];
+    const baseline = CHART_HEIGHT - PADDING.bottom;
+    const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + range * ratio);
+
+    return { path, areaPath, ticks, min, max };
   }, [series, mode]);
+
+  const formatTick = (value: number) => {
+    if (mode === 'percent') return `${value >= 0 ? '+' : ''}${value.toFixed(0)}%`;
+    return `$${(value / 1000).toFixed(0)}k`;
+  };
 
   return (
     <Card className="relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]">
@@ -64,69 +94,60 @@ export function PerformanceChart({ series }: Props) {
           </div>
         </div>
 
-        <div style={{ width: '100%', height: 286 }}>
-          <ResponsiveContainer>
-            <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="copilotArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#F4D97B" stopOpacity={0.36} />
-                  <stop offset="100%" stopColor="#C9A646" stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="copilotLine" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#A98220" />
-                  <stop offset="42%" stopColor="#F4D97B" />
-                  <stop offset="100%" stopColor="#C9A646" />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="rgba(201,166,70,0.08)" strokeDasharray="3 3" vertical />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 10 }}
-                stroke="rgba(201,166,70,0.10)"
-                tickFormatter={(d: string) => {
-                  const date = new Date(d);
-                  return date.toLocaleString('en', { month: 'short' });
-                }}
-                interval="preserveStartEnd"
-                minTickGap={44}
+        <svg className="h-[286px] w-full overflow-visible" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label="Portfolio performance chart">
+          <defs>
+            <linearGradient id="copilotSvgArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F4D97B" stopOpacity="0.30" />
+              <stop offset="100%" stopColor="#C9A646" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="copilotSvgLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#A98220" />
+              <stop offset="42%" stopColor="#F4D97B" />
+              <stop offset="100%" stopColor="#C9A646" />
+            </linearGradient>
+          </defs>
+
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = PADDING.top + ratio * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+            return (
+              <line
+                key={`h-${ratio}`}
+                x1={PADDING.left}
+                x2={CHART_WIDTH - PADDING.right}
+                y1={y}
+                y2={y}
+                stroke="rgba(201,166,70,0.08)"
+                strokeDasharray="4 6"
               />
-              <YAxis
-                tick={{ fill: 'rgba(255,255,255,0.42)', fontSize: 10 }}
-                stroke="rgba(201,166,70,0.10)"
-                tickFormatter={(v: number) => {
-                  if (mode === 'percent') return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(0)}%`;
-                  if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(0)}k`;
-                  return `$${Math.round(v)}`;
-                }}
-                width={56}
+            );
+          })}
+          {[0, 0.2, 0.4, 0.6, 0.8, 1].map((ratio) => {
+            const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
+            return (
+              <line
+                key={`v-${ratio}`}
+                y1={PADDING.top}
+                y2={CHART_HEIGHT - PADDING.bottom}
+                x1={x}
+                x2={x}
+                stroke="rgba(201,166,70,0.055)"
+                strokeDasharray="4 6"
               />
-              <Tooltip
-                contentStyle={{
-                  background: '#090806',
-                  border: '1px solid rgba(201,166,70,0.25)',
-                  borderRadius: 8,
-                  padding: 10,
-                }}
-                labelStyle={{ color: '#fff', fontSize: 11, marginBottom: 4 }}
-                itemStyle={{ color: '#F4D97B', fontSize: 12, fontWeight: 500 }}
-                formatter={(v: number) => {
-                  if (mode === 'percent') return [`${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(2)}%`, 'Return'];
-                  return [`$${v.toLocaleString('en', { maximumFractionDigits: 2 })}`, 'Value'];
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="url(#copilotLine)"
-                fill="url(#copilotArea)"
-                strokeWidth={2.2}
-                isAnimationActive={false}
-                dot={false}
-                activeDot={{ r: 5, fill: '#F4D97B', stroke: '#0a0a0a', strokeWidth: 2 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+            );
+          })}
+
+          {chart.ticks.map((tick, index) => {
+            const y = CHART_HEIGHT - PADDING.bottom - (index / Math.max(chart.ticks.length - 1, 1)) * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+            return (
+              <text key={tick} x={PADDING.left - 10} y={y + 4} textAnchor="end" fill="rgba(255,255,255,0.42)" fontSize="10">
+                {formatTick(tick)}
+              </text>
+            );
+          })}
+
+          <path d={chart.areaPath} fill="url(#copilotSvgArea)" />
+          <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
 
         <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
           {[

@@ -7,7 +7,7 @@
 // the Coming Soon landing page.
 // =====================================================
 
-import { motion } from 'framer-motion';
+import type { HTMLAttributes } from 'react';
 import {
   Brain,
   Lock,
@@ -22,6 +22,22 @@ import {
 } from 'lucide-react';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { FinotaurCopilotDashboard } from './copilot/FinotaurCopilotDashboard';
+
+type StaticMotionProps<T> = HTMLAttributes<T> & {
+  initial?: unknown;
+  animate?: unknown;
+  transition?: unknown;
+  whileHover?: unknown;
+};
+
+const motion = {
+  div: ({ initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, ...props }: StaticMotionProps<HTMLDivElement>) => (
+    <div {...props} />
+  ),
+  p: ({ initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, ...props }: StaticMotionProps<HTMLParagraphElement>) => (
+    <p {...props} />
+  ),
+};
 
 export default function MyPortfolio() {
   const { hasBetaAccess, isLoading } = useAdminAuth();
