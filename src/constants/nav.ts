@@ -201,10 +201,8 @@ ai: {
   label: 'AI Arena',
   locked: false,
   beta: false,
-  defaultPath: '/app/ai/my-portfolio',
-  subNav: [
-    { label: 'My Portfolio', path: '/app/ai/my-portfolio' },
-  ],
+  defaultPath: '/app/ai/copilot',
+  subNav: [],
   sidebar: [
     { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
     { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },

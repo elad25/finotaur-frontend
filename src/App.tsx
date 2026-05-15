@@ -245,6 +245,11 @@ const AIOptionsIntelligence = lazy(() => import("@/pages/app/ai/OptionsIntellige
 const AIFlowScanner = lazy(() => import("@/pages/app/ai/flow-scanner"));
 const AITop5 = lazy(() => import("@/pages/app/ai/Top5"));
 const AIAssistant = lazy(() => import("@/pages/app/ai/AIAssistant"));
+const CopilotTopOpportunitiesPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotTopOpportunitiesPage })));
+const CopilotMacroPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotMacroPage })));
+const CopilotHoldingsPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotHoldingsPage })));
+const CopilotRisksPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotRisksPage })));
+const CopilotAIChatPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIChatPage })));
 
 // Copy Trade
 const CopyTradeOverview = lazy(() => import("@/pages/app/copy-trade/Overview"));
@@ -425,7 +430,13 @@ function AppContent() {
           <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
           {/* AI */}
-          <Route path="ai/my-portfolio" element={<SuspenseRoute><AIMyPortfolio /></SuspenseRoute>} />
+          <Route path="ai/copilot" element={<SuspenseRoute><AIMyPortfolio /></SuspenseRoute>} />
+          <Route path="ai/copilot/top-opportunities" element={<SuspenseRoute><CopilotTopOpportunitiesPage /></SuspenseRoute>} />
+          <Route path="ai/copilot/macro" element={<SuspenseRoute><CopilotMacroPage /></SuspenseRoute>} />
+          <Route path="ai/copilot/holdings" element={<SuspenseRoute><CopilotHoldingsPage /></SuspenseRoute>} />
+          <Route path="ai/copilot/risks" element={<SuspenseRoute><CopilotRisksPage /></SuspenseRoute>} />
+          <Route path="ai/copilot/ai-chat" element={<SuspenseRoute><CopilotAIChatPage /></SuspenseRoute>} />
+          <Route path="ai/my-portfolio" element={<Navigate to="/app/ai/copilot" replace />} />
           <Route path="ai/stock-analyzer" element={<SuspenseRoute><AIStockAnalyzer /></SuspenseRoute>} />
           <Route path="ai/sector-analyzer" element={<SuspenseRoute><AISectorAnalyzer /></SuspenseRoute>} />
           <Route path="ai/macro-analyzer" element={<SuspenseRoute><AIMacroAnalyzer /></SuspenseRoute>} />

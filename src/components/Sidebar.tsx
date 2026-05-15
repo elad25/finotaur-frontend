@@ -97,6 +97,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   divider?: boolean;
   locked?: boolean;
   beta?: boolean;  // 🔥 NEW
+  children?: Array<{
+    label: string;
+    path: string;
+    icon: any;
+    beta?: boolean;
+  }>;
 }>> = {
   // ===============================================
   // 🌍 ALL MARKETS - 🔒 LOCKED
@@ -222,7 +228,19 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 // 🤖 AI INSIGHTS - 🔥 UPDATED v2.1
 // ===============================================
 'ai': [
-  { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
+  {
+    label: 'Finotaur Copilot',
+    path: '/app/ai/copilot',
+    icon: Shield,
+    beta: true,
+    children: [
+      { label: 'Top Opportunities', path: '/app/ai/copilot/top-opportunities', icon: Zap, beta: true },
+      { label: 'Macro', path: '/app/ai/copilot/macro', icon: Globe, beta: true },
+      { label: 'Holdings', path: '/app/ai/copilot/holdings', icon: Layers, beta: true },
+      { label: 'Risks', path: '/app/ai/copilot/risks', icon: Shield, beta: true },
+      { label: 'AI Portfolio Chat', path: '/app/ai/copilot/ai-chat', icon: MessageSquare, beta: true },
+    ],
+  },
   { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
   { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
   { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
@@ -353,6 +371,13 @@ const ENVIRONMENT_HEADERS: Record<EnvironmentType, { icon: any; label: string; b
   'affiliate': { icon: Award, label: 'Affiliate Center', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
   'settings': { icon: Settings, label: 'Settings', bgColor: 'bg-zinc-500/5', textColor: 'text-zinc-400' },
 };
+
+const sidebarItemBaseClass =
+  'relative group flex w-full min-h-[42px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-none transition-all duration-200';
+const sidebarItemExpandedClass = 'gap-3 px-3';
+const sidebarItemCollapsedClass = 'justify-center px-2';
+const sidebarIconClass = 'h-5 w-5 flex-shrink-0';
+const sidebarLabelClass = 'flex-1 truncate leading-none';
 
 export const Sidebar = ({ isOpen }: SidebarProps) => {
   const navigate = useNavigate();
@@ -508,8 +533,6 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     return isActive(itemPath);
   };
 
-  const envHeader = ENVIRONMENT_HEADERS[currentEnvironment];
-
   return (
     <aside
       className={cn(
@@ -544,28 +567,6 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
         </div>
       </div>
 
-      {/* 🏷️ Environment Header Badge */}
-      {envHeader && (
-        <div className={cn(
-          "px-3 py-2 border-b border-gray-700 h-10 min-h-[40px]",
-          envHeader.bgColor
-        )}>
-          <div className={cn(
-            "flex items-center gap-2 h-full overflow-hidden",
-            envHeader.textColor
-          )}>
-            {envHeader.icon && (
-              <envHeader.icon className="w-4 h-4 flex-shrink-0" />
-            )}
-            {isExpanded && (
-              <span className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
-                {envHeader.label}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
         {sidebarItems.map((item, index) => {
           if (item.divider) {
@@ -577,6 +578,10 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           const isBackButton = item.label === 'Back to Journal';
           const isWarZone = item.path === '/app/all-markets/warzone';
           const isBetaItem = item.beta === true;
+          const isCopilotItem = item.path === '/app/ai/copilot';
+          const showBetaBadge = isBetaItem && !isCopilotItem;
+          const hasChildren = Boolean(item.children?.length);
+          const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
           
           // 🔥 BETA ACCESS: Admins can access locked items
           const isLocked = item.locked === true && !hasBetaAccess;
@@ -587,39 +592,48 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           }
           
           return (
+            <div key={item.path}>
             <button
-              key={item.path}
-              onClick={() => handleNavigation(item.path, item.locked)}
+              onClick={() => {
+                if (hasChildren && isExpanded) {
+                  setOpenGroups(prev => ({ ...prev, [item.path]: true }));
+                }
+                handleNavigation(item.path, item.locked);
+              }}
               onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
               disabled={isLocked}
               title={!isExpanded ? item.label : undefined}
               className={cn(
-                'flex items-center rounded-lg py-2.5 text-sm font-medium transition-all duration-200 relative group',
-                isExpanded ? 'gap-3 px-3' : 'justify-center px-2',
+                sidebarItemBaseClass,
+                isExpanded ? sidebarItemExpandedClass : sidebarItemCollapsedClass,
                 isLocked
                   ? 'text-gray-500 cursor-not-allowed opacity-60'
                   : isBackButton
                     ? 'text-gray-400 hover:bg-base-700 hover:text-white'
                     : isWarZone
                       ? active
-                        ? 'border-l-2 border-red-500 bg-red-500/10 text-red-400'
+                        ? 'border-red-500 bg-red-500/10 text-red-400'
                         : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
+                      : isCopilotItem
+                        ? active
+                          ? 'border-gold bg-gold/15 text-gold shadow-[0_0_18px_rgba(201,166,70,0.16)]'
+                          : 'text-gold hover:bg-gold/10 hover:text-gold'
                       : isBetaItem
                         ? active
-                          ? 'border-l-2 border-orange-500 bg-orange-500/10 text-orange-400'
+                          ? 'border-orange-500 bg-orange-500/10 text-orange-400'
                           : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
                         : active
-                          ? 'border-l-2 border-gold bg-gold/10 text-gold'
+                          ? 'border-gold bg-gold/10 text-gold'
                           : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
               )}
             >
-              {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
+              {Icon && <Icon className={sidebarIconClass} />}
               
               {isExpanded && (
                 <>
-                  <span className="flex-1 truncate">{item.label}</span>
+                  <span className={sidebarLabelClass}>{item.label}</span>
                   {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
-                  {isBetaItem && (
+                  {showBetaBadge && (
                     <span className="px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
                       BETA
                     </span>
@@ -632,7 +646,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                 <div className="absolute left-full ml-3 px-2 py-1 bg-base-900 border border-gray-600 rounded text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
-                  {isBetaItem && (
+                  {showBetaBadge && (
                     <span className="ml-1 px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
                       BETA
                     </span>
@@ -640,6 +654,38 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                 </div>
               )}
             </button>
+
+              {childrenOpen && (
+                <div className="mt-1 space-y-1 pl-4">
+                  {item.children?.map((child) => {
+                    const ChildIcon = child.icon;
+                    const childActive = location.pathname === child.path;
+
+                    if (child.beta && !hasBetaAccess) {
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={child.path}
+                        onClick={() => handleNavigation(child.path)}
+                        onMouseEnter={() => handlePrefetch(child.path)}
+                        className={cn(
+                          sidebarItemBaseClass,
+                          sidebarItemExpandedClass,
+                          childActive
+                            ? 'border-gold bg-gold/10 text-gold'
+                            : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
+                        )}
+                      >
+                        {ChildIcon && <ChildIcon className={sidebarIconClass} />}
+                        <span className={sidebarLabelClass}>{child.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
