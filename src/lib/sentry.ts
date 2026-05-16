@@ -9,10 +9,10 @@ export function initSentry(): void {
   Sentry.init({
     dsn,
     environment: import.meta.env.MODE,
-    tracesSampleRate: 0.1,
+    tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
-    integrations: [Sentry.browserTracingIntegration()],
+    integrations: [],
     beforeSend(event) {
       if (event.user) {
         event.user.email = undefined;
