@@ -49,7 +49,7 @@ export function useIsAffiliate() {
         .from('affiliates')
         .select('id, status, current_tier, affiliate_code')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === 'PGRST116') return null; // Not found
@@ -82,7 +82,7 @@ export function useAffiliateApplication() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === 'PGRST116') return null;
@@ -167,7 +167,7 @@ export function useAffiliateDashboard() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (affError || !affiliate) {
         if (affError?.code === 'PGRST116') return null;
@@ -236,7 +236,7 @@ export function useAffiliateReferrals() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -274,7 +274,7 @@ export function useAffiliateCommissions(limit: number = 50) {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -313,7 +313,7 @@ export function useAffiliatePayouts() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -351,7 +351,7 @@ export function useAffiliateAnalytics(startDate?: string, endDate?: string) {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return null;
 
@@ -396,7 +396,7 @@ export function useUpdateAffiliateProfile() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) throw new Error('Affiliate not found');
 
