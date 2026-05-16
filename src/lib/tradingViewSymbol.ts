@@ -26,29 +26,25 @@ const FUTURES_ROOT_TO_EXCHANGE: Record<string, string> = {
 const FUTURES_PATTERN = /^([A-Z]{1,4})([FGHJKMNQUVXZ])(\d{1,2})$/;
 const CRYPTO_PATTERN = /^[A-Z]{3,10}(USDT|USDC|USD|BUSD)$/;
 
-function expandYearDigit(digits: string): string {
-  // Broker contract codes use 1-2 trailing digits for the year.
-  //   "6"  → 2026
-  //   "26" → 2026
-  // Always anchored in 2020s — futures further out aren't traded by retail.
-  if (digits.length === 1) return `202${digits}`;
-  return `20${digits}`;
-}
-
 export function toTradingViewSymbol(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const symbol = raw.trim().toUpperCase();
   if (!symbol) return null;
 
   // 1. Futures contract: <ROOT><MONTH_CODE><YEAR_DIGITS>
-  //    e.g. MNQM6 → CME_MINI:MNQM2026
+  //    e.g. MNQM6 → CME_MINI:MNQ1! (continuous front-month)
+  //
+  // We deliberately map to the continuous symbol (`<ROOT>1!`) instead of the
+  // expiration-specific one (e.g. MNQM2026). The free TradingView widget only
+  // serves data for continuous front-month — specific months require a paid
+  // TradingView plan. For the front-month window the two are price-identical,
+  // so the chart still shows the price action the user actually traded.
   const futuresMatch = symbol.match(FUTURES_PATTERN);
   if (futuresMatch) {
-    const [, root, monthCode, yearDigits] = futuresMatch;
+    const [, root] = futuresMatch;
     const exchange = FUTURES_ROOT_TO_EXCHANGE[root];
     if (exchange) {
-      const year = expandYearDigit(yearDigits);
-      return `${exchange}:${root}${monthCode}${year}`;
+      return `${exchange}:${root}1!`;
     }
     // Unknown root — let TradingView try to autocomplete from the raw code.
     return symbol;
