@@ -55,18 +55,13 @@ const footerLinks = {
   legal: [
     { label: "Terms of Use", href: "/legal/terms" },
     { label: "Privacy Policy", href: "/legal/privacy" },
-    { label: "Disclaimer", href: "/legal/disclaimer" },
-    { label: "Refund Policy", href: "/legal/refund" },
     { label: "Cookie Policy", href: "/legal/cookies" },
     { label: "Risk Disclosure", href: "/legal/risk-disclosure" },
     { label: "Futures Risk Disclosure", href: "/legal/futures-risk" },
     { label: "CFTC Hypothetical Performance", href: "/legal/cftc-hypothetical-performance" },
     { label: "Testimonial Disclaimer", href: "/legal/testimonial-disclaimer" },
-    { label: "Copyright", href: "/legal/copyright" },
-    { label: "DMCA", href: "/legal/dmca" },
-    { label: "Acceptable Use", href: "/legal/acceptable-use" },
-    { label: "AI Disclaimer", href: "/legal/ai-disclaimer" },
     { label: "Affiliate Disclosure", href: "/legal/affiliate-disclosure" },
+    { label: "All Legal & Disclosures →", href: "/legal" },
   ],
 };
 

@@ -15,6 +15,7 @@ export { default as CftcHypotheticalDisclosure } from './CftcHypotheticalDisclos
 export { default as TestimonialDisclaimer } from './TestimonialDisclaimer';
 export { default as RefundPolicy } from './RefundPolicy';
 export { default as DMCA } from './DMCA';
+export { default as LegalHub } from './LegalHub';
 
 // ✅ NEW: Terms & Conditions Modal (popup version)
 export { default as TermsAndConditionsModal } from './TermsAndConditionsModal';
