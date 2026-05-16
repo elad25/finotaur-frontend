@@ -1,10 +1,12 @@
 // src/components/onboarding/GuidedTour.tsx
 // ================================================
 // 🎯 GUIDED TOUR — Post-registration walkthrough
-// Navigates user through: Top Secret → War Zone → Journal → AI
+// Navigates user through: Top Secret → War Zone → AI → Journal
 // Tooltip positioned below the relevant nav tab
 // Nav area (top nav + sub nav) stays visible — rest is blurred
 // Design: Black + Gold only, full backdrop blur
+// On finish/skip: writes profiles.onboarding_completed_at so the
+// 1h-delayed Journal Risk Setup popup can gate itself correctly.
 // ================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -12,6 +14,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, ChevronRight } from 'lucide-react';
 import { startWelcomeOffer } from './WelcomeOffer';
+import { supabase } from '@/lib/supabase';
 
 // =====================================================
 // TOUR STEPS CONFIGURATION
@@ -32,17 +35,17 @@ const TOUR_STEPS = [
     tooltipSide: 'center' as const,
   },
   {
-    path: '/app/journal/overview',
-    title: 'Trading Journal',
-    tabLabel: 'Journal',
-    description: 'Log every trade, track your P&L, and let AI analyze your patterns. The tool that turns losing streaks into winning systems.',
-    tooltipSide: 'center' as const,
-  },
-  {
     path: '/app/ai/stock-analyzer',
     title: 'AI Suite',
     tabLabel: 'AI Arena',
     description: 'Institutional-grade AI analysis in 30 seconds. Stock analyzer, sector scanner, macro insights — what takes analysts hours, AI delivers instantly.',
+    tooltipSide: 'center' as const,
+  },
+  {
+    path: '/app/journal/overview',
+    title: 'Trading Journal',
+    tabLabel: 'Journal',
+    description: 'Log every trade, track your P&L, and let AI analyze your patterns. The tool that turns losing streaks into winning systems.',
     tooltipSide: 'center' as const,
   },
 ];
@@ -65,6 +68,23 @@ export const isGuidedTourActive = () => {
 export const clearGuidedTour = () => {
   sessionStorage.removeItem(TOUR_STORAGE_KEY);
   sessionStorage.removeItem(TOUR_STEP_KEY);
+};
+
+// Records onboarding completion timestamp in profiles. Best-effort:
+// if the user is not authenticated or the request fails, the tour still
+// ends cleanly. The downstream Journal Risk Setup popup will simply not
+// gate-fire for users without this timestamp.
+const recordOnboardingCompletion = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase
+      .from('profiles')
+      .update({ onboarding_completed_at: new Date().toISOString() })
+      .eq('id', user.id);
+  } catch (err) {
+    console.warn('GuidedTour: failed to record onboarding completion', err);
+  }
 };
 
 // =====================================================
@@ -241,9 +261,10 @@ export default function GuidedTour() {
       setCurrentStep(nextStep);
       sessionStorage.setItem(TOUR_STEP_KEY, String(nextStep));
     } else {
-      // Tour complete — start welcome offer & stay on last page
+      // Tour complete — record completion, start welcome offer, stay on last page
       clearGuidedTour();
       setIsActive(false);
+      void recordOnboardingCompletion();
       startWelcomeOffer();
     }
   }, [currentStep]);
@@ -252,6 +273,7 @@ export default function GuidedTour() {
     setIsVisible(false);
     clearGuidedTour();
     setIsActive(false);
+    void recordOnboardingCompletion();
     startWelcomeOffer();
   }, []);
 

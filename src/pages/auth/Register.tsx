@@ -1,6 +1,6 @@
 // src/pages/auth/Register.tsx
 // 📝 REGISTRATION PAGE WITH TERMS ACCEPTANCE CHECKBOX + MODAL POPUP
-// 🎯 UPDATED: After registration → Guided Tour (War Zone → Top Secret → Journal → AI)
+// After registration → /welcome screen (Start Tour / Skip)
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
@@ -13,7 +13,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
-import { startGuidedTour, isGuidedTourActive } from '@/components/onboarding/GuidedTour';
 import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation';
 
 // Current terms version - update when terms change
@@ -48,6 +47,9 @@ function getSafeFrom(from: string | undefined): string {
   if (from && from.startsWith('/app/')) return from;
   return '/app/top-secret';
 }
+
+// New users land on /welcome. Returning users (welcome seen) go to /app/top-secret.
+const POST_REGISTER_NEW_USER_DEST = '/welcome';
 
 export default function Register() {
   const { user, register, signInWithGoogle } = useAuth();
@@ -109,23 +111,17 @@ export default function Register() {
           return;
         }
 
+        // Returning user with completed onboarding → go where they intended
         if (data?.onboarding_completed && data?.account_type) {
-          // 🎯 If guided tour is active, go to the first tour stop
-          if (isGuidedTourActive()) {
-            navigate('/app/top-secret', { replace: true });
-            return;
-          }
-          navigate('/app/journal/overview', { replace: true });
+          navigate(postRegisterDest, { replace: true });
           return;
         }
 
-        // 🎯 If guided tour is active (new registration), skip onboarding and go to tour
-        if (isGuidedTourActive()) {
-          navigate('/app/top-secret', { replace: true });
-          return;
-        }
-
-        navigate(postRegisterDest, { replace: true });
+        // New user (first-time signup) → welcome screen. We deliberately do
+        // NOT gate on localStorage here: every fresh signup deserves the
+        // welcome screen, even if a previous signup in the same browser
+        // already marked the local flag.
+        navigate(POST_REGISTER_NEW_USER_DEST, { replace: true });
       } catch (error) {
         console.error('Unexpected error:', error);
         setChecking(false);
@@ -197,9 +193,7 @@ export default function Register() {
         }
       }
 
-      // 🎯 Start guided tour AFTER successful registration
-      startGuidedTour();
-
+      // Tour is no longer auto-started here; the /welcome screen handles that.
       toast.success('Account created successfully!');
 
     } catch (error: any) {
@@ -238,10 +232,8 @@ export default function Register() {
       // ✅ Store terms acceptance in localStorage for Google OAuth flow
       localStorage.setItem('pending_terms_accepted_at', new Date().toISOString());
       localStorage.setItem('pending_terms_version', CURRENT_TERMS_VERSION);
-      
-      // 🎯 Start guided tour BEFORE signIn so it's ready when checkUserStatus runs
-      startGuidedTour();
-      
+
+      // Tour is no longer auto-started here; the /welcome screen handles that.
       await signInWithGoogle();
     } catch (error: any) {
       console.error('Google sign in error:', error);

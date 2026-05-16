@@ -1,24 +1,23 @@
 // ================================================
 // ONBOARDING DIALOG - 4 STEPS WITH RISK SETUP
-// ✅ Step 1: Welcome to Finotaur
-// ✅ Step 2: Set Your Risk Parameters (explains why)
-// ✅ Step 3: Risk Management Setup (actual configuration!)
-// ✅ Step 4: Start Trading Smartly (ready to go)
-// 
-// Replaces WelcomePopup.tsx - now everything is configured in the onboarding
-// No redirect to Settings needed!
+// Self-mounting, self-gating popup. Renders globally in App.tsx.
+//
+// Trigger gate (all must be true):
+//   1. Route is under /app/journal/*
+//   2. User is authenticated AND has a profile row
+//   3. profiles.onboarding_completed_at is set AND > 1h ago
+//   4. localStorage 'finotaur_seen_welcome' is NOT set
+//
+// On close/skip/complete: writes 'finotaur_seen_welcome' so it never
+// re-fires for the same user on the same browser.
 // ================================================
 
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { X, DollarSign, Percent, AlertCircle, CheckCircle2, TrendingUp, Info, Zap, Shield, Target, ArrowRight } from 'lucide-react';
 import { formatNumber } from '@/utils/smartCalc';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-
-interface WelcomePopupProps {
-  open: boolean;
-  onClose: () => void;
-}
 
 type RiskMode = 'percentage' | 'fixed';
 
@@ -34,31 +33,73 @@ const DEFAULT_SETTINGS: RiskSettings = {
   riskPerTrade: 1,
 };
 
-// Export as WelcomePopup for backwards compatibility
-export function WelcomePopup({ open, onClose }: WelcomePopupProps) {
+const STORAGE_KEY_SEEN = 'finotaur_seen_welcome';
+const ONBOARDING_DELAY_MS = 60 * 60 * 1000; // 1 hour
+
+export function WelcomePopup() {
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
   const [settings, setSettings] = useState<RiskSettings>(DEFAULT_SETTINGS);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Load user ID on mount
-  useEffect(() => {
-    if (open) {
-      loadUser();
-    }
-  }, [open]);
-
-  const loadUser = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
-    } catch (e) {
-      console.error('Failed to load user:', e);
-    }
+  // Mark as seen and close. The flag is per-browser (localStorage) so a
+  // user on a fresh device would re-trigger — acceptable since the popup
+  // is harmless re-prompted: it just lets them re-confirm their risk setup.
+  const markSeenAndClose = () => {
+    localStorage.setItem(STORAGE_KEY_SEEN, 'true');
+    setOpen(false);
   };
+
+  // Gate evaluation. Runs on every route change (cheap — only DB-hits on a
+  // journal route that has never been gated for this browser).
+  useEffect(() => {
+    let cancelled = false;
+
+    const evaluateGate = async () => {
+      // Quick local checks first — avoid network for the common cases.
+      if (!location.pathname.startsWith('/app/journal')) return;
+      if (localStorage.getItem(STORAGE_KEY_SEEN) === 'true') return;
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('onboarding_completed_at')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (error || !data || cancelled) return;
+
+        const completedAt = data.onboarding_completed_at
+          ? new Date(data.onboarding_completed_at as string).getTime()
+          : null;
+
+        // Skip if onboarding never recorded (pre-existing user or new user
+        // who skipped pre-tour) — we don't want to annoy them.
+        if (!completedAt) return;
+
+        const elapsed = Date.now() - completedAt;
+        if (elapsed < ONBOARDING_DELAY_MS) return;
+
+        setUserId(user.id);
+        setStep(1);
+        setOpen(true);
+      } catch (e) {
+        console.warn('WelcomePopup gate evaluation failed:', e);
+      }
+    };
+
+    void evaluateGate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
 
   // Calculate 1R value
   const calculated1R =
@@ -106,16 +147,15 @@ export function WelcomePopup({ open, onClose }: WelcomePopupProps) {
           portfolio_size: settings.portfolioSize,
           risk_mode: settings.riskMode,
           risk_per_trade: settings.riskPerTrade,
-          risk_configured: true,
           onboarding_completed: true,
         })
         .eq('id', userId);
 
       if (error) throw error;
-      
-      // Mark as seen in localStorage
-      localStorage.setItem('finotaur_seen_welcome', 'true');
-      
+
+      // Mark as seen — gate will not re-fire even if this popup is unmounted/remounted.
+      localStorage.setItem(STORAGE_KEY_SEEN, 'true');
+
       return true;
     } catch (e) {
       console.error('Failed to save risk settings:', e);
@@ -136,7 +176,7 @@ export function WelcomePopup({ open, onClose }: WelcomePopupProps) {
     } else if (step === 4) {
       // Final step - complete onboarding
       toast.success('Welcome to Finotaur! 🎉');
-      onClose();
+      markSeenAndClose();
     } else {
       // Steps 1-2 - just move forward
       setStep(step + 1);
@@ -150,9 +190,7 @@ export function WelcomePopup({ open, onClose }: WelcomePopupProps) {
   };
 
   const handleSkip = () => {
-    // Mark as seen and close
-    localStorage.setItem('finotaur_seen_welcome', 'true');
-    onClose();
+    markSeenAndClose();
   };
 
   if (!open) return null;

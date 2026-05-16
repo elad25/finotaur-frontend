@@ -27,6 +27,8 @@ import { BetaRoute } from "@/components/routes/BetaRoute";
 // 🎯 Guided Tour
 import GuidedTour from "@/components/onboarding/GuidedTour";
 import WelcomeOffer from "@/components/onboarding/WelcomeOffer";
+import { WelcomePopup } from "@/components/WelcomePopup";
+import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
 
@@ -290,6 +292,8 @@ function AppContent() {
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
       <WelcomeOffer />
+      {/* Risk Setup popup — self-gated: only on /app/journal/* + 1h after onboarding completion */}
+      <WelcomePopup />
       <Routes>
         {/* DEV-ONLY: Design system playground (tree-shaken in prod) */}
         {import.meta.env.DEV && (
@@ -305,6 +309,8 @@ function AppContent() {
         <Route path="/auth/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/reset-password" element={<ResetPassword />} />
+        {/* Post-signup welcome screen (top-level, no app nav) */}
+        <Route path="/welcome" element={<ProtectedRoute><WelcomeScreen /></ProtectedRoute>} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />

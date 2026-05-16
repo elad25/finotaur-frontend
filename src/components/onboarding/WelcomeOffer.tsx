@@ -25,13 +25,12 @@ const PROMO_CODE = 'WELCOME10'; // ← Your Whop promo code
 // PUBLIC API
 // =====================================================
 
-/** Start the offer — call from GuidedTour when tour ends */
+/** Start the offer — call from GuidedTour when tour ends. */
 export const startWelcomeOffer = () => {
   if (localStorage.getItem(STORAGE_KEY_USED) === 'true') return;
   if (localStorage.getItem(STORAGE_KEY_EXPIRY)) return;
   const expiry = Date.now() + OFFER_DURATION_MS;
   localStorage.setItem(STORAGE_KEY_EXPIRY, String(expiry));
-  localStorage.removeItem(STORAGE_KEY_DISMISSED);
 };
 
 /** Check if offer is still valid */
@@ -71,7 +70,11 @@ const formatTime = (ms: number) => {
 // =====================================================
 export default function WelcomeOffer() {
   const [isActive, setIsActive] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
+  // Hard rule: the card NEVER opens on its own. Mount/reload always shows
+  // only the floating icon. The card is shown exclusively after the user
+  // clicks the icon (handleReopen) and stays open until they minimize/close
+  // it — at which point it returns to icon-only until the next icon click.
+  const [isMinimized, setIsMinimized] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [pulseGift, setPulseGift] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,12 +116,9 @@ export default function WelcomeOffer() {
     return () => clearInterval(poll);
   }, [tick]);
 
-  // Restore minimized state
-  useEffect(() => {
-    if (isActive) {
-      setIsMinimized(localStorage.getItem(STORAGE_KEY_DISMISSED) === 'true');
-    }
-  }, [isActive]);
+  // Note: no effect restores isMinimized from localStorage. The card is
+  // intentionally NEVER auto-opened — only the icon shows by default, and
+  // the user must click it to expand.
 
   // Pulse gift icon when minimized
   useEffect(() => {
@@ -136,12 +136,10 @@ export default function WelcomeOffer() {
 
   const handleMinimize = () => {
     setIsMinimized(true);
-    localStorage.setItem(STORAGE_KEY_DISMISSED, 'true');
   };
 
   const handleReopen = () => {
     setIsMinimized(false);
-    localStorage.removeItem(STORAGE_KEY_DISMISSED);
   };
 
   const handleClaim = async () => {
