@@ -38,6 +38,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
+import { TradeChart } from "@/components/journal/TradeChart";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { toast } from "sonner";
 import {
@@ -1891,21 +1892,7 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                 <div className="p-6 space-y-5 min-h-full">
                   
                   {/* 📊 CHART SECTION - FIRST */}
-                  <div className="rounded-xl border-2 border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-6 shadow-2xl">
-                    <h3 className="text-sm font-bold text-zinc-300 mb-5 uppercase tracking-wider flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5" />
-                      📊 PRICE CHART
-                    </h3>
-                    <div className="w-full h-[600px] bg-zinc-950 rounded-xl border-2 border-zinc-800 flex items-center justify-center shadow-2xl">
-                      <div className="text-center">
-                        <div className="w-20 h-20 rounded-full bg-yellow-500/10 flex items-center justify-center mx-auto mb-5 animate-pulse">
-                          <TrendingUp className="w-10 h-10 text-yellow-500" />
-                        </div>
-                        <p className="text-zinc-400 text-base mb-3 font-semibold">Chart Integration</p>
-                        <p className="text-zinc-600 text-sm">TradingView chart will be displayed here</p>
-                      </div>
-                    </div>
-                  </div>
+                  <TradeChart trade={selectedTrade} />
 
                   {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) - 🔥 UPDATED! */}
                   <div className="rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">
