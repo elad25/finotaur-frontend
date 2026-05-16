@@ -43,7 +43,10 @@ export class ErrorBoundary extends Component<Props, State> {
       this.props.onError(error, errorInfo);
     }
     
-    captureException(error, { componentStack: errorInfo.componentStack });
+    captureException(error, {
+      extra: { componentStack: errorInfo.componentStack },
+      tags: { boundary: 'journal' },
+    });
   }
 
   handleReset = () => {

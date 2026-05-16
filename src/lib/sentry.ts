@@ -12,7 +12,7 @@ export function initSentry(): void {
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
-    integrations: [],
+    integrations: [Sentry.browserTracingIntegration()],
     beforeSend(event) {
       if (event.user) {
         event.user.email = undefined;
@@ -36,7 +36,26 @@ export function initSentry(): void {
   sentryReady = true;
 }
 
-export function captureException(error: unknown, context?: Record<string, unknown>): void {
+type CaptureOptions = {
+  extra?: Record<string, unknown>;
+  tags?: Record<string, string>;
+};
+
+export function captureException(
+  error: unknown,
+  optsOrExtra?: CaptureOptions | Record<string, unknown>,
+): void {
   if (!sentryReady) return;
-  Sentry.captureException(error, { extra: context });
+
+  const isStructured =
+    !!optsOrExtra &&
+    typeof optsOrExtra === 'object' &&
+    ('extra' in optsOrExtra || 'tags' in optsOrExtra);
+
+  if (isStructured) {
+    const { extra, tags } = optsOrExtra as CaptureOptions;
+    Sentry.captureException(error, { extra, tags });
+  } else {
+    Sentry.captureException(error, { extra: optsOrExtra as Record<string, unknown> | undefined });
+  }
 }
