@@ -1370,10 +1370,12 @@ function JournalOverviewContent() {
       // Free user → send to pricing page
       navigate('/app/journal/pricing');
     } else {
-      // Paid user without connection → open SnapTrade popup
-      setShowSnapTradePopup(true);
+      // Paid user without connection → open the live Add-Broker popup
+      // (the SnapTrade stub was removed in Phase A1 Step 2; this CTA used
+      // to land on a maintenance message which blocked paying testers).
+      openAddBrokerPopup();
     }
-  }, [isFreeUser, navigate]);
+  }, [isFreeUser, navigate, openAddBrokerPopup]);
   
   const handleGeneratePDF = useCallback(() => {
     window.print();
