@@ -13,6 +13,7 @@ import AISection from '@/components/landing-new/AISection';
 import CoreSystem from '@/components/landing-new/CoreSystem';
 import ProductShowcase from '@/components/landing-new/ProductShowcase';
 import DesignPhilosophy from '@/components/landing-new/DesignPhilosophy';
+import PartnershipRow from '@/components/landing-new/PartnershipRow';
 import Testimonials from '@/components/landing-new/Testimonials';
 import Vision from '@/components/landing-new/Vision';
 import Pricing from '@/components/landing-new/Pricing';
@@ -22,7 +23,7 @@ import Footer from '@/components/landing-new/Footer';
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+    <div className="landing-mono-default min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
 
@@ -89,6 +90,7 @@ const LandingPage = () => {
       <AISection />
       <CoreSystem />
       <ProductShowcase />
+      <PartnershipRow />
       <DesignPhilosophy />
       <Testimonials />
       <Vision />

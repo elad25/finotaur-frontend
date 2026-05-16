@@ -71,7 +71,7 @@ const HeroSection = () => {
                 <span className="relative inline-block mt-2">
                   <span className="absolute inset-0 blur-3xl opacity-40 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] animate-pulse" style={{ animationDuration: '4s' }} />
                   <span className="relative text-[#C9A646] bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
-                    Pure Profit
+                    Pure Edge
                   </span>
                 </span>
               </h1>
@@ -653,7 +653,7 @@ const TestimonialsSection = () => {
             <span className="italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] to-[#F4D97B]">Real Results.</span>
           </h2>
           <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-            Join hundreds of traders who turned data into discipline — and discipline into profit.
+            Join hundreds of traders who turned data into discipline — and discipline into consistency.
           </p>
         </motion.div>
 

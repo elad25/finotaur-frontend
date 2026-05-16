@@ -122,7 +122,7 @@ const HeroSection = () => {
                 <span className="relative inline-block mt-2">
                   <span className="absolute inset-0 blur-3xl opacity-40 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] animate-pulse" style={{ animationDuration: '4s' }} />
                   <span className="relative text-[#C9A646] bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] bg-clip-text text-transparent">
-                    Pure Profit
+                    Pure Edge
                   </span>
                 </span>
               </h1>
