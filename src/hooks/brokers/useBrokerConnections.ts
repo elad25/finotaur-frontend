@@ -141,12 +141,31 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
         return { success: false, error: `Reconnect not implemented for ${conn.broker}` };
       }
 
-      const { error: e } = await supabase.functions.invoke('tradovate-auth', {
+      const { data, error: e } = await supabase.functions.invoke('tradovate-auth', {
         body: { mode: 'reconnect', credentialId: id, userId },
       });
       if (e) {
         toast.error(e.message || 'Reconnect failed');
         return { success: false, error: e.message };
+      }
+      // OQ-87: edge function signals when the vault entry is missing and a
+      // fresh credential entry is required. The caller (Overview.tsx) reacts
+      // by opening the AddBrokerPopup so the user can re-enter username +
+      // password; mode='login' then upserts on the same broker_connections
+      // row via the (user_id, broker, account_id) unique constraint.
+      const payload = (data ?? {}) as {
+        requires_credentials?: boolean;
+        environment?: string | null;
+        error?: string;
+      };
+      if (payload.requires_credentials) {
+        invalidate();
+        return {
+          success: false,
+          requires_credentials: true,
+          environment: payload.environment ?? conn.environment ?? null,
+          error: payload.error ?? 'vault_creds_missing',
+        };
       }
       invalidate();
       qc.invalidateQueries({ queryKey: ['trades'] });

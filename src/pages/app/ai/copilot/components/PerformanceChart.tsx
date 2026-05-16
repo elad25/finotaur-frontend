@@ -1,0 +1,170 @@
+import { useMemo, useState } from 'react';
+import { Card } from '@/components/ds/Card';
+import { PerformancePoint } from '../hooks/usePortfolioMockData';
+import { cn } from '@/lib/utils';
+
+interface Props {
+  series: PerformancePoint[];
+}
+
+type Mode = 'dollar' | 'percent';
+
+const CHART_WIDTH = 760;
+const CHART_HEIGHT = 286;
+const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
+
+export function PerformanceChart({ series }: Props) {
+  const [mode, setMode] = useState<Mode>('dollar');
+
+  const chart = useMemo(() => {
+    if (series.length === 0) {
+      return { path: '', areaPath: '', ticks: [] as number[], min: 0, max: 0 };
+    }
+
+    const start = series[0].value;
+    const values = series.map((point) =>
+      mode === 'dollar' ? point.value : ((point.value - start) / start) * 100
+    );
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
+    const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
+
+    const coords = values.map((value, index) => {
+      const x = PADDING.left + (index / Math.max(values.length - 1, 1)) * innerWidth;
+      const y = PADDING.top + (1 - (value - min) / range) * innerHeight;
+      return [x, y] as const;
+    });
+
+    const path = coords.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+    const first = coords[0];
+    const last = coords[coords.length - 1];
+    const baseline = CHART_HEIGHT - PADDING.bottom;
+    const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + range * ratio);
+
+    return { path, areaPath, ticks, min, max };
+  }, [series, mode]);
+
+  const formatTick = (value: number) => {
+    if (mode === 'percent') return `${value >= 0 ? '+' : ''}${value.toFixed(0)}%`;
+    return `$${(value / 1000).toFixed(0)}k`;
+  };
+
+  return (
+    <Card className="relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
+      <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(135deg,rgba(244,217,123,0.065),transparent_32%,rgba(201,166,70,0.025))]" />
+      <div className="relative">
+        <div className="flex items-start justify-between mb-4 gap-4">
+          <div>
+            <h2 className="text-[13px] font-normal uppercase text-gold-primary">PERFORMANCE</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-[10px] uppercase text-ink-tertiary">
+              <span>TIME RANGE</span>
+              {['1D', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'ALL'].map((label) => (
+                <span
+                  key={label}
+                  className={label === '1Y' ? 'rounded-[4px] border border-gold-primary/28 bg-gold-primary/10 px-2 py-1 text-gold-primary' : ''}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 p-1 rounded-[8px] bg-black/35 border border-gold-primary/15">
+            <button
+              onClick={() => setMode('dollar')}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
+                mode === 'dollar' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
+              )}
+            >
+              $
+            </button>
+            <button
+              onClick={() => setMode('percent')}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
+                mode === 'percent' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
+              )}
+            >
+              %
+            </button>
+          </div>
+        </div>
+
+        <svg className="h-[286px] w-full overflow-visible" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label="Portfolio performance chart">
+          <defs>
+            <linearGradient id="copilotSvgArea" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#F4D97B" stopOpacity="0.30" />
+              <stop offset="100%" stopColor="#C9A646" stopOpacity="0.02" />
+            </linearGradient>
+            <linearGradient id="copilotSvgLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#A98220" />
+              <stop offset="42%" stopColor="#F4D97B" />
+              <stop offset="100%" stopColor="#C9A646" />
+            </linearGradient>
+          </defs>
+
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = PADDING.top + ratio * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+            return (
+              <line
+                key={`h-${ratio}`}
+                x1={PADDING.left}
+                x2={CHART_WIDTH - PADDING.right}
+                y1={y}
+                y2={y}
+                stroke="rgba(201,166,70,0.08)"
+                strokeDasharray="4 6"
+              />
+            );
+          })}
+          {[0, 0.2, 0.4, 0.6, 0.8, 1].map((ratio) => {
+            const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
+            return (
+              <line
+                key={`v-${ratio}`}
+                y1={PADDING.top}
+                y2={CHART_HEIGHT - PADDING.bottom}
+                x1={x}
+                x2={x}
+                stroke="rgba(201,166,70,0.055)"
+                strokeDasharray="4 6"
+              />
+            );
+          })}
+
+          {chart.ticks.map((tick, index) => {
+            const y = CHART_HEIGHT - PADDING.bottom - (index / Math.max(chart.ticks.length - 1, 1)) * (CHART_HEIGHT - PADDING.top - PADDING.bottom);
+            return (
+              <text key={tick} x={PADDING.left - 10} y={y + 4} textAnchor="end" fill="rgba(255,255,255,0.42)" fontSize="10">
+                {formatTick(tick)}
+              </text>
+            );
+          })}
+
+          <path d={chart.areaPath} fill="url(#copilotSvgArea)" />
+          <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+
+        <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
+          {[
+            ['RETURN (1Y)', '+24.67%', 'text-emerald-300'],
+            ['ALPHA', '+7.38%', 'text-emerald-300'],
+            ['SHARPE RATIO', '1.68', 'text-white'],
+            ['MAX DRAWDOWN', '-8.91%', 'text-white'],
+            ['VOLATILITY', '14.32%', 'text-gold-primary'],
+            ['WINNING DAYS', '63.2%', 'text-white'],
+          ].map(([label, value, color]) => (
+            <div key={label} className="px-3 py-3 border-r border-gold-primary/10 last:border-r-0">
+              <p className="text-[9px] uppercase text-ink-tertiary">{label}</p>
+              <p className={`mt-2 font-mono text-sm tabular-nums ${color}`}>{value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}

@@ -59,8 +59,14 @@ const footerLinks = {
     { label: "Refund Policy", href: "/legal/refund" },
     { label: "Cookie Policy", href: "/legal/cookies" },
     { label: "Risk Disclosure", href: "/legal/risk-disclosure" },
+    { label: "Futures Risk Disclosure", href: "/legal/futures-risk" },
+    { label: "CFTC Hypothetical Performance", href: "/legal/cftc-hypothetical-performance" },
+    { label: "Testimonial Disclaimer", href: "/legal/testimonial-disclaimer" },
     { label: "Copyright", href: "/legal/copyright" },
     { label: "DMCA", href: "/legal/dmca" },
+    { label: "Acceptable Use", href: "/legal/acceptable-use" },
+    { label: "AI Disclaimer", href: "/legal/ai-disclaimer" },
+    { label: "Affiliate Disclosure", href: "/legal/affiliate-disclosure" },
   ],
 };
 
@@ -187,7 +193,7 @@ const Footer = () => {
           </p>
           <div className="flex items-center gap-1.5 text-ink-muted text-[10px]">
             <Shield className="w-3 h-3 text-gold-primary/40" />
-            <span>Bank-grade encryption · SOC 2 Compliant</span>
+            <span>Encrypted at rest · Privacy-first</span>
           </div>
         </div>
       </div>

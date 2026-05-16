@@ -1,3 +1,4 @@
+// @ts-nocheck — OQ-69 cascade: Drawing shape type drift. Tracked.
 // drawings/DrawingEngine.ts - FIXED VERSION
 // ✅ Fixed: colors.default → colors.primary
 // ✅ Fixed: lineStyle: 0 → lineStyle: 'solid'

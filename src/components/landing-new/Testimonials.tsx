@@ -240,7 +240,7 @@ const Testimonials = () => {
           <span className="text-gold-primary">Real Results.</span>
         </SectionTitle>
         <p className="text-lg text-ink-secondary max-w-2xl mx-auto mt-2">
-          Join hundreds of traders who turned data into discipline — and discipline into profit.
+          Join hundreds of traders who turned data into discipline — and discipline into consistency.
         </p>
       </div>
 

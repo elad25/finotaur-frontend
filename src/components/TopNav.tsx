@@ -109,9 +109,10 @@ export const TopNav = () => {
 
   const handleTabClick = (id: string) => {
     const domain = domains[id];
+    const isTradeCopierBeta = id === 'copy-trade' && domain?.beta === true;
     
     // 🔥 BETA ACCESS: Allow navigation to locked domains for beta users
-    if (domain?.locked && !hasBetaAccess) {
+    if ((domain?.locked || isTradeCopierBeta) && !hasBetaAccess) {
       return;
     }
     
@@ -170,12 +171,13 @@ export const TopNav = () => {
               const domain = domains[id];
               const isActive = domainId === id;
               const isBetaDomain = domain?.beta === true;
+              const isTradeCopierBeta = id === 'copy-trade' && isBetaDomain;
               
               // 🔥 BETA ACCESS: Override locked status for beta users
-              const locked = domain?.locked && !hasBetaAccess;
+              const locked = (domain?.locked || isTradeCopierBeta) && !hasBetaAccess;
               
-              // 🔥 Hide beta domains from non-beta users
-              if (isBetaDomain && !hasBetaAccess) {
+              // 🔥 Hide beta domains from non-beta users, except Trade Copier which stays visible but locked.
+              if (isBetaDomain && !hasBetaAccess && !isTradeCopierBeta) {
                 return null;
               }
 
@@ -195,7 +197,7 @@ export const TopNav = () => {
                       ? 'bg-[#C9A646]/10 text-[#C9A646] shadow-[0_0_12px_rgba(201,166,70,0.15)]'
                       : 'text-[#A0A0A0] hover:bg-[#1A1A1A] hover:text-[#F4F4F4]'
                   }`}
-                  title={locked ? 'Coming Soon' : isBetaDomain ? 'Beta Feature' : undefined}
+                  title={locked ? 'Beta access required' : isBetaDomain ? 'Beta Feature' : undefined}
                   style={isActive && !locked ? { 
                     borderBottom: isBetaDomain ? '2px solid #f97316' : '2px solid #C9A646' 
                   } : {}}
@@ -382,12 +384,13 @@ export const TopNav = () => {
           const domain = domains[id];
           const isActive = domainId === id;
           const isBetaDomain = domain?.beta === true;
+          const isTradeCopierBeta = id === 'copy-trade' && isBetaDomain;
           
           // 🔥 BETA ACCESS: Override locked status for beta users
-          const locked = domain?.locked && !hasBetaAccess;
+          const locked = (domain?.locked || isTradeCopierBeta) && !hasBetaAccess;
           
-          // 🔥 Hide beta domains from non-beta users
-          if (isBetaDomain && !hasBetaAccess) {
+          // 🔥 Hide beta domains from non-beta users, except Trade Copier which stays visible but locked.
+          if (isBetaDomain && !hasBetaAccess && !isTradeCopierBeta) {
             return null;
           }
 

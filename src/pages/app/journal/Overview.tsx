@@ -16,16 +16,15 @@
 import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import PageTitle from "@/components/PageTitle";
 import dayjs from "dayjs";
 import { FEATURES } from "@/config/features";
 import {
   PlusSquare, FileText, Layers, BarChart3, Calendar as CalendarIcon,
   MessageSquare, ListChecks, Users, GraduationCap, Settings as SettingsIcon,
   Sparkles, TrendingUp, TrendingDown, UserPlus, Link2, CheckCircle2, Lock, 
-  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check, Upload, 
+  Crown, X, Zap, FileEdit, ArrowRight, HelpCircle, Check, 
   FileSpreadsheet, Download, ChevronLeft, ChevronRight, CalendarRange,
-  RefreshCw, Wifi, WifiOff, AlertCircle
+  RefreshCw, Wifi, WifiOff, AlertCircle, Target
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
 import { useAuth } from "@/providers/AuthProvider";
@@ -34,13 +33,11 @@ import {
   useDashboardStats,
   formatCurrency,
   formatPercentage,
-  getPnLColor,
   type DashboardStats
 } from "@/hooks/useDashboardData";
-import { BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
+import { BORDER_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { prefetchTrades, prefetchStrategies, prefetchAnalytics, prefetchSettingsData } from "@/lib/queryClient";
-import { DashboardKpiCard } from "@/components/DashboardKpiCard";
 
 // ================================================
 // NEW: AFFILIATE STATUS HOOK
@@ -66,7 +63,10 @@ const BrokerConnectionPopup = lazy(() => import("@/components/BrokerConnectionPo
 const TradovateConnectModal = lazy(() => import("@/components/TradovateConnectModal"));
 const BrokerPickerModal = lazy(() => import("@/components/BrokerPickerModal"));
 const ImportTradesPopup = lazy(() => import("@/components/Importtradespopup"));
-const AddBrokerPopup = lazy(() => import("@/components/broker/AddBrokerPopup"));
+const BrokerReconnectModal = lazy(() =>
+  import("@/components/broker/BrokerReconnectModal").then((m) => ({ default: m.BrokerReconnectModal })),
+);
+import AddBrokerPopup from "@/components/broker/AddBrokerPopup";
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -111,6 +111,206 @@ interface DataPoint {
   value: number;
   isProfit: boolean;
 }
+
+const JOURNAL_PANEL =
+  "relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]";
+
+const JournalInfoIcon = ({
+  label,
+  className = "h-3.5 w-3.5",
+}: {
+  label: string;
+  className?: string;
+}) => (
+  <HelpCircle
+    className={`${className} shrink-0 cursor-help text-white/38 transition-colors hover:text-[#E8C766]`}
+    aria-label={label}
+    role="img"
+    title={label}
+  />
+);
+
+const formatPlainCurrency = (value: number): string => {
+  const abs = Math.abs(value || 0);
+  const formatted = abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value < 0 ? "-" : ""}$${formatted}`;
+};
+
+const formatSignedCurrency = (value: number): string => {
+  const abs = Math.abs(value || 0);
+  const formatted = abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${value >= 0 ? "+" : "-"}$${formatted}`;
+};
+
+const KpiSparkline = React.memo(({ type = "line" }: { type?: "line" | "bars" | "target" }) => {
+  if (type === "bars") {
+    const bars = [28, 42, 34, 62, -36, 44, 88];
+    return (
+      <div className="relative flex h-12 w-[72px] items-center justify-end overflow-hidden rounded-md">
+        <div className="absolute inset-x-1 top-1/2 h-px bg-[#C9A646]/12" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_74%_35%,rgba(201,166,70,0.16),transparent_48%)]" />
+        <div className="relative flex h-full items-center justify-end gap-1.5">
+          {bars.map((bar, index) => {
+            const positive = bar >= 0;
+            return (
+              <span
+                key={index}
+                className="relative flex w-2 justify-center"
+                style={{
+                  height: `${Math.abs(bar)}%`,
+                  alignSelf: positive ? "flex-start" : "flex-end",
+                  marginTop: positive ? `${100 - Math.abs(bar)}%` : 0,
+                }}
+              >
+                <span
+                  className={`absolute inset-0 rounded-full shadow-[0_0_10px_rgba(59,199,110,0.26)] ${
+                    positive
+                      ? "bg-[linear-gradient(180deg,#6FE49B_0%,#2CBD67_58%,#176C3D_100%)]"
+                      : "bg-[linear-gradient(180deg,#FF756F_0%,#EF4444_64%,#8F1F24_100%)] shadow-[0_0_10px_rgba(239,68,68,0.22)]"
+                  }`}
+                />
+                <span className="absolute left-1 top-1 h-[55%] w-px rounded-full bg-white/32" />
+              </span>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === "target") {
+    return (
+      <div className="relative flex h-14 w-14 items-center justify-center">
+        <div className="absolute inset-1 rounded-full border border-white/10" />
+        <div className="absolute inset-3 rounded-full border border-[#E8C766]/55" />
+        <div className="absolute inset-[1.35rem] rounded-full bg-[#E8C766]" />
+        <Target className="relative h-8 w-8 text-[#E8C766]" strokeWidth={1.8} />
+      </div>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 120 52" className="h-12 w-[78px] overflow-visible" aria-hidden="true">
+      <defs>
+        <linearGradient id="journal-kpi-line" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#173B27" />
+          <stop offset="42%" stopColor="#45D982" />
+          <stop offset="72%" stopColor="#C9A646" />
+          <stop offset="100%" stopColor="#35D879" />
+        </linearGradient>
+        <linearGradient id="journal-kpi-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#45D982" stopOpacity="0.24" />
+          <stop offset="100%" stopColor="#45D982" stopOpacity="0" />
+        </linearGradient>
+        <filter id="journal-kpi-glow" x="-40%" y="-70%" width="180%" height="220%">
+          <feGaussianBlur stdDeviation="2.4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10 L112 52 L8 52 Z"
+        fill="url(#journal-kpi-fill)"
+        opacity="0.75"
+      />
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10"
+        fill="none"
+        stroke="rgba(255,255,255,0.28)"
+        strokeWidth="5"
+        strokeLinecap="round"
+        opacity="0.18"
+      />
+      <path
+        d="M8 42 C24 38 28 17 43 22 S63 43 78 26 S94 11 112 10"
+        fill="none"
+        stroke="url(#journal-kpi-line)"
+        strokeWidth="2.3"
+        strokeLinecap="round"
+        filter="url(#journal-kpi-glow)"
+      />
+      <circle cx="112" cy="10" r="2.5" fill="#E8C766" opacity="0.95" />
+    </svg>
+  );
+});
+KpiSparkline.displayName = "KpiSparkline";
+
+const JournalKpiCard = React.memo(({
+  label,
+  value,
+  hint,
+  tone = "gold",
+  icon,
+  visual = "icon",
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "green" | "gold" | "red";
+  icon?: React.ReactNode;
+  visual?: "icon" | "gauge" | "line" | "bars" | "target";
+  tooltip: string;
+}) => {
+  const valueColor =
+    tone === "green" ? "text-[#3BC76E]" : tone === "red" ? "text-[#EF4444]" : "text-[#F2C85F]";
+
+  return (
+    <div className={`${JOURNAL_PANEL} min-h-[94px] px-4 py-3`}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_50%,rgba(255,255,255,0.035),transparent_32%)]" />
+      <div className="relative grid h-full grid-cols-[minmax(0,1fr)_66px] items-center gap-3">
+        <div className="min-w-0 pr-1">
+          <div className="mb-2 flex min-w-0 items-center gap-1.5">
+            <span className="truncate whitespace-nowrap text-[11px] font-semibold text-white/82">{label}</span>
+            <JournalInfoIcon label={tooltip} className="h-3 w-3" />
+          </div>
+          <div className={`max-w-full whitespace-nowrap font-sans text-[clamp(22px,1.55vw,28px)] font-semibold leading-none tracking-normal tabular-nums ${valueColor}`}>
+            {value}
+          </div>
+          {hint && (
+            <div className="mt-2 max-w-full break-words text-[11px] font-medium leading-snug text-white/72">{hint}</div>
+          )}
+        </div>
+
+        {visual === "icon" && (
+          <div className="ml-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/[0.035] text-[#E8C766]">
+            {icon}
+          </div>
+        )}
+        {visual === "gauge" && (
+          <div className="relative ml-auto h-16 w-16 shrink-0">
+            <div className="absolute inset-1 rounded-full border-[7px] border-white/[0.08]" />
+            <div
+              className="absolute inset-1 rounded-full"
+              style={{
+                background:
+                  "conic-gradient(from 210deg, #F2C85F 0deg, #F2C85F 168deg, transparent 168deg, transparent 360deg)",
+                mask: "radial-gradient(circle, transparent 54%, #000 56%)",
+                WebkitMask: "radial-gradient(circle, transparent 54%, #000 56%)",
+              }}
+            />
+          </div>
+        )}
+        {(visual === "line" || visual === "bars" || visual === "target") && (
+          <div className="ml-auto flex w-[66px] justify-end overflow-hidden">
+            {visual === "line" && <KpiSparkline type="line" />}
+            {visual === "bars" && <KpiSparkline type="bars" />}
+            {visual === "target" && <KpiSparkline type="target" />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+JournalKpiCard.displayName = "JournalKpiCard";
 
 // Helper function to extract time from trade
 const getTradeTimeData = (stats: DashboardStats): DataPoint[] => {
@@ -168,9 +368,8 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
   if (!data || data.length === 0) {
     return (
       <div 
-        className="rounded-2xl border p-5 shadow-lg flex items-center justify-center h-80"
+        className="flex h-[218px] items-center justify-center rounded-[12px] border border-white/[0.06] bg-black/10"
         style={{
-          borderColor: 'rgba(255, 255, 255, 0.08)',
           background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)'
         }}
       >
@@ -194,25 +393,24 @@ const TradeTimePerformanceChart = React.memo(({ data }: { data: DataPoint[] }) =
   
   return (
     <div 
-      className="rounded-2xl border p-5 shadow-lg"
-      style={{
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)'
-      }}
+      className="rounded-[12px] border border-white/[0.06] bg-black/10 p-0"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-[#F4F4F4] text-base font-semibold">
-            Trade time performance
+          <h3 className="text-[13px] font-medium text-white/82">
+            By Time
           </h3>
-          <HelpCircle className="w-4 h-4 text-[#808080] cursor-help hover:text-[#C9A646] transition-colors" />
+          <JournalInfoIcon
+            label="Shows each trade by its opening time, so you can see which hours produce your strongest and weakest P&L."
+            className="h-4 w-4"
+          />
         </div>
         <div className="text-xs text-[#666666]">
           {data.length} trades
         </div>
       </div>
 
-      <div className="relative h-64 w-full">
+      <div className="relative h-[168px] w-full">
         {/* Y-axis labels - DYNAMIC based on data */}
         <div className="absolute left-0 top-2 bottom-10 flex flex-col justify-between text-[10px] text-[#666666] pr-2 w-12 text-right">
           <span>${scaleMax.toFixed(0)}</span>
@@ -320,19 +518,21 @@ const TradeDurationPerformanceChart = React.memo(({
   if (isLocked) {
     return (
       <div 
-        className="rounded-2xl border p-5 shadow-lg relative overflow-hidden"
+        className="relative overflow-hidden rounded-[12px] border border-white/[0.06] bg-black/10 p-0"
         style={{
-          borderColor: 'rgba(255, 255, 255, 0.08)',
           background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)'
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 relative z-10">
+        <div className="relative z-10 mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h3 className="text-[#F4F4F4] text-base font-semibold">
-              Trade duration performance
+            <h3 className="text-[13px] font-medium text-white/82">
+              By Duration
             </h3>
-            <HelpCircle className="w-4 h-4 text-[#808080]" />
+            <JournalInfoIcon
+              label="Shows trade P&L by how long each trade was open. Unlocks when duration data is available from connected broker trades."
+              className="h-4 w-4"
+            />
           </div>
           <div className="flex items-center gap-1.5 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-lg px-3 py-1.5">
             <Lock className="w-3.5 h-3.5 text-[#C9A646]" />
@@ -343,7 +543,7 @@ const TradeDurationPerformanceChart = React.memo(({
         </div>
 
         {/* Blurred Preview Chart */}
-        <div className="relative h-64 w-full blur-[3px] opacity-30">
+        <div className="relative h-[168px] w-full blur-[3px] opacity-30">
           <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-[10px] text-[#666666] pr-2">
             <span>$5000</span>
             <span>$3750</span>
@@ -415,22 +615,21 @@ const TradeDurationPerformanceChart = React.memo(({
   // ✅ UNLOCKED STATE - SHOW REAL CHART
   return (
     <div 
-      className="rounded-2xl border p-5 shadow-lg"
-      style={{
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        background: 'linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)'
-      }}
+      className="rounded-[12px] border border-white/[0.06] bg-black/10 p-0"
     >
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-[#F4F4F4] text-base font-semibold">
-            Trade duration performance
+          <h3 className="text-[13px] font-medium text-white/82">
+            By Duration
           </h3>
-          <HelpCircle className="w-4 h-4 text-[#808080] cursor-help hover:text-[#C9A646] transition-colors" />
+          <JournalInfoIcon
+            label="Shows trade P&L by holding time, helping identify whether quick trades or longer holds perform better."
+            className="h-4 w-4"
+          />
         </div>
       </div>
 
-      <div className="relative h-64 w-full">
+      <div className="relative h-[168px] w-full">
         <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-[10px] text-[#666666] pr-2">
           <span>${(maxValue).toFixed(0)}</span>
           <span>${(maxValue * 0.75).toFixed(0)}</span>
@@ -738,7 +937,13 @@ const BestWorstTrades = React.memo(({ stats, timezone }: { stats: DashboardStats
 });
 BestWorstTrades.displayName = 'BestWorstTrades';
 
-const AIInsight = React.memo(({ stats }: { stats: DashboardStats }) => {
+const AIInsight = React.memo(({
+  stats,
+  onViewReport,
+}: {
+  stats: DashboardStats;
+  onViewReport: () => void;
+}) => {
   const insight = useMemo(() => {
     if (stats.closedTrades < 10) {
       return "Welcome! Track 10+ trades to unlock AI insights.";
@@ -756,25 +961,28 @@ const AIInsight = React.memo(({ stats }: { stats: DashboardStats }) => {
   }, [stats.closedTrades, stats.winrate, stats.avgRR]);
   
   return (
-    <div 
-      className="rounded-[20px] border p-5 flex items-start gap-4 shadow-[0_0_30px_rgba(201,166,70,0.08)] animate-fadeIn relative overflow-hidden"
-      style={{ 
-        background: 'linear-gradient(90deg, rgba(201,166,70,0.1), rgba(201,166,70,0.05))',
-        borderColor: 'rgba(255, 215, 0, 0.08)',
-        borderLeft: '3px solid #C9A646'
-      }}
-    >
-      <div className="rounded-lg bg-[#C9A646]/10 p-2.5 animate-pulse-gold">
-        <Sparkles className="w-5 h-5 text-[#C9A646]" />
-      </div>
-      <div className="flex-1">
-        <div className="text-[#C9A646] text-[10px] font-semibold uppercase tracking-[0.15em] mb-1.5">
-          AI Insights
+    <div className={`${JOURNAL_PANEL} grid min-h-[74px] items-center gap-4 px-6 py-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]`}>
+      <div className="flex min-w-0 items-center gap-5">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/18 bg-[#C9A646]/10 text-[#E8C766] shadow-[0_0_26px_rgba(201,166,70,0.18)]">
+          <Sparkles className="w-5 h-5" />
         </div>
-        <div className="text-[#F4F4F4] text-sm leading-relaxed font-light">
-          {insight}
+        <div className="min-w-0">
+          <div className="mb-1.5 text-[14px] font-semibold text-[#E8C766]">
+            AI Insight
+          </div>
+          <div className="text-[13px] leading-relaxed text-white/78">
+            {insight}
+          </div>
         </div>
       </div>
+      <button
+        onClick={onViewReport}
+        className="justify-self-center flex min-w-[180px] items-center justify-center gap-2 rounded-[12px] border border-[#C9A646]/18 bg-[#C9A646]/10 px-6 py-3 text-[12px] font-semibold text-[#E8C766] transition-colors hover:border-[#C9A646]/35 hover:bg-[#C9A646]/16"
+      >
+        View Full Report
+        <ArrowRight className="h-3.5 w-3.5" />
+      </button>
+      <div className="hidden sm:block" aria-hidden="true" />
     </div>
   );
 });
@@ -887,15 +1095,16 @@ const DashboardDatePicker = React.memo(({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 border rounded-[14px] px-4 py-3 text-sm font-medium transition-all duration-200"
+        className="flex h-10 items-center gap-2 rounded-[12px] border px-4 text-[11px] font-medium transition-all duration-200"
         style={{
-          background: hasFilter ? 'rgba(201,166,70,0.12)' : '#141414',
-          borderColor: hasFilter ? 'rgba(201,166,70,0.4)' : 'rgba(255,255,255,0.08)',
-          color: hasFilter ? '#C9A646' : '#F4F4F4',
+          background: hasFilter ? 'rgba(201,166,70,0.10)' : 'rgba(12,12,12,0.72)',
+          borderColor: hasFilter ? 'rgba(201,166,70,0.35)' : 'rgba(255,255,255,0.12)',
+          color: hasFilter ? '#E8C766' : 'rgba(255,255,255,0.82)',
         }}
       >
         <CalendarRange className="w-4 h-4" />
         {formatLabel()}
+        <ChevronRight className="h-3.5 w-3.5 rotate-90 text-white/48" />
         {hasFilter && (
           <span
             className="ml-1 opacity-60 hover:opacity-100 transition-opacity"
@@ -1039,8 +1248,17 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, isLoading: brokersLoading } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
+  // Resolves OQ-72: previously a user whose Tradovate session went degraded
+  // (e.g. Vault read failure) had no in-journal path back. They sat in 24h
+  // backoff silently until manually navigating to the broker popover.
+  const degradedConnection = allBrokerConnections.find(
+    (c) => c.status === 'degraded' || c.status === 'canceled',
+  );
+  const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
 
   // First-visit onboarding: auto-open AddBrokerPopup once for users with zero brokers.
   // Persisted in localStorage so refreshing or returning later does not re-trigger.
@@ -1051,6 +1269,18 @@ function JournalOverviewContent() {
     setShowAddBroker(true);
     localStorage.setItem('finotaur_journal_onboarding_done', 'true');
   }, [brokersLoading, allBrokerConnections.length]);
+
+  const openAddBrokerPopup = useCallback(() => {
+    setShowAddBroker(true);
+  }, []);
+
+  const handoffToAddBrokerPopup = useCallback(() => {
+    setShowAddBroker(true);
+    window.setTimeout(() => {
+      setShowTradovateModal(false);
+      setTradovateInitialStep('select-env');
+    }, 90);
+  }, []);
 
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1116,6 +1346,13 @@ function JournalOverviewContent() {
   const tradeDurationData = useMemo(() => {
     if (!stats) return [];
     return getTradeDurationData(stats);
+  }, [stats]);
+
+  const expectancy = useMemo(() => {
+    if (!stats || stats.closedTrades === 0) return 0;
+    const winProbability = stats.winrate || 0;
+    const lossProbability = 1 - winProbability;
+    return (winProbability * (stats.avgWin || 0)) + (lossProbability * (stats.avgLoss || 0));
   }, [stats]);
   
   // ✅ Check if Trade Duration chart should be locked
@@ -1188,28 +1425,36 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
   }
   
   return (
-    <div className="min-h-screen" style={{ 
-      background: 'radial-gradient(circle at top, #0A0A0A 0%, #121212 100%)'
-    }}>
+    <div className="min-h-screen bg-[#070808] text-white">
       <style>{ANIMATION_STYLES}</style>
       
-      <div className="p-6 space-y-6">
+      <div className="mx-auto max-w-[1360px] space-y-4 px-1 py-3 sm:px-3 lg:px-1">
         {/* ✅ UPDATED: Header with Import Button instead of Trader Tier */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex-1">
-            <PageTitle 
-              title="Dashboard" 
-              subtitle={`Welcome back, ${displayName.charAt(0).toUpperCase() + displayName.slice(1)} — let's review your performance`}
-            />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="pt-0.5">
+            <h1 className="text-[17px] font-semibold leading-tight tracking-normal text-white">
+              Welcome back, {displayName.charAt(0).toUpperCase() + displayName.slice(1)} 👋
+            </h1>
+            <p className="mt-2 text-[11px] text-white/62">Here's your performance overview</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {isImpersonating && (
               <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
                 <Crown className="w-4 h-4 text-orange-400" />
                 <span className="text-orange-400 text-sm font-medium">Admin View</span>
               </div>
             )}
+
+            <DashboardDatePicker
+              startDate={dateStart}
+              endDate={dateEnd}
+              onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
+            />
+
+            <AccountFilterDropdown
+              onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+            />
 
             {/* ✅ Broker Status Button — visible to all, opens account panel */}
             {canUseSnapTrade && (
@@ -1311,19 +1556,22 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
             {/* F2.5: Connect Broker — compact, opens BrokerConnectionsPopover.
                 The Popover handles the connections list + "+ Add new connection"
-                CTA, which calls setShowAddBroker(true) to mount AddBrokerPopup. */}
-            <BrokerConnectionsPopover onAddConnection={() => setShowAddBroker(true)}>
+                CTA, which calls openAddBrokerPopup to open the pre-mounted AddBrokerPopup. */}
+            <BrokerConnectionsPopover
+              onAddConnection={openAddBrokerPopup}
+              onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
+            >
               <Button
                 variant="goldOutline"
                 size="compact"
-                className="relative gap-2"
+                className="h-10 gap-2 border-[#C9A646]/80 px-5 text-[11px] text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766]"
                 aria-label="Connect Broker"
               >
                 <Link2 className="w-3.5 h-3.5" />
                 Connect Broker
                 {brokerDotColor && (
                   <span
-                    className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-[#0A0A0A] ${
+                    className={`ml-0.5 h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-[#0A0A0A] ${
                       brokerDotColor === 'red'
                         ? 'bg-[#E36363]'
                         : brokerDotColor === 'yellow'
@@ -1339,52 +1587,55 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             {/* F2.5: Import Trades — compact (handler unchanged) */}
             <Button
               onClick={() => setShowImportPopup(true)}
-              variant="goldOutline"
+              variant="gold"
               size="compact"
-              className="gap-2"
+              className="h-10 gap-2 px-6 text-[12px]"
               aria-label="Import Trades"
+              showArrow={false}
             >
-              <Upload className="w-3.5 h-3.5" />
+              <PlusSquare className="w-3.5 h-3.5" />
               Import Trades
             </Button>
           </div>
         </div>
 
-        {stats && <AIInsight stats={stats} />}
-
-        <div className="flex flex-wrap items-center gap-3">
-          <DashboardDatePicker
-            startDate={dateStart}
-            endDate={dateEnd}
-            onChange={(s, e) => { setDateStart(s); setDateEnd(e); }}
-          />
-
-          <AccountFilterDropdown
-            onManage={() => { setTradovateInitialStep('manage'); setShowTradovateModal(true); }}
-          />
-
-          <div className="ml-auto flex items-center gap-3">
-            <button
-              onClick={handleGeneratePDF}
-              className="relative flex items-center gap-2 bg-[#C9A646]/10 hover:bg-[#C9A646]/20 text-[#C9A646] border rounded-[12px] px-5 py-2.5 text-sm font-medium transition-all duration-300 overflow-hidden group"
-              style={{ borderColor: 'rgba(201,166,70,0.2)' }}
-            >
-              <FileText className="w-4 h-4 relative z-10" />
-              <span className="relative z-10">Download Monthly Report (AI-Enhanced)</span>
-            </button>
-          </div>
-        </div>
-
         {isLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map(i => <CardSkeleton key={i} />)}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {[1, 2, 3, 4, 5].map(i => <CardSkeleton key={i} />)}
+          </div>
+        )}
+
+        {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections. */}
+        {!brokersLoading && degradedConnection && (
+          <div className="rounded-2xl border border-[#E36363]/30 bg-[#E36363]/8 px-5 py-4 mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#E36363]/15 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-[#E36363]" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'} connection needs attention
+                </p>
+                <p className="text-xs text-[#A0A0A0] mt-0.5">
+                  {degradedConnection.last_error
+                    ? `Last error: ${degradedConnection.last_error.slice(0, 100)}`
+                    : 'Auto-recovery failed — reconnect to resume syncing trades.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setReconnectModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-[#C9A646] text-black text-sm font-semibold hover:bg-[#D4B255] transition-colors whitespace-nowrap"
+            >
+              Reconnect now
+            </button>
           </div>
         )}
 
         {!brokersLoading && allBrokerConnections.length === 0 && (
           <JournalEmptyState
             variant="no-broker"
-            onConnectBroker={() => setShowAddBroker(true)}
+            onConnectBroker={openAddBrokerPopup}
           />
         )}
 
@@ -1394,77 +1645,72 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
 
         {stats && stats.trades && stats.trades.length > 0 && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <DashboardKpiCard
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              <JournalKpiCard
                 label="Net P&L"
                 value={formatCurrency(stats.netPnl)}
-                color={getPnLColor(stats.netPnl)}
                 hint={`${stats.closedTrades} closed trades`}
-                tooltip="Total profit or loss from all closed trades"
-                accentBg="linear-gradient(135deg, rgba(0,196,108,0.08) 0%, rgba(0,196,108,0.03) 100%)"
+                tone={stats.netPnl >= 0 ? "green" : "red"}
+                icon={<TrendingUp className="h-8 w-8" strokeWidth={2} />}
+                tooltip="Total profit or loss from all closed trades in the selected date range."
               />
 
-              <DashboardKpiCard
+              <JournalKpiCard
                 label="Win Rate"
                 value={formatPercentage(stats.winrate)}
                 hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
-                color="text-[#C9A646]"
-                tooltip="Percentage of winning trades vs total trades"
-                accentBg="linear-gradient(135deg, rgba(201,166,70,0.08) 0%, rgba(201,166,70,0.03) 100%)"
-                showGauge={true}
-                gaugeData={{
-                  wins: stats.wins,
-                  losses: stats.losses,
-                  breakeven: stats.breakeven
-                }}
+                tone="gold"
+                visual="gauge"
+                tooltip="The percentage of closed trades that ended profitable, excluding open trades."
               />
 
-              <DashboardKpiCard
+              <JournalKpiCard
                 label="Profit Factor"
                 value={
                   stats.profitFactor != null && !isNaN(stats.profitFactor) && isFinite(stats.profitFactor)
                     ? stats.profitFactor.toFixed(2)
                     : "—"
                 }
-                color={
-                  stats.profitFactor > 2 ? "text-[#4AD295]" :
-                  stats.profitFactor > 1 ? "text-[#C9A646]" :
-                  "text-[#E36363]"
-                }
-                tooltip="Gross profit divided by gross loss. >1 means profitable"
-                accentBg="linear-gradient(135deg, rgba(74,210,149,0.08) 0%, rgba(74,210,149,0.03) 100%)"
+                tone={stats.profitFactor > 1 ? "green" : "red"}
+                visual="line"
+                tooltip="Gross profit divided by gross loss. Above 1.00 means total winners are larger than total losers."
               />
 
-              <DashboardKpiCard
-                label="Avg Win/Loss Trade"
+              <JournalKpiCard
+                label="Avg Win / Loss"
                 value={
-                  stats.avgWin && stats.avgLoss
+                  stats.avgWin !== 0 && stats.avgLoss !== 0
                     ? `${(stats.avgWin / Math.abs(stats.avgLoss)).toFixed(2)}`
                     : "—"
                 }
-                hint={`${formatCurrency(stats.avgWin || 0)} / ${formatCurrency(stats.avgLoss || 0)}`}
-                color="text-[#C9A646]"
-                tooltip="Average size of winning trades vs losing trades"
-                accentBg="linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.03) 100%)"
-                showGauge={true}
-                gaugeData={{
-                  avgWin: stats.avgWin || 0,
-                  avgLoss: stats.avgLoss || 0
-                }}
+                hint={`${formatSignedCurrency(stats.avgWin || 0)} / ${formatPlainCurrency(stats.avgLoss || 0)}`}
+                tone="gold"
+                visual="bars"
+                tooltip="Average winning trade compared with average losing trade. Higher means winners are larger relative to losses."
+              />
+
+              <JournalKpiCard
+                label="Expectancy"
+                value={formatSignedCurrency(expectancy)}
+                hint="Per Trade"
+                tone={expectancy >= 0 ? "green" : "red"}
+                visual="target"
+                tooltip="Estimated average P&L per trade based on win rate, average win, and average loss."
               />
 
             </div>
 
             {/* ✅ UPDATED: Best/Worst trades with timezone and session */}
-            <BestWorstTrades stats={stats} timezone={timezone} />
+            
 
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[0.9fr_1fr]">
             <ErrorBoundary fallback={
               <div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
                 Failed to load chart. Please refresh the page.
               </div>
             }>
               <Suspense fallback={<ChartSkeleton />}>
-                <EquityChart data={stats.equitySeries || []} />
+                <EquityChart data={stats.equitySeries || []} trades={stats.trades || []} />
               </Suspense>
             </ErrorBoundary>
 
@@ -1477,24 +1723,36 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 <DailyPnLChart data={stats.equitySeries || []} trades={stats.trades || []} />
               </Suspense>
             </ErrorBoundary>
+            </div>
 
             {/* ✅ UPDATED: Charts with lock logic for Trade Duration */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className={`${JOURNAL_PANEL} p-4`}>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[14px] font-semibold text-white">Trade Performance</h2>
+                    <JournalInfoIcon label="A scatter view of individual trade outcomes by time of day and by holding duration." />
+                  </div>
+                  <span className="text-[11px] text-white/50">{stats.closedTrades} trades</span>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <TradeTimePerformanceChart data={tradeTimeData} />
               <TradeDurationPerformanceChart
                 data={tradeDurationData}
                 isLocked={isDurationChartLocked}
-              />
-            </div>
+                  />
+                </div>
+              </div>
 
             {/* === BREAKDOWN PANEL (Symbol / Strategy / Session) === */}
-            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[20px]">
+            <ErrorBoundary fallback={<div className="text-center text-[#E36363] p-6 bg-[#1A1A1A] rounded-[12px]">
               Failed to load breakdown. Please refresh.
             </div>}>
               <Suspense fallback={<ChartSkeleton />}>
                 <BreakdownPanel trades={stats.trades || []} />
               </Suspense>
             </ErrorBoundary>
+
+            <AIInsight stats={stats} onViewReport={handleGeneratePDF} />
 
             {/* Calendar heatmap lives in its dedicated Calendar tab — removed
                 from Overview 2026-05-11 (was showing a 12-week window that
@@ -1537,6 +1795,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           <Suspense fallback={null}>
             <TradovateConnectModal
               onClose={() => { setShowTradovateModal(false); setTradovateInitialStep('select-env'); }}
+              onAddConnection={handoffToAddBrokerPopup}
               initialStep={tradovateInitialStep}
             />
           </Suspense>
@@ -1565,12 +1824,25 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
       )}
 
       {/* F2.5: Add New Broker popup (Dialog with picker / form swap).
-          The connections list lives inside BrokerConnectionsPopover, anchored
-          to the "Connect Broker" button above. Disconnect / Remove UI is OQ-57. */}
-      {showAddBroker && (
+          Keep it mounted so transitions from Manage Connections open instantly. */}
+      <ErrorBoundary>
+        <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+      </ErrorBoundary>
+
+      {/* Phase 1B.4 — BrokerReconnectModal driven by the degraded-connection banner above. */}
+      {reconnectModalOpen && degradedConnection && (
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+            <BrokerReconnectModal
+              open={reconnectModalOpen}
+              onOpenChange={setReconnectModalOpen}
+              brokerName={degradedConnection.connection_name ?? degradedConnection.broker ?? 'Broker'}
+              lastError={degradedConnection.last_error}
+              onReconnect={async () => {
+                const result = await brokerReconnect(degradedConnection.id);
+                return { success: result.success, error: result.error };
+              }}
+            />
           </Suspense>
         </ErrorBoundary>
       )}

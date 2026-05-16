@@ -216,7 +216,7 @@ export const EquityCurveOptimized = memo(function EquityCurveOptimized({
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={200} debounce={150}>
         <AreaChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

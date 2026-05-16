@@ -1,3 +1,4 @@
+import { useMemo, memo } from 'react';
 import { Card } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { Trade } from '@/lib/journal';
@@ -6,22 +7,22 @@ interface EquityChartProps {
   trades: Trade[];
 }
 
-export const EquityChart = ({ trades }: EquityChartProps) => {
+export const EquityChart = memo(({ trades }: EquityChartProps) => {
   // Calculate cumulative P&L
-  const equityData = trades
+  const equityData = useMemo(() => trades
     .filter((t) => t.exit_price !== null)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .reduce((acc, trade, index) => {
       const prevEquity = index > 0 ? acc[index - 1].equity : 0;
       const equity = prevEquity + (trade.pnl || 0);
-      
+
       acc.push({
         date: new Date(trade.date).toLocaleDateString(),
         equity,
       });
-      
+
       return acc;
-    }, [] as { date: string; equity: number }[]);
+    }, [] as { date: string; equity: number }[]), [trades]);
 
   if (equityData.length === 0) {
     return (
@@ -35,7 +36,7 @@ export const EquityChart = ({ trades }: EquityChartProps) => {
     <Card className="rounded-2xl border-border bg-base-800 p-6 shadow-premium">
       <h3 className="mb-4 text-lg font-bold">Equity Curve</h3>
       <div className="h-80">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" debounce={150}>
           <LineChart data={equityData}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--base-700))" />
             <XAxis
@@ -73,10 +74,13 @@ export const EquityChart = ({ trades }: EquityChartProps) => {
               stroke="hsl(var(--gold))"
               strokeWidth={2}
               dot={{ fill: 'hsl(var(--gold))', r: 4 }}
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>
       </div>
     </Card>
   );
-};
+});
+
+EquityChart.displayName = 'EquityChart';

@@ -83,7 +83,7 @@ interface SkeletonProps {
 export const Skeleton = memo<SkeletonProps>(({ className, width = '100%', height = '20px' }) => (
   <div
     className={cn('animate-pulse rounded-lg', className)}
-    style={{ width, height, background: 'rgba(201,166,70,0.08)' }}
+    style={{ width, height, background: 'linear-gradient(90deg, rgba(255,255,255,0.04), rgba(200,169,107,0.16), rgba(255,255,255,0.04))' }}
   />
 ));
 Skeleton.displayName = 'Skeleton';
@@ -100,12 +100,15 @@ interface CardProps {
 
 export const Card = memo<CardProps>(({ children, className, highlight = false }) => (
   <div
-    className={cn('rounded-2xl overflow-hidden', className)}
+    className={cn('rounded-[20px] overflow-hidden transition-all duration-300 hover:-translate-y-0.5', className)}
     style={{
       background: highlight
-        ? 'linear-gradient(135deg, rgba(201,166,70,0.08), rgba(13,11,8,0.95))'
-        : 'linear-gradient(145deg, rgba(18,16,12,0.95), rgba(12,10,8,0.98))',
-      border: highlight ? '1px solid rgba(201,166,70,0.25)' : '1px solid rgba(201,166,70,0.1)',
+        ? 'linear-gradient(180deg, rgba(17,24,30,0.98), rgba(9,13,18,0.98))'
+        : 'linear-gradient(180deg, rgba(12,18,24,0.96), rgba(7,10,14,0.97))',
+      border: highlight ? '1px solid rgba(200,169,107,0.26)' : '1px solid rgba(200,169,107,0.13)',
+      boxShadow: highlight
+        ? '0 20px 52px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06)'
+        : '0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)',
     }}
   >
     {children}
@@ -124,8 +127,8 @@ interface StatBoxProps {
 }
 
 export const StatBox = memo<StatBoxProps>(({ label, value, color = colors.gold.primary }) => (
-  <div className="text-center p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.06)' }}>
-    <div className="text-[10px] text-[#6B6B6B] mb-1 uppercase tracking-wider">{label}</div>
+  <div className="text-center p-3 rounded-2xl" style={{ background: 'linear-gradient(180deg, rgba(13,20,26,0.94), rgba(7,10,14,0.96))', border: '1px solid rgba(200,169,107,0.13)', boxShadow: '0 12px 30px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+    <div className="text-[10px] text-[#AAB2BF] mb-1 uppercase tracking-wider">{label}</div>
     <div className="text-lg font-bold" style={{ color }}>{value}</div>
   </div>
 ));
@@ -143,10 +146,10 @@ interface MetricBoxProps {
 }
 
 export const MetricBox = memo<MetricBoxProps>(({ label, value, sub, color = colors.gold.primary }) => (
-  <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.08)' }}>
-    <div className="text-[10px] text-[#6B6B6B] uppercase tracking-wider mb-1">{label}</div>
+  <div className="p-4 rounded-2xl" style={{ background: 'linear-gradient(180deg, rgba(13,20,26,0.94), rgba(7,10,14,0.96))', border: '1px solid rgba(200,169,107,0.13)', boxShadow: '0 12px 30px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)' }}>
+    <div className="text-[10px] text-[#AAB2BF] uppercase tracking-wider mb-1">{label}</div>
     <div className="text-xl font-bold" style={{ color }}>{value}</div>
-    {sub && <div className="text-[11px] text-[#6B6B6B] mt-0.5">{sub}</div>}
+    {sub && <div className="text-[11px] text-[#8E96A3] mt-0.5">{sub}</div>}
   </div>
 ));
 MetricBox.displayName = 'MetricBox';
@@ -173,7 +176,7 @@ export const SectionHeader = memo<SectionHeaderProps>(({ title, subtitle, icon: 
     )}
     <div>
       <h3 className="text-sm font-bold text-white uppercase tracking-wider">{title}</h3>
-      {subtitle && <p className="text-[11px] text-[#6B6B6B]">{subtitle}</p>}
+      {subtitle && <p className="text-[11px] text-[#AAB2BF]">{subtitle}</p>}
     </div>
   </div>
 ));
@@ -189,9 +192,9 @@ interface FactRowProps {
   color?: string;
 }
 
-export const FactRow = memo<FactRowProps>(({ label, value, color = '#fff' }) => (
-  <div className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-    <span className="text-xs text-[#8B8B8B]">{label}</span>
+export const FactRow = memo<FactRowProps>(({ label, value, color = '#F4F6FA' }) => (
+  <div className="flex items-center justify-between py-2 border-b border-white/[0.07] last:border-0">
+    <span className="text-xs text-[#AAB2BF]">{label}</span>
     <span className="text-xs font-semibold" style={{ color }}>{value}</span>
   </div>
 ));
@@ -213,10 +216,10 @@ export const BarMeter = memo<BarMeterProps>(({ label, value, max = 100, color = 
   return (
     <div>
       <div className="flex justify-between mb-1">
-        <span className="text-[11px] text-[#8B8B8B]">{label}</span>
+        <span className="text-[11px] text-[#AAB2BF]">{label}</span>
         <span className="text-[11px] font-bold" style={{ color }}>{value}</span>
       </div>
-      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
@@ -252,7 +255,7 @@ export const ROCCircle = memo<ROCCircleProps>(({ value, label, size = 64 }) => {
         <Icon className="h-5 w-5" style={{ color }} />
       </div>
       <span className="text-xs font-bold" style={{ color }}>{value > 0 ? '+' : ''}{value}%</span>
-      {label && <span className="text-[10px] text-[#6B6B6B]">{label}</span>}
+      {label && <span className="text-[10px] text-[#AAB2BF]">{label}</span>}
     </div>
   );
 });
@@ -319,7 +322,7 @@ export const ScoreBar = memo<{ score: number; showLabel?: boolean }>(({ score, s
   const color = getScoreColor(score);
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+      <div className="flex-1 h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
         <motion.div initial={{ width: 0 }} animate={{ width: `${score}%` }} transition={{ duration: 0.5 }} className="h-full rounded-full" style={{ background: color }} />
       </div>
       {showLabel && <span className="text-xs font-bold min-w-[28px]" style={{ color }}>{score}</span>}
@@ -342,8 +345,8 @@ interface TabButtonProps {
 export const TabButton = memo<TabButtonProps>(({ active, onClick, children, icon: Icon }) => (
   <button
     onClick={onClick}
-    className={cn('flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap', active ? 'text-black' : 'text-[#8B8B8B] hover:text-[#C9A646]')}
-    style={active ? { background: 'linear-gradient(135deg, #C9A646, #F4D97B)', boxShadow: '0 4px 20px rgba(201,166,70,0.3)' } : { background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(201,166,70,0.08)' }}
+    className={cn('flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap', active ? 'text-black' : 'text-[#C9A646] hover:text-[#F4D97B]')}
+    style={active ? { background: 'linear-gradient(135deg, #C8A96B, #EED899)', boxShadow: '0 10px 24px rgba(200,169,107,0.22)' } : { background: 'linear-gradient(180deg, rgba(13,20,26,0.94), rgba(7,10,14,0.96))', border: '1px solid rgba(200,169,107,0.20)', boxShadow: '0 10px 26px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.05)' }}
   >
     {Icon && <Icon className="h-4 w-4" />}
     {children}
@@ -359,10 +362,10 @@ export const CorrelationBar = memo<{ value: number; ticker: string }>(({ value, 
   const isPositive = value >= 0;
   const color = isPositive ? colors.positive : colors.negative;
   return (
-    <div className="flex items-center gap-4 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)' }}>
+    <div className="flex items-center gap-4 p-3 rounded-2xl" style={{ background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(200,169,107,0.12)' }}>
       <span className="font-bold text-white min-w-[50px]">{ticker}</span>
-      <div className="flex-1 h-2.5 bg-white/10 rounded-full overflow-hidden relative">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-[#6B6B6B]" />
+      <div className="flex-1 h-2.5 bg-white/[0.08] rounded-full overflow-hidden relative">
+        <div className="absolute inset-y-0 left-1/2 w-px bg-[#C9A646]/40" />
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${Math.abs(value) * 50}%` }}
@@ -387,7 +390,7 @@ export const ProgressRing = memo<{ value: number; max?: number; size?: number; s
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={strokeWidth} />
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth={strokeWidth} />
         <motion.circle
           cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"
           initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={{ duration: 0.8 }}
@@ -396,7 +399,7 @@ export const ProgressRing = memo<{ value: number; max?: number; size?: number; s
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-lg font-bold text-white">{value}</span>
-        {label && <span className="text-[10px] text-[#6B6B6B]">{label}</span>}
+        {label && <span className="text-[10px] text-[#AAB2BF]">{label}</span>}
       </div>
     </div>
   );

@@ -362,9 +362,6 @@ export default function StatisticsPage() {
             <TabsTrigger value="time" className="data-[state=active]:bg-[#C9A646] data-[state=active]:text-black">
               Time Analysis
             </TabsTrigger>
-            <TabsTrigger value="psychology" className="data-[state=active]:bg-[#C9A646] data-[state=active]:text-black">
-              Psychology
-            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -397,10 +394,6 @@ export default function StatisticsPage() {
             <TimeAnalysisTab trades={filteredTrades} />
           </TabsContent>
 
-          {/* Psychology Tab */}
-          <TabsContent value="psychology" className="space-y-6">
-            <PsychologyTab trades={filteredTrades} />
-          </TabsContent>
         </Tabs>
       </div>
     </div>
@@ -892,19 +885,3 @@ function TimeAnalysisTab({ trades }: { trades: Trade[] }) {
   );
 }
 
-// ============================================
-// PSYCHOLOGY TAB (Placeholder)
-// ============================================
-
-function PsychologyTab({ trades }: { trades: Trade[] }) {
-  return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-white">Trading Psychology</h2>
-      <Card className="bg-[#141416] border-[rgba(201,166,70,.12)] rounded-2xl">
-        <CardContent className="p-6">
-          <p className="text-[#9AA3AF]">Psychology metrics - Placeholder for future features (streaks, recovery, errors log)</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}

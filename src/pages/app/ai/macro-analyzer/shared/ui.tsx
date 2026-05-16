@@ -70,16 +70,19 @@ export const Card = memo(({ children, className, highlight = false, onClick }: {
   <div
     onClick={onClick}
     className={cn(
-      "rounded-2xl overflow-hidden transition-all duration-200",
-      onClick && "cursor-pointer hover:scale-[1.01] hover:-translate-y-1",
+      "rounded-[20px] overflow-hidden transition-all duration-300",
+      onClick && "cursor-pointer hover:-translate-y-0.5",
       className
     )}
     style={{
       background: highlight
-        ? 'linear-gradient(135deg, rgba(201,166,70,0.1), rgba(13,11,8,0.95))'
-        : 'linear-gradient(135deg, rgba(13,11,8,0.95), rgba(21,18,16,0.95))',
-      border: highlight ? '1px solid rgba(201,166,70,0.3)' : '1px solid rgba(201,166,70,0.15)',
-      willChange: onClick ? 'transform' : 'auto'
+        ? 'linear-gradient(180deg, rgba(17,24,30,0.98), rgba(9,13,18,0.98))'
+        : 'linear-gradient(180deg, rgba(12,18,24,0.96), rgba(7,10,14,0.97))',
+      border: highlight ? '1px solid rgba(200,169,107,0.26)' : '1px solid rgba(200,169,107,0.13)',
+      boxShadow: highlight
+        ? '0 20px 52px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06)'
+        : '0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)',
+      willChange: onClick ? 'transform' : 'auto',
     }}
   >
     {children}
@@ -97,17 +100,21 @@ export const SectionHeader = memo(({ icon: Icon, title, subtitle, action }: {
   subtitle?: string;
   action?: React.ReactNode;
 }) => (
-  <div className="flex items-center justify-between mb-6">
+  <div className="mb-5 flex items-center justify-between gap-4">
     <div className="flex items-center gap-3">
       <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center"
-        style={{ background: 'rgba(201,166,70,0.1)', border: '1px solid rgba(201,166,70,0.2)' }}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+        style={{
+          background: 'rgba(201,166,70,0.10)',
+          border: '1px solid rgba(201,166,70,0.20)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+        }}
       >
         <Icon className="w-5 h-5 text-[#C9A646]" />
       </div>
       <div>
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        {subtitle && <p className="text-xs text-[#6B6B6B]">{subtitle}</p>}
+        <h3 className="text-base font-semibold text-white">{title}</h3>
+        {subtitle && <p className="text-[11px] text-[#AAB2BF]">{subtitle}</p>}
       </div>
     </div>
     {action}
@@ -156,7 +163,10 @@ export const Badge = memo(({ children, variant = 'default' }: {
   }[variant];
 
   return (
-    <span className="text-[10px] font-bold px-2 py-1 rounded" style={{ background: styles.bg, color: styles.color }}>
+    <span
+      className="rounded-md px-2 py-1 text-[10px] font-bold"
+      style={{ background: styles.bg, color: styles.color, border: `1px solid ${styles.color}24` }}
+    >
       {children}
     </span>
   );
@@ -222,8 +232,12 @@ InfoTooltip.displayName = 'InfoTooltip';
 
 export const SectionSkeleton = memo(({ height = "h-64" }: { height?: string }) => (
   <div
-    className={cn("rounded-2xl p-6", height)}
-    style={{ background: 'linear-gradient(135deg, rgba(13,11,8,0.95), rgba(21,18,16,0.95))', border: '1px solid rgba(201,166,70,0.15)' }}
+    className={cn("rounded-[20px] p-6", height)}
+    style={{
+      background: 'linear-gradient(180deg, rgba(12,18,24,0.96), rgba(7,10,14,0.97))',
+      border: '1px solid rgba(200,169,107,0.13)',
+      boxShadow: '0 16px 40px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)',
+    }}
   >
     <div className="flex items-center gap-3 mb-6">
       <Skeleton className="w-10 h-10 rounded-xl" />
@@ -379,15 +393,23 @@ export const StatBox = memo(({ label, value, subValue, highlighted = false, valu
   valueColor?: string;
 }) => (
   <div
-    className="p-4 rounded-xl"
+    className="rounded-2xl p-4"
     style={highlighted
-      ? { background: 'rgba(201,166,70,0.05)', border: '1px solid rgba(201,166,70,0.2)' }
-      : { background: 'rgba(255,255,255,0.03)' }
+      ? {
+        background: 'linear-gradient(180deg, rgba(201,166,70,0.08), rgba(9,13,18,0.96))',
+        border: '1px solid rgba(201,166,70,0.22)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+      }
+      : {
+        background: 'linear-gradient(180deg, rgba(13,20,26,0.94), rgba(7,10,14,0.96))',
+        border: '1px solid rgba(200,169,107,0.13)',
+        boxShadow: '0 12px 30px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)',
+      }
     }
   >
-    <p className="text-xs text-[#6B6B6B] mb-1">{label}</p>
+    <p className="mb-1 text-xs text-[#AAB2BF]">{label}</p>
     <p className="text-2xl font-bold" style={{ color: valueColor || (highlighted ? '#C9A646' : '#fff') }}>{value}</p>
-    {subValue && <p className="text-xs text-[#6B6B6B] mt-1">{subValue}</p>}
+    {subValue && <p className="mt-1 text-xs text-[#8E96A3]">{subValue}</p>}
   </div>
 ));
 StatBox.displayName = 'StatBox';

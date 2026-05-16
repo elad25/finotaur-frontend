@@ -4,8 +4,8 @@
 // Leader dropdown, inline Ratio/Cross editing, FLATTEN double-check.
 // ═══════════════════════════════════════════════════════════════
 
-import { memo, useMemo, useState, useEffect, useRef } from 'react';
-import { AlertOctagon, ChevronDown, Crown, Search, Users } from 'lucide-react';
+import { memo, useMemo, useState } from 'react';
+import { AlertOctagon, Crown, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
@@ -272,23 +272,9 @@ export function CopyTradingDashboard() {
   const tradovateConnections = connections.filter(
     (c) => c.broker === 'tradovate' && c.is_active,
   );
-  const [leaderId, setLeaderId] = useState<string | null>(
+  const [leaderId] = useState<string | null>(
     tradovateConnections[0]?.id ?? null,
   );
-  const [leaderOpen, setLeaderOpen] = useState(false);
-  const leaderRef = useRef<HTMLDivElement>(null);
-
-  // Click-outside handler for leader popover
-  useEffect(() => {
-    if (!leaderOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (leaderRef.current && !leaderRef.current.contains(e.target as Node)) {
-        setLeaderOpen(false);
-      }
-    };
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
-  }, [leaderOpen]);
 
   // Resolve leader's portfolio id for copy-rule lookup
   const leaderConnection = connections.find((c) => c.id === leaderId);
@@ -297,11 +283,6 @@ export function CopyTradingDashboard() {
     (p) => (p as any).tradovate_account_id?.toString() === leaderConnection?.account_id,
   );
   const leaderPortfolioId = leaderPortfolio?.id ?? null;
-
-  const leaderName = useMemo(() => {
-    const c = connections.find((conn) => conn.id === leaderId);
-    return c?.account_name ?? c?.account_id ?? 'Select leader';
-  }, [connections, leaderId]);
 
   // Helper: find rule for a given follower portfolio
   function ruleFor(targetPortfolioId: string | null): CopyRule | null {
@@ -418,17 +399,54 @@ export function CopyTradingDashboard() {
   };
 
   return (
-    <div>
+    <div className="min-h-[620px]">
+      <div className="grid grid-cols-4 gap-ds-3 mb-ds-4">
+        <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
+          <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
+            Total Day PnL
+          </div>
+          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+            {totalDayPnL >= 0 ? '$' : 'גˆ’$'}
+            {Math.abs(totalDayPnL).toFixed(2)}
+          </div>
+        </div>
+        <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
+          <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
+            Total Open PnL
+          </div>
+          <div
+            className={`text-base font-mono tabular-nums mt-1 ${
+              totalOpenPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
+            }`}
+          >
+            {totalOpenPnL >= 0 ? '$' : 'גˆ’$'}
+            {Math.abs(totalOpenPnL).toFixed(2)}
+          </div>
+        </div>
+        <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
+          <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
+            Total Balance
+          </div>
+          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+            ${totalBalance.toFixed(2)}
+          </div>
+        </div>
+        <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
+          <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
+            Open Positions
+          </div>
+          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+            {openPositionsCount}
+          </div>
+        </div>
+      </div>
       {/* ── 1. Asset selector + action bar ── */}
-      <div className="flex items-center justify-between mb-ds-4 gap-ds-4">
+      <div className="relative z-20 flex items-center justify-between mb-ds-4 gap-ds-4">
         {/* ── Active Contract with typeahead ── */}
         <div className="flex items-center gap-ds-3">
-          <span className="text-xs text-ink-secondary uppercase tracking-wider">
-            Active Contract
-          </span>
           <div className="relative">
-            <div className="flex items-center gap-1.5 px-ds-3 py-ds-2 rounded-md bg-surface-1 border border-border-ds-subtle min-w-[180px]">
-              <Search className="w-3.5 h-3.5 text-ink-tertiary" />
+            <div className="flex h-11 min-w-[210px] items-center gap-ds-2 rounded-2xl border border-blue-500/35 bg-blue-500/10 px-ds-4 shadow-[0_0_22px_rgba(59,130,246,0.12)] transition-colors hover:border-blue-400/60">
+              <Search className="h-4 w-4 text-blue-200/70" />
               <input
                 type="text"
                 value={instrument}
@@ -438,13 +456,13 @@ export function CopyTradingDashboard() {
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                placeholder="NQ, ES, GC..."
-                className="bg-transparent border-0 outline-none text-sm font-mono tabular-nums text-ink-primary w-24 placeholder:text-ink-tertiary"
+                placeholder="Search ticker..."
+                className="w-36 border-0 bg-transparent text-sm font-semibold uppercase text-blue-100 outline-none placeholder:normal-case placeholder:text-blue-200/40"
               />
             </div>
 
             {showSuggestions && filteredContracts.length > 0 && (
-              <div className="absolute top-full mt-1 left-0 z-10 w-[280px] rounded-md bg-surface-1 border border-border-ds-subtle shadow-2xl overflow-hidden">
+              <div className="absolute top-full mt-2 left-0 z-50 w-[280px] overflow-hidden rounded-xl border border-blue-500/35 bg-[#080b12] shadow-[0_18px_50px_rgba(0,0,0,0.85),0_0_24px_rgba(59,130,246,0.18)]">
                 {filteredContracts.map((c) => (
                   <button
                     key={c.symbol}
@@ -453,12 +471,12 @@ export function CopyTradingDashboard() {
                       setInstrument(c.symbol);
                       setShowSuggestions(false);
                     }}
-                    className="w-full flex items-center justify-between px-ds-3 py-ds-2 hover:bg-surface-2 transition-colors duration-base text-left"
+                    className="w-full flex items-center justify-between px-ds-3 py-ds-2 hover:bg-blue-500/15 transition-colors duration-base text-left"
                   >
-                    <span className="text-sm font-mono tabular-nums text-ink-primary">
+                    <span className="text-sm font-mono tabular-nums text-white">
                       {c.symbol}
                     </span>
-                    <span className="text-[11px] text-ink-secondary truncate ml-ds-2">
+                    <span className="text-[11px] text-blue-100/65 truncate ml-ds-2">
                       {c.name}
                     </span>
                   </button>
@@ -470,70 +488,20 @@ export function CopyTradingDashboard() {
 
         <div className="flex items-center gap-ds-2">
           {/* ── Leader custom dropdown ── */}
-          <div className="flex items-center gap-ds-2" ref={leaderRef}>
-            <span className="text-[10px] uppercase tracking-wider text-ink-secondary">Leader</span>
-            <div className="relative">
-              <button
-                onClick={() => setLeaderOpen((v) => !v)}
-                className="flex items-center gap-ds-2 px-ds-3 py-ds-2 rounded-lg bg-gold-primary/5 border border-gold-border hover:bg-gold-primary/10 transition-colors duration-base min-w-[200px]"
-              >
-                <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />
-                <span className="text-sm text-ink-primary truncate flex-1 text-left">
-                  {leaderName}
-                </span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 text-ink-secondary transition-transform duration-base ${
-                    leaderOpen ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-
-              {leaderOpen && (
-                <div className="absolute top-full mt-1 left-0 z-10 w-[280px] rounded-lg bg-surface-1 border border-border-ds-subtle shadow-2xl overflow-hidden">
-                  {tradovateConnections.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => {
-                        setLeaderId(c.id);
-                        setLeaderOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-ds-2 px-ds-3 py-ds-2 hover:bg-surface-2 transition-colors duration-base text-left ${
-                        c.id === leaderId ? 'bg-gold-primary/10' : ''
-                      }`}
-                    >
-                      {c.id === leaderId && (
-                        <Crown className="w-3 h-3 text-gold-primary flex-shrink-0" />
-                      )}
-                      <span
-                        className={`text-sm text-ink-primary truncate flex-1 ${
-                          c.id !== leaderId ? 'ml-[18px]' : ''
-                        }`}
-                      >
-                        {c.account_name ?? c.account_id}
-                      </span>
-                      <span className="text-[10px] uppercase tracking-wider text-ink-tertiary flex-shrink-0">
-                        {c.environment}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* FLATTEN ALL */}
           <button
             onClick={handleFlattenAll}
-            className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md bg-num-negative/10 border border-num-negative/30 text-num-negative hover:bg-num-negative/20 transition-colors duration-base font-semibold text-sm"
+            className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md bg-red-600 border border-red-500 text-white hover:bg-red-500 transition-colors duration-base font-semibold text-sm"
           >
             <AlertOctagon className="w-4 h-4" />
-            FLATTEN ALL
+            Flatten All
           </button>
         </div>
       </div>
 
       {/* ── 2. Summary bar ── */}
-      <div className="grid grid-cols-4 gap-ds-3 mb-ds-4">
+      <div className="hidden">
         <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Day PnL

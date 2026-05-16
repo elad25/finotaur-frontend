@@ -17,40 +17,26 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
 import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
+import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetry.ts';
 
-// ─── Retry helper for transient Tradovate API errors ─────────
-// Retries on 5xx and 429. Returns immediately on 401 (token expiry
-// handled by caller) and other 4xx (client errors, not retriable).
-async function fetchWithRetry(
+// Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
+// is the canonical Tradovate retry wrapper (handles 429 via p-time/p-ticket
+// per Tradovate's official guidance, plus 5xx fixed-delay backoff).
+//
+// Observability (Phase 1A.2 + 1B.1): every 429 is fire-and-forget INSERTed
+// into `public.tradovate_api_call_log` via the `admin` option. Phase 1B
+// threads `userId` + `connectionId` down from the syncCredential caller so
+// every row can be attributed to a specific broker_connection.
+function fetchWithRetry(
   url: string,
   init: RequestInit,
-  opts?: { maxAttempts?: number }
+  opts?: { maxAttempts?: number; userId?: string; connectionId?: string },
 ): Promise<Response> {
-  const max = opts?.maxAttempts ?? 3;
-  const delays = [1000, 2000, 4000]; // ms — used for attempts 1→2, 2→3
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= max; attempt++) {
-    try {
-      const res = await fetch(url, init);
-      // 401 → don't retry, signal token expiry
-      if (res.status === 401) return res;
-      // 4xx (other than 401/429) → don't retry, client error
-      if (res.status >= 400 && res.status < 500 && res.status !== 429) return res;
-      // 5xx and 429 → retry
-      if (res.status >= 500 || res.status === 429) {
-        if (attempt === max) return res;
-        await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
-        continue;
-      }
-      // 2xx/3xx → success
-      return res;
-    } catch (err) {
-      lastErr = err;
-      if (attempt === max) throw err;
-      await new Promise(r => setTimeout(r, delays[attempt - 1] ?? 4000));
-    }
-  }
-  throw lastErr ?? new Error('fetchWithRetry: exhausted attempts');
+  return sharedFetchWithRetry(url, init, {
+    ...opts,
+    label: 'tradovate-sync',
+    admin: supabaseAdmin,
+  });
 }
 
 const TRADOVATE_URLS = {
@@ -85,20 +71,61 @@ async function fetchFills(
   base: string,
   accessToken: string,
   _accountId: number,
-  lastFillId: number
+  lastFillId: number,
+  attribution?: { userId: string; connectionId: string },
 ): Promise<TradovateFill[]> {
+  // Phase 1B.3: defensive pagination loop.
+  //
+  // Tradovate's /fill/list public docs don't specify pagination behavior
+  // (we use /fill/list because /fill/ldeps requires API key permissions
+  // we don't have — see top-of-function comment). Empirically the endpoint
+  // returns "all fills scoped to the token" in one call, but if Tradovate
+  // ever introduces an undocumented page cap (≥500 fills history is when
+  // it could bite), this loop survives that scenario:
+  //   - Fetch once.
+  //   - If response contains >= PAGE_THRESHOLD rows AND any rows are newer
+  //     than the cursor we passed in, advance cursor to the max-id observed
+  //     and refetch.
+  //   - Cap iterations at MAX_PAGES (sanity).
+  //
+  // Today (zero observed caps) this is a no-op single iteration. If
+  // Tradovate caps later, deep-history users still get all their fills.
+  const PAGE_THRESHOLD = 200;
+  const MAX_PAGES = 10;
   const url = `${base}/fill/list`;
-  const res = await fetchWithRetry(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const headers = { Authorization: `Bearer ${accessToken}` };
 
-  if (res.status === 401) throw new Error('TOKEN_EXPIRED');
-  if (!res.ok) throw new Error(`Fill fetch failed: ${res.status}`);
+  const collected: TradovateFill[] = [];
+  let cursor = lastFillId;
+  let iteration = 0;
 
-  const fills: TradovateFill[] = await res.json();
+  while (iteration < MAX_PAGES) {
+    iteration++;
+    const res = await fetchWithRetry(url, { headers }, attribution);
+    if (res.status === 401) throw new Error('TOKEN_EXPIRED');
+    if (!res.ok) throw new Error(`Fill fetch failed: ${res.status}`);
 
-  // Only fills newer than last cursor
-  return fills.filter(f => f.id > lastFillId);
+    const page: TradovateFill[] = await res.json();
+    const newFills = page.filter(f => f.id > cursor);
+
+    if (newFills.length === 0) break;
+    collected.push(...newFills);
+
+    // Only keep paging if (a) response looks capped and (b) we made progress.
+    if (page.length < PAGE_THRESHOLD) break;
+
+    const maxIdThisPage = newFills.reduce((m, f) => (f.id > m ? f.id : m), cursor);
+    if (maxIdThisPage <= cursor) break; // no forward progress — bail
+    cursor = maxIdThisPage;
+
+    if (iteration > 1) {
+      console.log(
+        `[tradovate-sync] fill_pagination: page=${iteration} collected=${collected.length} cursor=${cursor}`,
+      );
+    }
+  }
+
+  return collected;
 }
 
 interface TradovateFill {
@@ -141,11 +168,16 @@ const KNOWN_FUTURES_MULTIPLIERS: Record<string, number> = {
   ZF: 1000,  // 5-Year T-Note
 };
 
-// Extract the base symbol prefix from a contract name like "MNQM6" → "MNQ", "ESZ5" → "ES".
-// Returns null if no leading-letter prefix found.
+// Extract the base symbol prefix from a contract name like "MNQM6" → "MNQ", "ESZ5" → "ES", "M2KZ5" → "M2K".
+// Tradovate naming convention: BASE + MONTH-letter + YEAR-digit(s).
+// Month letters per CME: F(Jan) G(Feb) H(Mar) J(Apr) K(May) M(Jun) N(Jul) Q(Aug) U(Sep) V(Oct) X(Nov) Z(Dec).
+// BASE starts with a letter and may include digits afterward (e.g. M2K for Micro Russell 2000).
+// The lazy `*?` ensures the BASE captures the shortest prefix; the explicit month-letter class
+// prevents the greedy match that previously returned "MNQM" for "MNQM6" (a real bug — pre-2026-05-12
+// every contract whose API /product/item returned null/0 fell back to multiplier=1).
 function extractBaseSymbol(contractName: string): string | null {
   if (!contractName) return null;
-  const match = contractName.match(/^([A-Z]+)\d/);
+  const match = contractName.match(/^([A-Z][A-Z0-9]*?)[FGHJKMNQUVXZ]\d+$/);
   return match ? match[1] : null;
 }
 
@@ -153,7 +185,8 @@ function extractBaseSymbol(contractName: string): string | null {
 async function getContractInfo(
   base: string,
   accessToken: string,
-  contractId: number
+  contractId: number,
+  attribution?: { userId: string; connectionId: string },
 ): Promise<{ name: string; fullPointValue: number }> {
   // Helper: returns API value if usable (>0), otherwise tries hardcoded table by base symbol.
   // Always logs which source produced the multiplier — observability for Lesson 13 verification.
@@ -175,27 +208,35 @@ async function getContractInfo(
     return { name, fullPointValue: 1 };
   };
 
+  const authHeaders = { Authorization: `Bearer ${accessToken}` };
+
   // Step 1: contract/item → get name + contractMaturityId
-  const contractRes = await fetchWithRetry(`${base}/contract/item?id=${contractId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const contractRes = await fetchWithRetry(
+    `${base}/contract/item?id=${contractId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!contractRes.ok) return finalize('UNKNOWN', null);
   const contract = await contractRes.json();
   const contractName = contract.name ?? 'UNKNOWN';
 
   // Step 2: contractMaturity/item → get productId
   if (!contract.contractMaturityId) return finalize(contractName, null);
-  const maturityRes = await fetchWithRetry(`${base}/contractMaturity/item?id=${contract.contractMaturityId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const maturityRes = await fetchWithRetry(
+    `${base}/contractMaturity/item?id=${contract.contractMaturityId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!maturityRes.ok) return finalize(contractName, null);
   const maturity = await maturityRes.json();
 
   // Step 3: product/item → get fullPointValue
   if (!maturity.productId) return finalize(contractName, null);
-  const productRes = await fetchWithRetry(`${base}/product/item?id=${maturity.productId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const productRes = await fetchWithRetry(
+    `${base}/product/item?id=${maturity.productId}`,
+    { headers: authHeaders },
+    attribution,
+  );
   if (!productRes.ok) return finalize(contractName, null);
   const product = await productRes.json();
 
@@ -246,7 +287,12 @@ async function processFill(
     const outcome = pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE';
     const closedQty = Math.min(fill.qty, openPos.open_quantity);
 
-    // Update the trade to closed
+    // Update the trade to closed.
+    // fees=null (not 0): Tradovate's /fill/list endpoint does NOT return per-fill
+    // commission data, so we genuinely don't know. Writing 0 was a silent lie that
+    // inflated P&L by the commission amount. Downstream code already treats null
+    // as "unknown" via COALESCE(fees,0) / Number(fees || 0); the pnl above is the
+    // raw exit-minus-entry calculation and does NOT subtract fees.
     const { error: updateErr } = await supabaseAdmin
       .from('trades')
       .update({
@@ -254,7 +300,7 @@ async function processFill(
         close_at:   fillAt,
         pnl:        Math.round(pnl * 100) / 100,
         outcome,
-        fees:       0,
+        fees:       null,
       })
       .eq('id', openPos.open_trade_id);
 
@@ -280,7 +326,82 @@ async function processFill(
     return 'updated';
   }
 
-  // ── OPEN: no opposite position → open a new trade ────────────
+  // ── OPEN: no opposite position to close → add to or create position ────────
+  //
+  // B-4 (2026-05-12): check whether a same-side position already exists.
+  // If yes, this fill is an ADD-ON leg: accumulate qty + weighted-avg the
+  // entry_price on the existing trade row (Elad chose "single trade row per
+  // multi-leg position" — see plan α.3). If no, create a fresh trade row.
+  //
+  // The previous code blindly inserted a new trade row per fill AND blindly
+  // upserted position_state with `open_quantity = fill.qty` (overwrite, not
+  // accumulate), so multi-leg positions silently lost both their cumulative
+  // qty and their weighted-avg entry price. avg_entry_price = price-of-last-leg
+  // was the symptom; multiplier=1 on closes was the downstream consequence.
+  //
+  // Known limitation (tracked as new OQ post α.3): the CLOSE path still
+  // treats any closing fill as a full close of the (now singular) trade row
+  // even when fill.qty < open_quantity. After this change, partial closes
+  // will set `outcome` on a row that still has residual qty in position_state.
+  // The next close fill will overwrite that row's exit_price / pnl. Partial
+  // closes are uncommon for Elad's current futures usage (qty=2–5, typically
+  // closed in one fill). Defer the partial-close fix to a separate session.
+
+  const { data: existingSamePos } = await supabaseAdmin
+    .from('tradovate_position_state')
+    .select('*')
+    .eq('user_id', cred.user_id)
+    .eq('tradovate_account_id', cred.account_id)
+    .eq('symbol', symbol)
+    .eq('side', fillSide)
+    .gt('open_quantity', 0)
+    .maybeSingle();
+
+  if (existingSamePos && existingSamePos.open_trade_id) {
+    // Add-on leg: update the existing trade row + position state in place.
+    const oldQty = Number(existingSamePos.open_quantity);
+    const oldAvg = Number(existingSamePos.avg_entry_price);
+    const totalQty = oldQty + fill.qty;
+    const weightedAvg = (oldAvg * oldQty + fill.price * fill.qty) / totalQty;
+
+    const { error: updateTradeErr } = await supabaseAdmin
+      .from('trades')
+      .update({
+        quantity:    totalQty,
+        entry_price: weightedAvg,
+      })
+      .eq('id', existingSamePos.open_trade_id);
+
+    if (updateTradeErr) {
+      console.error('[tradovate-sync] addon-leg trade update error:', updateTradeErr.message);
+      return 'error';
+    }
+
+    const { error: updateStateErr } = await supabaseAdmin
+      .from('tradovate_position_state')
+      .update({
+        open_quantity:   totalQty,
+        avg_entry_price: weightedAvg,
+        last_updated_at: fillAt,
+      })
+      .eq('id', existingSamePos.id);
+
+    if (updateStateErr) {
+      console.error('[tradovate-sync] addon-leg state update error:', updateStateErr.message);
+      return 'error';
+    }
+
+    console.log(
+      `[tradovate-sync] addon_leg: trade=${existingSamePos.open_trade_id} ` +
+      `symbol=${symbol} side=${fillSide} ` +
+      `qty=${oldQty}+${fill.qty}=${totalQty} ` +
+      `avg=${oldAvg.toFixed(4)}→${weightedAvg.toFixed(4)}`
+    );
+
+    return 'updated';
+  }
+
+  // First leg: create a fresh trade row + position state row.
   const { data: newTrade, error: insertErr } = await supabaseAdmin
     .from('trades')
     .insert({
@@ -305,7 +426,10 @@ async function processFill(
       import_source:        'tradovate',
       broker:               'tradovate',
       multiplier:           multiplier ?? 1,
-      fees:                 0,
+      // See close-path comment above: Tradovate fills carry no fee data; null
+      // is honest, 0 was a silent lie. DB default for `fees` is 0 but the column
+      // is nullable, and downstream consumers tolerate null via COALESCE.
+      fees:                 null,
     })
     .select('id')
     .single();
@@ -316,10 +440,12 @@ async function processFill(
     return 'error';
   }
 
-  // Track open position
-  await supabaseAdmin
+  // Insert (not upsert) — we already verified no same-side position exists.
+  // The unique constraint on (user_id, tradovate_account_id, symbol, side)
+  // protects against the rare race-condition path.
+  const { error: insertStateErr } = await supabaseAdmin
     .from('tradovate_position_state')
-    .upsert({
+    .insert({
       user_id:              cred.user_id,
       tradovate_account_id: cred.account_id,
       symbol,
@@ -328,7 +454,14 @@ async function processFill(
       avg_entry_price:      fill.price,
       open_trade_id:        newTrade.id,
       last_updated_at:      fillAt,
-    }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
+    });
+
+  if (insertStateErr) {
+    // 23505 = race condition: a parallel run created the position between
+    // our SELECT and INSERT. Caller will retry on next cron tick.
+    console.error('[tradovate-sync] open state insert error:', insertStateErr.message);
+    return 'error';
+  }
 
   return 'inserted';
 }
@@ -372,8 +505,12 @@ async function syncCredential(cred: {
 
   const lastFillId = syncState?.last_fill_id ?? 0;
 
+  // Phase 1B.1: every Tradovate API call from this credential's sync run
+  // carries user_id + connection_id in 429 / non-2xx observability rows.
+  const attribution = { userId: cred.user_id, connectionId: cred.id };
+
   // 3. Fetch new fills
-  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId);
+  const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
   if (fills.length === 0) {
     // Update last_sync_at even when no new fills
     await supabaseAdmin.from('broker_connections').update({
@@ -422,7 +559,7 @@ async function syncCredential(cred: {
     try {
       if (!contractCache[fill.contractId]) {
         contractCache[fill.contractId] = await getContractInfo(
-          base, accessToken, fill.contractId
+          base, accessToken, fill.contractId, attribution,
         );
       }
       const contract = contractCache[fill.contractId];
@@ -501,8 +638,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const BATCH_SIZE = 20;
-const STAGGER_MS = 200;
+// Phase 1A.4 (2026-05-12): smaller batch + larger stagger to reduce burst
+// rate against Tradovate's per-IP 80 req/min limit.
+//
+// Prior: BATCH_SIZE=20, STAGGER_MS=200 (10 parallel/sec from one IP).
+// Now:  BATCH_SIZE=10, STAGGER_MS=500 (~3-4 parallel/sec) — halves burst.
+//
+// Trade-off: cron tick takes ~2x longer at scale. At 1000 connections this
+// is ~4 min wall clock (still inside the 5-min cron window). Beyond 1000
+// connections we need sharded cron OR the WS streamer (Phase 2).
+//
+// Note: these are tuning knobs, not the scale-out solution. The real fix
+// for 10K+ users is event-driven WS ingestion (see MASTER_PLAN OQ-64).
+const BATCH_SIZE = 10;
+const STAGGER_MS = 500;
 
 // ─── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
@@ -563,7 +712,64 @@ Deno.serve(async (req: Request) => {
     let totalErrors   = 0;
     let synced        = 0;
 
-    const activeConnections = credentials ?? [];
+    let allConnections = credentials ?? [];
+
+    // Phase 1B.2 — active-user filter (cron mode only).
+    //
+    // Skip cron-syncing connections whose owner has had no trade activity in
+    // the last 7 days AND whose connection is older than 7 days. New accounts
+    // (< 7 days) are always kept so initial sync runs even before the user
+    // has any trades yet. Cuts steady-state cron load by an expected 80%+
+    // once the user base spreads beyond active traders.
+    //
+    // Manual / initial modes bypass this filter — user explicitly asked for sync.
+    //
+    // Implementation: 1 extra DB read (trades.user_id where created_at > 7d).
+    // Build a Set, filter the connections list in-memory. Cheaper than a
+    // server-side join + works around postgrest's lack of inline EXISTS.
+    let activeConnections = allConnections;
+    if (mode === 'cron' && allConnections.length > 0) {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentTraders } = await supabaseAdmin
+        .from('trades')
+        .select('user_id')
+        .eq('broker', 'tradovate')
+        .gte('created_at', sevenDaysAgo);
+      const activeUserIds = new Set<string>(
+        (recentTraders ?? []).map((r: { user_id: string }) => r.user_id),
+      );
+      const skipped: string[] = [];
+      activeConnections = allConnections.filter((bc: { id: string; user_id: string; created_at?: string }) => {
+        if (activeUserIds.has(bc.user_id)) return true;
+        // New connection grace — keep if connection is < 7 days old.
+        // broker_connections.created_at not in SELECT (saves a column);
+        // we'll fetch it lazily only for connections that need the grace check.
+        return false; // default skip; grace check below repopulates kept new accounts
+      });
+      // Lazy grace fetch — only for connections we'd otherwise skip.
+      const candidatesForGrace = allConnections.filter(
+        (bc: { id: string; user_id: string }) => !activeUserIds.has(bc.user_id),
+      );
+      if (candidatesForGrace.length > 0) {
+        const { data: ageRows } = await supabaseAdmin
+          .from('broker_connections')
+          .select('id, created_at')
+          .in('id', candidatesForGrace.map((c: { id: string }) => c.id))
+          .gte('created_at', sevenDaysAgo);
+        const newConnIds = new Set<string>((ageRows ?? []).map((r: { id: string }) => r.id));
+        const grace = candidatesForGrace.filter((c: { id: string }) => newConnIds.has(c.id));
+        activeConnections = [...activeConnections, ...grace];
+        for (const c of candidatesForGrace) {
+          if (!newConnIds.has(c.id)) skipped.push(c.id);
+        }
+      }
+      console.log(JSON.stringify({
+        event: 'active_user_filter',
+        kept: activeConnections.length,
+        skipped_inactive: skipped.length,
+        total: allConnections.length,
+      }));
+    }
     const runStart = Date.now();
     let totalProcessed = 0;
     let totalSuccess   = 0;
@@ -637,23 +843,31 @@ Deno.serve(async (req: Request) => {
     }));
 
     // Cron heartbeat — last successful run timestamp for external monitoring.
-    const heartbeatStatus = totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : 'failed');
-    try {
-      await supabaseAdmin.from('cron_heartbeat').upsert({
-        job_name: 'tradovate-sync',
-        last_run_at: new Date().toISOString(),
-        last_status: heartbeatStatus,
-        last_duration_ms: durationMs,
-        last_payload: {
-          totalProcessed,
-          totalSuccess,
-          totalFailed,
-          totalSynced,
-          batchCount,
-        },
-      }, { onConflict: 'job_name' });
-    } catch (hbErr) {
-      console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+    // Only write 'ok' or 'partial'. On total failure, SKIP the heartbeat entirely so
+    // cron-health's staleness check (not the brittle 'failed' status) drives alerting.
+    // Prevents UptimeRobot flapping on a single transient cron tick.
+    const heartbeatStatus: 'ok' | 'partial' | null =
+      totalFailed === 0 ? 'ok' : (totalSuccess > 0 ? 'partial' : null);
+    if (heartbeatStatus !== null) {
+      try {
+        await supabaseAdmin.from('cron_heartbeat').upsert({
+          job_name: 'tradovate-sync',
+          last_run_at: new Date().toISOString(),
+          last_status: heartbeatStatus,
+          last_duration_ms: durationMs,
+          last_payload: {
+            totalProcessed,
+            totalSuccess,
+            totalFailed,
+            totalSynced,
+            batchCount,
+          },
+        }, { onConflict: 'job_name' });
+      } catch (hbErr) {
+        console.error('[tradovate-sync] heartbeat upsert failed:', String(hbErr).slice(0, 300));
+      }
+    } else {
+      console.warn('[tradovate-sync] total failure — skipping heartbeat write to let staleness alert');
     }
 
     return json({ synced, totalInserted, totalErrors });

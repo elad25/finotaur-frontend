@@ -1,17 +1,8 @@
 // src/components/broker/BrokerConnectionsPopover.tsx
-// ─────────────────────────────────────────────────────────────────────
-// F2.5 broker connection manager — replaces BrokerConnectionModal.
-// Compact Popover (desktop) / Sheet (mobile <768px) anchored to the
-// dashboard "Connect Broker" button. Renders active + re-auth rows,
-// preserves L4 sync toasts via useBrokerConnections, and exposes an
-// "Add new connection" CTA that delegates to AddBrokerPopup (parent-
-// owned). Disconnect/Remove are intentionally absent in F2.5 (OQ-57).
-// ─────────────────────────────────────────────────────────────────────
+// Compact broker/account selector anchored to the journal dashboard broker button.
 
-import { useState } from 'react';
-import {
-  RefreshCw, AlertCircle, Plus, CheckCircle2, Clock, Link as LinkIcon,
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AlertCircle, Check, ChevronDown, ChevronUp, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -19,9 +10,17 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { statusBadge } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
-import { Button } from '@/components/ds/Button';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
+import type { Portfolio } from '@/hooks/usePortfolios';
+import { cn } from '@/lib/utils';
 
 const BORDER_LIGHT = 'rgba(255, 215, 0, 0.08)';
+
+interface Props {
+  children: React.ReactNode;
+  onAddConnection?: () => void;
+  onManage?: () => void;
+}
 
 function timeAgo(iso: string | null | undefined): string {
   if (!iso) return 'never';
@@ -39,112 +38,431 @@ function brokerDisplay(broker: string): string {
   return BROKER_CONFIGS[broker as BrokerName]?.displayName ?? broker;
 }
 
-function brokerColor(broker: string): string {
-  return BROKER_CONFIGS[broker as BrokerName]?.color ?? '#C9A646';
+function brokerColor(broker: BrokerName | 'manual'): string {
+  if (broker === 'manual') return '#C9A646';
+  return BROKER_CONFIGS[broker]?.color ?? '#C9A646';
 }
 
-interface Props {
-  children: React.ReactNode;
-  onAddConnection?: () => void;
+function brokerLogo(broker: BrokerName | 'manual'): string | undefined {
+  if (broker === 'manual') return undefined;
+  return BROKER_CONFIGS[broker]?.logo;
 }
 
-// ── Connection row (active OR re-auth, distinguished by props) ───────
-function ConnectionRow({
-  conn,
-  busy,
-  onSync,
-  onReconnect,
-  onCanceled,
-}: {
-  conn: BrokerConnection;
-  busy: boolean;
-  onSync?: (id: string) => void;
-  onReconnect?: (id: string) => void;
-  /** Called when the "Reconnect now" button is clicked for a canceled connection. */
-  onCanceled?: (conn: BrokerConnection) => void;
-}) {
-  const badge = statusBadge(conn);
-  const envLabel = conn.environment ? ` · ${String(conn.environment).toUpperCase()}` : '';
-  const isCanceled = conn.status === 'canceled';
-  const isReauth = !!onReconnect && !isCanceled;
-
-  const handleRowClick = () => {
-    if (isReauth && onReconnect && !busy) onReconnect(conn.id);
-  };
+function BrokerLogo({ broker }: { broker: BrokerName | 'manual' }) {
+  const [imageErrored, setImageErrored] = useState(false);
+  const logo = brokerLogo(broker);
+  const label = broker === 'manual' ? 'Manual' : brokerDisplay(broker);
 
   return (
     <div
-      onClick={handleRowClick}
-      className={`bg-[#0A0A0A] border rounded-[12px] p-3 flex items-center gap-3 ${
-        isReauth ? 'cursor-pointer hover:border-[#E36363]/40 transition-colors' : ''
-      }`}
-      style={{ borderColor: isReauth || isCanceled ? 'rgba(227,99,99,0.15)' : BORDER_LIGHT }}
-      title={isReauth ? 'Click to reconnect' : undefined}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.035] text-[8px] font-bold"
+      style={{ color: brokerColor(broker) }}
     >
-      <div
-        className="w-2 h-2 rounded-full flex-shrink-0"
-        style={{ background: badge.color, boxShadow: `0 0 6px ${badge.color}` }}
-        aria-label={badge.label}
-      />
-      <div
-        className="w-8 h-8 rounded-md flex items-center justify-center text-[10px] font-mono flex-shrink-0"
-        style={{ background: `${brokerColor(conn.broker)}20`, color: brokerColor(conn.broker) }}
-      >
-        {brokerDisplay(conn.broker).substring(0, 2).toUpperCase()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-[#F4F4F4] text-[13px] font-medium truncate">
-          {conn.connection_name || conn.account_name || brokerDisplay(conn.broker)}
-        </div>
-        <div className="text-[10px] text-[#A0A0A0] truncate">
-          <span>{brokerDisplay(conn.broker)}{envLabel}</span>
-          {isReauth ? (
-            <span className="text-[#E36363]"> · {conn.last_error || 'click to reconnect'}</span>
-          ) : isCanceled ? (
-            <span className="text-[#E36363]"> · subscription canceled</span>
-          ) : (
-            <span className="text-[#666]"> · last sync {timeAgo(conn.last_sync_at)}</span>
-          )}
-        </div>
-      </div>
-      {!isReauth && !isCanceled && onSync && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onSync(conn.id);
-          }}
-          disabled={busy}
-          className="p-1.5 rounded-md text-[#A0A0A0] hover:text-[#C9A646] hover:bg-[#C9A646]/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Sync now"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${busy ? 'animate-spin' : ''}`} />
-        </button>
-      )}
-      {isReauth && (
-        <AlertCircle className="w-4 h-4 text-[#E36363] flex-shrink-0" />
-      )}
-      {isCanceled && onCanceled && (
-        <Button
-          variant="gold"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCanceled(conn);
-          }}
-        >
-          Reconnect now
-        </Button>
+      {logo && !imageErrored ? (
+        <img
+          src={logo}
+          alt={label}
+          className="max-h-3.5 max-w-[22px] object-contain"
+          onError={() => setImageErrored(true)}
+        />
+      ) : (
+        <span>{label.substring(0, 2).toUpperCase()}</span>
       )}
     </div>
   );
 }
 
-// ── Body shared by Popover + Sheet ───────────────────────────────────
-function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
+function CheckboxMark({ checked, compact = false }: { checked: boolean; compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-[4px] border transition-all duration-150',
+        compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
+        checked
+          ? 'border-[#C9A646] bg-[#C9A646] text-[#080808] shadow-[0_0_12px_rgba(201,166,70,0.22)]'
+          : 'border-[#C9A646]/28 bg-[#050505] text-transparent group-hover:border-[#C9A646]/55',
+      )}
+    >
+      <Check className="h-3 w-3" strokeWidth={3} />
+    </span>
+  );
+}
+
+function AllAccountsRow({
+  checked,
+  total,
+  onSelect,
+}: {
+  checked: boolean;
+  total: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={checked}
+      onClick={onSelect}
+      className={cn(
+        'group flex w-full items-center gap-2.5 rounded-[10px] border px-3 py-2 text-left transition-all duration-150',
+        checked
+          ? 'border-[#C9A646]/38 bg-[#C9A646]/[0.08]'
+          : 'border-white/[0.07] bg-[#080808] hover:border-[#C9A646]/24 hover:bg-[#101010]',
+      )}
+    >
+      <CheckboxMark checked={checked} />
+      <div className="flex h-7 w-9 shrink-0 items-center justify-center rounded-md border border-[#C9A646]/20 bg-[#C9A646]/10 text-[9px] font-bold text-[#C9A646]">
+        ALL
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] font-semibold text-[#F4F4F4]">All accounts</div>
+        <div className="text-[9px] text-[#777]">
+          {total} portfolio{total === 1 ? '' : 's'} in one view
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function AccountListRow({
+  portfolio,
+  broker,
+  connection,
+  checked,
+  onToggle,
+  onReconnect,
+}: {
+  portfolio: Portfolio;
+  broker: BrokerName | 'manual';
+  connection?: BrokerConnection;
+  checked: boolean;
+  onToggle: (id: string) => void;
+  onReconnect: (conn: BrokerConnection) => void;
+}) {
+  const badge = connection ? statusBadge(connection) : null;
+  const hasConnectionIssue = connection && connection.status !== 'connected' && connection.status !== 'active';
+  const environment = portfolio.environment ? portfolio.environment.toUpperCase() : null;
+
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={checked}
+      onClick={() => onToggle(portfolio.id)}
+      className={cn(
+        'group flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left transition-all duration-150',
+        checked
+          ? 'bg-[#C9A646]/[0.08]'
+          : 'hover:bg-white/[0.035]',
+      )}
+    >
+      <CheckboxMark checked={checked} compact />
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-[12px] font-semibold leading-tight text-[#EDEDED]">
+            {portfolio.name}
+          </span>
+          {environment && (
+            <span className="rounded-[4px] border border-[#C9A646]/24 bg-[#C9A646]/[0.08] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-[#C9A646]">
+              {environment}
+            </span>
+          )}
+        </div>
+        {connection?.last_sync_at && (
+          <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[10px] leading-tight text-[#777]">
+            <span className="shrink-0">synced {timeAgo(connection.last_sync_at)}</span>
+          </div>
+        )}
+      </div>
+
+      {badge && (
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ background: badge.color, boxShadow: `0 0 8px ${badge.color}` }}
+          aria-label={badge.label}
+        />
+      )}
+
+      {hasConnectionIssue && connection && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onReconnect(connection);
+          }}
+          className="rounded-md p-1 text-[#E36363] transition-colors hover:bg-[#E36363]/10"
+          aria-label="Reconnect broker"
+        >
+          <AlertCircle className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </button>
+  );
+}
+
+function SimpleAccountRow({
+  portfolio,
+  checked,
+  onToggle,
+}: {
+  portfolio: Portfolio;
+  checked: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const badge = portfolio.source === 'manual'
+    ? 'Manual'
+    : portfolio.environment === 'live'
+      ? 'Live'
+      : 'Demo';
+  const badgeClass = portfolio.source === 'manual'
+    ? 'bg-zinc-700/50 text-zinc-500'
+    : portfolio.environment === 'live'
+      ? 'bg-emerald-400/10 text-emerald-400'
+      : 'bg-yellow-400/10 text-yellow-400';
+
+  return (
+    <button
+      role="option"
+      aria-selected={checked}
+      onClick={() => onToggle(portfolio.id)}
+      className={cn(
+        'group flex w-full items-center gap-2.5 px-3 py-2 text-xs font-medium transition-colors duration-100',
+        checked
+          ? 'bg-[#C9A646]/5 text-[#C9A646]'
+          : 'text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100',
+      )}
+    >
+      <CheckboxMark checked={checked} compact />
+      <span className="min-w-0 flex-1 truncate text-left">{portfolio.name}</span>
+      <span className={cn('rounded px-1.5 py-0.5 text-[9px] font-semibold', badgeClass)}>
+        {badge}
+      </span>
+    </button>
+  );
+}
+
+type ConnectionGroup = {
+  id: string;
+  title: string;
+  broker: BrokerName | 'manual';
+  portfolios: Portfolio[];
+  connection?: BrokerConnection;
+};
+
+function ConnectionGroupSection({
+  group,
+  connectionFor,
+  selectedPortfolioIds,
+  isShowingAll,
+  isOpen,
+  onToggle,
+  onToggleOpen,
+  onReconnect,
+}: {
+  group: ConnectionGroup;
+  connectionFor: (portfolio: Portfolio) => BrokerConnection | undefined;
+  selectedPortfolioIds: string[];
+  isShowingAll: boolean;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  onToggleOpen: (id: string) => void;
+  onReconnect: (conn: BrokerConnection) => void;
+}) {
+  const badge = group.connection ? statusBadge(group.connection) : null;
+  const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
+  const displayBrokerName = group.broker === 'manual' ? 'MANUAL' : brokerName.toUpperCase();
+  const hasConnectionIssue = group.connection
+    && group.connection.status !== 'connected'
+    && group.connection.status !== 'renewing';
+
+  return (
+    <section className="border-t border-white/[0.06] first:border-t-0">
+      <div className="group flex w-full items-center gap-2.5 px-1.5 py-2 text-left transition-colors hover:bg-white/[0.025]">
+        <button
+          type="button"
+          onClick={() => onToggleOpen(group.id)}
+          className="min-w-0 flex-1 text-left"
+          aria-expanded={isOpen}
+        >
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[10px] font-semibold uppercase leading-tight tracking-[0.02em] text-[#DCDCDC]">
+              FINOTAUR - {displayBrokerName}
+            </span>
+          </div>
+          <div className="hidden">
+            {brokerName} · {group.portfolios.length} account{group.portfolios.length === 1 ? '' : 's'}
+          </div>
+        </div>
+        {badge && (
+          <span
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ background: badge.color, boxShadow: `0 0 8px ${badge.color}` }}
+            aria-label={badge.label}
+          />
+        )}
+        {isOpen ? (
+          <ChevronUp className="h-3.5 w-3.5 shrink-0 text-[#A0A0A0] transition-colors group-hover:text-[#C9A646]" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[#A0A0A0] transition-colors group-hover:text-[#C9A646]" />
+        )}
+      </button>
+      {hasConnectionIssue && group.connection && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onReconnect(group.connection!);
+          }}
+          className="flex h-6 shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-2 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+          aria-label={`Reconnect ${group.title}`}
+        >
+          <RefreshCw className="h-3 w-3" />
+          Reconnect
+        </button>
+      )}
+      </div>
+      {isOpen && (
+      <div className="pb-1 pl-1">
+      {group.portfolios.map((portfolio) => (
+        <AccountListRow
+          key={portfolio.id}
+          portfolio={portfolio}
+          broker={group.broker}
+          connection={connectionFor(portfolio)}
+          checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+          onToggle={onToggle}
+          onReconnect={onReconnect}
+        />
+      ))}
+      </div>
+      )}
+    </section>
+  );
+}
+
+function ConnectionGroupSectionClean({
+  group,
+  connectionFor,
+  selectedPortfolioIds,
+  isShowingAll,
+  isOpen,
+  onToggle,
+  onToggleOpen,
+  onReconnect,
+}: {
+  group: ConnectionGroup;
+  connectionFor: (portfolio: Portfolio) => BrokerConnection | undefined;
+  selectedPortfolioIds: string[];
+  isShowingAll: boolean;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+  onToggleOpen: (id: string) => void;
+  onReconnect: (conn: BrokerConnection) => void;
+}) {
+  const badge = group.connection ? statusBadge(group.connection) : null;
+  const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
+  const connectionTitle = group.title || `FINOTAUR - ${group.broker === 'manual' ? 'MANUAL' : brokerName.toUpperCase()}`;
+  const connectionStatus = badge?.label ?? (group.broker === 'manual' ? 'Manual' : 'Connected');
+  const hasConnectionIssue = group.connection
+    && group.connection.status !== 'connected'
+    && group.connection.status !== 'renewing';
+
+  return (
+    <section className="border-t border-white/[0.08] pt-3 first:border-t-0 first:pt-0">
+      <div className="rounded-[12px] border border-white/[0.055] bg-black/[0.16]">
+        <div className="flex items-center gap-3 px-3 py-3">
+          <BrokerLogo broker={group.broker} />
+
+          <button
+            type="button"
+            onClick={() => onToggleOpen(group.id)}
+            className="min-w-0 flex-1 text-left"
+            aria-expanded={isOpen}
+          >
+            <div className="truncate text-[12px] font-semibold uppercase leading-tight tracking-[0.03em] text-[#E5E5E5]">
+              {connectionTitle}
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[10px] text-[#7A7A7A]">
+              <span>{brokerName}</span>
+              <span className="h-1 w-1 rounded-full bg-white/20" />
+              <span>{group.portfolios.length} account{group.portfolios.length === 1 ? '' : 's'}</span>
+            </div>
+          </button>
+
+          <div className="flex shrink-0 items-center gap-2">
+            {badge && (
+              <span className="flex items-center gap-1.5 rounded-[6px] border border-white/[0.07] bg-white/[0.035] px-2 py-1 text-[9px] font-semibold text-[#A0A0A0]">
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: badge.color, boxShadow: `0 0 8px ${badge.color}` }}
+                  aria-label={badge.label}
+                />
+                {connectionStatus}
+              </span>
+            )}
+
+            {hasConnectionIssue && group.connection && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onReconnect(group.connection!);
+                }}
+                className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-2 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+                aria-label={`Reconnect ${group.title}`}
+              >
+                <RefreshCw className="h-3 w-3" />
+                Reconnect
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onToggleOpen(group.id)}
+              className="rounded-md p-1 text-[#A0A0A0] transition-colors hover:bg-white/[0.05] hover:text-[#C9A646]"
+              aria-label={isOpen ? 'Collapse connection' : 'Expand connection'}
+            >
+              {isOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="border-t border-white/[0.055] px-2 py-2">
+            {group.portfolios.map((portfolio) => (
+              <AccountListRow
+                key={portfolio.id}
+                portfolio={portfolio}
+                broker={group.broker}
+                connection={connectionFor(portfolio)}
+                checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                onToggle={onToggle}
+                onReconnect={onReconnect}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PopoverBody({
+  onAddConnection,
+  onManage,
+}: {
+  onAddConnection?: () => void;
+  onManage?: () => void;
+}) {
   const {
     connections: active,
     isLoading: loadingActive,
-    syncNow,
   } = useBrokerConnections({ active: true });
   const {
     connections: inactive,
@@ -152,108 +470,162 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
     reconnect,
   } = useBrokerConnections({ active: false });
 
-  const [busyId, setBusyId] = useState<string | null>(null);
-  // Drives the opt-in BrokerReconnectModal for canceled connections
+  const {
+    portfolios,
+    tradovatePortfolios,
+    manualPortfolios,
+    selectedPortfolioIds,
+    togglePortfolioSelection,
+    setSelectedPortfolioIds,
+    isShowingAll,
+    isLoading: loadingPortfolios,
+  } = usePortfolioContext();
+
   const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  const allConnections = useMemo(() => [...active, ...inactive], [active, inactive]);
 
-  const wrapBusy =
-    <T,>(fn: (id: string) => Promise<T>) =>
-    async (id: string) => {
-      setBusyId(id);
-      try {
-        await fn(id);
-      } finally {
-        setBusyId(null);
-      }
+  const toggleGroupOpen = (id: string) => {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const connectionForPortfolio = useMemo(() => {
+    const byTradovateId = new Map<string, BrokerConnection>();
+    for (const connection of allConnections) {
+      if (connection.account_id) byTradovateId.set(String(connection.account_id), connection);
+    }
+
+    return (portfolio: Portfolio) => {
+      if (portfolio.source !== 'tradovate' || !portfolio.tradovate_account_id) return undefined;
+      return byTradovateId.get(String(portfolio.tradovate_account_id));
     };
+  }, [allConnections]);
 
-  const showEmpty =
-    !loadingActive && !loadingInactive && active.length === 0 && inactive.length === 0;
+  const connectionGroups = useMemo<ConnectionGroup[]>(() => {
+    const groups = new Map<string, ConnectionGroup>();
+
+    for (const portfolio of tradovatePortfolios) {
+      const connection = connectionForPortfolio(portfolio);
+      const broker = (connection?.broker as BrokerName | undefined) ?? 'tradovate';
+      const title = connection?.connection_name?.trim()
+        || portfolio.connection_label?.trim()
+        || 'Tradovate connection';
+      const key = `${broker}:${title}`;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          id: key,
+          title,
+          broker,
+          portfolios: [],
+          connection,
+        });
+      }
+
+      groups.get(key)!.portfolios.push(portfolio);
+    }
+
+    if (manualPortfolios.length > 0) {
+      groups.set('manual', {
+        id: 'manual',
+        title: 'Manual',
+        broker: 'manual',
+        portfolios: manualPortfolios,
+      });
+    }
+
+    return Array.from(groups.values());
+  }, [tradovatePortfolios, manualPortfolios, connectionForPortfolio]);
+
+  const showLoading = loadingActive || loadingInactive || loadingPortfolios;
+  const handleManage = () => {
+    if (onManage) onManage();
+    else onAddConnection?.();
+  };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2.5" role="listbox" aria-multiselectable="true">
       <div className="px-1">
-        <h3 className="text-[#F4F4F4] text-sm font-semibold">Broker Connections</h3>
-        <p className="text-[10px] text-[#A0A0A0] mt-0.5 font-light">
-          Manage how Finotaur receives your trades.
+        <h3 className="text-sm font-semibold text-[#F4F4F4]">Broker Connections</h3>
+        <p className="mt-0.5 text-[10px] font-light text-[#A0A0A0]">
+          Choose which connected portfolios power this dashboard.
         </p>
       </div>
 
-      {!loadingActive && active.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center gap-1.5 px-1">
-            <CheckCircle2 className="w-3 h-3 text-[#4AD295]" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#A0A0A0]">
-              Active ({active.length})
-            </span>
+      {showLoading ? (
+        <div className="py-2 text-center text-xs text-[#A0A0A0]">Loading...</div>
+      ) : (
+        <div className="overflow-hidden rounded-[12px] border border-[#C9A646]/20 bg-[#141414]">
+          <button
+            type="button"
+            role="option"
+            aria-selected={isShowingAll}
+            onClick={() => setSelectedPortfolioIds([ALL_PORTFOLIOS_ID])}
+            className={cn(
+              'flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors',
+              isShowingAll
+                ? 'bg-[#C9A646]/5 text-[#C9A646]'
+                : 'text-zinc-300 hover:bg-zinc-800/50',
+            )}
+          >
+            <CheckboxMark checked={isShowingAll} compact />
+            <span className="flex-1 text-left">All accounts</span>
+          </button>
+
+          {portfolios.length > 0 && (
+            <>
+              <div className="mx-2 border-t border-zinc-800/60" />
+              <div className="px-3 pb-0.5 pt-2">
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
+                  My accounts
+                </span>
+              </div>
+
+              {tradovatePortfolios.map((portfolio) => (
+                <SimpleAccountRow
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
+
+              {manualPortfolios.map((portfolio) => (
+                <SimpleAccountRow
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
+            </>
+          )}
+
+          <div className="mx-2 mt-1 border-t border-zinc-800/60" />
+          <div className="grid grid-cols-2 gap-2 p-2">
+            <button
+              onClick={onAddConnection}
+              className="flex items-center justify-center gap-2 rounded-[10px] border border-[#C9A646]/30 px-3 py-2 text-xs font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/50 hover:bg-[#C9A646]/10"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add connection
+            </button>
+            <button
+              onClick={handleManage}
+              className="flex items-center justify-center gap-2 rounded-[10px] border border-zinc-700/70 px-3 py-2 text-xs font-medium text-zinc-400 transition-colors hover:border-[#C9A646]/35 hover:bg-zinc-800/50 hover:text-[#C9A646]"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              Manage
+            </button>
           </div>
-          {active.map((c) => (
-            <ConnectionRow
-              key={c.id}
-              conn={c}
-              busy={busyId === c.id}
-              onSync={wrapBusy(syncNow)}
-            />
-          ))}
-        </section>
-      )}
-
-      {!loadingInactive && inactive.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center gap-1.5 px-1">
-            <Clock className="w-3 h-3 text-[#E36363]" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#A0A0A0]">
-              Re-authenticate ({inactive.length})
-            </span>
-          </div>
-          {inactive.map((c) => (
-            <ConnectionRow
-              key={c.id}
-              conn={c}
-              busy={busyId === c.id}
-              onReconnect={wrapBusy(reconnect)}
-              onCanceled={setReconnectFor}
-            />
-          ))}
-        </section>
-      )}
-
-      {(loadingActive || loadingInactive) && (
-        <div className="text-[#A0A0A0] text-xs py-2 text-center">Loading...</div>
-      )}
-
-      {showEmpty && (
-        <div
-          className="bg-[#0A0A0A] border rounded-[12px] p-4 text-center"
-          style={{ borderColor: BORDER_LIGHT }}
-        >
-          <p className="text-[#A0A0A0] text-xs">No broker connections yet.</p>
-          <p className="text-[#666] text-[10px] mt-1">
-            Connect a broker to start syncing trades.
-          </p>
         </div>
       )}
 
-      <button
-        onClick={onAddConnection}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-[10px] border border-[#C9A646]/30 text-[#C9A646] text-xs font-medium hover:bg-[#C9A646]/10 hover:border-[#C9A646]/50 transition-colors"
-      >
-        <Plus className="w-3.5 h-3.5" />
-        Add new connection
-      </button>
-
-      {!loadingActive && active.length > 0 && (
-        <p className="text-[9px] text-[#666] flex items-start gap-1.5 px-1 leading-snug">
-          <LinkIcon className="w-2.5 h-2.5 mt-0.5 flex-shrink-0" />
-          <span>
-            Auto-sync coming soon — click{' '}
-            <RefreshCw className="w-2.5 h-2.5 inline-block align-text-bottom" /> Sync Now
-            after each trade for now.
-          </span>
-        </p>
-      )}
-
-      {/* Opt-in reconnect modal — only surfaces for connections in status='canceled' */}
       {reconnectFor && (
         <BrokerReconnectModal
           open={!!reconnectFor}
@@ -270,8 +642,7 @@ function PopoverBody({ onAddConnection }: { onAddConnection?: () => void }) {
   );
 }
 
-// ── Wrapper: Popover (desktop) or Sheet (mobile <768px) ──────────────
-export default function BrokerConnectionsPopover({ children, onAddConnection }: Props) {
+export default function BrokerConnectionsPopover({ children, onAddConnection, onManage }: Props) {
   const isMobile = useIsMobile();
 
   if (isMobile) {
@@ -280,10 +651,10 @@ export default function BrokerConnectionsPopover({ children, onAddConnection }: 
         <SheetTrigger asChild>{children}</SheetTrigger>
         <SheetContent
           side="bottom"
-          className="bg-[#141414] border-t rounded-t-[20px] max-h-[85vh] overflow-y-auto p-4"
+          className="max-h-[85vh] overflow-y-auto rounded-t-[20px] border-t bg-[#141414] p-4"
           style={{ borderColor: BORDER_LIGHT }}
         >
-          <PopoverBody onAddConnection={onAddConnection} />
+          <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
         </SheetContent>
       </Sheet>
     );
@@ -295,10 +666,10 @@ export default function BrokerConnectionsPopover({ children, onAddConnection }: 
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="bg-[#141414] border rounded-[16px] w-[360px] max-h-[80vh] overflow-y-auto p-3 shadow-[0_0_30px_rgba(201,166,70,0.15)]"
+        className="w-[360px] rounded-[16px] border bg-[#141414] p-3 shadow-[0_0_30px_rgba(201,166,70,0.15)]"
         style={{ borderColor: BORDER_LIGHT }}
       >
-        <PopoverBody onAddConnection={onAddConnection} />
+        <PopoverBody onAddConnection={onAddConnection} onManage={onManage} />
       </PopoverContent>
     </Popover>
   );

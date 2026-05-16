@@ -5,13 +5,14 @@ import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
 
 interface Props {
   onClose: () => void;
+  onAddConnection?: () => void;
   initialStep?: Step;
   env?: TradovateEnv;
 }
 
 type Step = 'select-env' | 'credentials' | 'connected' | 'manage';
 
-export default function TradovateConnectModal({ onClose, initialStep = 'select-env', env }: Props) {
+export default function TradovateConnectModal({ onClose, onAddConnection, initialStep = 'select-env', env }: Props) {
   const { credentials, liveCredential, demoCredential, hasLiveConnection, hasDemoConnection,
           connect, disconnect, triggerSync, updateLabel, isLoading } = useTradovate();
   
@@ -44,6 +45,14 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
   const handleDisconnect = useCallback(async (env: TradovateEnv) => {
     await disconnect(env);
   }, [disconnect]);
+
+  const handleAddConnection = useCallback(() => {
+    if (onAddConnection) {
+      onAddConnection();
+      return;
+    }
+    setStep('select-env');
+  }, [onAddConnection]);
 
   const credential = selectedEnv === 'live' ? liveCredential : demoCredential;
   const isAlreadyConnected = credential?.status === 'connected';
@@ -218,10 +227,10 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
             </div>
           )}
 
-          {/* Copy Trading section (if premium) */}
+          {/* Trade Copier section (if premium) */}
           <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between">
             <p className="text-[11px] text-zinc-600">
-              Trades sync every 5 minutes · Copy Trading available after connection
+              Trades sync every 5 minutes · Trade Copier available after connection
             </p>
             {credentials.length > 0 && (
               <button
@@ -235,37 +244,36 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
 
           {/* ── MANAGE VIEW — luxury overlay inside modal ── */}
           {step === 'manage' && (
-            <div className="absolute inset-0 rounded-[24px] z-20 flex flex-col overflow-hidden"
-              style={{ background: 'linear-gradient(160deg, #0f0f0f 0%, #141414 100%)' }}
+            <div
+              className="absolute inset-0 z-20 flex flex-col overflow-hidden rounded-[24px] border border-[#C9A646]/15 bg-[#101010] shadow-[0_26px_90px_rgba(0,0,0,0.62)]"
+              style={{ background: 'linear-gradient(150deg, rgba(18,18,18,0.98) 0%, rgba(10,10,10,0.99) 100%)' }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-5 flex-shrink-0"
+              <div className="flex items-center justify-between px-6 py-5 flex-shrink-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.025),transparent)]"
                 style={{ borderBottom: '1px solid rgba(201,166,70,0.12)' }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                    style={{ background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))', border: '1px solid rgba(201,166,70,0.2)' }}
-                  >
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#C9A646]/25 bg-[#C9A646]/10 shadow-[0_0_26px_rgba(201,166,70,0.12)]">
                     <Link2 className="w-4 h-4 text-[#C9A646]" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white tracking-tight">Manage Connections</h3>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <h3 className="text-lg font-semibold leading-tight text-white tracking-tight">Manage Connections</h3>
+                    <p className="text-sm text-zinc-500 mt-0.5">
                       {credentials.length} connection{credentials.length !== 1 ? 's' : ''}
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => { setStep('select-env'); setEditingId(null); setEditingLabel(''); }}
-                  className="w-8 h-8 rounded-xl flex items-center justify-center transition-all hover:bg-zinc-800"
+                  onClick={() => { onClose(); setEditingId(null); setEditingLabel(''); }}
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:bg-zinc-800"
                   style={{ border: '1px solid rgba(255,255,255,0.06)' }}
                 >
-                  <X className="w-4 h-4 text-zinc-400" />
+                  <X className="w-5 h-5 text-zinc-400" />
                 </button>
               </div>
 
               {/* Connections list */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
                 {credentials.map(cred => {
                   const isConnected = cred.status === 'connected';
                   const isExpired   = cred.status === 'expired';
@@ -275,27 +283,31 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
 
                   return (
                     <div key={cred.id}
-                      className="rounded-2xl overflow-hidden transition-all duration-200"
+                      className="rounded-[18px] overflow-hidden transition-all duration-200"
                       style={{
-                        background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+                        background: isConnected
+                          ? 'linear-gradient(135deg, rgba(30,52,41,0.42) 0%, rgba(15,15,15,0.96) 58%)'
+                          : 'linear-gradient(135deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.012) 100%)',
                         border: isConnected
-                          ? '1px solid rgba(74,210,149,0.2)'
+                          ? '1px solid rgba(74,210,149,0.28)'
                           : isExpired
                           ? '1px solid rgba(227,99,99,0.2)'
                           : '1px solid rgba(255,255,255,0.07)',
-                        boxShadow: isConnected ? '0 0 20px rgba(74,210,149,0.05)' : 'none',
+                        boxShadow: isConnected
+                          ? '0 18px 36px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)'
+                          : 'inset 0 1px 0 rgba(255,255,255,0.035)',
                       }}
                     >
                       {/* Top status bar */}
-                      <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2">
+                      <div className="flex items-center gap-2.5 px-5 pt-4 pb-2">
                         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
                           isConnected ? 'bg-emerald-400 animate-pulse' :
                           isExpired   ? 'bg-red-400' : 'bg-zinc-600'
                         }`} />
                         <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold tracking-wide ${
                           cred.environment === 'live'
-                            ? 'bg-[#C9A646]/10 text-[#C9A646]'
-                            : 'bg-blue-500/10 text-blue-400'
+                            ? 'bg-emerald-500/10 text-emerald-300'
+                            : 'bg-blue-500/12 text-blue-300'
                         }`}>
                           {cred.environment.toUpperCase()}
                         </span>
@@ -310,7 +322,7 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
                       </div>
 
                       {/* Label row */}
-                      <div className="px-4 pb-3.5">
+                      <div className="px-5 pb-4">
                         {editingId === cred.id ? (
                           <div className="flex items-center gap-2 mt-1">
                             <input
@@ -346,14 +358,12 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
                         ) : (
                           <div className="flex items-center justify-between gap-2 mt-1">
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold text-white truncate">
-                                {cred.connection_label || cred.account_name || `Account ${cred.account_id}`}
+                              <div className="text-base font-semibold text-white truncate">
+                                {cred.connection_label || `Tradovate (${cred.environment})`}
                               </div>
-                              {cred.account_name && (
-                                <div className="text-[10px] text-zinc-600 mt-0.5 truncate">
-                                  {cred.account_name}
-                                </div>
-                              )}
+                              <div className="text-xs text-zinc-500 mt-1 truncate">
+                                {cred.account_name || cred.account_id}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <button
@@ -384,10 +394,10 @@ export default function TradovateConnectModal({ onClose, initialStep = 'select-e
               </div>
 
               {/* Footer — add new */}
-              <div className="px-4 pb-4 flex-shrink-0">
+              <div className="px-5 pb-5 flex-shrink-0">
                 <button
-                  onClick={() => setStep('select-env')}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-medium transition-all"
+                  onClick={handleAddConnection}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-[14px] text-sm font-semibold transition-all hover:bg-[#C9A646]/10"
                   style={{
                     background: 'rgba(201,166,70,0.06)',
                     border: '1px solid rgba(201,166,70,0.15)',

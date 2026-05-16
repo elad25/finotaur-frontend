@@ -4,7 +4,7 @@
 // ================================================
 
 import React, { useState, useMemo } from "react";
-import { BarChart3 } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { type Trade } from "@/hooks/useDashboardData";
 import { normalizeSymbol } from "@/utils/normalizeSymbol";
 
@@ -166,21 +166,19 @@ const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades }) => {
   ];
 
   return (
-    <div
-      className="rounded-2xl border p-6 shadow-lg"
-      style={{
-        borderColor: "rgba(201, 166, 70, 0.15)",
-        background: "linear-gradient(135deg, rgba(20,20,20,0.95) 0%, rgba(14,14,14,0.95) 100%)",
-      }}
-    >
+    <div className="rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-5">
-        <BarChart3 className="w-5 h-5 text-[#C9A646]" />
-        <h3 className="text-[#F4F4F4] text-lg font-semibold">Performance Breakdown</h3>
+      <div className="mb-3 flex items-center gap-2">
+        <h3 className="text-[14px] font-semibold text-white">Performance Breakdown</h3>
+        <HelpCircle
+          className="h-3.5 w-3.5 cursor-help text-white/38 transition-colors hover:text-[#E8C766]"
+          aria-label="Groups your trades by symbol, strategy, or session and compares trades, win rate, net P&L, and average R."
+          title="Groups your trades by symbol, strategy, or session and compares trades, win rate, net P&L, and average R."
+        />
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-2 mb-5">
+      <div className="mb-3 flex gap-2">
         {tabs.map(tab => (
           <button
             key={tab.key}
@@ -188,10 +186,10 @@ const BreakdownPanel: React.FC<BreakdownPanelProps> = ({ trades }) => {
               setActiveTab(tab.key);
               setSort({ column: "netPnl", dir: "desc" });
             }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+            className={`rounded-md px-4 py-1.5 text-[11px] font-medium transition-all ${
               activeTab === tab.key
-                ? "bg-[#C9A646] text-black"
-                : "bg-white/[0.05] text-[#888888] hover:text-[#F4F4F4]"
+                ? "bg-[#C9A646]/55 text-white shadow-[0_0_18px_rgba(201,166,70,0.18)]"
+                : "bg-white/[0.045] text-white/56 hover:text-white"
             }`}
           >
             {tab.label}

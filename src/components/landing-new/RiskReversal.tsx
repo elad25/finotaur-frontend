@@ -10,7 +10,7 @@ import { Shield, Check, Sparkles } from "lucide-react";
 const guarantees = [
   "14 days full access — no restrictions",
   "Cancel in one click — no questions asked",
-  "Zero risk — you can only gain",
+  "Manage risk effectively",
 ];
 
 const RiskReversal = () => {

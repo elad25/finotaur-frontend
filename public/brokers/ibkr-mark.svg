@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">Interactive Brokers mark</title>
+  <path fill="#E31B2F" d="M11 36 24.5 8h9.8L20.8 36H11Z"/>
+  <circle cx="33.5" cy="31.5" r="5.5" fill="#E31B2F"/>
+</svg>

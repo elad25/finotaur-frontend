@@ -96,8 +96,8 @@ export const BillingToggle = memo(function BillingToggle({
         className={cn(
           "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300", 
           selected === 'monthly' 
-            ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
-            : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
+            ? "bg-gradient-to-b from-[#F5DA78] via-[#D9B84D] to-[#B99431] text-black shadow-[0_12px_34px_rgba(201,166,70,0.24)]" 
+            : "bg-black/25 border border-[#C9A646]/24 text-[#E5D8B7]/70 hover:border-[#C9A646]/45 hover:bg-[#C9A646]/5"
         )}
       >
         Monthly
@@ -107,16 +107,16 @@ export const BillingToggle = memo(function BillingToggle({
         className={cn(
           "px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 relative", 
           selected === 'yearly' 
-            ? "bg-gradient-to-r from-[#C9A646] to-[#F4D97B] text-black shadow-lg shadow-[#C9A646]/30" 
-            : "bg-white/[0.03] border border-[#C9A646]/30 text-slate-300 hover:border-[#C9A646]/50"
+            ? "bg-gradient-to-b from-[#F5DA78] via-[#D9B84D] to-[#B99431] text-black shadow-[0_12px_34px_rgba(201,166,70,0.24)]" 
+            : "bg-black/25 border border-[#C9A646]/24 text-[#E5D8B7]/70 hover:border-[#C9A646]/45 hover:bg-[#C9A646]/5"
         )}
       >
         Yearly
         <span className={cn(
           "absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold", 
           selected === 'yearly' 
-            ? "bg-green-500 text-white" 
-            : "bg-green-500/20 text-green-400 border border-green-500/30"
+            ? "bg-[#0f1f15] text-[#B7F0C7] border border-[#B7F0C7]/25" 
+            : "bg-[#0f1f15]/80 text-[#B7F0C7] border border-[#B7F0C7]/25"
         )}>
           Save ${YEARLY_SAVINGS}
         </span>
@@ -171,10 +171,10 @@ export const StatsBar = memo(function StatsBar({ isMobile = false }: { isMobile?
           <div className="grid grid-cols-4">
             {STATS.map((stat, i) => (
               <div key={i} className="text-center relative px-6">
-                <div className="text-3xl md:text-4xl lg:text-5xl font-bold heading-serif italic text-[#C9A646] whitespace-nowrap">
+                <div className="heading-serif text-2xl md:text-3xl lg:text-4xl font-semibold text-[#E8C766] whitespace-nowrap">
                   {stat.value}
                 </div>
-                <div className="text-slate-400 text-xs mt-2 tracking-wide uppercase">
+                <div className="text-[#E5D8B7]/45 text-xs mt-2 tracking-[0.16em] uppercase">
                   {stat.label}
                 </div>
               </div>
@@ -212,12 +212,12 @@ export const FeatureIcons = memo(function FeatureIcons({ isMobile = false }: { i
       <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
         {features.map((f, i) => (
           <div key={i} className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+            <div className="w-8 h-8 rounded-lg border border-[#C9A646]/30 flex items-center justify-center bg-[#C9A646]/7 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
               <f.icon className="w-3.5 h-3.5 text-[#C9A646]" strokeWidth={1.5} />
             </div>
             <div>
-              <div className="text-white font-bold">{f.title}</div>
-              <div className="text-slate-400 text-[10px]">{f.subtitle}</div>
+              <div className="text-white/90 font-bold">{f.title}</div>
+              <div className="text-[#E5D8B7]/45 text-[10px]">{f.subtitle}</div>
             </div>
           </div>
         ))}
@@ -229,15 +229,15 @@ export const FeatureIcons = memo(function FeatureIcons({ isMobile = false }: { i
     <div className="flex flex-wrap items-center gap-6 relative z-20">
       {features.map((f, i) => (
         <div key={i} className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-lg border border-[#C9A646]/40 flex items-center justify-center bg-[#C9A646]/5">
+          <div className="w-10 h-10 rounded-lg border border-[#C9A646]/28 flex items-center justify-center bg-[#C9A646]/7 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
             <f.icon className="w-4 h-4 text-[#C9A646]" strokeWidth={1.5} />
           </div>
           <div>
-            <div className="text-white font-bold text-sm">{f.title}</div>
-            <div className="text-slate-400 text-xs">{f.subtitle}</div>
+            <div className="text-white/92 font-bold text-sm">{f.title}</div>
+            <div className="text-[#E5D8B7]/45 text-xs">{f.subtitle}</div>
           </div>
           {i < features.length - 1 && (
-            <div className="w-px h-10 bg-[#C9A646]/30 ml-4" />
+            <div className="w-px h-10 bg-[#C9A646]/18 ml-4" />
           )}
         </div>
       ))}

@@ -173,7 +173,7 @@ const getTradeData = (trade: Trade, oneR: number) => {
 // ================================================
 
 const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
-  <ResponsiveContainer width="100%" height={280}>
+  <ResponsiveContainer width="100%" height={280} debounce={150}>
     <AreaChart data={data}>
       <defs>
         <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
@@ -237,8 +237,7 @@ const MemoizedAreaChart = memo(({ data }: { data: any[] }) => (
         stroke="#C9A646"
         strokeWidth={2.5}
         fill="url(#colorPnL)"
-        animationDuration={800}
-        animationEasing="ease-out"
+        isAnimationActive={false}
       />
     </AreaChart>
   </ResponsiveContainer>
@@ -314,7 +313,7 @@ const CustomTradesChartTooltip = memo(({ active, payload, label }: any) => {
 CustomTradesChartTooltip.displayName = 'CustomTradesChartTooltip';
 
 const MemoizedTradesChart = memo(({ data }: { data: TradesChartDataPoint[] }) => (
-  <ResponsiveContainer width="100%" height={280}>
+  <ResponsiveContainer width="100%" height={280} debounce={150}>
     <AreaChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
       <defs>
         <linearGradient id="colorTrades" x1="0" y1="0" x2="0" y2="1">
@@ -346,8 +345,7 @@ const MemoizedTradesChart = memo(({ data }: { data: TradesChartDataPoint[] }) =>
         fill="url(#colorTrades)"
         dot={{ r: 3, fill: '#C9A646', strokeWidth: 0 }}
         activeDot={{ r: 5, fill: '#C9A646', strokeWidth: 2, stroke: '#fff' }}
-        animationDuration={800}
-        animationEasing="ease-out"
+        isAnimationActive={false}
       />
     </AreaChart>
   </ResponsiveContainer>
@@ -355,7 +353,7 @@ const MemoizedTradesChart = memo(({ data }: { data: TradesChartDataPoint[] }) =>
 MemoizedTradesChart.displayName = 'MemoizedTradesChart';
 
 const MemoizedRadarChart = memo(({ data }: { data: any[] }) => (
-  <ResponsiveContainer width="100%" height={240}>
+  <ResponsiveContainer width="100%" height={240} debounce={150}>
     <RadarChart data={data}>
       <PolarGrid stroke="rgba(255,255,255,0.1)" />
       <PolarAngleAxis 
@@ -374,8 +372,7 @@ const MemoizedRadarChart = memo(({ data }: { data: any[] }) => (
         fill="#00C46C"
         fillOpacity={0.25}
         strokeWidth={2}
-        animationDuration={1000}
-        animationEasing="ease-out"
+        isAnimationActive={false}
       />
       <RechartsTooltip
         contentStyle={{

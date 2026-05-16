@@ -8,8 +8,8 @@ export type AssetClass = "stocks"|"futures"|"forex"|"crypto"|"options";
 const formatCache = new Map<string, string>();
 const MAX_CACHE_SIZE = 1000;
 
-export function formatNumber(n: number, fractionDigits=2): string {
-  if (!isFinite(n)) return "—";
+export function formatNumber(n: number | null | undefined, fractionDigits=2): string {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "—";
   
   const cacheKey = `${n}-${fractionDigits}`;
   

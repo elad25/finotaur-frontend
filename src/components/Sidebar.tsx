@@ -1,6 +1,6 @@
 // src/components/Sidebar.tsx
 // =====================================================
-// 🔥 v2.0: BETA ACCESS SYSTEM
+// נ”¥ v2.0: BETA ACCESS SYSTEM
 // =====================================================
 // Admins/VIPs with hasBetaAccess can see and access ALL locked items
 // =====================================================
@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
-import { useAdminAuth } from '@/hooks/useAdminAuth';  // 🔥 NEW
+import { useAdminAuth } from '@/hooks/useAdminAuth';  // נ”¥ NEW
 import { cn } from '@/lib/utils';
 import { FEATURES } from '@/config/features';
 import {
@@ -58,7 +58,8 @@ import {
   Bell,
   Coins,
   Flame,
-  Sparkles  // 🔥 For beta items
+  Sparkles,  // נ”¥ For beta items
+  Link2
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -72,12 +73,12 @@ interface SidebarProps {
   isOpen?: boolean;
 }
 
-type EnvironmentType = 
-  | 'journal' 
-  | 'backtest' 
-  | 'admin' 
-  | 'affiliate' 
-  | 'all-markets' 
+type EnvironmentType =
+  | 'journal'
+  | 'backtest'
+  | 'admin'
+  | 'affiliate'
+  | 'all-markets'
   | 'macro'
   | 'stocks'
   | 'crypto'
@@ -86,9 +87,11 @@ type EnvironmentType =
   | 'commodities'
   | 'options'
   | 'ai'
+  | 'ai-copilot'
   | 'copy-trade'
   | 'funding'
-  | 'settings';
+  | 'settings'
+  | 'connections';
 
 const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   label: string;
@@ -96,10 +99,16 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   icon: any;
   divider?: boolean;
   locked?: boolean;
-  beta?: boolean;  // 🔥 NEW
+  beta?: boolean;  // נ”¥ NEW
+  children?: Array<{
+    label: string;
+    path: string;
+    icon: any;
+    beta?: boolean;
+  }>;
 }>> = {
   // ===============================================
-  // 🌍 ALL MARKETS - 🔒 LOCKED
+  // נ ALL MARKETS - נ”’ LOCKED
   // ===============================================
   'all-markets': [
     { label: 'Overview', path: '/app/all-markets/overview', icon: LayoutDashboard, locked: true },
@@ -114,7 +123,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 📈 STOCKS
+  // נ“ˆ STOCKS
   // ===============================================
   'stocks': [
     { label: 'Dashboard', path: '/app/stocks/overview', icon: LayoutDashboard },
@@ -132,7 +141,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 🪙 CRYPTO
+  // נ×™ CRYPTO
   // ===============================================
   'crypto': [
     { label: 'Dashboard', path: '/app/crypto/overview', icon: LayoutDashboard },
@@ -144,7 +153,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 📊 FUTURES
+  // נ“ FUTURES
   // ===============================================
   'futures': [
     { label: 'Overview', path: '/app/futures/overview', icon: LayoutDashboard },
@@ -153,7 +162,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 💱 FOREX
+  // נ’± FOREX
   // ===============================================
   'forex': [
     { label: 'Dashboard', path: '/app/forex/overview', icon: LayoutDashboard },
@@ -168,7 +177,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 🛢️ COMMODITIES
+  // נ›¢ן¸ COMMODITIES
   // ===============================================
   'commodities': [
     { label: 'Dashboard', path: '/app/commodities/overview', icon: LayoutDashboard },
@@ -184,7 +193,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 📉 OPTIONS
+  // נ“‰ OPTIONS
   // ===============================================
   'options': [
     { label: 'Options Chain', path: '/app/options/chain', icon: LayoutDashboard },
@@ -202,7 +211,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   // ===============================================
-  // 🌐 MACRO & NEWS
+  // נ MACRO & NEWS
   // ===============================================
   'macro': [
     { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
@@ -218,22 +227,29 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'News', path: '/app/macro/news', icon: Newspaper },
   ],
 
-// ===============================================
-// 🤖 AI INSIGHTS - 🔥 UPDATED v2.1
-// ===============================================
-'ai': [
-  { label: 'My Portfolio', path: '/app/ai/my-portfolio', icon: Shield },
-  { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
-  { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
-  { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
-  { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
-  { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
-  { label: 'Top 5', path: '/app/ai/top-5', icon: Award },
-  { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
-],
-  // ===============================================
-  // 📓 JOURNAL
-  // ===============================================
+  'ai': [
+    { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },
+    { label: 'Sector Analyzer', path: '/app/ai/sector-analyzer', icon: Target },
+    { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
+    { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
+    { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
+    { label: 'Top 5', path: '/app/ai/top-5', icon: Award },
+    { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
+  ],
+
+  'ai-copilot': [
+    { label: 'FINOTAUR Copilot', path: '/app/ai/copilot', icon: LayoutDashboard, beta: true },
+    { label: 'Top Opportunities', path: '/app/ai/copilot/top-opportunities', icon: Zap, beta: true },
+    { label: 'Macro', path: '/app/ai/copilot/macro', icon: Globe, beta: true },
+    { label: 'Holdings', path: '/app/ai/copilot/holdings', icon: Layers, beta: true },
+    { label: 'Risks', path: '/app/ai/copilot/risks', icon: Shield, beta: true },
+  ],
+
+  connections: [
+    { label: 'My connections', path: '/app/connections', icon: Link2, beta: true },
+    { label: 'Add connection', path: '/app/connections/new', icon: PlusCircle, beta: true },
+  ],
+
   journal: [
     { label: 'Dashboard', path: '/app/journal/overview', icon: LayoutDashboard },
     { label: 'Add Trade', path: '/app/journal/new', icon: PlusCircle },
@@ -244,14 +260,10 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
-    { label: 'Trade Copier', path: '/app/journal/copy-trading', icon: Copy },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
     { label: 'Settings', path: '/app/journal/settings', icon: Settings },
   ],
 
-  // ===============================================
-  // 🧪 BACKTEST
-  // ===============================================
   backtest: [
     { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: FlaskConical },
     { label: 'Chart', path: '/app/journal/backtest/chart', icon: PlusCircle },
@@ -266,22 +278,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: Play },
   ],
 
-  // ===============================================
-  // 👥 COPY TRADE
-  // ===============================================
   'copy-trade': [
-    { label: 'Overview', path: '/app/copy-trade/overview', icon: LayoutDashboard },
-    { label: 'Top Traders', path: '/app/copy-trade/top-traders', icon: Users },
-    { label: 'Strategies', path: '/app/copy-trade/strategies', icon: Target },
-    { label: 'Portfolios', path: '/app/copy-trade/portfolios', icon: Wallet },
-    { label: 'Leaderboard', path: '/app/copy-trade/leaderboard', icon: Award },
-    { label: 'My Copying', path: '/app/copy-trade/my-copying', icon: Activity },
-    { label: 'Trader Insights', path: '/app/copy-trade/insights', icon: BarChart3 },
+    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2 },
+    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
+    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
   ],
 
-  // ===============================================
-  // 💰 FUNDING
-  // ===============================================
   'funding': [
     { label: 'Overview', path: '/app/funding/overview', icon: LayoutDashboard },
     { label: 'Brokers', path: '/app/funding/brokers', icon: Building },
@@ -289,9 +291,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Transactions', path: '/app/funding/transactions', icon: FileText },
   ],
 
-  // ===============================================
-  // 🔐 ADMIN
-  // ===============================================
   admin: [
     { label: 'Dashboard', path: '/app/journal/admin', icon: LayoutDashboard },
     { label: 'Users', path: '/app/journal/admin/users', icon: Users },
@@ -305,9 +304,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ],
 
-  // ===============================================
-  // 🤝 AFFILIATE
-  // ===============================================
   affiliate: FEATURES.AFFILIATE_TRACKING ? [
     { label: 'Dashboard', path: '/app/journal/affiliate/overview', icon: LayoutDashboard },
     { label: 'My Referrals', path: '/app/journal/affiliate/referrals', icon: UserPlus },
@@ -322,43 +318,29 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
   ] : [],
 
-  // ===============================================
-  // ⚙️ SETTINGS
-  // ===============================================
   settings: [
     { label: 'General', path: '/app/settings', icon: Settings },
     { label: 'Billing', path: '/app/settings/billing', icon: CreditCard },
     { label: 'Usage', path: '/app/settings/usage', icon: Activity },
-  ]
+  ],
 };
 
-// ===============================================
-// 🎨 ENVIRONMENT HEADERS CONFIG
-// ===============================================
-const ENVIRONMENT_HEADERS: Record<EnvironmentType, { icon: any; label: string; bgColor: string; textColor: string }> = {
-  'all-markets': { icon: LayoutDashboard, label: 'All Markets', bgColor: 'bg-blue-500/5', textColor: 'text-blue-400' },
-  'stocks': { icon: TrendingUp, label: 'Stocks', bgColor: 'bg-green-500/5', textColor: 'text-green-400' },
-  'crypto': { icon: Coins, label: 'Crypto', bgColor: 'bg-orange-500/5', textColor: 'text-orange-400' },
-  'futures': { icon: BarChart3, label: 'Futures', bgColor: 'bg-purple-500/5', textColor: 'text-purple-400' },
-  'forex': { icon: Globe, label: 'Forex', bgColor: 'bg-cyan-500/5', textColor: 'text-cyan-400' },
-  'commodities': { icon: Flame, label: 'Commodities', bgColor: 'bg-amber-500/5', textColor: 'text-amber-400' },
-  'options': { icon: Target, label: 'Options', bgColor: 'bg-pink-500/5', textColor: 'text-pink-400' },
-  'macro': { icon: Globe, label: 'Macro & News', bgColor: 'bg-emerald-500/5', textColor: 'text-emerald-400' },
-  'ai': { icon: Brain, label: 'AI Arena', bgColor: 'bg-violet-500/5', textColor: 'text-violet-400' },
-  'journal': { icon: BookOpen, label: 'Journal', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
-  'backtest': { icon: FlaskConical, label: 'Backtest', bgColor: 'bg-purple-500/5', textColor: 'text-purple-400' },
-  'copy-trade': { icon: Users, label: 'Copy Trade', bgColor: 'bg-teal-500/5', textColor: 'text-teal-400' },
-  'funding': { icon: Wallet, label: 'Funding', bgColor: 'bg-lime-500/5', textColor: 'text-lime-400' },
-  'admin': { icon: Shield, label: 'Admin Panel', bgColor: 'bg-[#D4AF37]/5', textColor: 'text-[#D4AF37]' },
-  'affiliate': { icon: Award, label: 'Affiliate Center', bgColor: 'bg-[#C9A646]/5', textColor: 'text-[#C9A646]' },
-  'settings': { icon: Settings, label: 'Settings', bgColor: 'bg-zinc-500/5', textColor: 'text-zinc-400' },
-};
+const sidebarItemBaseClass =
+  'relative group flex w-full min-h-[46px] items-center rounded-lg border-l-2 border-transparent py-2.5 text-[13px] font-medium leading-snug transition-all duration-200';
+const sidebarItemExpandedClass = 'gap-3 px-3';
+const sidebarItemCollapsedClass = 'justify-center px-2';
+const sidebarIconClass = 'h-5 w-5 flex-shrink-0';
+const sidebarLabelClass = 'flex-1 min-w-0 whitespace-normal break-words leading-snug';
+const sidebarBrandLabelClass = 'flex-1 min-w-0 whitespace-normal break-words leading-snug';
+const sidebarActiveClass =
+  'border-gold-bright bg-gold-primary/20 text-gold-bright shadow-[0_0_22px_rgba(201,166,70,0.22)]';
+const sidebarInactiveClass = 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright';
 
 export const Sidebar = ({ isOpen }: SidebarProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
-  const { isAdmin, hasBetaAccess } = useAdminAuth();  // 🔥 NEW: Beta access check
+  const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
     // Auto-collapse sidebar on AI Assistant page
@@ -368,6 +350,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
     return saved !== 'false';
   });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // Auto-collapse on AI Assistant, restore on other pages
   useEffect(() => {
@@ -388,7 +371,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   };
 
   // ===============================================
-  // 🔍 DETECT CURRENT ENVIRONMENT
+  // נ” DETECT CURRENT ENVIRONMENT
   // ===============================================
   const getCurrentEnvironment = (): EnvironmentType => {
     const path = location.pathname;
@@ -410,9 +393,11 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     if (path.startsWith('/app/commodities')) return 'commodities';
     if (path.startsWith('/app/options')) return 'options';
     if (path.startsWith('/app/macro')) return 'macro';
+    if (path.startsWith('/app/ai/copilot')) return 'ai-copilot';
     if (path.startsWith('/app/ai')) return 'ai';
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
+    if (path.startsWith('/app/connections')) return 'connections';
     if (path.startsWith('/app/journal')) return 'journal';
     
     // Default
@@ -421,14 +406,15 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
 
   const currentEnvironment = getCurrentEnvironment();
   const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
+  const sidebarTopClass = 'top-28 h-[calc(100vh-7rem)]';
 
   // ===============================================
-  // 🎯 SHOW SIDEBAR FOR ALL APP ROUTES
+  // נ¯ SHOW SIDEBAR FOR ALL APP ROUTES
   // ===============================================
   const shouldShowSidebar = location.pathname.startsWith('/app/');
   
   // ===============================================
-  // 🔥 HIDE SIDEBAR FOR SPECIFIC PAGES
+  // נ”¥ HIDE SIDEBAR FOR SPECIFIC PAGES
   // ===============================================
   const hideSidebarPaths = [
     '/app/all-markets/warzone',
@@ -441,7 +427,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     return null;
   }
 
-  // 🔥 UPDATED: Beta access allows navigation to locked items
+  // נ”¥ UPDATED: Beta access allows navigation to locked items
   const handleNavigation = (path: string, isLocked?: boolean) => {
     if (isLocked && !hasBetaAccess) return;
     navigate(path);
@@ -476,6 +462,10 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     if (location.pathname === itemPath) {
       return true;
     }
+
+    if (itemPath === '/app/ai/copilot') {
+      return false;
+    }
     
     // Special cases for dashboard pages
     const dashboardPaths = [
@@ -508,16 +498,15 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     return isActive(itemPath);
   };
 
-  const envHeader = ENVIRONMENT_HEADERS[currentEnvironment];
-
   return (
     <aside
       className={cn(
-        'fixed left-0 top-28 z-30 h-[calc(100vh-7rem)] border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:sticky md:translate-x-0',
-        isExpanded ? 'w-48' : 'w-[60px]'
+        'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:sticky md:translate-x-0',
+        sidebarTopClass,
+        isExpanded ? 'w-56' : 'w-[60px]'
       )}
     >
-      {/* 🔥 Gold Toggle Tab */}
+      {/* נ”¥ Gold Toggle Tab */}
       <div
         onClick={handleToggle}
         className="absolute top-1/2 -translate-y-1/2 -right-[16px] z-50 cursor-pointer group"
@@ -544,28 +533,6 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
         </div>
       </div>
 
-      {/* 🏷️ Environment Header Badge */}
-      {envHeader && (
-        <div className={cn(
-          "px-3 py-2 border-b border-gray-700 h-10 min-h-[40px]",
-          envHeader.bgColor
-        )}>
-          <div className={cn(
-            "flex items-center gap-2 h-full overflow-hidden",
-            envHeader.textColor
-          )}>
-            {envHeader.icon && (
-              <envHeader.icon className="w-4 h-4 flex-shrink-0" />
-            )}
-            {isExpanded && (
-              <span className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">
-                {envHeader.label}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       <nav className="flex h-full flex-col gap-1 overflow-y-auto p-2">
         {sidebarItems.map((item, index) => {
           if (item.divider) {
@@ -575,53 +542,94 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           const Icon = item.icon;
           const active = isItemActive(item.path);
           const isBackButton = item.label === 'Back to Journal';
-          const isWarZone = item.path === '/app/all-markets/warzone';
           const isBetaItem = item.beta === true;
+          const isCopilotItem = item.path === '/app/ai/copilot';
+          const showBetaBadge = isBetaItem && !isCopilotItem;
+          const hasChildren = Boolean(item.children?.length);
+          const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
+          const parentActive = hasChildren
+            ? location.pathname === item.path || item.children?.some(child => location.pathname === child.path)
+            : active;
           
-          // 🔥 BETA ACCESS: Admins can access locked items
+          // נ”¥ BETA ACCESS: Admins can access locked items
           const isLocked = item.locked === true && !hasBetaAccess;
           
-          // 🔥 Hide beta items for non-beta users
+          // נ”¥ Hide beta items for non-beta users
           if (isBetaItem && !hasBetaAccess) {
             return null;
           }
           
           return (
-            <button
-              key={item.path}
-              onClick={() => handleNavigation(item.path, item.locked)}
+            <div key={item.path}>
+              <button
+              onClick={() => {
+                if (hasChildren) {
+                  if (!isExpanded) {
+                    setIsExpanded(true);
+                    localStorage.setItem('finotaur-sidebar-expanded', 'true');
+                    setOpenGroups(prev => ({ ...prev, [item.path]: true }));
+                    return;
+                  }
+
+                  setOpenGroups(prev => ({ ...prev, [item.path]: !prev[item.path] }));
+                  return;
+                }
+                handleNavigation(item.path, item.locked);
+              }}
               onMouseEnter={() => !isLocked && handlePrefetch(item.path)}
               disabled={isLocked}
-              title={!isExpanded ? item.label : undefined}
+              title={hasChildren ? (childrenOpen ? 'Hide Copilot pages' : 'Show Copilot pages') : !isExpanded ? item.label : undefined}
               className={cn(
-                'flex items-center rounded-lg py-2.5 text-sm font-medium transition-all duration-200 relative group',
-                isExpanded ? 'gap-3 px-3' : 'justify-center px-2',
+                sidebarItemBaseClass,
+                isExpanded ? sidebarItemExpandedClass : sidebarItemCollapsedClass,
                 isLocked
                   ? 'text-gray-500 cursor-not-allowed opacity-60'
                   : isBackButton
                     ? 'text-gray-400 hover:bg-base-700 hover:text-white'
-                    : isWarZone
-                      ? active
-                        ? 'border-l-2 border-red-500 bg-red-500/10 text-red-400'
-                        : 'text-red-400/70 hover:bg-red-500/10 hover:text-red-400'
+                      : isCopilotItem
+                        ? parentActive
+                          ? sidebarActiveClass
+                          : sidebarInactiveClass
                       : isBetaItem
-                        ? active
-                          ? 'border-l-2 border-orange-500 bg-orange-500/10 text-orange-400'
-                          : 'text-orange-400/70 hover:bg-orange-500/10 hover:text-orange-400'
-                        : active
-                          ? 'border-l-2 border-gold bg-gold/10 text-gold'
-                          : 'text-muted-foreground hover:bg-base-700 hover:text-foreground'
+                        ? parentActive
+                          ? sidebarActiveClass
+                          : sidebarInactiveClass
+                        : parentActive
+                          ? sidebarActiveClass
+                          : sidebarInactiveClass
               )}
             >
-              {Icon && <Icon className="h-5 w-5 flex-shrink-0" />}
+              {Icon && (
+                <Icon
+                  className={cn(
+                    sidebarIconClass,
+                    hasChildren && 'transition-transform duration-200',
+                    childrenOpen && 'rotate-90'
+                  )}
+                />
+              )}
               
               {isExpanded && (
                 <>
-                  <span className="flex-1 truncate">{item.label}</span>
+                  <span className={item.label === 'FINOTAUR Copilot' ? sidebarBrandLabelClass : sidebarLabelClass}>
+                    {item.label === 'FINOTAUR Copilot' ? (
+                      <>
+                        <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
+                          FINOTAUR
+                        </span>{' '}
+                        <span className="font-semibold text-ink-primary">Copilot</span>
+                      </>
+                    ) : item.label}
+                  </span>
                   {isLocked && <Lock className="h-3.5 w-3.5 text-gray-500" />}
-                  {isBetaItem && (
-                    <span className="px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                  {showBetaBadge && (
+                    <span className="rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
                       BETA
+                    </span>
+                  )}
+                  {hasChildren && (
+                    <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/70">
+                      {childrenOpen ? 'Open' : 'Pages'}
                     </span>
                   )}
                 </>
@@ -632,14 +640,46 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                 <div className="absolute left-full ml-3 px-2 py-1 bg-base-900 border border-gray-600 rounded text-xs whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-lg pointer-events-none">
                   {item.label}
                   {isLocked && <Lock className="inline h-3 w-3 ml-1 text-gray-500" />}
-                  {isBetaItem && (
-                    <span className="ml-1 px-1 py-0.5 text-[9px] font-bold bg-orange-500/20 text-orange-400 rounded">
+                  {showBetaBadge && (
+                    <span className="ml-1 rounded bg-gold/15 px-1 py-0.5 text-[9px] font-bold text-gold">
                       BETA
                     </span>
                   )}
                 </div>
               )}
-            </button>
+              </button>
+
+              {childrenOpen && (
+                <div className="mt-1 space-y-1 pl-4">
+                  {item.children?.map((child) => {
+                    const ChildIcon = child.icon;
+                    const childActive = location.pathname === child.path;
+
+                    if (child.beta && !hasBetaAccess) {
+                      return null;
+                    }
+
+                    return (
+                      <button
+                        key={child.path}
+                        onClick={() => handleNavigation(child.path)}
+                        onMouseEnter={() => handlePrefetch(child.path)}
+                        className={cn(
+                          sidebarItemBaseClass,
+                          sidebarItemExpandedClass,
+                          childActive
+                            ? sidebarActiveClass
+                            : sidebarInactiveClass
+                        )}
+                      >
+                        {ChildIcon && <ChildIcon className={sidebarIconClass} />}
+                        <span className={sidebarLabelClass}>{child.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>

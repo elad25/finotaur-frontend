@@ -44,8 +44,9 @@ export function statusDotColor(conn: BrokerConnection): string {
 export type AggregateDotColor = 'red' | 'yellow' | 'green' | null;
 
 export function aggregateStatusDotColor(connections: BrokerConnection[]): AggregateDotColor {
+  if (connections.length === 0) return null;
   if (connections.some((c) => c.status === 'error' || c.status === 'canceled')) return 'red';
   if (connections.some((c) => c.status === 'pending' || c.status === 'degraded')) return 'yellow';
-  if (connections.some((c) => c.status === 'connected' || c.status === 'renewing')) return 'green';
+  if (connections.every((c) => c.status === 'connected' || c.status === 'renewing')) return 'green';
   return null;
 }
