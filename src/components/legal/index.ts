@@ -10,6 +10,9 @@ export { default as Disclaimer } from './Disclaimer';
 export { default as Copyright } from './Copyright';
 export { default as CookiePolicy } from './CookiePolicy';
 export { default as RiskDisclosure } from './RiskDisclosure';
+export { default as FuturesRiskDisclosure } from './FuturesRiskDisclosure';
+export { default as CftcHypotheticalDisclosure } from './CftcHypotheticalDisclosure';
+export { default as TestimonialDisclaimer } from './TestimonialDisclaimer';
 export { default as RefundPolicy } from './RefundPolicy';
 export { default as DMCA } from './DMCA';
 

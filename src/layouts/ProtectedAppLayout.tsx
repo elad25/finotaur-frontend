@@ -6,6 +6,7 @@ import { SubNav } from '@/components/SubNav';
 import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
+import ComplianceFooterBar from '@/components/ComplianceFooterBar';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -39,6 +40,7 @@ export const ProtectedAppLayout = () => {
             </div>
           </main>
         </div>
+        <ComplianceFooterBar />
       </div>
     </PortfolioProvider>
   );

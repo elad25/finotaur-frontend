@@ -76,7 +76,7 @@ import PricingSelection from "@/pages/app/journal/PricingSelection";
 import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
-import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, RefundPolicy, DMCA } from "@/components/legal";
+import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, RefundPolicy, DMCA } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
 
 // LAZY LOADED PAGES
@@ -316,6 +316,9 @@ function AppContent() {
         <Route path="/legal/copyright" element={<Copyright />} />
         <Route path="/legal/cookies" element={<CookiePolicy />} />
         <Route path="/legal/risk-disclosure" element={<RiskDisclosure />} />
+        <Route path="/legal/futures-risk" element={<FuturesRiskDisclosure />} />
+        <Route path="/legal/cftc-hypothetical-performance" element={<CftcHypotheticalDisclosure />} />
+        <Route path="/legal/testimonial-disclaimer" element={<TestimonialDisclaimer />} />
         <Route path="/legal/refund" element={<RefundPolicy />} />
         <Route path="/legal/dmca" element={<DMCA />} />
         <Route path="/pricing-selection" element={<Navigate to="/onboarding" replace />} />
