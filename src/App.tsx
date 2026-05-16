@@ -441,6 +441,7 @@ function AppContent() {
           <Route path="ai/top-5" element={<SuspenseRoute><AITop5 /></SuspenseRoute>} />
           <Route path="ai/assistant" element={<SuspenseRoute><AIAssistant /></SuspenseRoute>} />
           {/* JOURNAL */}
+          <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
           <Route path="journal/overview" element={<JournalRoute><JournalOverview /></JournalRoute>} />
 <Route path="journal/new" element={<JournalRoute><New /></JournalRoute>} />
 <Route path="journal/my-trades" element={<JournalRoute><JournalMyTrades /></JournalRoute>} />

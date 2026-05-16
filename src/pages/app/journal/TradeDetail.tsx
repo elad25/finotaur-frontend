@@ -77,6 +77,22 @@ export default function JournalTradeDetail() {
     }
   }, [id]);
 
+  // Warn before unload if the user has unsaved edits.
+  useEffect(() => {
+    if (!isEditing || !draft || !trade) return;
+    const baseline = tradeToEditDraft(trade);
+    const isDirty = (Object.keys(baseline) as Array<keyof EditDraft>).some(
+      (key) => draft[key] !== baseline[key],
+    );
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isEditing, draft, trade]);
+
   const fetchTrade = async () => {
     try {
       const { data, error } = await supabase

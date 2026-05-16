@@ -24,6 +24,7 @@
 import { memo, Suspense, ReactNode, lazy } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // =====================================================
 // LAZY LOAD LANDING PAGE
@@ -50,7 +51,9 @@ PageLoader.displayName = 'PageLoader';
 // =====================================================
 
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <ErrorBoundary>
+    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 
