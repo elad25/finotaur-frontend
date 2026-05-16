@@ -30,7 +30,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useTradovate, type TradovateEnv } from '@/hooks/useTradovate';
 
 const CONNECTION_NAME_MAX = 32;
-const NINJATRADER_AFFILIATE_URL = 'https://ninjatrader.com/';
+const NINJATRADER_AFFILIATE_URL = 'https://ninjatraderdomesticvendor.sjv.io/c/7301959/3069488/37581';
 
 const STRIP_BROKERS: BrokerName[] = [
   'tradovate',
@@ -333,7 +333,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               rel="noreferrer noopener"
               className="mb-3 inline-flex items-center gap-2 rounded-[8px] border border-[#C9A646]/16 bg-[#C9A646]/[0.045] px-2.5 py-1.5 text-[11px] text-[#E8C766] transition-all duration-200 hover:border-[#C9A646]/34 hover:bg-[#C9A646]/[0.075] hover:text-[#F4D97B]"
             >
-              אין חשבון בנינג'ה?
+              No NinjaTrader account?
               <ExternalLink className="h-3 w-3" />
             </a>
           )}
