@@ -1195,6 +1195,7 @@ const CopyHistorySection = memo(() => {
               </div>
             </div>
           </div>
+          {/* eslint-disable-next-line no-constant-binary-expression */}
           {false && (
             <div className="space-y-1.5 max-h-80 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent pr-1">
           {log.map(entry => {
@@ -1373,6 +1374,7 @@ export default function TradeCopier() {
                   />
                 </div>
 
+                {/* eslint-disable-next-line no-constant-binary-expression */}
                 {false && <div className="hidden">
                   <div className="mb-ds-4 flex items-center gap-ds-3">
                     <div className="flex items-center gap-ds-3">
@@ -1386,6 +1388,7 @@ export default function TradeCopier() {
                     </div>
                   </div>
 
+                  {/* eslint-disable-next-line no-constant-binary-expression */}
                   {false && <AccountsTable connections={connections} liveCredentialIds={liveCredentialIds} />}
 
                   <div className="mt-ds-2 flex items-center justify-between rounded-lg border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-4 text-sm text-ink-secondary">
