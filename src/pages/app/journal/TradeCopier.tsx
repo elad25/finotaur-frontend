@@ -193,16 +193,27 @@ function PremiumGate() {
         <div className="w-16 h-16 rounded-2xl bg-[#C9A646]/10 border border-[#C9A646]/20 flex items-center justify-center mx-auto">
           <Shield className="w-8 h-8 text-[#C9A646]" />
         </div>
-        <h2 className="text-xl font-bold text-white">Premium Feature</h2>
+        <h2 className="text-xl font-bold text-white">Premium Journal Feature</h2>
         <p className="text-zinc-400 text-sm">
-          Auto-sync &amp; Trade Copier requires a Premium subscription.
+          Trade Copier is available to Premium Journal subscribers (Finotaur tier and above).
+          Connect your broker, auto-sync trades, and copy positions across accounts.
         </p>
-        <a
-          href="/app/journal/pricing"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black font-bold text-sm hover:opacity-90 transition-all"
-        >
-          <Zap className="w-4 h-4" /> Upgrade to Premium
-        </a>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+          <a
+            href="/app/journal/pricing"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black font-bold text-sm hover:opacity-90 transition-all"
+          >
+            <Zap className="w-4 h-4" /> Upgrade Trade Journal
+          </a>
+          <a
+            href="https://finotaur.com/pricing"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/15 text-white font-bold text-sm hover:bg-white/10 transition-all"
+          >
+            <Zap className="w-4 h-4" /> Upgrade — Site Pricing
+          </a>
+        </div>
       </div>
     </div>
   );
