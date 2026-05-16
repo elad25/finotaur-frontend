@@ -16,6 +16,9 @@ interface MultiUploadZoneProps {
   maxFiles?: number;
 }
 
+// Match ScreenshotUpload + LuxuryUploadBox (both enforce 5MB).
+const MAX_BYTES = 5 * 1024 * 1024;
+
 export default function MultiUploadZone({
   screenshots,
   onScreenshotsChange,
@@ -46,6 +49,11 @@ export default function MultiUploadZone({
 
     // Validate all files first
     for (const file of filesToAdd) {
+      if (file.size > MAX_BYTES) {
+        toast.error(`${file.name}: max 5MB per screenshot`);
+        continue;
+      }
+
       const validation = validateImage(file);
       if (!validation.valid) {
         toast.error(validation.error || "Invalid image");

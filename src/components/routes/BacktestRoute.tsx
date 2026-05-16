@@ -4,6 +4,7 @@ import { memo, useEffect, useState, Suspense, ReactNode } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { domains } from '@/constants/nav';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Loading component
 const PageLoader = memo(() => (
@@ -18,7 +19,9 @@ PageLoader.displayName = 'PageLoader';
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  <ErrorBoundary>
+    <Suspense fallback={<PageLoader />}>{children}</Suspense>
+  </ErrorBoundary>
 ));
 SuspenseRoute.displayName = 'SuspenseRoute';
 
