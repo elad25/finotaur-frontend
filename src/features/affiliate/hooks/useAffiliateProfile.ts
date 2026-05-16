@@ -157,7 +157,7 @@ export function useAffiliateProfile() {
         .from('affiliates')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -237,7 +237,7 @@ export function useAffiliateReferrals(status?: string) {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -313,7 +313,7 @@ export function useAffiliateCommissions() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -351,7 +351,7 @@ export function useAffiliatePayouts() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -388,7 +388,7 @@ export function useAffiliateBonuses() {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
@@ -428,7 +428,7 @@ export function useAffiliateAnalytics(startDate?: Date, endDate?: Date) {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return null;
 
@@ -467,7 +467,7 @@ export function useAffiliateActivity(limit: number = 20) {
         .from('affiliates')
         .select('id')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
       if (!affiliate) return [];
 
