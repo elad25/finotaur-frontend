@@ -1455,7 +1455,7 @@ const WarZoneBriefingMockup = memo(function WarZoneBriefingMockup({ compact = fa
 // HERO SECTION - MOBILE
 // ============================================
 
-const HeroMobile = memo(function HeroMobile({}: {
+const HeroMobile = memo(function HeroMobile(_props: {
   onSubscribe: () => void;
 }) {
   const scrollToPricing = useCallback(() => {
@@ -1534,7 +1534,7 @@ const HeroMobile = memo(function HeroMobile({}: {
 // HERO SECTION - DESKTOP
 // ============================================
 
-const HeroDesktop = memo(function HeroDesktop({}: {
+const HeroDesktop = memo(function HeroDesktop(_props: {
   onSubscribe: () => void;
 }) {
   const scrollToPricing = useCallback(() => {

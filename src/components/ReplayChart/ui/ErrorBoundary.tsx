@@ -4,6 +4,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Theme } from '../types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { captureException } from '@/lib/sentry';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -36,6 +37,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({
       error,
       errorInfo,
+    });
+    captureException(error, {
+      extra: { componentStack: errorInfo.componentStack },
+      tags: { boundary: 'replay' },
     });
   }
 

@@ -8,6 +8,7 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
+import { captureException } from '@/lib/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -30,6 +31,10 @@ export class StockTabErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('[StockTabErrorBoundary]', error, errorInfo);
+    captureException(error, {
+      extra: { componentStack: errorInfo.componentStack },
+      tags: { boundary: 'stock-tab' },
+    });
   }
 
   handleRetry = () => {
