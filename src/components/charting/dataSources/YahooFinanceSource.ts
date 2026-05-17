@@ -13,6 +13,7 @@
 import type { UTCTimestamp } from 'lightweight-charts';
 import { supabase } from '@/lib/supabase';
 import type { Bar, ChartDataSource, Interval } from '../types';
+import { getCached, makeCacheKey, setCached } from './cache';
 
 interface ChartBarsResponse {
   bars: Array<{
@@ -37,6 +38,14 @@ export class YahooFinanceSource implements ChartDataSource {
     from: UTCTimestamp,
     to: UTCTimestamp,
   ): Promise<Bar[]> {
+    // ─── Client-side LRU cache check ─────────────────────────
+    // Avoids re-hitting the Edge Function (~1-2s) for trades the user just
+    // looked at. Server-side `chart_bars_cache` still saves Yahoo round-trips;
+    // this layer additionally saves the Edge Function round-trip itself.
+    const cacheKey = makeCacheKey('yahoo', symbol, interval, Number(from), Number(to));
+    const cached = getCached<Bar[]>(cacheKey);
+    if (cached) return cached;
+
     const { data, error } = await supabase.functions.invoke<ChartBarsResponse>('chart-bars', {
       body: {
         symbol,
@@ -71,6 +80,10 @@ export class YahooFinanceSource implements ChartDataSource {
       });
     }
     bars.sort((a, b) => (a.time as number) - (b.time as number));
+
+    // Cache only successful, non-empty responses. Empty results may indicate
+    // Yahoo rate limit / transient error — re-fetching is the right behavior.
+    if (bars.length > 0) setCached(cacheKey, bars);
     return bars;
   }
 }

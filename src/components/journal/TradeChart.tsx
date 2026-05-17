@@ -151,34 +151,50 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Window computation — open_at - padding, close_at + padding (or now)
+// Window computation — Option B: ASYMMETRIC hybrid (per Elad 2026-05-17)
 //
-// PHILOSOPHY: a journal chart should show "the big picture" around the
-// trade. Traders want to see what setup led to the entry, not just the
-// trade's own bars. So we pad generously:
-//   - 1 day minimum on each side (so even a 5-min scalp gets 24h of context)
-//   - 100% of trade duration on each side (5-day swing → 5 days context each side)
-//   - Capped at 14 days to stay within Yahoo's 1m=7d / 5m=60d windows
+// PHILOSOPHY: a journal chart needs:
+//   - ENOUGH context BEFORE the entry to see the setup (min 3 days)
+//   - ENOUGH context AFTER the exit / now to see immediate aftermath (min 1 day)
+//   - For longer trades, scale the PRE-entry padding 1:1 so a 7-day swing
+//     still shows the structure that led into it (capped at 14 days)
+//   - POST-exit padding scales gentler (0.3x) — once the trade is over,
+//     traders care more about "what happened immediately after" than
+//     extended weeks of follow-through
 //
-// For OPEN trades, close_at = now(), so `to` extends `padding` into the
-// future — Yahoo just returns no bars beyond now, lightweight-charts
-// renders the empty space which doubles as "this is happening live."
+// Output guarantees:
+//   - Scalp (30 min): window = 3d + 30m + 1d = ~4 days
+//   - Day trade (4h): window = 3d + 4h + 1d = ~4.2 days
+//   - Swing (5d):     window = 5d + 5d + 1.5d = ~11.5 days
+//   - Position (14d): window = 14d + 14d + 4.2d = ~32 days
+//   - Position (30d): window = 14d + 30d + 9d = ~53 days (cap kicks in)
+//
+// For OPEN trades, close_at = now(), so `to` = now + ~1 day — Yahoo returns
+// no future bars, lightweight-charts renders the empty space as "live edge".
 // ═══════════════════════════════════════════════════════════════
-const MIN_PADDING_SEC = 24 * 60 * 60;       // 1 day minimum on each side
-const PADDING_FRACTION = 1.0;               // 100% of trade duration each side
-const MAX_PADDING_SEC = 14 * 24 * 60 * 60;  // cap at 2 weeks per side
+const MIN_PADDING_BEFORE_SEC = 3 * 24 * 60 * 60;  // 3 days minimum before entry
+const MIN_PADDING_AFTER_SEC = 1 * 24 * 60 * 60;   // 1 day minimum after exit
+const PADDING_BEFORE_FRACTION = 1.0;              // 100% of trade duration before
+const PADDING_AFTER_FRACTION = 0.3;               // 30% of trade duration after
+const MAX_PADDING_SEC = 14 * 24 * 60 * 60;        // cap at 2 weeks per side
 
 function computeWindow(trade: TradeChartTrade): { from: number; to: number; durationMs: number } {
   const openMs = new Date(trade.open_at).getTime();
   const closeMs = trade.close_at ? new Date(trade.close_at).getTime() : Date.now();
   const durationMs = Math.max(closeMs - openMs, 0);
-  const fractionPadding = Math.floor((durationMs / 1000) * PADDING_FRACTION);
-  const paddingSec = Math.min(
+  const durationSec = Math.floor(durationMs / 1000);
+
+  const paddingBefore = Math.min(
     MAX_PADDING_SEC,
-    Math.max(MIN_PADDING_SEC, fractionPadding),
+    Math.max(MIN_PADDING_BEFORE_SEC, Math.floor(durationSec * PADDING_BEFORE_FRACTION)),
   );
-  const from = Math.floor(openMs / 1000) - paddingSec;
-  const to = Math.floor(closeMs / 1000) + paddingSec;
+  const paddingAfter = Math.min(
+    MAX_PADDING_SEC,
+    Math.max(MIN_PADDING_AFTER_SEC, Math.floor(durationSec * PADDING_AFTER_FRACTION)),
+  );
+
+  const from = Math.floor(openMs / 1000) - paddingBefore;
+  const to = Math.floor(closeMs / 1000) + paddingAfter;
   return { from, to, durationMs };
 }
 

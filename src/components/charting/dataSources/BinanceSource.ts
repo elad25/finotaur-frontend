@@ -26,6 +26,7 @@
 
 import type { UTCTimestamp } from 'lightweight-charts';
 import type { Bar, ChartDataSource, Interval } from '../types';
+import { getCached, makeCacheKey, setCached } from './cache';
 
 const BINANCE_BASE_URL = 'https://api.binance.com/api/v3/klines';
 const MAX_BARS = 1000;
@@ -56,6 +57,13 @@ export class BinanceSource implements ChartDataSource {
     if (!binanceInterval) {
       throw new Error(`BinanceSource: interval "${interval}" not supported`);
     }
+
+    // ─── Client-side LRU cache check ─────────────────────────
+    // Binance is free + fast but every fetch still costs a network round-trip
+    // and contributes to the per-IP rate limit. Cache avoids both.
+    const cacheKey = makeCacheKey('binance', symbol, interval, Number(from), Number(to));
+    const cached = getCached<Bar[]>(cacheKey);
+    if (cached) return cached;
 
     const url = new URL(BINANCE_BASE_URL);
     url.searchParams.set('symbol', symbol.toUpperCase());
@@ -98,6 +106,8 @@ export class BinanceSource implements ChartDataSource {
       });
     }
     bars.sort((a, b) => (a.time as number) - (b.time as number));
+
+    if (bars.length > 0) setCached(cacheKey, bars);
     return bars;
   }
 }
