@@ -27,7 +27,11 @@ import {
   toYahooSymbol,
   isCryptoSymbol,
 } from '@/components/charting/dataSources';
-import type { ChartMarker } from '@/components/charting/types';
+import { isIntradayInterval } from '@/components/charting/indicators';
+import { IndicatorToolbar } from '@/components/charting/IndicatorToolbar';
+import { useIndicatorPreferences } from '@/components/charting/useIndicatorPreferences';
+import type { ChartMarker, Indicator } from '@/components/charting/types';
+import { INDICATOR_PERIODS } from '@/components/charting/types';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 
 // ═══════════════════════════════════════════════════════════════
@@ -201,7 +205,15 @@ function computeWindow(trade: TradeChartTrade): { from: number; to: number; dura
 // ═══════════════════════════════════════════════════════════════
 // Inner chart body — shared by inline + fullscreen views
 // ═══════════════════════════════════════════════════════════════
-function ChartBody({ trade, height }: { trade: TradeChartTrade; height: number | string }) {
+function ChartBody({
+  trade,
+  height,
+  indicators,
+}: {
+  trade: TradeChartTrade;
+  height: number | string;
+  indicators?: Indicator[];
+}) {
   // Resolve symbol once per render — pure function of raw symbol
   const isCrypto = useMemo(() => isCryptoSymbol(trade.symbol ?? ''), [trade.symbol]);
   const resolvedSymbol = useMemo(
@@ -232,6 +244,7 @@ function ChartBody({ trade, height }: { trade: TradeChartTrade; height: number |
       to={window.to}
       dataSource={dataSource}
       markers={markers}
+      indicators={indicators}
       theme="dark"
       height={height}
     />
@@ -303,6 +316,25 @@ function MarkerChips({ trade }: { trade: TradeChartTrade }) {
 // ═══════════════════════════════════════════════════════════════
 export function TradeChart({ trade }: TradeChartProps) {
   const [fullscreen, setFullscreen] = useState(false);
+  const [indicatorSettings, setIndicatorSettings] = useIndicatorPreferences();
+
+  // Interval is the same calculation ChartBody does internally — recomputed
+  // here so the toolbar can gate VWAP on intraday intervals only.
+  const window = useMemo(() => computeWindow(trade), [trade]);
+  const interval = useMemo(() => pickInterval(window.durationMs), [window.durationMs]);
+
+  const indicators = useMemo<Indicator[]>(() => {
+    const list: Indicator[] = [];
+    if (indicatorSettings.sma) list.push({ type: 'SMA', period: INDICATOR_PERIODS.sma });
+    if (indicatorSettings.ema) list.push({ type: 'EMA', period: INDICATOR_PERIODS.ema });
+    if (indicatorSettings.rsi) list.push({ type: 'RSI', period: INDICATOR_PERIODS.rsi });
+    // VWAP gate: only meaningful on intraday intervals. The toolbar disables
+    // the chip too — this is a belt-and-suspenders guard.
+    if (indicatorSettings.vwap && isIntradayInterval(interval)) {
+      list.push({ type: 'VWAP', period: 0 });
+    }
+    return list;
+  }, [indicatorSettings, interval]);
 
   return (
     <div className="rounded-xl border-2 border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-6 shadow-2xl">
@@ -322,8 +354,16 @@ export function TradeChart({ trade }: TradeChartProps) {
         </button>
       </div>
 
+      <div className="mb-3">
+        <IndicatorToolbar
+          settings={indicatorSettings}
+          onChange={setIndicatorSettings}
+          interval={interval}
+        />
+      </div>
+
       <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 shadow-2xl">
-        <ChartBody trade={trade} height="100%" />
+        <ChartBody trade={trade} height="100%" indicators={indicators} />
       </div>
 
       <div className="mt-4">
@@ -338,9 +378,14 @@ export function TradeChart({ trade }: TradeChartProps) {
               <TrendingUp className="h-5 w-5" />
               {trade.symbol} · Price Chart
             </div>
+            <IndicatorToolbar
+              settings={indicatorSettings}
+              onChange={setIndicatorSettings}
+              interval={interval}
+            />
           </div>
           <div className="flex-1 overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950">
-            <ChartBody trade={trade} height="100%" />
+            <ChartBody trade={trade} height="100%" indicators={indicators} />
           </div>
           <MarkerChips trade={trade} />
         </DialogContent>
