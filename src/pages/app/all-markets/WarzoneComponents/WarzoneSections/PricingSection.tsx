@@ -22,7 +22,13 @@ interface Props {
   billingInterval: BillingInterval;
   setBillingInterval: (v: BillingInterval) => void;
   onBundleSubscribe?: () => void;
+  onBundleSubscribeYearly?: () => void;
 }
+
+// FINOTAUR Platform Bundle prices (source: TopSecretLanding.tsx FINOTAUR_PRICES)
+const FINOTAUR_MONTHLY = 109;
+const FINOTAUR_YEARLY = 1090;
+const FINOTAUR_YEARLY_PER_MONTH = Math.round(FINOTAUR_YEARLY / 12); // = 91
 
 const WAR_ZONE_FEATURES = [
   "Daily briefing before the market opens",
@@ -81,6 +87,7 @@ export default function PricingSection({
   billingInterval,
   setBillingInterval,
   onBundleSubscribe,
+  onBundleSubscribeYearly,
 }: Props) {
   const isYearly = billingInterval === "yearly";
 
@@ -89,7 +96,15 @@ export default function PricingSection({
     : Math.floor(CONFIG.MONTHLY_PRICE).toString();
   const warZoneCents = isYearly ? undefined : "99";
 
-  const platformAmount = "109";
+  const platformAmount = isYearly
+    ? FINOTAUR_YEARLY_PER_MONTH.toString()
+    : FINOTAUR_MONTHLY.toString();
+
+  // Pick the right bundle handler based on billing interval — falls back to
+  // monthly handler if yearly handler not provided.
+  const platformCta = isYearly
+    ? (onBundleSubscribeYearly ?? onBundleSubscribe ?? onSubscribe)
+    : (onBundleSubscribe ?? onSubscribe);
 
   return (
     <section
@@ -256,16 +271,21 @@ export default function PricingSection({
 
             <div className="my-6 border-t-[0.5px] border-gold-border" />
 
-            <PriceTag amount={platformAmount} suffix="month" />
+            <PriceTag
+              amount={platformAmount}
+              suffix={isYearly ? "month, billed yearly" : "month"}
+            />
             <div className="mt-2 text-gold-primary text-sm">
-              Includes the broader platform suite.
+              {isYearly
+                ? `$${FINOTAUR_YEARLY}/year · Save $${FINOTAUR_MONTHLY * 12 - FINOTAUR_YEARLY}`
+                : "Includes the broader platform suite."}
             </div>
 
             <div className="mt-6">
               <Button
                 variant="gold"
                 size="full"
-                onClick={onBundleSubscribe ?? onSubscribe}
+                onClick={platformCta}
                 showArrow={false}
               >
                 <span className="inline-flex items-center justify-center gap-2 w-full">
