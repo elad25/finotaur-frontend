@@ -17,6 +17,8 @@ import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { lazy, Suspense, memo } from "react";
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
+import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
+import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -315,6 +317,8 @@ function AppContent() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
         <Route path="/journal" element={<JournalPublicPage />} />
+        <Route path="/glossary" element={<GlossaryIndex />} />
+        <Route path="/glossary/:slug" element={<GlossaryTerm />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal" element={<LegalHub />} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
