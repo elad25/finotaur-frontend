@@ -2,10 +2,24 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Mail, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SEO } from '@/components/seo/SEO';
+import { contactPage, breadcrumbList } from '@/components/seo/jsonLd';
 
 const ContactPage = () => {
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Contact"
+        description="Get in touch with the Finotaur team. Questions about pricing, features, or partnerships? We respond within 24 hours."
+        path="/contact"
+        jsonLd={[
+          contactPage({ path: '/contact' }),
+          breadcrumbList([
+            ['Home', '/'],
+            ['Contact', '/contact'],
+          ]),
+        ]}
+      />
       {/* Header */}
       <div className="border-b border-border">
         <div className="container mx-auto px-4 py-6">

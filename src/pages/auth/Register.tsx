@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { Check, X, Eye, EyeOff, FileText } from 'lucide-react';
 import TermsAndConditionsModal from '@/components/legal/TermsAndConditionsModal';
 import { validatePassword, getPasswordStrength } from '@/lib/passwordValidation';
+import { SEO } from '@/components/seo/SEO';
 
 // Current terms version - update when terms change
 const CURRENT_TERMS_VERSION = '2025.11';
@@ -271,6 +272,12 @@ export default function Register() {
 
   return (
     <>
+      <SEO
+        title="Create Your Account"
+        description="Sign up for Finotaur — free unlimited AI stock analysis, options flow scanner, dark pool data, and trading journal. No credit card required."
+        path="/register"
+        noindex
+      />
       <div className="relative flex min-h-screen items-center justify-center p-4 bg-black font-['Inter',sans-serif] overflow-hidden">
         {/* Gold orbs background effect */}
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-yellow-500/20 rounded-full blur-[150px] -translate-x-1/2 translate-y-1/4 pointer-events-none"></div>
