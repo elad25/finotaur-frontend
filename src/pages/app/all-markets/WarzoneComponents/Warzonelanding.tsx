@@ -18,7 +18,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { 
-  Shield, Clock, ArrowRight,
+  Shield, Clock, ArrowRight, FileText,
   Loader2, Globe, Sparkles, Crown, Rocket, 
   TrendingUp, Check, Target, BarChart3, Zap, Activity,
   ChevronDown, XCircle, Headphones,
@@ -50,6 +50,16 @@ import {
 
 // Active subscriber view (same folder)
 import ActiveSubscriberView from './ActiveSubscriberView';
+
+// New redesigned sections (2026-05-16)
+import HeroSection from './WarzoneSections/HeroSection';
+import TimelineRailSection from './WarzoneSections/TimelineRailSection';
+import DailyBriefingPreviewSection from './WarzoneSections/DailyBriefingPreviewSection';
+import TestimonialsSection from './WarzoneSections/TestimonialsSection';
+import ClarityLedgerSection from './WarzoneSections/ClarityLedgerSection';
+import TradingAdvantageSection from './WarzoneSections/TradingAdvantageSection';
+import FinalCTABand from './WarzoneSections/FinalCTABand';
+import NewPricingSection from './WarzoneSections/PricingSection';
 
 // Lazy load modals (code splitting) - from modals subfolder
 const DisclaimerPopup = lazy(() => import('./modals/DisclaimerPopup'));
@@ -101,16 +111,16 @@ const DAILY_FEATURES = [
 const FAQS = [
   { q: "How does the 7-day free trial work?", a: "Full access for 7 days. Cancel in one click, pay nothing. Only available on monthly plan." },
   { q: "When do I receive the daily briefing?", a: "Every trading day at 9:00 AM New York time — before the market opens. You'll have everything you need to start your day with clarity." },
-  { q: "What do I get with my subscription?", a: "Daily market briefing, weekly tactical review, access to our private trading community, and the Finotaur Trading Room with live analysis." },
+  { q: "What do I get with my subscription?", a: "Daily market briefing, weekly tactical review, access to our private Discord community with 847+ traders, and the Finotaur Trading Room with live analysis." },
   { q: "Is this just another stock newsletter?", a: "No. WAR ZONE is a professional-grade market briefing — the same style institutional trading desks use. Not stock picks. Not hype. Pure market intelligence." },
   { q: "Can I cancel anytime?", a: "Absolutely. No contracts, no commitments, no questions asked. Cancel with one click from your account settings." }
 ];
 
 const STATS = [
   { value: '9:00 AM', label: 'Daily Delivery' },
-  { value: 'Desk', label: 'Style Research' },
+  { value: '847+', label: 'Active Traders' },
   { value: '7 Days', label: 'Free Trial' },
-  { value: 'Live', label: 'Trading Room' }
+  { value: '24/7', label: 'Discord Access' }
 ];
 
 // ============================================
@@ -162,8 +172,8 @@ const SocialProof = memo(function SocialProof() {
       
       <div className="max-w-7xl mx-auto relative z-10">
         <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 heading-serif">Trusted Morning Intelligence</h2>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto">Real feedback from traders who start the day with a structured market brief instead of scattered headlines.</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 heading-serif italic">What Traders Are Saying</h2>
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto">Join hundreds of professional traders who rely on WAR ZONE for daily market intelligence</p>
         </motion.div>
         
         <div className="relative">
@@ -236,7 +246,7 @@ const SocialProof = memo(function SocialProof() {
 
 const BeforeAfterSection = memo(function BeforeAfterSection() {
   return (
-    <section id="warzone-pricing" className="py-24 px-6 relative overflow-hidden">
+    <section className="py-24 px-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]" />
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent" />
       <div className="absolute top-1/4 right-1/4 w-[600px] h-[500px] bg-[#C9A646]/[0.08] rounded-full blur-[150px]" />
@@ -406,7 +416,7 @@ const NotANewsletterSection = memo(function NotANewsletterSection() {
 
 const MoreThanBriefingSection = memo(function MoreThanBriefingSection() {
   return (
-    <section id="warzone-pricing" className="py-24 px-6 relative overflow-hidden">
+    <section className="py-24 px-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a0a] via-[#0d0a08] to-[#0a0a0a]"/>
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/30 to-transparent"/>
       <div className="absolute top-1/2 right-1/3 w-[400px] h-[400px] bg-[#C9A646]/[0.05] rounded-full blur-[130px]"/>
@@ -605,224 +615,12 @@ const PricingSection = memo(function PricingSection({
   setBillingInterval,
   isTopSecretMember = false,
   onBundleSubscribe,
-  onBundleYearlySubscribe,
 }: {
   onSubscribe: () => void;
   setBillingInterval: (interval: BillingInterval) => void;
   isTopSecretMember?: boolean;
   onBundleSubscribe?: () => void;
-  onBundleYearlySubscribe?: () => void;
 }) {
-  const [pricingInterval, setPricingInterval] = useState<BillingInterval>('monthly');
-  const isYearly = pricingInterval === 'yearly';
-  const platformPrice = isYearly ? 999 : 109;
-  const platformPeriod = isYearly ? '/year' : '/month';
-  const warZonePrice = isYearly ? CONFIG.YEARLY_PRICE : CONFIG.MONTHLY_PRICE;
-  const warZonePeriod = isYearly ? '/year' : '/month';
-
-  const selectInterval = useCallback((interval: BillingInterval) => {
-    setPricingInterval(interval);
-    setBillingInterval(interval);
-  }, [setBillingInterval]);
-
-  const handleWarZoneCheckout = useCallback(() => {
-    setBillingInterval(pricingInterval);
-    onSubscribe();
-  }, [onSubscribe, pricingInterval, setBillingInterval]);
-
-  const handlePlatformCheckout = useCallback(() => {
-    setBillingInterval(pricingInterval);
-    if (pricingInterval === 'yearly') {
-      onBundleYearlySubscribe?.();
-      return;
-    }
-    onBundleSubscribe?.();
-  }, [onBundleSubscribe, onBundleYearlySubscribe, pricingInterval, setBillingInterval]);
-
-  const pricingCards = [
-    {
-      badge: 'WAR ZONE',
-      title: 'Daily Market Briefing',
-      copy: 'Institutional-grade market intelligence before the opening bell.',
-      price: warZonePrice,
-      period: warZonePeriod,
-      note: isYearly ? `Save $${YEARLY_SAVINGS} versus monthly` : '7-day free trial. Cancel anytime.',
-      cta: 'START WAR ZONE',
-      action: handleWarZoneCheckout,
-      icon: Target,
-      featured: false,
-      features: [
-        'Daily briefing before the market opens',
-        'Macro, sector flow, risk tone and key levels',
-        'Actionable market context in one clear morning read',
-        'Private community and trading room access',
-      ],
-    },
-    {
-      badge: 'FINOTAUR PLATFORM',
-      title: 'Complete Trading Ecosystem',
-      copy: 'The wider Finotaur platform for traders who want the full operating layer.',
-      price: platformPrice,
-      period: platformPeriod,
-      note: isYearly ? 'Master Plan annual platform price' : 'Includes the broader platform suite.',
-      cta: 'START FINOTAUR',
-      action: handlePlatformCheckout,
-      icon: Crown,
-      featured: true,
-      features: [
-        'Everything in War Zone',
-        'Top Secret research and premium reports',
-        'Journal Premium and trading workflow tools',
-        'AI tools, platform intelligence and broader trader suite',
-      ],
-    },
-  ];
-
-  return (
-    <section id="warzone-pricing" className="relative overflow-hidden px-6 py-24 md:py-28">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_0%,rgba(235,195,92,0.30),transparent_25%),radial-gradient(circle_at_48%_18%,rgba(201,166,70,0.16),transparent_34%),linear-gradient(180deg,#10100d_0%,#050505_52%,#080705_100%)]" />
-      <div className="absolute -left-24 -top-28 h-[520px] w-[520px] opacity-40">
-        <div className="absolute inset-0 rounded-full border border-[#C9A646]/24" />
-        <div className="absolute inset-5 rounded-full border border-[#C9A646]/20" />
-        <div className="absolute inset-10 rounded-full border border-[#C9A646]/18" />
-        <div className="absolute inset-16 rounded-full border border-[#C9A646]/14" />
-        <div className="absolute inset-24 rounded-full border border-[#C9A646]/10" />
-      </div>
-      <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-[#C9A646]/42 to-transparent" />
-      <div className="absolute left-1/2 top-[34%] h-[660px] w-[980px] -translate-x-1/2 rounded-full bg-[#C9A646]/[0.07] blur-[120px]" />
-
-      <div className="relative z-10 mx-auto max-w-[1040px]">
-        <div className="mx-auto mb-8 max-w-4xl text-center">
-          <div className="mb-6 inline-flex items-center gap-3 rounded-full border border-[#C9A646]/44 bg-black/24 px-5 py-2.5 shadow-[0_0_32px_rgba(201,166,70,0.13)] backdrop-blur-md">
-            <Crown className="h-4 w-4 text-[#E8C766]" />
-            <span className="luxury-kicker text-sm text-[#E8C766]">Choose Your Access</span>
-          </div>
-          <h2 className="heading-serif text-5xl font-semibold leading-[0.95] text-white md:text-6xl lg:text-7xl">
-            War Zone Alone.
-            <span className="block">
-              Or the <span className="text-[#D6AA3E]">Full Platform.</span>
-            </span>
-          </h2>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-[#E7DEC8]/74">
-            Pick the intelligence layer you need now.
-            <span className="block">Upgrade when you want the complete Finotaur ecosystem around it.</span>
-          </p>
-        </div>
-
-        <div className="relative mb-8 flex justify-center">
-          <div className="grid grid-cols-2 rounded-full border border-[#C9A646]/34 bg-black/42 p-1 shadow-[0_18px_48px_rgba(0,0,0,0.48)] backdrop-blur-xl">
-            {(['monthly', 'yearly'] as BillingInterval[]).map((interval) => (
-              <button
-                key={interval}
-                type="button"
-                onClick={() => selectInterval(interval)}
-                className={cn(
-                  'h-12 min-w-[132px] rounded-full px-8 text-sm font-semibold transition-all duration-300',
-                  pricingInterval === interval
-                    ? 'border border-[#F4D97B]/42 bg-[linear-gradient(180deg,#F4D97B_0%,#C79B32_100%)] text-black shadow-[0_12px_30px_rgba(201,166,70,0.28)]'
-                    : 'text-[#E8DCC4]/76 hover:text-[#F4D97B]'
-                )}
-              >
-                {interval === 'monthly' ? 'Monthly' : 'Yearly'}
-              </button>
-            ))}
-          </div>
-          <div className="absolute left-[calc(50%+160px)] top-1 hidden items-center gap-3 text-[#D6AA3E] lg:flex">
-            <div className="h-px w-12 rotate-[-12deg] bg-[#D6AA3E]/70" />
-            <p className="heading-serif text-lg italic leading-tight">Save more<br />with yearly</p>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {pricingCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div
-                key={card.badge}
-                className={cn(
-                  'relative min-h-[560px] overflow-hidden rounded-[26px] border p-8 md:p-10',
-                  card.featured
-                    ? 'border-[#D6AA3E]/80 bg-[linear-gradient(145deg,rgba(27,25,20,0.94),rgba(9,10,10,0.98))] shadow-[0_0_58px_rgba(201,166,70,0.16)]'
-                    : 'border-[#D6AA3E]/58 bg-[linear-gradient(145deg,rgba(19,19,17,0.94),rgba(7,8,8,0.98))]'
-                )}
-              >
-                <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#F4D97B]/72 to-transparent" />
-                {card.featured && (
-                  <div className="absolute right-7 top-6 rounded-lg border border-[#F4D97B]/28 bg-[linear-gradient(180deg,#F4D97B,#B88422)] px-4 py-2 text-xs font-black text-black shadow-[0_10px_24px_rgba(201,166,70,0.22)]">
-                    BEST VALUE
-                  </div>
-                )}
-
-                <div className="mb-8 flex h-14 w-14 items-center justify-center rounded-full border border-[#D6AA3E]/55 bg-[radial-gradient(circle_at_35%_24%,rgba(244,217,123,0.46),rgba(201,166,70,0.14)_42%,rgba(0,0,0,0.2)_100%)] shadow-[0_0_28px_rgba(201,166,70,0.18)]">
-                  <Icon className="h-6 w-6 text-[#E8C766]" />
-                </div>
-
-                <div className="mb-7 border-b border-[#C9A646]/20 pb-6">
-                  <p className="luxury-kicker mb-3 text-sm text-[#C9A646]">{card.badge}</p>
-                  <h3 className="heading-serif text-3xl font-semibold leading-tight text-white md:text-[2.45rem]">{card.title}</h3>
-                  <p className="mt-3 max-w-[360px] text-base leading-7 text-[#E7DEC8]/70">{card.copy}</p>
-                </div>
-
-                <div className="mb-5">
-                  <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-                    <span className="heading-serif text-5xl font-semibold leading-none text-white md:text-6xl">
-                      ${card.price.toLocaleString()}
-                    </span>
-                    <span className="pb-2 text-lg font-medium text-[#E7DEC8]/68">{card.period}</span>
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-[#D6AA3E]">{card.note}</p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={card.action}
-                  className="mb-8 flex h-14 w-full items-center justify-center gap-3 rounded-lg border border-[#F4D97B]/26 bg-[linear-gradient(180deg,#E3BD55_0%,#B98627_100%)] px-6 text-sm font-black uppercase tracking-[0.04em] text-black shadow-[0_18px_42px_rgba(201,166,70,0.18)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(201,166,70,0.28)]"
-                >
-                  {card.cta}
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-
-                <div className="space-y-4">
-                  {card.features.map((feature) => (
-                    <div key={feature} className="flex items-start gap-3">
-                      <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-[#D6AA3E]/70">
-                        <Check className="h-3.5 w-3.5 text-[#E8C766]" />
-                      </span>
-                      <span className="text-sm font-medium leading-relaxed text-[#F5EAD0]/78">{feature}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-7 text-[#E7DEC8]/68">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#C9A646]/38 bg-[#C9A646]/8">
-              <Shield className="h-4 w-4 text-[#E8C766]" />
-            </span>
-            <span className="text-sm">Secure payment</span>
-          </div>
-          <div className="hidden h-6 w-px bg-[#C9A646]/30 sm:block" />
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#C9A646]/38 bg-[#C9A646]/8">
-              <Clock className="h-4 w-4 text-[#E8C766]" />
-            </span>
-            <span className="text-sm">Free trial available</span>
-          </div>
-          <div className="hidden h-6 w-px bg-[#C9A646]/30 sm:block" />
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#C9A646]/38 bg-[#C9A646]/8">
-              <XCircle className="h-4 w-4 text-[#E8C766]" />
-            </span>
-            <span className="text-sm">Cancel anytime</span>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-
   // 🔥 If Top Secret member - show BUNDLE ONLY pricing
   if (isTopSecretMember && onBundleSubscribe) {
     return (
@@ -1315,197 +1113,52 @@ const PricingSection = memo(function PricingSection({
 });
 
 // ============================================
-// HERO CINEMATIC VISUAL
-// ============================================
-
-const WarZoneBriefingMockup = memo(function WarZoneBriefingMockup({ compact = false }: { compact?: boolean }) {
-  const levels = [
-    ['SPX', '5,300', 'Resistance'],
-    ['QQQ', '438', 'Support'],
-    ['DXY', '104.32', 'Watch'],
-  ];
-
-  const sectors = [
-    ['Tech', '+0.64%', 'w-[78%]', 'bg-emerald-300'],
-    ['Energy', '-0.18%', 'w-[46%]', 'bg-rose-300'],
-    ['Banks', '+0.31%', 'w-[63%]', 'bg-emerald-300'],
-  ];
-
-  return (
-    <div className={cn('relative mx-auto w-full', compact ? 'max-w-[390px] h-[390px]' : 'max-w-[760px] h-[640px]')}>
-      <div className="absolute inset-0 rounded-full bg-[#C9A646]/10 blur-[120px]" />
-      <div className="absolute left-1/2 top-1/2 h-[84%] w-[84%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#C9A646]/12" />
-      <div className="absolute left-[8%] top-[10%] h-[76%] w-[84%] rounded-[32px] border border-[#C9A646]/10 bg-[#C9A646]/[0.035] blur-sm" />
-
-      <div
-        className={cn(
-          'absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rotate-[-2deg] rounded-[30px] border border-[#D8B65A]/34 bg-[linear-gradient(145deg,rgba(20,18,12,0.96),rgba(6,6,5,0.98))] shadow-[0_28px_90px_rgba(0,0,0,0.68),0_0_80px_rgba(201,166,70,0.16)] backdrop-blur-xl',
-          compact ? 'w-[350px] p-5' : 'w-[610px] p-7'
-        )}
-      >
-        <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-[#F4D97B]/70 to-transparent" />
-        <div className="mb-5 flex items-start justify-between gap-4 border-b border-[#C9A646]/16 pb-5">
-          <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#C9A646]/24 bg-[#C9A646]/10 px-3 py-1.5">
-              <Clock className="h-3.5 w-3.5 text-[#E8C766]" />
-              <span className="luxury-kicker text-xs text-[#E8C766]">9:00 AM ET</span>
-            </div>
-            <h3 className={cn('heading-serif font-semibold leading-none text-white', compact ? 'text-3xl' : 'text-5xl')}>
-              Daily Market
-              <span className="block text-[#E8C766]">Briefing</span>
-            </h3>
-          </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#C9A646]/30 bg-[#C9A646]/10">
-            <BarChart3 className="h-6 w-6 text-[#E8C766]" />
-          </div>
-        </div>
-
-        <div className={cn('grid gap-4', compact ? 'grid-cols-1' : 'grid-cols-[1.1fr_0.9fr]')}>
-          <div className="rounded-2xl border border-[#C9A646]/16 bg-black/26 p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="luxury-kicker text-sm text-[#E8C766]">Market Map</p>
-              <Activity className="h-4 w-4 text-emerald-300" />
-            </div>
-            <p className={cn('font-semibold text-white', compact ? 'text-lg' : 'text-2xl')}>Before the opening bell</p>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {['Macro', 'Flow', 'Levels', 'Risk', 'Sector', 'Catalyst'].map((item, index) => (
-                <div key={item} className="rounded-xl border border-[#C9A646]/12 bg-[#0D0C09]/80 p-3">
-                  <p className="text-[11px] font-semibold text-[#D9CCAE]/48">{item}</p>
-                  <p className={cn('mt-2 font-black', index === 3 ? 'text-rose-300' : 'text-emerald-300')}>
-                    {index === 3 ? 'High' : 'Clear'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-[#C9A646]/16 bg-black/26 p-4">
-              <p className="luxury-kicker mb-3 text-sm text-[#E8C766]">Sector Flow</p>
-              <div className="space-y-3">
-                {sectors.map(([name, value, width, color]) => (
-                  <div key={name}>
-                    <div className="mb-1 flex items-center justify-between text-sm">
-                      <span className="font-bold text-white">{name}</span>
-                      <span className={cn('font-semibold', value.startsWith('+') ? 'text-emerald-300' : 'text-rose-300')}>{value}</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div className={cn('h-full rounded-full', width, color)} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {!compact && (
-              <div className="rounded-2xl border border-[#C9A646]/16 bg-black/26 p-4">
-                <p className="luxury-kicker mb-3 text-sm text-[#E8C766]">Key Levels</p>
-                <div className="space-y-2">
-                  {levels.map(([symbol, value, label]) => (
-                    <div key={symbol} className="flex items-center justify-between rounded-xl bg-white/[0.04] px-3 py-2">
-                      <div>
-                        <p className="text-sm font-black text-white">{symbol}</p>
-                        <p className="text-xs text-[#D9CCAE]/48">{label}</p>
-                      </div>
-                      <p className="heading-serif text-lg font-semibold text-[#E8C766]">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {!compact && (
-          <div className="mt-4 rounded-2xl border border-[#C9A646]/16 bg-black/26 p-4">
-            <div className="mb-4 flex items-center gap-2">
-              <Clock className="h-4 w-4 text-[#E8C766]" />
-              <p className="luxury-kicker text-sm text-[#E8C766]">Briefing Timeline</p>
-            </div>
-            <div className="grid gap-3">
-              {['Asia close confirms risk tone', 'Dollar strength sets the range', 'Premarket movers ranked by catalyst'].map((item, index) => (
-                <div key={item} className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full border border-[#C9A646]/20 bg-[#C9A646]/8 text-xs font-bold text-[#E8C766]">
-                    {index + 1}
-                  </div>
-                  <p className="text-sm font-medium text-[#F5EAD0]/82">{item}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className={cn('absolute z-20 rounded-2xl border border-[#C9A646]/26 bg-black/48 p-4 backdrop-blur-md shadow-[0_18px_60px_rgba(0,0,0,0.45)]', compact ? 'bottom-1 left-5 right-5' : 'bottom-10 right-4 w-[250px]')}>
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#C9A646]/28 bg-[#C9A646]/10">
-            <Target className="h-5 w-5 text-[#E8C766]" />
-          </div>
-          <div>
-            <p className="heading-serif text-lg font-semibold text-white">Ready at 9:00 AM</p>
-            <p className="mt-1 text-sm leading-relaxed text-[#E5D8B7]/68">Macro, flow, levels and trade context in one clear morning brief.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// ============================================
 // HERO SECTION - MOBILE
 // ============================================
 
-const HeroMobile = memo(function HeroMobile(_props: {
+const HeroMobile = memo(function HeroMobile({
+  billingInterval,
+  setBillingInterval,
+  onSubscribe,
+}: {
+  billingInterval: BillingInterval;
+  setBillingInterval: (interval: BillingInterval) => void;
   onSubscribe: () => void;
 }) {
-  const scrollToPricing = useCallback(() => {
-    document.getElementById('warzone-pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
   return (
     <div className="lg:hidden relative z-10 min-h-screen flex flex-col">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_8%,rgba(201,166,70,0.12),transparent_45%)] pointer-events-none" />
-      <div className="flex-1 flex flex-col items-center px-5 pt-7 relative">
-        <div 
-          className="mb-5 inline-flex items-center gap-2 self-center rounded-full px-4 py-2"
-          style={{
-            background: 'linear-gradient(135deg, rgba(201,166,70,0.18), rgba(201,166,70,0.04))',
-            border: '1px solid rgba(201,166,70,0.34)',
-            boxShadow: '0 0 30px rgba(201,166,70,0.12)'
-          }}
-        >
-          <BarChart3 className="h-4 w-4 text-[#C9A646]" />
-          <span className="luxury-kicker text-[12px] text-[#C9A646]">Daily Briefing</span>
-        </div>
-
+      <div className="flex-1 flex flex-col items-center px-6 pt-4">
         {/* Title */}
-        <h1 className="text-[2.2rem] sm:text-[2.55rem] font-bold leading-[0.98] tracking-tight text-center mb-4 drop-shadow-[0_10px_38px_rgba(0,0,0,0.45)]">
-          <span className="text-white block heading-serif">Before the Bell.</span>
-          <span className="text-white block heading-serif">Know the</span>
+        <h1 className="text-[1.5rem] sm:text-[1.8rem] font-bold leading-[1.05] tracking-tight text-center mb-3">
+          <span className="text-white block heading-serif italic">Every Morning</span>
+          <span className="text-white block heading-serif italic">You Wake Up</span>
           <span className="relative inline-block mt-1">
-            <span className="heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#B9912E] via-[#F4D97B] to-[#C9A646]">Battlefield.</span>
+            <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Blind to What Moves</span>
+          </span>
+          <span className="relative inline-block">
+            <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">the Market.</span>
           </span>
         </h1>
         {/* Description */}
-        <p className="text-[#E5D8B7]/70 text-sm leading-7 text-center mb-5 max-w-sm">
+        <p className="text-[#C9A646]/70 text-sm leading-relaxed text-center mb-4 max-w-sm">
           <span className="text-[#C9A646] font-bold">WAR ZONE</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
         </p>
 
-        <WarZoneBriefingMockup compact />
+        {/* Billing Toggle */}
+        <BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-3" />
 
         {/* CTA Button */}
         <button 
-          onClick={scrollToPricing} 
-          className="group mt-5 px-7 py-3.5 text-sm font-bold rounded-full transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2.5 mb-7 uppercase tracking-[0.08em]"
+          onClick={onSubscribe} 
+          className="group px-8 py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-2 mb-6"
           style={{ 
-            background: 'linear-gradient(180deg, #F6E7A7 0%, #D9B84F 48%, #A97820 100%)', 
-            color: '#090704', 
-            border: '1px solid rgba(255,240,177,0.38)',
-            boxShadow: '0 12px 34px rgba(201,166,70,0.22), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(79,49,5,0.28)' 
+            background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+            color: '#000', 
+            boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
           }}
         >
-          TRY NOW FOR FREE
-          <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+          {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${CONFIG.YEARLY_PRICE}/year`}
+          <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
         </button>
 
         {/* Feature Icons */}
@@ -1534,62 +1187,54 @@ const HeroMobile = memo(function HeroMobile(_props: {
 // HERO SECTION - DESKTOP
 // ============================================
 
-const HeroDesktop = memo(function HeroDesktop(_props: {
+const HeroDesktop = memo(function HeroDesktop({
+  billingInterval,
+  setBillingInterval,
+  onSubscribe,
+}: {
+  billingInterval: BillingInterval;
+  setBillingInterval: (interval: BillingInterval) => void;
   onSubscribe: () => void;
 }) {
-  const scrollToPricing = useCallback(() => {
-    document.getElementById('warzone-pricing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
   return (
     <div className="hidden lg:block relative z-10 min-h-screen">
       <div className="flex min-h-screen">
         {/* Left Column */}
-        <div className="w-[47%] bg-[#070604] flex flex-col justify-center pl-20 xl:pl-28 2xl:pl-36 pr-10 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_28%_42%,rgba(201,166,70,0.105),transparent_58%)]" />
-          <div className="absolute left-20 top-[18%] h-px w-56 luxury-hairline" />
+        <div className="w-1/2 bg-[#0a0806] flex flex-col justify-center pl-20 xl:pl-28 2xl:pl-36 pr-12 relative overflow-hidden">
           <div className="absolute inset-0 z-1 opacity-20">
             <SparkleEffect />
           </div>
           
-          <div 
-            className="relative z-20 mb-8 inline-flex w-fit items-center gap-2 rounded-full px-5 py-2.5"
-            style={{
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.2) 0%, rgba(201,166,70,0.045) 100%)',
-              border: '1px solid rgba(201,166,70,0.38)',
-              boxShadow: '0 0 40px rgba(201,166,70,0.14), inset 0 1px 0 rgba(255,255,255,0.08)'
-            }}
-          >
-            <BarChart3 className="h-5 w-5 text-[#C9A646]" />
-            <span className="luxury-kicker text-sm text-[#C9A646]">Daily Briefing</span>
-          </div>
-
-          <h1 className="text-[3.4rem] xl:text-[4.15rem] 2xl:text-[4.85rem] font-bold leading-[0.96] tracking-tight mb-8 relative z-20 drop-shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
-            <span className="text-white block heading-serif">Before the Bell.</span>
-            <span className="text-white block heading-serif">Know the</span>
+          <h1 className="text-[2.8rem] xl:text-[3.2rem] 2xl:text-[3.8rem] font-bold leading-[1.05] tracking-tight mb-8 relative z-20 pl-2">
+            <span className="text-white block heading-serif italic">Every Morning</span>
+            <span className="text-white block heading-serif italic">You Wake Up</span>
             <span className="relative inline-block mt-2">
-              <span className="absolute inset-0 blur-3xl opacity-28 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]" />
-              <span className="relative heading-serif text-transparent bg-clip-text bg-gradient-to-r from-[#B9912E] via-[#F1D36E] to-[#C9A646]">Battlefield.</span>
+              <span className="absolute inset-0 blur-3xl opacity-40 bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646] animate-pulse" style={{animationDuration:'4s'}}/>
+              <span className="relative heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">Blind to What Moves</span>
+            </span>
+            <span className="relative inline-block">
+              <span className="heading-serif italic text-transparent bg-clip-text bg-gradient-to-r from-[#C9A646] via-[#F4D97B] to-[#C9A646]">the Market.</span>
             </span>
           </h1>
 
-          <p className="text-[#E5D8B7]/72 text-lg leading-8 mb-8 max-w-xl relative z-20">
+          <p className="text-[#C9A646]/80 text-lg leading-relaxed mb-8 max-w-xl relative z-20">
             <span className="font-bold" style={{ color: '#E9A931' }}>WAR ZONE</span> gives you the same institutional market briefing Wall Street desks use — <span className="text-[#E8DCC4] font-medium">before the market opens.</span> Every single day.
           </p>
 
+          <BillingToggle selected={billingInterval} onChange={setBillingInterval} className="mb-6 justify-start relative z-20" />
+
           <div className="flex flex-wrap items-center gap-4 mb-8 relative z-20">
             <button 
-              onClick={scrollToPricing} 
-              className="group px-7 py-3.5 text-sm font-bold rounded-full transition-all duration-300 hover:-translate-y-0.5 flex items-center gap-2.5 uppercase tracking-[0.08em]"
+              onClick={onSubscribe} 
+              className="group px-8 py-4 text-lg font-bold rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-2"
               style={{ 
-                background: 'linear-gradient(180deg, #F6E7A7 0%, #D9B84F 48%, #A97820 100%)', 
-                color: '#090704', 
-                border: '1px solid rgba(255,240,177,0.38)',
-                boxShadow: '0 14px 38px rgba(201,166,70,0.22), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(79,49,5,0.28)' 
+                background: 'linear-gradient(135deg, #C9A646, #D4AF37, #C9A646)', 
+                color: '#000', 
+                boxShadow: '0 4px 24px rgba(201,166,70,0.4)' 
               }}
             >
-              TRY NOW FOR FREE
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+              {billingInterval === 'monthly' ? 'Start 7-Day Free Trial' : `Get WAR ZONE for $${CONFIG.YEARLY_PRICE}/year`}
+              <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
 
@@ -1598,31 +1243,44 @@ const HeroDesktop = memo(function HeroDesktop(_props: {
           </div>
         </div>
 
-        {/* Right Column - Intelligence Preview */}
-        <div className="w-[53%] relative flex items-center justify-center overflow-hidden bg-[#060504] px-10">
+        {/* Right Column - Bull */}
+        <div className="w-1/2 relative flex items-center justify-center overflow-hidden bg-[#080604]">
           <div className="absolute inset-0 z-0">
             <ParticleBackground />
           </div>
-          <div className="absolute inset-0 z-[5] bg-[radial-gradient(ellipse_at_54%_44%,rgba(201,166,70,0.13),rgba(6,5,4,0.55)_46%,rgba(6,5,4,0.92)_100%)]" />
+          <div className="absolute inset-0 z-[5] bg-[#0a0806]/40" />
           
           <div className="absolute inset-0 z-10">
             <SparkleEffect />
           </div>
           
           <div 
-            className="absolute bottom-[16%] left-1/2 -translate-x-1/2 w-[780px] h-[240px] z-10"
+            className="absolute bottom-[10%] left-1/2 -translate-x-1/2 w-[700px] h-[200px] z-10"
             style={{ 
-              background: 'radial-gradient(ellipse, rgba(232,199,102,0.26) 0%, rgba(201,166,70,0.1) 42%, transparent 72%)', 
+              background: 'radial-gradient(ellipse, rgba(255,130,30,0.4) 0%, rgba(200,100,20,0.15) 40%, transparent 70%)', 
               filter: 'blur(40px)' 
             }}
           />
           
-          <div className="relative z-20 w-full">
-            <WarZoneBriefingMockup />
+          <div 
+            className="relative z-20"
+            style={{
+              maskImage: 'radial-gradient(ellipse 75% 80% at 45% 50%, black 30%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.2) 70%, transparent 85%)',
+              WebkitMaskImage: 'radial-gradient(ellipse 75% 80% at 45% 50%, black 30%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.2) 70%, transparent 85%)',
+            }}
+          >
+            <img 
+              src={CONFIG.BULL_IMAGE}
+              alt="War Zone Bull" 
+              className="w-[500px] xl:w-[580px] 2xl:w-[650px] h-auto object-contain pointer-events-none select-none"
+              style={{ filter: 'drop-shadow(0 0 80px rgba(255,150,50,0.3))' }}
+              draggable={false}
+              onContextMenu={(e) => e.preventDefault()}
+            />
           </div>
           
           {/* Edge gradients */}
-          <div className="absolute inset-y-0 left-0 w-64 z-30" style={{ background: 'linear-gradient(90deg, #070604 0%, rgba(7,6,4,0.95) 35%, rgba(7,6,4,0.58) 72%, transparent 100%)' }} />
+          <div className="absolute inset-y-0 left-0 w-80 z-30" style={{ background: 'linear-gradient(90deg, #0a0806 0%, #0a0806 20%, rgba(10,8,6,0.95) 40%, rgba(10,8,6,0.6) 70%, transparent 100%)' }} />
           <div className="absolute inset-x-0 top-0 h-48 z-30" style={{ background: 'linear-gradient(180deg, #0a0806 0%, rgba(10,8,6,0.9) 30%, rgba(10,8,6,0.5) 60%, transparent 100%)' }} />
           <div className="absolute inset-y-0 right-0 w-56 z-30" style={{ background: 'linear-gradient(270deg, #0a0806 0%, rgba(10,8,6,0.95) 25%, rgba(10,8,6,0.5) 60%, transparent 100%)' }} />
           <div className="absolute inset-x-0 bottom-0 h-32 z-30" style={{ background: 'linear-gradient(0deg, #0a0806 0%, rgba(10,8,6,0.5) 40%, transparent 100%)' }} />
@@ -1669,7 +1327,6 @@ const LandingView = memo(function LandingView({
   isProcessing,
   isTopSecretMember = false,
   onBundleSubscribe,
-  onBundleYearlySubscribe,
 }: {
   onSubscribe: () => void;
   billingInterval: BillingInterval;
@@ -1677,97 +1334,69 @@ const LandingView = memo(function LandingView({
   isProcessing: boolean;
   isTopSecretMember?: boolean;
   onBundleSubscribe?: () => void;
-  onBundleYearlySubscribe?: () => void;
 }) {
+  void isProcessing; // kept for prop compatibility; subscribe button uses parent state internally
+  void isTopSecretMember; // bundle popup logic preserved at parent level
+
   return (
-    <div className="warzone-luxury-page min-h-screen bg-[#070604] overflow-hidden relative">
-      {/* CSS Animations */}
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
-        .heading-serif,.heading-formal{font-family:'Playfair Display',Georgia,serif;font-style:normal;letter-spacing:-0.018em}
-        .warzone-luxury-page h1,
-        .warzone-luxury-page h2,
-        .warzone-luxury-page h3,
-        .warzone-luxury-page h4,
-        .warzone-luxury-page .heading-serif,
-        .warzone-luxury-page .heading-formal{
-          font-family:'Playfair Display',Georgia,serif;
-          font-style:normal!important;
-          font-weight:600;
-          letter-spacing:-0.018em;
-        }
-        .warzone-luxury-page h1{letter-spacing:-0.024em}
-        .warzone-luxury-page h2{letter-spacing:-0.02em}
-        .warzone-luxury-page h3,
-        .warzone-luxury-page h4{letter-spacing:-0.006em}
-        .warzone-luxury-page .luxury-kicker{
-          font-family:'Playfair Display',Georgia,serif;
-          font-weight:600;
-          letter-spacing:.045em;
-          text-transform:none;
-        }
-        .luxury-hairline{background:linear-gradient(90deg,transparent,rgba(232,199,102,.58),transparent)}
-        @keyframes hero-orb{0%,100%{transform:scale(1);opacity:0.08}50%{transform:scale(1.1);opacity:0.12}}
-        .hero-orb{animation:hero-orb 8s ease-in-out infinite}
-        @keyframes particle-rise { 0% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 0.7; } 80% { opacity: 0.5; } 100% { transform: translateY(-85vh) scale(0.3); opacity: 0; } }
-        @keyframes sparkle { 0%, 100% { opacity: 0; transform: scale(0); } 50% { opacity: 1; transform: scale(1); } }
-      `}</style>
+    <div className="min-h-screen overflow-hidden relative bg-[#0a0805]">
+      {/* Global warm-gold ambient wash — adds life without being loud */}
+      <div
+        aria-hidden
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 1400px 800px at 15% 5%, rgba(201,166,70,0.08) 0%, transparent 55%), radial-gradient(ellipse 1200px 700px at 85% 45%, rgba(244,217,123,0.06) 0%, transparent 55%), radial-gradient(ellipse 1000px 600px at 30% 85%, rgba(201,166,70,0.05) 0%, transparent 55%)",
+        }}
+      />
+      <div className="relative z-10">
+      {/* HERO */}
+      <HeroSection onSubscribe={onSubscribe} />
 
-      {/* HERO SECTION */}
-      <section className="relative min-h-screen">
-        {/* Base Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,#050504_0%,#090805_42%,#050504_100%)]" />
-        <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(201,166,70,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(201,166,70,0.035)_1px,transparent_1px)] [background-size:140px_110px]" />
-        
-        {/* Animated Orbs */}
-        <div className="absolute top-[10%] left-[-10%] w-[700px] h-[700px] bg-[#C9A646]/[0.06] rounded-full blur-[150px] hero-orb"/>
-        <div className="absolute bottom-1/4 right-1/3 w-[600px] h-[600px] bg-[#D4BF8E]/[0.045] rounded-full blur-[140px] hero-orb" style={{animationDelay:'3s'}}/>
-        <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-[#F4D97B]/[0.03] rounded-full blur-[130px] hero-orb" style={{animationDelay:'5s'}}/>
+      {/* WHAT YOU SEE BEFORE THE OPEN */}
+      <TimelineRailSection />
 
-        <HeroMobile onSubscribe={onSubscribe} />
-        
-        {/* Seam cover - gradient that hides the column boundary */}
-        <div className="hidden lg:block absolute inset-0 z-[35] pointer-events-none"
-          style={{
-            background: 'linear-gradient(90deg, transparent 45%, #070604 49%, #070604 51%, transparent 55%)',
-          }}
-        />
-        
-        <HeroDesktop onSubscribe={onSubscribe} />
-      </section>
+      {/* EXCLUSIVE DAILY BRIEFING */}
+      <DailyBriefingPreviewSection onSubscribe={onSubscribe} />
 
-      {/* SOCIAL PROOF */}
-      <SocialProof />
+      {/* TRUSTED BY SERIOUS TRADERS */}
+      <TestimonialsSection />
 
-      {/* BEFORE/AFTER */}
-      <BeforeAfterSection />
+      {/* THE DIFFERENCE IS CLARITY. NOT NOISE. */}
+      <ClarityLedgerSection />
 
-      {/* NOT A NEWSLETTER */}
-      <NotANewsletterSection />
+      {/* MORE THAN A BRIEFING. A TRADING ADVANTAGE. */}
+      <TradingAdvantageSection />
 
-      {/* MORE THAN A BRIEFING */}
-      <MoreThanBriefingSection />
-
-      {/* FAQ */}
-      <FAQSection />
+      {/* FINAL CTA BAND */}
+      <FinalCTABand onSubscribe={onSubscribe} />
 
       {/* PRICING */}
-      <PricingSection 
+      <NewPricingSection
         onSubscribe={onSubscribe}
+        billingInterval={billingInterval}
         setBillingInterval={setBillingInterval}
-        isTopSecretMember={isTopSecretMember}
         onBundleSubscribe={onBundleSubscribe}
-        onBundleYearlySubscribe={onBundleYearlySubscribe}
       />
 
+      {/* FAQ (existing) */}
+      <FAQSection />
+
       {/* FOOTER */}
-      <footer className="border-t border-[#C9A646]/10 py-8 px-6">
+      <footer className="border-t border-gold-border py-8 px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <p className="text-[#C9A646]/40 text-sm">
-            Questions? <a href="mailto:support@finotaur.com" className="text-[#C9A646] hover:underline">support@finotaur.com</a>
+          <p className="text-ink-tertiary text-sm">
+            Questions?{' '}
+            <a
+              href="mailto:support@finotaur.com"
+              className="text-gold-primary hover:underline"
+            >
+              support@finotaur.com
+            </a>
           </p>
         </div>
       </footer>
+      </div>
     </div>
   );
 });
@@ -2449,7 +2078,6 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
         isProcessing={isProcessing}
         isTopSecretMember={isTopSecretMember}
         onBundleSubscribe={handleBundleCheckout}
-        onBundleYearlySubscribe={handleBundleYearlyCheckout}
       />
 
       {/* Modals */}
