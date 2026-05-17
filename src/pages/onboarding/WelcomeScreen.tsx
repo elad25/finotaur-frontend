@@ -15,10 +15,8 @@ import { startGuidedTour } from '@/components/onboarding/GuidedTour';
 
 const WELCOME_SEEN_KEY = 'finotaur_welcome_screen_seen';
 
-export const hasSeenWelcomeScreen = () => {
-  return localStorage.getItem(WELCOME_SEEN_KEY) === 'true';
-};
-
+// Local helper — kept (not exported) in case Register.tsx ever needs to
+// re-add a per-browser dedupe gate. Currently no caller outside this file.
 const markWelcomeScreenSeen = () => {
   localStorage.setItem(WELCOME_SEEN_KEY, 'true');
 };
