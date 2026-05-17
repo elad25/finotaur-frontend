@@ -1,24 +1,37 @@
 // src/components/routes/JournalRoute.tsx
 // =====================================================
-// 🔒 JOURNAL PROTECTION - Only paid users can access
+// 🔓 JOURNAL ACCESS (v8.5.0 — Journal Open For All)
 // =====================================================
-// 
+//
+// Journal is open to every authenticated user. Tier governs LIMITS,
+// not access. The trade-limit enforcement lives in useSubscription
+// (canAddTrade / isLimitReached / tradesRemaining); this route only
+// gates `premiumOnly` features (e.g., backtest, trade copier).
+//
 // ACCESS MATRIX:
-// ┌─────────────────────┬─────────────────────────────────┐
-// │ User Type           │ Journal Access                  │
-// ├─────────────────────┼─────────────────────────────────┤
-// │ Admin/VIP           │ ✅ Full Premium Access          │
-// │ Premium (paid)      │ ✅ Full Premium Access          │
-// │ Basic (paid)        │ ✅ Basic Access (25 trades/mo)  │
-// │ Trial (with Whop)   │ ✅ Trial Access (14 days)       │
-// │ Platform PRO        │ ✅ Premium (bundled)            │
-// │ Platform Enterprise │ ✅ Premium (bundled)            │
-// ├─────────────────────┼─────────────────────────────────┤
-// │ FREE (no payment)   │ ❌ Landing Page                 │
-// │ Platform FREE       │ ❌ Landing Page                 │
-// │ Platform CORE       │ ❌ Landing Page                 │
-// │ No subscription     │ ❌ Landing Page                 │
-// └─────────────────────┴─────────────────────────────────┘
+// ┌─────────────────────┬──────────────────────────────────────────┐
+// │ User Type           │ Journal Access                           │
+// ├─────────────────────┼──────────────────────────────────────────┤
+// │ Admin / VIP         │ ✅ Full Premium (unlimited)              │
+// │ Premium (paid)      │ ✅ Unlimited + backtest + trade copier   │
+// │ Basic (paid)        │ ✅ 25 trades / month                     │
+// │ Trial (with Whop)   │ ✅ Trial Access (14 days)                │
+// │ Platform PRO        │ ✅ Premium (bundled)                     │
+// │ Platform Enterprise │ ✅ Premium (bundled)                     │
+// │ Platform CORE       │ ✅ Basic-tier journal (25/mo)            │
+// │ FREE (no payment)   │ ✅ 15 trades LIFETIME (manual entry)     │
+// │ Platform FREE       │ ✅ 15 trades LIFETIME (manual entry)     │
+// │ No subscription     │ ✅ 15 trades LIFETIME (manual entry)     │
+// ├─────────────────────┼──────────────────────────────────────────┤
+// │ premiumOnly route   │ ❌ Landing page if !isPremium             │
+// └─────────────────────┴──────────────────────────────────────────┘
+//
+// JournalLandingPage is still rendered as a fallback for premiumOnly
+// gated routes (backtest, copier) when the user is not Premium, OR
+// for the safety net where hasJournalAccess somehow evaluates false
+// (should not happen given v8.5.0 — hasJournalFromFree is true for
+// every non-admin, non-paid user). Empty-state UX for free users with
+// no broker lives in JournalEmptyState (variant="no-broker").
 // =====================================================
 
 import { memo, Suspense, ReactNode, lazy } from 'react';
