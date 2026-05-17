@@ -1666,6 +1666,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
         {!brokersLoading && allBrokerConnections.length === 0 && (
           <JournalEmptyState
             variant="no-broker"
+            onAddManualTrade={() => navigate('/app/journal/new')}
             onConnectBroker={openAddBrokerPopup}
           />
         )}
