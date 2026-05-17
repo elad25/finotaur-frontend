@@ -201,10 +201,10 @@ ai: {
   label: 'AI Arena',
   locked: false,
   beta: false,
-  defaultPath: '/app/ai/copilot',
+  defaultPath: '/app/ai/stock-analyzer',
   subNav: [
     { label: 'AI Analytics', path: '/app/ai/stock-analyzer' },
-    { label: 'FINOTAUR Copilot', path: '/app/ai/copilot' },
+    { label: 'FINOTAUR Copilot', path: '/app/ai/copilot', locked: true },
   ],
   sidebar: [
     { label: 'Stock Analyzer', path: '/app/ai/stock-analyzer', icon: TrendingUp },

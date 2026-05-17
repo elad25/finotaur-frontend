@@ -432,12 +432,12 @@ function AppContent() {
           <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
           {/* AI */}
-          <Route path="ai/copilot" element={<SuspenseRoute><AIMyPortfolio /></SuspenseRoute>} />
-          <Route path="ai/copilot/top-opportunities" element={<SuspenseRoute><CopilotTopOpportunitiesPage /></SuspenseRoute>} />
-          <Route path="ai/copilot/macro" element={<SuspenseRoute><CopilotMacroPage /></SuspenseRoute>} />
-          <Route path="ai/copilot/holdings" element={<SuspenseRoute><CopilotHoldingsPage /></SuspenseRoute>} />
-          <Route path="ai/copilot/risks" element={<SuspenseRoute><CopilotRisksPage /></SuspenseRoute>} />
-          <Route path="ai/copilot/ai-chat" element={<SuspenseRoute><CopilotAIChatPage /></SuspenseRoute>} />
+          <Route path="ai/copilot" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
+          <Route path="ai/copilot/top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
+          <Route path="ai/copilot/macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
+          <Route path="ai/copilot/holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
+          <Route path="ai/copilot/risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
+          <Route path="ai/copilot/ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
           <Route path="ai/my-portfolio" element={<Navigate to="/app/ai/copilot" replace />} />
           <Route path="ai/stock-analyzer" element={<SuspenseRoute><AIStockAnalyzer /></SuspenseRoute>} />
           <Route path="ai/sector-analyzer" element={<SuspenseRoute><AISectorAnalyzer /></SuspenseRoute>} />
