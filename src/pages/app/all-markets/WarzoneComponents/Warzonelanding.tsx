@@ -1327,6 +1327,7 @@ const LandingView = memo(function LandingView({
   isProcessing,
   isTopSecretMember = false,
   onBundleSubscribe,
+  onBundleSubscribeYearly,
 }: {
   onSubscribe: () => void;
   billingInterval: BillingInterval;
@@ -1334,6 +1335,7 @@ const LandingView = memo(function LandingView({
   isProcessing: boolean;
   isTopSecretMember?: boolean;
   onBundleSubscribe?: () => void;
+  onBundleSubscribeYearly?: () => void;
 }) {
   void isProcessing; // kept for prop compatibility; subscribe button uses parent state internally
   void isTopSecretMember; // bundle popup logic preserved at parent level
@@ -1377,6 +1379,7 @@ const LandingView = memo(function LandingView({
         billingInterval={billingInterval}
         setBillingInterval={setBillingInterval}
         onBundleSubscribe={onBundleSubscribe}
+        onBundleSubscribeYearly={onBundleSubscribeYearly}
       />
 
       {/* FAQ (existing) */}
@@ -2078,6 +2081,7 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
         isProcessing={isProcessing}
         isTopSecretMember={isTopSecretMember}
         onBundleSubscribe={handleBundleCheckout}
+        onBundleSubscribeYearly={handleBundleYearlyCheckout}
       />
 
       {/* Modals */}
