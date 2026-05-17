@@ -11,6 +11,8 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  /** Sentry tag to identify which boundary caught the error. Defaults to 'journal'. */
+  boundary?: string;
 }
 
 interface State {
@@ -45,7 +47,7 @@ export class ErrorBoundary extends Component<Props, State> {
     
     captureException(error, {
       extra: { componentStack: errorInfo.componentStack },
-      tags: { boundary: 'journal' },
+      tags: { boundary: this.props.boundary ?? 'journal' },
     });
   }
 

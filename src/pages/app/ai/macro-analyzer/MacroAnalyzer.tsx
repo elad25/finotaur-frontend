@@ -13,6 +13,8 @@ import React, {
 } from 'react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { MacroErrorFallback } from './shared/MacroErrorFallback';
 import { LazyMotion, domAnimation, m } from 'framer-motion';
 import {
   BarChart3, Activity, FileText, Banknote, Globe, Brain, ShieldCheck, Crosshair, Zap
@@ -253,7 +255,8 @@ export default function MacroAnalyzer() {
   if (isLoading) return <LoadingSkeleton />;
 
   return (
-    <>
+    <ErrorBoundary boundary="macro-analyzer" fallback={<MacroErrorFallback />}>
+      <>
       <GlobalStyles />
       <MacroArenaStyles />
 
@@ -363,6 +366,7 @@ export default function MacroAnalyzer() {
           </div>
         </div>
       </div>
-    </>
+      </>
+    </ErrorBoundary>
   );
 }
