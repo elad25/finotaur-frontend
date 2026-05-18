@@ -21,6 +21,17 @@ export interface LineDataPoint {
   value: number;
 }
 
+/**
+ * Histogram bar point. Supports optional per-bar `color` override — matches
+ * lightweight-charts v4 `HistogramData` so MACD histogram bars can paint
+ * green when positive / red when negative without two separate series.
+ */
+export interface HistogramDataPoint {
+  time: UTCTimestamp;
+  value: number;
+  color?: string;
+}
+
 // ───────────────────────────────────────────────────────────────
 // SMA — Simple Moving Average
 // ───────────────────────────────────────────────────────────────
@@ -146,6 +157,170 @@ export function computeVWAP(bars: Bar[]): LineDataPoint[] {
     if (cumV > 0) {
       out.push({ time: bar.time, value: cumPV / cumV });
     }
+  }
+  return out;
+}
+
+// ───────────────────────────────────────────────────────────────
+// MACD — Moving Average Convergence Divergence (Phase 2.5)
+// ───────────────────────────────────────────────────────────────
+// Three series, all derived from `close`:
+//   macd_t   = EMA(close, fast)_t − EMA(close, slow)_t
+//   signal_t = EMA(macd, signalPeriod)_t
+//   hist_t   = macd_t − signal_t
+//
+// Histogram bars carry an inline `color` so positive bars render green
+// and negative bars render red on a single lightweight-charts histogram
+// series (per-bar color is a v4 feature on HistogramData).
+const MACD_HIST_UP_COLOR = '#22c55e';   // green-500 — momentum building up
+const MACD_HIST_DOWN_COLOR = '#dc2626'; // red-600   — momentum fading down
+
+export interface MACDResult {
+  macd: LineDataPoint[];
+  signal: LineDataPoint[];
+  histogram: HistogramDataPoint[];
+}
+
+export function computeMACD(
+  bars: Bar[],
+  fast = 12,
+  slow = 26,
+  signalPeriod = 9,
+): MACDResult {
+  const empty: MACDResult = { macd: [], signal: [], histogram: [] };
+  if (fast <= 0 || slow <= 0 || signalPeriod <= 0) return empty;
+  if (slow <= fast) return empty; // sanity — MACD requires slow > fast
+  if (bars.length < slow + signalPeriod) return empty;
+
+  const fastEma = computeEMA(bars, fast);
+  const slowEma = computeEMA(bars, slow);
+  // slowEma starts at bars[slow-1].time; fastEma at bars[fast-1].time.
+  // Align by skipping fastEma's lead so indices step the same bars.
+  const fastOffset = slow - fast; // ≥ 1 because slow > fast
+
+  const macdLine: LineDataPoint[] = [];
+  for (let i = 0; i < slowEma.length; i++) {
+    macdLine.push({
+      time: slowEma[i].time,
+      value: fastEma[i + fastOffset].value - slowEma[i].value,
+    });
+  }
+
+  if (macdLine.length < signalPeriod) {
+    return { macd: macdLine, signal: [], histogram: [] };
+  }
+
+  // Signal = EMA over the MACD line itself (seeded by SMA of first signalPeriod points)
+  const alpha = 2 / (signalPeriod + 1);
+  let seed = 0;
+  for (let i = 0; i < signalPeriod; i++) seed += macdLine[i].value;
+  let sig = seed / signalPeriod;
+  const signalLine: LineDataPoint[] = [
+    { time: macdLine[signalPeriod - 1].time, value: sig },
+  ];
+  for (let i = signalPeriod; i < macdLine.length; i++) {
+    sig = macdLine[i].value * alpha + sig * (1 - alpha);
+    signalLine.push({ time: macdLine[i].time, value: sig });
+  }
+
+  // Histogram only defined where signal is defined.
+  // signalLine.length === macdLine.length − signalPeriod + 1.
+  const macdOffset = macdLine.length - signalLine.length;
+  const histogram: HistogramDataPoint[] = [];
+  for (let i = 0; i < signalLine.length; i++) {
+    const diff = macdLine[i + macdOffset].value - signalLine[i].value;
+    histogram.push({
+      time: signalLine[i].time,
+      value: diff,
+      color: diff >= 0 ? MACD_HIST_UP_COLOR : MACD_HIST_DOWN_COLOR,
+    });
+  }
+
+  return { macd: macdLine, signal: signalLine, histogram };
+}
+
+// ───────────────────────────────────────────────────────────────
+// Bollinger Bands (period, stdDev multiplier) — Phase 2.5
+// ───────────────────────────────────────────────────────────────
+// middle_t = SMA(close, period)_t
+// std_t    = sqrt( Σ_{i=t-period+1..t} (close_i − middle_t)² / period )
+// upper_t  = middle_t + stdDevMult · std_t
+// lower_t  = middle_t − stdDevMult · std_t
+//
+// Population std (divide by N), not sample std (N-1). This matches the
+// standard chart convention used by TradingView / most platforms.
+export interface BollingerResult {
+  middle: LineDataPoint[];
+  upper: LineDataPoint[];
+  lower: LineDataPoint[];
+}
+
+export function computeBollinger(
+  bars: Bar[],
+  period = 20,
+  stdDevMult = 2,
+): BollingerResult {
+  if (period <= 0 || bars.length < period) {
+    return { middle: [], upper: [], lower: [] };
+  }
+  const middle: LineDataPoint[] = [];
+  const upper: LineDataPoint[] = [];
+  const lower: LineDataPoint[] = [];
+
+  // Rolling sum (close) for the SMA midline
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += bars[i].close;
+
+  for (let i = period - 1; i < bars.length; i++) {
+    if (i >= period) sum = sum - bars[i - period].close + bars[i].close;
+    const mean = sum / period;
+
+    // StdDev: O(period) per bar — chart windows are small (<2000 bars),
+    // and Welford's variant would not change observed perf here.
+    let sqDiffSum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const d = bars[j].close - mean;
+      sqDiffSum += d * d;
+    }
+    const std = Math.sqrt(sqDiffSum / period);
+
+    middle.push({ time: bars[i].time, value: mean });
+    upper.push({ time: bars[i].time, value: mean + stdDevMult * std });
+    lower.push({ time: bars[i].time, value: mean - stdDevMult * std });
+  }
+  return { middle, upper, lower };
+}
+
+// ───────────────────────────────────────────────────────────────
+// ATR — Average True Range (Wilder smoothing) — Phase 2.5
+// ───────────────────────────────────────────────────────────────
+// TR_i = max(high_i − low_i, |high_i − close_{i-1}|, |low_i − close_{i-1}|)
+// ATR_period = mean(TR_1 .. TR_period)                           (seed)
+// ATR_t      = (ATR_{t-1} · (period - 1) + TR_t) / period        (Wilder)
+//
+// Yields units of price ($) — caller renders in its own subpane.
+export function computeATR(bars: Bar[], period = 14): LineDataPoint[] {
+  if (period <= 0 || bars.length <= period) return [];
+  const out: LineDataPoint[] = [];
+
+  // Seed: arithmetic mean of TR_1..TR_period (TR_0 undefined — no prior close)
+  let trSum = 0;
+  for (let i = 1; i <= period; i++) {
+    const h = bars[i].high;
+    const l = bars[i].low;
+    const cp = bars[i - 1].close;
+    trSum += Math.max(h - l, Math.abs(h - cp), Math.abs(l - cp));
+  }
+  let atr = trSum / period;
+  out.push({ time: bars[period].time, value: atr });
+
+  for (let i = period + 1; i < bars.length; i++) {
+    const h = bars[i].high;
+    const l = bars[i].low;
+    const cp = bars[i - 1].close;
+    const tr = Math.max(h - l, Math.abs(h - cp), Math.abs(l - cp));
+    atr = (atr * (period - 1) + tr) / period;
+    out.push({ time: bars[i].time, value: atr });
   }
   return out;
 }

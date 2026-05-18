@@ -1,12 +1,18 @@
 /**
  * IndicatorToolbar — chip row for toggling chart indicators.
  *
- * Renders four toggle pills (SMA 20 / EMA 50 / RSI 14 / VWAP). Each pill
- * lights up in the indicator's overlay color when active, dims when off.
- * VWAP is disabled (grayed out) on non-intraday intervals, where the
- * cumulative-from-session-open semantics are not meaningful.
+ * Renders seven toggle pills (Phase 2 + Phase 2.5):
+ *   SMA 20 / EMA 50 / RSI 14 / VWAP / MACD / BB 20 / ATR 14
  *
- * Periods are fixed in Phase 2 (no settings dropdown).
+ * Each pill lights up in the indicator's overlay color when active, dims
+ * when off. VWAP is disabled (grayed out) on non-intraday intervals,
+ * where the cumulative-from-session-open semantics are not meaningful.
+ *
+ * Layout uses `flex-wrap` — on a wide container (TradeChart Dialog at
+ * 95vw) all seven sit on one line; on a narrow inline container they
+ * wrap naturally to a second row.
+ *
+ * Periods are fixed in Phase 2.5 (no settings dropdown).
  */
 
 import { isIntradayInterval } from './indicators';
@@ -28,6 +34,9 @@ const CHIP_COLOR = {
   ema: '#fcd34d',
   vwap: '#c4b5fd',
   rsi: '#d4d4d8',
+  macd: '#fcd34d',   // amber-300 — MACD line (matches chart palette)
+  bbands: '#a78bfa', // violet-400 — Bollinger middle band
+  atr: '#94a3b8',    // slate-400 — ATR ($-valued, distinct from RSI zinc)
 } as const;
 
 interface ChipProps {
@@ -106,6 +115,24 @@ export function IndicatorToolbar({ settings, onChange, interval }: IndicatorTool
         disabled={!intraday}
         disabledHint="VWAP is intraday-only"
         onClick={() => onChange({ ...settings, vwap: !settings.vwap })}
+      />
+      <Chip
+        label="MACD"
+        active={settings.macd}
+        color={CHIP_COLOR.macd}
+        onClick={() => onChange({ ...settings, macd: !settings.macd })}
+      />
+      <Chip
+        label={`BB ${INDICATOR_PERIODS.bbands.period}`}
+        active={settings.bbands}
+        color={CHIP_COLOR.bbands}
+        onClick={() => onChange({ ...settings, bbands: !settings.bbands })}
+      />
+      <Chip
+        label={`ATR ${INDICATOR_PERIODS.atr}`}
+        active={settings.atr}
+        color={CHIP_COLOR.atr}
+        onClick={() => onChange({ ...settings, atr: !settings.atr })}
       />
     </div>
   );
