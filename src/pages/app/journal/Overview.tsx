@@ -70,7 +70,6 @@ import AddBrokerPopup from "@/components/broker/AddBrokerPopup";
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
-import { isGuidedTourActive } from '@/components/onboarding/GuidedTour';
 import { supabase } from '@/lib/supabase';
 import { JournalEmptyState } from '@/components/journal/JournalEmptyState';
 import { Button } from '@/components/ds/Button';
@@ -1261,43 +1260,6 @@ function JournalOverviewContent() {
     (c) => c.status === 'degraded' || c.status === 'canceled',
   );
   const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
-
-  // First-visit onboarding: auto-open AddBrokerPopup once for users with zero brokers.
-  // Persisted in localStorage so refreshing or returning later does not re-trigger.
-  // Gated to prevent collision with the guided tour and to wait until at least
-  // 1h after onboarding completion (so the user has had time to settle in before
-  // we ask them to connect a broker).
-  useEffect(() => {
-    if (brokersLoading) return;
-    if (allBrokerConnections.length > 0) return;
-    if (localStorage.getItem('finotaur_journal_onboarding_done') === 'true') return;
-    if (isGuidedTourActive()) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-        const { data } = await supabase
-          .from('profiles')
-          .select('onboarding_completed_at')
-          .eq('id', user.id)
-          .maybeSingle();
-        const completedAt = data?.onboarding_completed_at
-          ? new Date(data.onboarding_completed_at as string).getTime()
-          : null;
-        // If onboarding completed less than 1h ago, hold off — don't pile
-        // popups on a freshly-onboarded user.
-        if (completedAt && Date.now() - completedAt < 60 * 60 * 1000) return;
-        if (cancelled) return;
-        setShowAddBroker(true);
-        localStorage.setItem('finotaur_journal_onboarding_done', 'true');
-      } catch (err) {
-        console.warn('Overview: broker popup gate eval failed', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [brokersLoading, allBrokerConnections.length]);
 
   const openAddBrokerPopup = useCallback(() => {
     setShowAddBroker(true);

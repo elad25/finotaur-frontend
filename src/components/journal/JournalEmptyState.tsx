@@ -45,7 +45,7 @@ export function JournalEmptyState({
   return (
     <div className="flex flex-col items-center justify-center py-ds-9 text-center">
       <h2 className="font-serif text-3xl text-ink-primary mb-ds-3">
-        Start your trading journal
+        Welcome to your trading journal
       </h2>
       <p className="text-ink-secondary max-w-md mb-ds-5">
         Add trades manually to start tracking your performance — no broker
