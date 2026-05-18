@@ -1147,7 +1147,54 @@ serve(async (req: Request) => {
         // payment.failed fires on every retry attempt — NOT a terminal event.
         // Terminal subscription death is signaled by membership.went_invalid (below).
         // No broker mutation here.
-        result = { success: true, message: `Payment failure logged` };
+        //
+        // Sprint W.1: fire-and-forget dunning email so the user knows their
+        // card failed. payment-failed-notify is never-throw + has its own
+        // kill-switch (PAYMENT_ALERT_DISABLED) + RESEND_API_KEY guard, so this
+        // call never breaks webhook processing.
+        try {
+          if (!finotaurUserId) {
+            console.info('[whop-webhook] payment-failed-notify skipped — no finotaur_user_id');
+            result = { success: true, message: `Payment failure logged (no user_id for email)` };
+            break;
+          }
+          const data = payload.data || {};
+          let amountCents = data.subtotal ?? data.total ?? data.usd_total ?? 0;
+          // Whop sends "small" amounts as dollars and "large" amounts as cents
+          // (per handlePaymentSucceeded heuristic line 1310). Normalize to cents
+          // for the email function's formatter.
+          if (amountCents > 0 && amountCents < 1000) amountCents = Math.round(amountCents * 100);
+          const productId = data.product?.id ?? '';
+          const productName = isPlatform(productId)
+            ? (productId === 'prod_LtP5GbpPfp9bn' || productId === 'prod_CbWpZrn5P7wc9' ? 'FINOTAUR'
+              : productId === 'prod_CIKv0J5Rq6aFk' ? 'Platform Enterprise'
+              : 'Platform Core')
+            : NEWSLETTER_PRODUCT_IDS.has(productId) ? 'War Zone Intelligence'
+            : TOP_SECRET_PRODUCT_IDS.has(productId) ? 'Top Secret'
+            : 'subscription';
+
+          // Fire-and-forget invoke. We do NOT await — webhook must respond fast
+          // and the email is non-critical for webhook idempotency.
+          void supabase.functions
+            .invoke('payment-failed-notify', {
+              body: {
+                user_id: finotaurUserId,
+                finotaur_email: finotaurEmail,
+                product_name: productName,
+                amount_cents: amountCents,
+                currency: data.currency ?? 'USD',
+                whop_membership_id: whopMembershipId,
+              },
+            })
+            .catch((err) => {
+              console.warn('[whop-webhook] payment-failed-notify invoke failed:', err?.message ?? err);
+            });
+        } catch (notifyErr) {
+          console.warn('[whop-webhook] payment-failed-notify wiring error (non-fatal):',
+            notifyErr instanceof Error ? notifyErr.message : String(notifyErr));
+        }
+
+        result = { success: true, message: `Payment failure logged + dunning email queued` };
         break;
       }
 
