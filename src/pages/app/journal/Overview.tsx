@@ -251,6 +251,7 @@ const JournalKpiCard = React.memo(({
   tone = "gold",
   icon,
   visual = "icon",
+  gaugeFillPct,
   tooltip,
 }: {
   label: string;
@@ -259,10 +260,15 @@ const JournalKpiCard = React.memo(({
   tone?: "green" | "gold" | "red";
   icon?: React.ReactNode;
   visual?: "icon" | "gauge" | "line" | "bars" | "target";
+  /** 0-100. When `visual="gauge"`, controls how much of the ring is filled.
+   *  100 = full circle, 0 = empty ring. Defaults to 0 (empty) if not provided. */
+  gaugeFillPct?: number;
   tooltip: string;
 }) => {
   const valueColor =
     tone === "green" ? "text-[#3BC76E]" : tone === "red" ? "text-[#EF4444]" : "text-[#F2C85F]";
+
+  const gaugeEndDeg = Math.max(0, Math.min(360, (gaugeFillPct ?? 0) * 3.6));
 
   return (
     <div className={`${JOURNAL_PANEL} min-h-[94px] px-4 py-3`}>
@@ -290,10 +296,10 @@ const JournalKpiCard = React.memo(({
           <div className="relative ml-auto h-16 w-16 shrink-0">
             <div className="absolute inset-1 rounded-full border-[7px] border-white/[0.08]" />
             <div
-              className="absolute inset-1 rounded-full"
+              className="absolute inset-1 rounded-full transition-[background] duration-500"
               style={{
                 background:
-                  "conic-gradient(from 210deg, #F2C85F 0deg, #F2C85F 168deg, transparent 168deg, transparent 360deg)",
+                  `conic-gradient(from 210deg, #F2C85F 0deg, #F2C85F ${gaugeEndDeg}deg, transparent ${gaugeEndDeg}deg, transparent 360deg)`,
                 mask: "radial-gradient(circle, transparent 54%, #000 56%)",
                 WebkitMask: "radial-gradient(circle, transparent 54%, #000 56%)",
               }}
@@ -1273,6 +1279,33 @@ function JournalOverviewContent() {
     }, 90);
   }, []);
 
+  // Empty-state dismissal: once the user has explicitly engaged with either
+  // empty-state CTA (added a trade manually OR opened the broker popup), we
+  // never show the empty state again on returns to the dashboard — even if
+  // they cancelled before actually saving anything. Persisted in localStorage
+  // so the decision survives refreshes / new tabs on the same device.
+  const [emptyStateDismissed, setEmptyStateDismissed] = useState(
+    () => typeof window !== 'undefined'
+      && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
+  );
+
+  const dismissEmptyStateOnce = useCallback(() => {
+    if (!emptyStateDismissed) {
+      localStorage.setItem('finotaur_journal_empty_state_dismissed', 'true');
+      setEmptyStateDismissed(true);
+    }
+  }, [emptyStateDismissed]);
+
+  const handleEmptyStateAddTrade = useCallback(() => {
+    dismissEmptyStateOnce();
+    navigate('/app/journal/new');
+  }, [dismissEmptyStateOnce, navigate]);
+
+  const handleEmptyStateConnectBroker = useCallback(() => {
+    dismissEmptyStateOnce();
+    openAddBrokerPopup();
+  }, [dismissEmptyStateOnce, openAddBrokerPopup]);
+
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handle(e: MouseEvent) {
@@ -1625,11 +1658,11 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {!brokersLoading && allBrokerConnections.length === 0 && (
+        {!brokersLoading && allBrokerConnections.length === 0 && !emptyStateDismissed && (
           <JournalEmptyState
             variant="no-broker"
-            onAddManualTrade={() => navigate('/app/journal/new')}
-            onConnectBroker={openAddBrokerPopup}
+            onAddManualTrade={handleEmptyStateAddTrade}
+            onConnectBroker={handleEmptyStateConnectBroker}
           />
         )}
 
@@ -1655,6 +1688,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
                 tone="gold"
                 visual="gauge"
+                gaugeFillPct={(stats.winrate ?? 0) * 100}
                 tooltip="The percentage of closed trades that ended profitable, excluding open trades."
               />
 
