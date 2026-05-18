@@ -51,11 +51,13 @@ import type {
   Interval,
 } from './types';
 import {
+  computeATR,
+  computeBollinger,
   computeEMA,
+  computeMACD,
   computeRSI,
   computeSMA,
   computeVWAP,
-  type LineDataPoint,
 } from './indicators';
 
 // ═══════════════════════════════════════════════════════════════
@@ -111,19 +113,236 @@ const FINOTAUR_DARK_THEME = {
 // ═══════════════════════════════════════════════════════════════
 // Per-type defaults — each picked to be distinguishable from candle
 // green/red AND from each other. Callers can override per-Indicator via
-// `Indicator.color`.
+// `Indicator.color`. For multi-series indicators (MACD, Bollinger) the
+// palette value is the PRIMARY line color; companion lines have their
+// own constants below.
 const INDICATOR_COLORS: Record<IndicatorType, string> = {
-  SMA: '#7dd3fc',   // sky-300 — moving average, "soft trend"
-  EMA: '#fcd34d',   // amber-300 — faster MA, "warmer / shorter horizon"
-  VWAP: '#c4b5fd',  // violet-300 — volume-weighted, distinct hue
-  RSI: '#d4d4d8',   // zinc-300 — sits in its own pane, neutral
+  SMA: '#7dd3fc',     // sky-300 — moving average, "soft trend"
+  EMA: '#fcd34d',     // amber-300 — faster MA, "warmer / shorter horizon"
+  VWAP: '#c4b5fd',    // violet-300 — volume-weighted, distinct hue
+  RSI: '#d4d4d8',     // zinc-300 — sits in its own pane, neutral
+  MACD: '#fcd34d',    // amber-300 — MACD line (paired with signal amber-400)
+  BBANDS: '#a78bfa',  // violet-400 — middle band (distinct from VWAP violet-300)
+  ATR: '#94a3b8',     // slate-400 — sits in its own pane (distinct from RSI zinc)
 };
 
-// Scale margins for the candle pane — wider bottom when RSI is on.
-const CANDLE_SCALE_MARGINS_DEFAULT = { top: 0.1, bottom: 0.1 };
-const CANDLE_SCALE_MARGINS_WITH_RSI = { top: 0.05, bottom: 0.3 };
-const RSI_SCALE_MARGINS = { top: 0.75, bottom: 0.05 };
+// Companion colors for the multi-series indicators
+const MACD_SIGNAL_COLOR = '#fbbf24';                 // amber-400, slightly bolder than MACD line
+const BBANDS_BAND_COLOR = 'rgba(167, 139, 250, 0.5)'; // violet-400 at 0.5 opacity for upper/lower
+
+// Subpane price-scale IDs. Each unknown id creates a new overlay scale in
+// lightweight-charts. The candle pane uses the built-in `right` scale.
 const RSI_PRICE_SCALE_ID = 'rsi';
+const MACD_PRICE_SCALE_ID = 'macd';
+const ATR_PRICE_SCALE_ID = 'atr';
+
+// ═══════════════════════════════════════════════════════════════
+// Pane allocation — dynamic scaleMargins for 0-3 active subpanes
+// ═══════════════════════════════════════════════════════════════
+// `lightweight-charts` v4 has no native multi-pane API (added in v5). We
+// approximate panes by giving each subpane its own overlay price scale and
+// carving the vertical space via `scaleMargins`. The candle pane shrinks
+// as more subpanes activate.
+//
+// scaleMargins semantics:
+//   { top: a, bottom: b }  →  scale occupies y ∈ [a, 1 − b]  (a + b ≤ 1)
+//
+// Subpane order top→bottom when more than one is active: RSI, MACD, ATR.
+// Order is fixed (not user-configurable in Phase 2.5) so the layout is
+// predictable across reload.
+type ScaleMargins = { top: number; bottom: number };
+interface PaneMargins {
+  candle: ScaleMargins;
+  rsi?: ScaleMargins;
+  macd?: ScaleMargins;
+  atr?: ScaleMargins;
+}
+
+function computePaneMargins(subpanes: {
+  rsi: boolean;
+  macd: boolean;
+  atr: boolean;
+}): PaneMargins {
+  const count =
+    (subpanes.rsi ? 1 : 0) + (subpanes.macd ? 1 : 0) + (subpanes.atr ? 1 : 0);
+
+  if (count === 0) {
+    return { candle: { top: 0.1, bottom: 0.1 } };
+  }
+  if (count === 1) {
+    // Phase 2 behavior preserved: candle compresses, single subpane at bottom
+    const candle: ScaleMargins = { top: 0.05, bottom: 0.3 };
+    const sub: ScaleMargins = { top: 0.75, bottom: 0.05 };
+    return {
+      candle,
+      rsi: subpanes.rsi ? sub : undefined,
+      macd: subpanes.macd ? sub : undefined,
+      atr: subpanes.atr ? sub : undefined,
+    };
+  }
+  if (count === 2) {
+    const candle: ScaleMargins = { top: 0.05, bottom: 0.5 };
+    const slotTop: ScaleMargins = { top: 0.55, bottom: 0.27 }; // height ≈ 18%
+    const slotBot: ScaleMargins = { top: 0.78, bottom: 0.04 }; // height ≈ 18%
+    return assignSlots(subpanes, candle, [slotTop, slotBot]);
+  }
+  // count === 3
+  const candle: ScaleMargins = { top: 0.05, bottom: 0.55 };
+  const slot1: ScaleMargins = { top: 0.45, bottom: 0.37 }; // y∈[0.45, 0.63]
+  const slot2: ScaleMargins = { top: 0.63, bottom: 0.19 }; // y∈[0.63, 0.81]
+  const slot3: ScaleMargins = { top: 0.81, bottom: 0.02 }; // y∈[0.81, 0.98]
+  return assignSlots(subpanes, candle, [slot1, slot2, slot3]);
+}
+
+// Helper: drop subpanes into available slots in RSI→MACD→ATR order.
+function assignSlots(
+  subpanes: { rsi: boolean; macd: boolean; atr: boolean },
+  candle: ScaleMargins,
+  slots: ScaleMargins[],
+): PaneMargins {
+  const out: PaneMargins = { candle };
+  let idx = 0;
+  if (subpanes.rsi) out.rsi = slots[idx++];
+  if (subpanes.macd) out.macd = slots[idx++];
+  if (subpanes.atr) out.atr = slots[idx++];
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Series factory — instantiates the right number of series per indicator
+// ═══════════════════════════════════════════════════════════════
+// Single-series indicators (SMA / EMA / RSI / VWAP / ATR) return [line].
+// Multi-series indicators return their series in a fixed order:
+//   MACD   → [macdLine, signalLine, histogram]
+//   BBANDS → [middle, upper, lower]
+//
+// Caller stores the returned array in `indicatorSeriesRef.current` and
+// pulls them by index when feeding data.
+function createSeriesForType(
+  chart: IChartApi,
+  type: IndicatorType,
+  primaryColor: string,
+): ISeriesApi<'Line' | 'Histogram'>[] {
+  switch (type) {
+    case 'RSI': {
+      const line = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: RSI_PRICE_SCALE_ID,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      // Classic 30 / 70 reference lines — dotted, neutral, no axis label.
+      line.createPriceLine({
+        price: 30,
+        color: FINOTAUR_DARK_THEME.textAxis,
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: false,
+        title: '',
+      });
+      line.createPriceLine({
+        price: 70,
+        color: FINOTAUR_DARK_THEME.textAxis,
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: false,
+        title: '',
+      });
+      return [line];
+    }
+    case 'MACD': {
+      const macdLine = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: MACD_PRICE_SCALE_ID,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      const signalLine = chart.addLineSeries({
+        color: MACD_SIGNAL_COLOR,
+        lineWidth: 2,
+        priceScaleId: MACD_PRICE_SCALE_ID,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      const histogram = chart.addHistogramSeries({
+        priceScaleId: MACD_PRICE_SCALE_ID,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        base: 0,
+        // color is set per-data-point (HistogramDataPoint.color) so positive
+        // bars paint green and negative bars paint red on the same series.
+      });
+      // Zero reference line — common-sense visual anchor for momentum sign
+      macdLine.createPriceLine({
+        price: 0,
+        color: FINOTAUR_DARK_THEME.textAxis,
+        lineWidth: 1,
+        lineStyle: 1,
+        axisLabelVisible: false,
+        title: '',
+      });
+      return [macdLine, signalLine, histogram];
+    }
+    case 'BBANDS': {
+      const middle = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: 'right',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      const upper = chart.addLineSeries({
+        color: BBANDS_BAND_COLOR,
+        lineWidth: 1,
+        priceScaleId: 'right',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      const lower = chart.addLineSeries({
+        color: BBANDS_BAND_COLOR,
+        lineWidth: 1,
+        priceScaleId: 'right',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      return [middle, upper, lower];
+    }
+    case 'ATR': {
+      const line = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: ATR_PRICE_SCALE_ID,
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      return [line];
+    }
+    case 'SMA':
+    case 'EMA':
+    case 'VWAP':
+    default: {
+      // Single-line overlay on the price pane
+      const line = chart.addLineSeries({
+        color: primaryColor,
+        lineWidth: 2,
+        priceScaleId: 'right',
+        lastValueVisible: false,
+        priceLineVisible: false,
+        crosshairMarkerVisible: true,
+      });
+      return [line];
+    }
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Chart options builder
@@ -236,10 +455,16 @@ export function FinotaurChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   /** Latest bars fetched, kept so the indicators effect can recompute on toggle. */
   const barsRef = useRef<Bar[]>([]);
-  /** Active line series, keyed by indicator type — survives bar refetch. */
-  const indicatorSeriesRef = useRef<Map<IndicatorType, ISeriesApi<'Line'>>>(new Map());
-  /** Whether the RSI price scale has been configured (one-time on first add). */
-  const rsiScaleConfiguredRef = useRef(false);
+  /**
+   * Active series per indicator type — survives bar refetch.
+   * Multi-series indicators (MACD = line+signal+histogram, BBANDS = middle+upper+lower)
+   * keep their series in a fixed order; single-series indicators store a length-1 array.
+   */
+  const indicatorSeriesRef = useRef<Map<IndicatorType, ISeriesApi<'Line' | 'Histogram'>[]>>(
+    new Map(),
+  );
+  /** Which subpane price scales have been styled (borderColor etc.) at least once. */
+  const scalesConfiguredRef = useRef<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -281,7 +506,7 @@ export function FinotaurChart({
       // Indicator series belonged to the destroyed chart — drop refs so the
       // next mount re-creates them from scratch.
       indicatorSeriesRef.current.clear();
-      rsiScaleConfiguredRef.current = false;
+      scalesConfiguredRef.current.clear();
     };
     // Re-create only when theme changes (Phase 0: theme is constant).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -350,10 +575,12 @@ export function FinotaurChart({
 
   // ─── Apply indicators ───────────────────────────────────────
   // Lifecycle:
-  //   - Add series for newly-requested types (configure RSI scale on first add).
-  //   - Remove series for types no longer requested.
+  //   - Add series for newly-requested types (multi-series indicators get
+  //     several series stored under the same map key, in fixed order).
+  //   - Remove every series for types no longer requested.
   //   - Recompute + setData on every effect run (cheap; runs on bars in memory).
-  //   - Adjust candle pane scaleMargins when RSI toggles.
+  //   - Re-apply scaleMargins for ALL active scales each run, because pane
+  //     allocation depends on how many subpanes are simultaneously active.
   useEffect(() => {
     const chart = chartRef.current;
     const candleSeries = seriesRef.current;
@@ -367,104 +594,121 @@ export function FinotaurChart({
     }
 
     const current = indicatorSeriesRef.current;
+    const bars = barsRef.current;
 
     // ─── Remove series no longer requested ──────────────────
-    for (const [type, series] of Array.from(current.entries())) {
+    for (const [type, seriesList] of Array.from(current.entries())) {
       if (!desired.has(type)) {
-        try {
-          chart.removeSeries(series);
-        } catch {
-          // Series may already be gone if chart was torn down mid-flight.
+        for (const s of seriesList) {
+          try {
+            chart.removeSeries(s);
+          } catch {
+            // Series may already be gone if chart was torn down mid-flight.
+          }
         }
         current.delete(type);
       }
     }
 
     // ─── Add / update series for each desired indicator ─────
-    const bars = barsRef.current;
     for (const [type, ind] of desired.entries()) {
       const color = ind.color ?? INDICATOR_COLORS[type];
-      let series = current.get(type);
 
-      if (!series) {
-        if (type === 'RSI') {
-          series = chart.addLineSeries({
-            color,
-            lineWidth: 2,
-            priceScaleId: RSI_PRICE_SCALE_ID,
-            lastValueVisible: false,
-            priceLineVisible: false,
-            crosshairMarkerVisible: true,
-          });
-          // Configure the RSI price scale once (lightweight-charts treats
-          // any unknown priceScaleId as a new overlay scale).
-          if (!rsiScaleConfiguredRef.current) {
-            chart.priceScale(RSI_PRICE_SCALE_ID).applyOptions({
-              scaleMargins: RSI_SCALE_MARGINS,
-              borderColor: FINOTAUR_DARK_THEME.border,
-            });
-            rsiScaleConfiguredRef.current = true;
-          }
-          // Classic 30 / 70 reference lines — dotted, neutral, no axis label.
-          series.createPriceLine({
-            price: 30,
-            color: FINOTAUR_DARK_THEME.textAxis,
-            lineWidth: 1,
-            lineStyle: 1,
-            axisLabelVisible: false,
-            title: '',
-          });
-          series.createPriceLine({
-            price: 70,
-            color: FINOTAUR_DARK_THEME.textAxis,
-            lineWidth: 1,
-            lineStyle: 1,
-            axisLabelVisible: false,
-            title: '',
-          });
-        } else {
-          // SMA / EMA / VWAP — share the main right price scale with candles.
-          series = chart.addLineSeries({
-            color,
-            lineWidth: 2,
-            priceScaleId: 'right',
-            lastValueVisible: false,
-            priceLineVisible: false,
-            crosshairMarkerVisible: true,
-          });
-        }
-        current.set(type, series);
-      } else {
-        // Color may have changed (caller provided a new Indicator.color)
-        series.applyOptions({ color });
+      // ── Create on first sight, or fetch existing ──────────
+      let seriesList = current.get(type);
+      if (!seriesList) {
+        seriesList = createSeriesForType(chart, type, color);
+        current.set(type, seriesList);
+      } else if (seriesList.length > 0 && type !== 'MACD' && type !== 'BBANDS') {
+        // Single-series indicator: color may have changed
+        (seriesList[0] as ISeriesApi<'Line'>).applyOptions({ color });
       }
 
-      // Compute + apply data. Empty bars (pre-fetch) → empty series — that's fine.
-      let data: LineDataPoint[] = [];
-      if (bars.length > 0) {
-        switch (type) {
-          case 'SMA':
-            data = computeSMA(bars, ind.period);
-            break;
-          case 'EMA':
-            data = computeEMA(bars, ind.period);
-            break;
-          case 'RSI':
-            data = computeRSI(bars, ind.period);
-            break;
-          case 'VWAP':
-            data = computeVWAP(bars);
-            break;
-        }
+      // ── Compute + apply data ──────────────────────────────
+      if (bars.length === 0) {
+        // Pre-fetch: clear out any stale data
+        for (const s of seriesList) s.setData([]);
+        continue;
       }
-      series.setData(data);
+
+      switch (type) {
+        case 'SMA':
+          (seriesList[0] as ISeriesApi<'Line'>).setData(
+            computeSMA(bars, ind.period),
+          );
+          break;
+        case 'EMA':
+          (seriesList[0] as ISeriesApi<'Line'>).setData(
+            computeEMA(bars, ind.period),
+          );
+          break;
+        case 'RSI':
+          (seriesList[0] as ISeriesApi<'Line'>).setData(
+            computeRSI(bars, ind.period),
+          );
+          break;
+        case 'VWAP':
+          (seriesList[0] as ISeriesApi<'Line'>).setData(computeVWAP(bars));
+          break;
+        case 'MACD': {
+          const { macd, signal, histogram } = computeMACD(bars);
+          (seriesList[0] as ISeriesApi<'Line'>).setData(macd);
+          (seriesList[1] as ISeriesApi<'Line'>).setData(signal);
+          (seriesList[2] as ISeriesApi<'Histogram'>).setData(histogram);
+          break;
+        }
+        case 'BBANDS': {
+          const { middle, upper, lower } = computeBollinger(
+            bars,
+            ind.period,
+          );
+          (seriesList[0] as ISeriesApi<'Line'>).setData(middle);
+          (seriesList[1] as ISeriesApi<'Line'>).setData(upper);
+          (seriesList[2] as ISeriesApi<'Line'>).setData(lower);
+          break;
+        }
+        case 'ATR':
+          (seriesList[0] as ISeriesApi<'Line'>).setData(
+            computeATR(bars, ind.period),
+          );
+          break;
+      }
     }
 
-    // ─── Candle pane margins flex when RSI is on ────────────
-    const hasRsi = desired.has('RSI');
-    candleSeries.priceScale().applyOptions({
-      scaleMargins: hasRsi ? CANDLE_SCALE_MARGINS_WITH_RSI : CANDLE_SCALE_MARGINS_DEFAULT,
+    // ─── Subpane scale styling (one-time per scale) ─────────
+    const styleScaleOnce = (scaleId: string) => {
+      if (scalesConfiguredRef.current.has(scaleId)) return;
+      chart.priceScale(scaleId).applyOptions({
+        borderColor: FINOTAUR_DARK_THEME.border,
+      });
+      scalesConfiguredRef.current.add(scaleId);
+    };
+    if (desired.has('RSI')) styleScaleOnce(RSI_PRICE_SCALE_ID);
+    if (desired.has('MACD')) styleScaleOnce(MACD_PRICE_SCALE_ID);
+    if (desired.has('ATR')) styleScaleOnce(ATR_PRICE_SCALE_ID);
+
+    // ─── Pane allocation — scaleMargins for active scales ───
+    const margins = computePaneMargins({
+      rsi: desired.has('RSI'),
+      macd: desired.has('MACD'),
+      atr: desired.has('ATR'),
     });
+    candleSeries.priceScale().applyOptions({ scaleMargins: margins.candle });
+    if (margins.rsi) {
+      chart.priceScale(RSI_PRICE_SCALE_ID).applyOptions({
+        scaleMargins: margins.rsi,
+      });
+    }
+    if (margins.macd) {
+      chart.priceScale(MACD_PRICE_SCALE_ID).applyOptions({
+        scaleMargins: margins.macd,
+      });
+    }
+    if (margins.atr) {
+      chart.priceScale(ATR_PRICE_SCALE_ID).applyOptions({
+        scaleMargins: margins.atr,
+      });
+    }
   }, [indicators, barCount]); // barCount → recompute after fresh data load
 
   // ─── Render ─────────────────────────────────────────────────
