@@ -333,6 +333,19 @@ export function TradeChart({ trade }: TradeChartProps) {
     if (indicatorSettings.vwap && isIntradayInterval(interval)) {
       list.push({ type: 'VWAP', period: 0 });
     }
+    // Phase 2.5 additions — each works across all intervals:
+    //  - MACD: fast/slow/signal baked into computeMACD defaults, period ignored
+    //  - BBANDS: rolling window of `period` close prices
+    //  - ATR: Wilder-smoothed True Range over `period` bars
+    if (indicatorSettings.macd) {
+      list.push({ type: 'MACD', period: 0 });
+    }
+    if (indicatorSettings.bbands) {
+      list.push({ type: 'BBANDS', period: INDICATOR_PERIODS.bbands.period });
+    }
+    if (indicatorSettings.atr) {
+      list.push({ type: 'ATR', period: INDICATOR_PERIODS.atr });
+    }
     return list;
   }, [indicatorSettings, interval]);
 
