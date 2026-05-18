@@ -19,6 +19,7 @@ import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
 import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
+import JournalCopierPage from "@/pages/JournalCopierPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -319,6 +320,7 @@ function AppContent() {
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/glossary" element={<GlossaryIndex />} />
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
+        <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal" element={<LegalHub />} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
