@@ -19,11 +19,17 @@ function readFromStorage(): IndicatorSettings {
     if (!raw) return INDICATOR_DEFAULTS;
     const parsed = JSON.parse(raw) as Partial<IndicatorSettings>;
     // Defensive: forward-compat with future keys, ignore unknown ones.
+    // Phase 2.5 added macd / bbands / atr — users on the Phase 2 schema
+    // (4 booleans) land here with those three keys undefined → coerce to
+    // `false`, which preserves the "all-off-by-default" invariant.
     return {
       sma: parsed.sma === true,
       ema: parsed.ema === true,
       rsi: parsed.rsi === true,
       vwap: parsed.vwap === true,
+      macd: parsed.macd === true,
+      bbands: parsed.bbands === true,
+      atr: parsed.atr === true,
     };
   } catch {
     // Corrupt JSON / blocked storage — fall back silently.

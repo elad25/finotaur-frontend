@@ -85,20 +85,37 @@ export interface BarFetchMeta {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Indicators (Phase 2)
+// Indicators (Phase 2 + Phase 2.5)
 // ═══════════════════════════════════════════════════════════════
 
-export type IndicatorType = 'SMA' | 'EMA' | 'RSI' | 'VWAP';
+export type IndicatorType =
+  | 'SMA'
+  | 'EMA'
+  | 'RSI'
+  | 'VWAP'
+  | 'MACD'
+  | 'BBANDS'
+  | 'ATR';
 
 /**
  * A single indicator overlay on the chart.
  *
- * - SMA / EMA / VWAP render as a line on the price pane.
- * - RSI renders on its own price scale (bottom ~25% via scaleMargins) with
- *   horizontal 30/70 reference lines.
+ * Phase 2:
+ *  - SMA / EMA / VWAP render as a line on the price pane.
+ *  - RSI renders on its own price scale (bottom ~25% via scaleMargins) with
+ *    horizontal 30/70 reference lines.
  *
- * `period` is ignored for VWAP (always cumulative from the first visible bar,
- * not a rolling window in Phase 2).
+ * Phase 2.5 additions:
+ *  - MACD renders in its own subpane (3 series: line, signal, histogram).
+ *  - Bollinger Bands render as 3 lines on the price pane (middle solid,
+ *    upper/lower dimmed).
+ *  - ATR renders in its own subpane (single line, $-valued).
+ *
+ * `period` semantics:
+ *  - SMA / EMA / RSI / BBANDS / ATR: the lookback window (bars).
+ *  - VWAP: ignored (always cumulative from the first visible bar).
+ *  - MACD: ignored (fast / slow / signal are fixed at 12 / 26 / 9 in Phase 2.5).
+ *
  * `color` is optional — when omitted, FinotaurChart picks from its palette.
  */
 export interface Indicator {
@@ -110,15 +127,22 @@ export interface Indicator {
 /**
  * User-toggleable indicator state, persisted in localStorage.
  *
- * Periods are fixed in Phase 2 (SMA 20, EMA 50, RSI 14). A future phase may
- * expose a settings menu per chip; until then this shape is intentionally a
- * flat 4-boolean record so localStorage migration is trivial.
+ * Periods are fixed in Phase 2.5 — see `INDICATOR_PERIODS` below. A future
+ * phase may expose a settings menu per chip; until then this shape is a
+ * flat boolean record so localStorage migration is trivial.
+ *
+ * **All defaults are `false`** — preserves the Phase 1 visual appearance
+ * until the user opts in. This is a hard requirement: do not flip any
+ * default to true without explicit product approval.
  */
 export interface IndicatorSettings {
   sma: boolean;
   ema: boolean;
   rsi: boolean;
   vwap: boolean;
+  macd: boolean;
+  bbands: boolean;
+  atr: boolean;
 }
 
 /** Fresh state — no indicators active until the user opts in. */
@@ -127,11 +151,20 @@ export const INDICATOR_DEFAULTS: IndicatorSettings = {
   ema: false,
   rsi: false,
   vwap: false,
+  macd: false,
+  bbands: false,
+  atr: false,
 };
 
-/** Fixed periods for Phase 2. */
+/**
+ * Fixed periods for Phase 2 + Phase 2.5. Scalars for single-period indicators,
+ * nested objects for the parameterized ones (MACD / Bollinger).
+ */
 export const INDICATOR_PERIODS = {
   sma: 20,
   ema: 50,
   rsi: 14,
+  macd: { fast: 12, slow: 26, signal: 9 },
+  bbands: { period: 20, stdDev: 2 },
+  atr: 14,
 } as const;
