@@ -141,6 +141,10 @@ export function useTradovate() {
       });
       if (error) throw error;
       loadCredentials();
+      // 2026-05-18: invalidate the new broker_connections cache too. tradovate-auth
+      // INSERTs into broker_connections, but useBrokerConnections reads from a
+      // separate query key. Without this the popover stays empty until manual refresh.
+      await queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['copy_trade_log', userId] });

@@ -229,9 +229,38 @@ async function fetchAllTrades(
 export function useTrades(userId?: string, portfolioId?: string | null) {
   const { id: effectiveUserId } = useEffectiveUser();
   const { isImpersonating } = useImpersonation();
-  
+  const qc = useQueryClient();
+
   // Use provided userId or fallback to effectiveUserId
   const targetUserId = userId || effectiveUserId;
+
+  // 2026-05-18: Supabase Realtime on trades — sub-second latency from broker fill
+  // to journal display. Previously: tradovate-sync cron runs every 5min, then the
+  // trades query held a 5min staleTime with no refetchInterval and no realtime
+  // listener — worst case 10 minutes from fill to UI. With this channel, INSERTs
+  // from the edge function trigger an immediate invalidate.
+  useEffect(() => {
+    if (!targetUserId) return;
+    const channel = supabase
+      .channel(`trades-${targetUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trades',
+          filter: `user_id=eq.${targetUserId}`,
+        },
+        () => {
+          qc.invalidateQueries({ queryKey: ['trades', targetUserId] });
+          qc.invalidateQueries({ queryKey: ['dashboard'] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [targetUserId, qc]);
 
   return useQuery({
     queryKey: [
@@ -241,11 +270,11 @@ export function useTrades(userId?: string, portfolioId?: string | null) {
     ],
     queryFn: () => fetchAllTrades(targetUserId!, isImpersonating, portfolioId),
     enabled: !!targetUserId,
-    
+
     // 🚀 PERFORMANCE: Aggressive caching
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    
+
     // 🚀 FIXED: Smart refetch strategy
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',

@@ -1255,8 +1255,26 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // 2026-05-18: manual Sync Trades button. Fires syncNow on every active
+  // Tradovate connection in parallel. Disabled while a sync is in flight to
+  // prevent double-clicks producing duplicate edge-function invocations.
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const tradovateConnections = useMemo(
+    () => allBrokerConnections.filter(c => c.broker === 'tradovate' && c.is_active),
+    [allBrokerConnections],
+  );
+  const handleSyncAllTrades = useCallback(async () => {
+    if (isSyncingAll || tradovateConnections.length === 0) return;
+    setIsSyncingAll(true);
+    try {
+      await Promise.all(tradovateConnections.map(c => brokerSyncNow(c.id)));
+    } finally {
+      setIsSyncingAll(false);
+    }
+  }, [isSyncingAll, tradovateConnections, brokerSyncNow]);
 
   // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
   // Resolves OQ-72: previously a user whose Tradovate session went degraded
@@ -1619,6 +1637,24 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 )}
               </Button>
             </BrokerConnectionsPopover>
+
+            {/* 2026-05-18: Sync Trades — fires tradovate-sync edge function for every
+                active Tradovate connection in parallel. Hidden when there are no
+                Tradovate connections (manual-only users). Spinner animates while
+                in flight; toast feedback comes from useBrokerConnections.syncNow. */}
+            {tradovateConnections.length > 0 && (
+              <Button
+                onClick={handleSyncAllTrades}
+                disabled={isSyncingAll}
+                variant="goldOutline"
+                size="compact"
+                className="h-10 gap-2 border-[#C9A646]/80 px-5 text-[11px] text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
+                aria-label="Sync Trades"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
+                {isSyncingAll ? 'Syncing…' : 'Sync Trades'}
+              </Button>
+            )}
 
             {/* F2.5: Import Trades — compact (handler unchanged) */}
             <Button
