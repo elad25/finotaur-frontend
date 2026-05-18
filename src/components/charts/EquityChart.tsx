@@ -48,9 +48,9 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
   // ✅ Optimize data for large datasets and ensure valid values
   const dailyData = useMemo(() => {
     if (!data || data.length === 0) return [];
-    
+
     // Filter out invalid data points and ensure numbers are valid
-    return data
+    const mapped = data
       .filter(d => d && typeof d.equity === 'number' && !isNaN(d.equity) && isFinite(d.equity))
       .map(d => ({
         ...d,
@@ -59,13 +59,24 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
         viewLabel: d.date,
         tooltipLabel: d.date,
       }));
+
+    if (mapped.length === 0) return mapped;
+
+    // Prepend a $0 baseline point so the curve visibly starts at zero, even
+    // when only one trade exists. Without this, recharts renders a single
+    // floating dot — unhelpful for a first-trade user expecting a line that
+    // rose from $0 to current equity.
+    return [
+      { date: 'Start', equity: 0, pnl: 0, viewLabel: 'Start', tooltipLabel: 'Start · $0.00' },
+      ...mapped,
+    ];
   }, [data]);
 
   const tradeData = useMemo(() => {
     if (!trades || trades.length === 0) return [];
 
     let runningPnl = 0;
-    return trades
+    const mapped = trades
       .filter(trade => trade && trade.pnl != null && isFinite(Number(trade.pnl)))
       .sort((a, b) => {
         const aTime = new Date(a.close_at || a.open_at || 0).getTime();
@@ -90,6 +101,15 @@ const EquityChart = React.memo(({ data, trades = [] }: EquityChartProps) => {
           ].filter(Boolean).join(' · '),
         };
       });
+
+    if (mapped.length === 0) return mapped;
+
+    // Prepend a #0 baseline point so the curve visibly rises from $0 to the
+    // first trade's cumulative equity. See identical reasoning in dailyData.
+    return [
+      { date: '#0', equity: 0, pnl: 0, viewLabel: 'Start', tooltipLabel: 'Start · $0.00' },
+      ...mapped,
+    ];
   }, [trades]);
 
   const rawDisplayData = viewMode === 'trades' ? tradeData : dailyData;
