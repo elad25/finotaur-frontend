@@ -1268,6 +1268,16 @@ function JournalOverviewContent() {
   const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
 
   const openAddBrokerPopup = useCallback(() => {
+    // Engagement signal: ANY path that opens the AddBroker popup (header
+    // "Connect Broker" → popover → "+ Add new connection", AccountFilterDropdown
+    // manage, empty-state "Or connect Tradovate" link, etc.) counts as
+    // "user has decided to act" → dismiss the empty state for good.
+    setEmptyStateDismissed((prev) => {
+      if (!prev) {
+        localStorage.setItem('finotaur_journal_empty_state_dismissed', 'true');
+      }
+      return true;
+    });
     setShowAddBroker(true);
   }, []);
 
@@ -1658,7 +1668,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {!brokersLoading && allBrokerConnections.length === 0 && !emptyStateDismissed && (
+        {!brokersLoading
+          && allBrokerConnections.length === 0
+          && !emptyStateDismissed
+          && (!stats || !stats.trades || stats.trades.length === 0) && (
           <JournalEmptyState
             variant="no-broker"
             onAddManualTrade={handleEmptyStateAddTrade}

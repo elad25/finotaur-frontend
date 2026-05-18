@@ -47,7 +47,13 @@ export function JournalEmptyState({
       <img
         src="/logo.png"
         alt="FINOTAUR"
-        className="h-20 w-auto mb-ds-5"
+        className="h-32 w-auto mb-ds-5"
+        style={{
+          maskImage:
+            'radial-gradient(ellipse at center, black 55%, transparent 90%)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse at center, black 55%, transparent 90%)',
+        }}
       />
       <h2 className="font-serif text-3xl text-ink-primary mb-ds-3">
         FINOTAUR · Trading Journal
