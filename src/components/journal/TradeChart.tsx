@@ -367,14 +367,6 @@ export function TradeChart({ trade }: TradeChartProps) {
         </button>
       </div>
 
-      <div className="mb-3">
-        <IndicatorToolbar
-          settings={indicatorSettings}
-          onChange={setIndicatorSettings}
-          interval={interval}
-        />
-      </div>
-
       <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 shadow-2xl">
         <ChartBody trade={trade} height="100%" indicators={indicators} />
       </div>
