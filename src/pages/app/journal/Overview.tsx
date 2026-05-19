@@ -1307,6 +1307,23 @@ function JournalOverviewContent() {
   );
   const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
 
+  // Empty-state dismissal: once the user has explicitly engaged with either
+  // empty-state CTA (added a trade manually OR opened the broker popup), we
+  // never show the empty state again on returns to the dashboard — even if
+  // they cancelled before actually saving anything. Persisted in localStorage
+  // so the decision survives refreshes / new tabs on the same device.
+  // 2026-05-19: hoisted above openAddBrokerPopup so the setter is initialized
+  // before any closure references it. Even though the closure body runs on
+  // click (post-init), the minifier could in principle inline it ahead of
+  // the declaration, and the same byte-offset-shifting that caused our
+  // earlier TDZ on V (= tradovateConnections) demonstrated that "closure-safe"
+  // forward refs are still risky after minification. Match declaration order
+  // to usage order to keep the bundle deterministic.
+  const [emptyStateDismissed, setEmptyStateDismissed] = useState(
+    () => typeof window !== 'undefined'
+      && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
+  );
+
   const openAddBrokerPopup = useCallback(() => {
     // Engagement signal: ANY path that opens the AddBroker popup (header
     // "Connect Broker" → popover → "+ Add new connection", AccountFilterDropdown
@@ -1328,16 +1345,6 @@ function JournalOverviewContent() {
       setTradovateInitialStep('select-env');
     }, 90);
   }, []);
-
-  // Empty-state dismissal: once the user has explicitly engaged with either
-  // empty-state CTA (added a trade manually OR opened the broker popup), we
-  // never show the empty state again on returns to the dashboard — even if
-  // they cancelled before actually saving anything. Persisted in localStorage
-  // so the decision survives refreshes / new tabs on the same device.
-  const [emptyStateDismissed, setEmptyStateDismissed] = useState(
-    () => typeof window !== 'undefined'
-      && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
-  );
 
   const dismissEmptyStateOnce = useCallback(() => {
     if (!emptyStateDismissed) {
