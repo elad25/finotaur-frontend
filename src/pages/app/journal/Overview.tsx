@@ -1258,6 +1258,20 @@ function JournalOverviewContent() {
   const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
 
+  // 2026-05-19: queryClient pulled up here from its original location ~90
+  // lines below. The Sync Trades useCallback (handleSyncAllTrades) below
+  // references queryClient in its deps array, and the deps array is
+  // evaluated at the call site of useCallback. Declaring queryClient AFTER
+  // the useCallback put the const in TDZ at that evaluation point, which
+  // surfaced in production as "Cannot access 'V' before initialization"
+  // (V = minified queryClient) thrown from the JournalOverview render. The
+  // ErrorBoundary caught it, the user saw "Something went wrong". The
+  // typecheck didn't catch it because TypeScript doesn't model block-level
+  // TDZ for const ordering; only the production bundle's evaluation order
+  // surfaces it. See lesson:
+  // .lessons/global/2026-05-19-pre-pr-build-and-cycle-validation.md
+  const queryClient = useQueryClient();
+
   // 2026-05-18: manual Sync Trades button. Fires syncNow on every active
   // Tradovate connection in parallel. Disabled while a sync is in flight to
   // prevent double-clicks producing duplicate edge-function invocations.
@@ -1354,7 +1368,7 @@ function JournalOverviewContent() {
   }, []);
 
   const { id: userId, isImpersonating } = useEffectiveUser();
-  const queryClient = useQueryClient();
+  // queryClient hoisted ~90 lines up to fix TDZ in handleSyncAllTrades deps.
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)
   const dashboardDays = useMemo(() => {
