@@ -1,5 +1,6 @@
 // src/components/legal/LegalFooter.tsx - UPDATED עם About ו-Contact
 import { Link } from 'react-router-dom';
+import { openPreferencesModal } from '@/lib/consent';
 
 /**
  * ⚖️ LEGAL FOOTER COMPONENT
@@ -40,6 +41,14 @@ export const LegalFooter = () => {
             <Link to="/legal/cookies" className="hover:text-primary transition-colors">
               Cookie Policy
             </Link>
+            <span className="text-gray-600">|</span>
+            <button
+              type="button"
+              onClick={openPreferencesModal}
+              className="hover:text-primary transition-colors"
+            >
+              Cookie Settings
+            </button>
             <span className="text-gray-600">|</span>
             <Link to="/legal/risk-disclosure" className="hover:text-primary transition-colors">
               Risk Disclosure
