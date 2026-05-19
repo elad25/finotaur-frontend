@@ -145,6 +145,10 @@ export function useTradovate() {
       // INSERTs into broker_connections, but useBrokerConnections reads from a
       // separate query key. Without this the popover stays empty until manual refresh.
       await queryClient.invalidateQueries({ queryKey: ['broker_connections', userId] });
+      // Portfolios cache must refresh too — fetchPortfolios falls back to
+      // tradovate_credentials when the portfolios table is empty, so the new
+      // account only appears in AccountFilterDropdown after invalidation.
+      await queryClient.invalidateQueries({ queryKey: ['portfolios', userId] });
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['copy_trade_log', userId] });

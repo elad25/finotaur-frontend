@@ -550,7 +550,16 @@ function PopoverBody({
           lastError={reconnectFor.last_error}
           onReconnect={async () => {
             const result = await reconnect(reconnectFor.id);
-            return { success: result.success, error: result.error };
+            // OQ-87: pass requires_credentials through so the modal closes
+            // cleanly (parent shows the AddBroker popup via onAddConnection).
+            if (result.requires_credentials && onAddConnection) {
+              onAddConnection();
+            }
+            return {
+              success: result.success,
+              error: result.error,
+              requires_credentials: result.requires_credentials,
+            };
           }}
         />
       )}

@@ -1437,13 +1437,14 @@ function JournalOverviewContent() {
   }, [stats]);
   
   // ✅ Check if Trade Duration chart should be locked
-  // Gate by actual trade-duration data (per Elad 2026-05-11): chart unlocks when
-  // there are closed trades with measurable duration. getTradeDurationData filters
-  // for open_at && close_at && pnl != null, so an empty array = nothing to plot.
-  // Previous gate checked a hardcoded empty `connections` array (SnapTrade-era
-  // dead stub) which kept the chart permanently locked even for paying users
-  // with valid trades and a connected broker. See OQ-67.
-  const isDurationChartLocked = isFreeUser || tradeDurationData.length === 0;
+  // 2026-05-19: previous gate locked the chart for paid users whenever
+  // tradeDurationData.length === 0 — which meant a brand-new paid account
+  // with a connected broker but pending sync (or first-trade not yet closed)
+  // saw a "Connect your broker to view this chart" lock screen even though
+  // their broker was already connected. Misleading + dead-end UX. Now lock
+  // is purely a tier gate (free → paid); empty-data paid users see the
+  // unlocked chart with no points until trades close.
+  const isDurationChartLocked = isFreeUser;
   
   // ✅ Determine where to send user when clicking upgrade
   const handleDurationUpgrade = useCallback(() => {
@@ -1746,11 +1747,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           />
         )}
 
-        {!brokersLoading && allBrokerConnections.length > 0 && !isLoading && stats && (!stats.trades || stats.trades.length === 0) && (
-          <JournalEmptyState variant="no-trades" />
-        )}
-
-        {stats && stats.trades && stats.trades.length > 0 && (
+        {stats && (allBrokerConnections.length > 0 || (stats.trades && stats.trades.length > 0) || emptyStateDismissed) && (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <JournalKpiCard
@@ -1948,7 +1945,19 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               lastError={degradedConnection.last_error}
               onReconnect={async () => {
                 const result = await brokerReconnect(degradedConnection.id);
-                return { success: result.success, error: result.error };
+                // OQ-87 fix: when the vault entry is missing the edge function
+                // returns `requires_credentials: true`. The modal closes itself
+                // on that signal — open the AddBroker popup so the user can
+                // re-enter Tradovate username + password. Without this the
+                // user clicks Reconnect, sees a silent close, and is stuck.
+                if (result.requires_credentials) {
+                  openAddBrokerPopup();
+                }
+                return {
+                  success: result.success,
+                  error: result.error,
+                  requires_credentials: result.requires_credentials,
+                };
               }}
             />
           </Suspense>

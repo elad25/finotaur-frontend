@@ -32,9 +32,14 @@ const getAssetMultiplier = (symbol: string): number => {
   return ASSET_MULTIPLIERS[cleanSymbol] || 1;
 };
 
-function calculateActualR(trade: any): number {
+// Contract-based R: pnl / risk_usd, where risk_usd is derived from the
+// distance to stop. Returns null when we can't compute it (missing stop,
+// missing exit, zero risk) — Tradovate fills don't carry stop orders, so
+// most synced trades hit this case. Returning null lets the consumer fall
+// back to user-1R (settings) instead of forcing a misleading 0.00R.
+function calculateActualR(trade: any): number | null {
   if (!trade.exit_price || !trade.entry_price || !trade.stop_price || !trade.quantity) {
-    return 0;
+    return null;
   }
 
   const entry = Number(trade.entry_price);
@@ -52,7 +57,7 @@ function calculateActualR(trade: any): number {
   const riskPerPoint = Math.abs(entry - stop);
   const riskUSD = riskPerPoint * quantity * multiplier;
 
-  if (riskUSD <= 0) return 0;
+  if (riskUSD <= 0) return null;
   return netPnL / riskUSD;
 }
 
@@ -196,10 +201,14 @@ async function fetchAllTrades(
           metrics = { ...metrics, actual_user_r: Number(trade.actual_user_r) };
         }
       } else {
-        // Summary mode: calculate if not already saved
+        // Summary mode: calculate if not already saved. Skip when contract-R
+        // is uncomputable (no stop_price — e.g. broker-synced fills) so the
+        // UI can fall back to user-1R from settings instead of locking onto 0.
         if (trade.exit_price && trade.actual_r == null) {
           const calculated_actual_r = calculateActualR(trade);
-          metrics = { ...metrics, actual_r: calculated_actual_r };
+          if (calculated_actual_r !== null) {
+            metrics = { ...metrics, actual_r: calculated_actual_r };
+          }
         } else if (trade.actual_r != null) {
           metrics = { ...metrics, actual_r: Number(trade.actual_r) };
         }
