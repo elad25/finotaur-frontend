@@ -342,141 +342,6 @@ function ConnectionGroupSection({
   );
 }
 
-function ConnectionGroupSectionClean({
-  group,
-  connectionFor,
-  selectedPortfolioIds,
-  isShowingAll,
-  isOpen,
-  onToggle,
-  onToggleOpen,
-  onReconnect,
-  onSync,
-  isSyncing,
-}: {
-  group: ConnectionGroup;
-  connectionFor: (portfolio: Portfolio) => BrokerConnection | undefined;
-  selectedPortfolioIds: string[];
-  isShowingAll: boolean;
-  isOpen: boolean;
-  onToggle: (id: string) => void;
-  onToggleOpen: (id: string) => void;
-  onReconnect: (conn: BrokerConnection) => void;
-  onSync?: (conn: BrokerConnection) => void;
-  isSyncing?: boolean;
-}) {
-  const badge = group.connection ? statusBadge(group.connection) : null;
-  const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
-  const connectionTitle = group.title || `FINOTAUR - ${group.broker === 'manual' ? 'MANUAL' : brokerName.toUpperCase()}`;
-  const connectionStatus = badge?.label ?? (group.broker === 'manual' ? 'Manual' : 'Connected');
-  const hasConnectionIssue = group.connection
-    && group.connection.status !== 'connected'
-    && group.connection.status !== 'renewing';
-  const canSync = group.connection
-    && group.broker === 'tradovate'
-    && !hasConnectionIssue
-    && !!onSync;
-
-  return (
-    <section className="border-t border-white/[0.08] pt-3 first:border-t-0 first:pt-0">
-      <div className="rounded-[12px] border border-white/[0.055] bg-black/[0.16]">
-        <div className="flex items-center gap-3 px-3 py-3">
-          <BrokerLogo broker={group.broker} />
-
-          <button
-            type="button"
-            onClick={() => onToggleOpen(group.id)}
-            className="min-w-0 flex-1 text-left"
-            aria-expanded={isOpen}
-          >
-            <div className="truncate text-[12px] font-semibold uppercase leading-tight tracking-[0.03em] text-[#E5E5E5]">
-              {connectionTitle}
-            </div>
-            <div className="mt-1 flex items-center gap-2 text-[10px] text-[#7A7A7A]">
-              <span>{brokerName}</span>
-              <span className="h-1 w-1 rounded-full bg-white/20" />
-              <span>{group.portfolios.length} account{group.portfolios.length === 1 ? '' : 's'}</span>
-            </div>
-          </button>
-
-          <div className="flex shrink-0 items-center gap-2">
-            {badge && (
-              <span className="flex items-center gap-1.5 rounded-[6px] border border-white/[0.07] bg-white/[0.035] px-2 py-1 text-[9px] font-semibold text-[#A0A0A0]">
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ background: badge.color, boxShadow: `0 0 8px ${badge.color}` }}
-                  aria-label={badge.label}
-                />
-                {connectionStatus}
-              </span>
-            )}
-
-            {hasConnectionIssue && group.connection && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onReconnect(group.connection!);
-                }}
-                className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-2 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
-                aria-label={`Reconnect ${group.title}`}
-              >
-                <RefreshCw className="h-3 w-3" />
-                Reconnect
-              </button>
-            )}
-
-            {canSync && (
-              <button
-                type="button"
-                disabled={isSyncing}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (group.connection) onSync!(group.connection);
-                }}
-                className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.1] px-2 text-[9px] font-medium text-[#A0A0A0] transition-colors hover:border-[#C9A646]/35 hover:bg-[#C9A646]/8 hover:text-[#C9A646] disabled:opacity-60"
-                aria-label={`Sync ${group.title}`}
-              >
-                <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
-                {isSyncing ? 'Syncing…' : 'Sync'}
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => onToggleOpen(group.id)}
-              className="rounded-md p-1 text-[#A0A0A0] transition-colors hover:bg-white/[0.05] hover:text-[#C9A646]"
-              aria-label={isOpen ? 'Collapse connection' : 'Expand connection'}
-            >
-              {isOpen ? (
-                <ChevronUp className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {isOpen && (
-          <div className="border-t border-white/[0.055] px-2 py-2">
-            {group.portfolios.map((portfolio) => (
-              <AccountListRow
-                key={portfolio.id}
-                portfolio={portfolio}
-                broker={group.broker}
-                connection={connectionFor(portfolio)}
-                checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
-                onToggle={onToggle}
-                onReconnect={onReconnect}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function PopoverBody({
   onAddConnection,
   onManage,
@@ -487,27 +352,12 @@ function PopoverBody({
   const {
     connections: active,
     isLoading: loadingActive,
-    syncNow,
   } = useBrokerConnections({ active: true });
   const {
     connections: inactive,
     isLoading: loadingInactive,
     reconnect,
   } = useBrokerConnections({ active: false });
-
-  // 2026-05-19: per-connection sync state for the inline Sync button. Tracks
-  // which connection id is currently mid-sync so we disable just that row's
-  // button (not the whole popover).
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const handleSyncConnection = async (conn: BrokerConnection) => {
-    if (syncingId) return;
-    setSyncingId(conn.id);
-    try {
-      await syncNow(conn.id);
-    } finally {
-      setSyncingId(null);
-    }
-  };
 
   const {
     portfolios,
@@ -521,17 +371,7 @@ function PopoverBody({
   } = usePortfolioContext();
 
   const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const allConnections = useMemo(() => [...active, ...inactive], [active, inactive]);
-
-  const toggleGroupOpen = (id: string) => {
-    setCollapsedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const connectionForPortfolio = useMemo(() => {
     const byTradovateId = new Map<string, BrokerConnection>();
@@ -625,31 +465,60 @@ function PopoverBody({
                 </span>
               </div>
 
-              {/* 2026-05-19: render grouped by broker connection (TRADOVATE (LIVE) /
-                  TRADOVATE (DEMO) / MANUAL) using the already-computed connectionGroups.
-                  The ConnectionGroupSectionClean component was authored earlier but never
-                  wired up — the popover was rendering SimpleAccountRow flat. Each group
-                  shows: broker logo, connection title, status badge, per-connection Sync
-                  button (Tradovate only, when healthy), and Reconnect button (when
-                  degraded). Inside each group, AccountListRow lists the individual
-                  account selectors with checkboxes. */}
-              <div className="px-2 py-1.5">
-                {connectionGroups.map((group) => (
-                  <ConnectionGroupSectionClean
-                    key={group.id}
-                    group={group}
-                    connectionFor={connectionForPortfolio}
-                    selectedPortfolioIds={selectedPortfolioIds}
-                    isShowingAll={isShowingAll}
-                    isOpen={!collapsedGroups.has(group.id)}
-                    onToggle={togglePortfolioSelection}
-                    onToggleOpen={toggleGroupOpen}
-                    onReconnect={setReconnectFor}
-                    onSync={handleSyncConnection}
-                    isSyncing={syncingId === group.connection?.id}
-                  />
-                ))}
-              </div>
+              {/* Flat layout grouped by broker connection. Each group renders a
+                  thin uppercase divider showing the user-given connection name
+                  (broker_connections.connection_name, falling back to
+                  portfolio.connection_label or the broker display name), followed
+                  by the individual accounts as flat selectable rows. No card
+                  wrapper, no per-connection Sync button, no expand/collapse, no
+                  "N accounts" counter — these were removed per the dashboard
+                  redesign request 2026-05-19. AccountListRow keeps a tiny
+                  per-account status dot + "synced Xm ago" caption for parity
+                  with the All-Accounts dropdown look. A Reconnect chip appears
+                  inside the divider only when the connection is degraded. */}
+              {connectionGroups.map((group, index) => {
+                const groupConnection = group.connection;
+                const groupHasIssue = !!groupConnection
+                  && groupConnection.status !== 'connected'
+                  && groupConnection.status !== 'renewing';
+                return (
+                  <div key={group.id}>
+                    <div
+                      className={cn(
+                        'flex items-center gap-2 px-3 pb-1',
+                        index === 0 ? 'pt-2' : 'pt-3',
+                      )}
+                    >
+                      <span className="truncate text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
+                        {group.title}
+                      </span>
+                      <div className="h-px flex-1 bg-zinc-800/60" />
+                      {groupHasIssue && groupConnection && (
+                        <button
+                          type="button"
+                          onClick={() => setReconnectFor(groupConnection)}
+                          className="flex shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-1.5 py-0.5 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
+                          aria-label={`Reconnect ${group.title}`}
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Reconnect
+                        </button>
+                      )}
+                    </div>
+                    {group.portfolios.map((portfolio) => (
+                      <AccountListRow
+                        key={portfolio.id}
+                        portfolio={portfolio}
+                        broker={group.broker}
+                        connection={connectionForPortfolio(portfolio)}
+                        checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                        onToggle={togglePortfolioSelection}
+                        onReconnect={setReconnectFor}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
             </>
           )}
 
