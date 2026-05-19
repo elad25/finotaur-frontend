@@ -83,6 +83,8 @@ import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
 import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, RefundPolicy, DMCA, LegalHub } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
@@ -289,8 +291,13 @@ LockedRoute.displayName = 'LockedRoute';
 
 // APP CONTENT
 function AppContent() {
+  // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
+  useAnalytics();
+
   return (
     <>
+      {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
+      <CookieConsentBanner />
       <AffiliateTracker />
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
