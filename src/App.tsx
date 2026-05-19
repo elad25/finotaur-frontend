@@ -98,6 +98,7 @@ const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
 const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 const SettingsLayout = lazy(() => import("@/layouts/SettingsLayout"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
+const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
 const PropFirmsPage = lazy(() => import('@/pages/app/journal/PropFirmsPage'));
 const PaymentSuccessPage = lazy(() => import("@/pages/app/journal/PaymentSuccessPage"));
 const PaymentFailurePage = lazy(() => import("@/pages/app/journal/PaymentFailurePage"));
@@ -471,6 +472,7 @@ function AppContent() {
 <Route path="journal/community" element={<JournalRoute><JournalCommunity /></JournalRoute>} />
 <Route path="journal/academy" element={<JournalRoute><JournalAcademy /></JournalRoute>} />          
 <Route path="journal/settings" element={<JournalRoute><JournalSettings /></JournalRoute>} />
+<Route path="journal/pricing" element={<JournalRoute><SuspenseRoute><JournalPricingPage /></SuspenseRoute></JournalRoute>} />
 <Route path="journal/import" element={<JournalRoute><JournalImport /></JournalRoute>} />
 <Route path="journal/export" element={<JournalRoute><JournalExport /></JournalRoute>} />
 <Route path="journal/notes" element={<JournalRoute><JournalNotes /></JournalRoute>} />

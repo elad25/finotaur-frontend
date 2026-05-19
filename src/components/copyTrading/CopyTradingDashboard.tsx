@@ -272,7 +272,7 @@ export function CopyTradingDashboard() {
   const tradovateConnections = connections.filter(
     (c) => c.broker === 'tradovate' && c.is_active,
   );
-  const [leaderId] = useState<string | null>(
+  const [leaderId, setLeaderId] = useState<string | null>(
     tradovateConnections[0]?.id ?? null,
   );
 
@@ -487,7 +487,25 @@ export function CopyTradingDashboard() {
         </div>
 
         <div className="flex items-center gap-ds-2">
-          {/* ── Leader custom dropdown ── */}
+          {/* ── Leader dropdown ── */}
+          {tradovateConnections.length > 0 && (
+            <div className="flex items-center gap-ds-2 rounded-md border border-gold-border bg-surface-1 px-ds-3 py-ds-1.5">
+              <Crown className="h-3.5 w-3.5 text-gold-primary" />
+              <span className="text-[10px] uppercase tracking-wider text-ink-secondary">Leader</span>
+              <select
+                value={leaderId ?? ''}
+                onChange={(e) => setLeaderId(e.target.value || null)}
+                className="h-7 cursor-pointer rounded border-0 bg-transparent pr-1 text-sm text-ink-primary outline-none focus:ring-1 focus:ring-gold-primary"
+                aria-label="Select leader account"
+              >
+                {tradovateConnections.map((c) => (
+                  <option key={c.id} value={c.id} className="bg-surface-1 text-ink-primary">
+                    {c.connection_name ?? c.account_name ?? c.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* FLATTEN ALL */}
           <button

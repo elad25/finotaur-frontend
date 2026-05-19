@@ -28,7 +28,7 @@ import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashbo
 import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
 import type { BrokerConnection } from '@/lib/brokers/types';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 
 // ─────────────────────────────────────────────────────────────
 // FUTURES CONTRACT EXPIRY LOGIC
@@ -199,20 +199,18 @@ function PremiumGate() {
           Connect your broker, auto-sync trades, and copy positions across accounts.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <a
-            href="/app/journal/pricing"
+          <Link
+            to="/app/journal/pricing"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E8C56A] text-black font-bold text-sm hover:opacity-90 transition-all"
           >
             <Zap className="w-4 h-4" /> Upgrade Trade Journal
-          </a>
-          <a
-            href="https://finotaur.com/pricing"
-            target="_blank"
-            rel="noopener noreferrer"
+          </Link>
+          <Link
+            to="/app/all-markets/pricing"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/15 text-white font-bold text-sm hover:bg-white/10 transition-all"
           >
             <Zap className="w-4 h-4" /> Upgrade — Site Pricing
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -1104,33 +1102,16 @@ const CopyHistorySection = memo(() => {
   const { log, isLoading, successCount, skippedCount, failedCount } = useCopyTradeLog(30);
 
   const historyRows = useMemo(() => {
-    if (log.length > 0) {
-      return log.map(entry => ({
-        id:       entry.id,
-        time:     format(new Date(entry.created_at), 'HH:mm:ss'),
-        contract: entry.target_symbol || entry.source_symbol || 'NQ',
-        type:     entry.action === 'close' ? 'Close' : 'Limit',
-        side:     entry.action === 'close' ? 'Sell' : 'Buy',
-        qty:      entry.copied_quantity ?? entry.original_quantity ?? 1,
-        price:    null as number | null,
-        status:   entry.status === 'success' ? 'Filled' : entry.status,
-      }));
-    }
-
-    const now = new Date();
-    return [0, 1, 2, 3].map(index => {
-      const side = index % 3 === 0 ? 'Sell' : 'Buy';
-      return {
-        id:       `history-preview-${index}`,
-        time:     new Date(now.getTime() - index * 13000).toLocaleTimeString('en-GB', { hour12: false }),
-        contract: 'NQ',
-        type:     'Limit',
-        side,
-        qty:      1,
-        price:    side === 'Sell' ? 25896.5 : 25894.75,
-        status:   'Filled',
-      };
-    });
+    return log.map(entry => ({
+      id:       entry.id,
+      time:     format(new Date(entry.created_at), 'HH:mm:ss'),
+      contract: entry.target_symbol || entry.source_symbol || 'NQ',
+      type:     entry.action === 'close' ? 'Close' : 'Limit',
+      side:     entry.action === 'close' ? 'Sell' : 'Buy',
+      qty:      entry.copied_quantity ?? entry.original_quantity ?? 1,
+      price:    null as number | null,
+      status:   entry.status === 'success' ? 'Filled' : entry.status,
+    }));
   }, [log]);
 
   const statusConfig = {
@@ -1201,24 +1182,30 @@ const CopyHistorySection = memo(() => {
                 <span className="text-right">Status</span>
               </div>
               <div className="divide-y divide-zinc-800/60">
-                {historyRows.map(order => (
-                  <div key={order.id} className="grid min-h-[34px] grid-cols-[120px_1fr_120px_120px_80px_140px_100px] items-center px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900/50">
-                    <span className="font-mono text-xs text-zinc-500">{order.time}</span>
-                    <span className="font-mono text-xs font-semibold">{order.contract}</span>
-                    <span className="text-xs text-zinc-400">{order.type}</span>
-                    <span className={order.side === 'Buy' ? 'text-emerald-400' : 'text-red-400'}>
-                      {order.side === 'Buy' ? 'up ' : 'down '}
-                      {order.side}
-                    </span>
-                    <span className="text-right font-mono text-xs">{order.qty}</span>
-                    <span className="text-right font-mono text-xs">{order.price != null ? order.price.toFixed(2) : '-'}</span>
-                    <span className="text-right">
-                      <span className="rounded-sm bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
-                        {order.status}
-                      </span>
-                    </span>
+                {historyRows.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-xs text-zinc-500">
+                    No copy history yet — once a copied trade fires, it will appear here.
                   </div>
-                ))}
+                ) : (
+                  historyRows.map(order => (
+                    <div key={order.id} className="grid min-h-[34px] grid-cols-[120px_1fr_120px_120px_80px_140px_100px] items-center px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900/50">
+                      <span className="font-mono text-xs text-zinc-500">{order.time}</span>
+                      <span className="font-mono text-xs font-semibold">{order.contract}</span>
+                      <span className="text-xs text-zinc-400">{order.type}</span>
+                      <span className={order.side === 'Buy' ? 'text-emerald-400' : 'text-red-400'}>
+                        {order.side === 'Buy' ? 'up ' : 'down '}
+                        {order.side}
+                      </span>
+                      <span className="text-right font-mono text-xs">{order.qty}</span>
+                      <span className="text-right font-mono text-xs">{order.price != null ? order.price.toFixed(2) : '-'}</span>
+                      <span className="text-right">
+                        <span className="rounded-sm bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+                          {order.status}
+                        </span>
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1333,9 +1320,7 @@ export default function TradeCopier() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-surface-base text-ink-primary">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_52%_0%,rgba(201,166,70,0.11),transparent_34%),radial-gradient(ellipse_at_52%_100%,rgba(201,166,70,0.12),transparent_40%)]" />
-      <div className="pointer-events-none absolute bottom-[-18%] right-[-8%] h-[520px] w-[900px] rounded-[50%] border border-gold-primary/20" />
-      <div className="pointer-events-none absolute bottom-[-26%] left-[12%] h-[460px] w-[980px] rounded-[50%] border border-gold-primary/12" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_-10%,rgba(201,166,70,0.08),transparent_70%)]" />
 
       <div className="relative w-full max-w-[1280px] mx-auto px-ds-5 py-ds-7 space-y-ds-6">
 
