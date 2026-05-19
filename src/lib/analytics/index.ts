@@ -96,6 +96,11 @@ export function useAnalytics(): void {
     const unsubscribe = onConsentChange(({ analytics }) => {
       if (analytics) {
         bootAnalytics();
+        // Fire initial pageview now — the [location] useEffect below won't refire
+        // because the user is still on the same route when they accept consent.
+        const path = window.location.pathname + window.location.search;
+        ga4PageView(path);
+        phPageView(path);
       } else {
         teardownAnalytics();
       }
