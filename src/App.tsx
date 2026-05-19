@@ -329,6 +329,7 @@ function AppContent() {
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
         <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
+        <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
         <Route path="/legal" element={<LegalHub />} />
         <Route path="/legal/terms" element={<TermsOfUse />} />
         <Route path="/legal/privacy" element={<PrivacyPolicy />} />
@@ -543,9 +544,9 @@ function AppContent() {
           <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
-          <Route path="copy-trade/overview" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
-          <Route path="copy-trade/trade-copier" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
-          <Route path="copy-trade/manage-risk" element={<BetaRoute><JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute></BetaRoute>} />
+          <Route path="copy-trade/overview" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          <Route path="copy-trade/manage-risk" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
           <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />
