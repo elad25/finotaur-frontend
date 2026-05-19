@@ -44,8 +44,19 @@ export function JournalEmptyState({
   // no-broker variant — Free-friendly: manual first, broker second.
   return (
     <div className="flex flex-col items-center justify-center py-ds-9 text-center">
+      <img
+        src="/logo.png"
+        alt="FINOTAUR"
+        className="h-32 w-auto mb-ds-5"
+        style={{
+          maskImage:
+            'radial-gradient(ellipse at center, black 55%, transparent 90%)',
+          WebkitMaskImage:
+            'radial-gradient(ellipse at center, black 55%, transparent 90%)',
+        }}
+      />
       <h2 className="font-serif text-3xl text-ink-primary mb-ds-3">
-        Start your trading journal
+        FINOTAUR · Trading Journal
       </h2>
       <p className="text-ink-secondary max-w-md mb-ds-5">
         Add trades manually to start tracking your performance — no broker

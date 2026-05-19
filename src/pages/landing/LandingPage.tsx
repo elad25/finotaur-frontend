@@ -20,10 +20,27 @@ import Pricing from '@/components/landing-new/Pricing';
 import RiskReversal from '@/components/landing-new/RiskReversal';
 import FAQ from '@/components/landing-new/FAQ';
 import Footer from '@/components/landing-new/Footer';
+import { SEO } from '@/components/seo/SEO';
+import { softwareApplication, faqPage } from '@/components/seo/jsonLd';
 
 const LandingPage = () => {
   return (
     <div className="landing-mono-default min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+      <SEO
+        title="Finotaur — AI Trading Intelligence for Stocks, Options & Crypto"
+        titleAsIs
+        description="Finotaur is the AI-powered trading intelligence platform for retail traders. Free AI stock analysis, options flow scanner, dark pool data, and institutional-grade research — Bloomberg Terminal quality at retail pricing."
+        path="/"
+        jsonLd={[
+          softwareApplication(),
+          faqPage([
+            { q: 'What is Finotaur?', a: 'Finotaur is an AI-powered trading intelligence platform for retail traders. It combines free AI stock analysis, options flow scanning, dark pool data, and institutional-grade research at a price retail traders can actually afford.' },
+            { q: 'Is Finotaur free?', a: 'Yes. The Free tier includes unlimited AI Stock Analyzer, Top Movers, Earnings Calendar, Watchlists, Crypto data, and News. No credit card required.' },
+            { q: 'How much does Finotaur Pro cost?', a: 'Pro costs $59/month or $499/year and adds AI sector and macro analysis, Options Suite, Flow Scanner, Dark Pool Scanner, and the Trading Journal.' },
+            { q: 'What is the Finotaur tier?', a: 'The Finotaur tier ($109/month or $999/year) is our flagship plan. It includes everything in Pro plus TOP SECRET and WAR ZONE newsletters, AI Top 5, AI Options Intelligence, AI Copilot, Block Trades, Unusual Options unlimited, and the Trade Copier.' },
+          ]),
+        ]}
+      />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
 

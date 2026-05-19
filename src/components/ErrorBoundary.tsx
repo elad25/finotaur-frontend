@@ -11,6 +11,8 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  /** Sentry tag to identify which boundary caught the error. Defaults to 'journal'. */
+  boundary?: string;
 }
 
 interface State {
@@ -35,17 +37,44 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('❌ Error Boundary caught:', error, errorInfo);
-    
+
     this.setState({ errorInfo });
-    
+
     // ✅ Call custom error handler if provided
     if (this.props.onError) {
       this.props.onError(error, errorInfo);
     }
-    
+
+    // 2026-05-19: enrich Sentry payload with self-diagnostic context. The default
+    // capture only included componentStack as an extra and a generic 'journal'
+    // tag, which left dashboard events impossible to localize without opening
+    // the JSON. The extra fields below show up as searchable tags + structured
+    // extras in Sentry — failingComponent in particular pinpoints the React
+    // component that threw, which is the first useful signal when triaging.
+    const stackLines = errorInfo.componentStack?.trim().split('\n') ?? [];
+    const firstFrame = stackLines[0]?.trim() ?? '';
+    // componentStack frames look like `    at Overview (...)` or `    in Overview (at ...)`.
+    const failingComponent =
+      firstFrame.replace(/^(?:at|in)\s+/, '').split(/[\s(]/)[0] || 'unknown';
+    const route =
+      typeof window !== 'undefined' && window.location ? window.location.pathname : 'unknown';
+
     captureException(error, {
-      extra: { componentStack: errorInfo.componentStack },
-      tags: { boundary: 'journal' },
+      extra: {
+        componentStack: errorInfo.componentStack,
+        errorName: error.name,
+        errorMessage: error.message,
+        failingComponent,
+        route,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+      },
+      tags: {
+        boundary: this.props.boundary ?? 'journal',
+        // Tag values must be <200 chars per Sentry — truncate defensively.
+        failingComponent: failingComponent.slice(0, 80),
+        route: route.slice(0, 80),
+        errorName: (error.name || 'Error').slice(0, 40),
+      },
     });
   }
 

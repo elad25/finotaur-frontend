@@ -60,6 +60,8 @@ interface UseApiDataResult<T> {
   lastUpdated: string | null;
 }
 
+const FETCH_TIMEOUT_MS = 8_000;
+
 function useApiData<T>(
   fetcher: () => Promise<T>,
   refreshMs: number
@@ -70,20 +72,41 @@ function useApiData<T>(
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const mounted = useRef(true);
   const fetching = useRef(false);
+  // Holds the AbortController for the currently in-flight request so cleanup can cancel it.
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async () => {
     if (fetching.current) return;
     fetching.current = true;
+
+    // Cancel any previous in-flight request before starting a new one.
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Timeout: abort the request after FETCH_TIMEOUT_MS milliseconds.
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
     try {
       setError(null);
       const result = await fetcher();
+      clearTimeout(timeoutId);
       if (mounted.current) {
         setData(result);
         setLastUpdated(new Date().toISOString());
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
       if (mounted.current) {
-        setError(err.message || 'Failed to fetch data');
+        const isAbort =
+          err instanceof Error && err.name === 'AbortError';
+        setError(
+          isAbort
+            ? 'Request timed out — server may be slow or unavailable'
+            : (err instanceof Error ? err.message : 'Failed to fetch data'),
+        );
       }
     } finally {
       if (mounted.current) setIsLoading(false);
@@ -98,6 +121,10 @@ function useApiData<T>(
     return () => {
       mounted.current = false;
       clearInterval(interval);
+      // Abort any in-flight request so it doesn't update unmounted state.
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
     };
   }, [fetchData, refreshMs]);
 

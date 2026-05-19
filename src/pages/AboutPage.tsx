@@ -3,10 +3,26 @@ import { Link } from 'react-router-dom';
 import { Target, Users, Zap, Shield, TrendingUp, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Navbar from '@/components/landing-new/Navbar';
+import { SEO } from '@/components/seo/SEO';
+import { aboutPage, breadcrumbList } from '@/components/seo/jsonLd';
 
 const AboutPage = () => {
+  const description = 'Finotaur is building the Bloomberg Terminal for retail traders — AI-powered trading intelligence for stocks, options, and crypto at a price independent traders can actually afford. Learn about our vision, team, and the technology behind the platform.';
+
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="About Finotaur"
+        description={description}
+        path="/about"
+        jsonLd={[
+          aboutPage({ description, path: '/about' }),
+          breadcrumbList([
+            ['Home', '/'],
+            ['About', '/about'],
+          ]),
+        ]}
+      />
       <Navbar />
 
       {/* Hero Section */}

@@ -23,22 +23,28 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // min), so this re-fetches periodically without per-request cost.
 let _cachedCronSecret: string | null = null;
 
+// UUID of the vault.secrets row whose name='secret_api_key'. Stable identifier
+// per project (created once; the row's decrypted value can rotate freely).
+// Reading via the SECURITY DEFINER RPC tradovate_vault_read(text) bypasses
+// PostgREST's schema-exposure layer — when 'vault' is not in db-schemas,
+// supabase-js's .schema('vault').from(...) silently 404s and dualAuth path 1a
+// never matches the cron Bearer. The RPC path works regardless of PostgREST
+// config. Fix for the 2026-05-18 cron 401 incident.
+const SECRET_API_KEY_VAULT_ID = 'f8d7c335-e2fe-405d-a722-54a0161ebfd4';
+
 async function getCronSecret(admin: SupabaseClient): Promise<string | null> {
   if (_cachedCronSecret !== null) return _cachedCronSecret;
-  const { data, error } = await admin
-    .schema('vault')
-    .from('decrypted_secrets')
-    .select('decrypted_secret')
-    .eq('name', 'secret_api_key')
-    .single();
-  if (error || !data?.decrypted_secret) {
+  const { data, error } = await admin.rpc('tradovate_vault_read', {
+    p_secret_id: SECRET_API_KEY_VAULT_ID,
+  });
+  if (error || !data) {
     console.error(
       '[dualAuth] vault.secret_api_key fetch failed:',
       error?.message ?? 'not found',
     );
     return null;
   }
-  _cachedCronSecret = data.decrypted_secret;
+  _cachedCronSecret = data as string;
   return _cachedCronSecret;
 }
 

@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { SEO } from '@/components/seo/SEO';
+import { webPage, breadcrumbList } from '@/components/seo/jsonLd';
 
 /**
  * LEGAL & DISCLOSURES HUB
@@ -50,8 +52,22 @@ const sections: LegalSection[] = [
 ];
 
 const LegalHub = () => {
+  const description = 'Finotaur legal hub — Terms of Use, Privacy Policy, Cookie Policy, Risk Disclosures, and all compliance documents in one place.';
+
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Legal & Disclosures"
+        description={description}
+        path="/legal"
+        jsonLd={[
+          webPage({ name: 'Legal & Disclosures', description, path: '/legal' }),
+          breadcrumbList([
+            ['Home', '/'],
+            ['Legal', '/legal'],
+          ]),
+        ]}
+      />
       {/* Header */}
       <div className="border-b border-border/40 bg-card/30">
         <div className="container mx-auto px-6 py-4">

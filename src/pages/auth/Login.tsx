@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Eye, EyeOff } from 'lucide-react';
 import { Wordmark } from '@/components/ds/Wordmark';
+import { SEO } from '@/components/seo/SEO';
 
 
 // Only allow redirects to internal /app/ paths (prevent open-redirect)
@@ -66,6 +67,12 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4 bg-black">
+      <SEO
+        title="Sign In"
+        description="Sign in to your Finotaur account to access AI trading intelligence, options flow scanner, dark pool data, and your trading journal."
+        path="/login"
+        noindex
+      />
       <Card className="w-full max-w-md rounded-2xl border-zinc-800 bg-zinc-900 p-8 shadow-2xl">
         <div className="mb-8 text-center">
           <h1 className="mb-2">

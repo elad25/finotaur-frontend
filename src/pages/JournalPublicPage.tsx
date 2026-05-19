@@ -30,6 +30,8 @@ import Navbar from '@/components/landing-new/Navbar';
 import Footer from '@/components/landing-new/Footer';
 import PaymentPopup from '@/components/PaymentPopup';
 import { useAffiliateDiscount } from '@/features/affiliate/hooks/useAffiliateDiscount';
+import { SEO } from '@/components/seo/SEO';
+import { webPage, breadcrumbList } from '@/components/seo/jsonLd';
 
 type PlanId = 'basic' | 'premium';
 
@@ -740,8 +742,22 @@ const VisionSection = () => (
 // MAIN COMPONENT
 // =====================================================
 const JournalPublicPage = () => {
+  const description = 'Finotaur Trading Journal — log every trade, tag setups, add notes, and analyze your performance with AI-powered insights. Connects to Tradovate, Interactive Brokers, Alpaca, and more. Free with every plan.';
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
+      <SEO
+        title="Trading Journal"
+        description={description}
+        path="/journal"
+        jsonLd={[
+          webPage({ name: 'Finotaur Trading Journal', description, path: '/journal' }),
+          breadcrumbList([
+            ['Home', '/'],
+            ['Journal', '/journal'],
+          ]),
+        ]}
+      />
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 0.08; } 50% { opacity: 0.15; } }
         html { scroll-behavior: smooth; }

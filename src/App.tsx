@@ -17,6 +17,9 @@ import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { lazy, Suspense, memo } from "react";
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
+import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
+import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
+import JournalCopierPage from "@/pages/JournalCopierPage";
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -80,6 +83,8 @@ import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
 import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, RefundPolicy, DMCA, LegalHub } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
@@ -286,8 +291,13 @@ LockedRoute.displayName = 'LockedRoute';
 
 // APP CONTENT
 function AppContent() {
+  // Consent-gated analytics: boots GA4 + PostHog only after user accepts cookies.
+  useAnalytics();
+
   return (
     <>
+      {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
+      <CookieConsentBanner />
       <AffiliateTracker />
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
@@ -315,6 +325,9 @@ function AppContent() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
         <Route path="/journal" element={<JournalPublicPage />} />
+        <Route path="/glossary" element={<GlossaryIndex />} />
+        <Route path="/glossary/:slug" element={<GlossaryTerm />} />
+        <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/legal" element={<LegalHub />} />
         <Route path="/legal/terms" element={<TermsOfUse />} />

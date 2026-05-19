@@ -751,14 +751,26 @@ export default function New() {
   const { effectivePortfolioId, isShowingAll } = usePortfolioContext();
 
   // Auto-select portfolio: global context first, then fallback to first portfolio
+  // 2026-05-18: when the user is on the ALL filter (isShowingAll === true) the
+  // first two branches resolve to no-op — activePortfolio is null and there's
+  // no effectivePortfolioId. Without the third branch, manual trades were
+  // saved with portfolio_id: null, appearing under ALL but hidden from every
+  // specific portfolio filter (including Manual). Default to the Manual
+  // portfolio whenever no other selection is available, so every manual
+  // entry is reachable from at least one portfolio view.
   useEffect(() => {
     if (selectedPortfolioIds.length > 0) return; // user already selected manually
     if (!isShowingAll && effectivePortfolioId) {
       setSelectedPortfolioIds([effectivePortfolioId]);
     } else if (activePortfolio) {
       setSelectedPortfolioIds([activePortfolio.id]);
+    } else {
+      const manualPortfolio = portfolios.find(p => p.source === 'manual');
+      if (manualPortfolio) {
+        setSelectedPortfolioIds([manualPortfolio.id]);
+      }
     }
-  }, [effectivePortfolioId, activePortfolio?.id, isShowingAll]);
+  }, [effectivePortfolioId, activePortfolio?.id, isShowingAll, portfolios]);
 
   
 
@@ -1696,7 +1708,16 @@ if (hasResult && directRiskUSD > 0) {
           } else {
             toast.success("Trade created successfully! 🎉");
           }
-          
+
+          // 2026-05-18: explicit cache invalidation. The Supabase Realtime
+          // listener in useTrades will also fire on the INSERT, but invalidating
+          // here gives an immediate refetch (no waiting for the WebSocket round
+          // trip) and keeps parity with the edit-mode branch above which
+          // already does this. Without this, the user lands on /my-trades and
+          // their just-saved trade is missing until the 5min staleTime expires.
+          await queryClient.invalidateQueries({ queryKey: ['trades'] });
+          await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
           // First trade celebration
           if (isFirstTrade) {
             fireFirstTradeConfetti();

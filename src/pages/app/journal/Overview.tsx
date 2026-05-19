@@ -70,7 +70,6 @@ import AddBrokerPopup from "@/components/broker/AddBrokerPopup";
 import BrokerConnectionsPopover from '@/components/broker/BrokerConnectionsPopover';
 import { aggregateStatusDotColor } from '@/components/broker/brokerStatusBadge';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
-import { isGuidedTourActive } from '@/components/onboarding/GuidedTour';
 import { supabase } from '@/lib/supabase';
 import { JournalEmptyState } from '@/components/journal/JournalEmptyState';
 import { Button } from '@/components/ds/Button';
@@ -252,6 +251,7 @@ const JournalKpiCard = React.memo(({
   tone = "gold",
   icon,
   visual = "icon",
+  gaugeFillPct,
   tooltip,
 }: {
   label: string;
@@ -260,10 +260,15 @@ const JournalKpiCard = React.memo(({
   tone?: "green" | "gold" | "red";
   icon?: React.ReactNode;
   visual?: "icon" | "gauge" | "line" | "bars" | "target";
+  /** 0-100. When `visual="gauge"`, controls how much of the ring is filled.
+   *  100 = full circle, 0 = empty ring. Defaults to 0 (empty) if not provided. */
+  gaugeFillPct?: number;
   tooltip: string;
 }) => {
   const valueColor =
     tone === "green" ? "text-[#3BC76E]" : tone === "red" ? "text-[#EF4444]" : "text-[#F2C85F]";
+
+  const gaugeEndDeg = Math.max(0, Math.min(360, (gaugeFillPct ?? 0) * 3.6));
 
   return (
     <div className={`${JOURNAL_PANEL} min-h-[94px] px-4 py-3`}>
@@ -291,10 +296,10 @@ const JournalKpiCard = React.memo(({
           <div className="relative ml-auto h-16 w-16 shrink-0">
             <div className="absolute inset-1 rounded-full border-[7px] border-white/[0.08]" />
             <div
-              className="absolute inset-1 rounded-full"
+              className="absolute inset-1 rounded-full transition-[background] duration-500"
               style={{
                 background:
-                  "conic-gradient(from 210deg, #F2C85F 0deg, #F2C85F 168deg, transparent 168deg, transparent 360deg)",
+                  `conic-gradient(from 210deg, #F2C85F 0deg, #F2C85F ${gaugeEndDeg}deg, transparent ${gaugeEndDeg}deg, transparent 360deg)`,
                 mask: "radial-gradient(circle, transparent 54%, #000 56%)",
                 WebkitMask: "radial-gradient(circle, transparent 54%, #000 56%)",
               }}
@@ -1250,8 +1255,48 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections();
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
+
+  // 2026-05-19: queryClient pulled up here from its original location ~90
+  // lines below. The Sync Trades useCallback (handleSyncAllTrades) below
+  // references queryClient in its deps array, and the deps array is
+  // evaluated at the call site of useCallback. Declaring queryClient AFTER
+  // the useCallback put the const in TDZ at that evaluation point, which
+  // surfaced in production as "Cannot access 'V' before initialization"
+  // (V = minified queryClient) thrown from the JournalOverview render. The
+  // ErrorBoundary caught it, the user saw "Something went wrong". The
+  // typecheck didn't catch it because TypeScript doesn't model block-level
+  // TDZ for const ordering; only the production bundle's evaluation order
+  // surfaces it. See lesson:
+  // .lessons/global/2026-05-19-pre-pr-build-and-cycle-validation.md
+  const queryClient = useQueryClient();
+
+  // 2026-05-18: manual Sync Trades button. Fires syncNow on every active
+  // Tradovate connection in parallel. Disabled while a sync is in flight to
+  // prevent double-clicks producing duplicate edge-function invocations.
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const tradovateConnections = useMemo(
+    () => allBrokerConnections.filter(c => c.broker === 'tradovate' && c.is_active),
+    [allBrokerConnections],
+  );
+  const handleSyncAllTrades = useCallback(async () => {
+    if (isSyncingAll || tradovateConnections.length === 0) return;
+    setIsSyncingAll(true);
+    try {
+      await Promise.all(tradovateConnections.map(c => brokerSyncNow(c.id)));
+      // 2026-05-19: belt-and-suspenders refetch. useBrokerConnections.syncNow
+      // already invalidates ['trades'] + ['dashboard'] on the React Query side,
+      // but invalidate only marks stale — it doesn't guarantee an immediate
+      // refetch when the data hasn't changed structurally. Force a real
+      // network round trip here so the UI cannot show a stale snapshot after
+      // the user explicitly asked to sync.
+      await queryClient.refetchQueries({ queryKey: ['trades'] });
+      await queryClient.refetchQueries({ queryKey: ['dashboard'] });
+    } finally {
+      setIsSyncingAll(false);
+    }
+  }, [isSyncingAll, tradovateConnections, brokerSyncNow, queryClient]);
 
   // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
   // Resolves OQ-72: previously a user whose Tradovate session went degraded
@@ -1262,44 +1307,17 @@ function JournalOverviewContent() {
   );
   const [reconnectModalOpen, setReconnectModalOpen] = useState(false);
 
-  // First-visit onboarding: auto-open AddBrokerPopup once for users with zero brokers.
-  // Persisted in localStorage so refreshing or returning later does not re-trigger.
-  // Gated to prevent collision with the guided tour and to wait until at least
-  // 1h after onboarding completion (so the user has had time to settle in before
-  // we ask them to connect a broker).
-  useEffect(() => {
-    if (brokersLoading) return;
-    if (allBrokerConnections.length > 0) return;
-    if (localStorage.getItem('finotaur_journal_onboarding_done') === 'true') return;
-    if (isGuidedTourActive()) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
-        const { data } = await supabase
-          .from('profiles')
-          .select('onboarding_completed_at')
-          .eq('id', user.id)
-          .maybeSingle();
-        const completedAt = data?.onboarding_completed_at
-          ? new Date(data.onboarding_completed_at as string).getTime()
-          : null;
-        // If onboarding completed less than 1h ago, hold off — don't pile
-        // popups on a freshly-onboarded user.
-        if (completedAt && Date.now() - completedAt < 60 * 60 * 1000) return;
-        if (cancelled) return;
-        setShowAddBroker(true);
-        localStorage.setItem('finotaur_journal_onboarding_done', 'true');
-      } catch (err) {
-        console.warn('Overview: broker popup gate eval failed', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [brokersLoading, allBrokerConnections.length]);
-
   const openAddBrokerPopup = useCallback(() => {
+    // Engagement signal: ANY path that opens the AddBroker popup (header
+    // "Connect Broker" → popover → "+ Add new connection", AccountFilterDropdown
+    // manage, empty-state "Or connect Tradovate" link, etc.) counts as
+    // "user has decided to act" → dismiss the empty state for good.
+    setEmptyStateDismissed((prev) => {
+      if (!prev) {
+        localStorage.setItem('finotaur_journal_empty_state_dismissed', 'true');
+      }
+      return true;
+    });
     setShowAddBroker(true);
   }, []);
 
@@ -1310,6 +1328,33 @@ function JournalOverviewContent() {
       setTradovateInitialStep('select-env');
     }, 90);
   }, []);
+
+  // Empty-state dismissal: once the user has explicitly engaged with either
+  // empty-state CTA (added a trade manually OR opened the broker popup), we
+  // never show the empty state again on returns to the dashboard — even if
+  // they cancelled before actually saving anything. Persisted in localStorage
+  // so the decision survives refreshes / new tabs on the same device.
+  const [emptyStateDismissed, setEmptyStateDismissed] = useState(
+    () => typeof window !== 'undefined'
+      && localStorage.getItem('finotaur_journal_empty_state_dismissed') === 'true',
+  );
+
+  const dismissEmptyStateOnce = useCallback(() => {
+    if (!emptyStateDismissed) {
+      localStorage.setItem('finotaur_journal_empty_state_dismissed', 'true');
+      setEmptyStateDismissed(true);
+    }
+  }, [emptyStateDismissed]);
+
+  const handleEmptyStateAddTrade = useCallback(() => {
+    dismissEmptyStateOnce();
+    navigate('/app/journal/new');
+  }, [dismissEmptyStateOnce, navigate]);
+
+  const handleEmptyStateConnectBroker = useCallback(() => {
+    dismissEmptyStateOnce();
+    openAddBrokerPopup();
+  }, [dismissEmptyStateOnce, openAddBrokerPopup]);
 
   const brokerPanelRef = React.useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1323,7 +1368,7 @@ function JournalOverviewContent() {
   }, []);
 
   const { id: userId, isImpersonating } = useEffectiveUser();
-  const queryClient = useQueryClient();
+  // queryClient hoisted ~90 lines up to fix TDZ in handleSyncAllTrades deps.
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)
   const dashboardDays = useMemo(() => {
@@ -1615,6 +1660,26 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
               </Button>
             </BrokerConnectionsPopover>
 
+            {/* 2026-05-18: Sync Trades — fires tradovate-sync edge function for every
+                active Tradovate connection in parallel. Hidden when there are no
+                Tradovate connections (manual-only users). Spinner animates while
+                in flight; toast feedback comes from useBrokerConnections.syncNow.
+                2026-05-19: icon-only per UX feedback. Square h-10 w-10 with
+                centered icon. Tooltip via title attribute on hover. */}
+            {tradovateConnections.length > 0 && (
+              <Button
+                onClick={handleSyncAllTrades}
+                disabled={isSyncingAll}
+                variant="goldOutline"
+                size="compact"
+                className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
+                aria-label={isSyncingAll ? 'Syncing trades' : 'Sync Trades'}
+                title={isSyncingAll ? 'Syncing…' : 'Sync Trades'}
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
+
             {/* F2.5: Import Trades — compact (handler unchanged) */}
             <Button
               onClick={() => setShowImportPopup(true)}
@@ -1663,11 +1728,14 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {!brokersLoading && allBrokerConnections.length === 0 && (
+        {!brokersLoading
+          && allBrokerConnections.length === 0
+          && !emptyStateDismissed
+          && (!stats || !stats.trades || stats.trades.length === 0) && (
           <JournalEmptyState
             variant="no-broker"
-            onAddManualTrade={() => navigate('/app/journal/new')}
-            onConnectBroker={openAddBrokerPopup}
+            onAddManualTrade={handleEmptyStateAddTrade}
+            onConnectBroker={handleEmptyStateConnectBroker}
           />
         )}
 
@@ -1693,6 +1761,7 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 hint={`${stats.wins}W / ${stats.losses}L / ${stats.breakeven}BE`}
                 tone="gold"
                 visual="gauge"
+                gaugeFillPct={(stats.winrate ?? 0) * 100}
                 tooltip="The percentage of closed trades that ended profitable, excluding open trades."
               />
 

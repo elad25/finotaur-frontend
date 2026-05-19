@@ -239,8 +239,11 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
   );
 
   // ── Tier 2a: Supabase Realtime subscription ──────────────────────────
-  // Immediately invalidates the cache when any UPDATE lands on
+  // Immediately invalidates the cache when any change lands on
   // broker_connections for this user — no polling lag.
+  // 2026-05-18: changed from event: 'UPDATE' to '*' so new connections (INSERT)
+  // also show up immediately. Previously INSERT was invisible to the listener
+  // and the popover stayed empty until manual page refresh.
   useEffect(() => {
     if (!userId) return;
 
@@ -249,7 +252,7 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: '*',
           schema: 'public',
           table: 'broker_connections',
           filter: `user_id=eq.${userId}`,
