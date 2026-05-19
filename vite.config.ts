@@ -71,7 +71,18 @@ proxy: {
   build: {
     target: 'esnext',
     minify: 'esbuild',
-    sourcemap: false,
+    // 2026-05-19: source maps enabled so Sentry can resolve minified frames
+    // back to original source positions. The first reproducing TDZ error
+    // ("Cannot access 'V' before initialization" on /app/journal/overview)
+    // landed in Sentry with only a minified variable name, which made it
+    // un-actionable. With sourcemaps, every future production exception in
+    // Sentry resolves to a real file + line + column. Trade-off accepted:
+    // build is slightly slower and dist/ ships .map files alongside .js
+    // (public). No secrets in frontend bundle — secret handling is in
+    // edge functions + finotaur-server, both of which have no client
+    // exposure of source. If sourcemap surface becomes a concern later,
+    // switch to 'hidden' + upload via sentry-cli in the CF Pages build step.
+    sourcemap: true,
     chunkSizeWarningLimit: 500,
     
     rollupOptions: {
