@@ -20,7 +20,6 @@ import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
-import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -450,6 +449,7 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
   onToggleConnection,
   onToggleEnabled,
   onReconnect,
+  reconnectingId,
 }: {
   connections: BrokerConnection[];
   liveCredentialIds: Set<string>;
@@ -458,6 +458,7 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
   onToggleConnection: (id: string) => void;
   onToggleEnabled: (id: string) => void;
   onReconnect: (conn: BrokerConnection) => void;
+  reconnectingId: string | null;
 }) {
   const activeCount = connections.filter((conn) => isConnectionActive(conn, liveCredentialIds)).length;
 
@@ -494,11 +495,12 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
                     <button
                       type="button"
                       onClick={() => onReconnect(connection)}
-                      className="ml-ds-2 inline-flex shrink-0 items-center gap-ds-1 rounded-md border border-gold-border bg-transparent px-ds-2 py-0.5 text-[11px] font-medium text-gold-primary transition-colors hover:border-gold-primary hover:bg-gold-primary/10"
+                      disabled={reconnectingId === connection.id}
+                      className="ml-ds-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-gold-border bg-transparent text-gold-primary transition-colors hover:border-gold-primary hover:bg-gold-primary/10 disabled:opacity-50 disabled:cursor-wait"
                       aria-label={`Reconnect ${connection.connection_name ?? connection.account_name ?? connection.broker}`}
+                      title="Reconnect"
                     >
-                      <RefreshCw className="h-3 w-3" />
-                      Reconnect
+                      <RefreshCw className={`h-3 w-3 ${reconnectingId === connection.id ? 'animate-spin' : ''}`} />
                     </button>
                   )}
                 </div>
@@ -1275,7 +1277,24 @@ export default function TradeCopier() {
   const [showAddBroker, setShowAddBroker] = useState(false);
   const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
   const [disabledConnectionIds, setDisabledConnectionIds] = useState<Set<string>>(() => new Set());
-  const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
+  // 2026-05-19: per-connection reconnect state for the icon-only button.
+  // Direct one-click reconnect — no confirmation modal. If the vault row is
+  // gone (OQ-87, returns requires_credentials=true) we open AddBrokerPopup
+  // so the user can supply fresh credentials instead of showing a popup.
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const handleReconnect = useCallback(async (conn: BrokerConnection) => {
+    if (reconnectingId) return;
+    setReconnectingId(conn.id);
+    try {
+      const result = await reconnect(conn.id);
+      const resultExt = result as { success: boolean; error?: string; requires_credentials?: boolean };
+      if (!resultExt.success && resultExt.requires_credentials) {
+        setShowAddBroker(true);
+      }
+    } finally {
+      setReconnectingId(null);
+    }
+  }, [reconnect, reconnectingId]);
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
     ? 'manage-risk'
     : location.pathname.endsWith('/trade-copier')
@@ -1397,7 +1416,8 @@ export default function TradeCopier() {
                     disabledConnectionIds={disabledConnectionIds}
                     onToggleConnection={toggleConnectionDetails}
                     onToggleEnabled={toggleConnectionEnabled}
-                    onReconnect={setReconnectFor}
+                    onReconnect={handleReconnect}
+                    reconnectingId={reconnectingId}
                   />
                 </div>
 
@@ -1472,29 +1492,6 @@ export default function TradeCopier() {
 
       {showAddBroker && (
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
-      )}
-
-      {reconnectFor && (
-        <BrokerReconnectModal
-          open={!!reconnectFor}
-          onOpenChange={(open) => { if (!open) setReconnectFor(null); }}
-          brokerName={reconnectFor.connection_name ?? reconnectFor.account_name ?? reconnectFor.broker ?? 'Broker'}
-          lastError={reconnectFor.last_error}
-          onReconnect={async () => {
-            const result = await reconnect(reconnectFor.id);
-            // When vault row is missing (OQ-VAULT-DRIFT remnant), the edge
-            // function returns requires_credentials=true. The modal surfaces
-            // that to the user; the AddBrokerPopup (fresh credentials) is the
-            // recovery path — user can click "Connect new broker" from the
-            // header. We do NOT auto-open AddBrokerPopup here to keep the
-            // flow explicit.
-            return {
-              success: result.success,
-              error: result.error,
-              requires_credentials: (result as { requires_credentials?: boolean }).requires_credentials,
-            };
-          }}
-        />
       )}
     </div>
   );
