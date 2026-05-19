@@ -16,6 +16,7 @@
 import React, { useState, lazy, Suspense, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import dayjs from "dayjs";
 import { FEATURES } from "@/config/features";
 import {
@@ -1275,13 +1276,28 @@ function JournalOverviewContent() {
   // 2026-05-18: manual Sync Trades button. Fires syncNow on every active
   // Tradovate connection in parallel. Disabled while a sync is in flight to
   // prevent double-clicks producing duplicate edge-function invocations.
+  // 2026-05-19: added 60s cooldown to bound the per-user load on Tradovate's
+  // API at scale. Cron polls every 5min anyway; the button is a safety valve,
+  // not a primary path. lastSyncClickAt is in component state (resets on page
+  // reload) — sufficient because the cron will satisfy any need within 5min.
+  // When 50K users land, server-side rate limiting will replace this; for now
+  // client-side is enough to prevent the click-spam pattern.
+  const SYNC_COOLDOWN_MS = 60_000;
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [lastSyncClickAt, setLastSyncClickAt] = useState<number>(0);
   const tradovateConnections = useMemo(
     () => allBrokerConnections.filter(c => c.broker === 'tradovate' && c.is_active),
     [allBrokerConnections],
   );
   const handleSyncAllTrades = useCallback(async () => {
     if (isSyncingAll || tradovateConnections.length === 0) return;
+    const elapsed = Date.now() - lastSyncClickAt;
+    if (elapsed < SYNC_COOLDOWN_MS) {
+      const secs = Math.ceil((SYNC_COOLDOWN_MS - elapsed) / 1000);
+      toast.info(`Just synced. Wait ${secs}s before the next manual sync.`);
+      return;
+    }
+    setLastSyncClickAt(Date.now());
     setIsSyncingAll(true);
     try {
       await Promise.all(tradovateConnections.map(c => brokerSyncNow(c.id)));
@@ -1296,7 +1312,7 @@ function JournalOverviewContent() {
     } finally {
       setIsSyncingAll(false);
     }
-  }, [isSyncingAll, tradovateConnections, brokerSyncNow, queryClient]);
+  }, [isSyncingAll, lastSyncClickAt, tradovateConnections, brokerSyncNow, queryClient]);
 
   // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
   // Resolves OQ-72: previously a user whose Tradovate session went degraded

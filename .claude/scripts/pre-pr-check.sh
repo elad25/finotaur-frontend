@@ -73,40 +73,17 @@ fi
 START_TS=$(date +%s)
 
 # ─── 1. typecheck ────────────────────────────────────────────────────
-# Two-mode: if errors live in files this branch changed → BLOCK.
-# If all errors are in files this branch didn't touch (pre-existing on
-# main) → WARN and continue. The repo has ~20 pre-existing tsc errors as
-# of 2026-05-19; blocking on those would make the script useless until
-# someone takes a cleanup sprint.
 info "step 1/3 — typecheck (npm run typecheck)"
 TS_START=$(date +%s)
-npm run typecheck > /tmp/pre-pr-typecheck.log 2>&1
-TS_EXIT=$?
-TS_END=$(date +%s)
-
-if [ "$TS_EXIT" -ne 0 ]; then
-  ERR_FILES=$(grep -oE "^[a-zA-Z0-9_/.-]+\.(ts|tsx)" /tmp/pre-pr-typecheck.log | sort -u)
-  CHANGED_FILES=$(git diff --name-only origin/main...HEAD 2>/dev/null || true)
-  NEW_ERR_FILES=""
-  for f in $ERR_FILES; do
-    if echo "$CHANGED_FILES" | grep -qFx "$f"; then
-      NEW_ERR_FILES="${NEW_ERR_FILES}${f}"$'\n'
-    fi
-  done
-  if [ -n "$NEW_ERR_FILES" ]; then
-    fail "typecheck failed with errors in files this branch changed:"
-    echo "$NEW_ERR_FILES"
-    echo
-    warn "tail of typecheck output:"
-    tail -20 /tmp/pre-pr-typecheck.log
-    echo
-    warn "full log: /tmp/pre-pr-typecheck.log"
-    exit 1
-  fi
-  ERR_COUNT=$(echo "$ERR_FILES" | grep -c .)
-  warn "typecheck has $ERR_COUNT files with pre-existing errors (none from this branch) — continuing"
+if ! npm run typecheck > /tmp/pre-pr-typecheck.log 2>&1; then
+  fail "typecheck failed. Tail:"
+  tail -30 /tmp/pre-pr-typecheck.log
+  echo
+  warn "full log: /tmp/pre-pr-typecheck.log"
+  exit 1
 fi
-ok "typecheck clean for changed files ($((TS_END - TS_START))s)"
+TS_END=$(date +%s)
+ok "typecheck clean ($((TS_END - TS_START))s)"
 
 # ─── 2. production build ─────────────────────────────────────────────
 if [ "$QUICK_MODE" -eq 1 ]; then

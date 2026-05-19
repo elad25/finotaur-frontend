@@ -1,0 +1,88 @@
+-- 2026-05-19: Drop the too-strict UNIQUE(external_id) constraint that
+-- silently blocked the Tradovate sync from inserting trades whenever two
+-- finotaur users connected to the same Tradovate account.
+--
+-- ROOT CAUSE INVESTIGATION:
+--   User reported: "I executed trades on Tradovate and clicked Sync, the
+--   toast said 'Sync complete — no new trades', but the trades aren't in
+--   my journal." Initial hypothesis was Tradovate-side API latency, but
+--   inspection of tradovate_sync_state revealed a smoking gun:
+--
+--     user_id=915e0efb...  last_fill_id=494322740320  fills_processed=0
+--     user_id=8e491450...  last_fill_id=494322740174  fills_processed=8
+--
+--   Both users' sync_state rows pointed at the SAME tradovate account_id
+--   (49530242, demo) — i.e. two finotaur accounts were OAuth-connected to
+--   the same Tradovate test account. User 915e0efb's cursor had advanced
+--   to 494322740320 while fills_processed stayed at 0 — proof that
+--   processFill returned 'skipped' for every fill returned by
+--   /fill/list, and the cursor advanced anyway (intended behaviour:
+--   advance past anything we've already seen, including duplicates).
+--
+--   Why 'skipped'? processFill catches PostgreSQL 23505 (unique_violation)
+--   on the trades INSERT and returns 'skipped':
+--
+--     if (insertErr.code === '23505') return 'skipped'; // duplicate fill
+--
+--   So WHICH unique constraint was firing? trades has THREE indexes that
+--   could match a Tradovate fill insert:
+--
+--     1. unique_external_id              UNIQUE (external_id)               ← BUG
+--     2. idx_trades_external_id_not_null UNIQUE (user_id, broker, external_id)
+--                                          WHERE external_id IS NOT NULL    ← CORRECT
+--     3. idx_trades_external_id_unique   UNIQUE (user_id, broker, external_id)
+--                                          WHERE external_id IS NOT NULL    ← DUPLICATE of #2
+--
+--   external_id for a Tradovate fill is "tradovate::fill::{fill.id}" with
+--   no user_id segment. So under #1, the FIRST user to insert any given
+--   fill ID claims it forever — any other user with access to the same
+--   Tradovate account (via shared test creds) hits 23505 and the row is
+--   skipped under the wrong user. Idempotency_key (which DOES include
+--   user_id) protects same-user re-inserts; #2 / #3 protect against
+--   intra-user duplicates. #1 is the legacy outlier and the actual bug.
+--
+-- THIS MIGRATION:
+--   1. ALTER TABLE … DROP CONSTRAINT unique_external_id
+--      Removes the broken global-unique constraint (and its backing
+--      index automatically — initial attempt to DROP INDEX failed
+--      because the index is owned by the constraint).
+--   2. DROP INDEX idx_trades_external_id_unique
+--      Removes the duplicate of #2. Pure cleanup — saves WAL on writes
+--      and one index-scan overhead on planner consideration. Not strictly
+--      required for the fix, but tidies state.
+--   3. UPDATE tradovate_sync_state SET last_fill_id = 0
+--      WHERE user_id = '915e0efb-…'
+--      Rewinds the affected user's cursor to 0 so their next sync
+--      re-fetches the ~146 fills that were silently skipped during the
+--      buggy period, and now properly inserts them with the correct
+--      per-user scope.
+--
+-- SAFETY:
+--   - Non-destructive. No row deletes.
+--   - idx_trades_external_id_not_null (the CORRECT per-user uniqueness
+--     constraint) remains in place. Two different users CAN now have
+--     trades with the same external_id; the same user CANNOT have two
+--     trades with the same external_id. Exactly what's wanted.
+--   - Cursor reset triggers a one-time backfill, ~146 row inserts.
+--     /fill/list is idempotent at Tradovate's end, so re-fetching is safe.
+--   - No application downtime.
+--
+-- REVERSAL (only if a regression is observed):
+--   ALTER TABLE public.trades
+--     ADD CONSTRAINT unique_external_id UNIQUE (external_id);
+--   CREATE UNIQUE INDEX idx_trades_external_id_unique
+--     ON public.trades (user_id, broker, external_id)
+--     WHERE external_id IS NOT NULL;
+--   -- Cursor rewind cannot be undone meaningfully — accept that
+--   -- affected user's fill history is rebuilt from /fill/list output.
+--
+-- APPLIED: 2026-05-19 to project xsgbtptkueabylkxibly via Supabase MCP
+-- after explicit user approval. Post-apply verification confirmed
+-- unique_external_id constraint removed, idx_trades_external_id_not_null
+-- still present, and the affected user's cursor reset to 0.
+
+ALTER TABLE public.trades DROP CONSTRAINT IF EXISTS unique_external_id;
+DROP INDEX IF EXISTS public.idx_trades_external_id_unique;
+UPDATE public.tradovate_sync_state
+SET last_fill_id = 0, fills_processed = 0
+WHERE user_id = '915e0efb-5e60-49f3-8776-a6ebb5131eb7';
