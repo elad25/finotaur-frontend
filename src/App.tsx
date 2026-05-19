@@ -85,6 +85,7 @@ import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDis
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
+import { PushOptInModal } from "@/components/notifications/PushOptInModal";
 
 // LAZY LOADED PAGES
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
@@ -298,6 +299,8 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
+      {/* Web Push opt-in — self-gated, only shows to returning logged-in users */}
+      <PushOptInModal />
       <AffiliateTracker />
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
