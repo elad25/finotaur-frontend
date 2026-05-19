@@ -7,6 +7,7 @@ import { Link } from "react-router-dom";
 import { Mail, Shield, Facebook, Instagram } from "lucide-react";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { FEATURES } from "@/config/features";
+import { openPreferencesModal } from "@/lib/consent";
 
 // X (Twitter) glyph — new brand mark, not in lucide-react
 const XIcon = ({ className }: { className?: string }) => (
@@ -64,6 +65,11 @@ const footerLinks = {
     { label: "All Legal & Disclosures →", href: "/legal" },
   ],
 };
+
+// Legal items that open modals rather than navigating to a route
+const legalButtons = [
+  { label: "Cookie Settings", onClick: openPreferencesModal },
+];
 
 const Footer = () => {
   const scrollTo = (href: string) => {
@@ -176,6 +182,18 @@ const Footer = () => {
                     {link.label}
                     <span className="absolute left-0 -bottom-0.5 w-full h-px origin-center scale-x-0 bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent transition-transform duration-300 group-hover:scale-x-100" />
                   </Link>
+                </li>
+              ))}
+              {legalButtons.map((btn, i) => (
+                <li key={`btn-${i}`}>
+                  <button
+                    type="button"
+                    onClick={btn.onClick}
+                    className="relative text-ink-secondary hover:text-gold-primary text-xs transition-colors duration-300 group text-left"
+                  >
+                    {btn.label}
+                    <span className="absolute left-0 -bottom-0.5 w-full h-px origin-center scale-x-0 bg-gradient-to-r from-transparent via-gold-eyebrow-hairline to-transparent transition-transform duration-300 group-hover:scale-x-100" />
+                  </button>
                 </li>
               ))}
             </ul>

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { openPreferencesModal } from "@/lib/consent";
 
 const ComplianceFooterBar = () => {
   return (
@@ -16,6 +17,14 @@ const ComplianceFooterBar = () => {
         <Link to="/legal/testimonial-disclaimer" className="hover:text-gold-primary transition-colors">
           Testimonial Disclaimer
         </Link>
+        <span aria-hidden>·</span>
+        <button
+          type="button"
+          onClick={openPreferencesModal}
+          className="hover:text-gold-primary transition-colors"
+        >
+          Cookie Settings
+        </button>
         <span aria-hidden>·</span>
         <span>© {new Date().getFullYear()} Finotaur</span>
       </div>
