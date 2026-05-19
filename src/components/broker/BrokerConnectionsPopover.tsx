@@ -351,6 +351,8 @@ function ConnectionGroupSectionClean({
   onToggle,
   onToggleOpen,
   onReconnect,
+  onSync,
+  isSyncing,
 }: {
   group: ConnectionGroup;
   connectionFor: (portfolio: Portfolio) => BrokerConnection | undefined;
@@ -360,6 +362,8 @@ function ConnectionGroupSectionClean({
   onToggle: (id: string) => void;
   onToggleOpen: (id: string) => void;
   onReconnect: (conn: BrokerConnection) => void;
+  onSync?: (conn: BrokerConnection) => void;
+  isSyncing?: boolean;
 }) {
   const badge = group.connection ? statusBadge(group.connection) : null;
   const brokerName = group.broker === 'manual' ? 'Manual Import' : brokerDisplay(group.broker);
@@ -368,6 +372,10 @@ function ConnectionGroupSectionClean({
   const hasConnectionIssue = group.connection
     && group.connection.status !== 'connected'
     && group.connection.status !== 'renewing';
+  const canSync = group.connection
+    && group.broker === 'tradovate'
+    && !hasConnectionIssue
+    && !!onSync;
 
   return (
     <section className="border-t border-white/[0.08] pt-3 first:border-t-0 first:pt-0">
@@ -418,6 +426,22 @@ function ConnectionGroupSectionClean({
               </button>
             )}
 
+            {canSync && (
+              <button
+                type="button"
+                disabled={isSyncing}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (group.connection) onSync!(group.connection);
+                }}
+                className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-white/[0.1] px-2 text-[9px] font-medium text-[#A0A0A0] transition-colors hover:border-[#C9A646]/35 hover:bg-[#C9A646]/8 hover:text-[#C9A646] disabled:opacity-60"
+                aria-label={`Sync ${group.title}`}
+              >
+                <RefreshCw className={`h-3 w-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'Syncing…' : 'Sync'}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => onToggleOpen(group.id)}
@@ -463,12 +487,27 @@ function PopoverBody({
   const {
     connections: active,
     isLoading: loadingActive,
+    syncNow,
   } = useBrokerConnections({ active: true });
   const {
     connections: inactive,
     isLoading: loadingInactive,
     reconnect,
   } = useBrokerConnections({ active: false });
+
+  // 2026-05-19: per-connection sync state for the inline Sync button. Tracks
+  // which connection id is currently mid-sync so we disable just that row's
+  // button (not the whole popover).
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const handleSyncConnection = async (conn: BrokerConnection) => {
+    if (syncingId) return;
+    setSyncingId(conn.id);
+    try {
+      await syncNow(conn.id);
+    } finally {
+      setSyncingId(null);
+    }
+  };
 
   const {
     portfolios,
@@ -586,23 +625,31 @@ function PopoverBody({
                 </span>
               </div>
 
-              {tradovatePortfolios.map((portfolio) => (
-                <SimpleAccountRow
-                  key={portfolio.id}
-                  portfolio={portfolio}
-                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
-                  onToggle={togglePortfolioSelection}
-                />
-              ))}
-
-              {manualPortfolios.map((portfolio) => (
-                <SimpleAccountRow
-                  key={portfolio.id}
-                  portfolio={portfolio}
-                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
-                  onToggle={togglePortfolioSelection}
-                />
-              ))}
+              {/* 2026-05-19: render grouped by broker connection (TRADOVATE (LIVE) /
+                  TRADOVATE (DEMO) / MANUAL) using the already-computed connectionGroups.
+                  The ConnectionGroupSectionClean component was authored earlier but never
+                  wired up — the popover was rendering SimpleAccountRow flat. Each group
+                  shows: broker logo, connection title, status badge, per-connection Sync
+                  button (Tradovate only, when healthy), and Reconnect button (when
+                  degraded). Inside each group, AccountListRow lists the individual
+                  account selectors with checkboxes. */}
+              <div className="px-2 py-1.5">
+                {connectionGroups.map((group) => (
+                  <ConnectionGroupSectionClean
+                    key={group.id}
+                    group={group}
+                    connectionFor={connectionForPortfolio}
+                    selectedPortfolioIds={selectedPortfolioIds}
+                    isShowingAll={isShowingAll}
+                    isOpen={!collapsedGroups.has(group.id)}
+                    onToggle={togglePortfolioSelection}
+                    onToggleOpen={toggleGroupOpen}
+                    onReconnect={setReconnectFor}
+                    onSync={handleSyncConnection}
+                    isSyncing={syncingId === group.connection?.id}
+                  />
+                ))}
+              </div>
             </>
           )}
 
