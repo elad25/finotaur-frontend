@@ -1,0 +1,11 @@
+/**
+ * CookieConsentBanner.css
+ *
+ * Width override for vanilla-cookieconsent v3 box layout.
+ * Default `.cm--box` width is 24em (~384px). We tighten to 22em (~352px)
+ * so the banner is comfortably under one-third of the viewport on any monitor
+ * down to ~1080px. On mobile the library's own responsive rules take over.
+ */
+#cc-main .cm--box {
+  max-width: 22em;
+}

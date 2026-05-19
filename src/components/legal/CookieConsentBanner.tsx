@@ -7,6 +7,7 @@
  */
 import { useEffect } from 'react';
 import 'vanilla-cookieconsent/dist/cookieconsent.css';
+import './CookieConsentBanner.css';
 import * as CookieConsent from 'vanilla-cookieconsent';
 
 // Custom event type declared here so it propagates across the app.
@@ -74,9 +75,9 @@ export function CookieConsentBanner(): null {
       // UI config
       guiOptions: {
         consentModal: {
-          // Non-intrusive bottom bar — never blocks the page.
-          layout: 'bar',
-          position: 'bottom',
+          // Compact box anchored bottom-left — small footprint, never blocks the page.
+          layout: 'box',
+          position: 'bottom left',
           equalWeightButtons: true,
           flipButtons: false,
         },
