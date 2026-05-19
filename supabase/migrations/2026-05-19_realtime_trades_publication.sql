@@ -1,0 +1,54 @@
+-- 2026-05-19: Enable Supabase Realtime postgres_changes for public.trades.
+--
+-- Background:
+--   PR #105 (frontend `fix/journal-broker-sync-realtime`) added a
+--   postgres_changes subscription on the trades table inside the
+--   useTrades hook (src/hooks/useTradesData.ts). The intent was sub-second
+--   journal refresh after any INSERT — manual trade creation via
+--   /journal/new, or tradovate-sync edge function pulling new fills.
+--
+--   The subscription has been silently no-op'ing in production because
+--   public.trades is NOT in the supabase_realtime publication. Verified
+--   2026-05-19 via:
+--     SELECT schemaname, tablename FROM pg_publication_tables
+--       WHERE pubname = 'supabase_realtime'
+--         AND tablename IN ('trades', 'broker_connections');
+--   Result: only broker_connections appears.
+--
+--   Without this publication entry no postgres_changes event ever fires
+--   for trades. The React Query cache refreshes only when staleTime
+--   expires (5 minutes) or the user explicitly refetches — the exact UX
+--   gap Elad reported (manual trade saved but not visible until manual
+--   refresh; Sync button toast "no new trades" while a fresh entry
+--   actually existed in the DB).
+--
+-- Statement 1 — ALTER PUBLICATION:
+--   Adds public.trades to the supabase_realtime publication. After this
+--   runs, postgres_changes broadcasts for INSERT/UPDATE/DELETE on the
+--   trades table to subscribed clients.
+--
+-- Statement 2 — REPLICA IDENTITY FULL:
+--   Default replica identity is primary-key-only, which means UPDATE and
+--   DELETE postgres_changes events carry only the primary key in the
+--   old-row payload. The client-side subscription filters on
+--   user_id=eq.{currentUserId}; Realtime cannot match that filter on
+--   UPDATE/DELETE unless user_id is present in the old-row payload.
+--   FULL identity includes every column in old-row, so the filter
+--   matches uniformly for INSERT (always uses new-row) and UPDATE/DELETE
+--   (uses old-row).
+--
+-- Safety:
+--   - Both statements are non-destructive and fully reversible:
+--       ALTER PUBLICATION supabase_realtime DROP TABLE public.trades;
+--       ALTER TABLE public.trades REPLICA IDENTITY DEFAULT;
+--   - REPLICA IDENTITY FULL adds a small per-row WAL overhead on UPDATE
+--     and DELETE. trades is a low-write, small (~30 live rows per
+--     pg_stat_user_tables on 2026-05-19) table — overhead is negligible
+--     at current scale and acceptable at expected growth.
+--   - RLS on public.trades stays enforced. Supabase Realtime applies
+--     SELECT RLS to outgoing realtime payloads, so clients only receive
+--     events for rows they would be authorized to read.
+--   - No data is modified by this migration. No application downtime.
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.trades;
+ALTER TABLE public.trades REPLICA IDENTITY FULL;
