@@ -1271,10 +1271,18 @@ function JournalOverviewContent() {
     setIsSyncingAll(true);
     try {
       await Promise.all(tradovateConnections.map(c => brokerSyncNow(c.id)));
+      // 2026-05-19: belt-and-suspenders refetch. useBrokerConnections.syncNow
+      // already invalidates ['trades'] + ['dashboard'] on the React Query side,
+      // but invalidate only marks stale — it doesn't guarantee an immediate
+      // refetch when the data hasn't changed structurally. Force a real
+      // network round trip here so the UI cannot show a stale snapshot after
+      // the user explicitly asked to sync.
+      await queryClient.refetchQueries({ queryKey: ['trades'] });
+      await queryClient.refetchQueries({ queryKey: ['dashboard'] });
     } finally {
       setIsSyncingAll(false);
     }
-  }, [isSyncingAll, tradovateConnections, brokerSyncNow]);
+  }, [isSyncingAll, tradovateConnections, brokerSyncNow, queryClient]);
 
   // Phase 1B.4 — surface degraded/canceled connections in the journal itself.
   // Resolves OQ-72: previously a user whose Tradovate session went degraded
@@ -1641,18 +1649,20 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
             {/* 2026-05-18: Sync Trades — fires tradovate-sync edge function for every
                 active Tradovate connection in parallel. Hidden when there are no
                 Tradovate connections (manual-only users). Spinner animates while
-                in flight; toast feedback comes from useBrokerConnections.syncNow. */}
+                in flight; toast feedback comes from useBrokerConnections.syncNow.
+                2026-05-19: icon-only per UX feedback. Square h-10 w-10 with
+                centered icon. Tooltip via title attribute on hover. */}
             {tradovateConnections.length > 0 && (
               <Button
                 onClick={handleSyncAllTrades}
                 disabled={isSyncingAll}
                 variant="goldOutline"
                 size="compact"
-                className="h-10 gap-2 border-[#C9A646]/80 px-5 text-[11px] text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
-                aria-label="Sync Trades"
+                className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
+                aria-label={isSyncingAll ? 'Syncing trades' : 'Sync Trades'}
+                title={isSyncingAll ? 'Syncing…' : 'Sync Trades'}
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin' : ''}`} />
-                {isSyncingAll ? 'Syncing…' : 'Sync Trades'}
+                <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
               </Button>
             )}
 
