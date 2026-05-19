@@ -20,6 +20,7 @@ import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
+import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -448,6 +449,7 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
   disabledConnectionIds,
   onToggleConnection,
   onToggleEnabled,
+  onReconnect,
 }: {
   connections: BrokerConnection[];
   liveCredentialIds: Set<string>;
@@ -455,6 +457,7 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
   disabledConnectionIds: Set<string>;
   onToggleConnection: (id: string) => void;
   onToggleEnabled: (id: string) => void;
+  onReconnect: (conn: BrokerConnection) => void;
 }) {
   const activeCount = connections.filter((conn) => isConnectionActive(conn, liveCredentialIds)).length;
 
@@ -487,6 +490,17 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
                 <div className="flex items-center gap-ds-2">
                   <ConnectionsStatusDot active={active} />
                   <span className={active ? 'text-status-success' : 'text-status-warning'}>{active ? 'Connected' : 'Attention'}</span>
+                  {!active && (
+                    <button
+                      type="button"
+                      onClick={() => onReconnect(connection)}
+                      className="ml-ds-2 inline-flex shrink-0 items-center gap-ds-1 rounded-md border border-gold-border bg-transparent px-ds-2 py-0.5 text-[11px] font-medium text-gold-primary transition-colors hover:border-gold-primary hover:bg-gold-primary/10"
+                      aria-label={`Reconnect ${connection.connection_name ?? connection.account_name ?? connection.broker}`}
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Reconnect
+                    </button>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -1254,13 +1268,14 @@ export default function TradeCopier() {
   const { hasAnyConnection, syncStatus } = useTradovate();
   const { alive: engineAlive } = useCopyEngineHealth();
 
-  const { connections } = useBrokerConnections({ active: true });
+  const { connections, reconnect } = useBrokerConnections({ active: true });
   const { liveCredentialIds } = useEngineSessions();
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
   const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
   const [disabledConnectionIds, setDisabledConnectionIds] = useState<Set<string>>(() => new Set());
+  const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
   const activeTab: 'connections' | 'copy-trading' | 'manage-risk' = location.pathname.endsWith('/manage-risk')
     ? 'manage-risk'
     : location.pathname.endsWith('/trade-copier')
@@ -1382,6 +1397,7 @@ export default function TradeCopier() {
                     disabledConnectionIds={disabledConnectionIds}
                     onToggleConnection={toggleConnectionDetails}
                     onToggleEnabled={toggleConnectionEnabled}
+                    onReconnect={setReconnectFor}
                   />
                 </div>
 
@@ -1456,6 +1472,29 @@ export default function TradeCopier() {
 
       {showAddBroker && (
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+      )}
+
+      {reconnectFor && (
+        <BrokerReconnectModal
+          open={!!reconnectFor}
+          onOpenChange={(open) => { if (!open) setReconnectFor(null); }}
+          brokerName={reconnectFor.connection_name ?? reconnectFor.account_name ?? reconnectFor.broker ?? 'Broker'}
+          lastError={reconnectFor.last_error}
+          onReconnect={async () => {
+            const result = await reconnect(reconnectFor.id);
+            // When vault row is missing (OQ-VAULT-DRIFT remnant), the edge
+            // function returns requires_credentials=true. The modal surfaces
+            // that to the user; the AddBrokerPopup (fresh credentials) is the
+            // recovery path — user can click "Connect new broker" from the
+            // header. We do NOT auto-open AddBrokerPopup here to keep the
+            // flow explicit.
+            return {
+              success: result.success,
+              error: result.error,
+              requires_credentials: (result as { requires_credentials?: boolean }).requires_credentials,
+            };
+          }}
+        />
       )}
     </div>
   );

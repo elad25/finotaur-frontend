@@ -15,11 +15,33 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // Backoff schedule in seconds: attempt 0→60s, 1→5min, 2→15min, 3→1h, 4→6h, 5→24h
 const BACKOFF_SECONDS = [60, 300, 900, 3600, 21600, 86400];
 
+// Error fragments that indicate the vault row backing this connection is gone
+// or unreadable. Silent retry cannot recover from these — the engine reads
+// vault on every refresh and will keep failing with the same string forever
+// until the user re-OAuths (mode=login) or supplies fresh credentials
+// (mode=reconnect with new password). Mark 'degraded' immediately and stop
+// scheduling so the UI surfaces a Reconnect prompt instead of hammering the
+// retry queue with no chance of recovery.
+const UNRECOVERABLE_ERROR_FRAGMENTS = [
+  'Cannot read from Vault',
+  'vault_creds_missing',
+  'No vault_secret_id',
+  'vault read returned null',
+];
+
+function isUnrecoverable(errorMsg: string): boolean {
+  return UNRECOVERABLE_ERROR_FRAGMENTS.some((frag) => errorMsg.includes(frag));
+}
+
 /**
  * Schedule a retry for a failed broker_connections row.
  * Computes next_retry_at from current retry_attempt_count, updates status
  * to 'renewing' (attempts 0-2) or 'degraded' (attempts 3+).
  * Never touches is_active or disconnected_at.
+ *
+ * For vault-missing failures (UNRECOVERABLE_ERROR_FRAGMENTS), jumps straight
+ * to 'degraded' and clears next_retry_at so cron stops scheduling. The user
+ * must click Reconnect in the UI to repopulate the vault row.
  */
 export async function scheduleRetry(
   admin: SupabaseClient,
@@ -33,10 +55,13 @@ export async function scheduleRetry(
     .single();
 
   const attempt = (data?.retry_attempt_count ?? 0) as number;
+  const unrecoverable = isUnrecoverable(errorMsg);
   const backoffIndex = Math.min(attempt, BACKOFF_SECONDS.length - 1);
   const backoffSec = BACKOFF_SECONDS[backoffIndex];
-  const nextRetryAt = new Date(Date.now() + backoffSec * 1000).toISOString();
-  const newStatus = attempt < 3 ? 'renewing' : 'degraded';
+  const nextRetryAt = unrecoverable
+    ? null
+    : new Date(Date.now() + backoffSec * 1000).toISOString();
+  const newStatus = unrecoverable || attempt >= 3 ? 'degraded' : 'renewing';
 
   await admin.from('broker_connections').update({
     status:               newStatus,
