@@ -41,6 +41,32 @@ export default tseslint.config(
       // tabs, TradeCopier). Real React anti-pattern but currently working in prod;
       // downgrading to warn so CI passes. Proper refactor tracked separately.
       "react-hooks/rules-of-hooks": "warn",
+      // 2026-05-19: TDZ ("Cannot access 'X' before initialization") shipped to
+      // production twice this week — both times from a hook whose dep array or
+      // body referenced a const declared later in the same component scope.
+      // TypeScript does NOT model block-level TDZ; only the minified production
+      // bundle's evaluation order surfaces it. This rule is the build-time gate.
+      // `variables` covers const/let. `functions: false` allows function-decl
+      // hoisting. `classes: true` is the default and stays.
+      //
+      // Level: warn (not error) so we don't fail CI on the 140+ pre-existing
+      // arrow-function-component patterns across the codebase that are
+      // technically forward refs but cosmetically harmless in non-hook
+      // contexts. The pre-pr-check.sh script escalates this rule to error
+      // **only for files this branch changed**, which is the actual gate.
+      "no-use-before-define": "off",
+      "@typescript-eslint/no-use-before-define": [
+        "warn",
+        {
+          functions: false,
+          classes: true,
+          variables: true,
+          allowNamedExports: false,
+          enums: true,
+          typedefs: false,
+          ignoreTypeReferences: true,
+        },
+      ],
     },
   },
 );

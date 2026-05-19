@@ -19,6 +19,7 @@
 #   1. typecheck       — npm run typecheck            (~10s)
 #   2. production build — npm run build                (~45-50s)
 #   3. circular scan   — npx madge --circular         (~10s)
+#   4. TDZ lint scan   — eslint --rule no-use-before-define on changed files (~5s)
 #
 # Exit codes:
 #   0  all checks passed → safe to push
@@ -26,6 +27,7 @@
 #   2  production build failed
 #   3  new circular dependency introduced
 #   4  internal error (e.g. npm missing)
+#   5  TDZ pattern found in a file this branch changed
 #
 # Flags:
 #   --quick        skip the production build step (typecheck + madge
@@ -175,6 +177,54 @@ else
     warn "  - never bypass with // @ts-ignore"
     exit 3
   fi
+fi
+
+# ─── 4. TDZ lint scan (changed files only) ───────────────────────────
+# Why this step exists:
+#   The production TDZ "Cannot access 'V' before initialization" shipped to
+#   /app/journal/overview on 2026-05-19 (after PRs #105/#106/#107 merged
+#   with clean tsc and clean build). Source-level cause: a useCallback that
+#   referenced a `const` declared later in the same component body. tsc
+#   doesn't model block-level TDZ; the production bundle's evaluation order
+#   does, and minifier rename masked the trail.
+#
+#   This step runs `eslint` with @typescript-eslint/no-use-before-define
+#   escalated to ERROR, **but only for files this branch changed**. The
+#   codebase has ~140 pre-existing arrow-component-as-JSX-before-decl
+#   patterns that are cosmetically harmless; blocking on them would
+#   nullify the script. Branch-changed-only scoping = same pattern as
+#   the typecheck step above.
+info "step 4/4 — TDZ lint scan (no-use-before-define on changed .ts/.tsx)"
+LT_START=$(date +%s)
+CHANGED_TS=$(git diff --name-only origin/main...HEAD 2>/dev/null \
+  | grep -E '^(finotaur-frontend/)?src/.*\.(ts|tsx)$' \
+  | sed -E 's|^finotaur-frontend/||' \
+  | sort -u)
+if [ -z "$CHANGED_TS" ]; then
+  ok "no .ts/.tsx files changed in this branch — skipping TDZ scan ($(( $(date +%s) - LT_START ))s)"
+else
+  # Escalate no-use-before-define to error for this scan. Other rules keep
+  # their config-default level. Use --no-warn-ignored so lint cleanly
+  # skips paths in .eslintignore without exit-1ing.
+  TDZ_RULE='{"@typescript-eslint/no-use-before-define":["error",{"functions":false,"classes":true,"variables":true,"allowNamedExports":false,"enums":true,"typedefs":false,"ignoreTypeReferences":true}]}'
+  ESLINT_OUT=$(npx eslint --rule "$TDZ_RULE" --quiet $CHANGED_TS 2>&1) || true
+  TDZ_ERRORS=$(echo "$ESLINT_OUT" | grep -cE "no-use-before-define" || true)
+  if [ "$TDZ_ERRORS" -gt 0 ]; then
+    fail "TDZ pattern (no-use-before-define) found in $TDZ_ERRORS location(s) in changed files:"
+    echo "$ESLINT_OUT" | grep -B1 "no-use-before-define" | head -40
+    echo
+    warn "how to fix:"
+    warn "  - move the variable's declaration ABOVE its first reference"
+    warn "  - if it's a useState/useReducer setter referenced in a closure"
+    warn "    declared earlier, hoist the useState block up"
+    warn "  - if it's a useCallback dep array referencing a later const,"
+    warn "    swap declaration order"
+    warn "  - re-run after fix: npx eslint <file>"
+    exit 5
+  fi
+  LT_END=$(date +%s)
+  CHANGED_COUNT=$(echo "$CHANGED_TS" | wc -l | tr -d ' ')
+  ok "no TDZ patterns in $CHANGED_COUNT changed file(s) ($((LT_END - LT_START))s)"
 fi
 
 END_TS=$(date +%s)
