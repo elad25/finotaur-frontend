@@ -4,6 +4,7 @@ import { GlossaryLayout } from '@/components/glossary/GlossaryLayout';
 import { SEO } from '@/components/seo/SEO';
 import { breadcrumbList } from '@/components/seo/jsonLd';
 import { getGlossaryTerm, glossaryBySlug, glossaryTerms } from '@/content/glossary/terms';
+import { ShareButtons } from '@/components/share/ShareButtons';
 
 const SITE_URL = 'https://www.finotaur.com';
 
@@ -70,6 +71,14 @@ export default function GlossaryTerm() {
         termNumber={termNumber}
         showBackLink
       >
+        {/* Share row — below eyebrow, above body */}
+        <ShareButtons
+          url={`${SITE_URL}${path}`}
+          title={term.title}
+          description={term.summary}
+          className="mb-8"
+        />
+
         <Content />
 
         {relatedTerms.length > 0 && (
