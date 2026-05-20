@@ -36,58 +36,47 @@ interface PropFirm {
   bottomLine?: string;
 }
 
-// 🏢 Prop Firms Data - Alpha Futures
+// 🏢 Prop Firms Data — Alpha Futures (FINOTAUR top pick)
 const propFirmsData: PropFirm[] = [
   {
     id: 'alpha-futures',
     name: 'Alpha Futures',
-    description: 'UK-based futures prop firm (Alpha Capital Group). CME futures only, three plan tiers (Standard / Advanced / Zero), end-of-day trailing drawdown that locks at starting balance, and up to 90% profit split.',
+    logo: 'https://logo.clearbit.com/alpha-futures.com',
+    description: 'Our #1 pick for funded CME futures. Single-step challenge, 90% split from day 1, and the most forgiving drawdown in the industry.',
     assetTypes: ['futures'],
     minAccountSize: 50000,
     maxAccountSize: 150000,
-    profitSplit: 'Up to 90% (flat from day 1 on Advanced & Zero; tiered 70→90% on Standard)',
+    profitSplit: 'Up to 90% — flat from day 1',
     challengeRules: {
-      maxDailyLoss: 'None on Standard / Advanced · 2% on Zero (Daily Loss Guard)',
-      maxTotalLoss: '4% EOD-trailing (Standard / Zero) · 3.5% EOD-trailing (Advanced) — locks at starting balance',
+      maxDailyLoss: 'None (Standard / Advanced) · 2% on Zero',
+      maxTotalLoss: '4% EOD-trailing — locks at start balance',
       profitTarget: '6% (Standard / Zero) · 8% (Advanced)',
-      tradingPeriod: 'Unlimited (subscription-based, no time pressure)',
-      minTradingDays: '2 days (Standard / Advanced) · 0–1 day (Zero, single-session pass possible)',
+      tradingPeriod: 'Unlimited — no time pressure',
+      minTradingDays: '2 days · just 1 on Zero (single-session pass possible)',
     },
     payoutRules: {
-      firstPayout: 'Bi-weekly (Standard) · Weekly after 5 winning days of $200+ (Advanced & Zero)',
-      subsequentPayouts: 'Weekly or bi-weekly · processed within 48 business hours (often same day)',
-      payoutMethods: ['ACH (US)', 'Wire Transfer', 'SWIFT', 'Wise', 'Rise'],
-      minimumPayout: '$200 (Standard / Zero) · $1,000 (Advanced)',
+      firstPayout: 'Weekly after 5 winning days of $200+',
+      subsequentPayouts: 'Up to $15K per request · processed in 48 hours',
+      payoutMethods: ['ACH', 'Wire', 'Wise', 'Rise'],
     },
-    features: [
-      'Single-step evaluation (no Phase 1 / Phase 2 grind)',
-      'EOD-trailing drawdown that locks at starting balance — more forgiving than intraday trailing',
-      'Three distinct plans: Standard, Advanced (no funded consistency rule), Zero (no activation fee)',
-      'Up to $15,000 max payout per request',
-      'Path to live capital via Alpha Prime program (60% live split + monthly salary)',
-      'Tradovate, NinjaTrader, TradingView, Quantower supported',
-    ],
+    features: [],
     pros: [
-      '90% profit split from day 1 on Advanced & Zero',
-      'EOD-trailing MLL locks at starting balance (forgiving)',
-      '$15,000 max payout per request — well above peers',
-      'Payouts processed within 48 business hours',
-      'Zero plan has $0 activation fee + fast pass (0–1 trading day)',
-      'Backed by Alpha Capital Group · 4.9/5 Trustpilot · $25M+ paid out',
+      '90% profit split — flat from day 1',
+      'EOD-trailing drawdown that locks at start balance',
+      '$15K max payout · paid in 48 hours',
+      'Zero plan: $0 activation, pass in one session',
+      '4.9/5 Trustpilot · $25M+ already paid out',
     ],
     cons: [
-      '40% consistency rule on funded Standard / Zero accounts',
-      'No bots / EAs / fully automated trading',
-      'Platform choice locked at purchase (cannot switch without new account)',
-      'No overnight holds — flatten by 4:20 PM EST',
+      '40% consistency rule on funded Standard / Zero',
+      'No bots / EAs · flatten by 4:20 PM EST',
     ],
     pricing: {
-      challenge: 'From $79/mo ($50K Standard) up to ~$419/mo ($150K Advanced)',
-      monthly: 'Recurring monthly until pass · activation $149 (Standard / Advanced) · $0 (Zero)',
+      challenge: 'From $79/mo · Zero plan = $0 activation',
     },
     affiliateLink: 'https://app.alpha-futures.com/signup/Elad013916/',
     rating: 5.0,
-    bottomLine: 'Alpha Futures is best for disciplined CME futures traders who want forgiving end-of-day drawdown, 90% splits from day 1, and $15K payout caps. Sweet spot: Advanced plan if you hate consistency rules post-funding, or Zero plan if you want to skip the activation fee and pass fast.',
+    bottomLine: '🏆 FINOTAUR\'s top-recommended futures prop firm. If you trade CME futures with discipline, this is the cleanest, fastest path to real capital we\'ve found — 90% splits, $15K payouts, no time pressure. Stop risking your own money. Get funded today.',
   },
 ];
 
@@ -125,11 +114,32 @@ const PropFirmCard = ({ firm }: { firm: PropFirm }) => {
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-base-700 flex items-center justify-center">
-            <Building className="w-6 h-6 text-gold" />
+          <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center overflow-hidden">
+            {firm.logo ? (
+              <img
+                src={firm.logo}
+                alt={`${firm.name} logo`}
+                className="w-full h-full object-contain p-1"
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  img.style.display = 'none';
+                  const fallback = img.nextElementSibling as HTMLElement | null;
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <Building
+              className="w-6 h-6 text-gold"
+              style={{ display: firm.logo ? 'none' : 'flex' }}
+            />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-foreground">{firm.name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-foreground">{firm.name}</h3>
+              <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-gold/15 text-gold border border-gold/30 rounded">
+                FINOTAUR Pick
+              </span>
+            </div>
             <div className="flex items-center gap-1 mt-1">
               {[...Array(5)].map((_, i) => (
                 <span
