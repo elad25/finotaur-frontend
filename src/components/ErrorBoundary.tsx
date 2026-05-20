@@ -19,26 +19,68 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  /**
+   * True when the error matched the chunk-load mismatch signature and we
+   * already tried (or skipped) the auto-reload. Used by render() to swap the
+   * generic message for a chunk-specific one and surface a hard-refresh hint.
+   */
+  isChunkLoadError: boolean;
+}
+
+// Vite/Webpack lazy import failures after a redeploy can take several
+// message shapes depending on browser. We match all known variants — the
+// global handler in App.tsx covers the unhandled-rejection path, this list
+// covers the React-Suspense path where the rejection is caught by React.
+const CHUNK_LOAD_ERROR_PATTERNS = [
+  'Failed to fetch dynamically imported module',
+  'Importing a module script failed',
+  'error loading dynamically imported module',
+  'Loading chunk',
+  'Loading CSS chunk',
+];
+
+function isChunkLoadError(error: Error | null): boolean {
+  if (!error) return false;
+  const msg = `${error.name ?? ''} ${error.message ?? ''}`;
+  return CHUNK_LOAD_ERROR_PATTERNS.some((p) => msg.includes(p));
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { 
-      hasError: false, 
+    this.state = {
+      hasError: false,
       error: null,
-      errorInfo: null 
+      errorInfo: null,
+      isChunkLoadError: false,
     };
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { hasError: true, error };
+    return { hasError: true, error, isChunkLoadError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('❌ Error Boundary caught:', error, errorInfo);
 
     this.setState({ errorInfo });
+
+    // Chunk-load auto-recovery. After a redeploy, the in-memory index.html
+    // references chunk hashes that no longer exist on the CDN; the SPA
+    // fallback returns text/html and the dynamic import throws. React's
+    // Suspense catches the rejection before the global window-level handler
+    // (App.tsx) gets it, so we mirror the same one-shot-reload logic here.
+    // sessionStorage key matches App.tsx so the two paths share the loop
+    // guard — if the reload already happened once on this pathname, fall
+    // through to the regular error UI (with a chunk-specific hint).
+    if (isChunkLoadError(error) && typeof window !== 'undefined') {
+      const reloadKey = 'chunk_reload_' + window.location.pathname;
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1');
+        window.location.reload();
+        return;
+      }
+    }
 
     // ✅ Call custom error handler if provided
     if (this.props.onError) {
@@ -76,13 +118,56 @@ export class ErrorBoundary extends Component<Props, State> {
         errorName: (error.name || 'Error').slice(0, 40),
       },
     });
+
+    // 2026-05-20: send a parallel fire-and-forget POST to the server's
+    // error-report endpoint so the admin alerter gets the event too. Sentry
+    // is the primary channel (rich grouping + alert rules); this is the
+    // belt-and-suspenders fallback in case Sentry's DSN is rotated, the
+    // network blocks Sentry, or alerts aren't configured. Skip the chunk-
+    // load case — we auto-reload and don't want to email-spam during a
+    // normal deploy. Skip in dev/test so local hot-reload errors don't fire.
+    const skipServerReport =
+      isChunkLoadError(error) ||
+      (typeof import.meta !== 'undefined' &&
+        (import.meta as ImportMeta & { env?: { MODE?: string } }).env?.MODE !== 'production');
+    if (!skipServerReport && typeof window !== 'undefined' && typeof fetch === 'function') {
+      const buildHash =
+        typeof document !== 'undefined'
+          ? (document.querySelector('script[type="module"]')?.getAttribute('src') ?? '')
+              .match(/index-([A-Za-z0-9_-]+)\.js/)?.[1] ?? ''
+          : '';
+      const payload = {
+        boundary: this.props.boundary ?? 'journal',
+        route,
+        errorName: error.name,
+        errorMessage: (error.message || '').slice(0, 800),
+        failingComponent,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        buildHash,
+      };
+      try {
+        fetch('/api/error-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        // Don't let a logging failure cascade into the render.
+      }
+    }
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+    this.setState({ hasError: false, error: null, errorInfo: null, isChunkLoadError: false });
   };
 
   handleReload = () => {
+    // Clear the auto-reload guard so a user-initiated reload always goes
+    // through even when the auto path already fired once on this pathname.
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('chunk_reload_' + window.location.pathname);
+    }
     window.location.reload();
   };
 
@@ -112,12 +197,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
             {/* Title */}
             <h2 className="text-2xl font-bold text-white mb-2">
-              Something went wrong
+              {this.state.isChunkLoadError ? 'New version available' : 'Something went wrong'}
             </h2>
 
             {/* Message */}
             <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
-              {this.state.error?.message || 'An unexpected error occurred. Please try again.'}
+              {this.state.isChunkLoadError
+                ? 'Auto-refresh did not pick up the latest build. Hard-refresh with Ctrl+Shift+R (Cmd+Shift+R on Mac) to load the new version.'
+                : this.state.error?.message || 'An unexpected error occurred. Please try again.'}
             </p>
 
             {/* Error Details (only in development) */}

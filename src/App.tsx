@@ -20,8 +20,6 @@ import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
 import GlossaryTerm from "@/pages/glossary/GlossaryTerm";
 import JournalCopierPage from "@/pages/JournalCopierPage";
-const BlogIndex = lazy(() => import("@/pages/blog/BlogIndex"));
-const BlogPost = lazy(() => import("@/pages/blog/BlogPost"));
 
 
 // 🔥 ROUTE PROTECTION COMPONENTS - Imported from separate files to use AuthProvider correctly
@@ -41,29 +39,65 @@ import '@/scripts/migrationRunner';
 // 🔄 AUTO-RELOAD ON CHUNK LOAD FAILURE (after deploy)
 // =====================================================
 if (typeof window !== 'undefined') {
-  window.addEventListener('error', (event) => {
-    const target = event.target as HTMLElement;
-    if (target?.tagName === 'SCRIPT' || target?.tagName === 'LINK') {
-      const reloadKey = 'chunk_reload_' + window.location.pathname;
-      if (!sessionStorage.getItem(reloadKey)) {
-        sessionStorage.setItem(reloadKey, '1');
-        window.location.reload();
+  // Keep this list in sync with CHUNK_LOAD_ERROR_PATTERNS in ErrorBoundary.tsx.
+  // Three layers can catch a chunk-load failure: this window-error listener
+  // (resource 404 on a <script> tag), unhandledrejection (the import promise
+  // rejected and React did not handle it), and the ErrorBoundary fallback
+  // (React's Suspense caught the rejection before it became unhandled).
+  // All three trip the same sessionStorage key so we never reload twice in a
+  // row on the same pathname.
+  const CHUNK_LOAD_PATTERNS = [
+    'Failed to fetch dynamically imported module',
+    'Importing a module script failed',
+    'error loading dynamically imported module',
+    'Loading chunk',
+    'Loading CSS chunk',
+  ];
+  const matchesChunkError = (msg: string) =>
+    !!msg && CHUNK_LOAD_PATTERNS.some((p) => msg.includes(p));
+  const tryReloadOnce = () => {
+    const reloadKey = 'chunk_reload_' + window.location.pathname;
+    if (sessionStorage.getItem(reloadKey)) return false;
+    sessionStorage.setItem(reloadKey, String(Date.now()));
+    window.location.reload();
+    return true;
+  };
+
+  // Expire stale reload guards after 5 minutes. Without this, a single
+  // genuine app-level error on a route after a chunk-load reload would
+  // leave the guard set forever for that route, defeating the auto-recovery
+  // the next time a real chunk mismatch hits the same path.
+  try {
+    const RELOAD_TTL_MS = 5 * 60 * 1000;
+    const now = Date.now();
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i);
+      if (!key || !key.startsWith('chunk_reload_')) continue;
+      const ts = Number(sessionStorage.getItem(key));
+      if (!Number.isFinite(ts) || now - ts > RELOAD_TTL_MS) {
+        sessionStorage.removeItem(key);
       }
+    }
+  } catch {
+    // sessionStorage can throw in private mode / storage disabled — ignore.
+  }
+
+  window.addEventListener('error', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === 'SCRIPT' || target?.tagName === 'LINK') {
+      tryReloadOnce();
+      return;
+    }
+    if (matchesChunkError(event.message || '')) {
+      tryReloadOnce();
     }
   }, true);
 
   window.addEventListener('unhandledrejection', (event) => {
-    const msg = event.reason?.message || '';
-    if (
-      msg.includes('Failed to fetch dynamically imported module') ||
-      msg.includes('Importing a module script failed') ||
-      msg.includes('error loading dynamically imported module')
-    ) {
-      const reloadKey = 'chunk_reload_' + window.location.pathname;
-      if (!sessionStorage.getItem(reloadKey)) {
-        sessionStorage.setItem(reloadKey, '1');
-        window.location.reload();
-      }
+    const msg =
+      (event.reason && (event.reason.message || event.reason.toString?.())) || '';
+    if (matchesChunkError(msg)) {
+      tryReloadOnce();
     }
   });
 }
@@ -87,7 +121,6 @@ import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDis
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { useAnalytics } from "@/lib/analytics";
-import { PushOptInModal } from "@/components/notifications/PushOptInModal";
 
 // LAZY LOADED PAGES
 const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
@@ -302,8 +335,6 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      {/* Web Push opt-in — self-gated, only shows to returning logged-in users */}
-      <PushOptInModal />
       <AffiliateTracker />
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
@@ -333,8 +364,6 @@ function AppContent() {
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/glossary" element={<GlossaryIndex />} />
         <Route path="/glossary/:slug" element={<GlossaryTerm />} />
-        <Route path="/blog" element={<SuspenseRoute><BlogIndex /></SuspenseRoute>} />
-        <Route path="/blog/:slug" element={<SuspenseRoute><BlogPost /></SuspenseRoute>} />
         <Route path="/journal-copier" element={<JournalCopierPage />} />
         <Route path="/warzone" element={<ProtectedRoute><SuspenseRoute><WarZonePage /></SuspenseRoute></ProtectedRoute>} />
         <Route path="/warzone-preview" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
