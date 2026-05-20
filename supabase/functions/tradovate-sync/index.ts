@@ -279,49 +279,133 @@ async function processFill(
     .maybeSingle();
 
   if (openPos && openPos.open_trade_id) {
-    // ── CLOSE: this fill exits an existing trade ──────────────
-    const pnl = closeSide === 'LONG'
-      ? (fill.price - openPos.avg_entry_price) * Math.min(fill.qty, openPos.open_quantity) * multiplier
-      : (openPos.avg_entry_price - fill.price) * Math.min(fill.qty, openPos.open_quantity) * multiplier;
-
-    const outcome = pnl > 0 ? 'WIN' : pnl < 0 ? 'LOSS' : 'BE';
-    const closedQty = Math.min(fill.qty, openPos.open_quantity);
-
-    // Update the trade to closed.
-    // fees=null (not 0): Tradovate's /fill/list endpoint does NOT return per-fill
-    // commission data, so we genuinely don't know. Writing 0 was a silent lie that
-    // inflated P&L by the commission amount. Downstream code already treats null
-    // as "unknown" via COALESCE(fees,0) / Number(fees || 0); the pnl above is the
-    // raw exit-minus-entry calculation and does NOT subtract fees.
-    const { error: updateErr } = await supabaseAdmin
+    // ── CLOSE — v46: proper partial-close via partial_exits JSONB ─────────
+    // v45 (broken): every close fill set exit_price + close_at on the trade
+    // row, even if it was a partial close. Subsequent partials overwrote it,
+    // and the DB trigger computed pnl from the FULL stored quantity × the
+    // LAST exit price — producing wrong PnL.
+    //
+    // v46 (this code): partial fills append to `partial_exits` JSONB and
+    // only decrement `position_state.open_quantity`. The trade row stays
+    // OPEN (no exit_price, no outcome) until the LAST closing fill brings
+    // remainingQty to 0. At that point we set exit_price to the
+    // QUANTITY-WEIGHTED AVERAGE of every leg in partial_exits, and the DB
+    // trigger computes pnl = (avg_exit - avg_entry) × quantity × multiplier,
+    // which is mathematically equal to summing each leg's PnL.
+    //
+    // Schema note: `trades.partial_exits` (jsonb) already exists and the
+    // frontend renders it (see manual trade 6f1310da from 2025-12-16).
+    const { data: currentTrade, error: tradeFetchErr } = await supabaseAdmin
       .from('trades')
-      .update({
-        exit_price: fill.price,
-        close_at:   fillAt,
-        pnl:        Math.round(pnl * 100) / 100,
-        outcome,
-        fees:       null,
-      })
-      .eq('id', openPos.open_trade_id);
+      .select('quantity, partial_exits')
+      .eq('id', openPos.open_trade_id)
+      .single();
 
-    if (updateErr) {
-      console.error('[tradovate-sync] close trade error:', updateErr.message);
+    if (tradeFetchErr || !currentTrade) {
+      console.error('[tradovate-sync] close trade fetch error:', tradeFetchErr?.message ?? 'no trade');
       return 'error';
     }
 
-    // Update position state
+    const closedQty = Math.min(fill.qty, openPos.open_quantity);
     const remainingQty = openPos.open_quantity - closedQty;
-    if (remainingQty <= 0) {
-      await supabaseAdmin
+
+    const existingExits: Array<Record<string, unknown>> = Array.isArray(currentTrade.partial_exits)
+      ? currentTrade.partial_exits as Array<Record<string, unknown>>
+      : [];
+    const totalQty = Number(currentTrade.quantity) || closedQty;
+    const newExit = {
+      id:         `tradovate::partial-close::${fill.id}`,
+      price:      fill.price,
+      quantity:   closedQty,
+      percentage: totalQty > 0
+        ? Math.round((closedQty / totalQty) * 10000) / 100
+        : 0,
+      timestamp:  fillAt,
+      fill_id:    fill.id,
+    };
+    const updatedExits = [...existingExits, newExit];
+
+    if (remainingQty > 0) {
+      // PARTIAL — keep trade OPEN, record exit leg, decrement position state.
+      const { error: partialErr } = await supabaseAdmin
+        .from('trades')
+        .update({ partial_exits: updatedExits })
+        .eq('id', openPos.open_trade_id);
+      if (partialErr) {
+        console.error('[tradovate-sync] partial close trade update error:', partialErr.message);
+        return 'error';
+      }
+
+      const { error: stateErr } = await supabaseAdmin
         .from('tradovate_position_state')
-        .delete()
+        .update({ open_quantity: remainingQty, last_updated_at: fillAt })
         .eq('id', openPos.id);
-    } else {
-      await supabaseAdmin
-        .from('tradovate_position_state')
-        .update({ open_quantity: remainingQty })
-        .eq('id', openPos.id);
+      if (stateErr) {
+        console.error('[tradovate-sync] partial close state update error:', stateErr.message);
+        return 'error';
+      }
+
+      console.log(JSON.stringify({
+        event:                'partial_close',
+        trade_id:             openPos.open_trade_id,
+        fill_id:              fill.id,
+        closed_qty:           closedQty,
+        remaining_qty:        remainingQty,
+        partial_exits_count:  updatedExits.length,
+      }));
+
+      return 'updated';
     }
+
+    // FULL — last fill that brings remainingQty to 0. Compute weighted-avg
+    // exit_price across every leg in partial_exits and finalize the trade.
+    const totalExitQty = updatedExits.reduce(
+      (sum, e) => sum + Number((e as { quantity?: number }).quantity ?? 0),
+      0,
+    );
+    const weightedAvgExit = totalExitQty > 0
+      ? updatedExits.reduce(
+          (sum, e) =>
+            sum +
+            Number((e as { price?: number }).price ?? 0) *
+              Number((e as { quantity?: number }).quantity ?? 0),
+          0,
+        ) / totalExitQty
+      : fill.price;
+
+    const { error: closeErr } = await supabaseAdmin
+      .from('trades')
+      .update({
+        exit_price:    weightedAvgExit,
+        close_at:      fillAt,
+        fees:          null,
+        partial_exits: updatedExits,
+        // pnl + outcome computed by DB trigger handle_trade_changes_unified
+        // from stored quantity × multiplier × (exit_price - entry_price).
+      })
+      .eq('id', openPos.open_trade_id);
+    if (closeErr) {
+      console.error('[tradovate-sync] full close trade update error:', closeErr.message);
+      return 'error';
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('tradovate_position_state')
+      .delete()
+      .eq('id', openPos.id);
+    if (delErr) {
+      console.error('[tradovate-sync] full close position_state delete error:', delErr.message);
+      return 'error';
+    }
+
+    console.log(JSON.stringify({
+      event:              'full_close',
+      trade_id:           openPos.open_trade_id,
+      final_fill_id:      fill.id,
+      total_exit_legs:    updatedExits.length,
+      weighted_avg_exit:  weightedAvgExit,
+      total_qty_closed:   totalExitQty,
+    }));
 
     return 'updated';
   }
@@ -358,17 +442,66 @@ async function processFill(
     .maybeSingle();
 
   if (existingSamePos && existingSamePos.open_trade_id) {
-    // Add-on leg: update the existing trade row + position state in place.
-    const oldQty = Number(existingSamePos.open_quantity);
-    const oldAvg = Number(existingSamePos.avg_entry_price);
-    const totalQty = oldQty + fill.qty;
-    const weightedAvg = (oldAvg * oldQty + fill.price * fill.qty) / totalQty;
+    // ── ADDON-LEG — v48: track every entry leg in partial_entries JSONB ────
+    // v47 (broken for interleaved scaling): computed weighted-avg from
+    // position_state.avg_entry_price + new fill price. When a partial close
+    // happened between addons, the position_state.avg reflected the post-partial
+    // state (not the full entry history), and trade.quantity counted "currently
+    // open" not "total ever entered" — so the DB trigger's pnl formula
+    // `qty × multiplier × price_diff` used the wrong qty.
+    //
+    // v48: APPEND to partial_entries JSONB, recompute entry_price + quantity
+    // from the FULL history. trade.quantity = sum(partial_entries.qty) =
+    // total ever entered. At full close, this matches sum(partial_exits.qty)
+    // so the trigger pnl formula is mathematically correct.
+    //
+    // Interleaved example (BUY 1 + BUY 1 + SELL 1 + BUY 1 + SELL 2):
+    //   partial_entries grows to [{p1,1},{p2,1},{p3,1}], trade.qty=3
+    //   partial_exits grows to [{s1,1},{s2,2}], total exit qty=3
+    //   pnl = (avg_exit - avg_entry) × 3 × multiplier  ✓
+    const { data: currentTrade, error: tradeFetchErr } = await supabaseAdmin
+      .from('trades')
+      .select('partial_entries')
+      .eq('id', existingSamePos.open_trade_id)
+      .single();
+
+    if (tradeFetchErr || !currentTrade) {
+      console.error('[tradovate-sync] addon trade fetch error:', tradeFetchErr?.message ?? 'no trade');
+      return 'error';
+    }
+
+    const existingEntries: Array<Record<string, unknown>> = Array.isArray(currentTrade.partial_entries)
+      ? currentTrade.partial_entries as Array<Record<string, unknown>>
+      : [];
+    const newEntry = {
+      id:        `tradovate::partial-entry::${fill.id}`,
+      price:     fill.price,
+      quantity:  fill.qty,
+      timestamp: fillAt,
+      fill_id:   fill.id,
+    };
+    const updatedEntries = [...existingEntries, newEntry];
+
+    const totalEnteredQty = updatedEntries.reduce(
+      (sum, e) => sum + Number((e as { quantity?: number }).quantity ?? 0),
+      0,
+    );
+    const weightedAvgEntry = totalEnteredQty > 0
+      ? updatedEntries.reduce(
+          (sum, e) =>
+            sum +
+            Number((e as { price?: number }).price ?? 0) *
+              Number((e as { quantity?: number }).quantity ?? 0),
+          0,
+        ) / totalEnteredQty
+      : fill.price;
 
     const { error: updateTradeErr } = await supabaseAdmin
       .from('trades')
       .update({
-        quantity:    totalQty,
-        entry_price: weightedAvg,
+        quantity:        totalEnteredQty,
+        entry_price:     weightedAvgEntry,
+        partial_entries: updatedEntries,
       })
       .eq('id', existingSamePos.open_trade_id);
 
@@ -377,11 +510,15 @@ async function processFill(
       return 'error';
     }
 
+    // position_state.open_quantity tracks CURRENT OPEN (after intervening
+    // partial closes), so increment by the new fill's qty — NOT replace with
+    // totalEnteredQty (that would re-open closed legs).
+    const newOpenQty = Number(existingSamePos.open_quantity) + fill.qty;
     const { error: updateStateErr } = await supabaseAdmin
       .from('tradovate_position_state')
       .update({
-        open_quantity:   totalQty,
-        avg_entry_price: weightedAvg,
+        open_quantity:   newOpenQty,
+        avg_entry_price: weightedAvgEntry,
         last_updated_at: fillAt,
       })
       .eq('id', existingSamePos.id);
@@ -391,12 +528,15 @@ async function processFill(
       return 'error';
     }
 
-    console.log(
-      `[tradovate-sync] addon_leg: trade=${existingSamePos.open_trade_id} ` +
-      `symbol=${symbol} side=${fillSide} ` +
-      `qty=${oldQty}+${fill.qty}=${totalQty} ` +
-      `avg=${oldAvg.toFixed(4)}→${weightedAvg.toFixed(4)}`
-    );
+    console.log(JSON.stringify({
+      event:               'addon_leg',
+      trade_id:            existingSamePos.open_trade_id,
+      fill_id:             fill.id,
+      total_entry_legs:    updatedEntries.length,
+      total_entered_qty:   totalEnteredQty,
+      weighted_avg_entry:  weightedAvgEntry,
+      open_quantity:       newOpenQty,
+    }));
 
     return 'updated';
   }
@@ -425,11 +565,27 @@ async function processFill(
       outcome:              'OPEN',
       import_source:        'tradovate',
       broker:               'tradovate',
-      multiplier:           multiplier ?? 1,
+      // v45: ALWAYS null. The DB trigger `handle_trade_changes_unified` calls
+      // `get_asset_multiplier(symbol)` to fill the correct value at insert time.
+      // v44's `multiplier ?? null` was insufficient because Tradovate's API can
+      // return wrong-but-truthy values (e.g. 1 for MNQM6), and v43's hardcoded
+      // fallback only fired on null/0. Architectural decision: DB is the SINGLE
+      // source of truth for multipliers (table covers 30+ symbols), edge fn just
+      // ships the trade row. See OQ-launch-readiness audit 2026-05-20.
+      multiplier:           null,
       // See close-path comment above: Tradovate fills carry no fee data; null
       // is honest, 0 was a silent lie. DB default for `fees` is 0 but the column
       // is nullable, and downstream consumers tolerate null via COALESCE.
       fees:                 null,
+      // v48: initialize partial_entries with this first leg so subsequent addons
+      // can append + recompute weighted-avg from the full history.
+      partial_entries:      [{
+        id:        `tradovate::partial-entry::${fill.id}`,
+        price:     fill.price,
+        quantity:  fill.qty,
+        timestamp: fillAt,
+        fill_id:   fill.id,
+      }],
     })
     .select('id')
     .single();
@@ -440,12 +596,18 @@ async function processFill(
     return 'error';
   }
 
-  // Insert (not upsert) — we already verified no same-side position exists.
-  // The unique constraint on (user_id, tradovate_account_id, symbol, side)
-  // protects against the rare race-condition path.
+  // v44 fix: UPSERT instead of INSERT. v43 used .insert() which could fail
+  // silently in production (2026-05-20 elad incident: 3 fills landed in trades
+  // table but position_state stayed empty → multi-leg detection broke → SHORT 2
+  // never matched the 2 LONG legs). Root cause was never pinned down (Postgres
+  // logs windowed too short by the time we looked), but symptoms matched a
+  // stale orphan row on the unique constraint (user_id, account_id, symbol, side)
+  // that our SELECT at line 350 missed because it filtered `open_quantity > 0`.
+  // UPSERT with onConflict self-heals that path. Structured logging surfaces
+  // any future failure with code/details/hint instead of just .message.
   const { error: insertStateErr } = await supabaseAdmin
     .from('tradovate_position_state')
-    .insert({
+    .upsert({
       user_id:              cred.user_id,
       tradovate_account_id: cred.account_id,
       symbol,
@@ -454,12 +616,22 @@ async function processFill(
       avg_entry_price:      fill.price,
       open_trade_id:        newTrade.id,
       last_updated_at:      fillAt,
-    });
+    }, { onConflict: 'user_id,tradovate_account_id,symbol,side' });
 
   if (insertStateErr) {
-    // 23505 = race condition: a parallel run created the position between
-    // our SELECT and INSERT. Caller will retry on next cron tick.
-    console.error('[tradovate-sync] open state insert error:', insertStateErr.message);
+    console.error(JSON.stringify({
+      event:        'position_state_upsert_failed',
+      user_id:      cred.user_id,
+      account_id:   cred.account_id,
+      symbol,
+      side:         fillSide,
+      fill_id:      fill.id,
+      trade_id:     newTrade.id,
+      error_code:   insertStateErr.code ?? null,
+      error_msg:    insertStateErr.message ?? null,
+      error_detail: (insertStateErr as { details?: string }).details ?? null,
+      error_hint:   (insertStateErr as { hint?: string }).hint ?? null,
+    }));
     return 'error';
   }
 
@@ -511,6 +683,14 @@ async function syncCredential(cred: {
 
   // 3. Fetch new fills
   const fills = await fetchFills(base, accessToken, accountIdNum, lastFillId, attribution);
+  // v47 fix: Tradovate's /fill/list returns fills in FIFO-pairing order
+  // (each opening fill followed by its matching closing fill), NOT in fill.id
+  // order. Without sorting, multi-leg positions get processed as N independent
+  // round-trips instead of one aggregated position (e.g. BUY+BUY+BUY+SELL+SELL+SELL
+  // becomes 3 separate trade rows instead of 1 with 3 partial_exits).
+  // fill.id is monotonic with execution time on Tradovate, so sort by id ASC
+  // restores the actual sequence the user executed.
+  fills.sort((a, b) => a.id - b.id);
   if (fills.length === 0) {
     // Update last_sync_at even when no new fills
     await supabaseAdmin.from('broker_connections').update({
