@@ -57,9 +57,14 @@ interface TradeChartProps {
 // are trade-specific semantics, not generic chart styling.
 // ═══════════════════════════════════════════════════════════════
 const MARKER_COLORS = {
-  long: '#10b981',   // emerald-500
-  short: '#ef4444',  // rose-500
-  exit: '#0ea5e9',   // sky-500
+  // Elad 2026-05-20: entry vs exit semantics — not LONG vs SHORT semantics.
+  // The arrow shape (arrowUp/arrowDown) already encodes direction; color
+  // signals "is this opening or closing the position".
+  //   ENTRY (any side) → green   = "active / opening"
+  //   EXIT  (any side) → red     = "closing / position done"
+  long:  '#10b981',  // emerald-500 — entry (LONG side, arrowUp belowBar)
+  short: '#10b981',  // emerald-500 — entry (SHORT side, arrowDown aboveBar)
+  exit:  '#ef4444',  // red-500     — exit (square, opposite side of entry arrow)
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
