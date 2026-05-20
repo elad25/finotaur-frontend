@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
 export interface CopyRule {
@@ -53,6 +54,10 @@ export function useCopyRules() {
       return data as CopyRule;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio-copy-rules'] }),
+    // D-10: surface mutation failures to the user instead of silent swallow.
+    // Common causes: RLS denial, deleted portfolio (FK violation), network drop.
+    onError: (err: Error) =>
+      toast.error(err.message || 'Failed to update copy rule'),
   });
 
   // I.4 (2026-05-10): create a new copy rule. Used by the follow toggle when
@@ -79,6 +84,11 @@ export function useCopyRules() {
       return data as CopyRule;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portfolio-copy-rules'] }),
+    // D-10: surface mutation failures to the user instead of silent swallow.
+    // After D-11 lands, "duplicate key" errors disappear; meanwhile keep the
+    // generic message — the original Supabase string is descriptive enough.
+    onError: (err: Error) =>
+      toast.error(err.message || 'Failed to create copy rule'),
   });
 
   return {
