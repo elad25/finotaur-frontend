@@ -40,10 +40,10 @@ const STRIP_BROKERS: BrokerName[] = [
   'tradingview',
 ];
 
-// Live integration is not wired up yet for these brokers. Tile is shown
-// with a "SOON" badge and selection renders a coming-soon notice instead
-// of a credentials form.
-const COMING_SOON_BROKERS: BrokerName[] = ['ninja_trader'];
+// NinjaTrader Web accounts run on Tradovate cloud (post-2022 acquisition),
+// so we route the NinjaTrader credentials form through the same Tradovate
+// edge function. From the user's perspective the two tiles behave the same.
+const TRADOVATE_AUTH_BROKERS: BrokerName[] = ['tradovate', 'ninja_trader'];
 
 const BROKER_MARKS: Partial<Record<BrokerName, string>> = {
   tradovate: '/brokers/tradovate-mark.svg',
@@ -87,12 +87,10 @@ function BrokerMark({ broker }: { broker: BrokerName }) {
 function BrokerTile({
   broker,
   selected,
-  comingSoon,
   onSelect,
 }: {
   broker: BrokerName;
   selected: boolean;
-  comingSoon?: boolean;
   onSelect: () => void;
 }) {
   const config = BROKER_CONFIGS[broker];
@@ -107,7 +105,6 @@ function BrokerTile({
         selected
           ? 'border-[#C9A646] shadow-[0_0_26px_rgba(201,166,70,0.24)]'
           : 'border-[#C9A646]/15 hover:border-[#C9A646]/35 hover:bg-[#C9A646]/[0.035]',
-        comingSoon ? 'opacity-70' : '',
       ].join(' ')}
       aria-pressed={selected}
     >
@@ -125,14 +122,12 @@ function BrokerTile({
       <span
         className={[
           'rounded-sm border px-2 py-0.5 text-[8px] uppercase tracking-wider',
-          comingSoon
-            ? 'border-white/15 bg-white/[0.04] text-ink-tertiary'
-            : selected
-              ? 'border-[#C9A646]/45 bg-[#C9A646]/10 text-[#E8C766]'
-              : 'border-white/10 bg-white/[0.025] text-ink-secondary',
+          selected
+            ? 'border-[#C9A646]/45 bg-[#C9A646]/10 text-[#E8C766]'
+            : 'border-white/10 bg-white/[0.025] text-ink-secondary',
         ].join(' ')}
       >
-        {comingSoon ? 'Soon' : 'Live'}
+        Live
       </span>
     </button>
   );
@@ -258,26 +253,23 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const config = BROKER_CONFIGS[selectedBroker];
   const isOAuth = config.features.oauth && selectedBroker !== 'tradovate';
   const isNinjaTrader = selectedBroker === 'ninja_trader';
-  const isComingSoon = COMING_SOON_BROKERS.includes(selectedBroker);
+  const usesTradovateAuth = TRADOVATE_AUTH_BROKERS.includes(selectedBroker);
 
   const canSubmit = useMemo(() => {
     if (!riskAcknowledged) return false;
-    if (isComingSoon) return false;
-    if (selectedBroker === 'tradovate') {
+    if (usesTradovateAuth) {
       return Boolean(username.trim() && password.trim() && !isLoading);
     }
     if (selectedBroker === 'interactive_brokers') {
       return Boolean(user) && !isLoading;
     }
     return false;
-  }, [riskAcknowledged, isComingSoon, selectedBroker, username, password, isLoading, user]);
+  }, [riskAcknowledged, usesTradovateAuth, selectedBroker, username, password, isLoading, user]);
 
   const handleConnect = async () => {
     setError('');
 
-    if (isComingSoon) return;
-
-    if (selectedBroker === 'tradovate') {
+    if (usesTradovateAuth) {
       const result = await connect(env, username.trim(), password, connectionName);
       if (result.success) {
         onOpenChange(false);
@@ -380,7 +372,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
                   key={broker}
                   broker={broker}
                   selected={selectedBroker === broker}
-                  comingSoon={COMING_SOON_BROKERS.includes(broker)}
                   onSelect={() => handlePickBroker(broker)}
                 />
               ))}
@@ -414,21 +405,21 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
           <div className="mb-2.5 rounded-[12px] border border-[#C9A646]/18 bg-[#050505]/86 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h3 className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-secondary">
-                {isComingSoon ? `${config.displayName} — Coming Soon` : `${config.displayName} Credentials`}
+                {`${config.displayName} Credentials`}
               </h3>
-              {selectedBroker === 'tradovate' && (
+              {usesTradovateAuth && (
                 <EnvironmentToggle value={env} onChange={setEnv} />
               )}
             </div>
 
-            {selectedBroker === 'tradovate' && (
+            {usesTradovateAuth && (
               <div className="overflow-hidden rounded-[12px] border border-white/10 bg-[#101010]/70">
                 <CredentialInput
                   icon={<User className="h-5 w-5" />}
                   label="Username"
                   value={username}
                   onChange={setUsername}
-                  placeholder="your@email.com or username"
+                  placeholder={isNinjaTrader ? 'NinjaTrader username' : 'your@email.com or username'}
                   autoComplete="username"
                 />
                 <CredentialInput
@@ -459,20 +450,37 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               </div>
             )}
 
-            {isNinjaTrader && (
-              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-4 text-sm leading-relaxed text-ink-secondary">
-                <p className="text-ink-primary">
-                  Live NinjaTrader sync is in active development.
-                </p>
-                <p className="mt-1.5 text-[12px]">
-                  Because NinjaTrader is a desktop platform (Windows .exe with a local API), the connection requires a small Finotaur bridge agent — currently in build. In the meantime, you can journal NinjaTrader trades via CSV export from your platform.
-                </p>
+            {!usesTradovateAuth && selectedBroker !== 'interactive_brokers' && (
+              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
+                {config.displayName} is prepared in the broker ecosystem UI. Live credential exchange will be enabled in a later broker-activation pass.
               </div>
             )}
 
-            {!isNinjaTrader && selectedBroker !== 'tradovate' && selectedBroker !== 'interactive_brokers' && (
-              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
-                {config.displayName} is prepared in the broker ecosystem UI. Live credential exchange will be enabled in a later broker-activation pass.
+            {isNinjaTrader && (
+              <div className="mt-2.5 rounded-[10px] border border-[#C9A646]/15 bg-[#0A0A0A]/70 p-2.5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-24 items-center justify-center rounded-md bg-white/[0.035] px-3">
+                      <img
+                        src="/brokers/kinetick-official.svg"
+                        alt="Kinetick"
+                        className="max-h-5 w-full object-contain"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-ink-primary">
+                        Professional market data powered by Kinetick.
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-ink-secondary">
+                        Real-time futures data available
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-2 rounded-sm border border-status-success/25 bg-status-success/10 px-2.5 py-0.5 text-[9px] uppercase tracking-wider text-status-success">
+                    <span className="h-1.5 w-1.5 rounded-full bg-status-success" />
+                    Available
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -543,7 +551,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               ) : (
                 <>
                   <Zap className="h-4 w-4" />
-                  {isComingSoon ? 'Coming Soon' : 'Connect'}
+                  {isNinjaTrader ? 'Connect NinjaTrader' : 'Connect'}
                 </>
               )}
             </button>
