@@ -684,10 +684,14 @@ Deno.serve(async (req: Request) => {
     const body = await req.json();
     const mode: string = body.mode ?? 'manual';
 
+    // Includes both 'tradovate' and 'ninja_trader' since NT Web accounts run
+    // on the same Tradovate cloud API and need the same sync handling. The
+    // trade rows themselves are still tagged broker='tradovate' (data source)
+    // while the connection row keeps its branded broker value for UI display.
     let credentialsQuery = supabaseAdmin
       .from('broker_connections')
       .select('id, user_id, environment, connection_data, account_id')
-      .eq('broker', 'tradovate')
+      .in('broker', ['tradovate', 'ninja_trader'])
       .eq('is_active', true);
 
     // Single user (manual / initial)

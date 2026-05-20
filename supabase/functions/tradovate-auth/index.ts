@@ -187,7 +187,7 @@ async function storeInVault(
       .from('broker_connections')
       .select('connection_data')
       .eq('user_id', userId)
-      .eq('broker', 'tradovate')
+      .in('broker', ['tradovate', 'ninja_trader'])
       .eq('environment', environment)
       .maybeSingle();
     const existingVaultId = (existing?.connection_data as { vault_secret_id?: string } | null)?.vault_secret_id;
@@ -250,11 +250,13 @@ Deno.serve(async (req: Request) => {
     // ══════════════════════════════════════════════════════════
     if (mode === 'refresh') {
       const refreshStart = Date.now();
-      // Find active broker_connections whose token expires within RENEW_AHEAD_MS
+      // Find active broker_connections whose token expires within RENEW_AHEAD_MS.
+      // Includes both 'tradovate' and 'ninja_trader' since NT Web accounts run
+      // on the same Tradovate cloud and need identical token-refresh handling.
       const { data: connected } = await supabaseAdmin
         .from('broker_connections')
         .select('id, user_id, environment, connection_data, account_id')
-        .eq('broker', 'tradovate')
+        .in('broker', ['tradovate', 'ninja_trader'])
         .eq('is_active', true)
         .lt('token_expires_at', new Date(Date.now() + RENEW_AHEAD_MS).toISOString());
 
@@ -434,7 +436,7 @@ Deno.serve(async (req: Request) => {
         .from('broker_connections')
         .select('id, user_id, broker, environment, account_id, connection_name, account_name, connection_data')
         .eq('id', credentialId)
-        .eq('broker', 'tradovate')
+        .in('broker', ['tradovate', 'ninja_trader'])
         .single();
 
       if (!cred) return json({ ok: false, source, status: 'not_found', error: 'Connection not found' }, 404);
@@ -548,6 +550,15 @@ Deno.serve(async (req: Request) => {
 
     // ══════════════════════════════════════════════════════════
     // mode: login — user connects a Tradovate account
+    //
+    // `broker` distinguishes the brand the user picked in the UI:
+    //   - 'tradovate'    → Tradovate tile
+    //   - 'ninja_trader' → NinjaTrader tile (NT Web accounts run on
+    //                      Tradovate cloud post-2022 acquisition, so
+    //                      the auth flow is identical, only the
+    //                      broker_connections.broker value differs)
+    // Default 'tradovate' preserves behavior for legacy callers that
+    // don't yet send the field.
     // ══════════════════════════════════════════════════════════
     const { userId, environment, username, password } = body;
     if (!userId || !environment || !username || !password) {
@@ -555,6 +566,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const env = environment as 'live' | 'demo';
+    const brokerName: 'tradovate' | 'ninja_trader' =
+      body.broker === 'ninja_trader' ? 'ninja_trader' : 'tradovate';
 
     // DEBUG — הסר אחרי בדיקה
     console.log('[tradovate-auth] login attempt:', {
@@ -591,7 +604,7 @@ Deno.serve(async (req: Request) => {
       .from('broker_connections')
       .select('id, connection_data')
       .eq('user_id', userId)
-      .eq('broker', 'tradovate')
+      .eq('broker', brokerName)
       .eq('account_id', String(primaryAccount.id))
       .maybeSingle();
 
@@ -601,7 +614,7 @@ Deno.serve(async (req: Request) => {
     const { error: upsertError } = await supabaseAdmin.from('broker_connections').upsert({
       id:               credentialId,
       user_id:          userId,
-      broker:           'tradovate',
+      broker:           brokerName,
       status:           'connected',
       is_active:        true,
       account_id:       String(primaryAccount.id),
