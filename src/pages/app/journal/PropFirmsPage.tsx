@@ -36,52 +36,58 @@ interface PropFirm {
   bottomLine?: string;
 }
 
-// 🏢 Prop Firms Data - FundingTicks Only
+// 🏢 Prop Firms Data - Alpha Futures
 const propFirmsData: PropFirm[] = [
   {
-    id: 'funding-ticks',
-    name: 'FundingTicks',
-    description: '',
+    id: 'alpha-futures',
+    name: 'Alpha Futures',
+    description: 'UK-based futures prop firm (Alpha Capital Group). CME futures only, three plan tiers (Standard / Advanced / Zero), end-of-day trailing drawdown that locks at starting balance, and up to 90% profit split.',
     assetTypes: ['futures'],
-    minAccountSize: 25000,
+    minAccountSize: 50000,
     maxAccountSize: 150000,
-    profitSplit: 'Up to 90/10 (varies by program)',
+    profitSplit: 'Up to 90% (flat from day 1 on Advanced & Zero; tiered 70→90% on Standard)',
     challengeRules: {
-      maxDailyLoss: 'Defined & risk-based ',
-      maxTotalLoss: 'Clear structure ',
-      profitTarget: 'Achievable targets',
-      tradingPeriod: 'No time pressure (minimum trading days required)',
-      minTradingDays: '3 Days',
+      maxDailyLoss: 'None on Standard / Advanced · 2% on Zero (Daily Loss Guard)',
+      maxTotalLoss: '4% EOD-trailing (Standard / Zero) · 3.5% EOD-trailing (Advanced) — locks at starting balance',
+      profitTarget: '6% (Standard / Zero) · 8% (Advanced)',
+      tradingPeriod: 'Unlimited (subscription-based, no time pressure)',
+      minTradingDays: '2 days (Standard / Advanced) · 0–1 day (Zero, single-session pass possible)',
     },
     payoutRules: {
-      firstPayout: 'After meeting funded criteria',
-      subsequentPayouts: 'Regular & predictable cycles',
-      payoutMethods: ['Bank Transfer', 'Crypto (varies by region)'],
+      firstPayout: 'Bi-weekly (Standard) · Weekly after 5 winning days of $200+ (Advanced & Zero)',
+      subsequentPayouts: 'Weekly or bi-weekly · processed within 48 business hours (often same day)',
+      payoutMethods: ['ACH (US)', 'Wire Transfer', 'SWIFT', 'Wise', 'Rise'],
+      minimumPayout: '$200 (Standard / Zero) · $1,000 (Advanced)',
     },
     features: [
-      'Futures-only focus — no distractions',
-      'Clean rule structure (no hidden traps)',
-      'Trader-friendly risk framework',
-      'Scalable capital for consistent traders',
-      'Suitable for Day Trading & Scalping',
-      'Built for professionals, not gamblers',
+      'Single-step evaluation (no Phase 1 / Phase 2 grind)',
+      'EOD-trailing drawdown that locks at starting balance — more forgiving than intraday trailing',
+      'Three distinct plans: Standard, Advanced (no funded consistency rule), Zero (no activation fee)',
+      'Up to $15,000 max payout per request',
+      'Path to live capital via Alpha Prime program (60% live split + monthly salary)',
+      'Tradovate, NinjaTrader, TradingView, Quantower supported',
     ],
     pros: [
-      'Futures-only focus — no distractions',
-      'Cheap pricing',
-      'Trader-friendly risk framework',
-      'Suitable for Day Trading & Scalping',
-      'No activation fee'
+      '90% profit split from day 1 on Advanced & Zero',
+      'EOD-trailing MLL locks at starting balance (forgiving)',
+      '$15,000 max payout per request — well above peers',
+      'Payouts processed within 48 business hours',
+      'Zero plan has $0 activation fee + fast pass (0–1 trading day)',
+      'Backed by Alpha Capital Group · 4.9/5 Trustpilot · $25M+ paid out',
     ],
     cons: [
-
+      '40% consistency rule on funded Standard / Zero accounts',
+      'No bots / EAs / fully automated trading',
+      'Platform choice locked at purchase (cannot switch without new account)',
+      'No overnight holds — flatten by 4:20 PM EST',
     ],
     pricing: {
-      challenge: 'Low & competitive (depends on account size)',
+      challenge: 'From $79/mo ($50K Standard) up to ~$419/mo ($150K Advanced)',
+      monthly: 'Recurring monthly until pass · activation $149 (Standard / Advanced) · $0 (Zero)',
     },
-    affiliateLink: 'https://app.fundingticks.com/register?ref=FINOTAUR',
+    affiliateLink: 'https://app.alpha-futures.com/signup/Elad013916/',
     rating: 5.0,
-    bottomLine: 'FundingTicks is not for everyone. But if you trade futures with discipline, manage risk properly, and think long-term — this is one of the cleanest paths to trading serious capital without risking your own.',
+    bottomLine: 'Alpha Futures is best for disciplined CME futures traders who want forgiving end-of-day drawdown, 90% splits from day 1, and $15K payout caps. Sweet spot: Advanced plan if you hate consistency rules post-funding, or Zero plan if you want to skip the activation fee and pass fast.',
   },
 ];
 

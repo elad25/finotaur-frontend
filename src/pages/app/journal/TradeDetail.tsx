@@ -8,6 +8,17 @@ import { formatTradeDate, formatTradeDateFull } from '@/utils/dateFormatter';
 import { formatSessionDisplay, getSessionColor } from '@/constants/tradingSessions';
 import { Loader2, ArrowLeft, Calendar, TrendingUp, DollarSign, Target, AlertCircle, Pencil } from 'lucide-react';
 
+interface PartialLeg {
+  // Common fields written by both the Tradovate edge fn (v48+) and the
+  // manual-entry flow in New.tsx. Only `price` and `quantity` are guaranteed.
+  price: number;
+  quantity: number;
+  id?: string;
+  fill_id?: number;
+  timestamp?: string;
+  percentage?: number;
+}
+
 interface Trade {
   id: string;
   symbol: string;
@@ -33,6 +44,8 @@ interface Trade {
   next_time?: string;
   tags?: string[];
   screenshots?: string[];
+  partial_entries?: PartialLeg[];
+  partial_exits?: PartialLeg[];
 }
 
 interface EditDraft {
@@ -42,6 +55,68 @@ interface EditDraft {
   next_time: string;
   tags: string; // comma-separated; split on save
   actual_user_r: string; // string for input binding; parsed to number | null on save
+}
+
+const LEG_VISIBLE_CAP = 3;
+
+function LegsList({
+  legs,
+  label,
+  tone,
+}: {
+  legs: PartialLeg[];
+  label: string;
+  tone: 'entry' | 'exit';
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? legs : legs.slice(0, LEG_VISIBLE_CAP);
+  const hidden = Math.max(0, legs.length - LEG_VISIBLE_CAP);
+  const arrow = tone === 'entry' ? '▲' : '▼';
+  const arrowColor = tone === 'entry' ? 'text-green-400' : 'text-red-400';
+
+  return (
+    <div>
+      <label className="text-sm text-zinc-500 mb-2 block">
+        {label} <span className="text-zinc-600">({legs.length})</span>
+      </label>
+      <ul className="space-y-1.5">
+        {visible.map((leg, i) => (
+          <li
+            key={leg.id ?? leg.fill_id ?? i}
+            className="flex items-center justify-between text-sm"
+          >
+            <span className="flex items-center gap-2">
+              <span className={`${arrowColor} text-xs`}>{arrow}</span>
+              <span className="text-white font-mono">
+                ${leg.price.toFixed(2)}
+              </span>
+            </span>
+            <span className="text-zinc-500 font-mono text-xs">
+              × {leg.quantity}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {hidden > 0 && !expanded && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-2 text-xs text-zinc-400 hover:text-[#C9A646] transition-colors"
+        >
+          … +{hidden} more
+        </button>
+      )}
+      {expanded && legs.length > LEG_VISIBLE_CAP && (
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="mt-2 text-xs text-zinc-400 hover:text-[#C9A646] transition-colors"
+        >
+          Show less
+        </button>
+      )}
+    </div>
+  );
 }
 
 function tradeToEditDraft(trade: Trade): EditDraft {
@@ -99,7 +174,6 @@ export default function JournalTradeDetail() {
         .from('trades')
         .select('*')
         .eq('id', id)
-        .is('deleted_at', null)
         .single();
 
       if (error) throw error;
@@ -416,6 +490,29 @@ export default function JournalTradeDetail() {
             </div>
           )}
         </div>
+
+        {/* Execution Legs — only when the trade was scaled (>1 leg on either side) */}
+        {(() => {
+          const entries = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
+          const exits = Array.isArray(trade.partial_exits) ? trade.partial_exits : [];
+          const showEntries = entries.length > 1;
+          const showExits = exits.length > 1;
+          if (!showEntries && !showExits) return null;
+          return (
+            <div className="mt-6 pt-6 border-t border-zinc-800">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {showEntries ? (
+                  <LegsList legs={entries} label="Entries" tone="entry" />
+                ) : (
+                  <div />
+                )}
+                {showExits && (
+                  <LegsList legs={exits} label="Exits" tone="exit" />
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Risk Management */}

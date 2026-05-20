@@ -582,9 +582,10 @@ function AppContent() {
           <Route path="backtest/replay" element={<BacktestRoute><BacktestReplay /></BacktestRoute>} />
           
           {/* TRADE COPIER */}
-          <Route path="copy-trade/overview" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
-          <Route path="copy-trade/trade-copier" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
-          <Route path="copy-trade/manage-risk" element={<JournalRoute><SuspenseRoute><TradeCopier /></SuspenseRoute></JournalRoute>} />
+          {/* TRADE COPIER — beta-only (gated via DomainGuard, domain copy-trade has beta:true in constants/nav.ts) */}
+          <Route path="copy-trade/overview" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/trade-copier" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
+          <Route path="copy-trade/manage-risk" element={<LockedRoute domainId="copy-trade"><TradeCopier /></LockedRoute>} />
           <Route path="copy-trade/top-traders" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/strategies" element={<Navigate to="/app/copy-trade/overview" replace />} />
           <Route path="copy-trade/portfolios" element={<Navigate to="/app/copy-trade/overview" replace />} />

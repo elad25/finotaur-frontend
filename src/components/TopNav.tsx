@@ -109,10 +109,9 @@ export const TopNav = () => {
 
   const handleTabClick = (id: string) => {
     const domain = domains[id];
-    const isTradeCopierBeta = id === 'copy-trade' && domain?.beta === true;
-    
-    // 🔥 BETA ACCESS: Allow navigation to locked domains for beta users
-    if ((domain?.locked || isTradeCopierBeta) && !hasBetaAccess) {
+
+    // 🔥 BETA ACCESS: Allow navigation to locked/beta domains for beta users only
+    if ((domain?.locked || domain?.beta) && !hasBetaAccess) {
       return;
     }
     
@@ -171,13 +170,12 @@ export const TopNav = () => {
               const domain = domains[id];
               const isActive = domainId === id;
               const isBetaDomain = domain?.beta === true;
-              const isTradeCopierBeta = id === 'copy-trade' && isBetaDomain;
-              
+
               // 🔥 BETA ACCESS: Override locked status for beta users
-              const locked = (domain?.locked || isTradeCopierBeta) && !hasBetaAccess;
-              
-              // 🔥 Hide beta domains from non-beta users, except Trade Copier which stays visible but locked.
-              if (isBetaDomain && !hasBetaAccess && !isTradeCopierBeta) {
+              const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
+
+              // 🔥 Hide beta domains from non-beta users entirely.
+              if (isBetaDomain && !hasBetaAccess) {
                 return null;
               }
 
@@ -384,13 +382,12 @@ export const TopNav = () => {
           const domain = domains[id];
           const isActive = domainId === id;
           const isBetaDomain = domain?.beta === true;
-          const isTradeCopierBeta = id === 'copy-trade' && isBetaDomain;
-          
+
           // 🔥 BETA ACCESS: Override locked status for beta users
-          const locked = (domain?.locked || isTradeCopierBeta) && !hasBetaAccess;
-          
-          // 🔥 Hide beta domains from non-beta users, except Trade Copier which stays visible but locked.
-          if (isBetaDomain && !hasBetaAccess && !isTradeCopierBeta) {
+          const locked = (domain?.locked || isBetaDomain) && !hasBetaAccess;
+
+          // 🔥 Hide beta domains from non-beta users entirely.
+          if (isBetaDomain && !hasBetaAccess) {
             return null;
           }
 

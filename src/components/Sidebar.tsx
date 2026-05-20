@@ -279,9 +279,9 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'copy-trade': [
-    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2 },
-    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy },
-    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield },
+    { label: 'Connections', path: '/app/copy-trade/overview', icon: Link2, beta: true },
+    { label: 'Trade Copier', path: '/app/copy-trade/trade-copier', icon: Copy, beta: true },
+    { label: 'Manage Risk', path: '/app/copy-trade/manage-risk', icon: Shield, beta: true },
   ],
 
   'funding': [
