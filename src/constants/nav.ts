@@ -295,7 +295,7 @@ ai: {
     id: 'copy-trade',
     label: 'Trade Copier',
     locked: false,
-    beta: false,
+    beta: true, // 🔒 Non-beta users get hidden tab + DomainGuard redirect + hidden sidebar items
     subNav: [
       { label: 'Trade Copier', path: '/app/copy-trade/overview' },
     ],
