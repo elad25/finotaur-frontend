@@ -1281,10 +1281,19 @@ function JournalOverviewContent() {
     [allBrokerConnections],
   );
   const handleSyncAllTrades = useCallback(async () => {
-    if (isSyncingAll || tradovateConnections.length === 0) return;
+    if (isSyncingAll) return;
     setIsSyncingAll(true);
     try {
-      await Promise.all(tradovateConnections.map(c => brokerSyncNow(c.id)));
+      // When Tradovate connections exist, do a real broker sync first so the
+      // user gets fresh fills. With no broker connected we still want the
+      // button to do something useful — refetch the dashboard queries so any
+      // server-side mutation (manual trades added in another tab, backfill
+      // job that just finished) shows up. 2026-05-20: the button used to be
+      // hidden behind `tradovateConnections.length > 0`, which made it invisible
+      // for manual-only users; the dashboard then had no manual-refresh path.
+      if (tradovateConnections.length > 0) {
+        await Promise.all(tradovateConnections.map((c) => brokerSyncNow(c.id)));
+      }
       // 2026-05-19: belt-and-suspenders refetch. useBrokerConnections.syncNow
       // already invalidates ['trades'] + ['dashboard'] on the React Query side,
       // but invalidate only marks stale — it doesn't guarantee an immediate
@@ -1674,19 +1683,33 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 in flight; toast feedback comes from useBrokerConnections.syncNow.
                 2026-05-19: icon-only per UX feedback. Square h-10 w-10 with
                 centered icon. Tooltip via title attribute on hover. */}
-            {tradovateConnections.length > 0 && (
-              <Button
-                onClick={handleSyncAllTrades}
-                disabled={isSyncingAll}
-                variant="goldOutline"
-                size="compact"
-                className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
-                aria-label={isSyncingAll ? 'Syncing trades' : 'Sync Trades'}
-                title={isSyncingAll ? 'Syncing…' : 'Sync Trades'}
-              >
-                <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
+            {/* 2026-05-20: unconditional refresh button. With a Tradovate
+                connection it triggers a broker sync; without one it still
+                refetches trades + dashboard queries so the user always has a
+                manual way to force-refresh the page data. */}
+            <Button
+              onClick={handleSyncAllTrades}
+              disabled={isSyncingAll}
+              variant="goldOutline"
+              size="compact"
+              className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
+              aria-label={
+                isSyncingAll
+                  ? 'Refreshing'
+                  : tradovateConnections.length > 0
+                    ? 'Sync Trades'
+                    : 'Refresh Dashboard'
+              }
+              title={
+                isSyncingAll
+                  ? 'Refreshing…'
+                  : tradovateConnections.length > 0
+                    ? 'Sync Trades'
+                    : 'Refresh Dashboard'
+              }
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
+            </Button>
 
             {/* F2.5: Import Trades — compact (handler unchanged) */}
             <Button
