@@ -653,10 +653,11 @@ const TradeRow = memo(({
       
       {/* Outcome */}
       <TableCell>
-        <Badge 
-          variant={outcome === "WIN" ? "outline" : outcome === "LOSS" ? "destructive" : "secondary"}
+        <Badge
+          variant={outcome === "WIN" || outcome === "LOSS" ? "outline" : "secondary"}
           className={`text-xs ${
-            outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : 
+            outcome === "WIN" ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" :
+            outcome === "LOSS" ? "border-red-400/45 bg-red-500/15 text-red-200 hover:bg-red-500/20" :
             outcome === "OPEN" && isRiskOnlyMode ? "border-yellow-500/40 text-yellow-400 bg-yellow-500/10" : ""
           }`}
         >
