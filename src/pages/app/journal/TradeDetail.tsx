@@ -99,6 +99,7 @@ export default function JournalTradeDetail() {
         .from('trades')
         .select('*')
         .eq('id', id)
+        .is('deleted_at', null)
         .single();
 
       if (error) throw error;

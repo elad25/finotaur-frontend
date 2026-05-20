@@ -160,6 +160,7 @@ async function fetchAllTrades(
         )
       `)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .order('open_at', { ascending: false });
 
     // 🔥 Portfolio filter: NULL = show all accounts, string = specific portfolio only

@@ -901,6 +901,7 @@ const {
           `)
           .eq('id', editTradeId)
           .eq('user_id', user.id)
+          .is('deleted_at', null)
           .single();
         
         if (error) {

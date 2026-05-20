@@ -507,6 +507,7 @@ async function fetchTradesForOverview(
       multiplier, session, input_mode, tags
     `)
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .gte('open_at', cutoffDate)
     .order('open_at', { ascending: true, nullsFirst: false });
   if (portfolioIds && portfolioIds.length > 0) q = q.in('portfolio_id', portfolioIds);
@@ -669,6 +670,7 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
           multiplier, session, input_mode, tags
         `)
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .order('open_at', { ascending: true, nullsFirst: false });
 
       // 🔥 Portfolio filter: null = all accounts, string[] = multi-select, string = single

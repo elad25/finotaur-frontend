@@ -75,7 +75,8 @@ export function useImportTrades(): UseImportTradesReturn {
       const { data: existingTrades, error: fetchError } = await supabase
         .from('trades')
         .select('symbol, open_at, entry_price, quantity')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .is('deleted_at', null);
       
       if (fetchError) {
         throw new Error(`Failed to check for duplicates: ${fetchError.message}`);

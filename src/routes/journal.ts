@@ -402,6 +402,7 @@ export async function updateTrade(id: string, payload: Partial<Trade>) {
       .select('*')
       .eq('id', id)
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .single();
 
     if (fetchError) {

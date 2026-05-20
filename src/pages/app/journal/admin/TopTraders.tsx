@@ -50,7 +50,8 @@ export default function AdminTopTraders() {
           const { data: trades } = await supabase
             .from('trades')
             .select('pnl, outcome, risk, reward')
-            .eq('user_id', user.id);
+            .eq('user_id', user.id)
+            .is('deleted_at', null);
 
           const totalTrades = trades?.length || 0;
           const completedTrades = trades?.filter(t => t.outcome !== 'OPEN') || [];
