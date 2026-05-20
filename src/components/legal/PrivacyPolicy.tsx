@@ -117,7 +117,9 @@ const PrivacyPolicy = () => {
           <h2 className="text-2xl font-semibold mt-12 mb-4">10. Data We Share with Third-Party Processors</h2>
           <p>
             We share limited operational data with the following processors to deliver the service.
-            Each processor is bound by a Data Processing Agreement (DPA) with us:
+            Each processor is either bound by a signed Data Processing Agreement (DPA) or governed by
+            Terms of Service that include data processing provisions consistent with GDPR Article 28
+            requirements:
           </p>
 
           <div className="not-prose overflow-x-auto mt-6 mb-6">
