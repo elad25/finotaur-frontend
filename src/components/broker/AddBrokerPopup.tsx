@@ -301,16 +301,17 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       <DialogContent
         className="max-h-[96vh] w-[calc(100vw-24px)] max-w-[560px] overflow-hidden rounded-[9px] border border-[#C9A646]/18 bg-[#070707] p-0 text-ink-primary shadow-[0_0_42px_rgba(201,166,70,0.16)] [&>button]:hidden"
       >
-        <div className="relative overflow-hidden rounded-[9px] bg-[radial-gradient(circle_at_12%_0%,rgba(201,166,70,0.13),transparent_28%),radial-gradient(circle_at_92%_92%,rgba(201,166,70,0.08),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.032),rgba(255,255,255,0.008))] px-6 py-4">
+        <div className="relative flex max-h-[96vh] flex-col overflow-hidden rounded-[9px] bg-[radial-gradient(circle_at_12%_0%,rgba(201,166,70,0.13),transparent_28%),radial-gradient(circle_at_92%_92%,rgba(201,166,70,0.08),transparent_30%),linear-gradient(135deg,rgba(255,255,255,0.032),rgba(255,255,255,0.008))]">
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-ink-primary transition-colors hover:border-[#C9A646]/40 hover:text-[#E8C766]"
+            className="absolute right-5 top-5 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/[0.03] text-ink-primary transition-colors hover:border-[#C9A646]/40 hover:text-[#E8C766]"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
 
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-2 pt-4">
           <div className="mb-3 flex items-center gap-3 pr-10">
             <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C9A646]/25 bg-[#0A0A0A]/70 shadow-[0_0_22px_rgba(201,166,70,0.14)]">
               <div className="absolute inset-0 rounded-full border-t-2 border-[#E8C766]" />
@@ -514,12 +515,14 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
           </label>
 
           {error && (
-            <div className="mb-5 flex items-start gap-3 rounded-[12px] border border-num-negative/30 bg-num-negative/10 px-4 py-3">
+            <div className="mb-3 flex items-start gap-3 rounded-[12px] border border-num-negative/30 bg-num-negative/10 px-4 py-3">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-num-negative" />
               <p className="text-sm text-num-negative">{error}</p>
             </div>
           )}
+          </div>
 
+          <div className="shrink-0 border-t border-white/[0.05] bg-[#070707]/85 px-6 pb-4 pt-3 backdrop-blur-sm">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[0.75fr_1fr]">
             <button
               type="button"
@@ -564,6 +567,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
               <Link to="/legal/disclaimer" target="_blank" rel="noopener noreferrer" className="hover:text-[#E8C766]">
                 CFTC Hypothetical Performance Disclaimer
               </Link>
+          </div>
           </div>
         </div>
       </DialogContent>
