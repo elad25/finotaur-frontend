@@ -270,7 +270,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
     setError('');
 
     if (usesTradovateAuth) {
-      const result = await connect(env, username.trim(), password, connectionName);
+      const result = await connect(env, username.trim(), password, connectionName, selectedBroker);
       if (result.success) {
         onOpenChange(false);
       } else {

@@ -39,6 +39,13 @@ const tradovateKeys = {
   copyRules:   (userId: string) => ['tradovate_copy_rules',  userId] as const,
 };
 
+// NinjaTrader Web accounts authenticate through the same Tradovate cloud
+// infrastructure (post-2022 acquisition), so this hook treats both broker
+// values as the same surface: same auth flow, same sync, same credentials
+// view. Brand-level distinction lives in `broker_connections.broker`.
+const TRADOVATE_AUTH_BROKERS = ['tradovate', 'ninja_trader'] as const;
+export type TradovateAuthBroker = (typeof TRADOVATE_AUTH_BROKERS)[number];
+
 async function fetchCredentials(userId: string): Promise<TradovateCredential[]> {
   // Post-F1.A: Tradovate lives in broker_connections (was tradovate_credentials).
   // Field renames: connection_label→connection_name, sync_error_message→last_error,
@@ -49,7 +56,7 @@ async function fetchCredentials(userId: string): Promise<TradovateCredential[]> 
     .from('broker_connections')
     .select('id,connection_name,environment,account_id,account_name,connection_data,status,token_expires_at,last_sync_at,last_error,error_count')
     .eq('user_id', userId)
-    .eq('broker', 'tradovate')
+    .in('broker', TRADOVATE_AUTH_BROKERS as unknown as string[])
     .order('created_at', { ascending: true });
   if (error?.code === '42P01') return [];
   if (error) throw error;
@@ -127,17 +134,22 @@ export function useTradovate() {
   }, [userId, queryClient]);
 
   // ── Connect: calls Edge Function (never touches keys client-side)
+  // `broker` distinguishes whether the user picked the Tradovate tile or
+  // the NinjaTrader tile in the popup. Both use the same Tradovate API
+  // under the hood, but the broker_connections row is branded accordingly
+  // so the dashboard / Trade Copier render the correct logo.
   const connect = useCallback(async (
     environment: TradovateEnv,
     username: string,
     password: string,
-    connectionLabel?: string
+    connectionLabel?: string,
+    broker: TradovateAuthBroker = 'tradovate'
   ) => {
     if (!userId) return { success: false, error: 'Not authenticated' };
     setIsLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('tradovate-auth', {
-        body: { userId, environment, username, password, connectionLabel }
+        body: { userId, environment, username, password, connectionLabel, broker }
       });
       if (error) throw error;
       loadCredentials();
@@ -152,7 +164,8 @@ export function useTradovate() {
       await queryClient.invalidateQueries({ queryKey: ['trades'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['copy_trade_log', userId] });
-      toast.success(`Tradovate ${environment} connected — syncing trades...`);
+      const brandLabel = broker === 'ninja_trader' ? 'NinjaTrader' : 'Tradovate';
+      toast.success(`${brandLabel} ${environment} connected — syncing trades...`);
       return { success: true, accountId: data?.accountId };
     } catch (err: any) {
       toast.error(err?.message || 'Connection failed');
@@ -174,7 +187,7 @@ export function useTradovate() {
         .from('broker_connections')
         .delete()
         .eq('user_id', userId)
-        .eq('broker', 'tradovate');
+        .in('broker', TRADOVATE_AUTH_BROKERS as unknown as string[]);
       if (credentialId) {
         query = query.eq('id', credentialId);
       } else {
@@ -250,7 +263,7 @@ export function useTradovate() {
       .update({ connection_name: trimmed })
       .eq('id', credentialId)
       .eq('user_id', userId)
-      .eq('broker', 'tradovate')
+      .in('broker', TRADOVATE_AUTH_BROKERS as unknown as string[])
       .select('account_id')
       .single();
 
