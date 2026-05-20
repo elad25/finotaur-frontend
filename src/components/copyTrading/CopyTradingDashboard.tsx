@@ -17,6 +17,11 @@ import { useFlattenActions } from '@/hooks/useFlattenActions';
 import { useCopyRules } from '@/hooks/useCopyRules';
 import type { CopyRule } from '@/hooks/useCopyRules';
 
+// NinjaTrader Web runs on Tradovate cloud (post-2022 acquisition); both
+// brokers share the same auth flow, account IDs, and engine sessions.
+// See useTradovate.ts TRADOVATE_AUTH_BROKERS.
+const TRADOVATE_FAMILY = ['tradovate', 'ninja_trader'] as const;
+
 // ─── Types ────────────────────────────────────────────────────
 
 interface AccountRowData {
@@ -268,9 +273,9 @@ export function CopyTradingDashboard() {
     accountName?: string;
   } | null>(null);
 
-  // Leader: user-controlled via dropdown, defaults to first tradovate connection
+  // Leader: user-controlled via dropdown, defaults to first Tradovate-family connection
   const tradovateConnections = connections.filter(
-    (c) => c.broker === 'tradovate' && c.is_active,
+    (c) => TRADOVATE_FAMILY.includes(c.broker as typeof TRADOVATE_FAMILY[number]) && c.is_active,
   );
   const [leaderId, setLeaderId] = useState<string | null>(
     tradovateConnections[0]?.id ?? null,
@@ -296,10 +301,10 @@ export function CopyTradingDashboard() {
     );
   }
 
-  // Build rows from broker_connections filtered to tradovate + portfolios
+  // Build rows from broker_connections filtered to Tradovate family + portfolios
   const rows = useMemo<AccountRowData[]>(() => {
     return connections
-      .filter((c) => c.broker === 'tradovate')
+      .filter((c) => TRADOVATE_FAMILY.includes(c.broker as typeof TRADOVATE_FAMILY[number]))
       .map((c) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const port = portfolios.find(

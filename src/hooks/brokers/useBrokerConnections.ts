@@ -136,7 +136,8 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       const conn = connections.find((c) => c.id === id);
       if (!conn) return { success: false, error: 'Connection not found' };
 
-      if (conn.broker !== 'tradovate') {
+      // NinjaTrader Web runs on Tradovate cloud, so both share tradovate-auth.
+      if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
         toast.error(`Reconnect not yet implemented for ${conn.broker}`);
         return { success: false, error: `Reconnect not implemented for ${conn.broker}` };
       }
@@ -185,7 +186,8 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       const conn = connections.find((c) => c.id === id);
       if (!conn) return { success: false, error: 'Connection not found' };
 
-      if (conn.broker !== 'tradovate') {
+      // NinjaTrader Web runs on Tradovate cloud, so both share tradovate-sync.
+      if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
         toast.error(`Sync not yet implemented for ${conn.broker}`);
         return { success: false, error: `Sync not implemented for ${conn.broker}` };
       }

@@ -1276,8 +1276,10 @@ function JournalOverviewContent() {
   // Tradovate connection in parallel. Disabled while a sync is in flight to
   // prevent double-clicks producing duplicate edge-function invocations.
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  // NinjaTrader Web runs on Tradovate cloud (post-2022 acquisition), so both
+  // brokers sync through the same edge function. See useTradovate.ts.
   const tradovateConnections = useMemo(
-    () => allBrokerConnections.filter(c => c.broker === 'tradovate' && c.is_active),
+    () => allBrokerConnections.filter(c => (c.broker === 'tradovate' || c.broker === 'ninja_trader') && c.is_active),
     [allBrokerConnections],
   );
   const handleSyncAllTrades = useCallback(async () => {
