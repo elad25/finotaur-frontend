@@ -673,7 +673,36 @@ Deno.serve(async (req: Request) => {
 
   } catch (err: unknown) {
     console.error('[tradovate-auth]', err);
-    return json({ error: String(err) }, 500);
+    const msg = String(err);
+    // Categorize the failure so the frontend can render a meaningful toast
+    // (and ops can grep). The raw message stays in `error`; the `code` is
+    // a stable handle for branching.
+    let code = 'internal_error';
+    let status = 500;
+    if (/Tradovate auth error/i.test(msg)) {
+      // Tradovate returned HTTP 200 with errorText — bad credentials, locked
+      // account, MFA required, account inactive, etc. This is the most common
+      // failure on first connect (e.g. Apex/Rithmic-routed accounts that don't
+      // exist in the Tradovate cloud).
+      code = 'invalid_credentials';
+      status = 401;
+    } else if (/No accounts returned/i.test(msg)) {
+      // Login succeeded but /account/list came back empty — account exists
+      // but has no trading accounts attached yet (rare).
+      code = 'no_accounts';
+      status = 422;
+    } else if (/Tradovate auth failed \(\d+\)/i.test(msg)) {
+      // Non-2xx from the Tradovate API itself (5xx, 429, network).
+      code = 'tradovate_api_error';
+      status = 502;
+    } else if (/Missing required fields/i.test(msg)) {
+      code = 'bad_request';
+      status = 400;
+    } else if (/broker_connections upsert failed/i.test(msg)) {
+      code = 'db_error';
+      status = 500;
+    }
+    return json({ error: msg, code }, status);
   }
 });
 

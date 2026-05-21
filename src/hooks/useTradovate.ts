@@ -39,6 +39,46 @@ const tradovateKeys = {
   copyRules:   (userId: string) => ['tradovate_copy_rules',  userId] as const,
 };
 
+// Extracts the real reason from an edge-function error.
+// supabase.functions.invoke wraps non-2xx responses in FunctionsHttpError whose
+// `.message` is the generic "Edge Function returned a non-2xx status code".
+// The actual server-side reason lives in `error.context` (a Response object) —
+// we read its JSON body and pull out the structured `error` field.
+async function extractEdgeError(err: any, fallback: string): Promise<string> {
+  // Best-effort — never throw from here, just return the best message we have.
+  try {
+    const ctx = err?.context;
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.clone().json();
+      if (typeof body?.error === 'string' && body.error.trim()) {
+        return body.error;
+      }
+    }
+    if (ctx && typeof ctx.text === 'function') {
+      const text = (await ctx.clone().text()).trim();
+      if (text) return text.slice(0, 500);
+    }
+  } catch {
+    /* fall through to message */
+  }
+  return err?.message || fallback;
+}
+
+// Apex-aware hint. APEX_xxx is the Apex Trader Funding username pattern; most
+// Apex accounts are routed via Rithmic by default, not Tradovate. Auth against
+// tradovateapi.com will reject them. Surface this in the toast so the user
+// doesn't keep retrying.
+function maybeAddBrokerHint(rawError: string, username: string): string {
+  const isApex = /^APEX[_-]?\d+/i.test(username.trim());
+  const looksLikeInvalidCreds =
+    /invalid|unauthorized|denied|wrong|incorrect|not\s+found|no\s+access/i.test(rawError) ||
+    /401|403|errorText/i.test(rawError);
+  if (isApex && looksLikeInvalidCreds) {
+    return `${rawError}\n\nApex tip: וודא שבחרת ב-Apex את ערוץ הנתונים "Tradovate" (לא Rithmic / NT Connect). חשבונות Rithmic לא יכולים להתחבר דרך כאן.`;
+  }
+  return rawError;
+}
+
 // NinjaTrader Web accounts authenticate through the same Tradovate cloud
 // infrastructure (post-2022 acquisition), so this hook treats both broker
 // values as the same surface: same auth flow, same sync, same credentials
@@ -151,7 +191,13 @@ export function useTradovate() {
       const { data, error } = await supabase.functions.invoke('tradovate-auth', {
         body: { userId, environment, username, password, connectionLabel, broker }
       });
-      if (error) throw error;
+      if (error) {
+        // Read the real reason from the response body (FunctionsHttpError wraps
+        // it). Without this the toast just says "Edge Function returned a
+        // non-2xx status code" and the user has no idea why login failed.
+        const real = await extractEdgeError(error, 'Connection failed');
+        throw new Error(maybeAddBrokerHint(real, username));
+      }
       loadCredentials();
       // 2026-05-18: invalidate the new broker_connections cache too. tradovate-auth
       // INSERTs into broker_connections, but useBrokerConnections reads from a
@@ -168,8 +214,9 @@ export function useTradovate() {
       toast.success(`${brandLabel} ${environment} connected — syncing trades...`);
       return { success: true, accountId: data?.accountId };
     } catch (err: any) {
-      toast.error(err?.message || 'Connection failed');
-      return { success: false, error: err?.message };
+      const msg = err?.message || 'Connection failed';
+      toast.error(msg, { duration: 10000 });
+      return { success: false, error: msg };
     } finally {
       setIsLoading(false);
     }
