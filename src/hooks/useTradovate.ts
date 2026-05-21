@@ -39,42 +39,70 @@ const tradovateKeys = {
   copyRules:   (userId: string) => ['tradovate_copy_rules',  userId] as const,
 };
 
-// Extracts the real reason from an edge-function error.
+// Extracts the real reason + code from an edge-function error.
 // supabase.functions.invoke wraps non-2xx responses in FunctionsHttpError whose
 // `.message` is the generic "Edge Function returned a non-2xx status code".
 // The actual server-side reason lives in `error.context` (a Response object) —
-// we read its JSON body and pull out the structured `error` field.
-async function extractEdgeError(err: any, fallback: string): Promise<string> {
+// we read its JSON body and pull out the structured `error` + `code` fields.
+async function extractEdgeError(
+  err: any,
+  fallback: string,
+): Promise<{ message: string; code?: string }> {
   // Best-effort — never throw from here, just return the best message we have.
   try {
     const ctx = err?.context;
     if (ctx && typeof ctx.json === 'function') {
       const body = await ctx.clone().json();
-      if (typeof body?.error === 'string' && body.error.trim()) {
-        return body.error;
-      }
+      const message = typeof body?.error === 'string' && body.error.trim()
+        ? body.error
+        : (err?.message || fallback);
+      const code = typeof body?.code === 'string' ? body.code : undefined;
+      return { message, code };
     }
     if (ctx && typeof ctx.text === 'function') {
       const text = (await ctx.clone().text()).trim();
-      if (text) return text.slice(0, 500);
+      if (text) return { message: text.slice(0, 500) };
     }
   } catch {
     /* fall through to message */
   }
-  return err?.message || fallback;
+  return { message: err?.message || fallback };
 }
 
-// Apex-aware hint. APEX_xxx is the Apex Trader Funding username pattern; most
-// Apex accounts are routed via Rithmic by default, not Tradovate. Auth against
-// tradovateapi.com will reject them. Surface this in the toast so the user
-// doesn't keep retrying.
-function maybeAddBrokerHint(rawError: string, username: string): string {
-  const isApex = /^APEX[_-]?\d+/i.test(username.trim());
+// Apex / prop-firm-aware hint. Most prop firm accounts (Apex Eval/Trial/PA,
+// Topstep, MyFundedFutures, etc.) run on Tradovate's LIVE API even when they
+// are "simulated money" — the prop firm pays for live-API access. Tradovate
+// Demo (demo.tradovateapi.com) is a separate environment where our app CID
+// is NOT registered. Selecting "Demo" in the popup for a prop-firm account
+// triggers "The app is not registered". Surface this clearly.
+function maybeAddBrokerHint(
+  rawError: string,
+  username: string,
+  environment: TradovateEnv,
+  code?: string,
+): string {
+  const u = username.trim();
+  const isApex = /^APEX[_-]?\d+/i.test(u);
+  const isPropFirm = isApex || /^(TST|MFF|TOPSTEP|EARN|UPROFIT|LH)[_-]?\d+/i.test(u);
+
+  // Categorized "app not registered" → almost always env mismatch
+  if (code === 'app_env_mismatch') {
+    if (environment === 'demo' && isPropFirm) {
+      return `${rawError}\n\n🎯 חשבונות Apex / prop firm רצים על Tradovate Live — לא על Demo. נסה שוב עם טוגל "Live" (אותם credentials). הכסף עדיין מדומה (זה Eval), זה רק שינוי שרת.`;
+    }
+    if (environment === 'demo') {
+      return `${rawError}\n\n💡 ייתכן שהחשבון רצ על Tradovate Live (לא Demo). נסה שוב עם טוגל "Live".`;
+    }
+    return `${rawError}\n\n💡 ה-Finotaur app לא רשום ב-Tradovate ל-${environment}. צור קשר עם התמיכה.`;
+  }
+
+  // Invalid credentials on an Apex username — could be wrong env OR wrong route
   const looksLikeInvalidCreds =
+    code === 'invalid_credentials' ||
     /invalid|unauthorized|denied|wrong|incorrect|not\s+found|no\s+access/i.test(rawError) ||
     /401|403|errorText/i.test(rawError);
   if (isApex && looksLikeInvalidCreds) {
-    return `${rawError}\n\nApex tip: וודא שבחרת ב-Apex את ערוץ הנתונים "Tradovate" (לא Rithmic / NT Connect). חשבונות Rithmic לא יכולים להתחבר דרך כאן.`;
+    return `${rawError}\n\nApex tip: (1) וודא שבחרת ב-Apex את ערוץ "Tradovate" (לא Rithmic / NT Connect). (2) Apex Eval רץ על LIVE — נסה לבחור Live ב-Finotaur popup.`;
   }
   return rawError;
 }
@@ -195,8 +223,8 @@ export function useTradovate() {
         // Read the real reason from the response body (FunctionsHttpError wraps
         // it). Without this the toast just says "Edge Function returned a
         // non-2xx status code" and the user has no idea why login failed.
-        const real = await extractEdgeError(error, 'Connection failed');
-        throw new Error(maybeAddBrokerHint(real, username));
+        const { message, code } = await extractEdgeError(error, 'Connection failed');
+        throw new Error(maybeAddBrokerHint(message, username, environment, code));
       }
       loadCredentials();
       // 2026-05-18: invalidate the new broker_connections cache too. tradovate-auth

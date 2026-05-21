@@ -679,11 +679,18 @@ Deno.serve(async (req: Request) => {
     // a stable handle for branching.
     let code = 'internal_error';
     let status = 500;
-    if (/Tradovate auth error/i.test(msg)) {
+    if (/app is not registered/i.test(msg)) {
+      // Tradovate refuses the CID on this environment. Almost always means
+      // the user picked the wrong env in the UI: prop-firm accounts (Apex
+      // Eval/Trial/PA, Topstep, etc.) live on the LIVE Tradovate API even
+      // when they're "simulated money" — Apex pays for live-API access and
+      // provisions accounts there. Tradovate Demo is a separate environment
+      // and our CID isn't registered for it. Hint surfaces in the toast.
+      code = 'app_env_mismatch';
+      status = 401;
+    } else if (/Tradovate auth error/i.test(msg)) {
       // Tradovate returned HTTP 200 with errorText — bad credentials, locked
-      // account, MFA required, account inactive, etc. This is the most common
-      // failure on first connect (e.g. Apex/Rithmic-routed accounts that don't
-      // exist in the Tradovate cloud).
+      // account, MFA required, account inactive, etc.
       code = 'invalid_credentials';
       status = 401;
     } else if (/No accounts returned/i.test(msg)) {
