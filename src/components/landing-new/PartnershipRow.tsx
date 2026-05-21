@@ -8,11 +8,12 @@
 //  • Eyebrow MUST read "Official Vendor Of" — NOT "In Partnership With".
 //  • Tagline MUST NOT imply trade execution or live market-data streaming.
 //    Finotaur is a connection/integration to NT/Tradovate for analytics.
-//  • Kinetick logo MUST be the approved Media Kit version. The current
-//    file at /brokers/kinetick-official.svg is the placeholder we used
-//    pre-approval. Replace with the NT-supplied asset before compliance
-//    re-review. TODO(elad): swap /public/brokers/kinetick-official.svg
-//    for the file from the NT Media Kit.
+//  • Kinetick logo: now pointing at `Kinetick_Logo.png` — extracted
+//    verbatim from NT's Homepage-Images-Logos.zip Media Kit (file kept
+//    at original NT-supplied name to make the audit trail obvious).
+//    The earlier placeholder `kinetick-official.svg` is left in /brokers
+//    as inert artifact in case any other component references it; safe
+//    to delete in a future cleanup once grep confirms no other usages.
 // ================================================
 
 const PartnershipRow = () => {
@@ -54,7 +55,7 @@ const PartnershipRow = () => {
             aria-label="Kinetick"
           >
             <img
-              src="/brokers/kinetick-official.svg"
+              src="/brokers/Kinetick_Logo.png"
               alt="Kinetick"
               className="h-8 md:h-10 w-auto"
             />
