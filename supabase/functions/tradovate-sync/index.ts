@@ -16,7 +16,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { authenticate } from '../_shared/dualAuth.ts';
-import { scheduleRetry, clearRetry } from '../_shared/retryQueue.ts';
+import { scheduleRetry } from '../_shared/retryQueue.ts';
 import { fetchWithRetry as sharedFetchWithRetry } from '../_shared/fetchWithRetry.ts';
 
 // Local alias preserving the existing call sites — `_shared/fetchWithRetry.ts`
@@ -745,38 +745,26 @@ async function syncCredential(cred: {
   // restores the actual sequence the user executed.
   fills.sort((a, b) => a.id - b.id);
   if (fills.length === 0) {
-    // Update last_sync_at even when no new fills
-    await supabaseAdmin.from('broker_connections').update({
-      last_sync_at:            new Date().toISOString(),
-      last_successful_sync_at: new Date().toISOString(),
-    }).eq('id', cred.id);
-    // Clear any pending retry state — successful sync means the connection is healthy
-    await clearRetry(supabaseAdmin, cred.id);
-
-    // Log skipped sync (no new fills to process)
-    try {
-      const completedAt = new Date();
-      await supabaseAdmin.from('broker_sync_logs').insert({
-        connection_id:   cred.id,
-        account_id:      null, // numeric Tradovate account_id; broker_accounts UUID not available here
-        user_id:         cred.user_id,
-        sync_type:       'fills',
-        sync_trigger:    syncMode,
-        status:          'success',
-        records_fetched: 0,
-        records_created: 0,
-        records_updated: 0,
-        records_skipped: 0,
-        records_failed:  0,
-        started_at:      syncStartedAt.toISOString(),
-        completed_at:    completedAt.toISOString(),
-        duration_ms:     completedAt.getTime() - syncStartedAt.getTime(),
-        sync_details:    { reason: 'no_new_fills' },
-      });
-    } catch (logErr) {
-      console.error('[tradovate-sync] broker_sync_logs insert failed (skipped path):', logErr);
+    // B6 perf fix (2026-05-21): one RPC instead of UPDATE + clearRetry + INSERT.
+    // record_sync_completion handles broker_connections metadata + clearRetry +
+    // broker_sync_logs in a single transaction. Cursor upsert skipped (p_max_fill_id=null).
+    const { error: rpcErr } = await supabaseAdmin.rpc('record_sync_completion', {
+      p_connection_id:        cred.id,
+      p_user_id:              cred.user_id,
+      p_account_id:           accountIdNum,
+      p_environment:          cred.environment,
+      p_max_fill_id:          null,
+      p_prev_fills_processed: syncState?.fills_processed ?? 0,
+      p_inserted:             0,
+      p_errors:               0,
+      p_fills_fetched:        0,
+      p_sync_mode:            syncMode,
+      p_sync_started_at:      syncStartedAt.toISOString(),
+      p_log_details:          { reason: 'no_new_fills' },
+    });
+    if (rpcErr) {
+      console.error('[tradovate-sync] record_sync_completion failed (no-fills path):', rpcErr);
     }
-
     return { inserted: 0, errors: 0 };
   }
 
@@ -788,80 +776,131 @@ async function syncCredential(cred: {
   // environment is also passed for the idempotency_key formula (see processFill body).
   const credForFill = { id: cred.id, user_id: cred.user_id, account_id: accountIdNum, environment: cred.environment };
 
-  for (const fill of fills) {
-    try {
-      if (!contractCache[fill.contractId]) {
-        contractCache[fill.contractId] = await getContractInfo(
-          base, accessToken, fill.contractId, attribution,
-        );
+  // B1 perf fix (2026-05-21) — feature-flagged batched-RPC path.
+  // Default OFF. Enable per-deployment via `PROCESS_FILLS_VIA_RPC=true` env var.
+  // When enabled: resolve contract info upfront (uses B2 cache), then make ONE
+  // RPC call with the full fills array + contract map instead of N×4-6 round-
+  // trips. Same per-fill semantics as the JS path (CLOSE/ADDON/OPEN), just
+  // wrapped in a single transaction. Falls back to JS path if RPC errors.
+  const useBatchedRpc =
+    (Deno.env.get('PROCESS_FILLS_VIA_RPC') ?? '').toLowerCase() === 'true';
+  let batchedRpcHandled = false;
+
+  if (useBatchedRpc) {
+    // Pre-resolve every unique contractId so the RPC has all metadata it needs.
+    // getContractInfo already short-circuits via tradovate_contracts cache (B2),
+    // so this typically costs 0 HTTP calls per cron tick steady-state.
+    const uniqueContractIds = Array.from(new Set(fills.map(f => f.contractId)));
+    for (const cid of uniqueContractIds) {
+      if (!contractCache[cid]) {
+        try {
+          contractCache[cid] = await getContractInfo(base, accessToken, cid, attribution);
+        } catch (err) {
+          console.error(`[tradovate-sync] contract resolve failed cid=${cid}:`, err);
+        }
       }
-      const contract = contractCache[fill.contractId];
+    }
 
-      const result = await processFill(
-        fill, credForFill,
-        contract.name, contract.fullPointValue,
-        base, accessToken
-      );
+    const contractMap: Record<string, { name: string; multiplier: number }> = {};
+    for (const [cid, info] of Object.entries(contractCache)) {
+      contractMap[cid] = { name: info.name, multiplier: info.fullPointValue };
+    }
+    const fillsPayload = fills.map(f => ({
+      id:         f.id,
+      action:     f.action,
+      contractId: f.contractId,
+      qty:        f.qty,
+      price:      f.price,
+      timestamp:  f.timestamp ?? new Date(
+        f.tradeDate.year, f.tradeDate.month - 1, f.tradeDate.day
+      ).toISOString(),
+    }));
 
-      if (result === 'inserted' || result === 'updated') inserted++;
-      else if (result === 'error') errors++;
-      // 'skipped' = duplicate, not an error
-    } catch (err) {
-      console.error('[tradovate-sync] fill error:', err);
-      errors++;
+    const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc('process_tradovate_fills', {
+      p_user_id:      cred.user_id,
+      p_account_id:   accountIdNum,
+      p_environment:  cred.environment,
+      p_contract_map: contractMap,
+      p_fills:        fillsPayload,
+    });
+
+    if (rpcErr) {
+      console.error('[tradovate-sync] process_tradovate_fills RPC failed — falling back to per-fill loop:', rpcErr);
+      // batchedRpcHandled stays false → JS loop below handles fills as fallback
+    } else {
+      const summary = rpcData as { inserted: number; updated: number; skipped: number; errors: number };
+      inserted = (summary.inserted ?? 0) + (summary.updated ?? 0);
+      errors   = summary.errors ?? 0;
+      batchedRpcHandled = true;
+      console.log(JSON.stringify({
+        event: 'process_fills_via_rpc',
+        inserted: summary.inserted,
+        updated:  summary.updated,
+        skipped:  summary.skipped,
+        errors:   summary.errors,
+        n_fills:  fills.length,
+      }));
     }
   }
 
-  // 5. Update sync cursor
-  const maxFillId = Math.max(...fills.map(f => f.id));
-  await supabaseAdmin.from('tradovate_sync_state').upsert({
-    user_id:         cred.user_id,
-    environment:     cred.environment,
-    account_id:      accountIdNum,
-    last_fill_id:    maxFillId,
-    last_sync_at:    new Date().toISOString(),
-    fills_processed: (syncState?.fills_processed ?? 0) + inserted,
-  }, { onConflict: 'user_id,environment,account_id' });
+  // Per-fill JS loop path (unchanged from v48). Runs when feature flag is OFF
+  // OR when the batched RPC errored above (fallback path).
+  if (!batchedRpcHandled) {
+    for (const fill of fills) {
+      try {
+        if (!contractCache[fill.contractId]) {
+          contractCache[fill.contractId] = await getContractInfo(
+            base, accessToken, fill.contractId, attribution,
+          );
+        }
+        const contract = contractCache[fill.contractId];
 
-  // 6. Update broker_connections metadata
-  await supabaseAdmin.from('broker_connections').update({
-    last_sync_at:            new Date().toISOString(),
-    last_successful_sync_at: errors === 0 ? new Date().toISOString() : null,
-    error_count:             errors > 0 ? errors : 0,
-  }).eq('id', cred.id);
+        const result = await processFill(
+          fill, credForFill,
+          contract.name, contract.fullPointValue,
+          base, accessToken
+        );
 
-  if (errors === 0) {
-    // Successful sync — clear any pending retry state (sets status='connected')
-    await clearRetry(supabaseAdmin, cred.id);
-  } else {
-    // Partial fill errors — schedule retry backoff
-    await scheduleRetry(supabaseAdmin, cred.id, `${errors} fills failed to insert`);
+        if (result === 'inserted' || result === 'updated') inserted++;
+        else if (result === 'error') errors++;
+        // 'skipped' = duplicate, not an error
+      } catch (err) {
+        console.error('[tradovate-sync] fill error:', err);
+        errors++;
+      }
+    }
   }
 
-  // 7. Write observability log — non-critical, never blocks the sync
-  try {
-    const completedAt = new Date();
-    const logStatus = errors === 0 ? 'success' : inserted > 0 ? 'partial' : 'failed';
-    await supabaseAdmin.from('broker_sync_logs').insert({
-      connection_id:   cred.id,
-      account_id:      null, // broker_accounts UUID not available at this layer; fill in OQ-23 scope
-      user_id:         cred.user_id,
-      sync_type:       'fills',
-      sync_trigger:    syncMode,
-      status:          logStatus,
-      records_fetched: fills.length,
-      records_created: inserted,
-      records_updated: 0,
-      records_skipped: fills.length - inserted - errors,
-      records_failed:  errors,
-      error_message:   errors > 0 ? `${errors} fills failed to insert` : null,
-      started_at:      syncStartedAt.toISOString(),
-      completed_at:    completedAt.toISOString(),
-      duration_ms:     completedAt.getTime() - syncStartedAt.getTime(),
-      sync_details:    { fills_fetched: fills.length, max_fill_id: maxFillId },
-    });
-  } catch (logErr) {
-    console.error('[tradovate-sync] broker_sync_logs insert failed:', logErr);
+  // 5. + 6. + 7. B6 perf fix (2026-05-21): one RPC instead of:
+  //   - tradovate_sync_state UPSERT (cursor)
+  //   - broker_connections UPDATE (metadata)
+  //   - broker_connections UPDATE again via clearRetry (only on success)
+  //   - broker_sync_logs INSERT
+  // → 3 writes in one transaction. Error path still chains scheduleRetry after
+  // for the backoff math + notification dispatch that don't fit cleanly in plpgsql.
+  const maxFillId = fills.reduce((m, f) => (f.id > m ? f.id : m), 0);
+  const { error: rpcErr } = await supabaseAdmin.rpc('record_sync_completion', {
+    p_connection_id:        cred.id,
+    p_user_id:              cred.user_id,
+    p_account_id:           accountIdNum,
+    p_environment:          cred.environment,
+    p_max_fill_id:          maxFillId,
+    p_prev_fills_processed: syncState?.fills_processed ?? 0,
+    p_inserted:             inserted,
+    p_errors:               errors,
+    p_fills_fetched:        fills.length,
+    p_sync_mode:            syncMode,
+    p_sync_started_at:      syncStartedAt.toISOString(),
+    p_log_details:          { fills_fetched: fills.length, max_fill_id: maxFillId },
+  });
+  if (rpcErr) {
+    console.error('[tradovate-sync] record_sync_completion failed (fills path):', rpcErr);
+  }
+
+  if (errors > 0) {
+    // Error path: RPC only wrote metadata + log; scheduleRetry computes backoff
+    // and may invoke broker-state-change-notify (transitions to degraded).
+    await scheduleRetry(supabaseAdmin, cred.id, `${errors} fills failed to insert`);
   }
 
   return { inserted, errors };
