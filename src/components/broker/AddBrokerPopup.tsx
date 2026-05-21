@@ -462,7 +462,7 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-24 items-center justify-center rounded-md bg-white/[0.035] px-3">
                       <img
-                        src="/brokers/kinetick-official.svg"
+                        src="/brokers/Kinetick_Logo.png"
                         alt="Kinetick"
                         className="max-h-5 w-full object-contain"
                       />
