@@ -411,7 +411,7 @@ export function CopyTradingDashboard() {
             Total Day PnL
           </div>
           <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
-            {totalDayPnL >= 0 ? '$' : 'גˆ’$'}
+            {totalDayPnL >= 0 ? '$' : '-$'}
             {Math.abs(totalDayPnL).toFixed(2)}
           </div>
         </div>
@@ -424,7 +424,7 @@ export function CopyTradingDashboard() {
               totalOpenPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
             }`}
           >
-            {totalOpenPnL >= 0 ? '$' : 'גˆ’$'}
+            {totalOpenPnL >= 0 ? '$' : '-$'}
             {Math.abs(totalOpenPnL).toFixed(2)}
           </div>
         </div>
