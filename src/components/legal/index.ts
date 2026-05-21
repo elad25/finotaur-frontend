@@ -13,6 +13,7 @@ export { default as RiskDisclosure } from './RiskDisclosure';
 export { default as FuturesRiskDisclosure } from './FuturesRiskDisclosure';
 export { default as CftcHypotheticalDisclosure } from './CftcHypotheticalDisclosure';
 export { default as TestimonialDisclaimer } from './TestimonialDisclaimer';
+export { default as AffiliateDisclosure } from './AffiliateDisclosure';
 export { default as RefundPolicy } from './RefundPolicy';
 export { default as DMCA } from './DMCA';
 export { default as LegalHub } from './LegalHub';

@@ -1,7 +1,18 @@
 // src/components/landing-new/PartnershipRow.tsx
 // ================================================
-// PARTNERSHIP ROW — NinjaTrader + Kinetick affiliate strip
+// VENDOR ROW — NinjaTrader + Kinetick official-vendor strip
 // Matches SocialProof.tsx aesthetic: hairline rules, gold eyebrow
+//
+// Compliance (NinjaTrader Vendor Guidelines, 2026-05-21 review by
+// Juliet Wu, Business Development):
+//  • Eyebrow MUST read "Official Vendor Of" — NOT "In Partnership With".
+//  • Tagline MUST NOT imply trade execution or live market-data streaming.
+//    Finotaur is a connection/integration to NT/Tradovate for analytics.
+//  • Kinetick logo MUST be the approved Media Kit version. The current
+//    file at /brokers/kinetick-official.svg is the placeholder we used
+//    pre-approval. Replace with the NT-supplied asset before compliance
+//    re-review. TODO(elad): swap /public/brokers/kinetick-official.svg
+//    for the file from the NT Media Kit.
 // ================================================
 
 const PartnershipRow = () => {
@@ -15,7 +26,7 @@ const PartnershipRow = () => {
         <div className="flex items-center justify-center gap-3 mb-5">
           <span className="h-px w-12 bg-gradient-to-r from-transparent to-gold-eyebrow-hairline" />
           <span className="text-[10px] uppercase tracking-[0.2em] text-gold-primary/60 font-medium">
-            In Partnership With
+            Official Vendor Of
           </span>
           <span className="h-px w-12 bg-gradient-to-l from-transparent to-gold-eyebrow-hairline" />
         </div>
@@ -52,7 +63,7 @@ const PartnershipRow = () => {
 
         {/* Tagline */}
         <p className="text-center text-sm text-ink-secondary max-w-xl mx-auto leading-relaxed">
-          Execute futures and stream institutional-grade market data directly through your trading journal.
+          Connect directly to NinjaTrader and Tradovate, and analyze your futures trades in your Finotaur journal.
         </p>
       </div>
 

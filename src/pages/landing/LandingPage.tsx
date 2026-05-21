@@ -19,6 +19,7 @@ import Vision from '@/components/landing-new/Vision';
 import Pricing from '@/components/landing-new/Pricing';
 import RiskReversal from '@/components/landing-new/RiskReversal';
 import FAQ from '@/components/landing-new/FAQ';
+import NinjaTraderCompliance from '@/components/landing-new/NinjaTraderCompliance';
 import Footer from '@/components/landing-new/Footer';
 import { SEO } from '@/components/seo/SEO';
 import { softwareApplication, faqPage } from '@/components/seo/jsonLd';
@@ -114,6 +115,7 @@ const LandingPage = () => {
       <Pricing />
       <RiskReversal />
       <FAQ />
+      <NinjaTraderCompliance />
       <Footer />
     </div>
   );
