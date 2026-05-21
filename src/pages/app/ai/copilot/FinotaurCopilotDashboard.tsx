@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
-import { HolographicAICore } from './components/HolographicAICore';
+import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioMockData, TimeRange } from './hooks/usePortfolioMockData';
 
 const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
@@ -158,7 +158,9 @@ function AiBrainPanel({ className }: { className?: string }) {
         <div className="absolute top-0 h-[286px] w-[108%] max-w-[500px] border border-gold-primary/20 bg-black/15 shadow-[0_0_90px_rgba(201,166,70,0.18)] [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
         <div className="absolute top-4 h-[252px] w-[94%] max-w-[444px] border border-gold-primary/10 [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
         <div className="absolute left-1/2 top-[110px] h-[250px] w-[470px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.24),rgba(201,166,70,0.08)_38%,transparent_68%)] blur-xl" />
-        <HolographicAICore />
+        <div className="absolute left-1/2 top-[16px] -translate-x-1/2">
+          <GlobeLoader size={240} />
+        </div>
         <div className="absolute bottom-[-4px] left-1/2 w-[270px] -translate-x-1/2 rounded-[8px] border border-gold-primary/24 bg-black/75 px-5 py-3 text-center shadow-[0_0_36px_rgba(201,166,70,0.22)] backdrop-blur-md">
           <div className="text-sm font-semibold uppercase text-gold-primary">AI CORE</div>
           <p className="mt-1 text-[10px] leading-relaxed text-ink-tertiary">Real-time market analysis</p>
