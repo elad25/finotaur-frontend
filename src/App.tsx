@@ -117,6 +117,7 @@ import PricingSelection from "@/pages/app/journal/PricingSelection";
 import AboutPage from "@/pages/AboutPage";
 import ContactPage from "@/pages/ContactPage";
 import AffiliatePage from "@/pages/AffiliatePage";
+import LinksPage from "@/pages/LinksPage";
 import { TermsOfUse, PrivacyPolicy, Disclaimer, Copyright, CookiePolicy, RiskDisclosure, FuturesRiskDisclosure, CftcHypotheticalDisclosure, TestimonialDisclaimer, AffiliateDisclosure, RefundPolicy, DMCA, LegalHub } from "@/components/legal";
 import ScrollToTop from "@/components/ScrollToTop";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
@@ -360,6 +361,7 @@ function AppContent() {
         <Route path="/welcome" element={<ProtectedRoute><WelcomeScreen /></ProtectedRoute>} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/links" element={<LinksPage />} />
         <Route path="/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <AffiliatePage /> : <Navigate to="/" replace />} />
         <Route path="/journal" element={<JournalPublicPage />} />
         <Route path="/glossary" element={<GlossaryIndex />} />
