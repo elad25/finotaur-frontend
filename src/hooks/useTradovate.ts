@@ -338,7 +338,6 @@ export function useTradovate() {
   // ── Derived state
   const liveCredential = credentials.find(c => c.environment === 'live');
   const demoCredential = credentials.find(c => c.environment === 'demo');
-  const ACTIVE_STATUSES = ['connected', 'expired', 'error'] as const;
   const hasLiveConnection = liveCredential != null;
   const hasDemoConnection = demoCredential != null;
   const hasAnyConnection  = hasLiveConnection || hasDemoConnection;
