@@ -6,6 +6,27 @@ import App from './App';
 import { initSentry } from '@/lib/sentry';
 initSentry();
 
+// ─── Vite stale-chunk recovery ─────────────────────────────────────────────
+// After a new deploy, Cloudflare Pages serves new chunk filenames. Clients
+// still holding stale HTML (open tabs from before the deploy) get a
+// "Failed to fetch dynamically imported module" error when a React.lazy()
+// route triggers. The fix is a single hard reload — the new HTML points at
+// the new chunk hashes. Guarded by a 10-second sessionStorage flag so we
+// never loop if the failure is something other than a stale chunk.
+// See Sentry MZ-2 (TradeCopier chunk) and MZ-4 (Strategies chunk).
+window.addEventListener('vite:preloadError', (event) => {
+  const RELOAD_KEY = '__vite_preload_reload_at__';
+  const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+  if (Date.now() - last < 10_000) {
+    // Already reloaded recently — surface the real error to Sentry instead
+    // of looping.
+    return;
+  }
+  sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  event.preventDefault?.();
+  window.location.reload();
+});
+
 // ================================================
 // 🔥 OPTIMIZED REACT QUERY CLIENT
 // ================================================
