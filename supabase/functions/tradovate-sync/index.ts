@@ -182,12 +182,39 @@ function extractBaseSymbol(contractName: string): string | null {
 }
 
 // ─── Fetch contract info ──────────────────────────────────────
+// B2 perf fix (2026-05-21): global cache via public.tradovate_contracts.
+// Same contractId (e.g. MNQM6) used by N users → without this, each cron tick
+// re-runs the 3-call API trio per user per fill. Lazy fill of the table on
+// API success; KNOWN_FUTURES_MULTIPLIERS fallback path stays un-cached
+// (already in-process via the hardcoded constant — no further win there).
+const CONTRACT_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 async function getContractInfo(
   base: string,
   accessToken: string,
   contractId: number,
   attribution?: { userId: string; connectionId: string },
 ): Promise<{ name: string; fullPointValue: number }> {
+  // ① B2 — DB cache lookup (global across all users/runs). Only honors
+  //    api-sourced rows; if the only row is a hardcoded-fallback snapshot,
+  //    skip and let the API trio try again (it may have come back since).
+  {
+    const { data: cached } = await supabaseAdmin
+      .from('tradovate_contracts')
+      .select('name, full_point_value, fetched_at, source')
+      .eq('contract_id', contractId)
+      .eq('source', 'api')
+      .maybeSingle();
+    if (cached && cached.fetched_at) {
+      const ageMs = Date.now() - Date.parse(cached.fetched_at);
+      if (ageMs < CONTRACT_CACHE_TTL_MS) {
+        return {
+          name: cached.name,
+          fullPointValue: Number(cached.full_point_value),
+        };
+      }
+    }
+  }
+
   // Helper: returns API value if usable (>0), otherwise tries hardcoded table by base symbol.
   // Always logs which source produced the multiplier — observability for Lesson 13 verification.
   const finalize = (name: string, apiValue: number | null | undefined): { name: string; fullPointValue: number } => {
@@ -240,7 +267,33 @@ async function getContractInfo(
   if (!productRes.ok) return finalize(contractName, null);
   const product = await productRes.json();
 
-  return finalize(contractName, product.fullPointValue);
+  const result = finalize(contractName, product.fullPointValue);
+
+  // ② B2 — write back to the cache (api source only, usable value).
+  //    ON CONFLICT updates name + fullPointValue + fetched_at so the cache
+  //    refreshes on every miss-with-success. Race-safe across parallel users.
+  if (product.fullPointValue && product.fullPointValue > 0) {
+    const { error: upsertErr } = await supabaseAdmin
+      .from('tradovate_contracts')
+      .upsert(
+        {
+          contract_id: contractId,
+          name: result.name,
+          full_point_value: result.fullPointValue,
+          fetched_at: new Date().toISOString(),
+          source: 'api',
+        },
+        { onConflict: 'contract_id' },
+      );
+    if (upsertErr) {
+      // Cache write failure is non-fatal — we already have the value to return.
+      console.warn(
+        `[tradovate-sync] contracts_cache_upsert_failed: contractId=${contractId} err=${upsertErr.message ?? upsertErr}`
+      );
+    }
+  }
+
+  return result;
 }
 
 // ─── Map fills to trade rows ───────────────────────────────────
@@ -870,7 +923,7 @@ Deno.serve(async (req: Request) => {
     // while the connection row keeps its branded broker value for UI display.
     let credentialsQuery = supabaseAdmin
       .from('broker_connections')
-      .select('id, user_id, environment, connection_data, account_id')
+      .select('id, user_id, environment, connection_data, account_id, created_at')
       .in('broker', ['tradovate', 'ninja_trader'])
       .eq('is_active', true);
 
@@ -913,45 +966,65 @@ Deno.serve(async (req: Request) => {
     // server-side join + works around postgrest's lack of inline EXISTS.
     let activeConnections = allConnections;
     if (mode === 'cron' && allConnections.length > 0) {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data: recentTraders } = await supabaseAdmin
-        .from('trades')
-        .select('user_id')
-        .eq('broker', 'tradovate')
-        .gte('created_at', sevenDaysAgo);
-      const activeUserIds = new Set<string>(
-        (recentTraders ?? []).map((r: { user_id: string }) => r.user_id),
-      );
-      const skipped: string[] = [];
-      activeConnections = allConnections.filter((bc: { id: string; user_id: string; created_at?: string }) => {
-        if (activeUserIds.has(bc.user_id)) return true;
-        // New connection grace — keep if connection is < 7 days old.
-        // broker_connections.created_at not in SELECT (saves a column);
-        // we'll fetch it lazily only for connections that need the grace check.
-        return false; // default skip; grace check below repopulates kept new accounts
-      });
-      // Lazy grace fetch — only for connections we'd otherwise skip.
-      const candidatesForGrace = allConnections.filter(
-        (bc: { id: string; user_id: string }) => !activeUserIds.has(bc.user_id),
-      );
-      if (candidatesForGrace.length > 0) {
-        const { data: ageRows } = await supabaseAdmin
-          .from('broker_connections')
-          .select('id, created_at')
-          .in('id', candidatesForGrace.map((c: { id: string }) => c.id))
-          .gte('created_at', sevenDaysAgo);
-        const newConnIds = new Set<string>((ageRows ?? []).map((r: { id: string }) => r.id));
-        const grace = candidatesForGrace.filter((c: { id: string }) => newConnIds.has(c.id));
-        activeConnections = [...activeConnections, ...grace];
-        for (const c of candidatesForGrace) {
-          if (!newConnIds.has(c.id)) skipped.push(c.id);
+      const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      // B4 perf fix (2026-05-21): replaces full-row scan with DISTINCT RPC backed
+      // by idx_trades_active_traders partial index. Drop-in shape ([{user_id}]).
+      // Defense-in-depth: if RPC errors (missing/migration drift), fall back
+      // to the original scan so cron never deadletters on this filter.
+      let recentTraders: { user_id: string }[] | null = null;
+      let rpcErr: { message?: string } | null = null;
+      {
+        const { data, error: e } = await supabaseAdmin
+          .rpc('get_active_tradovate_user_ids', { p_lookback: '7 days' });
+        if (e) {
+          rpcErr = e;
+        } else {
+          recentTraders = (data ?? []) as { user_id: string }[];
         }
       }
+      if (rpcErr) {
+        console.warn(
+          '[tradovate-sync] active_user_rpc_fallback: get_active_tradovate_user_ids errored',
+          rpcErr?.message ?? rpcErr,
+        );
+        const sevenDaysAgoIso = new Date(sevenDaysAgoMs).toISOString();
+        const { data } = await supabaseAdmin
+          .from('trades')
+          .select('user_id')
+          .eq('broker', 'tradovate')
+          .gte('created_at', sevenDaysAgoIso);
+        recentTraders = (data ?? []) as { user_id: string }[];
+      }
+      const activeUserIds = new Set<string>(
+        (recentTraders ?? []).map((r) => r.user_id),
+      );
+
+      // B5 perf fix (2026-05-21): broker_connections.created_at is now in the
+      // primary SELECT (line ~873), so the grace check uses the in-scope value
+      // and the secondary `ageRows` round-trip is removed entirely.
+      const skipped: string[] = [];
+      const kept: typeof allConnections = [];
+      for (const bc of allConnections as Array<{ id: string; user_id: string; created_at?: string }>) {
+        if (activeUserIds.has(bc.user_id)) {
+          kept.push(bc);
+          continue;
+        }
+        // New-connection grace: keep if < 7 days old, even with no trade activity yet.
+        const createdAtMs = bc.created_at ? Date.parse(bc.created_at) : NaN;
+        if (!Number.isNaN(createdAtMs) && createdAtMs >= sevenDaysAgoMs) {
+          kept.push(bc);
+        } else {
+          skipped.push(bc.id);
+        }
+      }
+      activeConnections = kept;
       console.log(JSON.stringify({
         event: 'active_user_filter',
         kept: activeConnections.length,
         skipped_inactive: skipped.length,
         total: allConnections.length,
+        rpc_used: !rpcErr,
       }));
     }
     const runStart = Date.now();
@@ -960,6 +1033,16 @@ Deno.serve(async (req: Request) => {
     let totalFailed    = 0;
     let totalSynced    = 0;
     let batchCount     = 0;
+
+    // B7 perf fix (2026-05-21): collect TOKEN_EXPIRED credentials during the
+    // batch loop instead of fire-and-forget per error. After the loop, fire
+    // ONE call to /tradovate-auth { mode: 'refresh' }. The auth fn already
+    // filters by `token_expires_at < now + RENEW_AHEAD_MS` so the single
+    // invocation covers every expired connection — no `connection_ids[]`
+    // filter or auth-fn change required. Eliminates the N-invocation
+    // self-DoS pattern where a cohort of ~200 tokens expiring in the same
+    // tick triggered 200 simultaneous edge-function invocations.
+    const expiredCredIds = new Set<string>();
 
     for (let i = 0; i < activeConnections.length; i += BATCH_SIZE) {
       const batch = activeConnections.slice(i, i + BATCH_SIZE);
@@ -990,15 +1073,8 @@ Deno.serve(async (req: Request) => {
             // Schedule silent retry — never flip is_active (that column is owned by whop-webhook)
             await scheduleRetry(supabaseAdmin, cred.id, 'Token expired — auto-refresh triggered');
 
-            // Fire-and-forget refresh attempt — may revive the token in the background
-            fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-              },
-              body: JSON.stringify({ mode: 'refresh' }),
-            }).catch(() => {});
+            // Collect for the single bulk refresh after the loop. See B7 comment above.
+            expiredCredIds.add(cred.id);
           } else {
             // Generic failure — schedule silent retry backoff
             await scheduleRetry(supabaseAdmin, cred.id, msg.slice(0, 500));
@@ -1011,6 +1087,23 @@ Deno.serve(async (req: Request) => {
       if (i + BATCH_SIZE < activeConnections.length) {
         await sleep(STAGGER_MS);
       }
+    }
+
+    // B7 — single coalesced refresh call. Auth fn picks up every connection
+    // with `token_expires_at` within its renewal window in one invocation.
+    if (expiredCredIds.size > 0) {
+      console.log(JSON.stringify({
+        event: 'token_refresh_coalesced',
+        expired_count: expiredCredIds.size,
+      }));
+      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/tradovate-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+        },
+        body: JSON.stringify({ mode: 'refresh' }),
+      }).catch(() => {});
     }
 
     const durationMs = Date.now() - runStart;
