@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, Facebook, Instagram, Mail, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, Facebook, Globe2, Instagram, Mail, ShieldCheck } from "lucide-react";
 import { dsButtonVariants } from "@/components/ds/Button";
 import { Card } from "@/components/ds/Card";
 import { Wordmark } from "@/components/ds/Wordmark";
@@ -12,6 +12,11 @@ const XIcon = ({ className }: { className?: string }) => (
 );
 
 const socialLinks = [
+  {
+    label: "Website",
+    href: "https://www.finotaur.com",
+    Icon: Globe2,
+  },
   {
     label: "Instagram",
     href: "https://www.instagram.com/finotaur/",
