@@ -492,23 +492,26 @@ export default function JournalTradeDetail() {
           )}
         </div>
 
-        {/* Execution Legs — only when the trade was scaled (>1 leg on either side) */}
+        {/* Execution Legs — visible when the trade was scaled on either side.
+            When section is shown, BOTH columns render (even if one side is 1
+            leg) so the user can see at what price the single-leg side filled. */}
         {(() => {
           const entries = Array.isArray(trade.partial_entries) ? trade.partial_entries : [];
           const exits = Array.isArray(trade.partial_exits) ? trade.partial_exits : [];
-          const showEntries = entries.length > 1;
-          const showExits = exits.length > 1;
-          if (!showEntries && !showExits) return null;
+          const scaled = entries.length > 1 || exits.length > 1;
+          if (!scaled) return null;
           return (
             <div className="mt-6 pt-6 border-t border-zinc-800">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {showEntries ? (
+                {entries.length >= 1 ? (
                   <LegsList legs={entries} label="Entries" tone="entry" />
                 ) : (
                   <div />
                 )}
-                {showExits && (
+                {exits.length >= 1 ? (
                   <LegsList legs={exits} label="Exits" tone="exit" />
+                ) : (
+                  <div />
                 )}
               </div>
             </div>
