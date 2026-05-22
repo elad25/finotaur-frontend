@@ -243,6 +243,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Macro', path: '/app/ai/copilot/macro', icon: Globe, beta: true },
     { label: 'Holdings', path: '/app/ai/copilot/holdings', icon: Layers, beta: true },
     { label: 'Risks', path: '/app/ai/copilot/risks', icon: Shield, beta: true },
+    { label: 'AI Analyst', path: '/app/ai/copilot/ai-analyst', icon: Brain, beta: true },
   ],
 
   connections: [

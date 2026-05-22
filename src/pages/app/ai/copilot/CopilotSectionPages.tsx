@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   ArrowLeft,
   BarChart3,
+  Brain,
   ChevronDown,
   ChevronRight,
   Filter,
@@ -151,6 +152,39 @@ const benefitRows = [
   'Diversified across secular themes',
   'Positioned for risk-on environment',
 ];
+
+const analystSummaryRows = [
+  { label: 'Analyst Rating', value: 'A-', note: 'High conviction, controlled risk' },
+  { label: 'Behavior Score', value: '82', note: 'Discipline improving across recent sessions' },
+  { label: 'Portfolio Fit', value: '78%', note: 'Growth tilt matches current macro regime' },
+  { label: 'Action Items', value: '4', note: 'Two allocation, one hedge, one watchlist update' },
+] as const;
+
+const analystSections = [
+  {
+    title: 'Executive Summary',
+    text: 'The user profile shows strong growth exposure, improving trade discipline, and portfolio construction that benefits from the current disinflationary growth backdrop. Main weakness is concentration in AI infrastructure names during high-beta sessions.',
+  },
+  {
+    title: 'Portfolio Diagnosis',
+    text: 'Core holdings are liquid and institutionally owned. Allocation is efficient for upside capture, but drawdown sensitivity rises when mega-cap technology correlations compress toward one.',
+  },
+  {
+    title: 'Behavioral Read',
+    text: 'Recent activity suggests cleaner decision timing and fewer reactive exits. The system should keep monitoring late-session entries, oversized conviction trades, and repeated exposure to the same catalyst.',
+  },
+  {
+    title: 'Recommended Next Moves',
+    text: 'Keep the AI/semiconductor overweight, trim redundant exposure on strength, add a defensive watchlist layer, and require a pre-trade thesis check for positions above portfolio-average risk.',
+  },
+] as const;
+
+const analystRiskRows = [
+  ['Concentration', 'Medium', 'Top holdings create meaningful single-theme dependency.'],
+  ['Execution Discipline', 'Improving', 'Entry timing has become more selective over the latest review window.'],
+  ['Macro Sensitivity', 'Medium', 'Risk-on backdrop helps, but duration shocks can pressure growth exposure.'],
+  ['User Readiness', 'High', 'Profile is suitable for detailed weekly AI analyst reporting.'],
+] as const;
 
 const riskRows = [
   ['Concentration', 'Medium', 'Top 3 holdings drive 58% of portfolio beta.'],
@@ -670,6 +704,85 @@ export function CopilotHoldingsPage() {
       </div>
       <div className="mt-3">
         <HoldingsTable holdings={snapshot.holdings} />
+      </div>
+    </CopilotPageShell>
+  );
+}
+
+export function CopilotAIAnalystPage() {
+  return (
+    <CopilotPageShell title="AI Analyst" eyebrow="Detailed per-user intelligence report" icon={Brain}>
+      <div className="space-y-3">
+        <section className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gold-primary/12 pb-5">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-gold-primary/78">User Report</p>
+              <h2 className="mt-2 text-2xl font-semibold text-ink-primary">Detailed AI analyst report per user</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-secondary">
+                A dedicated space for user-level analysis: portfolio fit, behavior, risk profile, macro exposure,
+                and prioritized analyst actions in one structured report.
+              </p>
+            </div>
+            <div className="rounded-[7px] border border-gold-primary/20 bg-black/32 px-4 py-3 text-right">
+              <p className="text-[10px] uppercase text-ink-tertiary">Current profile</p>
+              <p className="mt-1 font-mono text-sm text-ink-primary">USER-001</p>
+              <p className="mt-1 text-[11px] text-gold-primary">Ready for weekly report</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            {analystSummaryRows.map((row) => (
+              <div key={row.label} className="rounded-[7px] border border-gold-primary/14 bg-black/28 p-4">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-tertiary">{row.label}</p>
+                <p className="mt-3 font-mono text-2xl tabular-nums text-gold-primary">{row.value}</p>
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-secondary">{row.note}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="grid gap-3 xl:grid-cols-[1.25fr_0.75fr]">
+          <div className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5">
+            <div className="flex items-center gap-3">
+              <Brain className="h-5 w-5 text-gold-primary" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-ink-tertiary">Analyst Narrative</p>
+                <h3 className="text-lg font-semibold text-ink-primary">Full report structure</h3>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {analystSections.map((section) => (
+                <article key={section.title} className="rounded-[7px] border border-gold-primary/12 bg-black/24 p-4">
+                  <p className="text-sm font-semibold text-gold-primary">{section.title}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{section.text}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5">
+            <div className="flex items-center gap-3">
+              <BarChart3 className="h-5 w-5 text-gold-primary" />
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-ink-tertiary">Risk & Readiness</p>
+                <h3 className="text-lg font-semibold text-ink-primary">User-level checks</h3>
+              </div>
+            </div>
+            <div className="mt-5 divide-y divide-gold-primary/10">
+              {analystRiskRows.map(([label, value, text]) => (
+                <div key={label} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm text-ink-primary">{label}</p>
+                    <span className="rounded-[5px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[10px] uppercase text-gold-primary">
+                      {value}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-ink-secondary">{text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
       </div>
     </CopilotPageShell>
   );
