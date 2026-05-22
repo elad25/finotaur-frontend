@@ -887,7 +887,6 @@ export const OverviewTab = memo(function OverviewTab({ data }: { data: OptionsDa
       </div>
 
       <AlertsPreview data={data} />
-      <MarketReadout text={data.dailyReport?.bottomLine} />
     </div>
   );
 });

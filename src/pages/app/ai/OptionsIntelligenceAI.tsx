@@ -2,7 +2,7 @@
 
 import { memo, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Target } from 'lucide-react';
+import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -35,7 +35,7 @@ function OptionsIntelligenceContent() {
     { label: 'Flow Scanner', icon: Zap },
     { label: 'Squeeze Detector', icon: Flame },
     { label: 'Dark Pool', icon: Eye },
-    { label: 'Deep Dive', icon: Target },
+    { label: 'AI Analysis', icon: Brain },
   ];
 
   return (
@@ -53,9 +53,9 @@ function OptionsIntelligenceContent() {
       <div className="relative z-10 mx-auto w-full max-w-[1536px] px-6 lg:px-10 pt-5 pb-8 md:pt-6 md:pb-10">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-6">
-          <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-medium leading-none mb-3">
-            <span className="text-white">Options </span>
-            <span style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Intelligence</span>
+          <h1 className="mb-3 font-sans text-[46px] font-bold leading-none md:text-[62px]">
+            <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">Options</span>{' '}
+            <span className="text-ink-primary">Intelligence</span>
           </h1>
           <div className="mb-5 flex items-center justify-center gap-3">
             <p className="text-lg text-[#A7A7A7]">Institutional Options Flow & Market Intelligence</p>
@@ -135,14 +135,6 @@ function OptionsIntelligenceContent() {
           )}
         </AnimatePresence>
 
-        {/* Footer */}
-        {data && !isLoading && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-center pt-6 mt-8 border-t border-[#C9A646]/10">
-            <p className="text-xs text-[#6B6B6B]">
-              Data refreshes every 5 minutes<span className="mx-2">-</span>Last update: {new Date(data.lastUpdated).toLocaleTimeString()}
-            </p>
-          </motion.div>
-        )}
       </div>
 
       <AnimatePresence>

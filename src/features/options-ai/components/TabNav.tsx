@@ -7,7 +7,7 @@
 // =====================================================
 
 import { memo } from 'react';
-import { Layers, Zap, Flame, Eye, Crosshair } from 'lucide-react';
+import { Brain, Layers, Zap, Flame, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { OptionsTab } from '../types/options-ai.types';
 
@@ -16,7 +16,7 @@ const TAB_CONFIG: { id: OptionsTab | 'deepdive'; label: string; icon: typeof Lay
   { id: 'flow',     label: 'Flow Scanner',      icon: Zap },
   { id: 'squeeze',  label: 'Squeeze Detector',  icon: Flame },
   { id: 'darkpool', label: 'Dark Pool',         icon: Eye },
-  { id: 'deepdive', label: 'Deep Dive',         icon: Crosshair, disabled: true },
+  { id: 'deepdive', label: 'AI Analysis',       icon: Brain, disabled: true },
 ];
 
 export const TabNav = memo(function TabNav({
