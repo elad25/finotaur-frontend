@@ -5,7 +5,7 @@
 // Admins/VIPs with hasBetaAccess can see and access ALL locked items
 // =====================================================
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDomain } from '@/hooks/useDomain';
 import { useAdminAuth } from '@/hooks/useAdminAuth';  // נ”¥ NEW
@@ -233,7 +233,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
     { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
     { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
-    { label: 'Top 5', path: '/app/ai/top-5', icon: Award },
+    { label: 'Intelligence Desk', path: '/app/ai/top-5', icon: Award },
     { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
   ],
 
@@ -343,24 +343,21 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
-    // Auto-collapse sidebar on AI Assistant page
-    if (window.location.pathname.startsWith('/app/ai/assistant')) {
-      return false;
-    }
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
     return saved !== 'false';
   });
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
-  // Auto-collapse on AI Assistant, restore on other pages
   useEffect(() => {
-    if (location.pathname.startsWith('/app/ai/assistant')) {
-      setIsExpanded(false);
-    } else {
-      const saved = localStorage.getItem('finotaur-sidebar-expanded');
-      setIsExpanded(saved !== 'false');
-    }
-  }, [location.pathname]);
+    document.documentElement.style.setProperty(
+      '--finotaur-sidebar-width',
+      isExpanded ? '14rem' : '60px'
+    );
+
+    return () => {
+      document.documentElement.style.removeProperty('--finotaur-sidebar-width');
+    };
+  }, [isExpanded]);
 
   const handleToggle = () => {
     setIsExpanded(prev => {
@@ -501,7 +498,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   return (
     <aside
       className={cn(
-        'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:sticky md:translate-x-0',
+        'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
         isExpanded ? 'w-56' : 'w-[60px]'
       )}

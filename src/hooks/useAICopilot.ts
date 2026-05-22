@@ -77,10 +77,10 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   // Refs for streaming
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  // Load conversations on mount
+  // Load usage on mount. Conversation history is intentionally not loaded in
+  // AI Assistant; the screen should open as a clean workspace.
   useEffect(() => {
     if (user) {
-      refreshConversations();
       loadUsage();
     }
   }, [user]);
@@ -110,14 +110,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
   
   // Refresh conversations list
   const refreshConversations = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      const data = await aiCopilotApi.listConversations();
-      setConversations(data.conversations || []);
-    } catch (err) {
-      console.error('Failed to load conversations:', err);
-    }
+    setConversations([]);
   }, [user]);
   
   // Load a specific conversation
@@ -265,8 +258,7 @@ export function useAICopilot(initialConversationId?: string | null): UseAICopilo
             } : null);
           }
           
-          // Refresh conversations to get updated list
-          refreshConversations();
+          setConversations([]);
         },
         onError: (errorMsg) => {
           setError(errorMsg);

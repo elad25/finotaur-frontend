@@ -5,10 +5,21 @@
 
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, AlertCircle, X, Sparkles } from 'lucide-react';
+import {
+  Send,
+  Loader2,
+  AlertCircle,
+  X,
+  TrendingUp,
+  BarChart3,
+  Bitcoin,
+  Shield,
+  Building2,
+  LineChart,
+  LucideIcon,
+} from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
-import { SuggestedQuestions } from './SuggestedQuestions';
 import { UpgradeLimitModal } from './UpgradeLimitModal';
 import { Message } from '@/hooks/useAICopilot';
 import { cn } from '@/lib/utils';
@@ -26,6 +37,26 @@ interface ChatInterfaceProps {
   questionsUsed?: number;
   dailyLimit?: number;
 }
+
+interface PromptChip {
+  icon: LucideIcon;
+  question: string;
+}
+
+const PROMPT_ROWS: PromptChip[][] = [
+  [
+    { icon: TrendingUp, question: 'What are the latest trade ideas?' },
+    { icon: BarChart3, question: 'Which sectors should I favor this week?' },
+    { icon: Bitcoin, question: 'What is the current crypto regime?' },
+    { icon: Shield, question: 'What risks should I watch right now?' },
+  ],
+  [
+    { icon: Building2, question: 'Summarize the latest company analysis' },
+    { icon: LineChart, question: 'What is the macro outlook?' },
+    { icon: TrendingUp, question: 'Where is momentum improving?' },
+    { icon: Shield, question: 'What could invalidate this setup?' },
+  ],
+];
 
 export const ChatInterface = memo(function ChatInterface({
   messages,
@@ -70,17 +101,24 @@ export const ChatInterface = memo(function ChatInterface({
     setInput('');
     await onSendMessage(message);
   };
+
+  const handleSuggestedQuestion = async (question: string) => {
+    if (isLoading) return;
+
+    if (limitReached) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    setInput('');
+    await onSendMessage(question);
+  };
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
-  
-  const handleSuggestedQuestion = (question: string) => {
-    setInput(question);
-    inputRef.current?.focus();
   };
   
   const showEmptyState = messages.length === 0 && !isLoading;
@@ -96,7 +134,7 @@ export const ChatInterface = memo(function ChatInterface({
         {showEmptyState ? (
           <EmptyState onSelectQuestion={handleSuggestedQuestion} />
         ) : (
-          <div className="max-w-3xl mx-auto space-y-6">
+          <div className="w-full space-y-6">
             <AnimatePresence>
               {messages.map((message, index) => (
                 <motion.div
@@ -127,7 +165,7 @@ export const ChatInterface = memo(function ChatInterface({
             exit={{ opacity: 0, y: 20 }}
             className="px-4 pb-4"
           >
-            <div className="max-w-3xl mx-auto p-4 rounded-xl flex items-center justify-between"
+            <div className="flex w-full items-center justify-between rounded-xl p-4"
               style={{
                 background: 'rgba(239,68,68,0.1)',
                 border: '1px solid rgba(239,68,68,0.3)',
@@ -157,12 +195,8 @@ export const ChatInterface = memo(function ChatInterface({
       />
 
       {/* Input Area */}
-      <div className="p-4"
-        style={{
-          background: 'linear-gradient(180deg, transparent, rgba(13,11,8,0.95))',
-          borderTop: '1px solid rgba(201,166,70,0.1)',
-        }}>
-        <div className="max-w-3xl mx-auto">
+      <div className="border-t border-border-ds-subtle bg-surface-base p-4">
+        <div className="w-full">
           {/* Low questions warning */}
           {questionsRemaining > 0 && questionsRemaining <= 2 && (
             <motion.div
@@ -179,24 +213,12 @@ export const ChatInterface = memo(function ChatInterface({
           
           {/* Input Container */}
           <div className="relative">
-            {/* Glow effect */}
             <div className={cn(
-              "absolute -inset-1 rounded-2xl transition-opacity duration-500",
-              isFocused ? "opacity-100" : "opacity-0"
-            )} style={{
-              background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(244,217,123,0.05))',
-              filter: 'blur(12px)',
-            }} />
-            
-            <div className={cn(
-              "relative rounded-xl transition-all duration-300",
+              "relative rounded-[12px] border bg-surface-1 transition-colors duration-base",
               isFocused 
-                ? "border-[#C9A646]/50" 
-                : "border-[#C9A646]/20 hover:border-[#C9A646]/30"
-            )} style={{
-              background: 'linear-gradient(135deg, rgba(13,11,8,0.95), rgba(21,18,16,0.95))',
-              border: `1px solid ${isFocused ? 'rgba(201,166,70,0.5)' : 'rgba(201,166,70,0.2)'}`,
-            }}>
+                ? "border-gold-primary/50" 
+                : "border-border-ds-subtle hover:border-gold-border"
+            )}>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -207,7 +229,7 @@ export const ChatInterface = memo(function ChatInterface({
                 placeholder="Ask about market analysis, trade ideas, reports..."
                 disabled={isLoading}
                 rows={1}
-                className="w-full bg-transparent py-4 pl-5 pr-14 text-white placeholder-[#6B6B6B] focus:outline-none resize-none min-h-[56px] max-h-[200px]"
+                className="min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 pl-5 pr-14 text-ink-primary placeholder:text-ink-muted focus:outline-none"
                 style={{ scrollbarWidth: 'thin' }}
               />
               
@@ -216,31 +238,23 @@ export const ChatInterface = memo(function ChatInterface({
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
                 className={cn(
-                  "absolute right-3 bottom-3 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
+                  "absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-[12px] transition-all duration-base",
                   input.trim() && !isLoading
-                    ? "opacity-100 scale-100"
-                    : "opacity-50 scale-95"
+                    ? "scale-100 bg-gradient-gold opacity-100 shadow-btn-gold"
+                    : "scale-95 bg-gold-primary/20 opacity-50"
                 )}
-                style={{
-                  background: input.trim() && !isLoading
-                    ? 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)'
-                    : 'rgba(201,166,70,0.2)',
-                  boxShadow: input.trim() && !isLoading
-                    ? '0 4px 20px rgba(201,166,70,0.4)'
-                    : 'none',
-                }}
               >
                 {isLoading ? (
-                  <Loader2 className="h-5 w-5 text-black animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin text-ink-on-gold" />
                 ) : (
-                  <Send className="h-5 w-5 text-black" />
+                  <Send className="h-5 w-5 text-ink-on-gold" />
                 )}
               </button>
             </div>
           </div>
           
           {/* Disclaimer */}
-          <p className="text-[10px] text-[#6B6B6B] mt-3 text-center">
+          <p className="mt-3 text-center text-[10px] text-ink-tertiary">
             AI responses are based on FINOTAUR reports. Not financial advice.
           </p>
         </div>
@@ -253,57 +267,64 @@ export const ChatInterface = memo(function ChatInterface({
 // Empty State Component
 // =====================================================
 
-function EmptyState({ onSelectQuestion }: { onSelectQuestion: (q: string) => void }) {
+function EmptyState({ onSelectQuestion }: { onSelectQuestion: (question: string) => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center h-full py-12 px-4"
+      className="flex h-full flex-col items-center justify-center px-4 py-12"
     >
-      {/* Logo */}
-      <div className="relative mb-8">
-        {/* Glow */}
-        <div className="absolute inset-0 rounded-full blur-2xl"
-          style={{ background: 'rgba(201,166,70,0.2)' }} />
-        
-        <div className="relative w-24 h-24 rounded-2xl flex items-center justify-center"
-          style={{
-            background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.05))',
-            border: '2px solid rgba(201,166,70,0.3)',
-            boxShadow: '0 8px 32px rgba(201,166,70,0.2)',
-          }}>
-          <svg
-            viewBox="0 0 24 24"
-            className="w-12 h-12 text-[#C9A646]"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
-          </svg>
-        </div>
-      </div>
-      
-      {/* Title */}
-      <h2 className="text-2xl md:text-3xl font-bold mb-3 text-center">
-        <span className="text-white">FINOTAUR </span>
-        <span style={{
-          background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>AI Assistant</span>
+      <h2 className="mb-ds-2 text-center text-xl font-semibold text-ink-primary">
+        FINOTAUR <span className="text-gold-primary">AI Assistant</span>
       </h2>
-      
-      <p className="text-[#8B8B8B] text-center max-w-md mb-10 leading-relaxed">
-        Ask me anything about market analysis, trade ideas, sector trends, 
-        or insights from our institutional-grade reports.
+      <p className="max-w-sm text-center text-sm leading-relaxed text-ink-secondary">
+        Ask a market question to begin.
       </p>
-      
-      {/* Suggested Questions */}
-      <SuggestedQuestions onSelect={onSelectQuestion} />
+      <PromptMarquee onSelectQuestion={onSelectQuestion} />
     </motion.div>
+  );
+}
+
+function PromptMarquee({ onSelectQuestion }: { onSelectQuestion: (question: string) => void }) {
+  return (
+    <div className="mt-8 w-full max-w-5xl overflow-hidden rounded-[12px] border border-border-ds-subtle bg-black py-4">
+      <div
+        className="space-y-3 overflow-hidden"
+        style={{
+          maskImage: 'linear-gradient(90deg, transparent, black 10%, black 90%, transparent)',
+          WebkitMaskImage: 'linear-gradient(90deg, transparent, black 10%, black 90%, transparent)',
+        }}
+      >
+        {PROMPT_ROWS.map((row, index) => (
+          <motion.div
+            key={index}
+            className="flex w-max gap-3 px-3"
+            animate={{ x: index % 2 === 0 ? ['0%', '-50%'] : ['-50%', '0%'] }}
+            transition={{
+              duration: index % 2 === 0 ? 26 : 30,
+              repeat: Infinity,
+              ease: 'linear',
+            }}
+          >
+            {[...row, ...row].map((item, itemIndex) => {
+              const Icon = item.icon;
+
+              return (
+                <button
+                  key={`${item.question}-${itemIndex}`}
+                  type="button"
+                  onClick={() => onSelectQuestion(item.question)}
+                  className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-border-ds-subtle bg-black px-4 text-sm text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary"
+                >
+                  <Icon className="h-4 w-4 text-gold-primary/70" />
+                  <span>{item.question}</span>
+                </button>
+              );
+            })}
+          </motion.div>
+        ))}
+      </div>
+    </div>
   );
 }
 

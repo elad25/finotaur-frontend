@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
+import { cn } from '@/lib/utils';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
 const NO_SIDEBAR_ROUTES = [
@@ -34,7 +35,12 @@ export const ProtectedAppLayout = () => {
         <SubNav />
         <div className="flex flex-1">
           {!hideSidebar && <Sidebar isOpen={sidebarOpen} />}
-          <main className="flex-1 overflow-auto">
+          <main
+            className={cn(
+              'flex-1 overflow-auto transition-[margin-left] duration-300 ease-in-out',
+              !hideSidebar && 'md:ml-[var(--finotaur-sidebar-width,14rem)]'
+            )}
+          >
             <div className={hideSidebar ? "p-0" : "w-full"}>
               <Outlet />
             </div>

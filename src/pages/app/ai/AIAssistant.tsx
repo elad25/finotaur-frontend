@@ -9,13 +9,10 @@ import React, { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
-import { motion } from 'framer-motion';
-import { Bot, Plus, History, Sparkles, Menu } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import { ChatInterface } from '@/components/ai-copilot/ChatInterface';
-import { ConversationSidebar } from '@/components/ai-copilot/ConversationSidebar';
 import { UsageBanner } from '@/components/ai-copilot/UsageBanner';
 import { useAICopilot } from '@/hooks/useAICopilot';
-import { cn } from '@/lib/utils';
 
 export default function AIAssistant() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -30,17 +27,12 @@ export default function AIAssistant() {
     isStreaming,
     error,
     usage,
-    conversations,
     currentConversation,
     sendMessage,
     startNewConversation,
     loadConversation,
-    deleteConversation,
-    refreshConversations,
     clearError,
   } = useAICopilot(conversationId);
-  
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
 
   useEffect(() => {
     if (conversationId) {
@@ -76,11 +68,6 @@ export default function AIAssistant() {
     setSearchParams({});
   };
   
-  const handleSelectConversation = (id: string) => {
-    setSearchParams({ conversation: id });
-    setSidebarOpen(false);
-  };
-  
   const handleSendMessage = async (message: string) => {
     const newConversationId = await sendMessage(message);
     if (newConversationId && !conversationId) {
@@ -89,89 +76,20 @@ export default function AIAssistant() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] relative overflow-hidden"
-      style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #0d0b08 50%, #0a0a0a 100%)' }}>
-      
-      {/* Background Effects */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[10%] left-[5%] w-[600px] h-[600px] rounded-full blur-[180px]"
-          style={{ background: 'rgba(201,166,70,0.04)' }} />
-        <div className="absolute bottom-[10%] right-[5%] w-[500px] h-[500px] rounded-full blur-[160px]"
-          style={{ background: 'rgba(201,166,70,0.03)' }} />
-      </div>
-      
-      {/* Mobile Sidebar Toggle */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed left-4 top-20 z-50 lg:hidden w-10 h-10 rounded-xl flex items-center justify-center transition-all"
-        style={{
-          background: 'linear-gradient(135deg, rgba(13,11,8,0.95), rgba(21,18,16,0.95))',
-          border: '1px solid rgba(201,166,70,0.3)',
-        }}
-      >
-        <History className="h-5 w-5 text-[#C9A646]" />
-      </button>
-      
-      {/* Conversation Sidebar */}
-      <div
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 w-80 transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <ConversationSidebar
-          conversations={conversations}
-          currentId={currentConversation?.id}
-          onSelect={handleSelectConversation}
-          onDelete={deleteConversation}
-          onNewConversation={handleNewConversation}
-          onRefresh={refreshConversations}
-        />
-      </div>
-      
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-      
+    <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-surface-base">
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 relative z-10">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="relative px-6 py-4"
-          style={{
-            background: 'linear-gradient(180deg, rgba(13,11,8,0.98), rgba(13,11,8,0.9))',
-            borderBottom: '1px solid rgba(201,166,70,0.15)',
-          }}>
-          {/* Top gold line */}
-          <div className="absolute top-0 left-0 right-0 h-[1px]"
-            style={{ background: 'linear-gradient(90deg, transparent, rgba(201,166,70,0.5), transparent)' }} />
-          
-          <div className="flex items-center justify-between max-w-4xl mx-auto">
+        <header className="relative border-b border-border-ds-subtle bg-surface-base px-6 py-4">
+          <div className="flex w-full items-center justify-between">
             <div className="flex items-center gap-4">
-              {/* Logo */}
-              <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.05))',
-                  border: '1px solid rgba(201,166,70,0.3)',
-                  boxShadow: '0 4px 20px rgba(201,166,70,0.15)',
-                }}>
-                <Bot className="h-6 w-6 text-[#C9A646]" />
-              </div>
-              
               <div>
                 <h1 className="text-lg font-bold flex items-center gap-2">
-                  <span className="text-white">FINOTAUR</span>
-                  <span style={{
-                    background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}>AI</span>
-                  <Sparkles className="h-4 w-4 text-[#C9A646]" />
+                  <span className="text-ink-primary">FINOTAUR</span>
+                  <span className="text-gold-primary">AI</span>
+                  <Sparkles className="h-4 w-4 text-gold-primary" />
                 </h1>
-                <p className="text-xs text-[#6B6B6B]">
+                <p className="text-xs text-ink-tertiary">
                   {currentConversation?.title || 'New Conversation'}
                 </p>
               </div>
@@ -179,12 +97,7 @@ export default function AIAssistant() {
             
             <button
               onClick={handleNewConversation}
-              className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 hover:scale-105"
-              style={{
-                background: 'linear-gradient(135deg, rgba(201,166,70,0.15), rgba(201,166,70,0.05))',
-                border: '1px solid rgba(201,166,70,0.3)',
-                color: '#C9A646',
-              }}
+              className="hidden items-center gap-2 rounded-[12px] border border-border-ds-subtle bg-surface-1 px-ds-4 py-ds-2 text-sm font-medium text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary sm:flex"
             >
               <Plus className="h-4 w-4" />
               New Chat
