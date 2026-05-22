@@ -8,8 +8,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion } from 'framer-motion';
 import { 
-  User, Bot, ThumbsUp, ThumbsDown, Copy, Check,
-  ExternalLink, FileText, ChevronDown, ChevronUp, Sparkles
+  User, ThumbsUp, ThumbsDown, Copy, Check,
+  ExternalLink, FileText, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Message, MessageSource } from '@/hooks/useAICopilot';
 import { cn } from '@/lib/utils';
@@ -48,17 +48,19 @@ export const MessageBubble = memo(function MessageBubble({
       "flex gap-4",
       isUser && "flex-row-reverse"
     )}>
-      {/* Avatar */}
       <div className={cn(
-        "flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center",
+        "flex-shrink-0 flex items-start justify-center",
         isUser 
-          ? "bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 border border-[#C9A646]/30"
-          : "bg-white/5 border border-white/10"
+          ? "h-10 w-10 rounded-xl bg-gradient-to-br from-[#C9A646]/20 to-[#C9A646]/5 border border-[#C9A646]/30"
+          : "w-4 pt-4"
       )}>
         {isUser ? (
           <User className="h-5 w-5 text-[#C9A646]" />
         ) : (
-          <Bot className="h-5 w-5 text-[#8B8B8B]" />
+          <span
+            className="h-3 w-3 rounded-full bg-[#C9A646] shadow-[0_0_18px_rgba(201,166,70,0.45)]"
+            aria-hidden="true"
+          />
         )}
       </div>
       
@@ -67,7 +69,6 @@ export const MessageBubble = memo(function MessageBubble({
         "flex-1 max-w-[85%] space-y-3",
         isUser && "flex flex-col items-end"
       )}>
-        {/* Message Bubble */}
         <div className={cn(
           "rounded-2xl px-5 py-4 relative overflow-hidden",
           isUser ? "rounded-tr-md" : "rounded-tl-md"
@@ -76,16 +77,10 @@ export const MessageBubble = memo(function MessageBubble({
             background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.08))',
             border: '1px solid rgba(201,166,70,0.3)',
           } : {
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
+            background: 'rgba(255,255,255,0.035)',
             border: '1px solid rgba(255,255,255,0.08)',
           }}
         >
-          {/* Accent line for assistant */}
-          {isAssistant && (
-            <div className="absolute top-0 left-0 w-full h-[2px]"
-              style={{ background: 'linear-gradient(90deg, rgba(201,166,70,0.5), transparent)' }} />
-          )}
-          
           {isUser ? (
             <p className="text-[#E8DCC4] whitespace-pre-wrap leading-relaxed">{message.content}</p>
           ) : (
