@@ -1,6 +1,6 @@
 // src/features/options-ai/services/options-api.service.ts
 // =====================================================
-// OPTIONS AI — Frontend API Service v2.1
+// OPTIONS AI - Frontend API Service v2.1
 // =====================================================
 // Calls the Express backend proxy at /api/options-ai/...
 // Backend handles Polygon calls + 3-layer cache
@@ -19,16 +19,16 @@ import type {
 import { CACHE_TTL_MS, API_RETRY_COUNT, API_RETRY_DELAY_MS } from '../constants/options-ai.constants';
 import { authFetch } from '@/utils/authFetch';
 
-// ╔══════════════════════════════════════════════════════╗
-// ║  CONFIG                                              ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 const OAI_BASE = `${API_BASE}/api/options-ai`;
 
 const FRONTEND_CACHE_TTL = 5 * 60 * 1000; // Match backend cache TTL
 
-// Empty charts fallback — costs nothing, prevents errors
+// Empty charts fallback - costs nothing, prevents errors
 const EMPTY_CHARTS: OverviewChartsData = {
   marketNetFlow: [],
   odteFlow: [],
@@ -40,9 +40,9 @@ const EMPTY_CHARTS: OverviewChartsData = {
   callsDashboard: [],
   putsDashboard: [],
 };
-// ╔══════════════════════════════════════════════════════╗
-// ║  FRONTEND CACHE                                      ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 interface CacheEntry<T> { data: T; ts: number; }
 const _cache = new Map<string, CacheEntry<unknown>>();
@@ -61,9 +61,9 @@ export function invalidateCache(k?: string) {
   else _cache.clear();
 }
 
-// ╔══════════════════════════════════════════════════════╗
-// ║  HTTP HELPERS                                        ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
   const url = `${OAI_BASE}${path}`;
@@ -100,9 +100,9 @@ async function fetchWithRetry<T>(path: string, signal?: AbortSignal, retries = A
   throw lastError;
 }
 
-// ╔══════════════════════════════════════════════════════╗
-// ║  BACKEND RESPONSE TYPES                              ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 interface BackendOverview {
   symbol: string;
@@ -214,9 +214,9 @@ interface BackendDeepDive {
   timestamp: string;
 }
 
-// ╔══════════════════════════════════════════════════════╗
-// ║  TRANSFORMERS — Backend → Frontend Types              ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 let _flowIdCounter = 0;
 
@@ -241,8 +241,8 @@ function toUnusualFlow(f: BackendUnusualFlow, symbol: string): UnusualFlow {
 function generateFlowInsight(f: BackendUnusualFlow, symbol: string): string {
   const size = f.isLarge ? 'Large institutional' : 'Notable';
   const direction = f.type === 'call' ? 'bullish' : 'bearish';
-  const volOiNote = f.volOiRatio > 3 ? `${f.volOiRatio}x vol/OI — likely new position.` : `${f.volOiRatio}x vol/OI ratio.`;
-  return `${size} ${symbol} ${f.type} activity at $${f.strike} ${f.expiry}. ${volOiNote} ${f.premiumFmt} premium — ${direction} conviction.`;
+  const volOiNote = f.volOiRatio > 3 ? `${f.volOiRatio}x vol/OI - likely new position.` : `${f.volOiRatio}x vol/OI ratio.`;
+  return `${size} ${symbol} ${f.type} activity at $${f.strike} ${f.expiry}. ${volOiNote} ${f.premiumFmt} premium - ${direction} conviction.`;
 }
 
 function toKeyLevel(l: { price: number; type: string; strength: string; note: string }): KeyLevel {
@@ -254,9 +254,9 @@ function toKeyLevel(l: { price: number; type: string; strength: string; note: st
   };
 }
 
-// ╔══════════════════════════════════════════════════════╗
-// ║  PUBLIC API — Used by useOptionsIntelligence hook    ║
-// ╚══════════════════════════════════════════════════════╝
+// --------------------------------------------------
+// --------------------------------------------------
+// --------------------------------------------------
 
 const DEFAULT_SYMBOL = 'SPY';
 
@@ -276,11 +276,11 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
     fetchWithRetry<SqueezeDetectorData>('/squeeze-detector', signal),
   ]);
 
-  // Dashboard is required — throw if failed
+  // Dashboard is required - throw if failed
   if (dashboardResult.status === 'rejected') throw dashboardResult.reason;
   const { overview, flow, greeks, vol } = dashboardResult.value;
 
-  // Charts & squeeze gracefully fallback — overview still works without them
+  // Charts and squeeze gracefully fallback - overview still works without them
   const overviewCharts: OverviewChartsData = chartsResult.status === 'fulfilled'
     ? chartsResult.value
     : EMPTY_CHARTS;
@@ -362,8 +362,8 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
     level: g.strike,
     value: Math.round(g.gex * 0.3 * (g.gex < 0 ? -1 : 1)),
     interpretation: g.gex < 0
-      ? `Negative vanna at ${g.strike} — IV rise pushes delta lower.`
-      : `Positive vanna at ${g.strike} — IV drop supports rallies.`,
+      ? `Negative vanna at ${g.strike} - IV rise pushes delta lower.`
+      : `Positive vanna at ${g.strike} - IV drop supports rallies.`,
   }));
 
   const charmFlow: CharmEntry[] = [0, 1, 3, 5, 10].map((dte, i) => ({
@@ -377,7 +377,7 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
   }));
 
   const keyLevels: KeyLevel[] = (overview.keyLevels || []).map(toKeyLevel);
-  // ── Compute real 0DTE ratio from term structure ──
+  // Compute real 0DTE ratio from term structure
   const todayStr = new Date().toISOString().split('T')[0];
   const zeroDteExpiry = (vol.termStructure || []).find(
     (e: any) => e.daysOut === 0 || e.expiry === todayStr
@@ -390,17 +390,17 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
     : 0;
   const realZeroDteRatio = Math.round((zdteVol / totalTermVol) * 100) / 100;
 
-  // ── VIX proxy: SPY avg IV ≈ VIX (same underlying calculation) ──
+  // VIX proxy: SPY avg IV approximates VIX
   // SPY options IV is annualized implied volatility from all strikes
-  // VIX is calculated from SPX options (same thing) so SPY IV ≈ VIX
+  // VIX is calculated from SPX options, so SPY IV is a close proxy
   const vixProxy = +(vol.iv.avg).toFixed(1);
 
-  // ── IV Rank approximation from current IV position ──
+  // IV Rank approximation from current IV position
   // Without 252-day history we use a heuristic:
-  //   Low IV (<15) → rank ~15-25
-  //   Normal IV (15-25) → rank ~30-55
-  //   High IV (25-40) → rank ~55-80
-  //   Extreme (>40) → rank ~80-95
+  //   Low IV (<15) -> rank ~15-25
+  //   Normal IV (15-25) -> rank ~30-55
+  //   High IV (25-40) -> rank ~55-80
+  //   Extreme (>40) -> rank ~80-95
   // This is clearly labeled as approximate
   const ivAvg = vol.iv.avg;
   const approxIvRank = Math.min(99, Math.max(5, Math.round(
@@ -422,11 +422,11 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
     skewIndex: Math.min(170, Math.max(100, Math.round(120 + Math.min(vol.iv.skewDelta, 25) * 1.5))),
     zeroDteRatio: realZeroDteRatio,
     interpretation: `${symbol} IV ${vol.iv.avg.toFixed(1)}% (VIX proxy ~${vixProxy}). ${
-      vol.iv.skew === 'put' ? 'Put skew — downside demand.'
-      : vol.iv.skew === 'call' ? 'Call skew — upside speculation.'
+      vol.iv.skew === 'put' ? 'Put skew - downside demand.'
+      : vol.iv.skew === 'call' ? 'Call skew - upside speculation.'
       : 'Balanced skew.'
     } Term structure ${vol.termStructureShape}.${
-      realZeroDteRatio > 0.4 ? ` 0DTE is ${(realZeroDteRatio * 100).toFixed(0)}% of volume — elevated gamma risk.` : ''
+      realZeroDteRatio > 0.4 ? ` 0DTE is ${(realZeroDteRatio * 100).toFixed(0)}% of volume - elevated gamma risk.` : ''
     }`,
   };
 
@@ -434,7 +434,7 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
   const alerts: AIAlert[] = unusualFlows.slice(0, 5).map((f, i) => ({
     id: `alert-${i}`,
     type: (f.unusualScore >= 90 ? 'unusual_volume' : f.type === 'put' ? 'smart_money' : 'earnings_edge') as any,
-    title: `${f.symbol} ${f.strike}${f.type === 'call' ? 'C' : 'P'} ${f.expiry} — ${f.unusualScore} Score`,
+    title: `${f.symbol} ${f.strike}${f.type === 'call' ? 'C' : 'P'} ${f.expiry} - ${f.unusualScore} Score`,
     symbol: f.symbol,
     timestamp: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
     severity: f.unusualScore >= 90 ? 'critical' as const : f.unusualScore >= 80 ? 'high' as const : 'medium' as const,
@@ -460,7 +460,7 @@ const [dashboardResult, chartsResult, squeezeResult] = await Promise.allSettled(
     ],
     earningsWatchlist: [],
     keyLevels: keyLevels.slice(0, 3),
-    bottomLine: `${symbol} options flow shows ${flow.summary.sentiment} bias. P/C ratio ${flow.summary.putCallRatio}. Net premium ${flow.summary.netPremiumFmt}. ${greeks.gamma.netExposure < 0 ? 'Negative gamma — expect amplified moves.' : 'Positive gamma — market stabilizing.'} Max pain at ${greeks.maxPain}.`,
+    bottomLine: `${symbol} options flow shows ${flow.summary.sentiment} bias. P/C ratio ${flow.summary.putCallRatio}. Net premium ${flow.summary.netPremiumFmt}. ${greeks.gamma.netExposure < 0 ? 'Negative gamma - expect amplified moves.' : 'Positive gamma - market stabilizing.'} Max pain at ${greeks.maxPain}.`,
   };
  const now = new Date();
   const result: OptionsData = {
@@ -493,7 +493,7 @@ export async function refreshOptionsData(signal?: AbortSignal, symbol = DEFAULT_
 }
 
 /**
- * Deep Dive — full single-stock analysis
+ * Deep Dive - full single-stock analysis
  */
 export async function fetchDeepDive(ticker: string, signal?: AbortSignal): Promise<DeepDiveData> {
   const key = `dd:${ticker}`;
@@ -519,9 +519,9 @@ export async function fetchDeepDive(ticker: string, signal?: AbortSignal): Promi
       putIV: data.iv?.putAvg || 0,
     })),
     expectedMoves: [
-      { period: 'weekly' as const, range: `±${(data.iv.avg * 0.07).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0007)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0007)).toFixed(2), impliedMove: +(data.iv.avg * 0.07).toFixed(1) as unknown as number },
-      { period: 'monthly' as const, range: `±${(data.iv.avg * 0.29).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0029)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0029)).toFixed(2), impliedMove: +(data.iv.avg * 0.29).toFixed(1) as unknown as number },
-      { period: 'earnings' as const, range: `±${(data.iv.avg * 0.35).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0035)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0035)).toFixed(2), impliedMove: +(data.iv.avg * 0.35).toFixed(1) as unknown as number },
+      { period: 'weekly' as const, range: `+/-${(data.iv.avg * 0.07).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0007)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0007)).toFixed(2), impliedMove: +(data.iv.avg * 0.07).toFixed(1) as unknown as number },
+      { period: 'monthly' as const, range: `+/-${(data.iv.avg * 0.29).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0029)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0029)).toFixed(2), impliedMove: +(data.iv.avg * 0.29).toFixed(1) as unknown as number },
+      { period: 'earnings' as const, range: `+/-${(data.iv.avg * 0.35).toFixed(1)}%`, upperBound: +(data.currentPrice * (1 + data.iv.avg * 0.0035)).toFixed(2), lowerBound: +(data.currentPrice * (1 - data.iv.avg * 0.0035)).toFixed(2), impliedMove: +(data.iv.avg * 0.35).toFixed(1) as unknown as number },
     ],
     earnings: null,
     skew: {
@@ -529,17 +529,17 @@ export async function fetchDeepDive(ticker: string, signal?: AbortSignal): Promi
       callSkew: Math.round(data.iv.callAvg),
       direction: data.iv.skew as 'put' | 'call' | 'neutral',
       interpretation: data.iv.skew === 'put'
-        ? 'Put skew elevated — market paying more for downside protection.'
+        ? 'Put skew elevated - market paying more for downside protection.'
         : data.iv.skew === 'call'
-          ? 'Call skew elevated — upside speculation active.'
-          : 'Balanced skew — no strong directional demand.',
+          ? 'Call skew elevated - upside speculation active.'
+          : 'Balanced skew - no strong directional demand.',
     },
     termStructure: (data.expiryBreakdown || []).slice(0, 6).map((e: any) => {
       const daysOut = Math.max(1, Math.round((new Date(e.date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
       return { expiry: e.date, daysOut, iv: Math.round(data.iv.avg * (1 + (daysOut < 10 ? 0.1 : -0.05))) };
     }),
     termStructureShape: 'backwardation' as const,
-    aiInsight: `${ticker} at $${data.currentPrice}. IV avg ${data.iv.avg.toFixed(1)}%. ${data.iv.skew === 'put' ? 'Put skew heavy — institutional hedging.' : 'Balanced skew.'} ${data.summary?.sentiment === 'bullish' ? 'Flow bias is bullish.' : data.summary?.sentiment === 'bearish' ? 'Flow bias is bearish.' : 'Flow is balanced.'} ${data.contractsAnalyzed} contracts analyzed.`,
+    aiInsight: `${ticker} at $${data.currentPrice}. IV avg ${data.iv.avg.toFixed(1)}%. ${data.iv.skew === 'put' ? 'Put skew heavy - institutional hedging.' : 'Balanced skew.'} ${data.summary?.sentiment === 'bullish' ? 'Flow bias is bullish.' : data.summary?.sentiment === 'bearish' ? 'Flow bias is bearish.' : 'Flow is balanced.'} ${data.contractsAnalyzed} contracts analyzed.`,
   };
 
   setCache(key, result);

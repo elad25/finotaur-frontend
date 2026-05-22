@@ -2,7 +2,7 @@
 
 import { memo, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { XCircle, RefreshCw, Loader2 } from 'lucide-react';
+import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Target } from 'lucide-react';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -31,30 +31,52 @@ function OptionsIntelligenceContent() {
     handleFilterChange, handleFlowClick, handleCloseDrawer, handleRefresh,
   } = useOptionsIntelligence();
 
+  const featureRail = [
+    { label: 'Flow Scanner', icon: Zap },
+    { label: 'Squeeze Detector', icon: Flame },
+    { label: 'Dark Pool', icon: Eye },
+    { label: 'Deep Dive', icon: Target },
+  ];
+
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #0a0a0a 0%, #0d0b08 50%, #0a0a0a 100%)' }}>
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.08), transparent 30%), linear-gradient(180deg, #080808 0%, #0d0b08 48%, #080808 100%)' }}>
       {/* Background */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[10%] left-[5%] w-[800px] h-[800px] rounded-full blur-[180px]" style={{ background: 'rgba(201,166,70,0.06)' }} />
-        <div className="absolute bottom-[10%] right-[5%] w-[700px] h-[700px] rounded-full blur-[160px]" style={{ background: 'rgba(201,166,70,0.04)' }} />
-        <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[150px]" style={{ background: 'rgba(244,217,123,0.03)' }} />
+        <div className="absolute -top-24 -left-36 h-64 w-[720px] rotate-[-18deg] rounded-[50%] border border-[#C9A646]/20" />
+        <div className="absolute -top-16 -left-28 h-56 w-[760px] rotate-[-18deg] rounded-[50%] border border-[#C9A646]/10" />
+        <div className="absolute top-0 -right-52 h-56 w-[820px] rotate-[-12deg] rounded-[50%] border border-[#C9A646]/15" />
+        <div className="absolute top-10 -right-44 h-48 w-[780px] rotate-[-12deg] rounded-[50%] border border-[#C9A646]/10" />
+        <div className="absolute top-[10%] left-[5%] w-[800px] h-[800px] rounded-full blur-[180px]" style={{ background: 'rgba(201,166,70,0.045)' }} />
+        <div className="absolute bottom-[10%] right-[5%] w-[700px] h-[700px] rounded-full blur-[160px]" style={{ background: 'rgba(201,166,70,0.035)' }} />
       </div>
 
-      <div className="relative z-10 w-full px-6 lg:px-10 py-8 md:py-10">
+      <div className="relative z-10 mx-auto w-full max-w-[1536px] px-6 lg:px-10 pt-5 pb-8 md:pt-6 md:pb-10">
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-bold mb-3">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-6">
+          <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-medium leading-none mb-3">
             <span className="text-white">Options </span>
             <span style={{ background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Intelligence</span>
           </h1>
-          <div className="flex items-center justify-center gap-3">
-            <p className="text-[#8B8B8B]">Flow Scanner • Squeeze Detector • Dark Pool • Deep Dive</p>
+          <div className="mb-5 flex items-center justify-center gap-3">
+            <p className="text-lg text-[#A7A7A7]">Institutional Options Flow & Market Intelligence</p>
             {isRefreshing && <Loader2 className="h-4 w-4 text-[#C9A646] animate-spin" />}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4 md:gap-7">
+            {featureRail.map((item, index) => {
+              const Icon = item.icon;
+              return (
+                <div key={item.label} className="flex items-center gap-3 text-sm font-medium text-white/85">
+                  <Icon className="h-4 w-4 text-[#F4D97B]" />
+                  <span>{item.label}</span>
+                  {index < featureRail.length - 1 && <span className="hidden md:inline-block h-1 w-1 rounded-full bg-[#C9A646]" />}
+                </div>
+              );
+            })}
           </div>
         </motion.div>
 
         {/* Tabs */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex justify-center mb-8 overflow-x-auto">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex justify-center mb-6 overflow-x-auto px-4">
           <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
         </motion.div>
 
@@ -83,7 +105,7 @@ function OptionsIntelligenceContent() {
           </motion.div>
         )}
 
-        {/* Empty state — silent abort hole (request was cancelled mid-flight without setting an error) */}
+        {/* Empty state - request was cancelled mid-flight without setting an error */}
         {!isLoading && !data && !loadError && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-8 max-w-2xl mx-auto">
             <Card>
@@ -117,7 +139,7 @@ function OptionsIntelligenceContent() {
         {data && !isLoading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }} className="text-center pt-6 mt-8 border-t border-[#C9A646]/10">
             <p className="text-xs text-[#6B6B6B]">
-              Data refreshes every 5 minutes<span className="mx-2">•</span>Last update: {new Date(data.lastUpdated).toLocaleTimeString()}
+              Data refreshes every 5 minutes<span className="mx-2">-</span>Last update: {new Date(data.lastUpdated).toLocaleTimeString()}
             </p>
           </motion.div>
         )}

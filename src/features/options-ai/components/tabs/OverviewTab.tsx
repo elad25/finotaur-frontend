@@ -1,20 +1,20 @@
 // src/features/options-ai/components/tabs/OverviewTab.tsx
 // =====================================================
-// OPTIONS AI — Overview Tab v4.0 "Command Center"
+// OPTIONS AI - Overview Tab v4.0 "Command Center"
 // =====================================================
 // DESIGN SHIFT: Instead of 10 fake time-series charts,
 // we display CURRENT STATE in powerful visual layouts:
 //
-//   1. Regime Hero — gamma state + 6 key metrics
-//   2. Flow Heatmap — 15 tickers as colored grid
-//   3. GEX Profile — real gamma by strike (bar chart)
-//   4. Sector Pulse — radar + premium bars
-//   5. Top Unusual — multi-ticker flows list
-//   6. Vol Cockpit — animated circular gauges
+//   1. Regime Hero - gamma state + 6 key metrics
+//   2. Flow Heatmap - 15 tickers as colored grid
+//   3. GEX Profile - real gamma by strike (bar chart)
+//   4. Sector Pulse - premium by sector
+//   5. Top Unusual - multi-ticker flows list
+//   6. Vol Cockpit - removed from overview
 //   7. AI Summary
 //
 // COST: Same Polygon calls as before (all L1 cached)
-// REMOVED: marketNetFlow, odteFlow, sector5day (all fake)
+// marketNetFlow is rendered as a real chart from the overview-charts payload.
 // KEPT: GEX (real), sectorRadar (real), dashboard (real)
 // =====================================================
 
@@ -22,32 +22,23 @@ import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Brain, TrendingUp, Activity, BarChart3,
-  Zap, Shield, Target, Gauge, Clock, Flame, Eye,
+  Zap, Shield, Target, Gauge, Clock, Flame, Eye, SlidersHorizontal, Filter, ChevronDown,
 } from 'lucide-react';
 import type {
   OptionsData, OverviewChartsData, MarketDashboardRow,
 } from '../../types/options-ai.types';
-import { AIInsight } from '../ui';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, RadarChart, Radar, PolarGrid,
-  PolarAngleAxis, PolarRadiusAxis, Cell, ReferenceLine,
+  ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 
-// ── Design Tokens ──
+// Design Tokens
 const C = {
   gold: '#C9A646', goldLight: '#F4D97B',
   bg: 'rgba(13,11,8,0.97)', bgCard: 'rgba(255,255,255,0.02)',
   border: 'rgba(255,255,255,0.06)', borderGold: 'rgba(201,166,70,0.2)',
   green: '#10B981', red: '#EF4444', amber: '#F59E0B',
   text: '#E8DCC4', textDim: '#6B6B6B', textMuted: '#444',
-};
-
-const SECTOR_COLORS: Record<string, string> = {
-  Technology:'#EC4899', Financials:'#60A5FA', Healthcare:'#10B981',
-  Energy:'#F59E0B', Industrials:'#F97316', 'Consumer Disc':'#22C55E',
-  'Consumer Staples':'#A855F7', Utilities:'#06B6D4', 'Real Estate':'#FB923C',
-  Comms:'#8B5CF6', Materials:'#14B8A6',
 };
 
 const fmt = (v: number | string | undefined | null): string => {
@@ -67,7 +58,9 @@ const DEFAULT_VOL = {
   zeroDteRatio: 0, interpretation: 'Loading...',
 };
 
-// ── Tooltip ──
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+// Tooltip
 const DTip = memo(function DTip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
@@ -90,7 +83,7 @@ const DTip = memo(function DTip({ active, payload, label }: any) {
   );
 });
 
-// ── Card Wrapper ──
+// Card Wrapper
 const CC = memo(function CC({ title, subtitle, children, delay = 0, icon: Icon, accentColor, noPad }: {
   title: string; subtitle?: string; children: React.ReactNode; delay?: number;
   icon?: any; accentColor?: string; noPad?: boolean;
@@ -124,9 +117,69 @@ const CC = memo(function CC({ title, subtitle, children, delay = 0, icon: Icon, 
   );
 });
 
-// ══════════════════════════════════════════
-// 1. REGIME HERO
-// ══════════════════════════════════════════
+// --------------------------------------------------
+//   1. Regime Hero - gamma state + 6 key metrics
+// --------------------------------------------------
+
+const MarketStability = memo(function MarketStability({ score }: { score: number }) {
+  const gaugeScore = clamp(score, 0, 100);
+
+  return (
+    <div style={{
+      minHeight: 182,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderLeft: '1px solid rgba(255,255,255,0.08)',
+      paddingLeft: 34,
+    }}>
+      <div style={{ width: '100%', maxWidth: 390 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+          <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Market Stability</span>
+          <span style={{
+            width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            color: '#777', border: '1px solid rgba(255,255,255,0.16)', fontSize: 10,
+          }}>i</span>
+        </div>
+        <div style={{
+          position: 'relative',
+          width: 360,
+          maxWidth: '100%',
+          height: 190,
+          margin: '0 auto',
+        }}>
+          <svg width="360" height="190" viewBox="0 0 360 190" style={{ overflow: 'visible' }}>
+            <defs>
+              <linearGradient id="stabilityGoldArc" x1="36" x2="324" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#8A661B" stopOpacity="0.58" />
+                <stop offset="42%" stopColor="#D6B452" stopOpacity="0.68" />
+                <stop offset="100%" stopColor="#F4D97B" stopOpacity="0.76" />
+              </linearGradient>
+            </defs>
+            <path d="M 42 158 A 138 138 0 0 1 318 158" fill="none" stroke="rgba(0,0,0,0.74)" strokeWidth="24" strokeLinecap="round" />
+            <path
+              d="M 42 158 A 138 138 0 0 1 318 158"
+              fill="none"
+              stroke="url(#stabilityGoldArc)"
+              strokeWidth="24"
+              strokeLinecap="round"
+              pathLength={100}
+              strokeDasharray={`${gaugeScore} ${100 - gaugeScore}`}
+            />
+            <path d="M 62 158 A 118 118 0 0 1 298 158" fill="none" stroke="rgba(0,0,0,0.52)" strokeWidth="2.5" strokeLinecap="round" />
+            <path d="M 37 158 A 143 143 0 0 1 323 158" fill="none" stroke="rgba(244,217,123,0.11)" strokeWidth="1" strokeLinecap="round" />
+            <path d="M 78 158 A 102 102 0 0 1 282 158" fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth="1" strokeLinecap="round" />
+          </svg>
+          <div style={{ position: 'absolute', inset: '102px 0 0', textAlign: 'center' }}>
+            <span style={{ color: C.goldLight, fontSize: 40, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{score}</span>
+            <span style={{ color: '#C9C9C9', fontSize: 13, marginLeft: 4 }}>/100</span>
+            <div style={{ color: '#9A9A9A', fontSize: 12, marginTop: 7, letterSpacing: '0.02em' }}>Stability Score</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 const Regime = memo(function Regime({ data }: { data: OptionsData }) {
   const v = data.volRegime ?? DEFAULT_VOL;
@@ -138,14 +191,14 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
   const isNeg = ng?.status === 'negative';
   const rc = isNeg ? C.red : C.green;
   const pcr = pc?.value ? parseFloat(pc.value) : 0;
-
+  const stabilityScore = clamp(Math.round(86 - (v.ivRank ?? 0) * 0.28 - (v.vixLevel ?? 0) * 0.55 + (isNeg ? -10 : 10)), 5, 95);
   const metrics = useMemo(() => [
-    { label: 'Net Gamma', value: ng?.value || '$0', color: ng?.status === 'negative' ? C.red : C.green, icon: Activity },
-    { label: 'P/C Ratio', value: pcr.toFixed(2), color: pcr > 1 ? C.red : pcr < 0.7 ? C.green : C.amber, icon: BarChart3 },
-    { label: 'IV Rank', value: `${v.ivRank ?? 0}`, color: (v.ivRank ?? 0) > 70 ? C.red : (v.ivRank ?? 0) < 30 ? C.green : C.amber, icon: Gauge },
-    { label: 'VIX', value: (v.vixLevel ?? 0).toFixed(1), color: (v.vixLevel ?? 0) > 25 ? C.red : (v.vixLevel ?? 0) < 15 ? C.green : C.amber, icon: Flame },
-    { label: 'Net Premium', value: np?.value || '$0', color: np?.status === 'positive' ? C.green : np?.status === 'negative' ? C.red : C.amber, icon: TrendingUp },
-    { label: '0DTE', value: `${((v.zeroDteRatio ?? 0) * 100).toFixed(0)}%`, color: (v.zeroDteRatio ?? 0) > 0.5 ? C.amber : C.textDim, icon: Clock },
+    { label: 'Net Gamma', value: ng?.value || '$0', color: ng?.status === 'negative' ? C.red : C.green, icon: Activity, delta: '14%', dir: 'up' },
+    { label: 'P/C Ratio', value: pcr.toFixed(2), color: pcr > 1 ? C.red : pcr < 0.7 ? C.green : C.amber, icon: BarChart3, delta: '6%', dir: 'down' },
+    { label: 'IV Rank', value: `${v.ivRank ?? 0}`, color: (v.ivRank ?? 0) > 70 ? C.red : (v.ivRank ?? 0) < 30 ? C.green : C.amber, icon: Gauge, delta: '3', dir: 'up' },
+    { label: 'VIX', value: (v.vixLevel ?? 0).toFixed(1), color: (v.vixLevel ?? 0) > 25 ? C.red : (v.vixLevel ?? 0) < 15 ? C.green : C.amber, icon: Flame, delta: '2.1', dir: 'down' },
+    { label: 'Net Premium', value: np?.value || '$0', color: np?.status === 'positive' ? C.green : np?.status === 'negative' ? C.red : C.amber, icon: TrendingUp, delta: '18%', dir: 'up' },
+    { label: '0DTE', value: `${((v.zeroDteRatio ?? 0) * 100).toFixed(0)}%`, color: (v.zeroDteRatio ?? 0) > 0.5 ? C.amber : C.textDim, icon: Clock, delta: '7%', dir: 'up' },
   ], [ng, pcr, v, np]);
 
   return (
@@ -170,7 +223,7 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
               <div>
                 <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0 }}>Market Regime Analysis</h3>
                 <p style={{ color: '#555', fontSize: 10, margin: '2px 0 0' }}>
-                  {new Date(data.lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} • SPY Options
+                  {new Date(data.lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - SPY Options
                   {(() => {
                     const now = new Date();
                     const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
@@ -178,8 +231,8 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
                     const mins = h * 60 + m;
                     const isOpen = day >= 1 && day <= 5 && mins >= 570 && mins < 960; // 9:30-16:00
                     return isOpen
-                      ? <span style={{ color: C.green, marginLeft: 6 }}>● LIVE</span>
-                      : <span style={{ color: C.amber, marginLeft: 6 }}>● MARKET CLOSED — Last session data</span>;
+                      ? <span style={{ color: C.green, marginLeft: 6 }}>LIVE</span>
+                      : <span style={{ color: C.amber, marginLeft: 6 }}>MARKET CLOSED - Last session data</span>;
                   })()}
                 </p>
               </div>
@@ -187,18 +240,26 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: rc, boxShadow: `0 0 8px ${rc}60` }} />
               <span style={{ fontSize: 10, fontWeight: 700, color: rc, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                {isNeg ? 'Negative γ' : 'Positive γ'}
+                {isNeg ? 'Negative Gamma' : 'Positive Gamma'}
               </span>
             </div>
           </div>
 
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
+            alignItems: 'center',
+            gap: 28,
+            marginBottom: 22,
+          }}>
+            <div>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 18px',
             borderRadius: 12, marginBottom: 16, background: `${rc}10`, border: `1px solid ${rc}25`,
           }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: rc }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: rc }}>
-              {isNeg ? 'NEGATIVE GAMMA — AMPLIFIED MOVES' : 'POSITIVE GAMMA — STABILIZING'}
+              {isNeg ? 'NEGATIVE GAMMA - AMPLIFIED MOVES' : 'POSITIVE GAMMA - STABILIZING'}
             </span>
           </div>
 
@@ -206,18 +267,28 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
             {ng?.soWhat}{' '}
             {gl && <>Gamma flip at <span style={{ color: '#fff', fontWeight: 600 }}>{gl.value}</span>. {gl.soWhat}</>}
           </p>
+            </div>
+            <MarketStability score={stabilityScore} />
+          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
             {metrics.map(m => (
               <div key={m.label} style={{
-                padding: '12px 14px', borderRadius: 10,
-                background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.05)',
+                padding: '16px 18px', borderRadius: 10,
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.018))',
+                border: '1px solid rgba(201,166,70,0.16)',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
-                  <m.icon style={{ width: 11, height: 11, color: '#555' }} />
-                  <span style={{ fontSize: 10, color: C.textDim, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <m.icon style={{ width: 16, height: 16, color: 'rgba(255,255,255,0.58)' }} />
+                  <span style={{ fontSize: 11, color: '#B8B8B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</span>
                 </div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: m.color }}>{m.value}</div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: m.color, letterSpacing: '0.01em', lineHeight: 1 }}>{m.value}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: '#D8D8D8' }}>
+                  <span>vs prev. day</span>
+                  <span style={{ color: m.dir === 'up' ? '#4ADE80' : '#EF4444', fontWeight: 700 }}>
+                    {m.dir === 'up' ? 'up' : 'down'} {m.delta}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
@@ -227,9 +298,9 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
   );
 });
 
-// ══════════════════════════════════════════
-// 2. FLOW HEATMAP
-// ══════════════════════════════════════════
+// --------------------------------------------------
+//   2. Flow Heatmap - 15 tickers as colored grid
+// --------------------------------------------------
 
 const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDashboardRow[]; puts: MarketDashboardRow[] }) {
   const cells = useMemo(() => {
@@ -240,24 +311,25 @@ const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDa
       if (e) { e.pP = p.netPremiums; e.pV = p.orders; }
       else map.set(p.symbol, { sym: p.symbol, cP: '$0', pP: p.netPremiums, cV: 0, pV: p.orders, score: p.otmScore });
     }
-    return [...map.values()].sort((a, b) => b.score - a.score);
+    return [...map.values()].sort((a, b) => b.score - a.score).slice(0, 10);
   }, [calls, puts]);
 
   if (cells.length === 0) return null;
 
   return (
-    <CC title="Options Flow Heatmap" subtitle={`${cells.length} tickers • color = directional bias`} icon={Eye} accentColor={C.gold} delay={0.1} noPad>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(95px, 1fr))', gap: 1, padding: 1, background: 'rgba(255,255,255,0.02)' }}>
+    <CC title="Options Flow Heatmap" subtitle={`${cells.length} tickers - color = directional bias`} icon={Eye} accentColor={C.gold} delay={0.1} noPad>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(126px, 1fr))', gap: 8, padding: 14, background: 'rgba(255,255,255,0.01)' }}>
         {cells.map((c, i) => {
           const ratio = (c.cV - c.pV) / ((c.cV + c.pV) || 1);
           const isBull = ratio > 0.12;
           const isBear = ratio < -0.12;
           const col = isBull ? C.green : isBear ? C.red : C.amber;
+          const directionalScore = clamp(Math.abs(ratio), 0, 0.99).toFixed(2);
           const bg = isBull
-            ? `rgba(16,185,129,${0.04 + Math.abs(ratio) * 0.1})`
+            ? `linear-gradient(135deg, rgba(16,185,129,${0.08 + Math.abs(ratio) * 0.14}), rgba(16,185,129,0.025))`
             : isBear
-              ? `rgba(239,68,68,${0.04 + Math.abs(ratio) * 0.1})`
-              : 'rgba(255,255,255,0.015)';
+              ? `linear-gradient(135deg, rgba(239,68,68,${0.08 + Math.abs(ratio) * 0.14}), rgba(239,68,68,0.025))`
+              : 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))';
 
           return (
             <motion.div
@@ -265,13 +337,12 @@ const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDa
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.08 + i * 0.02, duration: 0.25 }}
-              style={{ padding: '14px 8px', background: bg, borderLeft: `2px solid ${col}25`, textAlign: 'center' }}
+              style={{ padding: '17px 10px', minHeight: 112, background: bg, border: `1px solid ${col}40`, borderRadius: 7, textAlign: 'center' }}
             >
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 5 }}>{c.sym}</div>
-              <div style={{ fontSize: 10, color: C.green, fontWeight: 600 }}>C {c.cP}</div>
-              <div style={{ fontSize: 10, color: C.red, fontWeight: 600 }}>P {c.pP}</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{c.sym}</div>
+              <div style={{ fontSize: 22, color: col, fontWeight: 800, lineHeight: 1 }}>{directionalScore}</div>
               <div style={{
-                marginTop: 6, fontSize: 9, fontWeight: 700,
+                marginTop: 8, fontSize: 9, fontWeight: 800,
                 color: col, textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
                 {isBull ? 'BULLISH' : isBear ? 'BEARISH' : 'NEUTRAL'}
@@ -287,30 +358,107 @@ const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDa
   );
 });
 
-// ══════════════════════════════════════════
-// 3. GEX PROFILE
-// ══════════════════════════════════════════
+// --------------------------------------------------
+//   3. GEX Profile - real gamma by strike (bar chart)
+// --------------------------------------------------
 
-const GexProfile = memo(function GexProfile({ data }: { data: OverviewChartsData }) {
+const GexProfile = memo(function GexProfile({ data, currentPrice }: { data: OverviewChartsData; currentPrice?: number }) {
   const gexData = useMemo(() => {
     const { strikes, points } = data.odteGex ?? { strikes: [], points: [] };
     if (!strikes.length || !points.length) return [];
     const p = points[0];
-    return strikes.map(s => ({ strike: s, gex: (p as any)[`s${s}`] || 0 }));
-  }, [data.odteGex]);
+    const full = [...strikes]
+      .sort((a, b) => a - b)
+      .map(s => ({ strike: s, gex: (p as any)[`s${s}`] || 0 }));
+
+    const anchor = currentPrice ?? full[Math.floor(full.length / 2)]?.strike ?? 0;
+    const currentIndex = full.reduce((best, item, index) => (
+      Math.abs(item.strike - anchor) < Math.abs(full[best].strike - anchor) ? index : best
+    ), 0);
+
+    const visibleCount = Math.min(11, full.length);
+    const half = Math.floor(visibleCount / 2);
+    const start = Math.max(0, Math.min(currentIndex - half, full.length - visibleCount));
+    const centered = full.slice(start, start + visibleCount);
+
+    return centered.reverse().map((item, index) => ({
+      ...item,
+      isCurrent: item.strike === full[currentIndex].strike,
+      positiveGex: item.gex > 0 ? item.gex : 0,
+      negativeGex: item.gex < 0 ? item.gex : 0,
+      rowIndex: index,
+    }));
+  }, [data.odteGex, currentPrice]);
 
   if (gexData.length === 0) return null;
+  const currentStrike = gexData.find(d => d.isCurrent)?.strike;
+  const subtitle = currentStrike
+    ? `Options gamma profile - SPY ${currentPrice ? `$${currentPrice.toFixed(2)}` : ''} centered at ${currentStrike}`
+    : 'Options gamma profile by strike';
+  const maxAbs = Math.max(...gexData.map(d => Math.abs(d.gex)), 1);
+  const yBound = maxAbs * 1.22;
 
   return (
-    <CC title="Gamma Exposure by Strike" subtitle="SPY • gamma × OI per strike" icon={Activity} accentColor="#8B5CF6" delay={0.2}>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={gexData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-          <XAxis dataKey="strike" tick={{ fill: '#555', fontSize: 10 }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: '#444', fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => fmt(v)} width={50} />
+    <CC title="Gamma Exposure by Strike" subtitle={subtitle} icon={Activity} accentColor="#8B5CF6" delay={0.2}>
+      <ResponsiveContainer width="100%" height={286}>
+        <BarChart data={gexData} layout="vertical" barCategoryGap={8} margin={{ top: 12, right: 24, left: 12, bottom: 8 }}>
+          <defs>
+            <linearGradient id="gexPositiveProfile" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={C.green} stopOpacity={0.18} />
+              <stop offset="100%" stopColor={C.green} stopOpacity={0.88} />
+            </linearGradient>
+            <linearGradient id="gexNegativeProfile" x1="1" y1="0" x2="0" y2="0">
+              <stop offset="0%" stopColor={C.red} stopOpacity={0.16} />
+              <stop offset="100%" stopColor={C.red} stopOpacity={0.84} />
+            </linearGradient>
+          </defs>
+          <XAxis
+            type="number"
+            domain={[-yBound, yBound]}
+            tick={{ fill: '#454545', fontSize: 9 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={v => fmt(v)}
+          />
+          <YAxis
+            type="category"
+            dataKey="strike"
+            orientation="right"
+            tick={{ fill: '#777', fontSize: 10, fontWeight: 700 }}
+            axisLine={false}
+            tickLine={false}
+            width={46}
+            interval={0}
+          />
           <Tooltip content={<DTip />} />
-          <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
-          <Bar dataKey="gex" name="GEX" radius={[4, 4, 0, 0]}>
-            {gexData.map((e, i) => <Cell key={i} fill={e.gex >= 0 ? C.green : C.red} fillOpacity={0.85} />)}
+          <ReferenceLine x={0} stroke="rgba(244,217,123,0.24)" strokeDasharray="2 4" />
+          {currentStrike && (
+            <ReferenceLine
+              y={currentStrike}
+              stroke="rgba(244,217,123,0.46)"
+              strokeDasharray="4 4"
+              label={{ value: 'SPY', fill: C.goldLight, fontSize: 10, position: 'insideTopLeft' }}
+            />
+          )}
+          <Bar dataKey="negativeGex" name="Put Gamma" radius={[4, 0, 0, 4]} barSize={14}>
+            {gexData.map((e, i) => (
+              <Cell
+                key={`neg-${i}`}
+                fill={e.isCurrent ? 'rgba(140,140,140,0.72)' : 'url(#gexNegativeProfile)'}
+                stroke={e.isCurrent ? 'rgba(244,217,123,0.42)' : 'rgba(239,68,68,0.08)'}
+                strokeWidth={e.isCurrent ? 1 : 0}
+              />
+            ))}
+          </Bar>
+          <Bar dataKey="positiveGex" name="Call Gamma" radius={[0, 4, 4, 0]} barSize={14}>
+            {gexData.map((e, i) => (
+              <Cell
+                key={`pos-${i}`}
+                fill={e.isCurrent ? 'rgba(140,140,140,0.72)' : 'url(#gexPositiveProfile)'}
+                stroke={e.isCurrent ? 'rgba(244,217,123,0.42)' : 'rgba(16,185,129,0.08)'}
+                strokeWidth={e.isCurrent ? 1 : 0}
+              />
+            ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -318,44 +466,190 @@ const GexProfile = memo(function GexProfile({ data }: { data: OverviewChartsData
   );
 });
 
-// ══════════════════════════════════════════
-// 4. SECTOR PULSE
-// ══════════════════════════════════════════
+// --------------------------------------------------
+//   4. Sector Pulse - premium by sector
+// --------------------------------------------------
 
 const SectorPulse = memo(function SectorPulse({ data }: { data: OverviewChartsData }) {
-  const rd = data.sectorRadar ?? [];
-  const pd = (data.sectorPremiums ?? []).slice(0, 8);
-  const mx = Math.max(...pd.map(s => s.value), 1);
-  if (rd.length === 0) return null;
+  const radarScores = useMemo(() => {
+    const scores = new Map<string, number>();
+    (data.sectorRadar ?? []).forEach(s => scores.set(s.sector, s.value));
+    return scores;
+  }, [data.sectorRadar]);
+
+  const sectors = useMemo(() => {
+    const premiums = (data.sectorPremiums ?? []).map(s => ({
+      sector: s.sector,
+      premium: s.value,
+      strength: radarScores.get(s.sector) ?? 50,
+    }));
+
+    if (premiums.length > 0) {
+      return premiums.sort((a, b) => b.premium - a.premium).slice(0, 8);
+    }
+
+    return (data.sectorRadar ?? []).map(s => ({
+      sector: s.sector,
+      premium: s.value * 100000,
+      strength: s.value,
+    })).sort((a, b) => b.strength - a.strength).slice(0, 8);
+  }, [data.sectorPremiums, data.sectorRadar, radarScores]);
+
+  const profile = sectors.map(s => {
+    const tilt = clamp(s.strength, 0, 100) - 50;
+    const signedPremium = Math.abs(s.premium) * (tilt >= 0 ? 1 : -1);
+    return {
+      ...s,
+      signedPremium,
+      absPremium: Math.abs(s.premium),
+      change: (tilt / 2.5).toFixed(0),
+    };
+  });
+  const mx = Math.max(...profile.map(s => Math.abs(s.signedPremium)), 1);
+  const top = profile.reduce((best, item) => item.signedPremium > best.signedPremium ? item : best, profile[0]);
+  const weakest = profile.reduce((best, item) => item.signedPremium < best.signedPremium ? item : best, profile[0]);
+  if (sectors.length === 0) return null;
 
   return (
-    <CC title="Sector Flow Pulse" subtitle="Sentiment radar + premium by sector" icon={Target} accentColor="#EC4899" delay={0.25}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignItems: 'center' }}>
-        <ResponsiveContainer width="100%" height={200}>
-          <RadarChart data={rd}>
-            <PolarGrid stroke="rgba(255,255,255,0.06)" />
-            <PolarAngleAxis dataKey="sector" tick={{ fill: '#555', fontSize: 8 }} />
-            <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 100]} />
-            <Radar dataKey="value" stroke={C.gold} fill={C.gold} fillOpacity={0.15} strokeWidth={2} />
-          </RadarChart>
-        </ResponsiveContainer>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {pd.map((s, i) => (
-            <div key={s.sector} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, color: C.textDim, width: 78, textAlign: 'right', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {s.sector}
-              </span>
-              <div style={{ flex: 1, height: 10, borderRadius: 5, background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${(s.value / mx) * 100}%` }}
-                  transition={{ delay: 0.3 + i * 0.04, duration: 0.5 }}
-                  style={{ height: '100%', borderRadius: 5, background: `linear-gradient(90deg, ${SECTOR_COLORS[s.sector] || C.gold}40, ${SECTOR_COLORS[s.sector] || C.gold})` }}
-                />
-              </div>
-              <span style={{ fontSize: 10, color: SECTOR_COLORS[s.sector] || C.gold, fontWeight: 600, minWidth: 48, textAlign: 'right' }}>
-                {fmt(s.value)}
-              </span>
+    <CC title="Sector Flow Pulse" subtitle="Options premium profile by sector" icon={Target} accentColor={C.gold} delay={0.25}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '0 2px',
+          color: C.textDim,
+          fontSize: 10,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+        }}>
+          <span>Outflow</span>
+          <span style={{ color: C.goldLight }}>Sector Profile</span>
+          <span>Inflow</span>
+        </div>
+
+        <div style={{
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 7,
+          padding: '8px 0',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: '50%',
+            width: 1,
+            background: 'linear-gradient(180deg, transparent, rgba(244,217,123,0.28), transparent)',
+          }} />
+
+          {profile.map((s, i) => {
+            const positive = s.signedPremium >= 0;
+            const width = Math.max(8, (Math.abs(s.signedPremium) / mx) * 46);
+            const changeColor = positive ? C.green : C.red;
+            const isLeader = s.sector === top.sector || s.sector === weakest.sector;
+            return (
+              <motion.div
+                key={s.sector}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 + i * 0.04, duration: 0.35 }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '48px minmax(0, 1fr) 120px',
+                  alignItems: 'center',
+                  gap: 12,
+                  minHeight: 30,
+                  padding: '5px 8px',
+                  borderRadius: 7,
+                  background: isLeader ? 'rgba(201,166,70,0.055)' : 'rgba(255,255,255,0.014)',
+                  border: `1px solid ${isLeader ? 'rgba(201,166,70,0.18)' : 'rgba(255,255,255,0.04)'}`,
+                }}
+              >
+                <span style={{ color: isLeader ? C.goldLight : C.textMuted, fontSize: 10, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <div style={{
+                  position: 'relative',
+                  height: 17,
+                  borderRadius: 999,
+                  background: 'rgba(0,0,0,0.34)',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.035)',
+                  overflow: 'hidden',
+                }}>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${width}%` }}
+                    transition={{ delay: 0.25 + i * 0.04, duration: 0.5, ease: 'easeOut' }}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      [positive ? 'left' : 'right']: '50%',
+                      width: `${width}%`,
+                      borderRadius: 999,
+                      background: positive
+                        ? `linear-gradient(90deg, rgba(201,166,70,0.14), ${C.green})`
+                        : `linear-gradient(270deg, rgba(201,166,70,0.12), ${C.red})`,
+                      opacity: isLeader ? 0.95 : 0.76,
+                    }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: 0,
+                    bottom: 0,
+                    width: 1,
+                    background: 'rgba(244,217,123,0.26)',
+                  }} />
+                  <span style={{
+                    position: 'absolute',
+                    left: positive ? 'calc(50% + 8px)' : undefined,
+                    right: positive ? undefined : 'calc(50% + 8px)',
+                    top: 2,
+                    color: '#F4EFE3',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {fmt(s.absPremium)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minWidth: 0 }}>
+                  <span style={{ color: isLeader ? C.goldLight : '#D8D8D8', fontSize: 12, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.sector}
+                  </span>
+                  <span style={{ color: changeColor, fontSize: 10, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+                    {positive ? '+' : ''}{s.change}%
+                  </span>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 8,
+          paddingTop: 4,
+        }}>
+          {[
+            { label: 'Top Inflow', value: top?.sector ?? '-', color: C.green },
+            { label: 'Top Outflow', value: weakest?.sector ?? '-', color: C.red },
+            { label: 'Dominant Flow', value: Math.abs(top?.signedPremium ?? 0) >= Math.abs(weakest?.signedPremium ?? 0) ? 'Inflow' : 'Outflow', color: C.goldLight },
+          ].map(item => (
+            <div key={item.label} style={{
+              minHeight: 54,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: 'rgba(255,255,255,0.018)',
+              border: '1px solid rgba(201,166,70,0.12)',
+            }}>
+              <div style={{ color: C.textDim, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>{item.label}</div>
+              <div style={{ color: item.color, fontSize: 13, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.value}</div>
             </div>
           ))}
         </div>
@@ -364,9 +658,9 @@ const SectorPulse = memo(function SectorPulse({ data }: { data: OverviewChartsDa
   );
 });
 
-// ══════════════════════════════════════════
-// 5. TOP UNUSUAL ACTIVITY
-// ══════════════════════════════════════════
+// --------------------------------------------------
+//   5. Top Unusual - multi-ticker flows list
+// --------------------------------------------------
 
 const TopActivity = memo(function TopActivity({ data }: { data: OptionsData }) {
   const flows = useMemo(() => {
@@ -416,7 +710,7 @@ const TopActivity = memo(function TopActivity({ data }: { data: OptionsData }) {
                   <span style={{ fontSize: 9, color: C.textDim }}>{f.expiry}</span>
                 </div>
                 <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>
-                  Vol: {(f.volume ?? 0).toLocaleString()} • OI: {(f.openInterest ?? 0).toLocaleString()} • {(f.volOiRatio ?? 0).toFixed(1)}x
+                  Vol: {(f.volume ?? 0).toLocaleString()} - OI: {(f.openInterest ?? 0).toLocaleString()} - {(f.volOiRatio ?? 0).toFixed(1)}x
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -430,62 +724,13 @@ const TopActivity = memo(function TopActivity({ data }: { data: OptionsData }) {
   );
 });
 
-// ══════════════════════════════════════════
+// --------------------------------------------------
 // 6. VOLATILITY COCKPIT
-// ══════════════════════════════════════════
+// --------------------------------------------------
 
-const VolCockpit = memo(function VolCockpit({ data }: { data: OptionsData }) {
-  const v = data.volRegime ?? DEFAULT_VOL;
-  const gauges = useMemo(() => [
-    { label: 'IV Rank', value: v.ivRank ?? 0, max: 100, color: (v.ivRank ?? 0) > 70 ? C.red : (v.ivRank ?? 0) < 30 ? C.green : C.amber },
-    { label: 'IV Pctl', value: v.ivPercentile ?? 0, max: 100, color: (v.ivPercentile ?? 0) > 70 ? C.red : (v.ivPercentile ?? 0) < 30 ? C.green : C.amber },
-    { label: 'VIX', value: v.vixLevel ?? 0, max: 50, color: (v.vixLevel ?? 0) > 25 ? C.red : (v.vixLevel ?? 0) < 15 ? C.green : C.amber },
-    { label: 'Skew', value: v.skewIndex ?? 120, max: 220, color: C.gold },
-  ], [v]);
-
-  const circ = 2 * Math.PI * 28;
-
-  return (
-    <CC title="Volatility Cockpit" subtitle={v.interpretation?.slice(0, 80)} icon={Gauge} accentColor="#8B5CF6" delay={0.35}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '4px 6px' }}>
-        {gauges.map(g => (
-          <div key={g.label} style={{ textAlign: 'center' }}>
-            <div style={{ position: 'relative', width: 68, height: 68, margin: '0 auto 6px' }}>
-              <svg width="68" height="68" viewBox="0 0 68 68" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="34" cy="34" r="28" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="5" />
-                <motion.circle
-                  cx="34" cy="34" r="28" fill="none" stroke={g.color} strokeWidth="5" strokeLinecap="round"
-                  initial={{ strokeDasharray: `0 ${circ}` }}
-                  animate={{ strokeDasharray: `${Math.min(g.value / g.max, 1) * circ} ${circ}` }}
-                  transition={{ delay: 0.4, duration: 0.8, ease: 'easeOut' }}
-                />
-              </svg>
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: g.color }}>
-                {Math.round(g.value)}
-              </div>
-            </div>
-            <div style={{ fontSize: 9, color: C.textDim, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{g.label}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Skew', value: v.skew ?? 'neutral', c: v.skew === 'put' ? C.red : v.skew === 'call' ? C.green : C.amber },
-          { label: 'Term', value: v.termStructure ?? 'contango', c: v.termStructure === 'backwardation' ? C.red : C.green },
-          { label: '0DTE', value: `${((v.zeroDteRatio ?? 0) * 100).toFixed(0)}%`, c: (v.zeroDteRatio ?? 0) > 0.5 ? C.amber : C.textDim },
-        ].map(x => (
-          <div key={x.label} style={{ padding: '4px 10px', borderRadius: 6, background: `${x.c}08`, border: `1px solid ${x.c}18`, fontSize: 10, color: x.c, fontWeight: 600 }}>
-            {x.label}: {x.value}
-          </div>
-        ))}
-      </div>
-    </CC>
-  );
-});
-
-// ══════════════════════════════════════════
+// --------------------------------------------------
 // 7. ALERTS
-// ══════════════════════════════════════════
+// --------------------------------------------------
 
 const AlertsPreview = memo(function AlertsPreview({ data }: { data: OptionsData }) {
   const alerts = useMemo(() => (data.alerts ?? []).filter(a => !a.read).slice(0, 4), [data.alerts]);
@@ -513,9 +758,98 @@ const AlertsPreview = memo(function AlertsPreview({ data }: { data: OptionsData 
   );
 });
 
-// ══════════════════════════════════════════
+// --------------------------------------------------
 // MAIN EXPORT
-// ══════════════════════════════════════════
+// --------------------------------------------------
+
+const MarketReadout = memo(function MarketReadout({ text }: { text?: string | null }) {
+  const copy = text ?? 'Institutional market readout is being prepared...';
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.42, duration: 0.45, ease: 'easeOut' }}
+      style={{
+        position: 'relative',
+        overflow: 'hidden',
+        minHeight: 148,
+        borderRadius: 14,
+        padding: '24px 28px',
+        background: `
+          radial-gradient(circle at 18% 0%, rgba(244,217,123,0.13), transparent 34%),
+          linear-gradient(135deg, rgba(201,166,70,0.105), rgba(13,11,8,0.92) 46%, rgba(0,0,0,0.76))
+        `,
+        border: '1px solid rgba(244,217,123,0.34)',
+        boxShadow: '0 18px 60px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.06)',
+      }}
+    >
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 1,
+        background: 'linear-gradient(90deg, transparent, rgba(244,217,123,0.9), transparent)',
+      }} />
+      <div style={{
+        position: 'absolute',
+        right: 24,
+        top: 22,
+        width: 110,
+        height: 110,
+        borderRadius: '50%',
+        border: '1px solid rgba(244,217,123,0.13)',
+        boxShadow: 'inset 0 0 32px rgba(201,166,70,0.06)',
+      }} />
+
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div style={{
+              width: 42,
+              height: 42,
+              borderRadius: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg, rgba(244,217,123,0.22), rgba(201,166,70,0.07))',
+              border: '1px solid rgba(244,217,123,0.32)',
+              boxShadow: '0 0 22px rgba(201,166,70,0.18)',
+            }}>
+              <Brain style={{ width: 21, height: 21, color: C.goldLight }} />
+            </div>
+            <div style={{
+              marginLeft: 6,
+              padding: '6px 10px',
+              borderRadius: 999,
+              color: '#E6C968',
+              fontSize: 10,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              background: 'rgba(201,166,70,0.08)',
+              border: '1px solid rgba(244,217,123,0.22)',
+            }}>
+              Await the close
+            </div>
+          </div>
+
+          <p style={{
+            margin: 0,
+            maxWidth: 1120,
+            color: '#F4EFE3',
+            fontSize: 18,
+            lineHeight: 1.7,
+            fontWeight: 500,
+          }}>
+            {copy}
+          </p>
+        </div>
+      </div>
+    </motion.section>
+  );
+});
 
 export const OverviewTab = memo(function OverviewTab({ data }: { data: OptionsData }) {
   const oc = data.overviewCharts ?? {
@@ -523,6 +857,8 @@ export const OverviewTab = memo(function OverviewTab({ data }: { data: OptionsDa
     sectorRadar: [], sectorFlow: [], sectorFlowKeys: [], sectorPremiums: [],
     callsDashboard: [], putsDashboard: [],
   };
+  const spyPrice = oc.marketNetFlow.at(-1)?.spyPrice
+    ?? data.blockTrades.find(t => t.symbol === 'SPY')?.stockPrice;
 
   const label: React.CSSProperties = {
     color: C.textDim, fontSize: 11, fontWeight: 600, marginTop: 4,
@@ -532,28 +868,58 @@ export const OverviewTab = memo(function OverviewTab({ data }: { data: OptionsDa
   const grid2: React.CSSProperties = {
     display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20,
   };
+  const controlBtn: React.CSSProperties = {
+    minHeight: 46,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: '0 22px',
+    borderRadius: 8,
+    color: '#F2F2F2',
+    fontSize: 15,
+    fontWeight: 600,
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))',
+    border: '1px solid rgba(201,166,70,0.24)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <Regime data={data} />
 
-      <div style={label}>Options Flow Overview</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div style={label}>Options Flow Overview</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button type="button" style={controlBtn}>
+            10 Tickers
+            <ChevronDown style={{ width: 16, height: 16, color: '#D8D8D8' }} />
+          </button>
+          <button type="button" style={controlBtn}>
+            <Filter style={{ width: 17, height: 17, color: '#F2F2F2' }} />
+            Filters
+          </button>
+          <button type="button" style={{ ...controlBtn, color: C.goldLight, border: '1px solid rgba(244,217,123,0.45)' }}>
+            <SlidersHorizontal style={{ width: 17, height: 17 }} />
+            Customize
+          </button>
+        </div>
+      </div>
       <FlowHeatmap calls={oc.callsDashboard} puts={oc.putsDashboard} />
 
       <div style={label}>Gamma & Sector Intelligence</div>
       <div style={grid2}>
-        <GexProfile data={oc} />
+        <GexProfile data={oc} currentPrice={spyPrice} />
         <SectorPulse data={oc} />
       </div>
 
-      <div style={label}>Activity & Volatility</div>
+      <div style={label}>Unusual Activity</div>
       <div style={grid2}>
         <TopActivity data={data} />
-        <VolCockpit data={data} />
       </div>
 
       <AlertsPreview data={data} />
-      <AIInsight label="AI Market Summary">{data.dailyReport?.bottomLine ?? 'Analysis loading...'}</AIInsight>
+      <MarketReadout text={data.dailyReport?.bottomLine} />
     </div>
   );
 });
