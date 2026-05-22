@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { useEffectiveUser } from '@/hooks/useEffectiveUser';
 import { useImpersonation } from '@/contexts/ImpersonationContext';
+import { TRADER_PORTFOLIO_ID } from '@/hooks/usePortfolios';
 import { normalizeSymbol } from '@/utils/normalizeSymbol';
 import dayjs from 'dayjs';
 
@@ -611,12 +612,21 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
   
   const userId = overrideUserId || effectiveUserId;
   const shouldUseAdminClient = isImpersonating && !!supabaseAdmin;
+  const dashboardPortfolioId = portfolioId === TRADER_PORTFOLIO_ID ? null : portfolioId;
+  const dashboardPortfolioIds = portfolioIds?.filter(id => id !== TRADER_PORTFOLIO_ID) ?? null;
   
   // Track if we've prefetched to avoid doing it multiple times
   const hasPrefetched = useRef(false);
 
   const query = useQuery({
-    queryKey: [...dashboardKeys.stats(userId || '', daysBack || -1), portfolioIds ? portfolioIds.join(',') : (portfolioId ?? 'all')],
+    queryKey: [
+      ...dashboardKeys.stats(userId || '', daysBack || -1),
+      portfolioId === TRADER_PORTFOLIO_ID
+        ? 'trader'
+        : dashboardPortfolioIds && dashboardPortfolioIds.length > 0
+          ? dashboardPortfolioIds.join(',')
+          : (dashboardPortfolioId ?? 'all'),
+    ],
     queryFn: async () => {
       if (!userId) throw new Error('No user ID available');
 
@@ -647,9 +657,9 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
       // unbounded trades fetch. JS path below remains for short lookbacks.
       const isAllTimeView = !daysBack || daysBack >= MAX_LOOKBACK_DAYS;
       if (isAllTimeView) {
-        const effectivePortfolioIds = portfolioIds && portfolioIds.length > 0
-          ? portfolioIds
-          : (portfolioId ? [portfolioId] : null);
+        const effectivePortfolioIds = dashboardPortfolioIds && dashboardPortfolioIds.length > 0
+          ? dashboardPortfolioIds
+          : (dashboardPortfolioId ? [dashboardPortfolioId] : null);
         const [agg, bestWorst, dailyRows, tradesForOverview] = await Promise.all([
           fetchAggregatedStats(client, userId, effectivePortfolioIds),
           fetchBestWorst(client, userId, cutoffDate, effectivePortfolioIds),
@@ -674,10 +684,10 @@ export function useDashboardStats(daysBack?: number, overrideUserId?: string, po
         .order('open_at', { ascending: true, nullsFirst: false });
 
       // 🔥 Portfolio filter: null = all accounts, string[] = multi-select, string = single
-      if (portfolioIds && portfolioIds.length > 0) {
-        queryBuilder = queryBuilder.in('portfolio_id', portfolioIds);
-      } else if (portfolioId) {
-        queryBuilder = queryBuilder.eq('portfolio_id', portfolioId);
+      if (dashboardPortfolioIds && dashboardPortfolioIds.length > 0) {
+        queryBuilder = queryBuilder.in('portfolio_id', dashboardPortfolioIds);
+      } else if (dashboardPortfolioId) {
+        queryBuilder = queryBuilder.eq('portfolio_id', dashboardPortfolioId);
       }
 
       // Cutoff is always set (defaults to MAX_LOOKBACK_DAYS for "all time").
