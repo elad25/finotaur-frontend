@@ -6,12 +6,12 @@ import {
   Eye,
   Layers3,
   Link2,
-  Radar,
   ShieldCheck,
   TrendingUp,
   Zap,
 } from 'lucide-react';
 import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
+import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioMockData, TimeRange } from './hooks/usePortfolioMockData';
@@ -118,18 +118,22 @@ function PortfolioValuePanel({ className, range }: { className?: string; range: 
       <div className="p-5 h-full grid grid-rows-[1fr_auto]">
         <div>
           <div className="flex items-center justify-between">
-            <p className="text-[10px] uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
+            <p className="text-eyebrow uppercase text-ink-tertiary">TOTAL PORTFOLIO VALUE</p>
             <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
           </div>
-          <div className="mt-6 font-mono text-[42px] leading-none text-gold-primary tabular-nums">$1,247,842.35</div>
+          <Price
+            value={1247842.35}
+            size="display"
+            className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
+          />
           <div className="mt-6 grid grid-cols-2 gap-5">
-            <Stat label="24H CHANGE" value="+2.34%" sub="+$28,472.11" positive />
+            <Stat label="24H CHANGE" value={<Change value={2.34} />} sub={<Change value={28472.11} format="currency" />} />
             <MiniReturn />
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="CASH BALANCE" value="$87,432.21" />
-          <Stat label="BUYING POWER" value="$163,210.09" />
+          <Stat label="CASH BALANCE" value={<Price value={87432.21} size="small" />} />
+          <Stat label="BUYING POWER" value={<Price value={163210.09} size="small" />} />
         </div>
         <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
       </div>
@@ -137,12 +141,12 @@ function PortfolioValuePanel({ className, range }: { className?: string; range: 
   );
 }
 
-function Stat({ label, value, sub, positive = false }: { label: string; value: string; sub?: string; positive?: boolean }) {
+function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
     <div>
-      <p className="text-[9px] uppercase text-ink-tertiary">{label}</p>
-      <div className={`mt-2 font-mono text-sm tabular-nums ${positive ? 'text-emerald-300' : 'text-ink-primary'}`}>{value}</div>
-      {sub && <div className="mt-1 font-mono text-xs text-emerald-300">{sub}</div>}
+      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">{label}</p>
+      <div className="mt-2 text-sm leading-none">{value}</div>
+      {sub && <div className="mt-1 text-xs leading-none">{sub}</div>}
     </div>
   );
 }
@@ -150,11 +154,13 @@ function Stat({ label, value, sub, positive = false }: { label: string; value: s
 function MiniReturn() {
   return (
     <div>
-      <p className="text-[9px] uppercase text-ink-tertiary">ALL TIME RETURN</p>
-      <p className="mt-2 font-mono text-sm text-emerald-300">+24.67%</p>
-      <svg viewBox="0 0 120 28" className="mt-2 h-7 w-28">
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10" fill="none" stroke="#d6b34f" strokeWidth="2" />
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10V28H0Z" fill="rgba(201,166,70,0.12)" />
+      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">ALL TIME RETURN</p>
+      <p className="mt-2 text-sm leading-none">
+        <Change value={24.67} />
+      </p>
+      <svg viewBox="0 0 120 28" className="mt-2 h-7 w-28 text-gold-primary">
+        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10V28H0Z" fill="currentColor" opacity="0.12" />
       </svg>
     </div>
   );
@@ -188,8 +194,10 @@ function InsightsPanel({ className }: { className?: string }) {
       <div className="p-5">
         <PanelHeader title="AI INSIGHTS" action="CHAT" actionTo="/app/ai/copilot/ai-chat" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
-          <div className="relative h-24 w-24 rounded-full bg-[conic-gradient(#f4d97b_0_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
-            <div className="h-full w-full rounded-full bg-[#090704] flex items-center justify-center font-mono text-2xl text-white">78%</div>
+          <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
+            <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
+              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">78%</span>
+            </div>
           </div>
           <div>
             <p className="text-[10px] uppercase text-ink-tertiary">PORTFOLIO HEALTH</p>
@@ -351,14 +359,7 @@ function RiskAnalysisPanel({ className }: { className?: string }) {
       <div className="p-5">
         <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/app/ai/copilot/risks" />
         <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
-          <div className="relative h-28 w-28">
-            <Radar className="absolute inset-0 h-full w-full text-gold-primary/18" />
-            <div className="absolute inset-[28px] rotate-45 border border-gold-primary/42 bg-gold-primary/12 shadow-[0_0_24px_rgba(201,166,70,0.18)]" />
-            <div className="absolute left-[49%] top-[12%] h-2 w-2 rounded-full bg-gold-primary" />
-            <div className="absolute right-[18%] top-[40%] h-2 w-2 rounded-full bg-gold-primary/80" />
-            <div className="absolute right-[31%] bottom-[18%] h-2 w-2 rounded-full bg-gold-primary/70" />
-            <div className="absolute left-[18%] bottom-[31%] h-2 w-2 rounded-full bg-gold-primary/70" />
-          </div>
+          <RiskManagementGoldMark />
           <div className="space-y-2">
             {rows.map(([label, value]) => (
               <div key={label} className="flex items-center justify-between gap-3 text-[11px]">
@@ -370,5 +371,99 @@ function RiskAnalysisPanel({ className }: { className?: string }) {
         </div>
       </div>
     </PremiumFrame>
+  );
+}
+
+function RiskManagementGoldMark() {
+  const totalTicks = 44;
+  const fillFraction = 0.72;
+  const startDeg = -132;
+  const endDeg = 132;
+  const ticks = Array.from({ length: totalTicks }, (_, index) => {
+    const progress = index / (totalTicks - 1);
+    const deg = startDeg + (endDeg - startDeg) * progress;
+    const rad = ((deg - 90) * Math.PI) / 180;
+    const inner = 57;
+    const outer = index % 4 === 0 ? 72 : 68;
+    return {
+      x1: Math.cos(rad) * inner,
+      y1: Math.sin(rad) * inner,
+      x2: Math.cos(rad) * outer,
+      y2: Math.sin(rad) * outer,
+      bright: progress <= fillFraction,
+      width: index % 4 === 0 ? 2.1 : 1.35,
+    };
+  });
+
+  return (
+    <div className="relative h-32 w-32">
+      <div className="absolute inset-2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.18),rgba(201,166,70,0.05)_42%,transparent_68%)] blur-md" />
+      <svg viewBox="-100 -100 200 200" className="relative h-full w-full overflow-visible drop-shadow-[0_0_22px_rgba(201,166,70,0.26)]" aria-hidden="true">
+        <defs>
+          <linearGradient id="riskGoldArc" x1="0" y1="-1" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--gold-bright)" />
+            <stop offset="45%" stopColor="var(--gold-primary)" />
+            <stop offset="100%" stopColor="var(--gold-deep)" />
+          </linearGradient>
+          <linearGradient id="riskGoldText" x1="0" y1="-1" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--gold-bright)" />
+            <stop offset="60%" stopColor="var(--gold-primary)" />
+            <stop offset="100%" stopColor="var(--gold-deep)" />
+          </linearGradient>
+          <radialGradient id="riskGoldGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="rgba(244,217,123,0.46)" />
+            <stop offset="60%" stopColor="rgba(201,166,70,0.10)" />
+            <stop offset="100%" stopColor="rgba(201,166,70,0)" />
+          </radialGradient>
+        </defs>
+
+        <circle r="82" fill="url(#riskGoldGlow)" opacity="0.56" />
+        <circle r="88" fill="none" stroke="rgba(244,217,123,0.14)" strokeWidth="0.8" />
+        <g opacity="0.72">
+          <animateTransform attributeName="transform" type="scale" values="0.985;1.035;0.985" dur="4.2s" repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.48;0.78;0.48" dur="4.2s" repeatCount="indefinite" />
+          <circle
+            r="88"
+            fill="none"
+            stroke="url(#riskGoldArc)"
+            strokeWidth="1.15"
+            strokeLinecap="round"
+          />
+        </g>
+        <circle r="78" fill="none" stroke="url(#riskGoldArc)" strokeWidth="0.9" strokeDasharray="1 4" opacity="0.68" />
+        <circle r="54" fill="none" stroke="rgba(244,217,123,0.18)" strokeWidth="0.7" />
+
+        <g stroke="url(#riskGoldArc)" strokeLinecap="round">
+          {ticks.map((tick, index) => (
+            <line
+              key={index}
+              x1={tick.x1.toFixed(2)}
+              y1={tick.y1.toFixed(2)}
+              x2={tick.x2.toFixed(2)}
+              y2={tick.y2.toFixed(2)}
+              strokeWidth={tick.width}
+              opacity={tick.bright ? 0.95 : 0.25}
+            />
+          ))}
+        </g>
+
+        <g stroke="url(#riskGoldArc)" strokeLinecap="round" fill="none" opacity="0.7">
+          <path d="M -76 -20 A 78 78 0 0 0 -76 20" strokeWidth="1.4" />
+          <path d="M 76 -20 A 78 78 0 0 1 76 20" strokeWidth="1.4" />
+          <path d="M -60 -54 A 78 78 0 0 0 -50 -64" strokeWidth="1.1" />
+          <path d="M 60 -54 A 78 78 0 0 1 50 -64" strokeWidth="1.1" />
+          <path d="M -60 54 A 78 78 0 0 1 -50 64" strokeWidth="1.1" />
+          <path d="M 60 54 A 78 78 0 0 0 50 64" strokeWidth="1.1" />
+        </g>
+
+        <g fill="var(--gold-bright)" opacity="0.82">
+          <polygon points="0,-58 2.1,-55 0,-52 -2.1,-55" />
+          <polygon points="0,58 2.1,55 0,52 -2.1,55" />
+          <polygon points="-58,0 -55,2.1 -52,0 -55,-2.1" />
+          <polygon points="58,0 55,2.1 52,0 55,-2.1" />
+        </g>
+
+      </svg>
+    </div>
   );
 }
