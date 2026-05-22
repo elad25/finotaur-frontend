@@ -58,7 +58,7 @@ function needlePoint(pct: number): { nx: number; ny: number } {
   const len   = R - 6;
   return {
     nx: CX + len * Math.cos(angle),
-    ny: CY + len * Math.sin(angle),
+    ny: CY - len * Math.sin(angle),
   };
 }
 
