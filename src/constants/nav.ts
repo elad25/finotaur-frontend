@@ -212,7 +212,7 @@ ai: {
     { label: 'Macro Analyzer', path: '/app/ai/macro-analyzer', icon: Globe },
     { label: 'Options Intelligence', path: '/app/ai/options-intelligence', icon: Layers },
     { label: 'Flow Scanner', path: '/app/ai/flow-scanner', icon: Search },
-    { label: 'Top 5', path: '/app/ai/top-5', icon: Award },
+    { label: 'Intelligence Desk', path: '/app/ai/top-5', icon: Award },
     { label: 'AI Assistant', path: '/app/ai/assistant', icon: MessageSquare },
   ],
 },
