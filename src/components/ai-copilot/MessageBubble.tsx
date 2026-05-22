@@ -70,16 +70,17 @@ export const MessageBubble = memo(function MessageBubble({
         isUser && "flex flex-col items-end"
       )}>
         <div className={cn(
-          "rounded-2xl px-5 py-4 relative overflow-hidden",
-          isUser ? "rounded-tr-md" : "rounded-tl-md"
+          "relative",
+          isUser
+            ? "rounded-2xl rounded-tr-md px-5 py-4 overflow-hidden"
+            : "px-0 py-2"
         )}
-          style={isUser ? {
-            background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.08))',
-            border: '1px solid rgba(201,166,70,0.3)',
-          } : {
-            background: 'rgba(255,255,255,0.035)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
+          style={isUser
+            ? {
+                background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.08))',
+                border: '1px solid rgba(201,166,70,0.3)',
+              }
+            : undefined}
         >
           {isUser ? (
             <p className="text-[#E8DCC4] whitespace-pre-wrap leading-relaxed">{message.content}</p>
@@ -134,7 +135,7 @@ export const MessageBubble = memo(function MessageBubble({
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="px-4 py-3 text-sm text-[#A0A0A0] border-t border-white/5">
+                    <td className="px-4 py-3 text-sm text-[#D0D0D0] border-t border-white/5">
                       {children}
                     </td>
                   ),
@@ -144,7 +145,7 @@ export const MessageBubble = memo(function MessageBubble({
                     </ul>
                   ),
                   li: ({ children }) => (
-                    <li className="flex items-start gap-2 text-[#A0A0A0]">
+                    <li className="flex items-start gap-2 text-[#D8D8D8]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#C9A646] mt-2 flex-shrink-0" />
                       <span>{children}</span>
                     </li>
@@ -159,7 +160,7 @@ export const MessageBubble = memo(function MessageBubble({
                     <h3 className="text-base font-semibold text-[#E8DCC4] mb-2 mt-3">{children}</h3>
                   ),
                   p: ({ children }) => (
-                    <p className="text-[#A0A0A0] leading-relaxed mb-3">{children}</p>
+                    <p className="text-[#D8D8D8] leading-relaxed mb-3">{children}</p>
                   ),
                   strong: ({ children }) => (
                     <strong className="text-white font-semibold">{children}</strong>
