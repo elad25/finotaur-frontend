@@ -24,6 +24,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
+import { useAccountSnapshots } from '@/hooks/useAccountSnapshots';
 import { CopyTradingDashboard } from '@/components/copyTrading/CopyTradingDashboard';
 import { ManageRiskTab } from '@/components/copyTrading/ManageRiskTab';
 import { BROKER_CONFIGS } from '@/lib/brokers/types';
@@ -184,6 +185,8 @@ function getActiveTicker(root: string): string {
 
 // Ratio presets
 const RATIO_PRESETS = [25, 50, 75, 100, 200];
+
+type CopierMonitorTab = 'positions' | 'orders' | 'history';
 
 // ─── Premium Guard ────────────────────────────────────────────
 function PremiumGate() {
@@ -1097,8 +1100,239 @@ const CopyPanel = memo(({ portfolios }: { portfolios: { id: string; name: string
   );
 });
 
+const formatMoney = (value: number | null | undefined) => {
+  if (value == null) return '-';
+  const prefix = value < 0 ? '−$' : '$';
+  return `${prefix}${Math.abs(value).toFixed(2)}`;
+};
+
+const formatPositionSide = (netPos: number) => {
+  if (netPos > 0) return 'Long';
+  if (netPos < 0) return 'Short';
+  return 'Flat';
+};
+
+// ─── Live Positions / Orders / History Section ─────────────────
+const CopierActivitySection = memo(() => {
+  const { accounts, isLoading, fetchedAt } = useAccountSnapshots();
+  const { connections } = useBrokerConnections({ active: true });
+  const [activeMonitorTab, setActiveMonitorTab] = useState<CopierMonitorTab>('positions');
+
+  const connectionLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    connections.forEach((connection) => {
+      map.set(
+        connection.id,
+        connection.account_name ??
+          connection.connection_name ??
+          (connection.account_id != null ? String(connection.account_id) : null) ??
+          connection.broker,
+      );
+    });
+    return map;
+  }, [connections]);
+
+  const positionRows = useMemo(() => {
+    return accounts.flatMap((account) => {
+      const accountName =
+        connectionLabelById.get(account.credentialId) ??
+        account.accountSpec ??
+        String(account.accountId ?? account.credentialId);
+
+      return (account.snapshot.positions ?? [])
+        .filter((position) => position.netPos !== 0)
+        .map((position) => ({
+          id: `${account.credentialId}-${position.contractId}`,
+          account: accountName,
+          contract: position.contractName,
+          side: formatPositionSide(position.netPos),
+          qty: Math.abs(position.netPos),
+          avgPrice: position.avgPrice,
+          breakevenPrice: position.breakevenPrice,
+          openPL: position.openPL,
+          updatedAt: account.snapshot.lastUpdated,
+        }));
+    });
+  }, [accounts, connectionLabelById]);
+
+  const orderRows = useMemo(() => {
+    return accounts.flatMap((account) => {
+      const accountName =
+        connectionLabelById.get(account.credentialId) ??
+        account.accountSpec ??
+        String(account.accountId ?? account.credentialId);
+
+      return (account.snapshot.orders ?? []).map((order) => ({
+        id: `${account.credentialId}-${order.orderId}`,
+        account: accountName,
+        contract: order.contractId,
+        type: order.orderType,
+        side: order.action,
+        qty: order.orderQty,
+        status: order.ordStatus,
+      }));
+    });
+  }, [accounts, connectionLabelById]);
+
+  const monitorTabs: { id: CopierMonitorTab; label: string; count: number }[] = [
+    { id: 'positions', label: 'Open Positions', count: positionRows.length },
+    { id: 'orders', label: 'Open Orders', count: orderRows.length },
+    { id: 'history', label: 'Copy History', count: 0 },
+  ];
+
+  return (
+    <div className="space-y-ds-4">
+      <div className="flex flex-col gap-ds-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-ds-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold-border bg-gold-primary/10">
+            <History className="h-4 w-4 text-gold-primary" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-ink-primary">Live Copier Monitor</h3>
+            <p className="text-[11px] text-ink-secondary">
+              Positions, pending orders, and copy history
+              {fetchedAt ? ` · updated ${format(new Date(fetchedAt), 'HH:mm:ss')}` : ''}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex overflow-hidden rounded-lg border border-border-ds-subtle bg-surface-1 p-1">
+          {monitorTabs.map((tab) => {
+            const selected = activeMonitorTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveMonitorTab(tab.id)}
+                className={`flex min-h-8 items-center gap-ds-2 rounded-md px-ds-3 text-xs font-semibold transition-colors ${
+                  selected
+                    ? 'bg-gold-primary/12 text-gold-primary'
+                    : 'text-ink-secondary hover:bg-surface-2 hover:text-ink-primary'
+                }`}
+              >
+                {tab.label}
+                {tab.id !== 'history' && (
+                  <span className="rounded-sm border border-border-ds-subtle px-1.5 py-0.5 font-mono text-[10px] text-ink-tertiary">
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {activeMonitorTab === 'positions' && (
+        <div className="min-h-[184px] overflow-hidden rounded-lg border border-zinc-800/70 bg-zinc-950/35">
+          <div className="grid min-w-[860px] grid-cols-[minmax(180px,1fr)_110px_90px_70px_120px_120px_120px_100px] border-b border-zinc-800/70 bg-zinc-900/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <span>Account</span>
+            <span>Contract</span>
+            <span>Side</span>
+            <span className="text-right">Qty</span>
+            <span className="text-right">Avg Price</span>
+            <span className="text-right">Breakeven</span>
+            <span className="text-right">Open PnL</span>
+            <span className="text-right">Updated</span>
+          </div>
+          <div className="overflow-x-auto">
+            {isLoading ? (
+              <div className="space-y-2 p-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-9 animate-pulse rounded-md bg-zinc-900/60" />
+                ))}
+              </div>
+            ) : positionRows.length === 0 ? (
+              <div className="px-3 py-8 text-center text-xs text-zinc-500">
+                No open positions right now.
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-800/60">
+                {positionRows.map((position) => (
+                  <div
+                    key={position.id}
+                    className="grid min-h-[38px] min-w-[860px] grid-cols-[minmax(180px,1fr)_110px_90px_70px_120px_120px_120px_100px] items-center px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900/50"
+                  >
+                    <span className="truncate text-xs text-zinc-300">{position.account}</span>
+                    <span className="font-mono text-xs font-semibold text-white">{position.contract}</span>
+                    <span className={position.side === 'Short' ? 'text-num-negative' : 'text-ink-primary'}>
+                      {position.side}
+                    </span>
+                    <span className="text-right font-mono text-xs">{position.qty}</span>
+                    <span className="text-right font-mono text-xs">
+                      {position.avgPrice != null ? position.avgPrice.toFixed(2) : '-'}
+                    </span>
+                    <span className="text-right font-mono text-xs">
+                      {position.breakevenPrice != null ? position.breakevenPrice.toFixed(2) : '-'}
+                    </span>
+                    <span className={`text-right font-mono text-xs ${position.openPL != null && position.openPL < 0 ? 'text-num-negative' : 'text-ink-primary'}`}>
+                      {formatMoney(position.openPL)}
+                    </span>
+                    <span className="text-right font-mono text-xs text-zinc-500">
+                      {position.updatedAt ? format(new Date(position.updatedAt), 'HH:mm:ss') : '-'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeMonitorTab === 'orders' && (
+        <div className="min-h-[184px] overflow-hidden rounded-lg border border-zinc-800/70 bg-zinc-950/35">
+          <div className="grid min-w-[760px] grid-cols-[minmax(180px,1fr)_120px_110px_100px_90px_120px] border-b border-zinc-800/70 bg-zinc-900/70 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            <span>Account</span>
+            <span>Contract ID</span>
+            <span>Type</span>
+            <span>Side</span>
+            <span className="text-right">Qty</span>
+            <span className="text-right">Status</span>
+          </div>
+          <div className="overflow-x-auto">
+            {isLoading ? (
+              <div className="space-y-2 p-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-9 animate-pulse rounded-md bg-zinc-900/60" />
+                ))}
+              </div>
+            ) : orderRows.length === 0 ? (
+              <div className="px-3 py-8 text-center text-xs text-zinc-500">
+                No open orders right now.
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-800/60">
+                {orderRows.map((order) => (
+                  <div
+                    key={order.id}
+                    className="grid min-h-[38px] min-w-[760px] grid-cols-[minmax(180px,1fr)_120px_110px_100px_90px_120px] items-center px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-900/50"
+                  >
+                    <span className="truncate text-xs text-zinc-300">{order.account}</span>
+                    <span className="font-mono text-xs font-semibold text-white">{order.contract}</span>
+                    <span className="text-xs text-zinc-400">{order.type}</span>
+                    <span className={order.side === 'Sell' ? 'text-num-negative' : 'text-ink-primary'}>
+                      {order.side}
+                    </span>
+                    <span className="text-right font-mono text-xs">{order.qty}</span>
+                    <span className="text-right">
+                      <span className="rounded-sm bg-gold-primary/10 px-2 py-0.5 text-xs text-gold-primary">
+                        {order.status}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeMonitorTab === 'history' && <CopyHistorySection compact />}
+    </div>
+  );
+});
+
 // ─── Copy History Section ─────────────────────────────────────
-const CopyHistorySection = memo(() => {
+const CopyHistorySection = memo(({ compact = false }: { compact?: boolean }) => {
   const { log, isLoading, successCount, skippedCount, failedCount } = useCopyTradeLog(30);
 
   const historyRows = useMemo(() => {
@@ -1121,8 +1355,8 @@ const CopyHistorySection = memo(() => {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className={compact ? 'min-h-[184px]' : 'space-y-4'}>
+      {!compact && <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700/60 flex items-center justify-center">
             <History className="w-4 h-4 text-zinc-400" />
@@ -1149,7 +1383,7 @@ const CopyHistorySection = memo(() => {
             </span>
           )}
         </div>
-      </div>
+      </div>}
 
       {isLoading ? (
         <div className="space-y-2">
@@ -1447,7 +1681,7 @@ export default function TradeCopier() {
                   <CopyTradingDashboard />
                 </SectionCard>
                 <SectionCard>
-                  <CopyHistorySection />
+                  <CopierActivitySection />
                 </SectionCard>
               </>
             ) : (

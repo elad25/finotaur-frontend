@@ -69,6 +69,7 @@ export function useCopyRules() {
       target_portfolio_id: string;
       ratio?:              number;
       is_active?:          boolean;
+      cross_to_micro?:     boolean;
     }) => {
       const { data, error } = await supabase
         .from('portfolio_copy_rules')
@@ -77,6 +78,7 @@ export function useCopyRules() {
           target_portfolio_id: input.target_portfolio_id,
           ratio:               input.ratio     ?? 1,
           is_active:           input.is_active ?? true,
+          cross_to_micro:       input.cross_to_micro ?? false,
         })
         .select()
         .single();

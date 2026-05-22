@@ -14,10 +14,21 @@ export interface PositionEntry {
   avgPrice:       number | null;
   prevPos:        number | null;
   breakevenPrice: number | null;
+  openPL?:        number | null;
+}
+
+export interface OpenOrderEntry {
+  orderId:    number;
+  contractId: number;
+  action:     'Buy' | 'Sell' | string;
+  orderQty:   number;
+  orderType:  string;
+  ordStatus:  string;
 }
 
 interface AccountSnapshot {
   positions:   PositionEntry[];
+  orders:      OpenOrderEntry[];
   cashBalance: number;
   openPnL:     number;
   realizedPnL: number;

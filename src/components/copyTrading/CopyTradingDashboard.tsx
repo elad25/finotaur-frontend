@@ -169,11 +169,14 @@ const CopyAccountRow = memo(function CopyAccountRow({
             key={`ratio-${rule?.id ?? row.id}`}
             onBlur={async (e) => {
               const newRatio = Number(e.target.value);
-              if (!Number.isNaN(newRatio) && newRatio > 0 && rule) {
+              if (!Number.isNaN(newRatio) && newRatio > 0) {
                 await onUpdateRule({ ratio: newRatio });
               }
             }}
-            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
+            disabled={!canFollow}
+            aria-label={`Copy ratio for ${row.accountName}`}
+            title="Copy ratio from leader to this account"
+            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none disabled:cursor-not-allowed disabled:opacity-30"
           />
         )}
       </div>
@@ -185,17 +188,16 @@ const CopyAccountRow = memo(function CopyAccountRow({
         ) : (
           <button
             onClick={async () => {
-              if (rule) {
-                await onUpdateRule({ cross_to_micro: !rule.cross_to_micro });
-              }
+              await onUpdateRule({ cross_to_micro: !(rule?.cross_to_micro ?? false) });
             }}
-            disabled={!rule}
+            disabled={!canFollow}
             className={`relative w-9 h-5 rounded-full transition-colors duration-base ${
               rule?.cross_to_micro
                 ? 'bg-status-success'
                 : 'bg-status-offline border border-border-ds-default'
-            } disabled:opacity-30`}
+            } disabled:cursor-not-allowed disabled:opacity-30`}
             aria-label="Cross-to-micro toggle"
+            title="When enabled, ES copies to MES, NQ to MNQ, and other supported contracts copy to their micro pair"
           >
             <span
               className={`absolute top-0.5 w-3 h-3 bg-ink-primary rounded-full transition-transform duration-base ${
@@ -746,6 +748,14 @@ export function CopyTradingDashboard() {
               onUpdateRule={async (patch) => {
                 if (rule) {
                   await updateRule({ id: rule.id, patch });
+                } else if (leaderPortfolioId && row.portfolioId && row.id !== leaderId) {
+                  await createRule({
+                    source_portfolio_id: leaderPortfolioId,
+                    target_portfolio_id: row.portfolioId,
+                    is_active:           false,
+                    ratio:               patch.ratio ?? 1,
+                    cross_to_micro:      patch.cross_to_micro ?? false,
+                  });
                 }
               }}
               onToggleFollow={async () => {
