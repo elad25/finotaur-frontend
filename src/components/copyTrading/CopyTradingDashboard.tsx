@@ -4,8 +4,8 @@
 // Leader dropdown, inline Ratio/Cross editing, FLATTEN double-check.
 // ═══════════════════════════════════════════════════════════════
 
-import { memo, useMemo, useState } from 'react';
-import { AlertOctagon, Crown, Search, Users } from 'lucide-react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import { AlertOctagon, Crown, Plus, Search, Users, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
 import { useEngineSessions } from '@/hooks/useEngineSessions';
@@ -38,6 +38,11 @@ interface AccountRowData {
   qty: number | null;
   following: boolean;
   portfolioId: string | null;
+}
+
+interface InstrumentTab {
+  id: string;
+  symbol: string;
 }
 
 // ─── Popular futures contracts for autocomplete ───────────────
@@ -148,14 +153,14 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Symbol */}
-      <div className="text-sm font-mono tabular-nums text-ink-primary truncate">
+      <div className="text-sm text-ink-primary truncate">
         {row.symbol ?? '—'}
       </div>
 
       {/* Ratio — inline editable for followers, empty for leader */}
       <div className="flex items-center">
         {isLeader ? (
-          <span className="text-sm font-mono tabular-nums text-ink-tertiary">—</span>
+          <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <input
             type="text"
@@ -168,7 +173,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
                 await onUpdateRule({ ratio: newRatio });
               }
             }}
-            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs font-mono tabular-nums text-ink-primary text-center focus:border-gold-border outline-none"
+            className="w-full px-2 py-1 rounded-sm bg-surface-base border border-border-ds-subtle text-xs text-ink-primary text-center focus:border-gold-border outline-none"
           />
         )}
       </div>
@@ -176,7 +181,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       {/* Cross toggle — for followers only */}
       <div className="flex items-center">
         {isLeader ? (
-          <span className="text-sm font-mono tabular-nums text-ink-tertiary">—</span>
+          <span className="text-sm text-ink-tertiary">—</span>
         ) : (
           <button
             onClick={async () => {
@@ -203,7 +208,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
 
       {/* Position */}
       <div
-        className={`text-sm font-mono tabular-nums text-right ${
+        className={`text-sm text-right ${
           row.position != null && row.position < 0 ? 'text-num-negative' : 'text-ink-primary'
         }`}
       >
@@ -211,13 +216,13 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Balance */}
-      <div className="text-sm font-mono tabular-nums text-right text-ink-primary">
+      <div className="text-sm text-right text-ink-primary">
         {row.balance != null ? `$${row.balance.toFixed(2)}` : '—'}
       </div>
 
       {/* Day PnL */}
       <div
-        className={`text-sm font-mono tabular-nums text-right ${
+        className={`text-sm text-right ${
           row.dayPnL != null && row.dayPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
         }`}
       >
@@ -228,7 +233,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
 
       {/* Open PnL */}
       <div
-        className={`text-sm font-mono tabular-nums text-right ${
+        className={`text-sm text-right ${
           row.openPnL != null && row.openPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
         }`}
       >
@@ -238,7 +243,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
       </div>
 
       {/* Qty */}
-      <div className="text-sm font-mono tabular-nums text-right text-ink-primary">
+      <div className="text-sm text-right text-ink-primary">
         {row.qty ?? '—'}
       </div>
 
@@ -262,7 +267,16 @@ export function CopyTradingDashboard() {
   const { liveCredentialIds } = useEngineSessions();
   const { portfolios } = usePortfolios();
   const { snapshotFor } = useAccountSnapshots();
-  const [instrument, setInstrument] = useState('NQ');
+  const [instrumentTabs, setInstrumentTabs] = useState<InstrumentTab[]>([
+    { id: 'asset-1', symbol: 'NQ' },
+  ]);
+  const [activeInstrumentTabId, setActiveInstrumentTabId] = useState('asset-1');
+  const activeInstrumentTab = useMemo(
+    () => instrumentTabs.find((tab) => tab.id === activeInstrumentTabId) ?? instrumentTabs[0],
+    [activeInstrumentTabId, instrumentTabs],
+  );
+  const instrument = activeInstrumentTab?.symbol ?? 'NQ';
+  const [instrumentDraft, setInstrumentDraft] = useState(instrument);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const { flattenAll, flattenCredential, isLoading: flattenLoading } = useFlattenActions();
   const { rules, updateRule, createRule } = useCopyRules();
@@ -272,6 +286,10 @@ export function CopyTradingDashboard() {
     credentialId?: string;
     accountName?: string;
   } | null>(null);
+
+  useEffect(() => {
+    setInstrumentDraft(instrument);
+  }, [instrument]);
 
   // Leader: user-controlled via dropdown, defaults to first Tradovate-family connection
   const tradovateConnections = connections.filter(
@@ -368,11 +386,72 @@ export function CopyTradingDashboard() {
   const accountsWithPositions = rows.filter((r) => (r.position ?? 0) !== 0).length;
 
   // ── Contract autocomplete suggestions ─────────────────────────
+  const normalizedDraftInstrument = instrumentDraft.trim().toUpperCase();
+  const canAddInstrument =
+    normalizedDraftInstrument.length > 0 &&
+    normalizedDraftInstrument !== instrument;
+
   const filteredContracts = POPULAR_CONTRACTS.filter(
     (c) =>
-      instrument.length === 0 ||
-      c.symbol.toUpperCase().includes(instrument.toUpperCase()),
+      normalizedDraftInstrument.length === 0 ||
+      c.symbol.toUpperCase().includes(normalizedDraftInstrument),
   ).slice(0, 8);
+
+  const setActiveTabInstrument = (symbol: string) => {
+    const nextSymbol = symbol.trim().toUpperCase();
+    if (!nextSymbol) return;
+    if (nextSymbol === instrument) {
+      setInstrumentDraft(nextSymbol);
+      setShowSuggestions(false);
+      return;
+    }
+    setInstrumentTabs((current) =>
+      current.map((tab) =>
+        tab.id === activeInstrumentTabId
+          ? { ...tab, symbol: nextSymbol }
+          : tab,
+      ),
+    );
+    setInstrumentDraft(nextSymbol);
+    setShowSuggestions(false);
+    toast.success(`Tracking ${nextSymbol} in this tab`);
+  };
+
+  const handleAddInstrumentToWatch = () => {
+    setActiveTabInstrument(normalizedDraftInstrument);
+  };
+
+  const handleAddInstrumentTab = () => {
+    const usedSymbols = new Set(instrumentTabs.map((tab) => tab.symbol));
+    const nextSymbol =
+      POPULAR_CONTRACTS.find((contract) => !usedSymbols.has(contract.symbol))?.symbol ?? 'NQ';
+    const nextTab: InstrumentTab = {
+      id: `asset-${Date.now()}`,
+      symbol: nextSymbol,
+    };
+
+    setInstrumentTabs((current) => [...current, nextTab]);
+    setActiveInstrumentTabId(nextTab.id);
+    setInstrumentDraft(nextSymbol);
+    setShowSuggestions(false);
+  };
+
+  const handleCloseInstrumentTab = (tabId: string) => {
+    if (instrumentTabs.length <= 1) return;
+    const closingIndex = instrumentTabs.findIndex((tab) => tab.id === tabId);
+    const nextTabs = instrumentTabs.filter((tab) => tab.id !== tabId);
+    const nextActiveTab =
+      activeInstrumentTabId === tabId
+        ? nextTabs[Math.max(0, closingIndex - 1)] ?? nextTabs[0]
+        : activeInstrumentTab;
+
+    setInstrumentTabs(nextTabs);
+    if (nextActiveTab) {
+      setActiveInstrumentTabId(nextActiveTab.id);
+      setInstrumentDraft(nextActiveTab.symbol);
+    }
+    setShowSuggestions(false);
+  };
 
   // ── Flatten handlers ──────────────────────────────────────────
   const handleFlattenAll = () => {
@@ -405,12 +484,60 @@ export function CopyTradingDashboard() {
 
   return (
     <div className="min-h-[620px]">
+      <div className="-mt-ds-6 mb-ds-4 flex items-end gap-ds-1 overflow-x-auto border-b border-gold-border/40 px-ds-3 pt-ds-1">
+        {instrumentTabs.map((tab) => {
+          const isActive = tab.id === activeInstrumentTabId;
+          return (
+            <div
+              key={tab.id}
+              className={`flex h-9 min-w-[92px] items-center gap-ds-1 rounded-t-md border border-b-0 px-ds-2 transition-colors ${
+                isActive
+                  ? 'border-gold-border bg-gold-primary/10 text-gold-primary shadow-[0_0_18px_rgba(201,166,70,0.10)]'
+                  : 'border-gold-border/20 bg-gold-primary/[0.03] text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-primary'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveInstrumentTabId(tab.id);
+                  setInstrumentDraft(tab.symbol);
+                  setShowSuggestions(false);
+                }}
+                className="min-w-0 flex-1 truncate text-left text-xs font-semibold"
+              >
+                {tab.symbol}
+              </button>
+              {instrumentTabs.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleCloseInstrumentTab(tab.id)}
+                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-ink-tertiary transition-colors hover:bg-white/10 hover:text-ink-primary"
+                  aria-label={`Close ${tab.symbol} tab`}
+                  title={`Close ${tab.symbol}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          onClick={handleAddInstrumentTab}
+          className="mb-px flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-gold-border/30 bg-gold-primary/[0.05] text-gold-primary/80 transition-colors hover:border-gold-border hover:bg-gold-primary/10 hover:text-gold-primary"
+          aria-label="Add asset tab"
+          title="Add asset tab"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+
       <div className="grid grid-cols-4 gap-ds-3 mb-ds-4">
         <div className="px-ds-4 py-ds-3 rounded-md bg-surface-1 border border-border-ds-subtle">
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Day PnL
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             {totalDayPnL >= 0 ? '$' : '-$'}
             {Math.abs(totalDayPnL).toFixed(2)}
           </div>
@@ -420,7 +547,7 @@ export function CopyTradingDashboard() {
             Total Open PnL
           </div>
           <div
-            className={`text-base font-mono tabular-nums mt-1 ${
+            className={`text-base font-semibold mt-1 ${
               totalOpenPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
             }`}
           >
@@ -432,7 +559,7 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Balance
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             ${totalBalance.toFixed(2)}
           </div>
         </div>
@@ -440,7 +567,7 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Open Positions
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             {openPositionsCount}
           </div>
         </div>
@@ -454,16 +581,35 @@ export function CopyTradingDashboard() {
               <Search className="h-4 w-4 text-blue-200/70" />
               <input
                 type="text"
-                value={instrument}
+                value={instrumentDraft}
                 onChange={(e) => {
-                  setInstrument(e.target.value.toUpperCase());
+                  setInstrumentDraft(e.target.value.toUpperCase());
                   setShowSuggestions(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddInstrumentToWatch();
+                  }
                 }}
                 onFocus={() => setShowSuggestions(true)}
                 onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                 placeholder="Search ticker..."
                 className="w-36 border-0 bg-transparent text-sm font-semibold uppercase text-blue-100 outline-none placeholder:normal-case placeholder:text-blue-200/40"
               />
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleAddInstrumentToWatch();
+                }}
+                disabled={!canAddInstrument}
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-blue-400/35 bg-blue-400/10 text-blue-100 transition-colors hover:border-blue-300/60 hover:bg-blue-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+                aria-label="Set active tab ticker"
+                title="Set active tab ticker"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
             </div>
 
             {showSuggestions && filteredContracts.length > 0 && (
@@ -473,12 +619,11 @@ export function CopyTradingDashboard() {
                     key={c.symbol}
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      setInstrument(c.symbol);
-                      setShowSuggestions(false);
+                      setActiveTabInstrument(c.symbol);
                     }}
                     className="w-full flex items-center justify-between px-ds-3 py-ds-2 hover:bg-blue-500/15 transition-colors duration-base text-left"
                   >
-                    <span className="text-sm font-mono tabular-nums text-white">
+                    <span className="text-sm font-semibold text-white">
                       {c.symbol}
                     </span>
                     <span className="text-[11px] text-blue-100/65 truncate ml-ds-2">
@@ -515,7 +660,7 @@ export function CopyTradingDashboard() {
           {/* FLATTEN ALL */}
           <button
             onClick={handleFlattenAll}
-            className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md bg-red-600 border border-red-500 text-white hover:bg-red-500 transition-colors duration-base font-semibold text-sm"
+            className="flex items-center gap-1.5 px-ds-4 py-ds-2 rounded-md border border-num-negative/35 bg-num-negative/15 text-num-negative transition-colors duration-base hover:bg-num-negative/25 font-semibold text-sm"
           >
             <AlertOctagon className="w-4 h-4" />
             Flatten All
@@ -529,7 +674,7 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Day PnL
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             {totalDayPnL >= 0 ? '$' : '−$'}
             {Math.abs(totalDayPnL).toFixed(2)}
           </div>
@@ -539,7 +684,7 @@ export function CopyTradingDashboard() {
             Total Open PnL
           </div>
           <div
-            className={`text-base font-mono tabular-nums mt-1 ${
+            className={`text-base font-semibold mt-1 ${
               totalOpenPnL < 0 ? 'text-num-negative' : 'text-ink-primary'
             }`}
           >
@@ -551,7 +696,7 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Total Balance
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             ${totalBalance.toFixed(2)}
           </div>
         </div>
@@ -559,7 +704,7 @@ export function CopyTradingDashboard() {
           <div className="text-[10px] text-ink-secondary uppercase tracking-wider">
             Open Positions
           </div>
-          <div className="text-base font-mono tabular-nums text-ink-primary mt-1">
+          <div className="text-base font-semibold text-ink-primary mt-1">
             {openPositionsCount}
           </div>
         </div>

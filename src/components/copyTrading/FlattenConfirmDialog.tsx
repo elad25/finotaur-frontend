@@ -1,19 +1,16 @@
 // src/components/copyTrading/FlattenConfirmDialog.tsx
-// ═══════════════════════════════════════════════════════════════
 // Confirmation dialog for the FLATTEN ALL / Flatten single destructive action.
-// Uses DS tokens only. Renders as a fixed overlay with a red danger button.
-// Requires user to type "FLATTEN" before confirming.
-// ═══════════════════════════════════════════════════════════════
+// Uses DS tokens only. Renders as a fixed centered overlay with a red danger button.
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect } from 'react';
 import { AlertOctagon, X } from 'lucide-react';
 
 interface FlattenConfirmDialogProps {
   open: boolean;
   scope: 'all' | 'single';
-  accountName?: string;         // when scope='single'
-  positionsCount: number;       // total positions to be flattened
-  accountsCount: number;        // total accounts affected
+  accountName?: string;
+  positionsCount: number;
+  accountsCount: number;
   onConfirm: () => void;
   onCancel: () => void;
   isLoading?: boolean;
@@ -29,15 +26,6 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
   onCancel,
   isLoading,
 }: FlattenConfirmDialogProps) {
-  const [confirmText, setConfirmText] = useState('');
-  const canConfirm = confirmText === 'FLATTEN';
-
-  // Reset input whenever the dialog opens or closes
-  useEffect(() => {
-    if (!open) setConfirmText('');
-  }, [open]);
-
-  // Close on ESC (only while open)
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -55,64 +43,50 @@ export const FlattenConfirmDialog = memo(function FlattenConfirmDialog({
     scope === 'all'
       ? `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} across ${accountsCount} account${accountsCount === 1 ? '' : 's'}, plus cancel ALL pending orders.`
       : `Close ${positionsCount} position${positionsCount === 1 ? '' : 's'} on ${accountName}, plus cancel its pending orders.`;
+  const confirmLabel = scope === 'all' ? 'I understand, flatten all' : 'I understand, flatten';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-base/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-ds-4 rounded-lg bg-surface-1 border border-num-negative/40 p-ds-5 shadow-2xl">
+    <div className="fixed inset-0 z-[9999] grid place-items-center bg-surface-base/85 p-ds-4 backdrop-blur-sm">
+      <div className="relative mx-ds-4 w-full max-w-md rounded-lg border border-num-negative/40 bg-surface-1 p-ds-5 shadow-2xl">
         <button
           onClick={onCancel}
           disabled={isLoading}
-          className="absolute top-ds-3 right-ds-3 text-ink-tertiary hover:text-ink-primary transition-colors duration-base disabled:opacity-50"
+          className="absolute right-ds-3 top-ds-3 text-ink-tertiary transition-colors duration-base hover:text-ink-primary disabled:opacity-50"
           aria-label="Close"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
 
-        <div className="flex items-center gap-ds-3 mb-ds-3">
-          <div className="w-10 h-10 rounded-md bg-num-negative/10 border border-num-negative/30 flex items-center justify-center flex-shrink-0">
-            <AlertOctagon className="w-5 h-5 text-num-negative" />
+        <div className="mb-ds-3 flex items-center gap-ds-3">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border border-num-negative/30 bg-num-negative/10">
+            <AlertOctagon className="h-5 w-5 text-num-negative" />
           </div>
           <h3 className="text-base font-semibold text-ink-primary">{title}</h3>
         </div>
 
-        <p className="text-sm text-ink-secondary mb-ds-4">{subtitle}</p>
+        <p className="mb-ds-4 text-sm text-ink-secondary">{subtitle}</p>
 
-        <div className="rounded-md bg-num-negative/5 border border-num-negative/20 p-ds-3 mb-ds-4">
-          <p className="text-xs text-num-negative font-medium">
-            ⚠ This sends market orders immediately. Realized P&amp;L impact is irreversible.
-            All pending orders will be cancelled.
+        <div className="mb-ds-4 rounded-md border border-num-negative/20 bg-num-negative/5 p-ds-3">
+          <p className="text-sm font-semibold leading-relaxed text-num-negative">
+            Warning: clicking confirm will immediately close and exit all affected positions.
+            All pending orders will be cancelled, and realized P&amp;L impact is irreversible.
           </p>
-        </div>
-
-        {/* Type FLATTEN to confirm */}
-        <div className="mb-ds-3">
-          <label className="block text-[10px] uppercase tracking-wider text-num-negative mb-1 font-semibold">
-            Type FLATTEN to confirm
-          </label>
-          <input
-            type="text"
-            value={confirmText}
-            onChange={(e) => setConfirmText(e.target.value)}
-            placeholder="FLATTEN"
-            className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-num-negative/30 text-sm font-mono text-ink-primary placeholder:text-ink-tertiary focus:border-num-negative outline-none transition-colors duration-base"
-            autoComplete="off"
-          />
         </div>
 
         <div className="flex gap-ds-2">
           <button
             onClick={onCancel}
             disabled={isLoading}
-            className="flex-1 px-ds-4 py-ds-2 rounded-md border border-border-ds-default text-sm text-ink-primary hover:bg-surface-2 transition-colors duration-base disabled:opacity-50"
+            className="flex-1 rounded-md border border-border-ds-default px-ds-4 py-ds-2 text-sm text-ink-primary transition-colors duration-base hover:bg-surface-2 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            disabled={isLoading || !canConfirm}
-            className="flex-1 px-ds-4 py-ds-2 rounded-md bg-num-negative text-ink-primary font-semibold text-sm hover:bg-num-negative/80 transition-colors duration-base disabled:opacity-30 disabled:cursor-not-allowed"
+            disabled={isLoading}
+            className="flex-1 rounded-md bg-num-negative px-ds-4 py-ds-2 text-sm font-semibold text-ink-primary transition-colors duration-base hover:bg-num-negative/80 disabled:cursor-not-allowed disabled:opacity-30"
           >
-            {isLoading ? 'Flattening…' : (scope === 'all' ? 'Flatten All' : 'Flatten')}
+            {isLoading ? 'Flattening...' : confirmLabel}
           </button>
         </div>
       </div>
