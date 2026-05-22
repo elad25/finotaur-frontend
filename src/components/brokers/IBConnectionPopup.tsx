@@ -121,148 +121,114 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   // ============================================================================
 
   const renderInstructions = () => (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-xl bg-[#D71E28]/10 flex items-center justify-center border border-[#D71E28]/30">
-          <img 
-            src="/brokers/interactive-brokers-logo.svg" 
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#D71E28]/30 bg-[#D71E28]/10">
+          <img
+            src="/brokers/interactive-brokers-logo.svg"
             alt="Interactive Brokers"
-            className="w-8 h-8"
+            className="h-7 w-7"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
               e.currentTarget.nextElementSibling?.classList.remove('hidden');
             }}
           />
-          <span className="hidden text-[#D71E28] font-bold text-xl">IB</span>
+          <span className="hidden text-xl font-bold text-[#D71E28]">IB</span>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white">Connect Interactive Brokers</h2>
-          <p className="text-zinc-400 text-sm">Follow these steps to link your IB account</p>
+          <h2 className="text-lg font-bold text-white">Connect Interactive Brokers</h2>
+          <p className="text-xs text-zinc-400">Read-only reporting connection</p>
         </div>
       </div>
 
-      {/* Info Box */}
-      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+      <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3">
         <div className="flex items-start gap-3">
-          <HelpCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="text-blue-100 font-medium mb-1">What is IBRIT?</p>
+          <HelpCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
+          <div className="text-xs">
+            <p className="mb-1 font-medium text-blue-100">IBRIT access</p>
             <p className="text-blue-200/80">
-              IBRIT (IB Reporting Integration) is Interactive Brokers' official service for 
-              third-party data feeds. It provides secure, read-only access to your trades 
-              and positions.
+              FINOTAUR reads trades and positions only. No trading permission is requested.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Steps */}
-      <div className="space-y-4">
-        <h3 className="text-white font-semibold">Setup Steps:</h3>
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-white">Setup</h3>
 
-        {/* Step 1 */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
           <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#C9A646] flex items-center justify-center flex-shrink-0 text-black font-bold text-sm">
+            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#C9A646] text-xs font-bold text-black">
               1
             </div>
             <div className="flex-1">
-              <p className="text-white font-medium mb-2">Log in to IB Client Portal</p>
-              <a 
-                href="https://www.interactivebrokers.com/portal" 
+              <p className="mb-2 text-sm font-medium text-white">Open IB Client Portal</p>
+              <a
+                href="https://www.interactivebrokers.com/portal"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-[#C9A646] hover:text-[#E5C158] text-sm transition-colors"
+                className="inline-flex items-center gap-2 text-xs text-[#C9A646] transition-colors hover:text-[#E5C158]"
               >
-                Open Client Portal
-                <ExternalLink className="w-4 h-4" />
+                Open portal
+                <ExternalLink className="h-4 w-4" />
               </a>
             </div>
           </div>
         </div>
 
-        {/* Step 2 */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
           <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#C9A646] flex items-center justify-center flex-shrink-0 text-black font-bold text-sm">
+            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#C9A646] text-xs font-bold text-black">
               2
             </div>
             <div className="flex-1">
-              <p className="text-white font-medium mb-2">Navigate to Third-Party Services</p>
-              <p className="text-zinc-400 text-sm">
-                Go to <span className="text-zinc-200">Settings</span> → 
-                <span className="text-zinc-200"> Third-Party Reports</span> → 
-                <span className="text-zinc-200"> Third-Party Services</span>
+              <p className="mb-2 text-sm font-medium text-white">Enable Finotaur reporting</p>
+              <p className="text-xs text-zinc-400">
+                Settings &gt; Third-Party Reports &gt; Third-Party Services &gt; Finotaur
               </p>
             </div>
           </div>
         </div>
 
-        {/* Step 3 */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
           <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#C9A646] flex items-center justify-center flex-shrink-0 text-black font-bold text-sm">
+            <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#C9A646] text-xs font-bold text-black">
               3
             </div>
             <div className="flex-1">
-              <p className="text-white font-medium mb-2">Request Finotaur Integration</p>
-              <p className="text-zinc-400 text-sm mb-3">
-                Search for <span className="text-[#C9A646] font-medium">Finotaur</span> and 
-                enable the service. You'll receive a Token and Query ID.
-              </p>
-              <div className="text-xs text-zinc-500 bg-zinc-800/50 rounded-lg p-3">
-                <p className="mb-1">
-                  <span className="text-zinc-400">Alternative:</span> Email 
-                  <button 
-                    onClick={() => handleCopy('reportingintegration@interactivebrokers.com', 3)}
-                    className="text-[#C9A646] hover:text-[#E5C158] mx-1 inline-flex items-center gap-1"
-                  >
-                    reportingintegration@interactivebrokers.com
-                    {copiedStep === 3 ? (
-                      <Check className="w-3 h-3" />
-                    ) : (
-                      <Copy className="w-3 h-3" />
-                    )}
-                  </button>
-                </p>
-                <p className="text-zinc-500">
-                  Include your account number and request the Finotaur feed
-                </p>
+              <p className="mb-2 text-sm font-medium text-white">Copy Token + Query ID</p>
+              <p className="mb-2 text-xs text-zinc-400">Paste both credentials on the next screen.</p>
+              <div className="rounded-lg bg-zinc-800/50 p-2 text-[11px] text-zinc-500">
+                <span className="text-zinc-400">Not listed?</span>
+                <button
+                  onClick={() => handleCopy('reportingintegration@interactivebrokers.com', 3)}
+                  className="mx-1 inline-flex items-center gap-1 text-[#C9A646] hover:text-[#E5C158]"
+                >
+                  Email IB
+                  {copiedStep === 3 ? (
+                    <Check className="h-3 w-3" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </button>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 4 */}
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-full bg-[#C9A646] flex items-center justify-center flex-shrink-0 text-black font-bold text-sm">
-              4
-            </div>
-            <div className="flex-1">
-              <p className="text-white font-medium mb-2">Enter Your Credentials</p>
-              <p className="text-zinc-400 text-sm">
-                Once you have your Token and Query ID, click Continue to enter them
-              </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 pt-2">
+      <div className="flex gap-3 pt-1">
         <button
           onClick={onClose}
-          className="flex-1 px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl transition-colors font-medium"
+          className="flex-1 rounded-xl bg-zinc-800 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
         >
           Cancel
         </button>
         <button
           onClick={() => setView('credentials')}
-          className="flex-1 px-6 py-3 bg-gradient-to-r from-[#C9A646] to-[#E5C158] hover:from-[#B39540] hover:to-[#D4B55E] text-black rounded-xl transition-all font-bold"
+          className="flex-1 rounded-xl bg-gradient-to-r from-[#C9A646] to-[#E5C158] px-5 py-2.5 text-sm font-bold text-black transition-all hover:from-[#B39540] hover:to-[#D4B55E]"
         >
-          I Have My Credentials
+          Continue
         </button>
       </div>
     </div>
@@ -455,11 +421,11 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
       onClick={onClose}
     >
       <div 
-        className="bg-[#141414] border rounded-[20px] p-6 max-w-lg w-full shadow-[0_0_50px_rgba(201,166,70,0.2)] max-h-[90vh] overflow-y-auto"
+        className="relative max-h-[calc(100vh-32px)] w-full max-w-[460px] overflow-y-auto rounded-[16px] border bg-[#141414] p-4 shadow-[0_0_50px_rgba(201,166,70,0.2)] sm:p-5"
         style={{ borderColor: 'rgba(255, 215, 0, 0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >

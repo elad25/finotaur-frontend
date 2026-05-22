@@ -5,11 +5,13 @@ import {
   ArrowRight,
   Eye,
   Layers3,
+  Link2,
   Radar,
   ShieldCheck,
   TrendingUp,
   Zap,
 } from 'lucide-react';
+import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioMockData, TimeRange } from './hooks/usePortfolioMockData';
@@ -18,6 +20,7 @@ const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
 export function FinotaurCopilotDashboard() {
   const [range, setRange] = useState<TimeRange>('1Y');
+  const [showBrokerPopup, setShowBrokerPopup] = useState(false);
   const snapshot = usePortfolioMockData(range);
 
   return (
@@ -31,14 +34,19 @@ export function FinotaurCopilotDashboard() {
             Finotaur Intelligence System
           </p>
           <h1 className="mx-auto mt-3 max-w-[980px] text-center text-[36px] font-semibold uppercase leading-[0.95] text-white md:text-[52px]">
-            <span className="block bg-gradient-to-r from-gold-deep via-gold-bright to-gold-primary bg-clip-text text-transparent">
-              FINOTAUR Copilot
-            </span>
-            <span className="mt-2 block text-ink-primary">Portfolio Command Center</span>
+            <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">
+              FINOTAUR
+            </span>{' '}
+            <span className="text-ink-primary">COPILOT</span>
           </h1>
-          <p className="mx-auto mt-4 max-w-[860px] text-center text-[11px] uppercase tracking-[0.18em] text-ink-tertiary">
-            Institutional-grade market intelligence, portfolio signals, and autonomous risk awareness
-          </p>
+          <button
+            type="button"
+            onClick={() => setShowBrokerPopup(true)}
+            className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-gold-bright/55 bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_24px_rgba(201,166,70,0.26)] transition hover:brightness-110 xl:absolute xl:right-2 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2"
+          >
+            <Link2 className="h-4 w-4" />
+            Connect broker
+          </button>
         </div>
 
         <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
@@ -59,6 +67,9 @@ export function FinotaurCopilotDashboard() {
         </div>
       </main>
 
+      {showBrokerPopup && (
+        <IBConnectionPopup onClose={() => setShowBrokerPopup(false)} />
+      )}
     </div>
   );
 }
@@ -152,13 +163,12 @@ function MiniReturn() {
 function AiBrainPanel({ className }: { className?: string }) {
   return (
     <div className={`relative min-h-[330px] ${className}`}>
-      <div className="absolute inset-x-[-72px] top-[118px] hidden xl:block h-px bg-gradient-to-r from-transparent via-gold-primary/60 to-transparent" />
       <div className="relative h-full min-h-[330px] flex items-start justify-center overflow-visible">
         <div className="absolute top-0 h-[286px] w-[108%] max-w-[500px] border border-gold-primary/20 bg-black/15 shadow-[0_0_90px_rgba(201,166,70,0.18)] [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
         <div className="absolute top-4 h-[252px] w-[94%] max-w-[444px] border border-gold-primary/10 [clip-path:polygon(10%_0,90%_0,100%_16%,100%_76%,88%_100%,12%_100%,0_76%,0_16%)]" />
         <div className="absolute left-1/2 top-[110px] h-[250px] w-[470px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.24),rgba(201,166,70,0.08)_38%,transparent_68%)] blur-xl" />
-        <div className="absolute left-1/2 top-[16px] -translate-x-1/2">
-          <GlobeLoader size={240} />
+        <div className="absolute left-1/2 top-[0px] -translate-x-1/2">
+          <GlobeLoader size={280} />
         </div>
         <div className="absolute bottom-[-4px] left-1/2 w-[270px] -translate-x-1/2 rounded-[8px] border border-gold-primary/24 bg-black/75 px-5 py-3 text-center shadow-[0_0_36px_rgba(201,166,70,0.22)] backdrop-blur-md">
           <div className="text-sm font-semibold uppercase text-gold-primary">AI CORE</div>
