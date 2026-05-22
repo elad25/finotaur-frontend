@@ -22,7 +22,7 @@ import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Brain, TrendingUp, Activity, BarChart3,
-  Zap, Shield, Target, Gauge, Clock, Flame, Eye, SlidersHorizontal, Filter, ChevronDown,
+  Zap, Shield, Target, Gauge, Clock, Flame,
 } from 'lucide-react';
 import type {
   OptionsData, OverviewChartsData, MarketDashboardRow,
@@ -125,57 +125,30 @@ const MarketStability = memo(function MarketStability({ score }: { score: number
   const gaugeScore = clamp(score, 0, 100);
 
   return (
-    <div style={{
-      minHeight: 182,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderLeft: '1px solid rgba(255,255,255,0.08)',
-      paddingLeft: 34,
-    }}>
-      <div style={{ width: '100%', maxWidth: 390 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-          <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Market Stability</span>
-          <span style={{
-            width: 15, height: 15, borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: '#777', border: '1px solid rgba(255,255,255,0.16)', fontSize: 10,
-          }}>i</span>
-        </div>
-        <div style={{
-          position: 'relative',
-          width: 360,
-          maxWidth: '100%',
-          height: 190,
-          margin: '0 auto',
-        }}>
-          <svg width="360" height="190" viewBox="0 0 360 190" style={{ overflow: 'visible' }}>
-            <defs>
-              <linearGradient id="stabilityGoldArc" x1="36" x2="324" y1="0" y2="0" gradientUnits="userSpaceOnUse">
-                <stop offset="0%" stopColor="#8A661B" stopOpacity="0.58" />
-                <stop offset="42%" stopColor="#D6B452" stopOpacity="0.68" />
-                <stop offset="100%" stopColor="#F4D97B" stopOpacity="0.76" />
-              </linearGradient>
-            </defs>
-            <path d="M 42 158 A 138 138 0 0 1 318 158" fill="none" stroke="rgba(0,0,0,0.74)" strokeWidth="24" strokeLinecap="round" />
-            <path
-              d="M 42 158 A 138 138 0 0 1 318 158"
-              fill="none"
-              stroke="url(#stabilityGoldArc)"
-              strokeWidth="24"
-              strokeLinecap="round"
-              pathLength={100}
-              strokeDasharray={`${gaugeScore} ${100 - gaugeScore}`}
-            />
-            <path d="M 62 158 A 118 118 0 0 1 298 158" fill="none" stroke="rgba(0,0,0,0.52)" strokeWidth="2.5" strokeLinecap="round" />
-            <path d="M 37 158 A 143 143 0 0 1 323 158" fill="none" stroke="rgba(244,217,123,0.11)" strokeWidth="1" strokeLinecap="round" />
-            <path d="M 78 158 A 102 102 0 0 1 282 158" fill="none" stroke="rgba(255,255,255,0.045)" strokeWidth="1" strokeLinecap="round" />
-          </svg>
-          <div style={{ position: 'absolute', inset: '102px 0 0', textAlign: 'center' }}>
-            <span style={{ color: C.goldLight, fontSize: 40, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{score}</span>
-            <span style={{ color: '#C9C9C9', fontSize: 13, marginLeft: 4 }}>/100</span>
-            <div style={{ color: '#9A9A9A', fontSize: 12, marginTop: 7, letterSpacing: '0.02em' }}>Stability Score</div>
-          </div>
-        </div>
+    <div style={{ position: 'relative', width: 148, height: 88, flex: '0 0 auto' }}>
+      <svg width="148" height="88" viewBox="0 0 148 88" style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="stabilityGoldArcCompact" x1="18" x2="130" y1="0" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#8A661B" stopOpacity="0.52" />
+            <stop offset="52%" stopColor="#D6B452" stopOpacity="0.72" />
+            <stop offset="100%" stopColor="#F4D97B" stopOpacity="0.84" />
+          </linearGradient>
+        </defs>
+        <path d="M 19 68 A 55 55 0 0 1 129 68" fill="none" stroke="rgba(0,0,0,0.78)" strokeWidth="10" strokeLinecap="round" />
+        <path
+          d="M 19 68 A 55 55 0 0 1 129 68"
+          fill="none"
+          stroke="url(#stabilityGoldArcCompact)"
+          strokeWidth="10"
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray={`${gaugeScore} ${100 - gaugeScore}`}
+        />
+        <path d="M 31 68 A 43 43 0 0 1 117 68" fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="1" strokeLinecap="round" />
+      </svg>
+      <div style={{ position: 'absolute', inset: '36px 0 0', textAlign: 'center' }}>
+        <div style={{ color: C.goldLight, fontSize: 34, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{score}</div>
+        <div style={{ color: '#B8B8B8', fontSize: 10, marginTop: 3, fontWeight: 800 }}>Stability</div>
       </div>
     </div>
   );
@@ -193,105 +166,110 @@ const Regime = memo(function Regime({ data }: { data: OptionsData }) {
   const pcr = pc?.value ? parseFloat(pc.value) : 0;
   const stabilityScore = clamp(Math.round(86 - (v.ivRank ?? 0) * 0.28 - (v.vixLevel ?? 0) * 0.55 + (isNeg ? -10 : 10)), 5, 95);
   const metrics = useMemo(() => [
-    { label: 'Net Gamma', value: ng?.value || '$0', color: ng?.status === 'negative' ? C.red : C.green, icon: Activity, delta: '14%', dir: 'up' },
-    { label: 'P/C Ratio', value: pcr.toFixed(2), color: pcr > 1 ? C.red : pcr < 0.7 ? C.green : C.amber, icon: BarChart3, delta: '6%', dir: 'down' },
-    { label: 'IV Rank', value: `${v.ivRank ?? 0}`, color: (v.ivRank ?? 0) > 70 ? C.red : (v.ivRank ?? 0) < 30 ? C.green : C.amber, icon: Gauge, delta: '3', dir: 'up' },
-    { label: 'VIX', value: (v.vixLevel ?? 0).toFixed(1), color: (v.vixLevel ?? 0) > 25 ? C.red : (v.vixLevel ?? 0) < 15 ? C.green : C.amber, icon: Flame, delta: '2.1', dir: 'down' },
-    { label: 'Net Premium', value: np?.value || '$0', color: np?.status === 'positive' ? C.green : np?.status === 'negative' ? C.red : C.amber, icon: TrendingUp, delta: '18%', dir: 'up' },
-    { label: '0DTE', value: `${((v.zeroDteRatio ?? 0) * 100).toFixed(0)}%`, color: (v.zeroDteRatio ?? 0) > 0.5 ? C.amber : C.textDim, icon: Clock, delta: '7%', dir: 'up' },
+    { label: 'Net Premium', value: np?.value || '$0', color: np?.status === 'negative' ? C.red : C.green, sub: '+18% vs. prev. day', trend: 'up' },
+    { label: 'P/C Ratio', value: pcr.toFixed(2), color: pcr > 1 ? C.red : pcr < 0.7 ? C.green : C.amber, sub: '-6% vs. prev. day', trend: 'down' },
+    { label: 'VIX', value: (v.vixLevel ?? 0).toFixed(1), color: (v.vixLevel ?? 0) > 25 ? C.red : (v.vixLevel ?? 0) < 15 ? C.green : C.amber, sub: '-2.1 vs. prev. day', trend: 'down' },
   ], [ng, pcr, v, np]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05, duration: 0.5 }}>
       <div style={{
-        background: `linear-gradient(135deg, ${C.bg}, rgba(21,18,16,0.97))`,
-        border: `1px solid ${C.borderGold}`, borderRadius: 16, overflow: 'hidden', position: 'relative',
+        background: 'linear-gradient(180deg, rgba(15,15,14,0.98), rgba(10,10,10,0.98))',
+        border: '1px solid rgba(201,166,70,0.18)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        position: 'relative',
+        boxShadow: 'inset 0 1px 0 rgba(244,217,123,0.05)',
       }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${C.gold}, ${C.goldLight}, ${C.gold}, transparent)` }} />
-        <div style={{ position: 'absolute', top: -40, left: '50%', transform: 'translateX(-50%)', width: 500, height: 200, borderRadius: '50%', filter: 'blur(120px)', pointerEvents: 'none', background: 'rgba(201,166,70,0.05)' }} />
-
-        <div style={{ position: 'relative', padding: '24px 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 42, height: 42, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'linear-gradient(135deg, rgba(201,166,70,0.2), rgba(201,166,70,0.05))',
-                border: '1px solid rgba(201,166,70,0.3)',
-              }}>
-                <Brain style={{ width: 20, height: 20, color: C.gold }} />
-              </div>
-              <div>
-                <h3 style={{ color: '#fff', fontSize: 16, fontWeight: 700, margin: 0 }}>Market Regime Analysis</h3>
-                <p style={{ color: '#555', fontSize: 10, margin: '2px 0 0' }}>
-                  {new Date(data.lastUpdated).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} - SPY Options
-                  {(() => {
-                    const now = new Date();
-                    const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-                    const h = et.getHours(), m = et.getMinutes(), day = et.getDay();
-                    const mins = h * 60 + m;
-                    const isOpen = day >= 1 && day <= 5 && mins >= 570 && mins < 960; // 9:30-16:00
-                    return isOpen
-                      ? <span style={{ color: C.green, marginLeft: 6 }}>LIVE</span>
-                      : <span style={{ color: C.amber, marginLeft: 6 }}>MARKET CLOSED - Last session data</span>;
-                  })()}
-                </p>
-              </div>
+        <div style={{
+          minHeight: 92,
+          display: 'grid',
+          gridTemplateColumns: 'minmax(118px, 0.9fr) repeat(4, minmax(86px, 0.72fr)) 176px',
+          alignItems: 'center',
+        }}>
+          <div style={{ padding: '10px 12px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ color: '#B7B7B7', fontSize: 8, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+              Market Regime
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: rc, boxShadow: `0 0 8px ${rc}60` }} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: rc, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: rc, boxShadow: `0 0 8px ${rc}80`, flex: '0 0 auto' }} />
+              <span style={{ color: rc, fontSize: 16, fontWeight: 800, lineHeight: 1 }}>
                 {isNeg ? 'Negative Gamma' : 'Positive Gamma'}
               </span>
             </div>
+            <div style={{ color: '#B7B7B7', fontSize: 10, marginTop: 7 }}>Market {isNeg ? 'Amplifying' : 'Stabilizing'}</div>
           </div>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
-            alignItems: 'center',
-            gap: 28,
-            marginBottom: 22,
-          }}>
-            <div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 18px',
-            borderRadius: 12, marginBottom: 16, background: `${rc}10`, border: `1px solid ${rc}25`,
-          }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: rc }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: rc }}>
-              {isNeg ? 'NEGATIVE GAMMA - AMPLIFIED MOVES' : 'POSITIVE GAMMA - STABILIZING'}
-            </span>
-          </div>
-
-          <p style={{ color: C.text, fontSize: 13, lineHeight: 1.75, margin: '0 0 20px', maxWidth: 800 }}>
-            {ng?.soWhat}{' '}
-            {gl && <>Gamma flip at <span style={{ color: '#fff', fontWeight: 600 }}>{gl.value}</span>. {gl.soWhat}</>}
-          </p>
+          <div style={{ padding: '10px 12px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ color: '#B7B7B7', fontSize: 8, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+              Net Gamma
             </div>
+            <div style={{ color: ng?.status === 'negative' ? C.red : C.green, fontSize: 18, fontWeight: 900, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{ng?.value || '$0'}</div>
+            <div style={{ color: C.green, fontSize: 9, marginTop: 7, fontWeight: 700 }}>+14% vs. prev. day</div>
+          </div>
+
+          {metrics.map(m => (
+            <div key={m.label} style={{ padding: '10px 12px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+              <div style={{ color: '#B7B7B7', fontSize: 8, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                {m.label}
+              </div>
+              <div style={{ color: m.color, fontSize: 18, fontWeight: 900, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+                {m.value}<span style={{ color: '#E8E8E8', fontSize: 9, marginLeft: 3, fontWeight: 700 }}>{m.sub === '/100' ? m.sub : ''}</span>
+              </div>
+              {m.sub !== '/100' && <div style={{ color: m.trend === 'down' ? C.red : C.green, fontSize: 9, marginTop: 7, fontWeight: 700 }}>{m.sub}</div>}
+              {m.sub === '/100' && <div style={{ height: 3, width: 62, borderRadius: 2, background: 'rgba(255,255,255,0.12)', marginTop: 9, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${stabilityScore}%`, background: C.goldLight, borderRadius: 2 }} />
+              </div>}
+            </div>
+          ))}
+
+          <div style={{
+            padding: '2px 14px 2px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            borderLeft: '1px solid rgba(201,166,70,0.18)',
+            background: 'radial-gradient(circle at 50% 0%, rgba(201,166,70,0.12), transparent 62%)',
+          }}>
             <MarketStability score={stabilityScore} />
           </div>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-            {metrics.map(m => (
-              <div key={m.label} style={{
-                padding: '16px 18px', borderRadius: 10,
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.018))',
-                border: '1px solid rgba(201,166,70,0.16)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                  <m.icon style={{ width: 16, height: 16, color: 'rgba(255,255,255,0.58)' }} />
-                  <span style={{ fontSize: 11, color: '#B8B8B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.label}</span>
-                </div>
-                <div style={{ fontSize: 26, fontWeight: 800, color: m.color, letterSpacing: '0.01em', lineHeight: 1 }}>{m.value}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, fontSize: 13, color: '#D8D8D8' }}>
-                  <span>vs prev. day</span>
-                  <span style={{ color: m.dir === 'up' ? '#4ADE80' : '#EF4444', fontWeight: 700 }}>
-                    {m.dir === 'up' ? 'up' : 'down'} {m.delta}
-                  </span>
-                </div>
-              </div>
-            ))}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '96px 1fr 124px',
+          alignItems: 'center',
+          gap: 16,
+          minHeight: 40,
+          padding: '8px 16px',
+          borderTop: '1px solid rgba(201,166,70,0.13)',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01))',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#D8D8D8', fontSize: 10, fontWeight: 700 }}>
+            <span style={{
+              width: 22, height: 22, borderRadius: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              color: C.goldLight, border: '1px solid rgba(201,166,70,0.28)',
+              background: 'rgba(201,166,70,0.08)',
+            }}>
+              <Brain style={{ width: 12, height: 12 }} />
+            </span>
+            AI Insight
           </div>
+          <div style={{ color: '#D7D2C7', fontSize: 10, lineHeight: 1.45 }}>
+            {ng?.soWhat || (isNeg ? 'Dealers are short gamma and positioning for amplified moves.' : 'Dealers are long gamma and positioning for stability.')}
+            {gl && <> Gamma flip at <span style={{ color: '#fff', fontWeight: 700 }}>{gl.value}</span>.</>}
+          </div>
+          <button type="button" style={{
+            color: C.goldLight,
+            fontSize: 9,
+            fontWeight: 800,
+            background: 'transparent',
+            border: 0,
+            textAlign: 'right',
+            cursor: 'pointer',
+          }}>
+            View Full Report →
+          </button>
         </div>
       </div>
     </motion.div>
@@ -317,8 +295,33 @@ const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDa
   if (cells.length === 0) return null;
 
   return (
-    <CC title="Options Flow Heatmap" subtitle={`${cells.length} tickers - color = directional bias`} icon={Eye} accentColor={C.gold} delay={0.1} noPad>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(126px, 1fr))', gap: 8, padding: 14, background: 'rgba(255,255,255,0.01)' }}>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.28 }}>
+      <div style={{
+        background: 'linear-gradient(180deg, rgba(16,16,15,0.96), rgba(10,10,10,0.96))',
+        border: '1px solid rgba(201,166,70,0.13)',
+        borderRadius: 7,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          minHeight: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '4px 10px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#BDBDBD', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Options Flow Heatmap
+            <span style={{ color: '#6B6B6B', fontSize: 8 }}>ⓘ</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#8D8D8D', fontSize: 8, fontWeight: 700 }}>
+            <span><span style={{ color: C.green }}>●</span> Bullish</span>
+            <span><span style={{ color: C.amber }}>●</span> Neutral</span>
+            <span><span style={{ color: C.red }}>●</span> Bearish</span>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(58px, 1fr))', gap: 4, padding: 5, background: 'rgba(255,255,255,0.01)' }}>
         {cells.map((c, i) => {
           const ratio = (c.cV - c.pV) / ((c.cV + c.pV) || 1);
           const isBull = ratio > 0.12;
@@ -337,24 +340,22 @@ const FlowHeatmap = memo(function FlowHeatmap({ calls, puts }: { calls: MarketDa
               initial={{ opacity: 0, scale: 0.92 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.08 + i * 0.02, duration: 0.25 }}
-              style={{ padding: '17px 10px', minHeight: 112, background: bg, border: `1px solid ${col}40`, borderRadius: 7, textAlign: 'center' }}
+              style={{ padding: '6px 5px', minHeight: 51, background: bg, border: `1px solid ${col}36`, borderRadius: 4, textAlign: 'center' }}
             >
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{c.sym}</div>
-              <div style={{ fontSize: 22, color: col, fontWeight: 800, lineHeight: 1 }}>{directionalScore}</div>
+              <div style={{ fontSize: 9, fontWeight: 900, color: '#fff', marginBottom: 4 }}>{c.sym}</div>
+              <div style={{ fontSize: 14, color: col, fontWeight: 900, lineHeight: 1 }}>{directionalScore}</div>
               <div style={{
-                marginTop: 8, fontSize: 9, fontWeight: 800,
+                marginTop: 4, fontSize: 7, fontWeight: 800,
                 color: col, textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>
                 {isBull ? 'BULLISH' : isBear ? 'BEARISH' : 'NEUTRAL'}
-              </div>
-              <div style={{ marginTop: 6, height: 2, borderRadius: 1, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min(c.score, 100)}%`, background: `linear-gradient(90deg, ${C.gold}40, ${C.gold})`, borderRadius: 1 }} />
               </div>
             </motion.div>
           );
         })}
       </div>
-    </CC>
+      </div>
+    </motion.div>
   );
 });
 
@@ -868,45 +869,12 @@ export const OverviewTab = memo(function OverviewTab({ data }: { data: OptionsDa
   const grid2: React.CSSProperties = {
     display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20,
   };
-  const controlBtn: React.CSSProperties = {
-    minHeight: 46,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: '0 22px',
-    borderRadius: 8,
-    color: '#F2F2F2',
-    fontSize: 15,
-    fontWeight: 600,
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))',
-    border: '1px solid rgba(201,166,70,0.24)',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-  };
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <Regime data={data} />
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div style={label}>Options Flow Overview</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button type="button" style={controlBtn}>
-            10 Tickers
-            <ChevronDown style={{ width: 16, height: 16, color: '#D8D8D8' }} />
-          </button>
-          <button type="button" style={controlBtn}>
-            <Filter style={{ width: 17, height: 17, color: '#F2F2F2' }} />
-            Filters
-          </button>
-          <button type="button" style={{ ...controlBtn, color: C.goldLight, border: '1px solid rgba(244,217,123,0.45)' }}>
-            <SlidersHorizontal style={{ width: 17, height: 17 }} />
-            Customize
-          </button>
-        </div>
-      </div>
       <FlowHeatmap calls={oc.callsDashboard} puts={oc.putsDashboard} />
 
+      <div style={{ height: 12 }} />
       <div style={label}>Gamma & Sector Intelligence</div>
       <div style={grid2}>
         <GexProfile data={oc} currentPrice={spyPrice} />
