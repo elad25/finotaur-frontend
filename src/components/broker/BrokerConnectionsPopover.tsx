@@ -1,7 +1,7 @@
 // src/components/broker/BrokerConnectionsPopover.tsx
 // Compact broker/account selector anchored to the journal dashboard broker button.
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { AlertCircle, Check, ChevronDown, ChevronUp, Plus, RefreshCw, Settings } from 'lucide-react';
 import { BROKER_CONFIGS, BrokerName, BrokerConnection } from '@/lib/brokers/types';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -350,19 +350,15 @@ function PopoverBody({
   onManage?: () => void;
 }) {
   const {
-    connections: active,
     isLoading: loadingActive,
   } = useBrokerConnections({ active: true });
   const {
-    connections: inactive,
     isLoading: loadingInactive,
     reconnect,
   } = useBrokerConnections({ active: false });
 
   const {
     portfolios,
-    tradovatePortfolios,
-    manualPortfolios,
     selectedPortfolioIds,
     togglePortfolioSelection,
     setSelectedPortfolioIds,
@@ -371,55 +367,6 @@ function PopoverBody({
   } = usePortfolioContext();
 
   const [reconnectFor, setReconnectFor] = useState<BrokerConnection | null>(null);
-  const allConnections = useMemo(() => [...active, ...inactive], [active, inactive]);
-
-  const connectionForPortfolio = useMemo(() => {
-    const byTradovateId = new Map<string, BrokerConnection>();
-    for (const connection of allConnections) {
-      if (connection.account_id) byTradovateId.set(String(connection.account_id), connection);
-    }
-
-    return (portfolio: Portfolio) => {
-      if (portfolio.source !== 'tradovate' || !portfolio.tradovate_account_id) return undefined;
-      return byTradovateId.get(String(portfolio.tradovate_account_id));
-    };
-  }, [allConnections]);
-
-  const connectionGroups = useMemo<ConnectionGroup[]>(() => {
-    const groups = new Map<string, ConnectionGroup>();
-
-    for (const portfolio of tradovatePortfolios) {
-      const connection = connectionForPortfolio(portfolio);
-      const broker = (connection?.broker as BrokerName | undefined) ?? 'tradovate';
-      const title = connection?.connection_name?.trim()
-        || portfolio.connection_label?.trim()
-        || 'Tradovate connection';
-      const key = `${broker}:${title}`;
-
-      if (!groups.has(key)) {
-        groups.set(key, {
-          id: key,
-          title,
-          broker,
-          portfolios: [],
-          connection,
-        });
-      }
-
-      groups.get(key)!.portfolios.push(portfolio);
-    }
-
-    if (manualPortfolios.length > 0) {
-      groups.set('manual', {
-        id: 'manual',
-        title: 'Manual',
-        broker: 'manual',
-        portfolios: manualPortfolios,
-      });
-    }
-
-    return Array.from(groups.values());
-  }, [tradovatePortfolios, manualPortfolios, connectionForPortfolio]);
 
   const showLoading = loadingActive || loadingInactive || loadingPortfolios;
   const handleManage = () => {
@@ -465,60 +412,14 @@ function PopoverBody({
                 </span>
               </div>
 
-              {/* Flat layout grouped by broker connection. Each group renders a
-                  thin uppercase divider showing the user-given connection name
-                  (broker_connections.connection_name, falling back to
-                  portfolio.connection_label or the broker display name), followed
-                  by the individual accounts as flat selectable rows. No card
-                  wrapper, no per-connection Sync button, no expand/collapse, no
-                  "N accounts" counter — these were removed per the dashboard
-                  redesign request 2026-05-19. AccountListRow keeps a tiny
-                  per-account status dot + "synced Xm ago" caption for parity
-                  with the All-Accounts dropdown look. A Reconnect chip appears
-                  inside the divider only when the connection is degraded. */}
-              {connectionGroups.map((group, index) => {
-                const groupConnection = group.connection;
-                const groupHasIssue = !!groupConnection
-                  && groupConnection.status !== 'connected'
-                  && groupConnection.status !== 'renewing';
-                return (
-                  <div key={group.id}>
-                    <div
-                      className={cn(
-                        'flex items-center gap-2 px-3 pb-1',
-                        index === 0 ? 'pt-2' : 'pt-3',
-                      )}
-                    >
-                      <span className="truncate text-[9px] font-semibold uppercase tracking-widest text-zinc-500">
-                        {group.title}
-                      </span>
-                      <div className="h-px flex-1 bg-zinc-800/60" />
-                      {groupHasIssue && groupConnection && (
-                        <button
-                          type="button"
-                          onClick={() => setReconnectFor(groupConnection)}
-                          className="flex shrink-0 items-center gap-1 rounded-md border border-[#C9A646]/25 px-1.5 py-0.5 text-[9px] font-medium text-[#C9A646] transition-colors hover:border-[#C9A646]/45 hover:bg-[#C9A646]/10"
-                          aria-label={`Reconnect ${group.title}`}
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          Reconnect
-                        </button>
-                      )}
-                    </div>
-                    {group.portfolios.map((portfolio) => (
-                      <AccountListRow
-                        key={portfolio.id}
-                        portfolio={portfolio}
-                        broker={group.broker}
-                        connection={connectionForPortfolio(portfolio)}
-                        checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
-                        onToggle={togglePortfolioSelection}
-                        onReconnect={setReconnectFor}
-                      />
-                    ))}
-                  </div>
-                );
-              })}
+              {portfolios.map((portfolio) => (
+                <SimpleAccountRow
+                  key={portfolio.id}
+                  portfolio={portfolio}
+                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  onToggle={togglePortfolioSelection}
+                />
+              ))}
             </>
           )}
 
