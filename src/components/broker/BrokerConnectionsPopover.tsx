@@ -10,7 +10,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { statusBadge } from '@/components/broker/brokerStatusBadge';
 import { BrokerReconnectModal } from '@/components/broker/BrokerReconnectModal';
-import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
 import type { Portfolio } from '@/hooks/usePortfolios';
 import { cn } from '@/lib/utils';
 
@@ -363,6 +363,7 @@ function PopoverBody({
     togglePortfolioSelection,
     setSelectedPortfolioIds,
     isShowingAll,
+    isShowingTrader,
     isLoading: loadingPortfolios,
   } = usePortfolioContext();
 
@@ -403,6 +404,22 @@ function PopoverBody({
             <span className="flex-1 text-left">All accounts</span>
           </button>
 
+          <button
+            type="button"
+            role="option"
+            aria-selected={isShowingTrader}
+            onClick={() => setSelectedPortfolioIds([TRADER_PORTFOLIO_ID])}
+            className={cn(
+              'flex w-full items-center gap-2.5 px-3 py-2 text-xs font-semibold transition-colors',
+              isShowingTrader
+                ? 'bg-[#C9A646]/5 text-[#C9A646]'
+                : 'text-zinc-300 hover:bg-zinc-800/50',
+            )}
+          >
+            <CheckboxMark checked={isShowingTrader} compact />
+            <span className="flex-1 text-left">Trader</span>
+          </button>
+
           {portfolios.length > 0 && (
             <>
               <div className="mx-2 border-t border-zinc-800/60" />
@@ -416,7 +433,7 @@ function PopoverBody({
                 <SimpleAccountRow
                   key={portfolio.id}
                   portfolio={portfolio}
-                  checked={!isShowingAll && selectedPortfolioIds.includes(portfolio.id)}
+                  checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(portfolio.id)}
                   onToggle={togglePortfolioSelection}
                 />
               ))}

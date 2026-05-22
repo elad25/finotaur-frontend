@@ -142,6 +142,7 @@ const SELECTED_PORTFOLIOS_KEY = 'finotaur_selected_portfolios';
 
 // Special sentinel — means "show all accounts"
 export const ALL_PORTFOLIOS_ID = '__ALL__';
+export const TRADER_PORTFOLIO_ID = '__TRADER__';
 
 export function usePortfolios() {
   const { id: userId } = useEffectiveUser();
@@ -205,7 +206,7 @@ export function usePortfolios() {
     setSelectedIdsState(ids);
     localStorage.setItem(multiKey, JSON.stringify(ids));
     // Keep legacy single-select in sync: use first real portfolio or ALL
-    const first = ids.find(id => id !== ALL_PORTFOLIOS_ID) ?? null;
+    const first = ids.find(id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID) ?? null;
     const legacyId = ids.includes(ALL_PORTFOLIOS_ID) ? ALL_PORTFOLIOS_ID : (first ?? ALL_PORTFOLIOS_ID);
     setActivePortfolioIdState(legacyId);
     localStorage.setItem(storageKey, legacyId);
@@ -214,11 +215,11 @@ export function usePortfolios() {
   const togglePortfolioSelection = useCallback((id: string) => {
     setSelectedIdsState(prev => {
       let next: string[];
-      if (id === ALL_PORTFOLIOS_ID) {
-        // ALL toggle: select everything
-        next = [ALL_PORTFOLIOS_ID];
+      if (id === ALL_PORTFOLIOS_ID || id === TRADER_PORTFOLIO_ID) {
+        // Virtual top-level views are mutually exclusive.
+        next = [id];
       } else {
-        const withoutAll = prev.filter(x => x !== ALL_PORTFOLIOS_ID);
+        const withoutAll = prev.filter(x => x !== ALL_PORTFOLIOS_ID && x !== TRADER_PORTFOLIO_ID);
         if (withoutAll.includes(id)) {
           // Deselect — but never go empty; fall back to ALL
           const remaining = withoutAll.filter(x => x !== id);
@@ -233,16 +234,18 @@ export function usePortfolios() {
   }, [multiKey]);
 
   // ── Derived values ────────────────────────────────────────────
-  const isShowingAll = selectedIds.includes(ALL_PORTFOLIOS_ID) || selectedIds.length === 0;
+  const isShowingTrader = selectedIds.includes(TRADER_PORTFOLIO_ID);
+  const isShowingAll = !isShowingTrader && (selectedIds.includes(ALL_PORTFOLIOS_ID) || selectedIds.length === 0);
 
   // ALL_PORTFOLIOS_ID → activePortfolio is null (no filter)
   const activePortfolio =
-    activePortfolioId === ALL_PORTFOLIOS_ID || isShowingAll
+    activePortfolioId === ALL_PORTFOLIOS_ID || isShowingAll || isShowingTrader
       ? null
       : portfolios.find(p => p.id === activePortfolioId) ?? portfolios[0] ?? null;
 
   // effectivePortfolioId — legacy single: null = ALL
   const effectivePortfolioId = (() => {
+    if (isShowingTrader) return TRADER_PORTFOLIO_ID;
     if (isShowingAll) return null;
     const id = activePortfolio?.id ?? null;
     if (id?.startsWith('trado_')) return null;
@@ -252,9 +255,9 @@ export function usePortfolios() {
   // effectivePortfolioIds — for multi-filter queries
   // null = no filter (ALL), string[] = filter to these IDs
   const effectivePortfolioIds: string[] | null = (() => {
-    if (isShowingAll) return null;
+    if (isShowingAll || isShowingTrader) return null;
     const realIds = selectedIds.filter(id =>
-      id !== ALL_PORTFOLIOS_ID && !id.startsWith('trado_')
+      id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID && !id.startsWith('trado_')
     );
     return realIds.length > 0 ? realIds : null;
   })();
@@ -278,5 +281,6 @@ export function usePortfolios() {
     togglePortfolioSelection,
     hasMultiplePortfolios: portfolios.length > 1,
     isShowingAll,
+    isShowingTrader,
   };
 }

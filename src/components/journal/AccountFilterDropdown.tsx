@@ -9,7 +9,7 @@
 import { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { Wallet, ChevronDown, Settings, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePortfolioContext, ALL_PORTFOLIOS_ID } from '@/contexts/PortfolioContext';
+import { usePortfolioContext, ALL_PORTFOLIOS_ID, TRADER_PORTFOLIO_ID } from '@/contexts/PortfolioContext';
 
 interface AccountFilterDropdownProps {
   /** Called when user clicks "Manage accounts" — parent owns the modal state. */
@@ -27,6 +27,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
     togglePortfolioSelection,
     setSelectedPortfolioIds,
     isShowingAll,
+    isShowingTrader,
     isLoading,
   } = usePortfolioContext();
 
@@ -58,17 +59,22 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
   // Button label
   const label = useMemo(() => {
     if (isShowingAll) return 'All accounts';
-    const count = selectedPortfolioIds.filter(id => id !== ALL_PORTFOLIOS_ID).length;
+    if (isShowingTrader) return 'Trader';
+    const count = selectedPortfolioIds.filter(id => id !== ALL_PORTFOLIOS_ID && id !== TRADER_PORTFOLIO_ID).length;
     if (count === 0) return 'All accounts';
     if (count === 1) {
       const match = portfolios.find(p => p.id === selectedPortfolioIds[0]);
       return match?.name ?? 'Account';
     }
     return `${count} accounts`;
-  }, [isShowingAll, selectedPortfolioIds, portfolios]);
+  }, [isShowingAll, isShowingTrader, selectedPortfolioIds, portfolios]);
 
   const handleToggleAll = useCallback(() => {
     setSelectedPortfolioIds([ALL_PORTFOLIOS_ID]);
+  }, [setSelectedPortfolioIds]);
+
+  const handleToggleTrader = useCallback(() => {
+    setSelectedPortfolioIds([TRADER_PORTFOLIO_ID]);
   }, [setSelectedPortfolioIds]);
 
   const handleManage = useCallback(() => {
@@ -124,6 +130,13 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
             onToggle={handleToggleAll}
           />
 
+          <AccountRow
+            id={TRADER_PORTFOLIO_ID}
+            label="Trader"
+            checked={isShowingTrader}
+            onToggle={handleToggleTrader}
+          />
+
           {hasAccounts && (
             <div className="border-t border-zinc-800/60 mx-2 my-1" />
           )}
@@ -145,7 +158,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
               label={p.name}
               badge={p.environment === 'live' ? 'Live' : 'Demo'}
               badgeColor={p.environment === 'live' ? 'emerald' : 'yellow'}
-              checked={!isShowingAll && selectedPortfolioIds.includes(p.id)}
+              checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
               onToggle={togglePortfolioSelection}
             />
           ))}
@@ -158,7 +171,7 @@ export const AccountFilterDropdown = memo(function AccountFilterDropdown({
               label={p.name}
               badge="Manual"
               badgeColor="zinc"
-              checked={!isShowingAll && selectedPortfolioIds.includes(p.id)}
+              checked={!isShowingAll && !isShowingTrader && selectedPortfolioIds.includes(p.id)}
               onToggle={togglePortfolioSelection}
             />
           ))}
