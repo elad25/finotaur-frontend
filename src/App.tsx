@@ -201,6 +201,7 @@ const AllMarketsNews = lazy(() => import("@/pages/app/all-markets/News"));
 const AllMarketsHeatmap = lazy(() => import("@/pages/app/all-markets/Heatmap"));
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
+const AdminSupportAiDrafts = lazy(() => import("@/pages/app/all-markets/admin/SupportAiDrafts"));
 const AdminSiteDashboard = lazy(() => import("@/pages/app/all-markets/admin/SiteDashboard"));
 const AffiliateSmartPage = lazy(() => import("@/pages/app/all-markets/affiliate/AffiliateSmartPage"));  // 🤝 NEW
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
@@ -401,6 +402,7 @@ function AppContent() {
 <Route path="all-markets/warzone" element={<SuspenseRoute><WarZonePage /></SuspenseRoute>} />
           <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="all-markets/admin/support-ai" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportAiDrafts /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/admin/site-dashboard" element={<ProtectedAdminRoute><SuspenseRoute><AdminSiteDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
