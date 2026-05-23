@@ -29,7 +29,7 @@ export const ProtectedAppLayout = () => {
 
   return (
     <PortfolioProvider>
-      <div className="flex min-h-screen w-full flex-col">
+      <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
         <TopNav />
         <SubNav />

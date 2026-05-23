@@ -16,7 +16,7 @@ import {
   X, Send, MessageCircle, Shield, ArrowLeft, Plus, 
   Paperclip, Image as ImageIcon, ChevronRight, Upload, Bell, 
   CheckCircle2, AlertCircle, Info, Megaphone, Download,
-  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb
+  TrendingUp, TrendingDown, Wrench, CreditCard, HelpCircle, Lightbulb, UserRound
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Textarea } from '@/components/ui/textarea';
@@ -123,6 +123,13 @@ const TICKET_CATEGORIES: CategoryOption[] = [
 // ==================== ADMIN EMAIL CONSTANT ====================
 const ADMIN_EMAIL = 'elad2550@gmail.com';
 
+const SUPPORT_TOPIC_SUGGESTIONS = [
+  'I have a technical issue',
+  'I need help with billing',
+  'I have a question about my account',
+  'I want to share feedback',
+];
+
 export default function SupportWidget() {
   // ==================== STATE ====================
   const [isOpen, setIsOpen] = useState(false);
@@ -146,10 +153,8 @@ export default function SupportWidget() {
   const [loadingUpdates, setLoadingUpdates] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   
-  // New state for category selection
-  const [selectedCategory, setSelectedCategory] = useState<TicketCategory | null>(null);
-  const [showCategorySelector, setShowCategorySelector] = useState(true);
   const [messageSent, setMessageSent] = useState(false);
+  const [showSupportPrompt, setShowSupportPrompt] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -188,7 +193,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedTicket?.messages, isNewConversation, selectedCategory, messageSent]);
+  }, [selectedTicket?.messages, isNewConversation, messageSent, isTyping, showSupportPrompt]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -233,10 +238,24 @@ export default function SupportWidget() {
   }, [isOpen, selectedTicket?.id, isGuest]);
 
   useEffect(() => {
-    if (isNewConversation && isOpen) {
+    if (!isOpen || view !== 'chat' || !isNewConversation || messageSent || showGuestForm) {
       setIsTyping(false);
+      setShowSupportPrompt(false);
+      return;
     }
-  }, [isNewConversation, isOpen]);
+
+    setShowSupportPrompt(false);
+    setIsTyping(true);
+
+    const timer = window.setTimeout(() => {
+      setIsTyping(false);
+      setShowSupportPrompt(true);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isOpen, view, isNewConversation, messageSent, showGuestForm]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -599,31 +618,6 @@ async function loadTicketById(ticketId: string) {
     }, 100);
   }
 
-  // ==================== CATEGORY SELECTION ====================
-
-  function handleCategorySelect(categoryId: TicketCategory) {
-    setSelectedCategory(categoryId);
-    setShowCategorySelector(false);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-  }
-
-  function getCategoryPrompt(category: TicketCategory): string {
-    switch (category) {
-      case 'technical':
-        return "Please describe the issue you're experiencing. Include any error messages, steps to reproduce, and what you expected to happen.";
-      case 'payment':
-        return "Please describe your billing or payment concern. Include relevant transaction details, dates, or subscription information if applicable.";
-      case 'question':
-        return "What would you like to know? Feel free to ask anything about Finotaur features, trading tools, or how to get the most out of your account!";
-      case 'feedback':
-        return "We'd love to hear your thoughts! Share your ideas, suggestions, or feature requests. Your feedback helps us improve Finotaur for everyone.";
-      default:
-        return "How can we help you today?";
-    }
-  }
-
   // ==================== MESSAGING ====================
 
   async function handleSendMessage() {
@@ -633,12 +627,6 @@ async function loadTicketById(ticketId: string) {
     }
 
     if (!currentMessage.trim()) return;
-
-    // For new conversations, require category selection (unless guest)
-    if (isNewConversation && !isGuest && !selectedCategory) {
-      toast.error('Please select a category first');
-      return;
-    }
 
     setSending(true);
 
@@ -659,16 +647,12 @@ async function loadTicketById(ticketId: string) {
       };
 
       if (isGuest || isNewConversation) {
-        const categoryLabel = selectedCategory 
-          ? TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.label 
-          : 'Support Request';
-
         const ticketPayload = {
           user_id: isGuest ? null : (await supabase.auth.getUser()).data.user?.id,
           user_email: userEmail,
           user_name: userName,
-          subject: categoryLabel,
-          category: selectedCategory,
+          subject: 'Support Request',
+          category: null,
           message: currentMessage.trim(),
           messages: [newMessage],
           status: 'open',
@@ -982,9 +966,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
       setShowGuestForm(false);
       setGuestFormName('');
       setGuestFormEmail('');
-      setSelectedCategory(null);
-      setShowCategorySelector(true);
       setMessageSent(false);
+      setShowSupportPrompt(false);
       setInitialLoadDone(false); // Reset for next open
     }, 300);
   };
@@ -995,9 +978,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     setSelectedTicket(null);
     setIsNewConversation(false);
     setAttachments([]);
-    setSelectedCategory(null);
-    setShowCategorySelector(true);
     setMessageSent(false);
+    setShowSupportPrompt(false);
     loadUserTickets();
   };
 
@@ -1007,9 +989,15 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     setSelectedTicket(null);
     setIsNewConversation(true);
     setAttachments([]);
-    setSelectedCategory(null);
-    setShowCategorySelector(true);
     setMessageSent(false);
+    setShowSupportPrompt(false);
+  };
+
+  const handleTopicSuggestionClick = (topic: string) => {
+    setCurrentMessage(topic);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   // ==================== RENDER ====================
@@ -1064,10 +1052,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
         The inner card also gets flex + max-h so content scrolls properly.
       */}
       {isOpen && (
-        <div className="fixed bottom-8 right-8 z-[200] w-[420px] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
+        <div className="fixed bottom-8 right-8 z-[200] w-[500px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
           <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
           
-          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30 flex flex-col max-h-[calc(100vh-80px-32px)]">
+          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30 flex flex-col h-full max-h-[calc(100vh-80px-32px)]">
             {/* Header */}
             <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20 flex-shrink-0">
               <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
@@ -1084,9 +1072,9 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   )}
                   
                   <div className="relative">
-                    <div className="absolute inset-0 bg-[#D4AF37] opacity-20 blur-lg rounded-lg"></div>
-                    <div className="relative h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                      <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                    <div className="absolute inset-0 bg-[#1E88E5] opacity-20 blur-lg rounded-lg"></div>
+                    <div className="relative h-10 w-10 rounded-lg bg-[#1E88E5]/10 flex items-center justify-center border border-[#42A5F5]/30">
+                      <UserRound className="h-5 w-5 text-[#42A5F5]" strokeWidth={2.5} />
                     </div>
                   </div>
                   
@@ -1095,7 +1083,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       Finotaur
                     </h3>
                     <p className="text-[10px] text-[#D4AF37] font-medium mt-0.5 font-['Inter',sans-serif]">
-                      {isAdmin ? '🛡️ Admin View' : 'Support & Updates'}
+                      Support & Updates
                     </p>
                   </div>
                 </div>
@@ -1222,17 +1210,6 @@ function hasUnreadMessages(ticket: Ticket): boolean {
               {/* ==================== UPDATES TAB ==================== */}
               {!isGuest && activeTab === 'updates' && (
                 <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                  {isAdmin && (
-                    <div className="px-4 pt-3 flex-shrink-0">
-                      <div className="px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-purple-400" />
-                        <span className="text-xs text-purple-300">
-                          Admin View: Showing ALL reports from all target groups
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
                   {/* Clear All Button */}
                   {systemUpdates.length > 0 && unreadUpdatesCount > 0 && (
                     <div className="px-4 pt-3 flex-shrink-0">
@@ -1481,102 +1458,38 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     <>
                       <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
                         {isNewConversation ? (
-                          <div className="space-y-4">
-                            {/* Welcome Message */}
-                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
-                              <div className="flex justify-start">
-                                <div className="max-w-[85%]">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                      <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
-                                    </div>
-                                    <span className="text-xs font-medium text-[#D4AF37]">
-                                      Support Team
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                                    <p className="text-sm leading-relaxed text-white font-['Inter',sans-serif]">
-                                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋
-                                    </p>
-                                    <p className="text-sm leading-relaxed text-white/90 mt-2 font-['Inter',sans-serif]">
-                                      {isGuest 
-                                        ? `Great to have you here! How can we help you today? We'll respond to ${userEmail || 'your email'}.`
-                                        : "Welcome to Finotaur Support! We're here to help with any questions or issues you might have."
-                                      }
-                                    </p>
-                                    <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
-                                      {formatTime(new Date().toISOString())}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Category Selector (for logged-in users only) */}
-                            {!isGuest && showCategorySelector && !messageSent && (
-                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200 delay-150">
-                                <div className="flex justify-start">
-                                  <div className="max-w-[90%]">
-                                    <div className="rounded-[18px] px-4 py-4 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                                      <p className="text-sm text-white/90 mb-4 font-['Inter',sans-serif]">
-                                        What can we help you with today?
-                                      </p>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        {TICKET_CATEGORIES.map((cat) => (
-                                          <button
-                                            key={cat.id}
-                                            onClick={() => handleCategorySelect(cat.id)}
-                                            className={`p-3 rounded-xl border transition-all duration-200 text-left hover:scale-[1.02] active:scale-[0.98] ${
-                                              selectedCategory === cat.id
-                                                ? 'bg-[#D4AF37]/20 border-[#D4AF37]/50'
-                                                : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-[#7F6823]/40'
-                                            }`}
-                                          >
-                                            <div className={`mb-2 ${cat.color}`}>
-                                              {cat.icon}
-                                            </div>
-                                            <span className="text-xs font-medium text-white block">{cat.label}</span>
-                                            <span className="text-[10px] text-gray-500 block mt-0.5">{cat.description}</span>
-                                          </button>
-                                        ))}
+                          <div className="min-h-full flex flex-col justify-end space-y-4 pb-2">
+                            {showSupportPrompt && !messageSent && (
+                              <>
+                                <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                  <div className="flex justify-start">
+                                    <div className="max-w-[75%]">
+                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                                        <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
+                                          ✨ How can we help?
+                                        </p>
+                                        <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                          {formatTime(new Date().toISOString())}
+                                        </span>
                                       </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            )}
-
-                            {/* Category Selected - Show prompt */}
-                            {!isGuest && selectedCategory && !showCategorySelector && !messageSent && (
-                              <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
-                                <div className="flex justify-start">
-                                  <div className="max-w-[85%]">
-                                    <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className={TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.color}>
-                                          {TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.icon}
-                                        </span>
-                                        <span className="text-sm font-medium text-[#D4AF37]">
-                                          {TICKET_CATEGORIES.find(c => c.id === selectedCategory)?.label}
-                                        </span>
-                                        <button
-                                          onClick={() => setShowCategorySelector(true)}
-                                          className="ml-auto text-[10px] text-gray-500 hover:text-gray-300 transition-colors underline"
-                                        >
-                                          Change
-                                        </button>
-                                      </div>
-                                      <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
-                                        {getCategoryPrompt(selectedCategory)}
-                                      </p>
-                                      <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
-                                        {formatTime(new Date().toISOString())}
-                                      </span>
-                                    </div>
+                                <div className="flex justify-end">
+                                  <div className="max-w-[78%] flex flex-wrap justify-end gap-2">
+                                    {SUPPORT_TOPIC_SUGGESTIONS.map((topic) => (
+                                      <button
+                                        key={topic}
+                                        type="button"
+                                        onClick={() => handleTopicSuggestionClick(topic)}
+                                        className="rounded-lg border border-[#7F6823]/30 bg-white/[0.04] px-3 py-2 text-left text-xs leading-snug text-white/70 transition-all duration-200 hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/10 hover:text-white"
+                                      >
+                                        {topic}
+                                      </button>
+                                    ))}
                                   </div>
                                 </div>
-                              </div>
+                              </>
                             )}
 
                             {/* Message Sent Confirmation */}
@@ -1697,15 +1610,6 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         {isTyping && (
                           <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="max-w-[75%]">
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                  <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
-                                </div>
-                                <span className="text-xs font-medium text-[#D4AF37]">
-                                  Support Team
-                                </span>
-                              </div>
-                              
                               <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
                                 <div className="flex gap-1">
                                   <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
@@ -1762,13 +1666,9 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               ref={inputRef}
                               value={currentMessage}
                               onChange={(e) => setCurrentMessage(e.target.value)}
-                              placeholder={
-                                isNewConversation && !isGuest && !selectedCategory
-                                  ? "Please select a category above..."
-                                  : "Type your message..."
-                              }
+                              placeholder="Type your message..."
                               className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
-                              disabled={sending || (isNewConversation && !isGuest && !selectedCategory)}
+                              disabled={sending}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                                   e.preventDefault();
@@ -1778,7 +1678,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                             />
                             <button
                               onClick={handleSendMessage}
-                              disabled={!currentMessage.trim() || sending || uploadingFiles || (isNewConversation && !isGuest && !selectedCategory)}
+                              disabled={!currentMessage.trim() || sending || uploadingFiles}
                               className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
                             >
                               {sending || uploadingFiles ? (

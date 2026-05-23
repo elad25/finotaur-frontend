@@ -186,11 +186,64 @@ const analystRiskRows = [
   ['User Readiness', 'High', 'Profile is suitable for detailed weekly AI analyst reporting.'],
 ] as const;
 
-const riskRows = [
-  ['Concentration', 'Medium', 'Top 3 holdings drive 58% of portfolio beta.'],
-  ['Volatility', 'Medium', 'Growth allocation can widen daily drawdowns during rate shocks.'],
-  ['Liquidity', 'Low', 'Core holdings remain highly liquid.'],
-  ['Correlation', 'Medium', 'AI and mega-cap names can move together during risk-off sessions.'],
+const riskDriverCards = [
+  {
+    label: 'Rates',
+    sublabel: 'Interest Rate Risk',
+    level: 'High',
+    tone: 'red',
+    icon: BarChart3,
+    progress: 50,
+    text: 'Duration sensitivity is elevated. Rate shocks could pressure growth assets.',
+  },
+  {
+    label: 'AI Correlation',
+    sublabel: 'Correlation Risk',
+    level: 'Medium',
+    tone: 'gold',
+    icon: Brain,
+    progress: 38,
+    text: 'AI and mega-cap names are highly correlated. Risk-off could hit valuations.',
+  },
+  {
+    label: 'Liquidity',
+    sublabel: 'Liquidity Risk',
+    level: 'Low',
+    tone: 'green',
+    icon: Shield,
+    progress: 28,
+    text: 'Core holdings remain liquid. Market depth is supportive.',
+  },
+  {
+    label: 'Volatility',
+    sublabel: 'Volatility Risk',
+    level: 'Medium',
+    tone: 'gold',
+    icon: Zap,
+    progress: 44,
+    text: 'Volatility can expand during macroeconomic surprises. Stay nimble.',
+  },
+] as const;
+
+const riskScenarioRows = [
+  { label: 'Soft Landing', probability: '48%', impact: '+4.2%', tone: 'green', path: 'M3 62 C12 56 18 59 27 52 C38 43 45 48 54 38 C64 27 71 34 81 21 C90 12 95 18 105 8' },
+  { label: 'Sticky Inflation', probability: '27%', impact: '-6.8%', tone: 'gold', path: 'M3 58 C12 50 18 54 27 47 C38 38 45 44 54 34 C64 24 72 30 82 19 C91 12 96 17 105 5' },
+  { label: 'Recession', probability: '15%', impact: '-14.2%', tone: 'red', path: 'M3 14 C12 22 18 16 27 25 C39 31 45 27 55 38 C66 47 74 43 84 52 C94 61 98 58 105 68' },
+] as const;
+
+const riskExposureRows = [
+  { ticker: 'NVDA', level: 'High Exposure', tone: 'red', width: '92%', mark: 'NV' },
+  { ticker: 'TSLA', level: 'High Exposure', tone: 'red', width: '91%', mark: 'T' },
+  { ticker: 'QQQ', level: 'High Exposure', tone: 'red', width: '88%', mark: 'QQ' },
+  { ticker: 'MSFT', level: 'Medium Exposure', tone: 'gold', width: '72%', mark: 'MS' },
+  { ticker: 'META', level: 'Medium Exposure', tone: 'gold', width: '68%', mark: 'ME' },
+] as const;
+
+const riskMitigationIdeas = [
+  { title: 'Rates Hedge', text: 'Add duration hedge via TLT or rate swaps.', impact: 'High', tone: 'red', icon: Shield },
+  { title: 'Volatility Hedge', text: 'Increase VIX exposure via calls or UVXY.', impact: 'Medium', tone: 'gold', icon: Zap },
+  { title: 'Quality Tilt', text: 'Rotate into quality and earnings stability.', impact: 'Medium', tone: 'gold', icon: BarChart3 },
+  { title: 'Diversification', text: 'Add non-correlated assets: GLD, utilities.', impact: 'Medium', tone: 'gold', icon: Globe },
 ] as const;
 
 export function CopilotTopOpportunitiesPage() {
@@ -791,109 +844,295 @@ export function CopilotAIAnalystPage() {
 export function CopilotRisksPage() {
   return (
     <CopilotPageShell title="Risks" eyebrow="AI risk map for the portfolio" icon={Shield}>
-      <div className="grid gap-3 lg:grid-cols-[360px_1fr]">
-        <section className="rounded-[7px] border border-gold-primary/18 bg-[#050505]/96 p-6">
-          <div className="flex min-h-[360px] items-center justify-center">
-            <RiskManagementBreathingMark />
+      <div className="space-y-3">
+        <section className="overflow-hidden rounded-[8px] border border-gold-primary/18 bg-[linear-gradient(135deg,#171816_0%,#10100f_52%,#18150e_100%)] shadow-[0_18px_48px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="px-5 pt-4">
+            <p className="text-[11px] font-medium uppercase tracking-normal text-ink-tertiary">Portfolio Risk Score</p>
           </div>
-        </section>
-        <section className="rounded-[7px] border border-gold-primary/18 bg-[#080704]/92 p-5">
-          <div className="space-y-3">
-            {riskRows.map(([label, level, text]) => (
-              <div key={label} className="rounded-[7px] border border-gold-primary/12 bg-black/24 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-ink-primary">{label}</p>
-                  <span className={level === 'Low' ? 'text-emerald-300' : 'text-gold-primary'}>{level}</span>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-ink-secondary">{text}</p>
+          <div className="grid divide-y divide-gold-primary/10 lg:grid-cols-[1.05fr_0.86fr_1fr] lg:divide-x lg:divide-y-0">
+            <div className="flex min-h-[116px] items-center gap-4 px-5 pb-4 pt-2">
+              <RiskScoreGauge score={74} />
+              <div className="pt-1">
+                <p className="font-mono text-[35px] font-semibold leading-none tabular-nums text-gold-primary">74</p>
+                <p className="mt-2 font-mono text-[11px] text-ink-secondary">/100</p>
               </div>
-            ))}
+            </div>
+
+            <div className="flex min-h-[116px] flex-col justify-center px-5 py-4">
+              <p className="text-sm font-semibold text-gold-primary">Moderate Risk</p>
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-ink-tertiary">
+                <span>vs last week</span>
+                <span className="font-mono font-semibold text-status-success">down 6</span>
+              </div>
+            </div>
+
+            <div className="flex min-h-[116px] flex-col justify-center px-5 py-4">
+              <p className="text-[11px] font-medium text-ink-secondary">Main Risk Drivers</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {['Rates', 'AI Correlation', 'USD Strength'].map((driver) => (
+                  <span
+                    key={driver}
+                    className="rounded-[6px] border border-gold-primary/14 bg-gold-primary/[0.055] px-3 py-1.5 text-[10px] font-medium text-gold-primary"
+                  >
+                    {driver}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
+
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {riskDriverCards.map((driver) => (
+            <RiskDriverCard key={driver.label} driver={driver} />
+          ))}
+        </section>
+
+        <RiskScenarioTable />
+        <RiskMitigationSummary />
       </div>
     </CopilotPageShell>
   );
 }
 
-function RiskManagementBreathingMark() {
-  const totalTicks = 44;
-  const fillFraction = 0.72;
-  const startDeg = -132;
-  const endDeg = 132;
-  const ticks = Array.from({ length: totalTicks }, (_, index) => {
-    const progress = index / (totalTicks - 1);
-    const deg = startDeg + (endDeg - startDeg) * progress;
-    const rad = ((deg - 90) * Math.PI) / 180;
-    const inner = 57;
-    const outer = index % 4 === 0 ? 72 : 68;
-    return {
-      x1: Math.cos(rad) * inner,
-      y1: Math.sin(rad) * inner,
-      x2: Math.cos(rad) * outer,
-      y2: Math.sin(rad) * outer,
-      bright: progress <= fillFraction,
-      width: index % 4 === 0 ? 2.1 : 1.35,
-    };
-  });
+function RiskScoreGauge({ score }: { score: number }) {
+  const needleAngle = 180 - (score / 100) * 180;
+  const rad = (needleAngle * Math.PI) / 180;
+  const needleLength = 42;
+  const needleX = 58 + Math.cos(rad) * needleLength;
+  const needleY = 60 - Math.sin(rad) * needleLength;
 
   return (
-    <div className="relative h-[286px] w-[286px]">
-      <div className="absolute inset-8 rounded-full bg-[radial-gradient(circle,rgba(244,217,123,0.2),rgba(201,166,70,0.06)_42%,transparent_68%)] blur-xl" />
-      <svg viewBox="-100 -100 200 200" className="relative h-full w-full overflow-visible drop-shadow-[0_0_30px_rgba(201,166,70,0.28)]" aria-hidden="true">
-        <defs>
-          <linearGradient id="riskPageGoldArc" x1="0" y1="-1" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--gold-bright)" />
-            <stop offset="45%" stopColor="var(--gold-primary)" />
-            <stop offset="100%" stopColor="var(--gold-deep)" />
-          </linearGradient>
-          <radialGradient id="riskPageGoldGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="rgba(244,217,123,0.46)" />
-            <stop offset="60%" stopColor="rgba(201,166,70,0.10)" />
-            <stop offset="100%" stopColor="rgba(201,166,70,0)" />
-          </radialGradient>
-        </defs>
+    <svg viewBox="0 0 116 68" className="h-[78px] w-[142px] flex-none overflow-hidden drop-shadow-[0_0_16px_rgba(201,166,70,0.18)]" aria-label={`Portfolio risk score ${score} out of 100`}>
+      <defs>
+        <linearGradient id="portfolioRiskGaugeGold" x1="8" x2="108" y1="16" y2="16">
+          <stop offset="0%" stopColor="var(--gold-deep)" />
+          <stop offset="48%" stopColor="var(--gold-bright)" />
+          <stop offset="100%" stopColor="var(--gold-primary)" />
+        </linearGradient>
+        <filter id="portfolioRiskGaugeGlow" x="-35%" y="-45%" width="170%" height="180%">
+          <feGaussianBlur stdDeviation="1.8" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
 
-        <circle r="82" fill="url(#riskPageGoldGlow)" opacity="0.56" />
-        <circle r="88" fill="none" stroke="rgba(244,217,123,0.14)" strokeWidth="0.8" />
-        <g opacity="0.72">
-          <animateTransform attributeName="transform" type="scale" values="0.985;1.035;0.985" dur="4.2s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.48;0.78;0.48" dur="4.2s" repeatCount="indefinite" />
-          <circle r="88" fill="none" stroke="url(#riskPageGoldArc)" strokeWidth="1.15" strokeLinecap="round" />
-        </g>
-        <circle r="78" fill="none" stroke="url(#riskPageGoldArc)" strokeWidth="0.9" strokeDasharray="1 4" opacity="0.68" />
-        <circle r="54" fill="none" stroke="rgba(244,217,123,0.18)" strokeWidth="0.7" />
+      <path d="M11 60 A47 47 0 0 1 105 60" fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="8" strokeLinecap="butt" />
+      <path
+        d="M11 60 A47 47 0 0 1 105 60"
+        fill="none"
+        stroke="url(#portfolioRiskGaugeGold)"
+        pathLength="100"
+        strokeDasharray={`${score} 100`}
+        strokeWidth="8"
+        strokeLinecap="butt"
+        filter="url(#portfolioRiskGaugeGlow)"
+      />
+      <line x1="58" y1="60" x2={needleX.toFixed(2)} y2={needleY.toFixed(2)} stroke="rgba(255,255,255,0.24)" strokeWidth="5" strokeLinecap="round" />
+      <line x1="58" y1="60" x2={needleX.toFixed(2)} y2={needleY.toFixed(2)} stroke="rgba(255,255,255,0.92)" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="58" cy="60" r="3.2" fill="#090908" stroke="rgba(255,255,255,0.84)" strokeWidth="1.2" />
+    </svg>
+  );
+}
 
-        <g stroke="url(#riskPageGoldArc)" strokeLinecap="round">
-          {ticks.map((tick, index) => (
-            <line
-              key={index}
-              x1={tick.x1.toFixed(2)}
-              y1={tick.y1.toFixed(2)}
-              x2={tick.x2.toFixed(2)}
-              y2={tick.y2.toFixed(2)}
-              strokeWidth={tick.width}
-              opacity={tick.bright ? 0.95 : 0.25}
-            />
+function RiskDriverCard({ driver }: { driver: (typeof riskDriverCards)[number] }) {
+  const Icon = driver.icon;
+  const toneClass = driver.tone === 'red' ? 'text-num-negative' : driver.tone === 'green' ? 'text-status-success' : 'text-gold-primary';
+  const fillClass = driver.tone === 'red' ? 'bg-num-negative' : driver.tone === 'green' ? 'bg-status-success' : 'bg-gold-primary';
+
+  return (
+    <article className="min-h-[164px] rounded-[8px] border border-gold-primary/14 bg-[#080806]/95 p-4 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-[7px] border border-gold-primary/18 bg-gold-primary/[0.055] ${toneClass}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-tight text-ink-primary">{driver.label}</p>
+          <p className="mt-0.5 text-[11px] leading-tight text-ink-tertiary">{driver.sublabel}</p>
+        </div>
+      </div>
+
+      <p className={`mt-4 text-[11px] font-semibold ${toneClass}`}>{driver.level}</p>
+      <div className="mt-2 flex h-1.5 gap-1">
+        {Array.from({ length: 7 }, (_, index) => {
+          const lit = index < Math.ceil((driver.progress / 100) * 7);
+          return <span key={index} className={`h-full flex-1 rounded-[2px] ${lit ? fillClass : 'bg-white/[0.08]'}`} />;
+        })}
+      </div>
+      <p className="mt-4 text-[11px] leading-[1.55] text-ink-secondary">{driver.text}</p>
+    </article>
+  );
+}
+
+function RiskScenarioTable() {
+  return (
+    <section className="grid gap-3 xl:grid-cols-[1.18fr_0.88fr]">
+      <div className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-4 shadow-[0_0_34px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-secondary">Macro Scenario Analysis</p>
+            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-ink-tertiary/30 text-[9px] text-ink-tertiary">i</span>
+          </div>
+          <button type="button" className="flex items-center gap-1.5 text-[10px] font-semibold text-gold-primary">
+            View Details
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3 md:divide-x md:divide-gold-primary/10">
+          {riskScenarioRows.map((scenario) => (
+            <RiskScenarioCard key={scenario.label} scenario={scenario} />
           ))}
-        </g>
+        </div>
 
-        <g stroke="url(#riskPageGoldArc)" strokeLinecap="round" fill="none" opacity="0.7">
-          <path d="M -76 -20 A 78 78 0 0 0 -76 20" strokeWidth="1.4" />
-          <path d="M 76 -20 A 78 78 0 0 1 76 20" strokeWidth="1.4" />
-          <path d="M -60 -54 A 78 78 0 0 0 -50 -64" strokeWidth="1.1" />
-          <path d="M 60 -54 A 78 78 0 0 1 50 -64" strokeWidth="1.1" />
-          <path d="M -60 54 A 78 78 0 0 1 -50 64" strokeWidth="1.1" />
-          <path d="M 60 54 A 78 78 0 0 0 50 64" strokeWidth="1.1" />
-        </g>
+        <p className="mt-4 border-t border-gold-primary/10 pt-3 text-[10px] leading-relaxed text-ink-tertiary">
+          Probabilities are AI-estimated and updated daily based on market data.
+        </p>
+      </div>
 
-        <g fill="var(--gold-bright)" opacity="0.82">
-          <polygon points="0,-58 2.1,-55 0,-52 -2.1,-55" />
-          <polygon points="0,58 2.1,55 0,52 -2.1,55" />
-          <polygon points="-58,0 -55,2.1 -52,0 -55,-2.1" />
-          <polygon points="58,0 55,2.1 52,0 55,-2.1" />
-        </g>
+      <div className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-4 shadow-[0_0_34px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-secondary">What Can Hurt Your Portfolio</p>
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-ink-tertiary/30 text-[9px] text-ink-tertiary">i</span>
+        </div>
+        <p className="mt-2 text-[10px] text-ink-tertiary">Top vulnerabilities in a risk-off scenario.</p>
+
+        <div className="mt-5 space-y-3">
+          {riskExposureRows.map((row) => (
+            <RiskExposureRow key={row.ticker} row={row} />
+          ))}
+        </div>
+
+        <button type="button" className="mx-auto mt-6 flex items-center gap-2 text-[11px] font-semibold text-gold-primary">
+          View Full Exposure Map
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function RiskScenarioCard({ scenario }: { scenario: (typeof riskScenarioRows)[number] }) {
+  const toneClass = scenario.tone === 'red' ? 'text-num-negative' : scenario.tone === 'green' ? 'text-status-success' : 'text-gold-primary';
+  const strokeColor = scenario.tone === 'red' ? 'var(--num-negative)' : scenario.tone === 'green' ? 'var(--status-success)' : 'var(--gold-primary)';
+
+  return (
+    <article className="min-w-0 md:px-4 md:first:pl-0 md:last:pr-0">
+      <p className={`text-sm font-semibold ${toneClass}`}>{scenario.label}</p>
+      <p className="mt-4 text-[11px] text-ink-tertiary">Probability</p>
+      <p className={`mt-1 font-mono text-3xl font-semibold tabular-nums ${toneClass}`}>{scenario.probability}</p>
+      <svg viewBox="0 0 110 76" className="mt-1 h-[74px] w-full" aria-hidden="true">
+        <path d={scenario.path} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={`${scenario.path} L105 76 L3 76 Z`} fill={strokeColor} opacity="0.08" />
       </svg>
+      <p className="text-[11px] text-ink-tertiary">Portfolio Impact (1Y)</p>
+      <p className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${toneClass}`}>{scenario.impact}</p>
+    </article>
+  );
+}
+
+function RiskExposureRow({ row }: { row: (typeof riskExposureRows)[number] }) {
+  const toneClass = row.tone === 'red' ? 'text-num-negative' : 'text-gold-primary';
+  const barClass = row.tone === 'red' ? 'bg-num-negative' : 'bg-gold-primary';
+
+  return (
+    <div className="grid grid-cols-[36px_48px_1fr] items-center gap-3">
+      <div className={`flex h-7 w-7 items-center justify-center rounded-full border bg-black/30 font-mono text-[9px] font-semibold ${toneClass} ${row.tone === 'red' ? 'border-num-negative/25' : 'border-gold-primary/25'}`}>
+        {row.mark}
+      </div>
+      <p className="font-mono text-[12px] font-semibold text-ink-primary">{row.ticker}</p>
+      <div className="min-w-0">
+        <div className="flex items-center justify-between gap-3">
+          <p className={`text-[10px] font-semibold ${toneClass}`}>{row.level}</p>
+        </div>
+        <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.08]">
+          <div className={`h-full rounded-full ${barClass}`} style={{ width: row.width }} />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function RiskMitigationSummary() {
+  return (
+    <section className="grid gap-3 xl:grid-cols-[1.18fr_0.88fr]">
+      <div className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-4 shadow-[0_0_34px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-secondary">Risk Mitigation Ideas</p>
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-ink-tertiary/30 text-[9px] text-ink-tertiary">i</span>
+        </div>
+
+        <div className="mt-5 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {riskMitigationIdeas.map((idea) => (
+            <RiskMitigationCard key={idea.title} idea={idea} />
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[8px] border border-gold-primary/14 bg-[#050505]/96 p-4 shadow-[0_0_34px_rgba(0,0,0,0.35)]">
+        <div className="flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-secondary">AI Risk Summary</p>
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-ink-tertiary/30 text-[9px] text-ink-tertiary">i</span>
+        </div>
+
+        <div className="mt-5 flex gap-4">
+          <div className="flex h-14 w-14 flex-none items-center justify-center rounded-[8px] border border-gold-primary/20 bg-gold-primary/[0.075] text-gold-primary shadow-[0_0_22px_rgba(201,166,70,0.15)]">
+            <Brain className="h-7 w-7" />
+          </div>
+          <p className="max-w-[420px] text-[12px] leading-[1.65] text-ink-secondary">
+            Portfolio risk is <span className="font-semibold text-gold-primary">Moderate</span>. Elevated exposure to rates,
+            AI correlation, and growth. Maintain hedges and monitor inflation and FOMC signals.
+          </p>
+        </div>
+
+        <div className="mt-6 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-[10px] text-ink-tertiary">Overall Outlook</p>
+            <p className="mt-1 text-xl font-semibold text-gold-primary">Moderate</p>
+          </div>
+          <RiskSummarySparkline />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RiskMitigationCard({ idea }: { idea: (typeof riskMitigationIdeas)[number] }) {
+  const Icon = idea.icon;
+  const toneClass = idea.tone === 'red' ? 'text-num-negative' : 'text-gold-primary';
+
+  return (
+    <article className="min-h-[150px] rounded-[7px] border border-gold-primary/12 bg-[#080806]/95 p-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-[7px] border border-gold-primary/18 bg-gold-primary/[0.055] text-gold-primary">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="mt-4 text-[12px] font-semibold text-ink-primary">{idea.title}</p>
+      <p className="mt-2 min-h-[40px] text-[10px] leading-[1.5] text-ink-secondary">{idea.text}</p>
+      <p className="mt-3 text-[9px] text-ink-tertiary">Impact</p>
+      <p className={`mt-1 text-[11px] font-semibold ${toneClass}`}>{idea.impact}</p>
+    </article>
+  );
+}
+
+function RiskSummarySparkline() {
+  return (
+    <svg viewBox="0 0 180 62" className="h-[62px] w-[180px] flex-none text-gold-primary" aria-hidden="true">
+      <path
+        d="M3 52 C14 45 21 51 31 38 C42 24 49 33 59 28 C71 21 77 34 88 30 C99 26 103 15 114 19 C126 24 134 15 145 17 C157 19 165 10 177 6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3 52 C14 45 21 51 31 38 C42 24 49 33 59 28 C71 21 77 34 88 30 C99 26 103 15 114 19 C126 24 134 15 145 17 C157 19 165 10 177 6 L177 62 L3 62 Z"
+        fill="currentColor"
+        opacity="0.08"
+      />
+    </svg>
   );
 }
 

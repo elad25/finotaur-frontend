@@ -8,13 +8,15 @@ import { memo, useCallback, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowUpRight, ArrowDownRight, ChevronRight, Sparkles, Search,
-  BarChart3, DollarSign, Clock, Activity, X, RefreshCw,
+  BarChart3, DollarSign, Clock, Activity, X, RefreshCw, Star,
+  Filter, List, Grid2X2, Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FlowItem, FlowTypeFilter, DirectionFilter, TabType } from '../shared/types';
 import { FLOW_TYPE_CONFIG } from '../shared/constants';
 import { filterFlowData } from '../shared/api';
 import { Card, SearchBar, FilterSelect, SectionHeader } from '../shared/Ui';
+import { getCompanyLogo } from '@/pages/app/ai/copilot/utils/companyLogo';
 
 // ─────────────────────────────────────────────────────
 // Tab → allowed filter options mapping
@@ -65,6 +67,208 @@ const ALL_FILTER_OPTIONS = [
   { value: 'short_squeeze',         label: 'Short Squeeze'      },
   { value: 'confluence',            label: 'Confluence Alert'   },
 ];
+
+const MIN_RELATIVE_VOLUME_OPTIONS = [
+  { value: '1', label: '1x+' },
+  { value: '1.5', label: '1.5x+' },
+  { value: '2', label: '2x+' },
+  { value: '3', label: '3x+' },
+];
+
+const SORT_OPTIONS = [
+  { value: 'relative', label: 'Relative Volume' },
+  { value: 'volume', label: 'Volume' },
+  { value: 'value', label: 'Value Traded' },
+  { value: 'move', label: 'Move' },
+];
+
+function formatLargeNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value >= 10_000_000_000 ? 0 : 2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 100_000_000 ? 0 : 1)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return `${value.toFixed(0)}`;
+}
+
+function parseFlowValue(value: string): number {
+  const cleaned = value.replace(/[$,\s]/g, '').toUpperCase();
+  const num = Number.parseFloat(cleaned);
+  if (!Number.isFinite(num)) return 0;
+  if (cleaned.endsWith('B')) return num * 1_000_000_000;
+  if (cleaned.endsWith('M')) return num * 1_000_000;
+  if (cleaned.endsWith('K')) return num * 1_000;
+  return num;
+}
+
+function volumeStrength(item: FlowItem): { label: string; color: string; filled: number } {
+  const ratio = item.volumeRatio || 0;
+  if (ratio >= 2.5) return { label: 'Very High', color: '#EF4444', filled: 12 };
+  if (ratio >= 2) return { label: 'High', color: item.direction === 'bearish' ? '#F97316' : '#22C55E', filled: 10 };
+  if (ratio >= 1.5) return { label: 'Elevated', color: '#F59E0B', filled: 8 };
+  return { label: 'Active', color: '#C9A646', filled: 6 };
+}
+
+function VolumeSparkline({ direction, seed }: { direction: FlowItem['direction']; seed: string }) {
+  const bullish = direction === 'bullish';
+  const color = bullish ? '#22C55E' : direction === 'bearish' ? '#EF4444' : '#C9A646';
+  const charSeed = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const points = Array.from({ length: 18 }, (_, index) => {
+    const wave = Math.sin((index + charSeed) * 0.7) * 5;
+    const drift = bullish ? 24 - index * 1.25 : 10 + index * 1.35;
+    const y = Math.max(4, Math.min(36, drift + wave));
+    return `${index * 7},${y}`;
+  }).join(' ');
+
+  return (
+    <svg viewBox="0 0 119 40" className="h-12 w-[120px]" aria-hidden="true">
+      <defs>
+        <linearGradient id={`volume-spark-${seed}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.26" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline points={`${points} 119,40 0,40`} fill={`url(#volume-spark-${seed})`} stroke="none" />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TickerLogo({ item }: { item: FlowItem }) {
+  const logo = getCompanyLogo(item.ticker);
+  const tone =
+    item.direction === 'bullish' ? '#22C55E' :
+    item.direction === 'bearish' ? '#EF4444' : '#C9A646';
+
+  return (
+    <div
+      className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full"
+      style={{
+        background: `radial-gradient(circle at 50% 35%, ${tone}40, rgba(5,5,5,0.96) 62%)`,
+        border: `1px solid ${tone}55`,
+        boxShadow: `0 0 22px ${tone}18`,
+      }}
+    >
+      {logo ? (
+        <img src={logo} alt="" className="h-9 w-9 object-contain" />
+      ) : (
+        <span className="font-wordmark text-lg font-bold text-white">{item.ticker.slice(0, 2)}</span>
+      )}
+    </div>
+  );
+}
+
+function VolumeSignalCard({ item, index, onClick }: {
+  item: FlowItem;
+  index: number;
+  onClick: () => void;
+}) {
+  const typeConfig = FLOW_TYPE_CONFIG[item.type] ?? FLOW_TYPE_CONFIG.unusual_volume;
+  const strength = volumeStrength(item);
+  const directionColor =
+    item.direction === 'bullish' ? '#22C55E' :
+    item.direction === 'bearish' ? '#EF4444' : '#C9A646';
+  const avgVolume = item.avgVolume || Math.max(item.volume / Math.max(item.volumeRatio || 1, 1), 0);
+  const value = parseFlowValue(item.value) || item.volume * item.price;
+  const signalLabel = item.direction === 'bullish' ? 'Bullish' : item.direction === 'bearish' ? 'Bearish' : 'Neutral';
+
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.035 }}
+      onClick={onClick}
+      className="group relative w-full overflow-hidden rounded-[8px] text-left transition-all duration-200 hover:-translate-y-px"
+      style={{
+        background: 'linear-gradient(90deg, rgba(7,7,7,0.98), rgba(14,13,11,0.98))',
+        border: '1px solid rgba(201,166,70,0.16)',
+        boxShadow: '0 14px 30px rgba(0,0,0,0.28)',
+      }}
+    >
+      <div className="absolute left-0 top-0 h-full w-[3px]" style={{ background: directionColor }} />
+      <Star className="absolute right-3 top-3 h-4 w-4 text-[#C9A646]/75" />
+
+      <div className="grid min-h-[132px] grid-cols-[250px_minmax(0,1fr)_340px] items-stretch">
+        <div className="flex items-center gap-4 border-r border-[#C9A646]/10 px-5">
+          <TickerLogo item={item} />
+          <div className="min-w-0">
+            <div className="font-wordmark text-xl font-bold leading-tight text-white">{item.ticker}</div>
+            <div className="mt-1 truncate text-xs text-[#8B8B8B]">{item.company}</div>
+            <div className="mt-2 flex w-fit items-center gap-1.5 rounded-[5px] px-2 py-1 text-[11px] font-medium" style={{ background: `${typeConfig.color}18`, color: typeConfig.color }}>
+              {item.direction === 'bullish' ? <ArrowUpRight className="h-3 w-3" /> : item.direction === 'bearish' ? <ArrowDownRight className="h-3 w-3" /> : <Activity className="h-3 w-3" />}
+              {typeConfig.label}
+            </div>
+            <div className="mt-2 flex w-fit items-center gap-1.5 rounded-[5px] bg-[#C9A646]/10 px-2 py-1 text-[11px] font-medium text-[#D8BE67]">
+              <Building2 className="h-3 w-3" />
+              Institutional Size
+            </div>
+          </div>
+        </div>
+
+        <div className="grid min-w-0 grid-cols-5 items-center gap-4 px-6">
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] text-[#8B8B8B]">Volume</div>
+            <div className="font-sans text-[17px] font-semibold leading-tight tabular-nums text-white">{formatLargeNumber(item.volume)}</div>
+            <div className="mt-1 font-sans text-[12px] font-medium tabular-nums" style={{ color: directionColor }}>{item.volumeRatio.toFixed(2)}x avg</div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] text-[#8B8B8B]">Avg Volume (30D)</div>
+            <div className="font-sans text-[17px] font-medium leading-tight tabular-nums text-white">{formatLargeNumber(avgVolume)}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] text-[#8B8B8B]">Relative Volume</div>
+            <div className="font-sans text-[18px] font-semibold leading-tight tabular-nums" style={{ color: directionColor }}>{item.volumeRatio.toFixed(2)}x</div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] text-[#8B8B8B]">Value Traded</div>
+            <div className="font-sans text-[17px] font-semibold leading-tight tabular-nums text-white">${formatLargeNumber(value)}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] text-[#8B8B8B]">Time</div>
+            <div className="font-sans text-[15px] font-semibold leading-none tabular-nums text-white">{item.time}</div>
+          </div>
+        </div>
+
+        <div className="grid min-w-0 grid-cols-[128px_minmax(130px,1fr)] items-center gap-5 border-l border-[#C9A646]/10 px-7 pr-10">
+          <div className="min-w-0 self-center">
+            <div className="mb-1 text-[10px] text-[#8B8B8B]">Price</div>
+            <div className="whitespace-nowrap font-sans text-[22px] font-semibold leading-tight tabular-nums text-white">${item.price.toFixed(2)}</div>
+            <div className="mt-2 text-[10px] text-[#8B8B8B]">Move</div>
+            <div className="mt-1 flex items-center gap-1 whitespace-nowrap font-sans text-[18px] font-bold leading-tight tabular-nums" style={{ color: directionColor }}>
+              {item.direction === 'bullish' ? <ArrowUpRight className="h-4 w-4" /> : item.direction === 'bearish' ? <ArrowDownRight className="h-4 w-4" /> : null}
+              {item.changePercent >= 0 ? '+' : ''}{item.changePercent.toFixed(2)}%
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[10px] text-[#8B8B8B]">Signal</span>
+              <span className="rounded-[5px] px-2 py-1 text-[11px] font-medium" style={{ background: `${directionColor}18`, color: directionColor }}>{signalLabel}</span>
+            </div>
+          </div>
+          <div className="flex min-w-0 justify-end">
+            <VolumeSparkline direction={item.direction} seed={item.id.replace(/[^a-zA-Z0-9]/g, '') || item.ticker} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[250px_minmax(0,1fr)_340px] border-t border-[#C9A646]/8">
+        <div />
+        <div className="flex items-center gap-4 px-6 py-3">
+          <span className="shrink-0 text-[11px] text-[#A7A7A7]">Volume Spike Strength</span>
+          <div className="flex min-w-[220px] flex-1 gap-1">
+            {Array.from({ length: 16 }, (_, barIndex) => (
+              <span
+                key={barIndex}
+                className="h-2 flex-1 rounded-[3px]"
+                style={{ background: barIndex < strength.filled ? strength.color : 'rgba(255,255,255,0.08)' }}
+              />
+            ))}
+          </div>
+          <span className="shrink-0 text-[11px] font-semibold" style={{ color: strength.color }}>{strength.label}</span>
+        </div>
+        <div />
+      </div>
+    </motion.button>
+  );
+}
 
 // =====================================================
 // Flow Card
@@ -379,6 +583,8 @@ export default memo(function AllFlowTab({ flowData, activeTab, onRefresh, isRefr
   const [search, setSearch]         = useState('');
   const [filterType, setFilterType] = useState<FlowTypeFilter>('all');
   const [filterDir, setFilterDir]   = useState<DirectionFilter>('all');
+  const [minRelativeVolume, setMinRelativeVolume] = useState('2');
+  const [sortBy, setSortBy] = useState('relative');
   const [selected, setSelected]     = useState<FlowItem | null>(null);
 
   // Get tab-contextual filter options
@@ -395,10 +601,20 @@ export default memo(function AllFlowTab({ flowData, activeTab, onRefresh, isRefr
     }
   }, [activeTab, typeOptions, filterType]);
 
-  const filtered = useMemo(
-    () => filterFlowData(flowData, activeTab, search, filterType, filterDir),
-    [flowData, activeTab, search, filterType, filterDir]
-  );
+  const filtered = useMemo(() => {
+    const base = filterFlowData(flowData, activeTab, search, filterType, filterDir);
+    const minRelative = activeTab === 'unusual-volume' ? Number(minRelativeVolume) : 0;
+    const volumeFiltered = minRelative > 0
+      ? base.filter(item => item.volumeRatio >= minRelative)
+      : base;
+
+    return [...volumeFiltered].sort((a, b) => {
+      if (sortBy === 'volume') return b.volume - a.volume;
+      if (sortBy === 'value') return parseFlowValue(b.value) - parseFlowValue(a.value);
+      if (sortBy === 'move') return Math.abs(b.changePercent) - Math.abs(a.changePercent);
+      return b.volumeRatio - a.volumeRatio;
+    });
+  }, [flowData, activeTab, search, filterType, filterDir, minRelativeVolume, sortBy]);
 
   const handleClick = useCallback((item: FlowItem) => setSelected(item), []);
   const handleClose = useCallback(() => setSelected(null), []);
@@ -406,49 +622,104 @@ export default memo(function AllFlowTab({ flowData, activeTab, onRefresh, isRefr
   return (
     <>
       <Card className="mb-8">
-        <div className="p-6 md:p-8">
+        <div className={cn('p-6 md:p-8', activeTab === 'unusual-volume' && 'md:p-5')}>
           {/* Filters */}
-          <div className="flex flex-wrap items-center gap-4 mb-6">
+          <div className="mb-6 flex flex-wrap items-end gap-4">
             <SearchBar value={search} onChange={setSearch} />
 
-            <FilterSelect
-              value={filterType}
-              onChange={v => setFilterType(v as FlowTypeFilter)}
-              placeholder="Flow Type"
-              options={typeOptions}
-            />
+            <div>
+              <div className="mb-1.5 text-[10px] font-medium text-[#A7A7A7]">Volume Type</div>
+              <FilterSelect
+                value={filterType}
+                onChange={v => setFilterType(v as FlowTypeFilter)}
+                placeholder="Flow Type"
+                options={typeOptions}
+              />
+            </div>
 
-            <FilterSelect
-              value={filterDir}
-              onChange={v => setFilterDir(v as DirectionFilter)}
-              placeholder="Direction"
-              options={[
-                { value: 'all',     label: 'All Directions' },
-                { value: 'bullish', label: 'Bullish'        },
-                { value: 'bearish', label: 'Bearish'        },
-                { value: 'neutral', label: 'Neutral'        },
-              ]}
-            />
+            <div>
+              <div className="mb-1.5 text-[10px] font-medium text-[#A7A7A7]">Direction</div>
+              <FilterSelect
+                value={filterDir}
+                onChange={v => setFilterDir(v as DirectionFilter)}
+                placeholder="Direction"
+                options={[
+                  { value: 'all',     label: 'All Directions' },
+                  { value: 'bullish', label: 'Bullish'        },
+                  { value: 'bearish', label: 'Bearish'        },
+                  { value: 'neutral', label: 'Neutral'        },
+                ]}
+              />
+            </div>
+
+            {activeTab === 'unusual-volume' && (
+              <div>
+                <div className="mb-1.5 text-[10px] font-medium text-[#A7A7A7]">Min Relative Volume</div>
+                <FilterSelect
+                  value={minRelativeVolume}
+                  onChange={setMinRelativeVolume}
+                  placeholder="Min Relative Volume"
+                  options={MIN_RELATIVE_VOLUME_OPTIONS}
+                />
+              </div>
+            )}
+
+            {activeTab === 'unusual-volume' && (
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-[8px] px-5 py-3 text-sm font-semibold text-[#D8BE67] transition-all hover:bg-[#C9A646]/10"
+                style={{ border: '1px solid rgba(201,166,70,0.45)', boxShadow: '0 0 18px rgba(201,166,70,0.10)' }}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+              </button>
+            )}
 
             <button
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="ml-auto flex items-center gap-2 px-4 py-3 rounded-xl text-sm text-[#C9A646] transition-all hover:bg-[#C9A646]/10 disabled:opacity-50"
-              style={{ border: '1px solid rgba(201,166,70,0.2)' }}
+              className="ml-auto flex items-center gap-2 rounded-[8px] px-5 py-3 text-sm font-semibold text-black transition-all hover:scale-[1.02] disabled:opacity-50"
+              style={{
+                background: 'linear-gradient(135deg, #C9A646 0%, #F4D97B 50%, #C9A646 100%)',
+                boxShadow: '0 4px 18px rgba(201,166,70,0.25)',
+              }}
             >
               <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
               {isRefreshing ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
 
-          {/* Count */}
-          <div className="text-xs text-[#6B6B6B] mb-4">{filtered.length} signals</div>
+          {/* Count / Sort */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-xs text-[#8B8B8B]">
+            <span>{filtered.length} signals found</span>
+            {activeTab === 'unusual-volume' && (
+              <div className="flex items-center gap-3">
+                <span>Sort by:</span>
+                <FilterSelect
+                  value={sortBy}
+                  onChange={setSortBy}
+                  placeholder="Sort by"
+                  options={SORT_OPTIONS}
+                />
+                <button className="rounded-[6px] bg-[#C9A646]/15 p-2 text-[#C9A646]" type="button" aria-label="List view">
+                  <List className="h-4 w-4" />
+                </button>
+                <button className="rounded-[6px] border border-[#C9A646]/15 p-2 text-[#6B6B6B]" type="button" aria-label="Grid view">
+                  <Grid2X2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Flow List */}
           <div className="space-y-3">
             {filtered.length > 0 ? (
               filtered.map((item, idx) => (
-                <FlowCard key={item.id} item={item} index={idx} onClick={() => handleClick(item)} />
+                activeTab === 'unusual-volume' ? (
+                  <VolumeSignalCard key={item.id} item={item} index={idx} onClick={() => handleClick(item)} />
+                ) : (
+                  <FlowCard key={item.id} item={item} index={idx} onClick={() => handleClick(item)} />
+                )
               ))
             ) : (
               <div className="text-center py-12">

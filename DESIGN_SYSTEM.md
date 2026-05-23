@@ -96,7 +96,8 @@ Three fonts. Each has a single, defined purpose. Do not mix.
 | Font | Token | Usage |
 |---|---|---|
 | **Inter** | `--font-sans` | Body text, UI labels, paragraphs, navigation, buttons |
-| **JetBrains Mono** | `--font-mono` | All numbers — prices, percentages, P/L, ratios, ticker symbols |
+| **Inter** | `--font-data` | App data numbers — prices, percentages, P/L, ratios, metrics |
+| **JetBrains Mono** | `--font-mono` | Code, IDs, technical strings, and Landing-only market texture |
 | **Cormorant Garamond** | `--font-serif` | Hero titles, "FINOTAUR" wordmark, marketing headlines only |
 
 ### Type scale
@@ -111,7 +112,7 @@ Three fonts. Each has a single, defined purpose. Do not mix.
 | `--text-small` | `13px` | 400 | 1.5 | Supporting text, metadata |
 | `--text-eyebrow` | `11px` | 500 | 1.4 | Section eyebrows (uppercase, letter-spacing 1.5px) |
 
-### Number sizing (override — uses `--font-mono`)
+### Number sizing (override — uses `--font-data`)
 | Token | Size | Usage |
 |---|---|---|
 | `--num-display` | `48px` | Featured numbers (hero metrics, dashboard headline) |
@@ -459,7 +460,7 @@ Never render numbers manually with `<span style={{color: 'red'}}>`.
 ### ✅ Do
 - Use `var(--gold-primary)` instead of `#C9A646`
 - Render the minus sign as `−` (U+2212) in all displayed numbers
-- Use JetBrains Mono for every digit on screen
+- Use `--font-data` / `tabular-nums` for app data numbers
 - Apply always-on gold glow to primary buttons (not just hover)
 - Use `border-radius: var(--radius-lg)` (12px) for primary buttons and cards
 - Pad cards with `var(--space-5)` (24px) by default

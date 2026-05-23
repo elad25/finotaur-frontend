@@ -5,7 +5,7 @@
  * update DESIGN_SYSTEM.md first, then add it here.
  *
  * Enforced invariants (LOCKED — do not change without design approval):
- *  - JetBrains Mono with `tabular-nums` for column alignment.
+ *  - Inter with `tabular-nums` for modern financial data alignment.
  *  - U+2212 (−) minus sign, NOT hyphen-minus (-).
  *  - White for values (`text-num-neutral`), red for negative changes only
  *    (`text-num-negative`). Color NEVER goes on the price itself.
@@ -110,7 +110,7 @@ const Price = React.forwardRef<HTMLSpanElement, PriceProps>(
       <span
         ref={ref}
         className={cn(
-          "font-mono tabular-nums",
+          "font-sans tabular-nums",
           "text-num-neutral",
           "leading-[1.2]",
           sizeClassMap[size],
@@ -160,7 +160,7 @@ const Change = React.forwardRef<HTMLSpanElement, ChangeProps>(
       <span
         ref={ref}
         className={cn(
-          "font-mono tabular-nums",
+          "font-sans tabular-nums",
           "text-num-small",
           isNegative ? "text-num-negative" : "text-num-positive",
           className,

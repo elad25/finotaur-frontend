@@ -116,7 +116,10 @@ const ConfluenceCard = memo(({ item, index, onClick }: {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {signals.map(sig => {
-                const cfg = FLOW_TYPE_CONFIG[sig];
+                const cfg = FLOW_TYPE_CONFIG[sig] ?? {
+                  label: String(sig).replace(/_/g, ' '),
+                  color: COLORS.gold,
+                };
                 return (
                   <span
                     key={sig}

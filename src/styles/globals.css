@@ -120,6 +120,7 @@ All colors MUST be HSL.
 
     /* ---------- Typography: families ---------- */
     --font-sans: 'Inter', -apple-system, 'SF Pro Text', BlinkMacSystemFont, sans-serif;
+    --font-data: 'Inter', -apple-system, 'SF Pro Text', BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
     --font-serif: 'Cormorant Garamond', Georgia, serif;
 
@@ -133,7 +134,7 @@ All colors MUST be HSL.
     --text-small: 13px;
     --text-eyebrow: 11px;
 
-    /* ---------- Typography: number scale (mono) ---------- */
+    /* ---------- Typography: number scale ---------- */
     --num-display: 48px;
     --num-large: 28px;
     --num-default: 22px;
@@ -253,11 +254,12 @@ All colors MUST be HSL.
 
   /* Numbers — apply to ANY element displaying a numeric value */
   .num {
-    font-family: var(--font-mono);
+    font-family: var(--font-data);
+    font-weight: 600;
     font-feature-settings: "tnum";
     font-variant-numeric: tabular-nums;
     color: var(--num-neutral);
-    letter-spacing: -0.5px;
+    letter-spacing: 0;
   }
   .num--small { font-size: var(--num-small); letter-spacing: 0; }
   .num--default { font-size: var(--num-default); }
@@ -266,12 +268,28 @@ All colors MUST be HSL.
 
   /* Number change (the +/- delta below the price) */
   .num-change {
-    font-family: var(--font-mono);
+    font-family: var(--font-data);
+    font-weight: 600;
     font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
     font-size: var(--num-small);
   }
   .num-change--positive { color: var(--num-positive); }
   .num-change--negative { color: var(--num-negative); }
+
+  /* App data typography.
+     Landing pages intentionally sit outside `.finotaur-app-shell`, so their
+     existing marketing typography stays untouched. */
+  .finotaur-app-shell :where(.font-mono) {
+    font-family: var(--font-data);
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+
+  .finotaur-app-shell :where(code, pre, kbd, samp, textarea, input).font-mono {
+    font-family: var(--font-mono);
+  }
 
   /* Eyebrow — small uppercase label (e.g. "FLAGSHIP") */
   .ds-eyebrow {
