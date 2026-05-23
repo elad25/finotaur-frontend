@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles, TrendingUp, Calendar, Filter, BarChart3, Loader2, FileText, Target, AlertTriangle, TrendingDown, Brain, Activity } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { Sparkles, TrendingUp, Calendar, Filter, BarChart3, FileText, Target, Brain, Activity } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChatInterface } from "@/components/ai-copilot/ChatInterface";
+import { Message } from "@/hooks/useAICopilot";
 import { getTrades } from "@/routes/journal";
 import { formatNumber } from "@/utils/smartCalc";
 import { getStrategyName } from "@/utils/storage";
@@ -38,14 +38,6 @@ interface Trade {
   };
 }
 
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-  isFullAnalysis?: boolean;
-}
-
 interface StatsData {
   totalTrades: number;
   winRate: number;
@@ -79,23 +71,103 @@ interface TradingPattern {
   description: string;
 }
 
+const DAILY_QUESTION_LIMIT = 3;
+const DAILY_QUESTION_STORAGE_KEY = "finotaur:journal-ai-chat:daily-questions";
+
+function getTodayKey(): string {
+  return new Date().toLocaleDateString("en-CA");
+}
+
+function readDailyQuestionCount(): number {
+  try {
+    const raw = window.localStorage.getItem(DAILY_QUESTION_STORAGE_KEY);
+    if (!raw) return 0;
+
+    const parsed = JSON.parse(raw) as { date?: string; count?: number };
+    if (parsed.date !== getTodayKey()) return 0;
+
+    return Number.isFinite(parsed.count) ? Math.max(0, parsed.count || 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeDailyQuestionCount(count: number) {
+  try {
+    window.localStorage.setItem(
+      DAILY_QUESTION_STORAGE_KEY,
+      JSON.stringify({ date: getTodayKey(), count })
+    );
+  } catch {
+    // If localStorage is unavailable, keep the in-memory state only.
+  }
+}
+
+function isJournalQuestion(message: string): boolean {
+  const lowerMessage = message.toLowerCase();
+  const journalTerms = [
+    "journal",
+    "trade",
+    "trades",
+    "trading",
+    "pnl",
+    "p&l",
+    "profit",
+    "loss",
+    "win rate",
+    "winrate",
+    "session",
+    "strategy",
+    "performance",
+    "expectancy",
+    "drawdown",
+    "psychology",
+    "pattern",
+    "risk",
+    "rr",
+    "r:r",
+    "setup",
+    "entry",
+    "exit",
+    "stop",
+    "notes",
+    "calendar",
+    "analysis",
+    "יומן",
+    "מסחר",
+    "עסקה",
+    "עסקאות",
+    "רווח",
+    "הפסד",
+    "סיכון",
+    "אסטרטגיה",
+    "ביצועים",
+  ];
+
+  return journalTerms.some((term) => lowerMessage.includes(term));
+}
+
 export default function JournalAIReviewEnhanced() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [timeRange, setTimeRange] = useState("30d");
   const [groupBy, setGroupBy] = useState("day");
   const [useMyTrades, setUseMyTrades] = useState(true);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [questionsUsedToday, setQuestionsUsedToday] = useState(() => readDailyQuestionCount());
 
   useEffect(() => {
     loadTrades();
   }, []);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  function markQuestionUsed() {
+    setQuestionsUsedToday((current) => {
+      const next = Math.min(DAILY_QUESTION_LIMIT, current + 1);
+      writeDailyQuestionCount(next);
+      return next;
+    });
+  }
 
   async function loadTrades() {
     const result = await getTrades();
@@ -460,14 +532,6 @@ export default function JournalAIReviewEnhanced() {
     const filteredTrades = useMyTrades ? getFilteredTrades() : [];
     const lowerMessage = userMessage.toLowerCase();
 
-    const isDataQuery = 
-      ["win rate", "pnl", "profit", "loss", "session", "strategy", "trades", "performance",
-       "best", "worst", "average", "expectancy", "drawdown", "psychology", "pattern", "risk"].some(term => lowerMessage.includes(term));
-
-    if (!isDataQuery) {
-      return "I'm your AI trading coach. Ask about your trades, risk, sessions, strategies, and performance!";
-    }
-
     if (!useMyTrades || filteredTrades.length === 0) {
       return "Please enable 'Use my trades' and ensure you have data in the selected range.";
     }
@@ -524,14 +588,19 @@ export default function JournalAIReviewEnhanced() {
 
   async function handleFullAnalysis() {
     if (!useMyTrades || getFilteredTrades().length === 0) return;
+    if (questionsUsedToday >= DAILY_QUESTION_LIMIT) {
+      setError("Daily journal AI limit reached. You can ask 3 journal questions per day.");
+      return;
+    }
+
     setLoading(true);
+    setError(null);
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
       content: "Generate full analysis",
-      timestamp: new Date(),
-      isFullAnalysis: true,
+      created_at: new Date().toISOString(),
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -542,290 +611,175 @@ export default function JournalAIReviewEnhanced() {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: report,
-        timestamp: new Date(),
-        isFullAnalysis: true,
+        created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, aiMsg]);
+      markQuestionUsed();
+    } catch (err: any) {
+      setError(err?.message || "Failed to generate analysis");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSend() {
-    if (!input.trim()) return;
+  async function handleSendMessage(message: string) {
+    const trimmed = message.trim();
+    if (!trimmed || loading) return;
+
+    if (!isJournalQuestion(trimmed)) {
+      setError("This AI Chat is limited to Trade Journal questions only. Ask about your trades, risk, sessions, strategies, psychology, or performance.");
+      return;
+    }
+
+    if (questionsUsedToday >= DAILY_QUESTION_LIMIT) {
+      setError("Daily journal AI limit reached. You can ask 3 journal questions per day.");
+      return;
+    }
+
+    if (trimmed.toLowerCase() === "generate full analysis") {
+      await handleFullAnalysis();
+      return;
+    }
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
-      timestamp: new Date(),
+      content: trimmed,
+      created_at: new Date().toISOString(),
     };
 
     setMessages(prev => [...prev, userMsg]);
-    setInput("");
     setLoading(true);
+    setError(null);
 
     try {
-      const response = await generateAIResponse(input.trim());
+      const response = await generateAIResponse(trimmed);
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: response,
-        timestamp: new Date(),
+        created_at: new Date().toISOString(),
       };
       setMessages(prev => [...prev, aiMsg]);
+      markQuestionUsed();
+    } catch (err: any) {
+      setError(err?.message || "Failed to analyze journal data");
     } finally {
       setLoading(false);
     }
   }
 
-  function handleKeyPress(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  }
+  const filteredTradesCount = getFilteredTrades().length;
+  const questionsRemainingToday = Math.max(0, DAILY_QUESTION_LIMIT - questionsUsedToday);
+  const journalPromptRows = [
+    [
+      { icon: Brain, question: "What's my win rate and psychology?" },
+      { icon: TrendingUp, question: "Which session performs best?" },
+      { icon: Target, question: "Analyze my risk and drawdown" },
+    ],
+    [
+      { icon: Activity, question: "What patterns do you see?" },
+      { icon: BarChart3, question: "Which strategy performs best?" },
+      { icon: FileText, question: "Generate full analysis" },
+    ],
+  ];
 
   return (
-    <div className="flex flex-col h-screen bg-black">
-      {/* Premium Header */}
-      <div className="px-6 py-6 border-b border-zinc-800/50 bg-gradient-to-r from-zinc-900/60 via-zinc-900/40 to-zinc-900/60 backdrop-blur-sm">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent mb-2">
-          Your Personal Finotaur AI Coach
-        </h1>
-        <p className="text-sm text-zinc-400">
-          Advanced AI with psychology insights, pattern recognition, risk analysis & personalized recommendations.
-        </p>
-      </div>
-
-      {/* Controls Bar */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-800/50 bg-gradient-to-r from-zinc-900/60 via-zinc-900/40 to-zinc-900/60 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <Calendar className="w-3.5 h-3.5 text-yellow-500" />
+    <div className="relative flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-surface-base">
+      <header className="relative z-10 border-b border-border-ds-subtle bg-surface-base px-ds-6 py-ds-4">
+        <div className="flex flex-col gap-ds-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h1 className="flex items-center gap-ds-2 text-lg font-bold">
+              <span className="text-ink-primary">FINOTAUR</span>
+              <span className="text-gold-primary">AI Chat</span>
+              <Sparkles className="h-4 w-4 text-gold-primary" />
+            </h1>
+            <p className="mt-ds-1 text-xs text-ink-tertiary">Journal-aware trading coach</p>
           </div>
-          <Select value={timeRange} onValueChange={setTimeRange}>
-            <SelectTrigger className="w-36 h-9 text-xs bg-zinc-900/80 border-zinc-700/50 hover:border-zinc-600 transition-colors backdrop-blur-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="90d">Last 90 days</SelectItem>
-              <SelectItem value="all">All time</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-            <Filter className="w-3.5 h-3.5 text-yellow-500" />
-          </div>
-          <Select value={groupBy} onValueChange={setGroupBy}>
-            <SelectTrigger className="w-36 h-9 text-xs bg-zinc-900/80 border-zinc-700/50 hover:border-zinc-600 transition-colors backdrop-blur-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="day">By Day</SelectItem>
-              <SelectItem value="week">By Week</SelectItem>
-              <SelectItem value="session">By Session</SelectItem>
-              <SelectItem value="strategy">By Strategy</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <Button
-          variant={useMyTrades ? "default" : "outline"}
-          size="sm"
-          onClick={() => setUseMyTrades(!useMyTrades)}
-          className={`h-9 text-xs font-medium transition-all ${
-            useMyTrades 
-              ? "bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black shadow-lg shadow-yellow-500/20" 
-              : "bg-zinc-900/80 border-zinc-700/50 hover:border-zinc-600 hover:bg-zinc-900"
-          }`}
-        >
-          <BarChart3 className="w-3.5 h-3.5 mr-1.5" />
-          {useMyTrades ? "Using My Trades" : "Use My Trades"}
-        </Button>
-
-        <div className="ml-auto flex items-center gap-3">
-          <div className="px-3 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-800/50 backdrop-blur-sm">
-            <span className="text-xs text-zinc-400">
-              {useMyTrades && `${getFilteredTrades().length} trades loaded`}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 flex items-center justify-center mb-6 shadow-xl border border-yellow-500/30">
-              <Sparkles className="w-10 h-10 text-yellow-500" />
-            </div>
-            <h3 className="text-2xl font-bold text-white mb-3 bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
-              Your Personal Finotaur AI Coach
-            </h3>
-            <p className="text-zinc-400 mb-8 max-w-md text-sm leading-relaxed">
-              Advanced AI with psychological insights, pattern recognition, and personalized recommendations.
-            </p>
-            
-            <div className="grid grid-cols-2 gap-3 max-w-2xl mb-6">
-              <button
-                onClick={() => setInput("What's my win rate and psychology?")}
-                className="group px-5 py-3.5 text-sm text-left bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 hover:from-zinc-800 hover:to-zinc-900 rounded-xl border border-zinc-800/50 hover:border-zinc-700 transition-all backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Brain className="w-4 h-4 text-yellow-500" />
-                  <span className="font-semibold text-white">Win Rate & Psychology</span>
-                </div>
-                <span className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                  Deep dive into mindset
-                </span>
-              </button>
-              <button
-                onClick={() => setInput("Which session performs best?")}
-                className="group px-5 py-3.5 text-sm text-left bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 hover:from-zinc-800 hover:to-zinc-900 rounded-xl border border-zinc-800/50 hover:border-zinc-700 transition-all backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-emerald-500" />
-                  <span className="font-semibold text-white">Best Session</span>
-                </div>
-                <span className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                  Find your golden hour
-                </span>
-              </button>
-              <button
-                onClick={() => setInput("Analyze my risk and drawdown")}
-                className="group px-5 py-3.5 text-sm text-left bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 hover:from-zinc-800 hover:to-zinc-900 rounded-xl border border-zinc-800/50 hover:border-zinc-700 transition-all backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Target className="w-4 h-4 text-blue-500" />
-                  <span className="font-semibold text-white">Risk Analysis</span>
-                </div>
-                <span className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                  Assess risk exposure
-                </span>
-              </button>
-              <button
-                onClick={() => setInput("What patterns do you see?")}
-                className="group px-5 py-3.5 text-sm text-left bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 hover:from-zinc-800 hover:to-zinc-900 rounded-xl border border-zinc-800/50 hover:border-zinc-700 transition-all backdrop-blur-sm"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <Activity className="w-4 h-4 text-purple-500" />
-                  <span className="font-semibold text-white">Pattern Detection</span>
-                </div>
-                <span className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors">
-                  Discover hidden behaviors
-                </span>
-              </button>
+          <div className="flex flex-wrap items-center gap-ds-3">
+            <div className="flex items-center gap-ds-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-gold-border bg-gold-primary/10">
+                <Calendar className="h-3.5 w-3.5 text-gold-primary" />
+              </span>
+              <Select value={timeRange} onValueChange={setTimeRange}>
+                <SelectTrigger className="h-9 w-36 rounded-md border-border-ds-subtle bg-surface-1 text-xs text-ink-secondary focus:ring-gold-primary/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">Last 7 days</SelectItem>
+                  <SelectItem value="30d">Last 30 days</SelectItem>
+                  <SelectItem value="90d">Last 90 days</SelectItem>
+                  <SelectItem value="all">All time</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="mt-4">
-              <Button
-                onClick={handleFullAnalysis}
-                disabled={loading || !useMyTrades || getFilteredTrades().length === 0}
-                className="h-12 px-8 text-sm font-semibold bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black shadow-2xl shadow-yellow-500/30 transition-all transform hover:scale-105"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Generate Full Comprehensive Analysis
-              </Button>
-              <p className="text-xs text-zinc-600 mt-3">
-                Get an in-depth professional report with AI recommendations
-              </p>
+            <div className="flex items-center gap-ds-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-gold-border bg-gold-primary/10">
+                <Filter className="h-3.5 w-3.5 text-gold-primary" />
+              </span>
+              <Select value={groupBy} onValueChange={setGroupBy}>
+                <SelectTrigger className="h-9 w-36 rounded-md border-border-ds-subtle bg-surface-1 text-xs text-ink-secondary focus:ring-gold-primary/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="day">By Day</SelectItem>
+                  <SelectItem value="week">By Week</SelectItem>
+                  <SelectItem value="session">By Session</SelectItem>
+                  <SelectItem value="strategy">By Strategy</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-        )}
 
-        {messages.map(message => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-4xl rounded-2xl px-5 py-4 shadow-xl ${
-                message.role === "user"
-                  ? "bg-gradient-to-br from-yellow-500/15 to-yellow-600/10 border border-yellow-500/30 text-white backdrop-blur-sm"
-                  : message.isFullAnalysis
-                  ? "bg-gradient-to-br from-zinc-900/95 to-zinc-900/80 border border-zinc-700/50 text-zinc-100 backdrop-blur-lg w-full"
-                  : "bg-gradient-to-br from-zinc-900/80 to-zinc-900/60 border border-zinc-700/50 text-zinc-100 backdrop-blur-sm"
-              }`}
+            <button
+              type="button"
+              onClick={() => setUseMyTrades((value) => !value)}
+              className="flex h-9 items-center gap-ds-2 rounded-[12px] border border-border-ds-subtle bg-surface-1 px-ds-4 text-xs font-medium text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary"
             >
-              {message.role === "assistant" && (
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="p-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <Sparkles className="w-4 h-4 text-yellow-500" />
-                  </div>
-                  <span className="text-xs font-semibold bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
-                    AI Coach {message.isFullAnalysis && "• Full Analysis"}
-                  </span>
-                </div>
-              )}
-              <div className={`text-sm whitespace-pre-wrap leading-relaxed ${message.isFullAnalysis ? 'space-y-2' : ''}`}>
-                {message.content}
-              </div>
-              <div className="text-[10px] text-zinc-500 mt-3 flex items-center gap-2">
-                <span>{message.timestamp.toLocaleTimeString()}</span>
-                {message.isFullAnalysis && (
-                  <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 font-semibold">
-                    COMPREHENSIVE
-                  </span>
-                )}
-              </div>
+              <BarChart3 className="h-3.5 w-3.5 text-gold-primary" />
+              {useMyTrades ? "Using My Trades" : "Use My Trades"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFullAnalysis}
+              disabled={loading || !useMyTrades || filteredTradesCount === 0 || questionsRemainingToday === 0}
+              className="flex h-9 items-center gap-ds-2 rounded-[12px] border border-border-ds-subtle bg-surface-1 px-ds-4 text-xs font-medium text-ink-secondary transition-colors duration-base hover:border-gold-border hover:text-gold-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FileText className="h-3.5 w-3.5 text-gold-primary" />
+              Full Analysis
+            </button>
+
+            <div className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2 text-xs text-ink-tertiary">
+              {useMyTrades ? `${filteredTradesCount} trades loaded` : "Trade data disabled"}
+            </div>
+
+            <div className="rounded-md border border-border-ds-subtle bg-surface-1 px-ds-3 py-ds-2 text-xs text-ink-tertiary">
+              {questionsRemainingToday} / {DAILY_QUESTION_LIMIT} questions left today
             </div>
           </div>
-        ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div className="max-w-3xl rounded-2xl px-5 py-4 bg-gradient-to-br from-zinc-900/80 to-zinc-900/60 border border-zinc-700/50 backdrop-blur-sm shadow-xl">
-              <div className="flex items-center gap-3">
-                <Loader2 className="w-5 h-5 text-yellow-500 animate-spin" />
-                <span className="text-sm text-zinc-300 font-medium">AI is analyzing your data...</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="px-6 py-5 border-t border-zinc-800/50 bg-gradient-to-r from-zinc-900/60 via-zinc-900/40 to-zinc-900/60 backdrop-blur-sm">
-        <div className="flex gap-3 max-w-5xl mx-auto">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask about your trading: 'What psychological patterns do I have?' or 'Analyze my risk'"
-            className="flex-1 h-12 bg-zinc-900/80 border-zinc-700/50 text-white placeholder:text-zinc-500 focus-visible:ring-2 focus-visible:ring-yellow-500/50 focus-visible:border-yellow-500/50 rounded-xl backdrop-blur-sm transition-all"
-            disabled={loading}
-          />
-          <Button
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-            className="h-12 px-6 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-black font-semibold shadow-lg shadow-yellow-500/20 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-          <Button
-            onClick={handleFullAnalysis}
-            disabled={loading || !useMyTrades || getFilteredTrades().length === 0}
-            variant="outline"
-            className="h-12 px-6 bg-zinc-900/80 border-zinc-700/50 hover:bg-zinc-800 hover:border-zinc-600 text-white font-semibold backdrop-blur-sm transition-all"
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Full Analysis
-          </Button>
         </div>
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <AlertTriangle className="w-3 h-3 text-zinc-600" />
-          <p className="text-[10px] text-zinc-600 text-center">
-            Insights are educational; not financial advice. Always manage risk appropriately.
-          </p>
-        </div>
-      </div>
+      </header>
+
+      <ChatInterface
+        messages={messages}
+        isLoading={loading}
+        isStreaming={loading}
+        error={error}
+        onSendMessage={handleSendMessage}
+        onClearError={() => setError(null)}
+        limitReached={false}
+        questionsRemaining={questionsRemainingToday}
+        userTier="PREMIUM"
+        questionsUsed={questionsUsedToday}
+        dailyLimit={DAILY_QUESTION_LIMIT}
+        promptRows={journalPromptRows}
+        emptyTitle={<>FINOTAUR <span className="text-gold-primary">AI Chat</span></>}
+        emptyDescription="Ask about your trades, psychology, risk, sessions, strategies, and execution patterns."
+        placeholder="Ask about your trading: 'What psychological patterns do I have?' or 'Analyze my risk'"
+        disclaimer="Insights are educational; not financial advice. Always manage risk appropriately."
+      />
     </div>
   );
 }

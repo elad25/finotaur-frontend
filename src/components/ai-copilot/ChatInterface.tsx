@@ -36,6 +36,11 @@ interface ChatInterfaceProps {
   userTier?: 'FREE' | 'BASIC' | 'PREMIUM';
   questionsUsed?: number;
   dailyLimit?: number;
+  emptyTitle?: React.ReactNode;
+  emptyDescription?: string;
+  promptRows?: PromptChip[][];
+  placeholder?: string;
+  disclaimer?: string;
 }
 
 interface PromptChip {
@@ -70,6 +75,11 @@ export const ChatInterface = memo(function ChatInterface({
   userTier = 'FREE',
   questionsUsed = 0,
   dailyLimit = 5,
+  emptyTitle = <>FINOTAUR <span className="text-gold-primary">AI Assistant</span></>,
+  emptyDescription = 'Ask a market question to begin.',
+  promptRows = PROMPT_ROWS,
+  placeholder = 'Ask about market analysis, trade ideas, reports...',
+  disclaimer = 'AI responses are based on FINOTAUR reports. Not financial advice.',
 }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -132,7 +142,12 @@ export const ChatInterface = memo(function ChatInterface({
         style={{ scrollBehavior: 'smooth' }}
       >
         {showEmptyState ? (
-          <EmptyState onSelectQuestion={handleSuggestedQuestion} />
+          <EmptyState
+            title={emptyTitle}
+            description={emptyDescription}
+            promptRows={promptRows}
+            onSelectQuestion={handleSuggestedQuestion}
+          />
         ) : (
           <div className="w-full space-y-6">
             <AnimatePresence>
@@ -226,7 +241,7 @@ export const ChatInterface = memo(function ChatInterface({
                 onKeyDown={handleKeyDown}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                placeholder="Ask about market analysis, trade ideas, reports..."
+                placeholder={placeholder}
                 disabled={isLoading}
                 rows={1}
                 className="min-h-[56px] max-h-[200px] w-full resize-none bg-transparent py-4 pl-5 pr-14 text-ink-primary placeholder:text-ink-muted focus:outline-none"
@@ -255,7 +270,7 @@ export const ChatInterface = memo(function ChatInterface({
           
           {/* Disclaimer */}
           <p className="mt-3 text-center text-[10px] text-ink-tertiary">
-            AI responses are based on FINOTAUR reports. Not financial advice.
+            {disclaimer}
           </p>
         </div>
       </div>
@@ -267,7 +282,17 @@ export const ChatInterface = memo(function ChatInterface({
 // Empty State Component
 // =====================================================
 
-function EmptyState({ onSelectQuestion }: { onSelectQuestion: (question: string) => void }) {
+function EmptyState({
+  title,
+  description,
+  promptRows,
+  onSelectQuestion,
+}: {
+  title: React.ReactNode;
+  description: string;
+  promptRows: PromptChip[][];
+  onSelectQuestion: (question: string) => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -275,17 +300,23 @@ function EmptyState({ onSelectQuestion }: { onSelectQuestion: (question: string)
       className="flex h-full flex-col items-center justify-center px-4 py-12"
     >
       <h2 className="mb-ds-2 text-center text-xl font-semibold text-ink-primary">
-        FINOTAUR <span className="text-gold-primary">AI Assistant</span>
+        {title}
       </h2>
       <p className="max-w-sm text-center text-sm leading-relaxed text-ink-secondary">
-        Ask a market question to begin.
+        {description}
       </p>
-      <PromptMarquee onSelectQuestion={onSelectQuestion} />
+      <PromptMarquee promptRows={promptRows} onSelectQuestion={onSelectQuestion} />
     </motion.div>
   );
 }
 
-function PromptMarquee({ onSelectQuestion }: { onSelectQuestion: (question: string) => void }) {
+function PromptMarquee({
+  promptRows,
+  onSelectQuestion,
+}: {
+  promptRows: PromptChip[][];
+  onSelectQuestion: (question: string) => void;
+}) {
   return (
     <div className="mt-8 w-full max-w-5xl overflow-hidden rounded-[12px] border border-border-ds-subtle bg-black py-4">
       <div
@@ -295,7 +326,7 @@ function PromptMarquee({ onSelectQuestion }: { onSelectQuestion: (question: stri
           WebkitMaskImage: 'linear-gradient(90deg, transparent, black 10%, black 90%, transparent)',
         }}
       >
-        {PROMPT_ROWS.map((row, index) => (
+        {promptRows.map((row, index) => (
           <motion.div
             key={index}
             className="flex w-max gap-3 px-3"
