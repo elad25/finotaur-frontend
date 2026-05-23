@@ -1247,25 +1247,25 @@ function hasUnreadMessages(ticket: Ticket): boolean {
               {/* Guest Form Overlay */}
               {showGuestForm && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                  <div className="bg-[#0f0f0f] border border-[#7F6823]/30 rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl">
+                  <div className="bg-[#F8F3EA] border border-[#C8CDD6] rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl">
                     <div className="text-center mb-6">
                       <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center mx-auto mb-3">
                         <Shield className="h-6 w-6 text-black" strokeWidth={2.5} />
                       </div>
-                      <h3 className="text-lg font-semibold text-white mb-1">Welcome! 👋</h3>
-                      <p className="text-sm text-gray-400">Let us know how to reach you</p>
+                      <h3 className="text-lg font-semibold text-[#111827] mb-1">Welcome! 👋</h3>
+                      <p className="text-sm text-[#64748B]">Let us know how to reach you</p>
                     </div>
 
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-2">Your Name</label>
+                        <label className="block text-xs font-medium text-[#64748B] mb-2">Your Name</label>
                         <input
                           type="text"
                           value={guestFormName}
                           onChange={(e) => setGuestFormName(e.target.value)}
                           placeholder="John Doe"
                           autoFocus
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all"
+                          className="w-full px-4 py-3 bg-white/90 border border-[#C8CDD6] rounded-xl text-[#111827] text-sm placeholder-[#94A3B8] focus:border-[#1D4ED8] focus:ring-1 focus:ring-[#1D4ED8] outline-none transition-all"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
@@ -1276,14 +1276,14 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-2">Your Email</label>
+                        <label className="block text-xs font-medium text-[#64748B] mb-2">Your Email</label>
                         <input
                           id="guest-email-input"
                           type="email"
                           value={guestFormEmail}
                           onChange={(e) => setGuestFormEmail(e.target.value)}
                           placeholder="john@example.com"
-                          className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none transition-all"
+                          className="w-full px-4 py-3 bg-white/90 border border-[#C8CDD6] rounded-xl text-[#111827] text-sm placeholder-[#94A3B8] focus:border-[#1D4ED8] focus:ring-1 focus:ring-[#1D4ED8] outline-none transition-all"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               handleGuestFormSubmit();
@@ -1295,7 +1295,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       <div className="flex gap-3 pt-2">
                         <button
                           onClick={handleClose}
-                          className="flex-1 h-11 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 text-sm font-medium transition-all"
+                          className="flex-1 h-11 bg-white/80 hover:bg-white border border-[#C8CDD6] rounded-xl text-[#475569] text-sm font-medium transition-all"
                         >
                           Cancel
                         </button>
@@ -1319,10 +1319,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     <div className="px-4 pt-3 flex-shrink-0">
                       <button
                         onClick={clearAllUpdates}
-                        className="w-full h-9 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#7F6823]/40 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 group"
+                        className="w-full h-9 bg-white/75 hover:bg-white border border-[#C8CDD6] hover:border-[#1D4ED8]/45 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 group"
                       >
-                        <CheckCircle2 className="h-4 w-4 text-gray-400 group-hover:text-[#D4AF37] transition-colors" />
-                        <span className="text-xs font-medium text-gray-400 group-hover:text-[#D4AF37] transition-colors">
+                        <CheckCircle2 className="h-4 w-4 text-[#64748B] group-hover:text-[#1D4ED8] transition-colors" />
+                        <span className="text-xs font-medium text-[#64748B] group-hover:text-[#1D4ED8] transition-colors">
                           Clear All ({unreadUpdatesCount})
                         </span>
                       </button>
@@ -1503,38 +1503,38 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     t.id === ticket.id ? { ...t, last_read_at: new Date().toISOString() } : t
   ));
 }}
-                                className="w-full px-4 py-3 border-b border-white/5 hover:bg-gradient-to-r hover:from-[#1a1510]/30 hover:to-transparent transition-all duration-200 ease-out text-left group"
+                                className="w-full px-4 py-3 border-b border-[#D8D1C5]/70 hover:bg-white/60 transition-all duration-200 ease-out text-left group"
                               >
                                 <div className="flex items-start gap-3">
                                   <div className="relative flex-shrink-0">
-                                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                    <div className="h-10 w-10 rounded-lg bg-white flex items-center justify-center border border-[#C8CDD6]">
                                       {ticket.category ? (
-                                        <span className="text-black">{getCategoryIcon(ticket.category)}</span>
+                                        <span className="text-[#1D4ED8]">{getCategoryIcon(ticket.category)}</span>
                                       ) : (
-                                        <Shield className="h-5 w-5 text-black" strokeWidth={2.5} />
+                                        <Shield className="h-5 w-5 text-[#1D4ED8]" strokeWidth={2.5} />
                                       )}
                                     </div>
                                     {hasUnread && (
-                                      <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-black"></div>
+                                      <div className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-[#F4EFE4]"></div>
                                     )}
                                   </div>
 
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between mb-1">
-                                      <h4 className={`text-sm font-medium ${hasUnread ? 'text-white' : 'text-gray-300'} transition-colors`}>
+                                      <h4 className={`text-sm font-medium ${hasUnread ? 'text-[#111827]' : 'text-[#475569]'} transition-colors`}>
                                         {ticket.category ? getCategoryLabel(ticket.category) : 'Support'}
                                       </h4>
-                                      <span className="text-[11px] text-[#E6C77D] opacity-40 group-hover:opacity-60 transition-opacity">
+                                      <span className="text-[11px] text-[#1D4ED8] opacity-60 group-hover:opacity-90 transition-opacity">
                                         {formatRelativeTime(ticket.updated_at)}
                                       </span>
                                     </div>
-                                    <p className={`text-xs line-clamp-2 ${hasUnread ? 'text-gray-300' : 'text-gray-500'}`}>
+                                    <p className={`text-xs line-clamp-2 ${hasUnread ? 'text-[#475569]' : 'text-[#64748B]'}`}>
                                       {getLastMessage(ticket)}
                                     </p>
                                   </div>
 
                                   <div className="flex items-center">
-                                    <ChevronRight className="h-[18px] w-[18px] text-[#E6C77D] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
+                                    <ChevronRight className="h-[18px] w-[18px] text-[#1D4ED8] opacity-45 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200" />
                                   </div>
                                 </div>
                               </button>
@@ -1543,13 +1543,13 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         )}
                       </div>
 
-                      <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
+                      <div className="border-t border-[#D8D1C5] bg-gradient-to-r from-[#F8F3EA] to-[#EEF0F3] p-4 flex-shrink-0">
                         <button
                           onClick={handleNewChat}
-                          className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
+                          className="w-full h-12 bg-white hover:bg-[#EFF6FF] border border-[#C8CDD6] hover:border-[#1D4ED8]/45 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out transform hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                         >
-                          <Plus className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
-                          <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
+                          <Plus className="h-5 w-5 text-[#1D4ED8]" strokeWidth={2.5} />
+                          <span className="text-sm font-semibold text-[#1D4ED8] tracking-wide font-['Inter',sans-serif]">
                             NEW CHAT
                           </span>
                         </button>
@@ -1666,10 +1666,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                           Message Received!
                                         </span>
                                       </div>
-                                      <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
+                                      <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
                                         Thank you for reaching out! Our support team has received your message and will get back to you as soon as possible.
                                       </p>
-                                      <p className="text-xs text-gray-400 mt-2 font-['Inter',sans-serif]">
+                                      <p className="text-xs text-[#64748B] mt-2 font-['Inter',sans-serif]">
                                         📧 We typically respond within 24 hours.
                                       </p>
                                       <span className="text-[10px] text-green-400/50 mt-2 block">
@@ -1788,21 +1788,21 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       
                       {/* Input Area */}
                       {!messageSent && (
-                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
+                        <div className="border-t border-[#D8D1C5] bg-gradient-to-r from-[#F8F3EA] to-[#EEF0F3] p-4 flex-shrink-0">
                           {attachments.length > 0 && (
                             <div className="mb-3 flex flex-wrap gap-2">
                               {attachments.map((file, idx) => (
                                 <div
                                   key={idx}
-                                  className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg"
+                                  className="flex items-center gap-2 px-3 py-1.5 bg-white/80 border border-[#C8CDD6] rounded-lg"
                                 >
-                                  <ImageIcon className="h-3 w-3 text-[#D4AF37]" />
-                                  <span className="text-xs text-gray-300 max-w-[100px] truncate font-['Inter',sans-serif]">
+                                  <ImageIcon className="h-3 w-3 text-[#1D4ED8]" />
+                                  <span className="text-xs text-[#334155] max-w-[100px] truncate font-['Inter',sans-serif]">
                                     {file.name}
                                   </span>
                                   <button
                                     onClick={() => removeAttachment(idx)}
-                                    className="ml-1 text-gray-400 hover:text-white transition-colors"
+                                    className="ml-1 text-[#64748B] hover:text-[#111827] transition-colors"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -1815,11 +1815,11 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                             <button
                               onClick={() => fileInputRef.current?.click()}
                               disabled={sending || attachments.length >= 5}
-                              className="h-11 px-4 flex-shrink-0 bg-white/5 hover:bg-[#1a1510]/50 border border-white/10 hover:border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
+                              className="h-11 px-4 flex-shrink-0 bg-white/80 hover:bg-white border border-[#C8CDD6] hover:border-[#1D4ED8]/45 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all duration-200 ease-out group"
                               title="Upload file (max 20MB)"
                             >
-                              <Upload className="h-[18px] w-[18px] text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
-                              <span className="text-xs font-medium text-[#E6C77D] opacity-60 group-hover:opacity-100 transition-opacity">
+                              <Upload className="h-[18px] w-[18px] text-[#475569] group-hover:text-[#1D4ED8] transition-colors" strokeWidth={2.5} />
+                              <span className="text-xs font-medium text-[#475569] group-hover:text-[#1D4ED8] transition-colors">
                                 Upload
                               </span>
                             </button>
@@ -1835,7 +1835,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                     ? 'Type your answer...'
                                     : 'Type your message...'
                               }
-                              className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
+                              className="flex-1 px-4 py-3 bg-white/90 border border-[#C8CDD6] rounded-xl text-[#111827] text-sm placeholder-[#94A3B8] focus:border-[#1D4ED8] focus:ring-1 focus:ring-[#1D4ED8] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
                               disabled={sending}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1847,25 +1847,25 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                             <button
                               onClick={handleSendMessage}
                               disabled={(!currentMessage.trim() && guidedStep !== 'ready') || sending || uploadingFiles}
-                              className={`h-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg ${
+                              className={`h-11 flex-shrink-0 bg-gradient-to-br from-[#1D4ED8] to-[#1E40AF] hover:from-[#1E40AF] hover:to-[#1D4ED8] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg ${
                                 guidedStep === 'ready' ? 'px-4 gap-2' : 'w-11'
                               }`}
                             >
                               {sending || uploadingFiles ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                               ) : guidedStep === 'ready' ? (
                                 <>
-                                  <Send className="h-[16px] w-[16px] text-black" strokeWidth={2.5} />
-                                  <span className="text-xs font-semibold text-black whitespace-nowrap">
+                                  <Send className="h-[16px] w-[16px] text-white" strokeWidth={2.5} />
+                                  <span className="text-xs font-semibold text-white whitespace-nowrap">
                                     Send Request
                                   </span>
                                 </>
                               ) : (
-                                <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
+                                <Send className="h-[18px] w-[18px] text-white" strokeWidth={2.5} />
                               )}
                             </button>
                           </div>
-                          <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
+                          <p className="text-[10px] text-[#64748B] mt-2 text-center font-['Inter',sans-serif]">
                             {isGuest 
                               ? "We'll respond to your email • Max 5 files, 20MB each"
                               : 'Press Enter to send • Shift+Enter for new line • Max 5 files, 20MB each'
@@ -1876,13 +1876,13 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
                       {/* After message sent - show back button */}
                       {messageSent && !isGuest && (
-                        <div className="border-t border-[#7F6823]/20 bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] p-4 flex-shrink-0">
+                        <div className="border-t border-[#D8D1C5] bg-gradient-to-r from-[#F8F3EA] to-[#EEF0F3] p-4 flex-shrink-0">
                           <button
                             onClick={handleBackToList}
-                            className="w-full h-12 bg-gradient-to-br from-[#3d3420] to-[#2d2718] hover:from-[#4d4430] hover:to-[#3d3728] border border-[#7F6823]/40 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out"
+                            className="w-full h-12 bg-white hover:bg-[#EFF6FF] border border-[#C8CDD6] hover:border-[#1D4ED8]/45 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ease-out"
                           >
-                            <ArrowLeft className="h-5 w-5 text-[#D4AF37]" strokeWidth={2.5} />
-                            <span className="text-sm font-semibold text-[#D4AF37] tracking-wide font-['Inter',sans-serif]">
+                            <ArrowLeft className="h-5 w-5 text-[#1D4ED8]" strokeWidth={2.5} />
+                            <span className="text-sm font-semibold text-[#1D4ED8] tracking-wide font-['Inter',sans-serif]">
                               Back to Conversations
                             </span>
                           </button>
