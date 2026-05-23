@@ -174,10 +174,10 @@ Deno.serve(async (req: Request) => {
     accountCount: userInfo.accounts.length,
   });
 
-  // Prop firm accounts cannot use Finotaur (per product boundary)
-  if (isPropFirm) {
-    return redirectTo('?oauth_status=prop_firm_blocked');
-  }
-
-  return redirectTo(`?oauth_status=connected&broker=${encodeURIComponent(broker)}`);
+  // Prop firm accounts (Apex/Topstep/MFFU) are supported via Tradovate OAuth
+  // (validated empirically: TradeZella supports Apex through the same flow).
+  // is_prop_firm flag is informational only — frontend may show a badge.
+  return redirectTo(
+    `?oauth_status=connected&broker=${encodeURIComponent(broker)}&is_prop_firm=${isPropFirm}`,
+  );
 });
