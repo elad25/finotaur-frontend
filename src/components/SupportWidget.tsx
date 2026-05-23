@@ -1157,21 +1157,21 @@ function hasUnreadMessages(ticket: Ticket): boolean {
       */}
       {isOpen && (
         <div className="fixed bottom-8 right-8 z-[200] w-[500px] h-[720px] max-w-[calc(100vw-64px)] max-h-[calc(100vh-80px-32px)] flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="absolute -inset-1 bg-gradient-to-br from-[#D4AF37]/10 via-transparent to-transparent rounded-3xl blur-2xl"></div>
+          <div className="absolute -inset-1 bg-gradient-to-br from-[#1D4ED8]/10 via-transparent to-[#C8CDD6]/30 rounded-3xl blur-2xl"></div>
           
-          <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl overflow-hidden border border-[#7F6823]/30 flex flex-col h-full max-h-[calc(100vh-80px-32px)]">
+          <div className="relative bg-[#F4EFE4] rounded-2xl shadow-2xl overflow-hidden border border-[#C8CDD6] flex flex-col h-full max-h-[calc(100vh-80px-32px)]">
             {/* Header */}
-            <div className="relative bg-gradient-to-r from-[#0f0f0f] to-[#0a0a0a] px-5 py-4 border-b border-[#7F6823]/20 flex-shrink-0">
-              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+            <div className="relative bg-gradient-to-r from-[#F8F3EA] to-[#EEF0F3] px-5 py-4 border-b border-[#D8D1C5] flex-shrink-0">
+              <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#1D4ED8]/40 to-transparent"></div>
               
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {!isGuest && activeTab === 'support' && view === 'chat' && !isNewConversation && (
                     <button
                       onClick={handleBackToList}
-                      className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out"
+                      className="h-8 w-8 rounded-lg bg-white/70 hover:bg-white border border-[#C8CDD6] flex items-center justify-center transition-all duration-200 ease-out"
                     >
-                      <ArrowLeft className="h-4 w-4 text-gray-400 hover:text-white transition-colors" />
+                      <ArrowLeft className="h-4 w-4 text-[#475569] hover:text-[#1D4ED8] transition-colors" />
                     </button>
                   )}
                   
@@ -1183,10 +1183,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-semibold text-white tracking-tight font-['Inter',sans-serif]">
+                    <h3 className="text-sm font-semibold text-[#111827] tracking-tight font-['Inter',sans-serif]">
                       Finotaur
                     </h3>
-                    <p className="text-[10px] text-[#D4AF37] font-medium mt-0.5 font-['Inter',sans-serif]">
+                    <p className="text-[10px] text-[#1D4ED8] font-medium mt-0.5 font-['Inter',sans-serif]">
                       Support & Updates
                     </p>
                   </div>
@@ -1194,9 +1194,9 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                 
                 <button
                   onClick={handleClose}
-                  className="h-8 w-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center transition-all duration-200 ease-out group"
+                  className="h-8 w-8 rounded-lg bg-white/70 hover:bg-white border border-[#C8CDD6] flex items-center justify-center transition-all duration-200 ease-out group"
                 >
-                  <X className="h-4 w-4 text-gray-400 group-hover:text-white transition-colors" />
+                  <X className="h-4 w-4 text-[#475569] group-hover:text-[#111827] transition-colors" />
                 </button>
               </div>
 
@@ -1207,8 +1207,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     onClick={() => setActiveTab('updates')}
                     className={`flex-1 h-10 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ${
                       activeTab === 'updates'
-                        ? 'bg-gradient-to-br from-[#3d3420] to-[#2d2718] border border-[#7F6823]/50 text-[#D4AF37]'
-                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-300'
+                        ? 'bg-white border border-[#1D4ED8]/35 text-[#1D4ED8] shadow-sm'
+                        : 'bg-[#E5E7EB]/70 border border-[#C8CDD6] text-[#64748B] hover:bg-white hover:text-[#334155]'
                     }`}
                   >
                     <Bell className="h-4 w-4" />
@@ -1223,8 +1223,8 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                     onClick={() => setActiveTab('support')}
                     className={`flex-1 h-10 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 ${
                       activeTab === 'support'
-                        ? 'bg-gradient-to-br from-[#3d3420] to-[#2d2718] border border-[#7F6823]/50 text-[#D4AF37]'
-                        : 'bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 hover:text-gray-300'
+                        ? 'bg-white border border-[#1D4ED8]/35 text-[#1D4ED8] shadow-sm'
+                        : 'bg-[#E5E7EB]/70 border border-[#C8CDD6] text-[#64748B] hover:bg-white hover:text-[#334155]'
                     }`}
                   >
                     <MessageCircle className="h-4 w-4" />
@@ -1571,10 +1571,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 <div className="max-w-[75%]">
                                   {msg.type === 'admin' && (
                                     <div className="flex items-center gap-2 mb-2">
-                                      <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                        <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                      <div className="h-6 w-6 rounded-lg bg-[#E5E7EB] flex items-center justify-center border border-[#C8CDD6]">
+                                        <Shield className="h-3.5 w-3.5 text-[#475569]" strokeWidth={2.5} />
                                       </div>
-                                      <span className="text-xs font-medium text-[#D4AF37]">
+                                      <span className="text-xs font-medium text-[#475569]">
                                         Support Team
                                       </span>
                                     </div>
@@ -1582,7 +1582,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
                                   {msg.type === 'customer' && (
                                     <div className="flex items-center gap-2 mb-2 justify-end">
-                                      <span className="text-xs font-medium text-[#D4AF37]">
+                                      <span className="text-xs font-medium text-[#1D4ED8]">
                                         {userName || 'You'}
                                       </span>
                                     </div>
@@ -1591,16 +1591,16 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   <div
                                     className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
                                       msg.type === 'customer'
-                                        ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
-                                        : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
+                                        ? 'bg-[#1D4ED8] border border-[#1E40AF]'
+                                        : 'bg-white/90 border border-[#D8D1C5]'
                                     }`}
                                   >
                                     <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
-                                      msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
+                                      msg.type === 'customer' ? 'text-white' : 'text-[#1F2937]'
                                     }`}>
                                       {msg.content}
                                     </p>
-                                    <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                    <span className={`text-[10px] mt-2 block ${msg.type === 'customer' ? 'text-white/65' : 'text-[#64748B]'}`}>
                                       {formatTime(msg.timestamp)}
                                     </span>
                                   </div>
@@ -1613,11 +1613,11 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
                                   <div className="flex justify-start">
                                     <div className="max-w-[75%]">
-                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
-                                        <p className="text-sm leading-relaxed text-white/90 font-['Inter',sans-serif]">
+                                      <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">
+                                        <p className="text-sm leading-relaxed text-[#1F2937] font-['Inter',sans-serif]">
                                           ✨ How can we help?
                                         </p>
-                                        <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                        <span className="text-[10px] text-[#64748B] mt-2 block">
                                           {formatTime(new Date().toISOString())}
                                         </span>
                                       </div>
@@ -1631,7 +1631,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                         key={topic}
                                         type="button"
                                         onClick={() => handleTopicSuggestionClick(topic)}
-                                        className="rounded-lg border border-[#7F6823]/30 bg-white/[0.04] px-3 py-2 text-left text-xs leading-snug text-white/70 transition-all duration-200 hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/10 hover:text-white"
+                                        className="rounded-lg border border-[#C8CDD6] bg-white/75 px-3 py-2 text-left text-xs leading-snug text-[#334155] transition-all duration-200 hover:border-[#1D4ED8]/45 hover:bg-[#EFF6FF] hover:text-[#1D4ED8]"
                                       >
                                         {topic}
                                       </button>
@@ -1643,11 +1643,11 @@ function hasUnreadMessages(ticket: Ticket): boolean {
 
                             {guidedStep === 'ready' && !messageSent && (
                               <div className="flex justify-end animate-in slide-in-from-bottom-2 fade-in duration-200">
-                                <div className="max-w-[82%] rounded-[14px] border border-[#7F6823]/35 bg-[#0E0E0E]/80 px-4 py-3">
-                                  <p className="text-xs font-semibold text-[#D4AF37] font-['Inter',sans-serif]">
+                                <div className="max-w-[82%] rounded-[14px] border border-[#C8CDD6] bg-white/85 px-4 py-3">
+                                  <p className="text-xs font-semibold text-[#1D4ED8] font-['Inter',sans-serif]">
                                     Leave a support request
                                   </p>
-                                  <p className="mt-1 text-xs leading-relaxed text-white/55 font-['Inter',sans-serif]">
+                                  <p className="mt-1 text-xs leading-relaxed text-[#64748B] font-['Inter',sans-serif]">
                                     Add any final details in the box below. Your answers will be included for the support team.
                                   </p>
                                 </div>
@@ -1701,10 +1701,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               <div className="max-w-[75%]">
                                 {msg.type === 'admin' && (
                                   <div className="flex items-center gap-2 mb-2">
-                                    <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
-                                      <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                    <div className="h-6 w-6 rounded-lg bg-[#E5E7EB] flex items-center justify-center border border-[#C8CDD6]">
+                                      <Shield className="h-3.5 w-3.5 text-[#475569]" strokeWidth={2.5} />
                                     </div>
-                                    <span className="text-xs font-medium text-[#D4AF37]">
+                                    <span className="text-xs font-medium text-[#475569]">
                                       Support Team
                                     </span>
                                   </div>
@@ -1712,7 +1712,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 
                                 {msg.type === 'customer' && (
                                   <div className="flex items-center gap-2 mb-2 justify-end">
-                                    <span className="text-xs font-medium text-[#D4AF37]">
+                                    <span className="text-xs font-medium text-[#1D4ED8]">
                                       {userName || 'You'}
                                     </span>
                                   </div>
@@ -1721,12 +1721,12 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                 <div
                                   className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
                                     msg.type === 'customer'
-                                      ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
-                                      : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
+                                      ? 'bg-[#1D4ED8] border border-[#1E40AF]'
+                                      : 'bg-white/90 border border-[#D8D1C5]'
                                   }`}
                                 >
                                   <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
-                                    msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
+                                    msg.type === 'customer' ? 'text-white' : 'text-[#1F2937]'
                                   }`}>
                                     {msg.content}
                                   </p>
@@ -1760,7 +1760,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                     </div>
                                   )}
 
-                                  <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                  <span className={`text-[10px] mt-2 block ${msg.type === 'customer' ? 'text-white/65' : 'text-[#64748B]'}`}>
                                     {formatTime(msg.timestamp)}
                                   </span>
                                 </div>
@@ -1772,11 +1772,11 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                         {isTyping && (
                           <div className="flex justify-start animate-in slide-in-from-bottom-2 fade-in duration-200">
                             <div className="max-w-[75%]">
-                              <div className="rounded-[18px] px-4 py-3 shadow-md bg-[#0E0E0E]/90 border border-[#7F6823]/40 backdrop-blur-sm">
+                              <div className="rounded-[18px] px-4 py-3 shadow-md bg-white/90 border border-[#D8D1C5] backdrop-blur-sm">
                                 <div className="flex gap-1">
-                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
-                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
-                                  <div className="w-2 h-2 bg-[#D4AF37] rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
+                                  <div className="w-2 h-2 bg-[#1D4ED8] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
+                                  <div className="w-2 h-2 bg-[#1D4ED8] rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
+                                  <div className="w-2 h-2 bg-[#1D4ED8] rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
                                 </div>
                               </div>
                             </div>
@@ -1838,7 +1838,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
                               disabled={sending}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                if (e.key === 'Enter' && !e.shiftKey) {
                                   e.preventDefault();
                                   handleSendMessage();
                                 }
@@ -1868,7 +1868,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                           <p className="text-[10px] text-gray-600 mt-2 text-center font-['Inter',sans-serif]">
                             {isGuest 
                               ? "We'll respond to your email • Max 5 files, 20MB each"
-                              : 'Press Ctrl+Enter to send • Max 5 files, 20MB each'
+                              : 'Press Enter to send • Shift+Enter for new line • Max 5 files, 20MB each'
                             }
                           </p>
                         </div>
