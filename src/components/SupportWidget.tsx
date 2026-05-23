@@ -32,6 +32,8 @@ interface ChatMessage {
   attachments?: string[];
 }
 
+type GuidedSupportStep = 'idle' | 'details' | 'impact' | 'contact' | 'ready';
+
 interface Ticket {
   id: string;
   user_id: string | null;
@@ -130,6 +132,13 @@ const SUPPORT_TOPIC_SUGGESTIONS = [
   'I want to share feedback',
 ];
 
+const SUPPORT_TOPIC_FOLLOW_UPS: Record<string, string> = {
+  'I have a technical issue': 'Got it. What exactly is happening? Please include the page, action, or error message if you have one.',
+  'I need help with billing': 'Got it. What billing issue should we look at? Please mention the plan, payment, invoice, or subscription change involved.',
+  'I have a question about my account': 'Sure. What account question can we help with? Include what you expected to see or change.',
+  'I want to share feedback': 'Thanks. What feedback would you like to share, and what would make the experience better for you?',
+};
+
 export default function SupportWidget() {
   // ==================== STATE ====================
   const [isOpen, setIsOpen] = useState(false);
@@ -155,6 +164,9 @@ export default function SupportWidget() {
   
   const [messageSent, setMessageSent] = useState(false);
   const [showSupportPrompt, setShowSupportPrompt] = useState(false);
+  const [guidedMessages, setGuidedMessages] = useState<ChatMessage[]>([]);
+  const [guidedStep, setGuidedStep] = useState<GuidedSupportStep>('idle');
+  const [guidedTopic, setGuidedTopic] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -193,7 +205,7 @@ export default function SupportWidget() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [selectedTicket?.messages, isNewConversation, messageSent, isTyping, showSupportPrompt]);
+  }, [selectedTicket?.messages, guidedMessages, guidedStep, isNewConversation, messageSent, isTyping, showSupportPrompt]);
 
   useEffect(() => {
     if (isOpen && !isGuest) {
@@ -620,13 +632,91 @@ async function loadTicketById(ticketId: string) {
 
   // ==================== MESSAGING ====================
 
+  function resetGuidedSupportFlow() {
+    setGuidedMessages([]);
+    setGuidedStep('idle');
+    setGuidedTopic('');
+  }
+
+  function appendGuidedAdminMessage(content: string, delay = 700) {
+    setIsTyping(true);
+
+    window.setTimeout(() => {
+      setIsTyping(false);
+      setGuidedMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'admin',
+          content,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    }, delay);
+  }
+
+  function buildSupportRequestMessage(finalNote: string) {
+    const transcript = guidedMessages
+      .map((msg) => `${msg.type === 'customer' ? 'User' : 'Support'}: ${msg.content}`)
+      .join('\n');
+
+    return [
+      'Support request',
+      '',
+      `Topic: ${guidedTopic || 'Support Request'}`,
+      '',
+      'Intake conversation:',
+      transcript || 'No guided intake conversation.',
+      finalNote ? ['', 'Additional note:', finalNote].join('\n') : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  function handleGuidedReply() {
+    const message = currentMessage.trim();
+    if (!message) return;
+
+    const customerMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      type: 'customer',
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+
+    setGuidedMessages((prev) => [...prev, customerMessage]);
+    setCurrentMessage('');
+
+    if (guidedStep === 'details') {
+      setGuidedStep('impact');
+      appendGuidedAdminMessage('Thanks. How is this affecting you right now? For example: blocked completely, partially working, or just a question before moving forward.');
+      return;
+    }
+
+    if (guidedStep === 'impact') {
+      setGuidedStep('contact');
+      appendGuidedAdminMessage('Understood. Is there anything specific our team should check first, or any account/order detail that would help us investigate faster?');
+      return;
+    }
+
+    if (guidedStep === 'contact') {
+      setGuidedStep('ready');
+      appendGuidedAdminMessage('Perfect, I have enough context. Add any final details below, then leave a support request and our team will follow up.');
+    }
+  }
+
   async function handleSendMessage() {
     if (isGuest && (!userName || !userEmail)) {
       toast.error('Please fill in your contact information first');
       return;
     }
 
-    if (!currentMessage.trim()) return;
+    if (isNewConversation && guidedStep !== 'idle' && guidedStep !== 'ready') {
+      handleGuidedReply();
+      return;
+    }
+
+    if (!currentMessage.trim() && !(isNewConversation && guidedStep === 'ready')) return;
 
     setSending(true);
 
@@ -641,7 +731,9 @@ async function loadTicketById(ticketId: string) {
       const newMessage: ChatMessage = {
         id: crypto.randomUUID(),
         type: 'customer',
-        content: currentMessage.trim(),
+        content: guidedStep === 'ready'
+          ? buildSupportRequestMessage(currentMessage.trim())
+          : currentMessage.trim(),
         timestamp: new Date().toISOString(),
         attachments: uploadedUrls.length > 0 ? uploadedUrls : undefined,
       };
@@ -653,7 +745,7 @@ async function loadTicketById(ticketId: string) {
           user_name: userName,
           subject: 'Support Request',
           category: null,
-          message: currentMessage.trim(),
+          message: newMessage.content,
           messages: [newMessage],
           status: 'open',
         };
@@ -968,6 +1060,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
       setGuestFormEmail('');
       setMessageSent(false);
       setShowSupportPrompt(false);
+      resetGuidedSupportFlow();
       setInitialLoadDone(false); // Reset for next open
     }, 300);
   };
@@ -980,6 +1073,7 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     setAttachments([]);
     setMessageSent(false);
     setShowSupportPrompt(false);
+    resetGuidedSupportFlow();
     loadUserTickets();
   };
 
@@ -991,13 +1085,23 @@ function hasUnreadMessages(ticket: Ticket): boolean {
     setAttachments([]);
     setMessageSent(false);
     setShowSupportPrompt(false);
+    resetGuidedSupportFlow();
   };
 
   const handleTopicSuggestionClick = (topic: string) => {
-    setCurrentMessage(topic);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 0);
+    const customerMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      type: 'customer',
+      content: topic,
+      timestamp: new Date().toISOString(),
+    };
+
+    setGuidedTopic(topic);
+    setGuidedStep('details');
+    setGuidedMessages([customerMessage]);
+    setCurrentMessage('');
+    setShowSupportPrompt(false);
+    appendGuidedAdminMessage(SUPPORT_TOPIC_FOLLOW_UPS[topic] || 'Got it. Tell me a bit more so we can understand the issue.');
   };
 
   // ==================== RENDER ====================
@@ -1459,6 +1563,51 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                       <div className="flex-1 overflow-y-auto p-5 space-y-4 min-h-0">
                         {isNewConversation ? (
                           <div className="min-h-full flex flex-col justify-end space-y-4 pb-2">
+                            {guidedMessages.map((msg, idx) => (
+                              <div
+                                key={msg.id || idx}
+                                className={`flex ${msg.type === 'customer' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 fade-in duration-200`}
+                              >
+                                <div className="max-w-[75%]">
+                                  {msg.type === 'admin' && (
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="h-6 w-6 rounded-lg bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center border border-[#E6C77D]/30">
+                                        <Shield className="h-3.5 w-3.5 text-black" strokeWidth={2.5} />
+                                      </div>
+                                      <span className="text-xs font-medium text-[#D4AF37]">
+                                        Support Team
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {msg.type === 'customer' && (
+                                    <div className="flex items-center gap-2 mb-2 justify-end">
+                                      <span className="text-xs font-medium text-[#D4AF37]">
+                                        {userName || 'You'}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  <div
+                                    className={`rounded-[18px] px-4 py-3 shadow-md backdrop-blur-sm ${
+                                      msg.type === 'customer'
+                                        ? 'bg-[#1a1510]/90 border border-[#7F6823]/50'
+                                        : 'bg-[#0E0E0E]/90 border border-[#7F6823]/40'
+                                    }`}
+                                  >
+                                    <p className={`text-sm leading-relaxed whitespace-pre-wrap font-['Inter',sans-serif] ${
+                                      msg.type === 'customer' ? 'text-[#E6C77D]' : 'text-white/90'
+                                    }`}>
+                                      {msg.content}
+                                    </p>
+                                    <span className="text-[10px] text-[#E6C77D] opacity-50 mt-2 block">
+                                      {formatTime(msg.timestamp)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
                             {showSupportPrompt && !messageSent && (
                               <>
                                 <div className="animate-in slide-in-from-bottom-2 fade-in duration-200">
@@ -1490,6 +1639,19 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                                   </div>
                                 </div>
                               </>
+                            )}
+
+                            {guidedStep === 'ready' && !messageSent && (
+                              <div className="flex justify-end animate-in slide-in-from-bottom-2 fade-in duration-200">
+                                <div className="max-w-[82%] rounded-[14px] border border-[#7F6823]/35 bg-[#0E0E0E]/80 px-4 py-3">
+                                  <p className="text-xs font-semibold text-[#D4AF37] font-['Inter',sans-serif]">
+                                    Leave a support request
+                                  </p>
+                                  <p className="mt-1 text-xs leading-relaxed text-white/55 font-['Inter',sans-serif]">
+                                    Add any final details in the box below. Your answers will be included for the support team.
+                                  </p>
+                                </div>
+                              </div>
                             )}
 
                             {/* Message Sent Confirmation */}
@@ -1666,7 +1828,13 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                               ref={inputRef}
                               value={currentMessage}
                               onChange={(e) => setCurrentMessage(e.target.value)}
-                              placeholder="Type your message..."
+                              placeholder={
+                                guidedStep === 'ready'
+                                  ? 'Add final details for support...'
+                                  : guidedStep !== 'idle'
+                                    ? 'Type your answer...'
+                                    : 'Type your message...'
+                              }
                               className="flex-1 px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-600 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] outline-none resize-none min-h-[44px] max-h-[120px] transition-all duration-200 ease-out font-['Inter',sans-serif]"
                               disabled={sending}
                               onKeyDown={(e) => {
@@ -1678,11 +1846,20 @@ function hasUnreadMessages(ticket: Ticket): boolean {
                             />
                             <button
                               onClick={handleSendMessage}
-                              disabled={!currentMessage.trim() || sending || uploadingFiles}
-                              className="h-11 w-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg"
+                              disabled={(!currentMessage.trim() && guidedStep !== 'ready') || sending || uploadingFiles}
+                              className={`h-11 flex-shrink-0 bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] hover:from-[#C19A2F] hover:to-[#D4AF37] rounded-xl flex items-center justify-center disabled:opacity-50 transition-all duration-200 ease-out transform hover:scale-105 active:scale-95 shadow-lg ${
+                                guidedStep === 'ready' ? 'px-4 gap-2' : 'w-11'
+                              }`}
                             >
                               {sending || uploadingFiles ? (
                                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-black border-t-transparent"></div>
+                              ) : guidedStep === 'ready' ? (
+                                <>
+                                  <Send className="h-[16px] w-[16px] text-black" strokeWidth={2.5} />
+                                  <span className="text-xs font-semibold text-black whitespace-nowrap">
+                                    Send Request
+                                  </span>
+                                </>
                               ) : (
                                 <Send className="h-[18px] w-[18px] text-black" strokeWidth={2.5} />
                               )}
