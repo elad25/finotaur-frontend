@@ -1243,10 +1243,10 @@ function hasUnreadMessages(ticket: Ticket): boolean {
               This lets the content area fill whatever space remains after the header,
               instead of forcing a fixed 600px that could push past the SUBNAV.
             */}
-            <div className="flex-1 min-h-0 flex flex-col bg-gradient-to-b from-[#0a0a0a] to-black overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col bg-[#E5E7EB] overflow-hidden">
               {/* Guest Form Overlay */}
               {showGuestForm && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#E5E7EB]/80 backdrop-blur-sm animate-in fade-in duration-200">
                   <div className="bg-[#F8F3EA] border border-[#C8CDD6] rounded-2xl p-6 w-[90%] max-w-sm shadow-2xl">
                     <div className="text-center mb-6">
                       <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#D4AF37] to-[#C19A2F] flex items-center justify-center mx-auto mb-3">
