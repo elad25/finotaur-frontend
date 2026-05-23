@@ -15,6 +15,7 @@ import { Card } from '../shared/Ui';
 import { getCompanyLogo } from '@/pages/app/ai/copilot/utils/companyLogo';
 
 const PURPLE = '#6D63FF';
+const DARK_POOL_TABLE_VERSION = 'dark-pool-table-v2-2026-05-23';
 
 function parseFlowValue(value: string): number {
   const cleaned = value.replace(/[$,\s]/g, '').toUpperCase();
@@ -266,7 +267,7 @@ export default memo(function DarkPoolTab({ flowData, onItemClick }: DarkPoolTabP
   const sorted = [...items].sort((a, b) => dpScore(b) - dpScore(a));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-ui-version={DARK_POOL_TABLE_VERSION}>
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Total Prints', value: items.length, color: PURPLE },
