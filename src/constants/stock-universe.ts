@@ -2,7 +2,7 @@
 // =====================================================
 // 📊 STOCK UNIVERSE — SPY + QQQ + IWM Holdings
 // =====================================================
-// Contains ALL stocks from the 3 major US ETF indices.
+// Contains a curated 500-stock universe from major US equity indices.
 // This is a STATIC list — loaded once, searched locally.
 // No API calls needed for search/autocomplete.
 //
@@ -12,7 +12,7 @@
 // ✅ Only individual stocks within these indices
 //
 // Update frequency: Quarterly (when index rebalances)
-// Last updated: 2026-02-06
+// Last updated: 2026-05-23
 // =====================================================
 
 export interface UniverseStock {
@@ -62,8 +62,8 @@ export const BLOCKED_TICKERS = new Set([
 // Format: { t: ticker, n: name, e: exchange, s: sector, i: indices }
 // i = 'S' (SPY), 'Q' (QQQ), 'R' (IWM), 'SQ' (SPY+QQQ), etc.
 //
-// This is a representative set of the top holdings.
-// The full IWM has ~2000 stocks — we include the top ~800.
+// This is a representative searchable set for Stock Analyzer.
+// The full IWM has ~2000 stocks, and we include a curated liquid subset.
 // =====================================================
 
 export const STOCK_UNIVERSE: UniverseStock[] = [
@@ -272,7 +272,7 @@ export const STOCK_UNIVERSE: UniverseStock[] = [
   { t: 'SPG', n: 'Simon Property Group', e: 'NYSE', s: 'Real Estate', i: 'S' },
   { t: 'EQIX', n: 'Equinix Inc.', e: 'NASDAQ', s: 'Real Estate', i: 'S' },
   { t: 'D', n: 'Dominion Energy', e: 'NYSE', s: 'Utilities', i: 'S' },
-  { t: 'AEP', n: 'American Electric Power', e: 'NASDAQ', s: 'Utilities', i: 'S' },
+  { t: 'AEP', n: 'American Electric Power', e: 'NASDAQ', s: 'Utilities', i: 'SQ' },
   { t: 'SRE', n: 'Sempra', e: 'NYSE', s: 'Utilities', i: 'S' },
   { t: 'ED', n: 'Consolidated Edison', e: 'NYSE', s: 'Utilities', i: 'S' },
   { t: 'WEC', n: 'WEC Energy Group', e: 'NYSE', s: 'Utilities', i: 'S' },
@@ -306,7 +306,7 @@ export const STOCK_UNIVERSE: UniverseStock[] = [
   { t: 'HES', n: 'Hess Corporation', e: 'NYSE', s: 'Energy', i: 'S' },
   { t: 'DVN', n: 'Devon Energy', e: 'NYSE', s: 'Energy', i: 'S' },
   { t: 'HAL', n: 'Halliburton Company', e: 'NYSE', s: 'Energy', i: 'S' },
-  { t: 'BKR', n: 'Baker Hughes', e: 'NASDAQ', s: 'Energy', i: 'S' },
+  { t: 'BKR', n: 'Baker Hughes', e: 'NASDAQ', s: 'Energy', i: 'SQ' },
 
   // ═══════════════════════════════════════════
   // QQQ ONLY (NASDAQ-100 specific)
@@ -314,12 +314,10 @@ export const STOCK_UNIVERSE: UniverseStock[] = [
   { t: 'PDD', n: 'PDD Holdings', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'Q' },
   { t: 'MSTR', n: 'MicroStrategy Inc.', e: 'NASDAQ', s: 'Technology', i: 'Q' },
   { t: 'FICO', n: 'Fair Isaac Corporation', e: 'NYSE', s: 'Technology', i: 'Q' },
-  { t: 'AEP', n: 'American Electric Power', e: 'NASDAQ', s: 'Utilities', i: 'Q' },
   { t: 'CCEP', n: 'Coca-Cola Europacific', e: 'NASDAQ', s: 'Consumer Defensive', i: 'Q' },
   { t: 'CDW', n: 'CDW Corporation', e: 'NASDAQ', s: 'Technology', i: 'Q' },
   { t: 'TTWO', n: 'Take-Two Interactive', e: 'NASDAQ', s: 'Communication Services', i: 'Q' },
   { t: 'WBD', n: 'Warner Bros. Discovery', e: 'NASDAQ', s: 'Communication Services', i: 'Q' },
-  { t: 'BKR', n: 'Baker Hughes Company', e: 'NASDAQ', s: 'Energy', i: 'Q' },
   { t: 'SPLK', n: 'Splunk Inc.', e: 'NASDAQ', s: 'Technology', i: 'Q' },
 
   // ═══════════════════════════════════════════
@@ -427,6 +425,169 @@ export const STOCK_UNIVERSE: UniverseStock[] = [
   { t: 'CRSP', n: 'CRISPR Therapeutics', e: 'NASDAQ', s: 'Healthcare', i: 'R' },
   { t: 'NTLA', n: 'Intellia Therapeutics', e: 'NASDAQ', s: 'Healthcare', i: 'R' },
   { t: 'BEAM', n: 'Beam Therapeutics', e: 'NASDAQ', s: 'Healthcare', i: 'R' },
+
+  // =====================================================
+  // EXTENDED LARGE-CAP / LIQUID US UNIVERSE
+  // Added 2026-05-23 to bring Stock Analyzer autocomplete to 500 unique stocks.
+  // =====================================================
+  { t: 'A', n: 'Agilent Technologies', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'AEE', n: 'Ameren Corporation', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'AES', n: 'AES Corporation', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'AKAM', n: 'Akamai Technologies', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'ALB', n: 'Albemarle Corporation', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'ALGN', n: 'Align Technology', e: 'NASDAQ', s: 'Healthcare', i: 'S' },
+  { t: 'ALLE', n: 'Allegion PLC', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'AMCR', n: 'Amcor PLC', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'AMP', n: 'Ameriprise Financial', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'APH', n: 'Amphenol Corporation', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'APO', n: 'Apollo Global Management', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'ARE', n: 'Alexandria Real Estate Equities', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'ARES', n: 'Ares Management Corporation', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'ATO', n: 'Atmos Energy', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'AVB', n: 'AvalonBay Communities', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'AVY', n: 'Avery Dennison', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'BALL', n: 'Ball Corporation', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'BG', n: 'Bunge Global', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'BRO', n: 'Brown & Brown', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'BSX', n: 'Boston Scientific', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'C', n: 'Citigroup', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'CAH', n: 'Cardinal Health', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'CBOE', n: 'Cboe Global Markets', e: 'CBOE', s: 'Financial Services', i: 'S' },
+  { t: 'CFG', n: 'Citizens Financial Group', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'CHD', n: 'Church & Dwight', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'CHRW', n: 'C.H. Robinson Worldwide', e: 'NASDAQ', s: 'Industrials', i: 'S' },
+  { t: 'CINF', n: 'Cincinnati Financial', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'CNC', n: 'Centene Corporation', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'CNP', n: 'CenterPoint Energy', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'COR', n: 'Cencora', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'CPAY', n: 'Corpay', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'CPT', n: 'Camden Property Trust', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'CSGP', n: 'CoStar Group', e: 'NASDAQ', s: 'Real Estate', i: 'S' },
+  { t: 'CTRA', n: 'Coterra Energy', e: 'NYSE', s: 'Energy', i: 'S' },
+  { t: 'CTVA', n: 'Corteva', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'CZR', n: 'Caesars Entertainment', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'DAL', n: 'Delta Air Lines', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'DAY', n: 'Dayforce', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'DECK', n: 'Deckers Outdoor', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'DFS', n: 'Discover Financial Services', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'DG', n: 'Dollar General', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'DGX', n: 'Quest Diagnostics', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'DLR', n: 'Digital Realty Trust', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'DLTR', n: 'Dollar Tree', e: 'NASDAQ', s: 'Consumer Defensive', i: 'S' },
+  { t: 'DOV', n: 'Dover Corporation', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'DRI', n: 'Darden Restaurants', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'DTE', n: 'DTE Energy', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'EBAY', n: 'eBay Inc.', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'EFX', n: 'Equifax', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'EG', n: 'Everest Group', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'EIX', n: 'Edison International', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'EL', n: 'Estee Lauder Companies', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'EME', n: 'EMCOR Group', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'EPAM', n: 'EPAM Systems', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'EQR', n: 'Equity Residential', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'EQT', n: 'EQT Corporation', e: 'NYSE', s: 'Energy', i: 'S' },
+  { t: 'ES', n: 'Eversource Energy', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'ESS', n: 'Essex Property Trust', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'EW', n: 'Edwards Lifesciences', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'EXE', n: 'Expand Energy', e: 'NASDAQ', s: 'Energy', i: 'S' },
+  { t: 'EXPD', n: 'Expeditors International', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'EXPE', n: 'Expedia Group', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'FDS', n: 'FactSet Research Systems', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'FE', n: 'FirstEnergy', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'FFIV', n: 'F5 Inc.', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'FI', n: 'Fiserv Inc.', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'FITB', n: 'Fifth Third Bancorp', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'FOXA', n: 'Fox Corporation Class A', e: 'NASDAQ', s: 'Communication Services', i: 'S' },
+  { t: 'FRT', n: 'Federal Realty Investment Trust', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'GDDY', n: 'GoDaddy', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'GEN', n: 'Gen Digital', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'GPC', n: 'Genuine Parts', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'GRMN', n: 'Garmin', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'GWW', n: 'W.W. Grainger', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'HBAN', n: 'Huntington Bancshares', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'HIG', n: 'Hartford Financial Services', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'HOLX', n: 'Hologic', e: 'NASDAQ', s: 'Healthcare', i: 'S' },
+  { t: 'HPQ', n: 'HP Inc.', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'HRL', n: 'Hormel Foods', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'HST', n: 'Host Hotels & Resorts', e: 'NASDAQ', s: 'Real Estate', i: 'S' },
+  { t: 'HUBB', n: 'Hubbell', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'IFF', n: 'International Flavors & Fragrances', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'INVH', n: 'Invitation Homes', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'IQV', n: 'IQVIA Holdings', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'IRM', n: 'Iron Mountain', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'IVZ', n: 'Invesco', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'J', n: 'Jacobs Solutions', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'JBHT', n: 'J.B. Hunt Transport Services', e: 'NASDAQ', s: 'Industrials', i: 'S' },
+  { t: 'JBL', n: 'Jabil', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'JKHY', n: 'Jack Henry & Associates', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'KHC', n: 'Kraft Heinz', e: 'NASDAQ', s: 'Consumer Defensive', i: 'S' },
+  { t: 'KEY', n: 'KeyCorp', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'KEYS', n: 'Keysight Technologies', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'KIM', n: 'Kimco Realty', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'KKR', n: 'KKR & Co.', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'KMB', n: 'Kimberly-Clark', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'KMX', n: 'CarMax', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'KR', n: 'Kroger', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'LDOS', n: 'Leidos Holdings', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'LEN', n: 'Lennar Corporation', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'LH', n: 'Labcorp Holdings', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'LHX', n: 'L3Harris Technologies', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'LII', n: 'Lennox International', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'LKQ', n: 'LKQ Corporation', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'LNT', n: 'Alliant Energy', e: 'NASDAQ', s: 'Utilities', i: 'S' },
+  { t: 'LYB', n: 'LyondellBasell Industries', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'LYV', n: 'Live Nation Entertainment', e: 'NYSE', s: 'Communication Services', i: 'S' },
+  { t: 'MAS', n: 'Masco Corporation', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'MGM', n: 'MGM Resorts International', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'MKC', n: 'McCormick & Company', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'MLM', n: 'Martin Marietta Materials', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'MPWR', n: 'Monolithic Power Systems', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'MTB', n: 'M&T Bank', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'NDAQ', n: 'Nasdaq', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'NI', n: 'NiSource', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'NTRS', n: 'Northern Trust', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'NWSA', n: 'News Corp Class A', e: 'NASDAQ', s: 'Communication Services', i: 'S' },
+  { t: 'OKE', n: 'ONEOK', e: 'NYSE', s: 'Energy', i: 'S' },
+  { t: 'OMC', n: 'Omnicom Group', e: 'NYSE', s: 'Communication Services', i: 'S' },
+  { t: 'OTIS', n: 'Otis Worldwide', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'PFG', n: 'Principal Financial Group', e: 'NASDAQ', s: 'Financial Services', i: 'S' },
+  { t: 'PKG', n: 'Packaging Corporation of America', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'PNR', n: 'Pentair', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'POOL', n: 'Pool Corporation', e: 'NASDAQ', s: 'Industrials', i: 'S' },
+  { t: 'PPG', n: 'PPG Industries', e: 'NYSE', s: 'Basic Materials', i: 'S' },
+  { t: 'PPL', n: 'PPL Corporation', e: 'NYSE', s: 'Utilities', i: 'S' },
+  { t: 'PTC', n: 'PTC Inc.', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'PWR', n: 'Quanta Services', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'RF', n: 'Regions Financial', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'RJF', n: 'Raymond James Financial', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'ROL', n: 'Rollins', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'RSG', n: 'Republic Services', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'SBAC', n: 'SBA Communications', e: 'NASDAQ', s: 'Real Estate', i: 'S' },
+  { t: 'SJM', n: 'J.M. Smucker', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'STE', n: 'STERIS', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'STLD', n: 'Steel Dynamics', e: 'NASDAQ', s: 'Basic Materials', i: 'S' },
+  { t: 'STT', n: 'State Street', e: 'NYSE', s: 'Financial Services', i: 'S' },
+  { t: 'SW', n: 'Smurfit Westrock', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'SWK', n: 'Stanley Black & Decker', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'SWKS', n: 'Skyworks Solutions', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'TDG', n: 'TransDigm Group', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'TEL', n: 'TE Connectivity', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'TER', n: 'Teradyne', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'TKO', n: 'TKO Group Holdings', e: 'NYSE', s: 'Communication Services', i: 'S' },
+  { t: 'TPL', n: 'Texas Pacific Land', e: 'NYSE', s: 'Energy', i: 'S' },
+  { t: 'TPR', n: 'Tapestry', e: 'NYSE', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'TRMB', n: 'Trimble', e: 'NASDAQ', s: 'Technology', i: 'S' },
+  { t: 'TSCO', n: 'Tractor Supply', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'TSN', n: 'Tyson Foods', e: 'NYSE', s: 'Consumer Defensive', i: 'S' },
+  { t: 'TXT', n: 'Textron', e: 'NYSE', s: 'Industrials', i: 'S' },
+  { t: 'TYL', n: 'Tyler Technologies', e: 'NYSE', s: 'Technology', i: 'S' },
+  { t: 'UAL', n: 'United Airlines Holdings', e: 'NASDAQ', s: 'Industrials', i: 'S' },
+  { t: 'UDR', n: 'UDR Inc.', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'UHS', n: 'Universal Health Services', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'ULTA', n: 'Ulta Beauty', e: 'NASDAQ', s: 'Consumer Cyclical', i: 'S' },
+  { t: 'VEEV', n: 'Veeva Systems', e: 'NYSE', s: 'Healthcare', i: 'S' },
+  { t: 'VICI', n: 'VICI Properties', e: 'NYSE', s: 'Real Estate', i: 'S' },
+  { t: 'VLTO', n: 'Veralto', e: 'NYSE', s: 'Industrials', i: 'S' },
 ];
 
 // =====================================================
