@@ -88,12 +88,12 @@ function maybeAddBrokerHint(
   // Categorized "app not registered" → almost always env mismatch
   if (code === 'app_env_mismatch') {
     if (environment === 'demo' && isPropFirm) {
-      return `${rawError}\n\n🎯 חשבונות Apex / prop firm רצים על Tradovate Live — לא על Demo. נסה שוב עם טוגל "Live" (אותם credentials). הכסף עדיין מדומה (זה Eval), זה רק שינוי שרת.`;
+      return `${rawError}\n\n🎯 Apex / prop firm accounts run on Tradovate Live — not Demo. Try again with the "Live" toggle (same credentials). The money is still simulated (it's an Eval) — only the server changes.`;
     }
     if (environment === 'demo') {
-      return `${rawError}\n\n💡 ייתכן שהחשבון רצ על Tradovate Live (לא Demo). נסה שוב עם טוגל "Live".`;
+      return `${rawError}\n\n💡 This account may run on Tradovate Live (not Demo). Try again with the "Live" toggle.`;
     }
-    return `${rawError}\n\n💡 ה-Finotaur app לא רשום ב-Tradovate ל-${environment}. צור קשר עם התמיכה.`;
+    return `${rawError}\n\n💡 The Finotaur app isn't registered with Tradovate for ${environment}. Please contact support.`;
   }
 
   // Invalid credentials on an Apex username — could be wrong env OR wrong route
@@ -102,7 +102,7 @@ function maybeAddBrokerHint(
     /invalid|unauthorized|denied|wrong|incorrect|not\s+found|no\s+access/i.test(rawError) ||
     /401|403|errorText/i.test(rawError);
   if (isApex && looksLikeInvalidCreds) {
-    return `${rawError}\n\nApex tip: (1) וודא שבחרת ב-Apex את ערוץ "Tradovate" (לא Rithmic / NT Connect). (2) Apex Eval רץ על LIVE — נסה לבחור Live ב-Finotaur popup.`;
+    return `${rawError}\n\nApex tip: (1) Make sure you picked "Tradovate" as the data feed inside Apex (not Rithmic / NT Connect). (2) Apex Eval runs on LIVE — try selecting Live in the Finotaur popup.`;
   }
   return rawError;
 }
@@ -172,7 +172,7 @@ export function useTradovate() {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
 
-  // ── React Query — credentials נשמרים בין דפים, לא מתאפסים ל-[]
+  // ── React Query — credentials persist across pages, don't reset to []
   const { data: credentials = [] } = useQuery({
     queryKey: tradovateKeys.credentials(userId ?? ''),
     queryFn:  () => fetchCredentials(userId!),

@@ -9,13 +9,10 @@ import {
   Check,
   CheckCircle2,
   ExternalLink,
-  Eye,
-  EyeOff,
   Link2,
   Lock,
   RefreshCw,
   ShieldCheck,
-  User,
   X,
   Zap,
 } from 'lucide-react';
@@ -178,52 +175,13 @@ function EnvironmentToggle({
   );
 }
 
-function CredentialInput({
-  icon,
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  autoComplete,
-  trailing,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  type?: string;
-  autoComplete?: string;
-  trailing?: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-[34px] items-center gap-2.5 border-b border-white/10 px-3.5 last:border-b-0">
-      <div className="text-ink-secondary">{icon}</div>
-      <label className="w-[120px] shrink-0 text-[11px] text-ink-secondary">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={autoComplete}
-        className="min-w-0 flex-1 bg-transparent text-[11px] text-ink-primary outline-none placeholder:text-ink-muted"
-      />
-      {trailing}
-    </div>
-  );
-}
-
 export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const { user } = useAuth();
-  const { connect, isLoading } = useTradovate();
+  const { isLoading } = useTradovate();
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>('tradovate');
   const [connectionName, setConnectionName] = useState('');
   const [env, setEnv] = useState<TradovateEnv>('live');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [riskAcknowledged, setRiskAcknowledged] = useState(false);
 
@@ -232,9 +190,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
       setSelectedBroker('tradovate');
       setConnectionName('');
       setEnv('live');
-      setUsername('');
-      setPassword('');
-      setShowPassword(false);
       setError('');
       setRiskAcknowledged(false);
     }
@@ -251,30 +206,34 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   }, [selectedBroker, env, open]);
 
   const config = BROKER_CONFIGS[selectedBroker];
-  const isOAuth = config.features.oauth && selectedBroker !== 'tradovate';
   const isNinjaTrader = selectedBroker === 'ninja_trader';
   const usesTradovateAuth = TRADOVATE_AUTH_BROKERS.includes(selectedBroker);
+  // Tradovate + NinjaTrader now use OAuth 2.0 (per S2/S3 broker-oauth migration).
+  // IB OAuth is the existing pattern. Both routes redirect off-site for authentication.
+  const isOAuth = usesTradovateAuth || config.features.oauth;
 
   const canSubmit = useMemo(() => {
     if (!riskAcknowledged) return false;
     if (usesTradovateAuth) {
-      return Boolean(username.trim() && password.trim() && !isLoading);
+      return Boolean(user) && !isLoading;
     }
     if (selectedBroker === 'interactive_brokers') {
       return Boolean(user) && !isLoading;
     }
     return false;
-  }, [riskAcknowledged, usesTradovateAuth, selectedBroker, username, password, isLoading, user]);
+  }, [riskAcknowledged, usesTradovateAuth, selectedBroker, isLoading, user]);
 
   const handleConnect = async () => {
     setError('');
 
-    if (usesTradovateAuth) {
-      const result = await connect(env, username.trim(), password, connectionName, selectedBroker);
-      if (result.success) {
-        onOpenChange(false);
-      } else {
-        setError(result.error || 'Connection failed. Check your credentials.');
+    if (usesTradovateAuth && user) {
+      try {
+        const { getTradovateAuthorizationUrl } = await import(
+          '@/lib/brokers/tradovate/tradovate-oauth'
+        );
+        window.location.href = await getTradovateAuthorizationUrl(env);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Tradovate OAuth failed. Try again or contact support.');
       }
       return;
     }
@@ -292,8 +251,6 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
   const handlePickBroker = (broker: BrokerName) => {
     setSelectedBroker(broker);
     setError('');
-    setUsername('');
-    setPassword('');
     setConnectionName(`${BROKER_CONFIGS[broker].displayName}${broker === 'tradovate' || broker === 'ninja_trader' ? ` (${env})` : ''}`.slice(0, CONNECTION_NAME_MAX));
   };
 
@@ -413,34 +370,8 @@ export default function AddBrokerPopup({ open, onOpenChange }: Props) {
             </div>
 
             {usesTradovateAuth && (
-              <div className="overflow-hidden rounded-[12px] border border-white/10 bg-[#101010]/70">
-                <CredentialInput
-                  icon={<User className="h-5 w-5" />}
-                  label="Username"
-                  value={username}
-                  onChange={setUsername}
-                  placeholder={isNinjaTrader ? 'NinjaTrader username' : 'your@email.com or username'}
-                  autoComplete="username"
-                />
-                <CredentialInput
-                  icon={<Lock className="h-5 w-5" />}
-                  label="Password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="************"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  trailing={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((value) => !value)}
-                      className="text-ink-secondary transition-colors hover:text-[#E8C766]"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                    </button>
-                  }
-                />
+              <div className="rounded-[12px] border border-white/10 bg-[#101010]/70 p-5 text-sm leading-relaxed text-ink-secondary">
+                Click Connect to authenticate with {isNinjaTrader ? 'NinjaTrader' : 'Tradovate'} via OAuth. You'll be redirected to Tradovate's secure login and brought back here. Supports Apex, Topstep, MFFU and other prop firm accounts routed through your Tradovate login.
               </div>
             )}
 
