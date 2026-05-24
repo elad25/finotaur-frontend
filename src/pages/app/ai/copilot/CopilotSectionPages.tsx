@@ -1165,19 +1165,19 @@ function CopilotPageShell({
 
   if (adminLoading || accessLoading) {
     return (
-      <div className="min-h-screen bg-[#030302] flex items-center justify-center text-ink-primary">
+      <div className="flex items-center justify-center py-20 text-ink-primary">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
       </div>
     );
   }
 
   if (!hasSubscriberAccess) {
-    return <Navigate to="/app/ai/copilot" replace />;
+    return <Navigate to="/copilot" replace />;
   }
 
   return (
-    <div className="min-h-screen bg-[#030302] px-3 py-4 text-ink-primary">
-      <main className="mx-auto max-w-[1480px]">
+    <div className="px-0 pt-4 text-ink-primary">
+      <div className="mx-auto">
         {!frameless && (
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -1189,14 +1189,14 @@ function CopilotPageShell({
                 <h1 className="text-2xl font-semibold text-gold-primary">{title}</h1>
               </div>
             </div>
-            <Link to="/app/ai/copilot" className="inline-flex items-center gap-2 rounded-[6px] border border-gold-primary/20 bg-black/30 px-3 py-2 text-xs uppercase text-gold-primary hover:bg-gold-primary/10">
+            <Link to="/copilot" className="inline-flex items-center gap-2 rounded-[6px] border border-gold-primary/20 bg-black/30 px-3 py-2 text-xs uppercase text-gold-primary hover:bg-gold-primary/10">
               <ArrowLeft className="h-3.5 w-3.5" />
               Back to Copilot
             </Link>
           </div>
         )}
         {children}
-      </main>
+      </div>
     </div>
   );
 }
