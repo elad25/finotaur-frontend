@@ -13,6 +13,7 @@ import { RiskSettingsRealtimeProvider } from "@/providers/RiskSettingsRealtimePr
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
+import { CopilotStandaloneLayout } from "@/layouts/CopilotStandaloneLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
 import { lazy, Suspense, memo } from "react";
 import { JournalRoute } from "@/components/routes/JournalRoute";
@@ -605,6 +606,17 @@ function AppContent() {
           <Route path="funding/transactions" element={<LockedRoute domainId="funding"><FundingTransactions /></LockedRoute>} />
           
           <Route path="settings" element={<SuspenseRoute><SettingsLayout /></SuspenseRoute>} />
+        </Route>
+
+        {/* COPILOT STANDALONE SHELL — opens in new tab, no TopNav/SubNav */}
+        <Route path="/copilot" element={<ProtectedRoute><CopilotStandaloneLayout /></ProtectedRoute>}>
+          <Route index element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
+          <Route path="top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
+          <Route path="macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
+          <Route path="ai-analyst" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIAnalystPage /></BetaRoute>} />
+          <Route path="holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
+          <Route path="risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
+          <Route path="ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
         </Route>
 
         <Route path="*" element={<NotFound />} />

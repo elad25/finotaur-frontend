@@ -222,6 +222,15 @@ export const SubNav = () => {
       return;
     }
 
+    // CO PILOT: opens in a separate browser tab (its own product surface).
+    // Auth is shared automatically via Supabase localStorage.
+    if (path === '/copilot' || path.startsWith('/copilot/')) {
+      if (typeof window !== 'undefined') {
+        window.open(path, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
     // BACKTEST LOCKED CHECK
     if (path.includes('/backtest') && isPathLocked(path) && !hasBetaAccess) {
       console.log('🔒 Backtest is locked - Coming Soon');
