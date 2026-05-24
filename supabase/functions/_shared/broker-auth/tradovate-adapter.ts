@@ -34,6 +34,7 @@ interface TradovateConfig {
   tokenUrl: string;
   renewUrl: string;
   userInfoUrl: string;
+  accountListUrl: string;
   defaultScope: string;
 }
 
@@ -51,11 +52,12 @@ function detectPropFirm(accountName: string): boolean {
   return PROP_FIRM_KEYWORDS.some((kw) => upper.includes(kw));
 }
 
-// Shape of a raw Tradovate /auth/me account entry.
+// Shape of a raw Tradovate /account/list entry.
 interface TradovateRawAccount {
   id: string | number;
   name?: string;
   accountName?: string;
+  active?: boolean;
 }
 
 export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapter {
@@ -156,23 +158,40 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
       accessToken: string,
       _environment: BrokerEnvironment,
     ): Promise<OAuthUserInfo> {
-      const resp = await fetch(config.userInfoUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-        },
-      });
+      const authHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      };
 
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error(`Tradovate user info failed: ${resp.status} ${text}`);
+      // Fire /auth/me and /account/list in parallel.
+      // /auth/me provides identity; /account/list provides the accounts array
+      // (it is NOT returned by /auth/me despite older assumptions).
+      const [meResp, accountsResp] = await Promise.all([
+        fetch(config.userInfoUrl, { method: 'GET', headers: authHeaders }),
+        fetch(config.accountListUrl, { method: 'GET', headers: authHeaders }),
+      ]);
+
+      if (!meResp.ok) {
+        const text = await meResp.text();
+        throw new Error(`Tradovate user info failed: ${meResp.status} ${text}`);
       }
 
-      const data = (await resp.json()) as Record<string, unknown>;
+      const data = (await meResp.json()) as Record<string, unknown>;
 
-      // Tradovate /auth/me returns user id + accounts array in a single payload.
-      const rawAccounts = Array.isArray(data.accounts) ? (data.accounts as TradovateRawAccount[]) : [];
+      // /account/list returns a top-level array; treat failure as soft error
+      // so a broken accounts call never aborts the whole OAuth flow.
+      let rawAccounts: TradovateRawAccount[] = [];
+      if (accountsResp.ok) {
+        const accountsData = await accountsResp.json();
+        if (Array.isArray(accountsData)) {
+          rawAccounts = (accountsData as TradovateRawAccount[]).filter(
+            (acc) => acc.active !== false,
+          );
+        }
+      } else {
+        const errText = await accountsResp.text();
+        console.warn(`[tradovate-adapter] /account/list failed: ${accountsResp.status} ${errText}`);
+      }
 
       const userId = data.userId ?? data.id;
 
@@ -226,6 +245,9 @@ export function buildTradovateConfigFromEnv(): TradovateConfig {
     userInfoUrl:
       Deno.env.get('oauth_tradovate_userinfo_url') ??
       'https://live.tradovateapi.com/auth/me',
+    accountListUrl:
+      Deno.env.get('oauth_tradovate_account_list_url') ??
+      'https://live.tradovateapi.com/v1/account/list',
     defaultScope:
       Deno.env.get('oauth_tradovate_default_scope') ?? 'trading_read',
   };

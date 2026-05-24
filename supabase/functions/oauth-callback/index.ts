@@ -166,6 +166,30 @@ Deno.serve(async (req: Request) => {
     return redirectTo('?oauth_error=storage_failed');
   }
 
+  // Upsert a portfolio row for each account returned by the broker.
+  // The journal dropdown reads from portfolios, not broker_connections,
+  // so without this step new OAuth connections are invisible in the UI.
+  if (userInfo.accounts.length > 0) {
+    try {
+      for (const acc of userInfo.accounts) {
+        await supabaseAdmin.rpc('upsert_portfolio_from_tradovate', {
+          p_user_id:              userId,
+          p_tradovate_account_id: Number(acc.id),
+          p_account_spec:         `${acc.name}${acc.id}`,
+          p_account_name:         acc.name,
+          p_environment:          environment,
+          p_credential_id:        null,
+          p_connection_label:     null,
+        });
+      }
+      console.log('[oauth-callback] portfolios upserted', { userId, count: userInfo.accounts.length });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[oauth-callback] portfolios upsert failed:', msg);
+      // OAuth succeeded and tokens are stored — do not redirect to error page.
+    }
+  }
+
   console.log('[oauth-callback] OAuth flow completed', {
     userId,
     broker,
