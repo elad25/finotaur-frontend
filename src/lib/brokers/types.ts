@@ -34,6 +34,7 @@ export interface BrokerConnection {
   broker: BrokerName;
   status: BrokerStatus;
   is_active: boolean;
+  purpose?: 'journal' | 'copier';    // M-001: NOT NULL in DB, default 'journal'; optional here for pre-migration rows
   account_id?: string | null;        // TEXT in DB; numeric for Tradovate; coerce as needed
   account_name?: string | null;
   environment?: BrokerEnvironment | string | null;

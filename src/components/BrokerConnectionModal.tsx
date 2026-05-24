@@ -232,9 +232,9 @@ function BrokerCard({
 export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
   const { user } = useAuth();
   const { connections: active, isLoading: loadingActive, syncNow, disconnect } =
-    useBrokerConnections({ active: true });
+    useBrokerConnections({ active: true, purpose: 'journal' });
   const { connections: inactive, isLoading: loadingInactive, reconnect, remove } =
-    useBrokerConnections({ active: false });
+    useBrokerConnections({ active: false, purpose: 'journal' });
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showTradovateConnect, setShowTradovateConnect] = useState(false);

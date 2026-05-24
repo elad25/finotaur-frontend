@@ -351,11 +351,11 @@ function PopoverBody({
 }) {
   const {
     isLoading: loadingActive,
-  } = useBrokerConnections({ active: true });
+  } = useBrokerConnections({ active: true, purpose: 'journal' });
   const {
     isLoading: loadingInactive,
     reconnect,
-  } = useBrokerConnections({ active: false });
+  } = useBrokerConnections({ active: false, purpose: 'journal' });
 
   const {
     portfolios,

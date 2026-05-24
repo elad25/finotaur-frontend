@@ -1255,7 +1255,7 @@ function JournalOverviewContent() {
 
   // F2.5: aggregate dot color for the compact "Connect Broker" button
   // (OQ-47 — global broker status indicator outside the popover).
-  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections();
+  const { connections: allBrokerConnections, isLoading: brokersLoading, reconnect: brokerReconnect, syncNow: brokerSyncNow } = useBrokerConnections({ purpose: 'journal' });
   const brokerDotColor = aggregateStatusDotColor(allBrokerConnections);
 
   // 2026-05-19: queryClient pulled up here from its original location ~90
