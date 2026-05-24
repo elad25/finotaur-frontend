@@ -20,6 +20,7 @@ import { useCopyEngineHealth } from '@/hooks/useCopyEngineHealth';
 import { usePortfolios } from '@/hooks/usePortfolios';
 import { useCopyTradeLog } from '@/hooks/useCopyTradeLog';
 import AddBrokerPopup from '@/components/broker/AddBrokerPopup';
+import { ConnectCopierModal } from '@/components/copyTrading/ConnectCopierModal';
 import { useSubscription } from '@/hooks/useSubscription';
 import { format } from 'date-fns';
 import { useBrokerConnections } from '@/hooks/brokers/useBrokerConnections';
@@ -1496,6 +1497,7 @@ export default function TradeCopier() {
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
+  const [showCopierModal, setShowCopierModal] = useState(false);
   const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
   const [disabledConnectionIds, setDisabledConnectionIds] = useState<Set<string>>(() => new Set());
   // 2026-05-19: per-connection reconnect state for the icon-only button.
@@ -1593,11 +1595,11 @@ export default function TradeCopier() {
               <div className="flex items-center gap-ds-3">
                 <SystemStatusRow ok={engineAlive && syncStatus.type === 'connected'} />
                 <button
-                  onClick={() => setShowAddBroker(true)}
+                  onClick={() => setShowCopierModal(true)}
                   className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary shadow-[0_0_22px_rgba(201,166,70,0.12)] transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10 hover:shadow-[0_0_30px_rgba(201,166,70,0.22)]"
                 >
                   <Plus className="w-4 h-4" />
-                  Connect new broker
+                  Connect Trade Copier
                 </button>
               </div>
             </div>
@@ -1607,13 +1609,13 @@ export default function TradeCopier() {
                 <div className="w-12 h-12 rounded-lg bg-gold-primary/10 border border-gold-border flex items-center justify-center">
                   <Link2 className="w-5 h-5 text-gold-primary" />
                 </div>
-                <p className="text-sm text-ink-secondary">No broker connected yet.</p>
+                <p className="text-sm text-ink-secondary">No copier broker connected yet.</p>
                 <button
-                  onClick={() => setShowAddBroker(true)}
+                  onClick={() => setShowCopierModal(true)}
                   className="inline-flex items-center gap-ds-2 rounded-xl border border-gold-border bg-transparent px-ds-4 py-ds-2 text-sm font-semibold text-gold-primary transition-all duration-base hover:border-gold-primary hover:bg-gold-primary/10"
                 >
                   <Plus className="w-4 h-4" />
-                  Connect a broker
+                  Connect Trade Copier
                 </button>
               </div>
             ) : (
@@ -1711,6 +1713,9 @@ export default function TradeCopier() {
 
       {showAddBroker && (
         <AddBrokerPopup open={showAddBroker} onOpenChange={setShowAddBroker} />
+      )}
+      {showCopierModal && (
+        <ConnectCopierModal onClose={() => setShowCopierModal(false)} />
       )}
     </div>
   );
