@@ -15,6 +15,7 @@ import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
+import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 
 const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
@@ -22,6 +23,7 @@ export function FinotaurCopilotDashboard() {
   const [range, setRange] = useState<TimeRange>('1Y');
   const [showBrokerPopup, setShowBrokerPopup] = useState(false);
   const snapshot = usePortfolioData(range);
+  const ib = useIBConnection();
 
   return (
     <div className="min-h-screen bg-[#030302] text-ink-primary relative overflow-hidden">
@@ -39,14 +41,32 @@ export function FinotaurCopilotDashboard() {
             </span>{' '}
             <span className="text-ink-primary">COPILOT</span>
           </h1>
-          <button
-            type="button"
-            onClick={() => setShowBrokerPopup(true)}
-            className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-gold-bright/55 bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_24px_rgba(201,166,70,0.26)] transition hover:brightness-110 xl:absolute xl:right-2 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2"
-          >
-            <Link2 className="h-4 w-4" />
-            Connect broker
-          </button>
+          {ib.isConnected ? (
+            <button
+              type="button"
+              onClick={() => setShowBrokerPopup(true)}
+              title={ib.lastSyncAt ? `Last sync: ${new Date(ib.lastSyncAt).toLocaleString()}` : 'Connected'}
+              className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300 shadow-[0_0_18px_rgba(16,185,129,0.18)] transition hover:bg-emerald-500/15 xl:absolute xl:right-2 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70"></span>
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+              </span>
+              <span className="text-white/90">Interactive Brokers</span>
+              {ib.accountId && (
+                <span className="font-mono text-emerald-200/80 normal-case tracking-normal">{ib.accountId}</span>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowBrokerPopup(true)}
+              className="mx-auto mt-4 flex items-center gap-2 rounded-[8px] border border-gold-bright/55 bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-black shadow-[0_0_24px_rgba(201,166,70,0.26)] transition hover:brightness-110 xl:absolute xl:right-2 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2"
+            >
+              <Link2 className="h-4 w-4" />
+              Connect broker
+            </button>
+          )}
         </div>
 
         <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
