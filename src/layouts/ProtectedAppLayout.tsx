@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { ImpersonationBanner } from '@/components/admin/ImpersonationBanner';
 import { PortfolioProvider } from '@/contexts/PortfolioContext';
 import ComplianceFooterBar from '@/components/ComplianceFooterBar';
+import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
 import { cn } from '@/lib/utils';
 
 // 🔥 דפים שמוצגים בלי Sidebar (רק Top Nav + Sub Nav)
@@ -23,14 +24,19 @@ export const ProtectedAppLayout = () => {
   const location = useLocation();
   
   // 🔥 בדיקה אם הדף הנוכחי צריך להיות בלי Sidebar
-  const hideSidebar = NO_SIDEBAR_ROUTES.some(route => 
+  const hideSidebar = NO_SIDEBAR_ROUTES.some(route =>
     location.pathname.startsWith(route)
   );
+
+  // Show "Market Closed — Showing Friday's Close" badge across AI Arena routes
+  // when US equities are closed. Auto-hides during regular session.
+  const showMarketStatus = location.pathname.startsWith('/app/ai/');
 
   return (
     <PortfolioProvider>
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col">
         <ImpersonationBanner />
+        {showMarketStatus && <MarketStatusBadge />}
         <TopNav />
         <SubNav />
         <div className="flex flex-1">
