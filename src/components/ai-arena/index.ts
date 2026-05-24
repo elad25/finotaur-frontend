@@ -8,3 +8,5 @@ export { AIArenaKpiCard } from './AIArenaKpiCard';
 export type { AIArenaKpiCardProps } from './AIArenaKpiCard';
 export { AIArenaSkeleton } from './AIArenaSkeleton';
 export type { AIArenaSkeletonVariant } from './AIArenaSkeleton';
+export { MarketStatusBadge } from './MarketStatusBadge';
+export type { MarketStatusBadgeProps } from './MarketStatusBadge';

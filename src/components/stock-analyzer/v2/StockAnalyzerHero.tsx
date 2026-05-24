@@ -5,6 +5,7 @@ import { Price, Change } from '@/components/ds/NumberDisplay';
 import type { StockData } from '@/types/stock-analyzer.types';
 import { usePricePolling } from '@/hooks/usePricePolling';
 import type { QuoteUpdate } from '@/services/fetchQuoteOnly';
+import { useMarketStatus } from '@/lib/marketStatus';
 import { Clock, RefreshCw, WifiOff } from 'lucide-react';
 
 function formatTimeRemaining(ms: number): string {
@@ -66,6 +67,9 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
   });
 
   const session = sessionLabel(marketSession);
+  // Centralized market status — adds weekend/holiday context the per-stock
+  // polling hook cannot derive (it only knows session at quote time, not why).
+  const marketStatus = useMarketStatus();
 
   return (
     <div className="relative flex flex-col gap-ds-7 py-ds-2 lg:flex-row lg:items-end lg:justify-between">
@@ -168,7 +172,16 @@ export const StockAnalyzerHero = memo(({ data, onPriceUpdate, actions }: StockAn
           </div>
         </div>
 
-        <div className="flex items-center gap-ds-3 text-[11px] text-ink-tertiary">
+        <div className="flex flex-wrap items-center gap-ds-3 text-[11px] text-ink-tertiary lg:justify-end">
+          {!marketStatus.isOpen && (
+            <span>
+              Showing{' '}
+              <span className="font-medium text-ink-secondary">
+                {marketStatus.lastTradingDayLabel}
+              </span>
+              <span className="mx-2 opacity-60">·</span>
+            </span>
+          )}
           <span>
             Last updated {new Date(data.lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
           </span>
