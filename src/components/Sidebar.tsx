@@ -342,8 +342,11 @@ const sidebarItemBaseClass =
 const sidebarItemExpandedClass = 'gap-3 px-3';
 const sidebarItemCollapsedClass = 'justify-center px-2';
 const sidebarIconClass = 'h-5 w-5 flex-shrink-0';
-const sidebarLabelClass = 'flex-1 min-w-0 whitespace-normal break-words leading-snug';
-const sidebarBrandLabelClass = 'flex-1 min-w-0 whitespace-normal break-words leading-snug';
+// whitespace-nowrap + overflow-hidden = text clips cleanly during the 300ms
+// width transition instead of wrapping one letter per line (the "vertical
+// letters" artifact reported on /copilot sidebar toggle).
+const sidebarLabelClass = 'flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis leading-snug';
+const sidebarBrandLabelClass = 'flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis leading-snug';
 const sidebarActiveClass =
   'border-gold-bright bg-gold-primary/20 text-gold-bright shadow-[0_0_22px_rgba(201,166,70,0.22)]';
 const sidebarInactiveClass = 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright';
@@ -518,7 +521,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   return (
     <aside
       className={cn(
-        'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
+        'fixed left-0 z-30 overflow-hidden border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
         isExpanded ? 'w-56' : 'w-[60px]'
       )}
