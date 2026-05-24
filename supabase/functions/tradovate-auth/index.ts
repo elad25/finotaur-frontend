@@ -571,6 +571,11 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Missing required fields: userId, environment, username, password' }, 400);
     }
 
+    const purpose: 'journal' | 'copier' = body.purpose === 'copier' ? 'copier' : 'journal';
+    if (body.purpose !== undefined && body.purpose !== 'journal' && body.purpose !== 'copier') {
+      return json({ error: `Invalid purpose '${body.purpose}': must be 'journal' or 'copier'`, code: 'bad_request' }, 400);
+    }
+
     const env = environment as 'live' | 'demo';
     const brokerName: 'tradovate' | 'ninja_trader' =
       body.broker === 'ninja_trader' ? 'ninja_trader' : 'tradovate';
@@ -602,16 +607,18 @@ Deno.serve(async (req: Request) => {
     }
 
     // 4. Upsert broker_connections row (metadata + jsonb only — tokens live in Vault)
+    console.log('[tradovate-auth] login purpose:', purpose, 'broker:', brokerName, 'account:', primaryAccount.id);
     console.log('[tradovate-auth] upserting broker_connections row...');
     // Get existing connection ID + connection_data if reconnecting (to preserve PK + FK refs
     // AND to avoid wiping out other jsonb fields a future feature may have added).
-    // Match the new UNIQUE constraint: (user_id, broker, account_id)
+    // Match the new UNIQUE constraint: (user_id, broker, account_id, purpose)
     const { data: existingConn } = await supabaseAdmin
       .from('broker_connections')
       .select('id, connection_data')
       .eq('user_id', userId)
       .eq('broker', brokerName)
       .eq('account_id', String(primaryAccount.id))
+      .eq('purpose', purpose)   // NEW: scoped to same purpose only
       .maybeSingle();
 
     const credentialId = existingConn?.id ?? crypto.randomUUID();
@@ -623,6 +630,7 @@ Deno.serve(async (req: Request) => {
       broker:           brokerName,
       status:           'connected',
       is_active:        true,
+      purpose:          purpose,
       account_id:       String(primaryAccount.id),
       account_name:     primaryAccount.name,
       environment:      env,
@@ -642,7 +650,7 @@ Deno.serve(async (req: Request) => {
         account_spec:      `${primaryAccount.name}${primaryAccount.id}`,
         access_token_hash: accessToken.slice(0, 8),
       },
-    }, { onConflict: 'user_id,broker,account_id' });
+    }, { onConflict: 'user_id,broker,account_id,purpose' });
 
     console.log('[tradovate-auth] upsert result:', upsertError ? `ERROR: ${upsertError.message} code:${upsertError.code}` : 'OK');
     if (upsertError) throw new Error(`broker_connections upsert failed: ${upsertError.message}`);
