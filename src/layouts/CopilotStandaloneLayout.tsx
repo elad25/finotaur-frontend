@@ -18,7 +18,7 @@ export const CopilotStandaloneLayout = () => {
       <div className="finotaur-app-shell flex min-h-screen w-full flex-col bg-[#030302] text-ink-primary">
         <ImpersonationBanner />
         <div className="flex flex-1">
-          <Sidebar isOpen={sidebarOpen} collapseMode="hover" />
+          <Sidebar isOpen={sidebarOpen} collapseMode="collapsed-default" />
           <main className="flex-1 overflow-auto transition-[margin-left] duration-300 ease-in-out md:ml-[var(--finotaur-sidebar-width,14rem)]">
             <div className="relative min-h-full overflow-hidden">
               <CopilotBackdrop />

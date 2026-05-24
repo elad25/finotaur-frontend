@@ -72,13 +72,15 @@ import {
 interface SidebarProps {
   isOpen?: boolean;
   /**
-   * 'persistent' (default) — width controlled by user clicks on the gold tab,
-   *                          persisted to localStorage.
-   * 'hover'                — starts collapsed; expands on mouse enter, collapses
-   *                          on mouse leave. Used by CopilotStandaloneLayout
-   *                          so the standalone tab feels more spacious.
+   * 'persistent'        (default) — starts expanded; click toggles, persisted
+   *                                  to localStorage 'finotaur-sidebar-expanded'.
+   * 'collapsed-default'           — starts collapsed; click toggles same as
+   *                                  persistent, persisted to a separate key
+   *                                  ('finotaur-copilot-sidebar-expanded') so
+   *                                  it doesn't clobber main-app preference.
+   *                                  Used by CopilotStandaloneLayout.
    */
-  collapseMode?: 'persistent' | 'hover';
+  collapseMode?: 'persistent' | 'collapsed-default';
 }
 
 type EnvironmentType =
@@ -347,24 +349,22 @@ const sidebarActiveClass =
 const sidebarInactiveClass = 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright';
 
 export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) => {
-  const isHoverMode = collapseMode === 'hover';
+  // Two storage profiles so /copilot's preference doesn't override the main app.
+  const storageKey = collapseMode === 'collapsed-default'
+    ? 'finotaur-copilot-sidebar-expanded'
+    : 'finotaur-sidebar-expanded';
+  const defaultExpanded = collapseMode !== 'collapsed-default';
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
-    if (isHoverMode) return false; // hover mode always starts collapsed
-    const saved = localStorage.getItem('finotaur-sidebar-expanded');
+    const saved = localStorage.getItem(storageKey);
+    if (saved === null) return defaultExpanded; // first visit per surface
     return saved !== 'false';
   });
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-
-  // Hover-mode handlers — wired to <aside> below to expand on enter / collapse on leave
-  const handleMouseEnter = isHoverMode ? () => setIsExpanded(true) : undefined;
-  const handleMouseLeave = isHoverMode
-    ? () => { setIsExpanded(false); setOpenGroups({}); }
-    : undefined;
 
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -378,10 +378,9 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   }, [isExpanded]);
 
   const handleToggle = () => {
-    if (isHoverMode) return; // hover mode: click on gold tab is a no-op
     setIsExpanded(prev => {
       const newValue = !prev;
-      localStorage.setItem('finotaur-sidebar-expanded', String(newValue));
+      localStorage.setItem(storageKey, String(newValue));
       return newValue;
     });
   };
@@ -518,8 +517,6 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
 
   return (
     <aside
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       className={cn(
         'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
@@ -586,7 +583,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
                 if (hasChildren) {
                   if (!isExpanded) {
                     setIsExpanded(true);
-                    localStorage.setItem('finotaur-sidebar-expanded', 'true');
+                    localStorage.setItem(storageKey, 'true');
                     setOpenGroups(prev => ({ ...prev, [item.path]: true }));
                     return;
                   }
