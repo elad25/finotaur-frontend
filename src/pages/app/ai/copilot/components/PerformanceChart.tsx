@@ -22,15 +22,28 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
 
   const chart = useMemo(() => {
     if (series.length === 0) {
-      return { path: '', areaPath: '', ticks: [] as number[], min: 0, max: 0 };
+      return { path: '', areaPath: '', ticks: [] as number[], min: 0, max: 0, isFlat: false };
     }
 
     const start = series[0].value;
     const values = series.map((point) =>
       mode === 'dollar' ? point.value : ((point.value - start) / start) * 100
     );
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    const isFlat = max - min === 0;
+
+    // Flat line (e.g., cash-only account, no historical movement): synthesize a
+    // visible band around the single value so the line renders in the middle of
+    // the chart instead of at the baseline. Band width = ±10% of value (or ±1
+    // when value is 0 for percent mode).
+    if (isFlat) {
+      const v = max;
+      const halfBand = mode === 'percent' ? 1 : Math.max(Math.abs(v) * 0.1, 0.5);
+      min = v - halfBand;
+      max = v + halfBand;
+    }
+
     const valueRange = max - min || 1;
     const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
     const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
@@ -48,12 +61,18 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
     const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + valueRange * ratio);
 
-    return { path, areaPath, ticks, min, max };
+    return { path, areaPath, ticks, min, max, isFlat };
   }, [series, mode]);
 
   const formatTick = (value: number) => {
-    if (mode === 'percent') return `${value >= 0 ? '+' : ''}${value.toFixed(0)}%`;
-    return `$${(value / 1000).toFixed(0)}k`;
+    if (mode === 'percent') return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+    if (abs >= 10_000)    return `$${(value / 1_000).toFixed(1)}K`;
+    if (abs >= 1_000)     return `$${(value / 1_000).toFixed(2)}K`;
+    if (abs >= 1)         return `$${value.toFixed(2)}`;
+    if (abs > 0)          return `$${value.toFixed(4)}`;
+    return '$0.00';
   };
 
   const cardShell = 'relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]';
