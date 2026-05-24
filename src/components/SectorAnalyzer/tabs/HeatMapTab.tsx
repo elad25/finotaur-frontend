@@ -208,19 +208,22 @@ function generateTopMoversFromSector(sector: Sector): SectorTopMoversCache {
     .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
     .slice(0, 10);
 
+  // Real per-holding data only — no Math.random() noise.
+  // Fields not in sector_snapshots.top_holdings (volume, weekChange/monthChange per stock,
+  // P/E) are left undefined; the UI already renders missing optional fields gracefully.
   const movers: TopMover[] = holdings.map((h, i) => ({
     rank: i + 1,
     ticker: h.ticker,
     name: h.name,
-    change: sector.weekChange + parseFloat(((Math.random() - 0.5) * 4).toFixed(2)),
-    volume: `${(Math.random() * 50 + 5).toFixed(1)}M`,
-    volumeVsAvg: h.volumeVsAvg || parseFloat((0.5 + Math.random() * 2.5).toFixed(2)),
+    change: h.change,
+    volume: '—',
+    volumeVsAvg: h.volumeVsAvg ?? 1.0,
     score: h.score,
     signal: calculateSignal(h.score),
     aiOneLiner: AI_ONE_LINERS[h.ticker] || `Strong positioning within ${sector.name} sector`,
-    weekChange: sector.weekChange + parseFloat(((Math.random() - 0.5) * 4).toFixed(2)),
-    monthChange: sector.monthChange + parseFloat(((Math.random() - 0.5) * 6).toFixed(2)),
-    pe: parseFloat((15 + Math.random() * 35).toFixed(1)),
+    weekChange: undefined,
+    monthChange: undefined,
+    pe: undefined,
     weight: h.weight,
     insiderActivity: h.insiderActivity || 'none',
   }));
