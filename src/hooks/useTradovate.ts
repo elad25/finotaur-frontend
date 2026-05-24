@@ -211,14 +211,15 @@ export function useTradovate() {
     username: string,
     password: string,
     connectionLabel?: string,
-    broker: TradovateAuthBroker = 'tradovate'
+    broker: TradovateAuthBroker = 'tradovate',
+    purpose?: 'journal' | 'copier'
   ) => {
     if (!userId) return { success: false, error: 'Not authenticated' };
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('tradovate-auth', {
-        body: { userId, environment, username, password, connectionLabel, broker }
-      });
+      const body: Record<string, unknown> = { userId, environment, username, password, connectionLabel, broker };
+      if (purpose) body.purpose = purpose;
+      const { data, error } = await supabase.functions.invoke('tradovate-auth', { body });
       if (error) {
         // Read the real reason from the response body (FunctionsHttpError wraps
         // it). Without this the toast just says "Edge Function returned a
