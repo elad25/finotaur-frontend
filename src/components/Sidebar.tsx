@@ -71,6 +71,14 @@ import {
 
 interface SidebarProps {
   isOpen?: boolean;
+  /**
+   * 'persistent' (default) — width controlled by user clicks on the gold tab,
+   *                          persisted to localStorage.
+   * 'hover'                — starts collapsed; expands on mouse enter, collapses
+   *                          on mouse leave. Used by CopilotStandaloneLayout
+   *                          so the standalone tab feels more spacious.
+   */
+  collapseMode?: 'persistent' | 'hover';
 }
 
 type EnvironmentType =
@@ -338,17 +346,25 @@ const sidebarActiveClass =
   'border-gold-bright bg-gold-primary/20 text-gold-bright shadow-[0_0_22px_rgba(201,166,70,0.22)]';
 const sidebarInactiveClass = 'text-ink-secondary hover:bg-gold-primary/10 hover:text-gold-bright';
 
-export const Sidebar = ({ isOpen }: SidebarProps) => {
+export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) => {
+  const isHoverMode = collapseMode === 'hover';
   const navigate = useNavigate();
   const location = useLocation();
   const { isActive } = useDomain();
   const { isAdmin, hasBetaAccess } = useAdminAuth();  // נ”¥ NEW: Beta access check
 
   const [isExpanded, setIsExpanded] = useState(() => {
+    if (isHoverMode) return false; // hover mode always starts collapsed
     const saved = localStorage.getItem('finotaur-sidebar-expanded');
     return saved !== 'false';
   });
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  // Hover-mode handlers — wired to <aside> below to expand on enter / collapse on leave
+  const handleMouseEnter = isHoverMode ? () => setIsExpanded(true) : undefined;
+  const handleMouseLeave = isHoverMode
+    ? () => { setIsExpanded(false); setOpenGroups({}); }
+    : undefined;
 
   useEffect(() => {
     document.documentElement.style.setProperty(
@@ -362,6 +378,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
   }, [isExpanded]);
 
   const handleToggle = () => {
+    if (isHoverMode) return; // hover mode: click on gold tab is a no-op
     setIsExpanded(prev => {
       const newValue = !prev;
       localStorage.setItem('finotaur-sidebar-expanded', String(newValue));
@@ -501,6 +518,8 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
 
   return (
     <aside
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={cn(
         'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
