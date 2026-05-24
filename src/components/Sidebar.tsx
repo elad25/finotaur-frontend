@@ -100,6 +100,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   divider?: boolean;
   locked?: boolean;
   beta?: boolean;  // נ”¥ NEW
+  newTab?: boolean; // open in new browser tab instead of in-place navigation
   children?: Array<{
     label: string;
     path: string;
@@ -238,12 +239,12 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
   ],
 
   'ai-copilot': [
-    { label: 'FINOTAUR Copilot', path: '/app/ai/copilot', icon: LayoutDashboard, beta: true },
-    { label: 'Top Opportunities', path: '/app/ai/copilot/top-opportunities', icon: Zap, beta: true },
-    { label: 'Macro', path: '/app/ai/copilot/macro', icon: Globe, beta: true },
-    { label: 'Holdings', path: '/app/ai/copilot/holdings', icon: Layers, beta: true },
-    { label: 'Risks', path: '/app/ai/copilot/risks', icon: Shield, beta: true },
-    { label: 'AI Analyst', path: '/app/ai/copilot/ai-analyst', icon: Brain, beta: true },
+    { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
+    { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
+    { label: 'Macro', path: '/copilot/macro', icon: Globe, beta: true },
+    { label: 'Holdings', path: '/copilot/holdings', icon: Layers, beta: true },
+    { label: 'Risks', path: '/copilot/risks', icon: Shield, beta: true },
+    { label: 'AI Analyst', path: '/copilot/ai-analyst', icon: Brain, beta: true },
   ],
 
   connections: [
@@ -391,7 +392,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
     if (path.startsWith('/app/commodities')) return 'commodities';
     if (path.startsWith('/app/options')) return 'options';
     if (path.startsWith('/app/macro')) return 'macro';
-    if (path.startsWith('/app/ai/copilot')) return 'ai-copilot';
+    if (path.startsWith('/app/ai/copilot') || path.startsWith('/copilot')) return 'ai-copilot';
     if (path.startsWith('/app/ai')) return 'ai';
     if (path.startsWith('/app/copy-trade')) return 'copy-trade';
     if (path.startsWith('/app/funding')) return 'funding';
@@ -404,12 +405,14 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
 
   const currentEnvironment = getCurrentEnvironment();
   const sidebarItems = ENVIRONMENT_MENUS[currentEnvironment];
+  // True when the user is already inside the /copilot/* standalone shell
+  const inStandaloneCopilot = location.pathname.startsWith('/copilot');
   const sidebarTopClass = 'top-28 h-[calc(100vh-7rem)]';
 
   // ===============================================
   // נ¯ SHOW SIDEBAR FOR ALL APP ROUTES
   // ===============================================
-  const shouldShowSidebar = location.pathname.startsWith('/app/');
+  const shouldShowSidebar = location.pathname.startsWith('/app/') || location.pathname.startsWith('/copilot');
   
   // ===============================================
   // נ”¥ HIDE SIDEBAR FOR SPECIFIC PAGES
@@ -461,7 +464,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
       return true;
     }
 
-    if (itemPath === '/app/ai/copilot') {
+    if (itemPath === '/app/ai/copilot' || itemPath === '/copilot') {
       return false;
     }
     
@@ -541,7 +544,7 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
           const active = isItemActive(item.path);
           const isBackButton = item.label === 'Back to Journal';
           const isBetaItem = item.beta === true;
-          const isCopilotItem = item.path === '/app/ai/copilot';
+          const isCopilotItem = item.path === '/copilot';
           const showBetaBadge = isBetaItem && !isCopilotItem;
           const hasChildren = Boolean(item.children?.length);
           const childrenOpen = isExpanded && hasChildren && openGroups[item.path];
@@ -570,6 +573,14 @@ export const Sidebar = ({ isOpen }: SidebarProps) => {
                   }
 
                   setOpenGroups(prev => ({ ...prev, [item.path]: !prev[item.path] }));
+                  return;
+                }
+                // Copilot items (/copilot/*) open in a new tab when the user is NOT
+                // already inside the standalone /copilot shell.
+                if (item.path.startsWith('/copilot') && !inStandaloneCopilot) {
+                  if (!item.locked || hasBetaAccess) {
+                    window.open(item.path, '_blank', 'noopener,noreferrer');
+                  }
                   return;
                 }
                 handleNavigation(item.path, item.locked);
