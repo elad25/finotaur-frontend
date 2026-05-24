@@ -24,6 +24,10 @@ export interface SectorHolding {
   volumeVsAvg?: number;
   peVsSector?: number;
   insiderActivity?: 'buy' | 'sell' | 'none';
+  /** Cron-generated one-line insight per stock. See server's
+   *  `generateHoldingInsights` in `sector-refresh.ts`. Frontend falls back
+   *  to the static `AI_ONE_LINERS` map in `HeatMapTab.tsx` when null. */
+  aiInsight?: string | null;
 }
 
 export interface CorrelationData {

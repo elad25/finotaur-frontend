@@ -220,7 +220,7 @@ function generateTopMoversFromSector(sector: Sector): SectorTopMoversCache {
     volumeVsAvg: h.volumeVsAvg ?? 1.0,
     score: h.score,
     signal: calculateSignal(h.score),
-    aiOneLiner: AI_ONE_LINERS[h.ticker] || `Strong positioning within ${sector.name} sector`,
+    aiOneLiner: h.aiInsight || AI_ONE_LINERS[h.ticker] || `Strong positioning within ${sector.name} sector`,
     weekChange: undefined,
     monthChange: undefined,
     pe: undefined,
