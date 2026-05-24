@@ -43,14 +43,20 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   
   // State
   const [view, setView] = useState<ViewType>('instructions');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [copiedStep, setCopiedStep] = useState<number | null>(null);
-  
+
   // Credentials
   const [token, setToken] = useState('');
   const [queryId, setQueryId] = useState('');
-  const [connectionId, setConnectionId] = useState<string | null>(null);
+
+  // Sync result from the auto-sync that runs on connect (shown in success view)
+  const [syncStats, setSyncStats] = useState<{
+    tradesInserted?: number;
+    positionsCount?: number;
+    daysWithData?: number;
+    firstError?: string | null;
+  } | null>(null);
 
   // ============================================================================
   // HANDLERS
@@ -120,10 +126,15 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
       });
 
       if (syncErr) throw new Error(syncErr.message || 'Sync failed');
-      // syncResult shape: { ok: true, tradesInserted, positionsCount } OR { error: '...' }
+      // syncResult shape: { ok: true, tradesInserted, positionsCount, daysWithData, firstError } OR { error: '...' }
       if (syncResult?.error) throw new Error(syncResult.error);
 
-      setConnectionId(conn.id);
+      setSyncStats({
+        tradesInserted: syncResult?.tradesInserted ?? 0,
+        positionsCount: syncResult?.positionsCount ?? 0,
+        daysWithData: syncResult?.daysWithData ?? 0,
+        firstError: syncResult?.firstError ?? null,
+      });
       setView('success');
       if (onSuccess) onSuccess(conn.id);
     } catch (err: any) {
@@ -139,29 +150,12 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
     setTimeout(() => setCopiedStep(null), 2000);
   };
 
-  const handleSyncNow = async () => {
-    if (!user || !connectionId) return;
-
-    setLoading(true);
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const jwt = sess.session?.access_token;
-      const { data, error: syncErr } = await supabase.functions.invoke('interactive-brokers-sync', {
-        body: { userId: user.id, mode: 'manual' },
-        headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
-      });
-      if (syncErr) {
-        console.error('Sync error:', syncErr);
-      } else {
-        const body = (data ?? {}) as { tradesInserted?: number };
-        console.log(`Synced ${body.tradesInserted ?? 0} trades`);
-      }
-    } catch (err: any) {
-      console.error('Sync error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // ----------------------------------------------------------------------------
+  // Note: a manual "Sync Trades Now" handler was removed in this view.
+  // Sync runs automatically inside handleConnect, and pg_cron `ib-auto-sync`
+  // refreshes data every 4 hours. Manual re-sync stays available from outside
+  // the popup via useBrokerConnections.syncNow().
+  // ----------------------------------------------------------------------------
 
   // ============================================================================
   // RENDER - Instructions View
@@ -393,40 +387,70 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   // RENDER - Success View
   // ============================================================================
 
-  const renderSuccess = () => (
-    <div className="py-8 flex flex-col items-center justify-center gap-6">
-      <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center border-2 border-emerald-500/30">
-        <CheckCircle className="w-10 h-10 text-emerald-500" />
+  const renderSuccess = () => {
+    const trades = syncStats?.tradesInserted ?? 0;
+    const positions = syncStats?.positionsCount ?? 0;
+    const noActivity = trades === 0 && positions === 0;
+
+    return (
+      <div className="py-8 flex flex-col items-center justify-center gap-5">
+        <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center border-2 border-emerald-500/30">
+          <CheckCircle className="w-10 h-10 text-emerald-500" />
+        </div>
+
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-white mb-2">Successfully Connected!</h2>
+          <p className="text-zinc-400">
+            Your Interactive Brokers account is now linked to Finotaur
+          </p>
+        </div>
+
+        {/* Sync results panel — auto-sync just ran inside handleConnect */}
+        {syncStats && !noActivity && (
+          <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <div>
+                <div className="text-2xl font-bold text-emerald-400">{trades}</div>
+                <div className="text-xs text-zinc-400 mt-1">Trades imported</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-emerald-400">{positions}</div>
+                <div className="text-xs text-zinc-400 mt-1">Open positions</div>
+              </div>
+            </div>
+            <div className="text-[11px] text-zinc-500 mt-3 text-center flex items-center justify-center gap-1.5">
+              <RefreshCw className="w-3 h-3" />
+              Auto-syncs every 4 hours — no action needed
+            </div>
+          </div>
+        )}
+
+        {/* Empty-activity panel — account connected but no trades in last 30 days */}
+        {syncStats && noActivity && (
+          <div className="w-full rounded-xl border border-zinc-700 bg-zinc-800/40 p-4 text-center">
+            <p className="text-sm text-zinc-300">
+              No trades found in the last 30 days.
+            </p>
+            <p className="text-xs text-zinc-500 mt-1">
+              Your account is connected. New activity will appear automatically.
+            </p>
+            <div className="text-[11px] text-zinc-500 mt-2 flex items-center justify-center gap-1.5">
+              <RefreshCw className="w-3 h-3" />
+              Auto-syncs every 4 hours
+            </div>
+          </div>
+        )}
+
+        {/* Done Button */}
+        <button
+          onClick={onClose}
+          className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors font-bold"
+        >
+          Done
+        </button>
       </div>
-
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-white mb-2">Successfully Connected!</h2>
-        <p className="text-zinc-400">
-          Your Interactive Brokers account is now linked to Finotaur
-        </p>
-      </div>
-
-      {/* Sync Button */}
-      <button
-        onClick={handleSyncNow}
-        disabled={loading}
-        className="w-full px-6 py-4 bg-[#C9A646]/10 border border-[#C9A646]/30 rounded-xl flex items-center justify-center gap-3 hover:bg-[#C9A646]/20 transition-colors disabled:opacity-50"
-      >
-        <RefreshCw className={`w-5 h-5 text-[#C9A646] ${loading ? 'animate-spin' : ''}`} />
-        <span className="text-white font-semibold">
-          {loading ? 'Syncing...' : 'Sync Trades Now'}
-        </span>
-      </button>
-
-      {/* Done Button */}
-      <button
-        onClick={onClose}
-        className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors font-bold"
-      >
-        Done
-      </button>
-    </div>
-  );
+    );
+  };
 
   // ============================================================================
   // RENDER - Error View
