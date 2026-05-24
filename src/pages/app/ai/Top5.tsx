@@ -1739,6 +1739,7 @@ function Top5Content() {
                         })}
                       </div>
 
+                  {/* eslint-disable-next-line no-constant-binary-expression */}
                   {false && earningsPicks.length > 0 && (
                     <div>
                       <SectionHeader
@@ -1767,6 +1768,7 @@ function Top5Content() {
                   )}
 
                   {/* ═══ CATALYSTS SECTION ═══ */}
+                  {/* eslint-disable-next-line no-constant-binary-expression */}
                   {false && catalystPicks.length > 0 && (
                     <div className="mt-10">
                       <SectionHeader
