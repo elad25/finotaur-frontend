@@ -48,8 +48,14 @@ const RENEW_AHEAD_MS = 15 * 60 * 1000;
 
 const APP_ID      = 'FINOTAUR';
 const APP_VERSION = '1.0';
-const CID         = 11045;
-const SEC         = Deno.env.get('TRADOVATE_SECRET') ?? '';
+// Unified Tradovate app credentials — Journal=OAuth strategy means one app
+// services both the OAuth flow (oauth-start/callback) and the legacy
+// renewTradovateToken path for existing legacy connections.
+// Source: Supabase Dashboard → Edge Functions → Secrets:
+//   oauth_cid_Journal      = Tradovate Ecosystem app's CID (numeric)
+//   secret_oauth_journal   = Tradovate Ecosystem app's client_secret
+const CID         = parseInt(Deno.env.get('oauth_cid_Journal') ?? '0', 10);
+const SEC         = Deno.env.get('secret_oauth_journal') ?? '';
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
