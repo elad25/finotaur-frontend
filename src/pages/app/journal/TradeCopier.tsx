@@ -518,7 +518,7 @@ const ConnectionsAccordion = memo(function ConnectionsAccordion({
                   </span>
                 </button>
                 <span className="max-lg:hidden">{brokerName}</span>
-                <span className="max-lg:hidden">{activeCount} / 20</span>
+                <span className="max-lg:hidden">{active ? 1 : 0} / 20</span>
                 <span className="text-status-success max-lg:hidden">
                   {formatLastSync(connection.last_successful_sync_at ?? connection.last_sync_at)}
                 </span>
