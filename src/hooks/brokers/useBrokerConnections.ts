@@ -136,6 +136,12 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       const conn = connections.find((c) => c.id === id);
       if (!conn) return { success: false, error: 'Connection not found' };
 
+      // Interactive Brokers reconnect = re-open popup so user re-enters credentials (no OAuth refresh)
+      if (conn.broker === 'interactive_brokers') {
+        toast.info('To reconnect IB, click "Add Broker" → Interactive Brokers and re-enter your Token + Query ID');
+        return { success: false, error: 'manual_reconnect_required', requires_credentials: true };
+      }
+
       // NinjaTrader Web runs on Tradovate cloud, so both share tradovate-auth.
       if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
         toast.error(`Reconnect not yet implemented for ${conn.broker}`);
@@ -185,6 +191,30 @@ export function useBrokerConnections(opts: UseBrokerConnectionsOptions = {}) {
       if (!userId) return { success: false, error: 'Not authenticated' };
       const conn = connections.find((c) => c.id === id);
       if (!conn) return { success: false, error: 'Connection not found' };
+
+      // Interactive Brokers sync via IBRIT edge function.
+      if (conn.broker === 'interactive_brokers') {
+        const { data: sess } = await supabase.auth.getSession();
+        const jwt = sess.session?.access_token;
+        const { data, error: e } = await supabase.functions.invoke('interactive-brokers-sync', {
+          body: { userId, mode: 'manual' },
+          headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+        });
+        if (e) {
+          toast.error('IB sync failed — ' + (e.message || 'unknown'));
+          return { success: false, error: e.message };
+        }
+        invalidate();
+        qc.invalidateQueries({ queryKey: ['trades'] });
+        qc.invalidateQueries({ queryKey: ['dashboard'] });
+        const body = (data ?? {}) as { tradesInserted?: number; positionsCount?: number; error?: string };
+        if (body.error) {
+          toast.error('IB sync: ' + body.error);
+          return { success: false, error: body.error };
+        }
+        toast.success(`IB synced — ${body.tradesInserted ?? 0} trades, ${body.positionsCount ?? 0} positions`);
+        return { success: true };
+      }
 
       // NinjaTrader Web runs on Tradovate cloud, so both share tradovate-sync.
       if (conn.broker !== 'tradovate' && conn.broker !== 'ninja_trader') {
