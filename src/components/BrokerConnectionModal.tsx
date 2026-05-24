@@ -258,8 +258,20 @@ export default function BrokerConnectionModal({ isOpen, onClose }: Props) {
     };
 
   const handlePickBroker = async (broker: BrokerName) => {
-    if (broker === 'tradovate') {
-      setShowTradovateConnect(true);
+    if (broker === 'tradovate' && user) {
+      // OAuth 2.0 path — calls oauth-start edge function for a signed authorize URL.
+      // Falls back to the legacy username/password modal if OAuth start fails
+      // (e.g. dashboard secrets not yet configured).
+      try {
+        const { getTradovateAuthorizationUrl } = await import(
+          '@/lib/brokers/tradovate/tradovate-oauth'
+        );
+        const url = await getTradovateAuthorizationUrl('sandbox');
+        window.location.href = url;
+      } catch (err) {
+        console.error('[BrokerConnectionModal] Tradovate OAuth start failed:', err);
+        setShowTradovateConnect(true);
+      }
       return;
     }
     if (broker === 'interactive_brokers' && user) {

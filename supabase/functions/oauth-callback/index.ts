@@ -24,7 +24,7 @@ import { getBrokerAuthAdapter } from '../_shared/broker-auth/registry.ts';
 import type { BrokerName, BrokerEnvironment } from '../_shared/broker-auth/interface.ts';
 
 const FRONTEND_BASE_URL = 'https://www.finotaur.com';
-const JOURNAL_PATH = '/journal';
+const JOURNAL_PATH = '/app/journal/overview';
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
