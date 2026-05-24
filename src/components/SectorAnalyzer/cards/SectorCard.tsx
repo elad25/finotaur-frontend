@@ -42,19 +42,50 @@ const visualMap: Record<string, string> = {
   XLC: 'radial-gradient(circle at 76% 28%, rgba(218,218,218,0.18), transparent 29%), linear-gradient(135deg, rgba(17,29,39,0.84), rgba(5,6,8,0.56) 62%), linear-gradient(28deg, transparent 44%, rgba(201,166,70,0.12) 45% 47%, transparent 48%)',
 };
 
-const intelligenceMap: Record<string, { holdings: string; momentum: string; sentiment: string; activity: string; cta: string; spark: string }> = {
-  XLK: { holdings: 'NVDA / MSFT / AAPL', momentum: '+2.8%', sentiment: 'Bullish', activity: 'Accumulation', cta: 'Deep Dive', spark: 'M 0 18 L 16 15 L 30 17 L 44 10 L 58 12 L 72 6 L 86 8 L 100 3' },
-  XLV: { holdings: 'LLY / UNH / JNJ', momentum: '+0.9%', sentiment: 'Constructive', activity: 'Rotating In', cta: 'Explore Sector', spark: 'M 0 14 L 14 13 L 28 16 L 42 11 L 56 12 L 70 9 L 84 10 L 100 7' },
-  XLF: { holdings: 'BRK.B / JPM / V', momentum: '+1.4%', sentiment: 'Positive', activity: 'Steady Bid', cta: 'Enter Analysis', spark: 'M 0 16 L 14 14 L 28 13 L 42 12 L 56 9 L 70 10 L 84 8 L 100 6' },
-  XLE: { holdings: 'XOM / CVX / COP', momentum: '+1.9%', sentiment: 'Bullish', activity: 'Flow Rising', cta: 'Deep Dive', spark: 'M 0 15 L 15 17 L 30 12 L 45 13 L 60 8 L 75 10 L 90 5 L 100 6' },
-  XLY: { holdings: 'AMZN / TSLA / HD', momentum: '+0.6%', sentiment: 'Neutral+', activity: 'Selective', cta: 'Explore Sector', spark: 'M 0 13 L 16 14 L 32 12 L 48 15 L 64 11 L 80 12 L 100 9' },
-  XLI: { holdings: 'GE / CAT / RTX', momentum: '+1.1%', sentiment: 'Positive', activity: 'Institutional', cta: 'Enter Analysis', spark: 'M 0 17 L 16 15 L 32 16 L 48 13 L 64 10 L 80 11 L 100 8' },
-  XLB: { holdings: 'LIN / SHW / FCX', momentum: '-0.2%', sentiment: 'Mixed', activity: 'Light Flow', cta: 'Explore Sector', spark: 'M 0 10 L 14 12 L 28 11 L 42 14 L 56 13 L 70 16 L 84 14 L 100 15' },
-  XLU: { holdings: 'NEE / SO / DUK', momentum: '-0.7%', sentiment: 'Defensive', activity: 'Outflow', cta: 'Enter Analysis', spark: 'M 0 8 L 14 9 L 28 11 L 42 10 L 56 13 L 70 15 L 84 14 L 100 17' },
-  XLRE: { holdings: 'PLD / AMT / EQIX', momentum: '+0.3%', sentiment: 'Neutral', activity: 'Stabilizing', cta: 'Deep Dive', spark: 'M 0 14 L 16 15 L 32 13 L 48 14 L 64 12 L 80 12 L 100 10' },
-  XLP: { holdings: 'COST / WMT / PG', momentum: '+0.4%', sentiment: 'Stable', activity: 'Low Beta', cta: 'Explore Sector', spark: 'M 0 14 L 18 13 L 36 13 L 54 12 L 72 12 L 88 10 L 100 11' },
-  XLC: { holdings: 'META / GOOGL / NFLX', momentum: '+2.1%', sentiment: 'Bullish', activity: 'Accumulation', cta: 'Deep Dive', spark: 'M 0 17 L 16 14 L 32 15 L 48 11 L 64 12 L 80 7 L 100 5' },
-};
+const SPARK_UP   = 'M 0 18 L 16 16 L 30 17 L 44 13 L 58 11 L 72 8 L 86 7 L 100 4';
+const SPARK_DOWN = 'M 0 4 L 16 6 L 30 7 L 44 10 L 58 12 L 72 14 L 86 16 L 100 19';
+const SPARK_FLAT = 'M 0 11 L 16 12 L 30 11 L 44 12 L 58 11 L 72 12 L 86 11 L 100 12';
+
+function capitalize(s: string): string {
+  if (!s) return '';
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
+interface SectorIntel {
+  holdings: string;
+  momentum: string;
+  sentiment: string;
+  activity: string;
+  cta: string;
+  spark: string;
+}
+
+function buildSectorIntel(sector: Sector): SectorIntel {
+  const top3 = (sector.topHoldings ?? [])
+    .slice(0, 3)
+    .map(h => h.ticker)
+    .filter(Boolean)
+    .join(' / ');
+
+  const wk = sector.weekChange ?? 0;
+  const momentum = `${wk >= 0 ? '+' : ''}${wk.toFixed(1)}%`;
+
+  const sentiment = capitalize(sector.sentiment ?? 'neutral');
+
+  const flowSignal = sector.moneyFlow?.signal;
+  const activity = flowSignal ? capitalize(flowSignal) : 'Neutral';
+
+  const spark = wk > 0.5 ? SPARK_UP : wk < -0.5 ? SPARK_DOWN : SPARK_FLAT;
+
+  return {
+    holdings: top3 || '—',
+    momentum,
+    sentiment: sentiment || 'Neutral',
+    activity,
+    cta: 'Explore',
+    spark,
+  };
+}
 
 const descriptionMap: Record<string, string> = {
   XLK: 'Innovation & Growth',
@@ -79,7 +110,7 @@ interface SectorCardProps {
 export const SectorCard = memo<SectorCardProps>(({ sector, onClick, index }) => {
   const Icon = useMemo(() => getSectorIcon(sector.icon), [sector.icon]);
   const visual = visualMap[sector.ticker] ?? visualMap.XLK;
-  const intel = intelligenceMap[sector.ticker] ?? intelligenceMap.XLK;
+  const intel = useMemo(() => buildSectorIntel(sector), [sector]);
 
   return (
     <motion.button
