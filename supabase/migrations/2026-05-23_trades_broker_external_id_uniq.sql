@@ -1,0 +1,27 @@
+-- ════════════════════════════════════════════════════════════════════════════
+-- trades (broker, external_id) unique index — NO-OP: already covered
+-- Session: copilot-ib-oauth (2026-05-23)
+-- ════════════════════════════════════════════════════════════════════════════
+--
+-- Originally planned: CREATE UNIQUE INDEX trades_broker_external_id_uniq
+--   ON public.trades (broker, external_id) WHERE external_id IS NOT NULL
+--
+-- NOT NEEDED. Two equivalent unique indexes already exist in production
+-- (verified via CURRENT_SCHEMA.sql):
+--
+--   idx_trades_external_id_not_null:
+--     UNIQUE (user_id, broker, external_id) WHERE external_id IS NOT NULL
+--
+--   idx_trades_external_id_unique:
+--     UNIQUE (user_id, broker, external_id) WHERE external_id IS NOT NULL
+--
+-- The ibSync.service.js and interactive-brokers-sync edge function use
+-- onConflict: 'user_id,broker,external_id' — matching the column set
+-- of those indexes exactly.
+--
+-- Adding a (broker, external_id) index without user_id would allow a
+-- user to conflict on another user's trade, which is incorrect.
+-- The (user_id, broker, external_id) indexes are the right shape.
+-- ════════════════════════════════════════════════════════════════════════════
+
+SELECT 1; -- no-op placeholder so Supabase migration runner treats this file as applied

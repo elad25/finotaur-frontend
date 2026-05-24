@@ -14,14 +14,14 @@ import IBConnectionPopup from '@/components/brokers/IBConnectionPopup';
 import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
-import { usePortfolioMockData, TimeRange } from './hooks/usePortfolioMockData';
+import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
 
 const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
 export function FinotaurCopilotDashboard() {
   const [range, setRange] = useState<TimeRange>('1Y');
   const [showBrokerPopup, setShowBrokerPopup] = useState(false);
-  const snapshot = usePortfolioMockData(range);
+  const snapshot = usePortfolioData(range);
 
   return (
     <div className="min-h-screen bg-[#030302] text-ink-primary relative overflow-hidden">

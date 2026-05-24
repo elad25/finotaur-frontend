@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { HoldingsTable } from './components/HoldingsTable';
-import { usePortfolioMockData } from './hooks/usePortfolioMockData';
+import { usePortfolioData } from './hooks/usePortfolioData';
 import { getCompanyLogo } from './utils/companyLogo';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -746,7 +746,7 @@ function MacroSparkline({ index }: { index: number }) {
 }
 
 export function CopilotHoldingsPage() {
-  const snapshot = usePortfolioMockData('1Y');
+  const snapshot = usePortfolioData('1Y');
 
   return (
     <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>

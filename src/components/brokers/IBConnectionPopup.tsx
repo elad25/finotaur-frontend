@@ -2,7 +2,7 @@
 // 🏦 Interactive Brokers IBRIT Connection Component
 // Guides users through connecting their IB account via IBRIT
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   X,
   Loader2,
@@ -16,7 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { ibTradeSyncService } from '@/services/brokers/interactive-brokers/ibTradeSync.service';
+import { supabase } from '@/lib/supabase';
 
 // ============================================================================
 // TYPES
@@ -57,37 +57,51 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
   // ============================================================================
 
   const handleConnect = async () => {
-    if (!user) {
-      setError('Please sign in to connect your broker');
-      return;
-    }
-
-    if (!token.trim() || !queryId.trim()) {
-      setError('Please enter both Token and Query ID');
-      return;
-    }
+    if (!user) { setError('Please sign in to connect your broker'); return; }
+    if (!token.trim() || !queryId.trim()) { setError('Please enter both Token and Query ID'); return; }
 
     setView('connecting');
     setError('');
 
     try {
-      const newConnectionId = await ibTradeSyncService.createConnection(
-        user.id,
-        {
-          token: token.trim(),
-          queryId: queryId.trim(),
-          serviceCode: 'Finotaur-ws', // Will be replaced with actual code from IB
-        }
-      );
+      // 1. Upsert broker_connections row (user_id + broker UNIQUE)
+      const { data: conn, error: insertErr } = await supabase
+        .from('broker_connections')
+        .upsert({
+          user_id: user.id,
+          broker: 'interactive_brokers',
+          status: 'pending',
+          is_active: true,
+          connected_at: new Date().toISOString(),
+          connection_data: {
+            integration_type: 'ibrit',
+            token: token.trim(),
+            query_id: queryId.trim(),
+            service_code: 'finotaur-ws',
+          },
+        }, { onConflict: 'user_id,broker' })
+        .select('id')
+        .single();
 
-      setConnectionId(newConnectionId);
+      if (insertErr || !conn) throw new Error(insertErr?.message || 'Failed to save connection');
+
+      // 2. Trigger first sync via edge function
+      const { data: sess } = await supabase.auth.getSession();
+      const jwt = sess.session?.access_token;
+      const { data: syncResult, error: syncErr } = await supabase.functions.invoke('interactive-brokers-sync', {
+        body: { userId: user.id, mode: 'manual' },
+        headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+      });
+
+      if (syncErr) throw new Error(syncErr.message || 'Sync failed');
+      // syncResult shape: { ok: true, tradesInserted, positionsCount } OR { error: '...' }
+      if (syncResult?.error) throw new Error(syncResult.error);
+
+      setConnectionId(conn.id);
       setView('success');
-
-      if (onSuccess) {
-        onSuccess(newConnectionId);
-      }
+      if (onSuccess) onSuccess(conn.id);
     } catch (err: any) {
-      console.error('IB connection error:', err);
+      console.error('IB IBRIT connection error:', err);
       setError(err.message || 'Failed to connect to Interactive Brokers');
       setView('error');
     }
@@ -104,10 +118,17 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
 
     setLoading(true);
     try {
-      const result = await ibTradeSyncService.triggerManualSync(user.id, connectionId, 30);
-      
-      if (result.success) {
-        console.log(`✅ Synced ${result.tradesImported} trades`);
+      const { data: sess } = await supabase.auth.getSession();
+      const jwt = sess.session?.access_token;
+      const { data, error: syncErr } = await supabase.functions.invoke('interactive-brokers-sync', {
+        body: { userId: user.id, mode: 'manual' },
+        headers: jwt ? { Authorization: `Bearer ${jwt}` } : undefined,
+      });
+      if (syncErr) {
+        console.error('Sync error:', syncErr);
+      } else {
+        const body = (data ?? {}) as { tradesInserted?: number };
+        console.log(`Synced ${body.tradesInserted ?? 0} trades`);
       }
     } catch (err: any) {
       console.error('Sync error:', err);
@@ -182,10 +203,11 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
               2
             </div>
             <div className="flex-1">
-              <p className="mb-2 text-sm font-medium text-white">Enable Finotaur reporting</p>
+              <p className="mb-2 text-sm font-medium text-white">Find Finotaur in Third-Party Reports</p>
               <p className="text-xs text-zinc-400">
-                Settings &gt; Third-Party Reports &gt; Third-Party Services &gt; Finotaur
+                In the Portal menu, select <strong className="text-zinc-300">Reporting</strong> OR <strong className="text-zinc-300">Performance &amp; Reports</strong> → <strong className="text-zinc-300">Third-Party Reports</strong> → <strong className="text-zinc-300">Third-Party Data Feeds &gt; Finotaur (ws)</strong>
               </p>
+              <p className="mt-1 text-xs text-zinc-500">Your Token and Query ID will be displayed there.</p>
             </div>
           </div>
         </div>
