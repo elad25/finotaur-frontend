@@ -487,15 +487,15 @@ function AppContent() {
           <Route path="macro/sentiment" element={<LockedRoute domainId="macro"><MacroSentiment /></LockedRoute>} />
           <Route path="macro/news" element={<LockedRoute domainId="macro"><MacroNews /></LockedRoute>} />
           
-          {/* AI */}
-          <Route path="ai/copilot" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
-          <Route path="ai/copilot/top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
-          <Route path="ai/copilot/macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
-          <Route path="ai/copilot/ai-analyst" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIAnalystPage /></BetaRoute>} />
-          <Route path="ai/copilot/holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
-          <Route path="ai/copilot/risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
-          <Route path="ai/copilot/ai-chat" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIChatPage /></BetaRoute>} />
-          <Route path="ai/my-portfolio" element={<Navigate to="/app/ai/copilot" replace />} />
+          {/* AI — legacy /app/ai/copilot/* routes redirect to /copilot/* standalone shell */}
+          <Route path="ai/copilot" element={<Navigate to="/copilot" replace />} />
+          <Route path="ai/copilot/top-opportunities" element={<Navigate to="/copilot/top-opportunities" replace />} />
+          <Route path="ai/copilot/macro" element={<Navigate to="/copilot/macro" replace />} />
+          <Route path="ai/copilot/ai-analyst" element={<Navigate to="/copilot/ai-analyst" replace />} />
+          <Route path="ai/copilot/holdings" element={<Navigate to="/copilot/holdings" replace />} />
+          <Route path="ai/copilot/risks" element={<Navigate to="/copilot/risks" replace />} />
+          <Route path="ai/copilot/ai-chat" element={<Navigate to="/copilot/ai-chat" replace />} />
+          <Route path="ai/my-portfolio" element={<Navigate to="/copilot" replace />} />
           <Route path="ai/stock-analyzer" element={<SuspenseRoute><AIStockAnalyzer /></SuspenseRoute>} />
           <Route path="ai/sector-analyzer" element={<SuspenseRoute><AISectorAnalyzer /></SuspenseRoute>} />
           <Route path="ai/macro-analyzer" element={<SuspenseRoute><AIMacroAnalyzer /></SuspenseRoute>} />
