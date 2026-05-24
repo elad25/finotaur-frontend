@@ -26,9 +26,55 @@ import { TopDownTab } from '@/components/SectorAnalyzer/tabs/TopDownTab';
 import { RisksTab } from '@/components/SectorAnalyzer/tabs/RisksTab';
 
 // Data & Types
-import { sectors } from '@/components/SectorAnalyzer/data';
-import { Sector, TabType } from '@/components/SectorAnalyzer/types';
-import { useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
+import { sectorMetadata, defaultBreakoutCandidate } from '@/components/SectorAnalyzer/data';
+import { Sector, TabType, SentimentType } from '@/components/SectorAnalyzer/types';
+import { useAllSectorAnalysis, useSectorAnalysis, sectorNameToId } from '@/hooks/useSectorAnalysis';
+import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
+
+// =====================================================
+// 🔄 SectorSnapshot (Supabase) → Sector (component shape) adapter
+// Snapshot fields come from `sector_snapshots` (cron-cached, 4x/day).
+// UI-only fields (icon, description, companies) come from sectorMetadata.
+// =====================================================
+function snapshotToSector(snap: SectorSnapshot): Sector {
+  const meta = sectorMetadata[snap.id];
+  return {
+    id: snap.id,
+    name: snap.sector_name,
+    ticker: snap.ticker,
+    icon: meta?.icon ?? 'Cpu',
+    description: meta?.description ?? '',
+    companies: meta?.companies ?? 0,
+    price: snap.price ?? 0,
+    changePercent: snap.change_percent ?? 0,
+    weekChange: snap.week_change ?? 0,
+    monthChange: snap.month_change ?? 0,
+    ytdChange: snap.ytd_change ?? 0,
+    momentum: snap.momentum ?? 0,
+    relativeStrength: snap.relative_strength ?? 0,
+    sentiment: (snap.sentiment as SentimentType) ?? 'neutral',
+    beta: snap.beta ?? 1,
+    marketCap: snap.market_cap ?? '',
+    spWeight: snap.sp_weight ?? 0,
+    etfs: [],
+    topHoldings: Array.isArray(snap.top_holdings) ? (snap.top_holdings as Sector['topHoldings']) : [],
+    correlations: Array.isArray(snap.correlations) ? (snap.correlations as Sector['correlations']) : [],
+    macroSensitivity: Array.isArray(snap.macro_sensitivity) ? (snap.macro_sensitivity as Sector['macroSensitivity']) : [],
+    industryTrends: [],
+    risks: Array.isArray(snap.risks) ? (snap.risks as Sector['risks']) : [],
+    breakoutCandidate: (snap.breakout_candidate as Sector['breakoutCandidate']) ?? defaultBreakoutCandidate,
+    tradeIdeas: Array.isArray(snap.trade_ideas) ? (snap.trade_ideas as Sector['tradeIdeas']) : [],
+    verdict: (snap.verdict as Sector['verdict']) ?? undefined,
+    vsMarket: ((snap.vsMarket ?? snap.vs_market) as Sector['vsMarket']) ?? [],
+    fundamentals: (snap.fundamentals as Sector['fundamentals']) ?? undefined,
+    moneyFlow: (snap.money_flow as Sector['moneyFlow']) ?? undefined,
+    earningsCalendar: (snap.earnings_calendar as Sector['earningsCalendar']) ?? [],
+    subSectors: (snap.sub_sectors as Sector['subSectors']) ?? [],
+    intraSectorCorrelation: (snap.intra_sector_correlation as Sector['intraSectorCorrelation']) ?? undefined,
+    correlationBreakers: (snap.correlation_breakers as Sector['correlationBreakers']) ?? [],
+    pairsTrades: (snap.pairs_trades as Sector['pairsTrades']) ?? [],
+  };
+}
 
 // =====================================================
 // 📊 SECTOR ANALYSIS VIEW
@@ -116,6 +162,9 @@ SectorAnalysisView.displayName = 'SectorAnalysisView';
 
 interface HomeViewProps {
   onSelectSector: (sector: Sector) => void;
+  sectors: Sector[];
+  isLoading: boolean;
+  isError: boolean;
 }
 
 const trustItems = [
@@ -124,7 +173,7 @@ const trustItems = [
   { label: 'Actionable Insights', hint: 'Make smarter decisions', icon: Zap },
 ];
 
-const HomeView = memo<HomeViewProps>(({ onSelectSector }) => (
+const HomeView = memo<HomeViewProps>(({ onSelectSector, sectors, isLoading, isError }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -161,7 +210,21 @@ const HomeView = memo<HomeViewProps>(({ onSelectSector }) => (
     </motion.div>
 
     {/* Sector Grid */}
-    <SectorGrid sectors={sectors} onSelectSector={onSelectSector} />
+    {isLoading ? (
+      <div className="flex w-full max-w-[1224px] items-center justify-center py-24">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+      </div>
+    ) : isError ? (
+      <div className="w-full max-w-[1224px] py-16 text-center">
+        <p className="text-[13px] text-ink-secondary">Unable to load sector data. Please refresh the page.</p>
+      </div>
+    ) : sectors.length === 0 ? (
+      <div className="w-full max-w-[1224px] py-16 text-center">
+        <p className="text-[13px] text-ink-secondary">Sector data is loading — please refresh in a moment.</p>
+      </div>
+    ) : (
+      <SectorGrid sectors={sectors} onSelectSector={onSelectSector} />
+    )}
 
     {/* Footer */}
     <motion.div
@@ -198,6 +261,12 @@ HomeView.displayName = 'HomeView';
 function SectorAnalyzerContent() {
   const [selectedSector, setSelectedSector] = useState<Sector | null>(null);
   const { recordSectorAnalysis, plan } = usePlatformAccess();
+  const { data: allAnalysis, isLoading: sectorsLoading, isError: sectorsError } = useAllSectorAnalysis();
+
+  const sectors = useMemo<Sector[]>(
+    () => (allAnalysis?.sectors ?? []).map(snapshotToSector),
+    [allAnalysis],
+  );
 
   const handleSelectSector = useCallback(async (sector: Sector) => {
     if (plan === 'platform_core') {
@@ -503,7 +572,13 @@ function SectorAnalyzerContent() {
               onBack={handleBack}
             />
           ) : (
-            <HomeView key="home" onSelectSector={handleSelectSector} />
+            <HomeView
+              key="home"
+              onSelectSector={handleSelectSector}
+              sectors={sectors}
+              isLoading={sectorsLoading}
+              isError={sectorsError}
+            />
           )}
         </AnimatePresence>
       </div>
