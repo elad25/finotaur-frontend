@@ -15,9 +15,10 @@ import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
+import type { PortfolioSnapshot } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 
-const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
+// Time-range list lives inside PerformanceChart now.
 
 export function FinotaurCopilotDashboard() {
   const [range, setRange] = useState<TimeRange>('1Y');
@@ -70,18 +71,18 @@ export function FinotaurCopilotDashboard() {
         </div>
 
         <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
-          <PortfolioValuePanel className="xl:col-span-4" range={range} />
+          <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} isConnected={ib.isConnected} />
           <AiBrainPanel className="xl:col-span-4" />
           <InsightsPanel className="xl:col-span-4" />
 
           <div className="xl:col-span-8">
-            <PerformanceChart series={snapshot.series} />
+            <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
           </div>
           <div className="xl:col-span-4">
             <TopOpportunitiesPanel />
           </div>
 
-          <AllocationPanel className="xl:col-span-4" />
+          <AllocationPanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
           <SectorExposurePanel className="xl:col-span-4" />
           <RiskAnalysisPanel className="xl:col-span-4" />
         </div>
@@ -132,7 +133,26 @@ function PremiumFrame({ children, className = '' }: { children: ReactNode; class
   );
 }
 
-function PortfolioValuePanel({ className, range }: { className?: string; range: TimeRange }) {
+function PortfolioValuePanel({
+  className,
+  range,
+  snapshot,
+  isConnected,
+}: {
+  className?: string;
+  range: TimeRange;
+  snapshot: PortfolioSnapshot;
+  isConnected: boolean;
+}) {
+  // Sum all CASH-class holdings to derive cash balance.
+  // assetClass is carried on Holding when sourced from IBRIT; absent on mock holdings.
+  const cashBalance = snapshot.holdings
+    .filter((h) => h.assetClass === 'CASH')
+    .reduce((sum, h) => sum + h.marketValue, 0);
+  // Buying power = cash balance for cash-only accounts.
+  // TODO: when margin data is available from IB account summary, add margin here.
+  const buyingPower = cashBalance;
+
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
       <div className="p-5 h-full grid grid-rows-[1fr_auto]">
@@ -142,18 +162,22 @@ function PortfolioValuePanel({ className, range }: { className?: string; range: 
             <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
           </div>
           <Price
-            value={1247842.35}
+            value={isConnected ? snapshot.totalValue : 1247842.35}
             size="display"
             className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
           />
           <div className="mt-6 grid grid-cols-2 gap-5">
-            <Stat label="24H CHANGE" value={<Change value={2.34} />} sub={<Change value={28472.11} format="currency" />} />
-            <MiniReturn />
+            <Stat
+              label="24H CHANGE"
+              value={isConnected ? <span className="text-ink-tertiary">—</span> : <Change value={2.34} />}
+              sub={isConnected ? null : <Change value={28472.11} format="currency" />}
+            />
+            <MiniReturn changePercent={snapshot.changePercent} isConnected={isConnected} />
           </div>
         </div>
         <div className="grid grid-cols-2 border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="CASH BALANCE" value={<Price value={87432.21} size="small" />} />
-          <Stat label="BUYING POWER" value={<Price value={163210.09} size="small" />} />
+          <Stat label="CASH BALANCE" value={<Price value={isConnected ? cashBalance : 87432.21} size="small" />} />
+          <Stat label="BUYING POWER" value={<Price value={isConnected ? buyingPower : 163210.09} size="small" />} />
         </div>
         <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
       </div>
@@ -161,7 +185,7 @@ function PortfolioValuePanel({ className, range }: { className?: string; range: 
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
+function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode | null }) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">{label}</p>
@@ -171,12 +195,13 @@ function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: Re
   );
 }
 
-function MiniReturn() {
+function MiniReturn({ changePercent, isConnected }: { changePercent?: number; isConnected?: boolean }) {
+  const display = isConnected ? (changePercent ?? 0) : 24.67;
   return (
     <div>
       <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">ALL TIME RETURN</p>
       <p className="mt-2 text-sm leading-none">
-        <Change value={24.67} />
+        <Change value={display} />
       </p>
       <svg viewBox="0 0 120 28" className="mt-2 h-7 w-28 text-gold-primary">
         <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -303,14 +328,59 @@ function TickerMark({ ticker }: { ticker: string }) {
   return <div className={`h-8 w-8 flex items-center justify-center font-black ${color}`}>{ticker.slice(0, 1)}</div>;
 }
 
-function AllocationPanel({ className }: { className?: string }) {
-  const rows = [
+/** Map IB AssetClass codes to human-readable display labels for the allocation panel. */
+function bucketAssetClass(cls: string | undefined): string {
+  const c = (cls || '').toUpperCase();
+  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'EQUITIES';
+  if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS') return 'OPTIONS';
+  if (c === 'FUT' || c === 'FUTURES') return 'FUTURES';
+  if (c === 'BOND' || c === 'BONDS') return 'BONDS';
+  if (c === 'CASH' || c === 'FOREX') return 'CASH';
+  if (c === 'CMDTY' || c === 'COMMODITIES') return 'COMMODITIES';
+  return 'OTHER';
+}
+
+function AllocationPanel({
+  className,
+  snapshot,
+  isConnected,
+}: {
+  className?: string;
+  snapshot: PortfolioSnapshot;
+  isConnected: boolean;
+}) {
+  const mockRows: Array<[string, string]> = [
     ['EQUITIES', '68.4%'],
     ['ETFs', '15.7%'],
     ['BONDS', '7.3%'],
     ['CASH', '5.6%'],
     ['OTHER', '2.0%'],
   ];
+
+  let rows: Array<[string, string]> = mockRows;
+  let totalDisplay = '$1.25M';
+
+  if (isConnected) {
+    const total = snapshot.totalValue || 1;
+    const groups = new Map<string, number>();
+    for (const h of snapshot.holdings) {
+      const label = bucketAssetClass(h.assetClass);
+      groups.set(label, (groups.get(label) || 0) + h.marketValue);
+    }
+    rows = Array.from(groups.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, val]) => [label, `${((val / total) * 100).toFixed(1)}%`]);
+    if (rows.length === 0) rows = [['CASH', '100.0%']]; // defensive: empty holdings
+    // Format total value compactly
+    if (snapshot.totalValue >= 1_000_000) {
+      totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
+    } else if (snapshot.totalValue >= 10_000) {
+      totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
+    } else {
+      totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
+    }
+  }
+
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
@@ -318,7 +388,7 @@ function AllocationPanel({ className }: { className?: string }) {
         <div className="mt-4 flex items-center gap-5">
           <div className="relative h-28 w-28 rounded-full bg-[conic-gradient(#f4d97b_0_34%,#c9a646_34%_68%,rgba(201,166,70,0.52)_68%_84%,rgba(255,255,255,0.13)_84%_100%)] p-4">
             <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
-              <span className="font-mono text-sm text-gold-primary">$1.25M</span>
+              <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
               <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
             </div>
           </div>

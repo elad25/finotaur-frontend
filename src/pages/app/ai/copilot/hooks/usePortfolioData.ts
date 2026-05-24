@@ -15,6 +15,30 @@ import { usePortfolioMockData } from './usePortfolioMockData';
 export type { TimeRange, Holding, PerformancePoint, PortfolioSnapshot } from './usePortfolioMockData';
 import type { TimeRange, Holding, PerformancePoint, PortfolioSnapshot } from './usePortfolioMockData';
 
+// ─── Series helpers ──────────────────────────────────────────────────────────
+
+const RANGE_DAYS: Record<TimeRange, number> = {
+  '1M': 30, '3M': 90, '6M': 180, 'YTD': 130, '1Y': 365, 'ALL': 730,
+};
+
+/**
+ * Generates a flat series at `totalValue` for the selected range.
+ * Used when we have a real portfolio value but no historical time series
+ * (IB gateway doesn't return trade history in the snapshot).
+ * TODO future: replace with real trade-history time series from IB.
+ */
+function makeFlatSeries(totalValue: number, range: TimeRange): PerformancePoint[] {
+  const days = RANGE_DAYS[range];
+  const today = new Date();
+  const points: PerformancePoint[] = [];
+  for (let i = days; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    points.push({ date: d.toISOString().slice(0, 10), value: totalValue });
+  }
+  return points;
+}
+
 // ─── IBRIT position shape (written by interactive-brokers-sync edge fn v2) ──
 
 interface IBRITPosition {
@@ -90,6 +114,7 @@ function mapIBRITPositionToHolding(pos: IBRITPosition): Holding {
     marketValue,
     unrealizedPnl,
     unrealizedPnlPercent: costBasis > 0 ? (unrealizedPnl / costBasis) * 100 : 0,
+    assetClass: pos.AssetClass || 'UNKNOWN',
   };
 }
 
@@ -103,13 +128,15 @@ function buildSnapshot(
   holdings: Holding[],
   accountSummary: IBAccountSummary | undefined,
   lastSyncAt: string | null,
+  range: TimeRange,
 ): PortfolioSnapshot {
   const sumMarketValue = holdings.reduce((sum, h) => sum + h.marketValue, 0);
   const totalValue = accountSummary?.netliquidation?.amount ?? sumMarketValue;
 
-  // TODO: derive series from trade history when range !== current snapshot
-  const series: PerformancePoint[] =
-    lastSyncAt ? [{ date: lastSyncAt.slice(0, 10), value: totalValue }] : [];
+  // Flat series at current totalValue for the selected range.
+  // A flat line is honest: we have one snapshot point, not a real time series.
+  // TODO: replace with real trade-history time series from IB when available.
+  const series: PerformancePoint[] = makeFlatSeries(totalValue, range);
 
   const changeAbs = holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
   const costBase = totalValue - changeAbs;
@@ -148,8 +175,8 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
     const holdings = transformPositions(positions);
     const accountSummary = ibRow?.connection_data?.last_account_summary;
     const lastSyncAt = ibRow?.last_sync_at ?? ibLastSyncAt;
-    const snapshot = buildSnapshot(holdings, accountSummary, lastSyncAt);
+    const snapshot = buildSnapshot(holdings, accountSummary, lastSyncAt, range);
 
     return { ...snapshot, source: 'live', lastSyncAt };
-  }, [isConnected, ibLoading, queryLoading, mockSnapshot, ibRow, ibLastSyncAt]);
+  }, [isConnected, ibLoading, queryLoading, mockSnapshot, ibRow, ibLastSyncAt, range]);
 }

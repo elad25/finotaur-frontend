@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/ds/Card';
-import { PerformancePoint } from '../hooks/usePortfolioMockData';
+import { PerformancePoint, TimeRange } from '../hooks/usePortfolioMockData';
 import { cn } from '@/lib/utils';
 
 interface Props {
   series: PerformancePoint[];
+  range?: TimeRange;
+  onRangeChange?: (r: TimeRange) => void;
 }
+
+const RANGES: TimeRange[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
 
 type Mode = 'dollar' | 'percent';
 
@@ -13,7 +17,7 @@ const CHART_WIDTH = 760;
 const CHART_HEIGHT = 286;
 const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
 
-export function PerformanceChart({ series }: Props) {
+export function PerformanceChart({ series, range, onRangeChange }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
 
   const chart = useMemo(() => {
@@ -27,13 +31,13 @@ export function PerformanceChart({ series }: Props) {
     );
     const min = Math.min(...values);
     const max = Math.max(...values);
-    const range = max - min || 1;
+    const valueRange = max - min || 1;
     const innerWidth = CHART_WIDTH - PADDING.left - PADDING.right;
     const innerHeight = CHART_HEIGHT - PADDING.top - PADDING.bottom;
 
     const coords = values.map((value, index) => {
       const x = PADDING.left + (index / Math.max(values.length - 1, 1)) * innerWidth;
-      const y = PADDING.top + (1 - (value - min) / range) * innerHeight;
+      const y = PADDING.top + (1 - (value - min) / valueRange) * innerHeight;
       return [x, y] as const;
     });
 
@@ -42,7 +46,7 @@ export function PerformanceChart({ series }: Props) {
     const last = coords[coords.length - 1];
     const baseline = CHART_HEIGHT - PADDING.bottom;
     const areaPath = `${path} L${last[0].toFixed(1)} ${baseline} L${first[0].toFixed(1)} ${baseline} Z`;
-    const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + range * ratio);
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => min + valueRange * ratio);
 
     return { path, areaPath, ticks, min, max };
   }, [series, mode]);
@@ -52,46 +56,85 @@ export function PerformanceChart({ series }: Props) {
     return `$${(value / 1000).toFixed(0)}k`;
   };
 
+  const cardShell = 'relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]';
+
+  const rangeButtons = (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] uppercase text-ink-tertiary">
+      <span className="mr-2">TIME RANGE</span>
+      {RANGES.map((label) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => onRangeChange?.(label)}
+          className={cn(
+            'rounded-[4px] px-2 py-1 transition-colors',
+            range === label
+              ? 'border border-gold-primary/28 bg-gold-primary/10 text-gold-primary'
+              : 'border border-transparent text-ink-tertiary hover:text-gold-primary hover:border-gold-primary/15'
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const modeToggle = (
+    <div className="flex items-center gap-1 p-1 rounded-[8px] bg-black/35 border border-gold-primary/15">
+      <button
+        onClick={() => setMode('dollar')}
+        className={cn(
+          'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
+          mode === 'dollar' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
+        )}
+      >
+        $
+      </button>
+      <button
+        onClick={() => setMode('percent')}
+        className={cn(
+          'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
+          mode === 'percent' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
+        )}
+      >
+        %
+      </button>
+    </div>
+  );
+
+  // Empty-series guard: show placeholder but keep header + range buttons visible.
+  if (series.length === 0) {
+    return (
+      <Card className={cardShell}>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(135deg,rgba(244,217,123,0.065),transparent_32%,rgba(201,166,70,0.025))]" />
+        <div className="relative">
+          <div className="flex items-start justify-between mb-4 gap-4">
+            <div>
+              <h2 className="text-[13px] font-normal uppercase text-gold-primary">PERFORMANCE</h2>
+              {rangeButtons}
+            </div>
+            {modeToggle}
+          </div>
+          <div className="flex h-[286px] items-center justify-center text-sm text-ink-tertiary">
+            Connect a broker to see your performance chart
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   return (
-    <Card className="relative overflow-hidden rounded-[7px] bg-[#070604]/92 border-gold-primary/20 shadow-[0_24px_70px_rgba(0,0,0,0.48)]">
+    <Card className={cardShell}>
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-primary/70 to-transparent" />
       <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(135deg,rgba(244,217,123,0.065),transparent_32%,rgba(201,166,70,0.025))]" />
       <div className="relative">
         <div className="flex items-start justify-between mb-4 gap-4">
           <div>
             <h2 className="text-[13px] font-normal uppercase text-gold-primary">PERFORMANCE</h2>
-            <div className="mt-3 flex flex-wrap items-center gap-4 text-[10px] uppercase text-ink-tertiary">
-              <span>TIME RANGE</span>
-              {['1D', '1W', '1M', '3M', '6M', '1Y', 'YTD', 'ALL'].map((label) => (
-                <span
-                  key={label}
-                  className={label === '1Y' ? 'rounded-[4px] border border-gold-primary/28 bg-gold-primary/10 px-2 py-1 text-gold-primary' : ''}
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
+            {rangeButtons}
           </div>
-          <div className="flex items-center gap-1 p-1 rounded-[8px] bg-black/35 border border-gold-primary/15">
-            <button
-              onClick={() => setMode('dollar')}
-              className={cn(
-                'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
-                mode === 'dollar' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
-              )}
-            >
-              $
-            </button>
-            <button
-              onClick={() => setMode('percent')}
-              className={cn(
-                'px-3 py-1 text-xs font-medium rounded-[5px] transition-colors',
-                mode === 'percent' ? 'bg-gold-primary/18 text-gold-primary' : 'text-ink-secondary hover:text-ink-primary'
-              )}
-            >
-              %
-            </button>
-          </div>
+          {modeToggle}
         </div>
 
         <svg className="h-[286px] w-full overflow-visible" viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} role="img" aria-label="Portfolio performance chart">
@@ -149,6 +192,7 @@ export function PerformanceChart({ series }: Props) {
           <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
 
+        {/* TODO: wire RETURN/ALPHA/SHARPE/DRAWDOWN/VOLATILITY/WINNING DAYS to real IB data when trade history API is available */}
         <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
           {[
             ['RETURN (1Y)', '+24.67%', 'text-emerald-300'],

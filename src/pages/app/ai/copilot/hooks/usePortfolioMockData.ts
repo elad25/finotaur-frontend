@@ -19,6 +19,8 @@ export interface Holding {
   marketValue: number;
   unrealizedPnl: number;       // dollars
   unrealizedPnlPercent: number; // percent (e.g. 12.5 = +12.5%)
+  /** IB AssetClass code: 'STK', 'OPT', 'CASH', 'FUT', 'BOND', etc. Absent on mock holdings. */
+  assetClass?: string;
 }
 
 export interface PerformancePoint {
