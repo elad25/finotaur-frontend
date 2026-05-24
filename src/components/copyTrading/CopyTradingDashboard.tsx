@@ -69,10 +69,10 @@ const POPULAR_CONTRACTS = [
 ] as const;
 
 // ─── Table column grid (shared by header + rows) ──────────────
-// 13 cols: crown · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
+// 14 cols: leader-radio · follow · connection · account · symbol · ratio · cross · position · balance · dayPnL · openPnL · qty · actions
 
 const GRID_COLS =
-  'grid-cols-[40px_60px_120px_minmax(160px,1fr)_80px_80px_60px_90px_100px_100px_100px_60px_80px]';
+  'grid-cols-[56px_60px_120px_minmax(160px,1fr)_80px_80px_60px_90px_100px_100px_100px_60px_80px]';
 
 // ─── Internal AccountRow ──────────────────────────────────────
 
@@ -83,6 +83,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
   onFlatten,
   onUpdateRule,
   onToggleFollow,
+  onSelectLeader,
   canFollow,
 }: {
   row: AccountRowData;
@@ -91,6 +92,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
   onFlatten: () => void;
   onUpdateRule: (patch: Partial<CopyRule>) => Promise<void>;
   onToggleFollow: () => Promise<void>;
+  onSelectLeader: () => void;
   canFollow: boolean;
 }) {
   const ratioValue = rule?.ratio ?? 1;
@@ -102,9 +104,18 @@ const CopyAccountRow = memo(function CopyAccountRow({
     <div
       className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-3 border-b border-border-ds-subtle last:border-b-0 hover:bg-surface-2 transition-colors duration-base`}
     >
-      {/* Crown col */}
-      <div className="flex items-center justify-center">
-        {isLeader && <Crown className="w-4 h-4 text-gold-primary" />}
+      {/* Leader radio col */}
+      <div className="flex items-center justify-center gap-ds-1">
+        <input
+          type="radio"
+          name="leader-select"
+          checked={isLeader}
+          onChange={onSelectLeader}
+          title="Set as leader"
+          aria-label={`Set ${row.accountName} as leader`}
+          className="h-3.5 w-3.5 cursor-pointer accent-gold-primary"
+        />
+        {isLeader && <Crown className="w-3.5 h-3.5 text-gold-primary flex-shrink-0" />}
       </div>
 
       {/* Follow toggle */}
@@ -145,11 +156,6 @@ const CopyAccountRow = memo(function CopyAccountRow({
           }`}
         />
         <span className="text-sm text-ink-primary truncate">{row.accountName}</span>
-        {isLeader && (
-          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-sm bg-gold-primary/10 border border-gold-border text-gold-primary">
-            Leader
-          </span>
-        )}
       </div>
 
       {/* Symbol */}
@@ -639,26 +645,6 @@ export function CopyTradingDashboard() {
         </div>
 
         <div className="flex items-center gap-ds-2">
-          {/* ── Leader dropdown ── */}
-          {tradovateConnections.length > 0 && (
-            <div className="flex items-center gap-ds-2 rounded-md border border-gold-border bg-surface-1 px-ds-3 py-ds-1.5">
-              <Crown className="h-3.5 w-3.5 text-gold-primary" />
-              <span className="text-[10px] uppercase tracking-wider text-ink-secondary">Leader</span>
-              <select
-                value={leaderId ?? ''}
-                onChange={(e) => setLeaderId(e.target.value || null)}
-                className="h-7 cursor-pointer rounded border-0 bg-transparent pr-1 text-sm text-ink-primary outline-none focus:ring-1 focus:ring-gold-primary"
-                aria-label="Select leader account"
-              >
-                {tradovateConnections.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-surface-1 text-ink-primary">
-                    {c.connection_name ?? c.account_name ?? c.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* FLATTEN ALL */}
           <button
             onClick={handleFlattenAll}
@@ -718,7 +704,7 @@ export function CopyTradingDashboard() {
         <div
           className={`grid ${GRID_COLS} gap-ds-2 px-ds-3 py-ds-2 border-b border-border-ds-subtle text-[10px] font-medium uppercase tracking-wider text-ink-secondary`}
         >
-          <div></div>
+          <div>Leader</div>
           <div>Follow</div>
           <div>Connection</div>
           <div>Account</div>
@@ -744,6 +730,7 @@ export function CopyTradingDashboard() {
               isLeader={row.id === leaderId}
               rule={rule}
               canFollow={canFollow}
+              onSelectLeader={() => setLeaderId(row.id)}
               onFlatten={() => handleFlattenSingle(row.id, row.accountName)}
               onUpdateRule={async (patch) => {
                 if (rule) {
