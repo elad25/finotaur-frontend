@@ -64,26 +64,52 @@ export default function IBConnectionPopup({ onClose, onSuccess }: Props) {
     setError('');
 
     try {
-      // 1. Upsert broker_connections row (user_id + broker UNIQUE)
-      const { data: conn, error: insertErr } = await supabase
+      // 1. UPDATE-or-INSERT broker_connections row.
+      //    Production unique index is (user_id, broker, account_id) NULLS NOT DISTINCT —
+      //    .upsert with onConflict='user_id,broker' fails (no matching constraint),
+      //    and onConflict on the 3-col index would orphan rows once account_id is set.
+      //    Robust pattern: UPDATE first; if 0 rows affected, INSERT.
+      const connectionData = {
+        integration_type: 'ibrit',
+        token: token.trim(),
+        query_id: queryId.trim(),
+        service_code: 'finotaur-ws',
+      };
+      const nowIso = new Date().toISOString();
+
+      const { data: updated, error: updateErr } = await supabase
         .from('broker_connections')
-        .upsert({
-          user_id: user.id,
-          broker: 'interactive_brokers',
+        .update({
           status: 'pending',
           is_active: true,
-          connected_at: new Date().toISOString(),
-          connection_data: {
-            integration_type: 'ibrit',
-            token: token.trim(),
-            query_id: queryId.trim(),
-            service_code: 'finotaur-ws',
-          },
-        }, { onConflict: 'user_id,broker' })
-        .select('id')
-        .single();
+          connected_at: nowIso,
+          connection_data: connectionData,
+        })
+        .eq('user_id', user.id)
+        .eq('broker', 'interactive_brokers')
+        .select('id');
 
-      if (insertErr || !conn) throw new Error(insertErr?.message || 'Failed to save connection');
+      if (updateErr) throw new Error(updateErr.message);
+
+      let conn: { id: string };
+      if (updated && updated.length > 0) {
+        conn = updated[0];
+      } else {
+        const { data: inserted, error: insertErr } = await supabase
+          .from('broker_connections')
+          .insert({
+            user_id: user.id,
+            broker: 'interactive_brokers',
+            status: 'pending',
+            is_active: true,
+            connected_at: nowIso,
+            connection_data: connectionData,
+          })
+          .select('id')
+          .single();
+        if (insertErr || !inserted) throw new Error(insertErr?.message || 'Failed to save connection');
+        conn = inserted;
+      }
 
       // 2. Trigger first sync via edge function
       const { data: sess } = await supabase.auth.getSession();
