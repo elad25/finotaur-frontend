@@ -58,7 +58,7 @@ const CONNECTION_LIMIT = 4;
 export const AddConnectionModal = memo(function AddConnectionModal({
   onClose,
 }: AddConnectionModalProps) {
-  const { connections } = useBrokerConnections({ active: true });
+  const { connections } = useBrokerConnections({ active: true, purpose: 'copier' });
   const { connect } = useTradovate();
 
   const [selectedBroker, setSelectedBroker] = useState<BrokerName>(FUNCTIONAL_BROKER);

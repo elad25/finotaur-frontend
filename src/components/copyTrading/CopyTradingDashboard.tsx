@@ -265,7 +265,7 @@ const CopyAccountRow = memo(function CopyAccountRow({
 // ─── Main Component ───────────────────────────────────────────
 
 export function CopyTradingDashboard() {
-  const { connections } = useBrokerConnections({ active: true });
+  const { connections } = useBrokerConnections({ active: true, purpose: 'copier' });
   const { liveCredentialIds } = useEngineSessions();
   const { portfolios } = usePortfolios();
   const { snapshotFor } = useAccountSnapshots();

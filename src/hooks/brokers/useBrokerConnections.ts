@@ -24,15 +24,17 @@ interface UseBrokerConnectionsOptions {
   active?: boolean;
   /** Filter by broker. Omit for all brokers. */
   broker?: BrokerName;
+  /** Filter by connection purpose (Journal vs Copier). Omit for both. */
+  purpose?: 'journal' | 'copier';
 }
 
 const SELECT_COLS =
-  'id,user_id,broker,status,is_active,account_id,account_name,environment,connection_name,' +
+  'id,user_id,broker,status,is_active,purpose,account_id,account_name,environment,connection_name,' +
   'connected_at,disconnected_at,last_sync_at,last_successful_sync_at,error_count,last_error,' +
   'last_error_at,token_expires_at,connection_data,created_at,updated_at';
 
 const queryKey = (userId: string, opts: UseBrokerConnectionsOptions) =>
-  ['broker_connections', userId, opts.active ?? 'all', opts.broker ?? 'all'] as const;
+  ['broker_connections', userId, opts.active ?? 'all', opts.broker ?? 'all', opts.purpose ?? 'all'] as const;
 
 async function fetchConnections(
   userId: string,
@@ -46,6 +48,7 @@ async function fetchConnections(
 
   if (opts.active !== undefined) q = q.eq('is_active', opts.active);
   if (opts.broker) q = q.eq('broker', opts.broker);
+  if (opts.purpose) q = q.eq('purpose', opts.purpose);
 
   const { data, error } = await q;
   if (error?.code === '42P01') return []; // table missing — defensive (e.g. fresh dev DB)

@@ -1115,7 +1115,7 @@ const formatPositionSide = (netPos: number) => {
 // ─── Live Positions / Orders / History Section ─────────────────
 const CopierActivitySection = memo(() => {
   const { accounts, isLoading, fetchedAt } = useAccountSnapshots();
-  const { connections } = useBrokerConnections({ active: true });
+  const { connections } = useBrokerConnections({ active: true, purpose: 'copier' });
   const [activeMonitorTab, setActiveMonitorTab] = useState<CopierMonitorTab>('positions');
 
   const connectionLabelById = useMemo(() => {
@@ -1491,7 +1491,7 @@ export default function TradeCopier() {
   const { hasAnyConnection, syncStatus } = useTradovate();
   const { alive: engineAlive } = useCopyEngineHealth();
 
-  const { connections, reconnect } = useBrokerConnections({ active: true });
+  const { connections, reconnect } = useBrokerConnections({ active: true, purpose: 'copier' });
   const { liveCredentialIds } = useEngineSessions();
 
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
