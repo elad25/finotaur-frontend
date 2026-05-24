@@ -102,7 +102,7 @@ async function tradovateLogin(
 
   const data = await res.json();
 
-  // DEBUG — הסר אחרי בדיקה
+  // DEBUG — remove after testing
   console.log('[tradovate-auth] Tradovate raw response:', JSON.stringify(data).slice(0, 300));
 
   // Tradovate returns errorText on HTTP 200 for invalid credentials
@@ -569,7 +569,7 @@ Deno.serve(async (req: Request) => {
     const brokerName: 'tradovate' | 'ninja_trader' =
       body.broker === 'ninja_trader' ? 'ninja_trader' : 'tradovate';
 
-    // DEBUG — הסר אחרי בדיקה
+    // DEBUG — remove after testing
     console.log('[tradovate-auth] login attempt:', {
       username,
       passwordLength: password?.length,
