@@ -1,4 +1,12 @@
-// interactive-brokers-sync v5 — IBRIT (Flex Query) + cron mode + portfolio snapshots
+// interactive-brokers-sync v6 — IBRIT (Flex Query) + cron mode + portfolio snapshots
+//
+// v6 (2026-05-25): fix side mapping so trades flow through the DB pnl trigger.
+//   - Pre-v6 wrote `side: 'buy'/'sell'` (lowercase). DB trigger
+//     `handle_trade_changes_unified` only computes pnl + outcome for
+//     'LONG'/'SHORT', so every IB trade sat at outcome='OPEN', pnl=NULL —
+//     invisible to journal stats and to user_daily_pnl_v / get_equity_curve.
+//   - backfillFromTrades sign detection updated to accept 'LONG' too, so
+//     mixed-history accounts (pre-v6 + post-v6 rows) still reconstruct correctly.
 //
 // CRITICAL invariant (v5 fix): `last_positions` is NEVER overwritten with an empty array.
 // Cash-only IBRIT accounts produce zero trades → aggregatePositions returns []. If we wrote
@@ -147,7 +155,10 @@ function mapActivityToTrade(rec: Record<string, string>, userId: string): Record
     user_id: userId, broker: 'interactive_brokers',
     external_id: 'ib_' + extId,
     symbol: rec.Symbol || rec.UnderlyingSymbol || 'UNKNOWN',
-    side: buySell.toLowerCase(),
+    // v6 fix: DB trigger handle_trade_changes_unified only computes pnl/outcome
+    // for 'LONG'/'SHORT' (uppercase). Pre-v6 used `buySell.toLowerCase()` which
+    // silently bypassed the trigger and left every row at outcome='OPEN', pnl=NULL.
+    side: buySell === 'BUY' ? 'LONG' : 'SHORT',
     quantity: Math.abs(Number(rec.Quantity) || 0),
     entry_price: Number(rec.TradePrice) || 0,
     fees: Math.abs(Number(rec.IBCommission) || 0),
@@ -349,7 +360,10 @@ async function backfillFromTrades(userId: string, days: number): Promise<{ inser
     const qty = Number(t.quantity) || 0;
     const px = Number(t.entry_price) || 0;
     const fee = Number(t.fees) || 0;
-    const sign = String(t.side).toLowerCase() === 'buy' ? -1 : 1;
+    // v6: accept both legacy ('buy'/'sell', pre-v6) and current ('LONG'/'SHORT', v6+).
+    // Long-leg / buy = cash outflow → sign -1.
+    const sideLower = String(t.side).toLowerCase();
+    const sign = (sideLower === 'buy' || sideLower === 'long') ? -1 : 1;
     const flow = sign * (qty * px) - fee;
     dailyNetFlow.set(dt, (dailyNetFlow.get(dt) || 0) + flow);
   }
