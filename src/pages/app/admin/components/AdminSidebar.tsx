@@ -1,12 +1,13 @@
 // src/pages/app/admin/components/AdminSidebar.tsx
 // ============================================
 // Sidebar for Admin CRM shell.
-// 12 tabs total; only Phase-0 tabs are clickable, the rest render
-// disabled with a tooltip describing which phase ships them.
+// Phase 1: all 12 tabs are clickable. 7 mount existing pages,
+// 4 are rich "planned" placeholders, 1 is the custom Overview.
+// `planned` tabs get a "soon" badge to flag they aren't full features yet.
 // ============================================
 
 import { NavLink } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { ADMIN_TABS, type AdminTab } from '../config/adminTabs';
 import { cn } from '@/lib/utils';
 
@@ -31,7 +32,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
               Admin CRM
             </h2>
             <p className="text-gray-500 text-[10px] leading-tight mt-0.5">
-              Phase 0 · Foundation
+              Phase 1 · Unified
             </p>
           </div>
         </div>
@@ -45,8 +46,8 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
 
       <div className="px-4 py-3 mt-2 border-t border-gray-800">
         <p className="text-[10px] text-gray-600 leading-relaxed">
-          11 מודולים נוספים יגיעו ב-Phase 1–5.
-          סמן על כל מודול לתיאור שלו.
+          תגי <span className="text-[#D4AF37]">soon</span> מסמנים מודולים בתכנון —
+          התוכן הוא תצוגה מקדימה של הפיצ׳רים שיגיעו.
         </p>
       </div>
     </aside>
@@ -54,28 +55,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
 }
 
 function SidebarTab({ tab }: { tab: AdminTab }) {
-  const { label, path, icon: Icon, enabled, phase, description } = tab;
-
-  if (!enabled) {
-    return (
-      <div
-        title={`${description ?? ''}\nComing in Phase ${phase}`}
-        className={cn(
-          'group flex items-center justify-between gap-2 px-3 py-2 rounded-md',
-          'text-gray-600 cursor-not-allowed select-none'
-        )}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <Icon className="w-4 h-4 shrink-0" />
-          <span className="text-[13px] truncate">{label}</span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Lock className="w-3 h-3" />
-          <span className="text-[10px] text-gray-700">P{phase}</span>
-        </div>
-      </div>
-    );
-  }
+  const { label, path, icon: Icon, description, planned } = tab;
 
   return (
     <NavLink
@@ -93,7 +73,19 @@ function SidebarTab({ tab }: { tab: AdminTab }) {
       }
     >
       <Icon className="w-4 h-4 shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {planned && (
+        <span
+          className={cn(
+            'flex items-center gap-0.5 px-1.5 py-0.5 rounded',
+            'text-[9px] uppercase tracking-wide font-semibold',
+            'bg-[#D4AF37]/10 text-[#D4AF37]'
+          )}
+        >
+          <Sparkles className="w-2.5 h-2.5" />
+          soon
+        </span>
+      )}
     </NavLink>
   );
 }
