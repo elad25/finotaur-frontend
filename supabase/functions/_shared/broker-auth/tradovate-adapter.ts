@@ -163,13 +163,12 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
         Accept: 'application/json',
       };
 
-      // Fire /auth/me and /account/list in parallel.
-      // /auth/me provides identity; /account/list provides the accounts array
-      // (it is NOT returned by /auth/me despite older assumptions).
-      const [meResp, accountsResp] = await Promise.all([
-        fetch(config.userInfoUrl, { method: 'GET', headers: authHeaders }),
-        fetch(config.accountListUrl, { method: 'GET', headers: authHeaders }),
-      ]);
+      // STEP 1: Fetch /auth/me first to get the userId.
+      // /auth/me provides identity (userId, fullName, email, organizationName).
+      const meResp = await fetch(config.userInfoUrl, {
+        method: 'GET',
+        headers: authHeaders,
+      });
 
       if (!meResp.ok) {
         const text = await meResp.text();
@@ -177,23 +176,40 @@ export function createTradovateAdapter(config: TradovateConfig): BrokerAuthAdapt
       }
 
       const data = (await meResp.json()) as Record<string, unknown>;
+      const userId = data.userId ?? data.id;
 
-      // /account/list returns a top-level array; treat failure as soft error
-      // so a broken accounts call never aborts the whole OAuth flow.
+      // STEP 2: Fetch /account/list?userId={providerUserId}.
+      // CRITICAL: empirically verified 2026-05-24 — OAuth Vendor tokens (CID 13543,
+      // scope=trading_read) return [] from /v1/account/list WITHOUT the userId query
+      // param, but DO return prop firm (APEX/TOPSTEP/MFFU/etc) accounts WITH it.
+      // The userId filter exposes accounts that the user has trading permission for
+      // (sponsored by the prop firm, owned by a different master user).
+      // Without this param the journal never sees Apex accounts via OAuth — see
+      // memory file: tradovate-ecosystem-oauth-pending.md.
       let rawAccounts: TradovateRawAccount[] = [];
-      if (accountsResp.ok) {
-        const accountsData = await accountsResp.json();
-        if (Array.isArray(accountsData)) {
-          rawAccounts = (accountsData as TradovateRawAccount[]).filter(
-            (acc) => acc.active !== false,
+      if (userId !== undefined && userId !== null && userId !== '') {
+        const accountsUrl = `${config.accountListUrl}?userId=${encodeURIComponent(String(userId))}`;
+        const accountsResp = await fetch(accountsUrl, {
+          method: 'GET',
+          headers: authHeaders,
+        });
+
+        if (accountsResp.ok) {
+          const accountsData = await accountsResp.json();
+          if (Array.isArray(accountsData)) {
+            rawAccounts = (accountsData as TradovateRawAccount[]).filter(
+              (acc) => acc.active !== false,
+            );
+          }
+        } else {
+          const errText = await accountsResp.text();
+          console.warn(
+            `[tradovate-adapter] /account/list?userId=${userId} failed: ${accountsResp.status} ${errText}`,
           );
         }
       } else {
-        const errText = await accountsResp.text();
-        console.warn(`[tradovate-adapter] /account/list failed: ${accountsResp.status} ${errText}`);
+        console.warn('[tradovate-adapter] /auth/me missing userId — skipping /account/list lookup');
       }
-
-      const userId = data.userId ?? data.id;
 
       return {
         providerUserId: typeof userId === 'string' ? userId : String(userId ?? ''),
