@@ -55,6 +55,16 @@ const GRID_BROKERS: BrokerName[] = [
 const FUNCTIONAL_BROKER: BrokerName = 'tradovate';
 const COPIER_CONNECTION_LIMIT = 4;
 
+// Prop-firm usernames (Apex, Topstep, MyFundedFutures, EarnFutures, Uprofit, LeeLoo)
+// run on Tradovate LIVE even when the money is simulated — the prop firm pays
+// for live-API access. Tradovate Demo is a separate environment where our app
+// (CID) isn't registered for these accounts. Auto-route to Live so customers
+// don't have to know this quirk.
+const PROP_FIRM_USERNAME_RE = /^(APEX|TST|MFF|TOPSTEP|EARN|UPROFIT|LH)[_-]?\d+/i;
+function isPropFirmUsername(u: string): boolean {
+  return PROP_FIRM_USERNAME_RE.test(u.trim());
+}
+
 export const ConnectCopierModal = memo(function ConnectCopierModal({
   onClose,
 }: ConnectCopierModalProps) {
@@ -70,6 +80,10 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
   const [error, setError] = useState<string | null>(null);
 
   const usedCount = connections.length;
+  const isPropFirm = isPropFirmUsername(username);
+  // Effective environment forces Live for prop-firm usernames (Apex etc.) —
+  // the customer never sees the override, it just works.
+  const effectiveEnvironment: TradovateEnv = isPropFirm ? 'live' : environment;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -94,7 +108,7 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
     setIsConnecting(true);
     try {
       const result = await connect(
-        environment,
+        effectiveEnvironment,
         username.trim(),
         password,
         connectionName.trim() || undefined,
@@ -135,6 +149,13 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
               💡 If you already have this account in Journal, you can connect it here again for Copier — they work independently.
             </p>
           </div>
+          {isPropFirm && (
+            <div className="mt-ds-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-ds-3 py-ds-2">
+              <p className="text-[11px] leading-snug text-ink-secondary">
+                ✓ Prop firm account detected — we'll connect through Tradovate Live automatically.
+              </p>
+            </div>
+          )}
           <div className="text-[10px] text-ink-tertiary mt-ds-2 uppercase tracking-wider">
             {usedCount}/{COPIER_CONNECTION_LIMIT} copier connections used
           </div>
@@ -200,22 +221,7 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
           {/* Tradovate credential form */}
           {selectedBroker === 'tradovate' && (
             <div className="space-y-ds-3 pt-ds-2 border-t border-border-ds-subtle">
-              {/* Environment */}
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
-                  Environment
-                </label>
-                <select
-                  value={environment}
-                  onChange={(e) => setEnvironment(e.target.value as TradovateEnv)}
-                  className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary focus:border-gold-border outline-none transition-colors duration-base"
-                >
-                  <option value="demo">Demo</option>
-                  <option value="live">Live</option>
-                </select>
-              </div>
-
-              {/* Username */}
+              {/* Username — first so prop-firm detection drives the Environment field */}
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
                   Username
@@ -229,6 +235,23 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
                   className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-gold-border outline-none transition-colors duration-base"
                 />
               </div>
+
+              {/* Environment — hidden for prop-firm usernames (auto-routes to Live) */}
+              {!isPropFirm && (
+                <div>
+                  <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
+                    Environment
+                  </label>
+                  <select
+                    value={environment}
+                    onChange={(e) => setEnvironment(e.target.value as TradovateEnv)}
+                    className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary focus:border-gold-border outline-none transition-colors duration-base"
+                  >
+                    <option value="demo">Demo</option>
+                    <option value="live">Live</option>
+                  </select>
+                </div>
+              )}
 
               {/* Password */}
               <div>

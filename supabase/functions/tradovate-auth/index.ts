@@ -113,7 +113,11 @@ async function tradovateLogin(
 
   // Tradovate returns errorText on HTTP 200 for invalid credentials
   if (data.errorText) {
-    throw new Error(`Tradovate auth error: ${data.errorText}`);
+    // DEBUG 2026-05-25 — include cid + env in the error message so the frontend
+    // surfaces them in the toast. Without this we cannot tell whether the failure
+    // is a credential mismatch vs. CID-not-registered-for-this-env (Apex case).
+    // Remove the [DEBUG ...] suffix once GUARD/login is stable.
+    throw new Error(`Tradovate auth error: ${data.errorText} [DEBUG cid=${CID} env=${environment}]`);
   }
   if (!data.accessToken) {
     throw new Error('No accessToken in Tradovate response');
@@ -723,7 +727,10 @@ Deno.serve(async (req: Request) => {
       code = 'db_error';
       status = 500;
     }
-    return json({ error: msg, code }, status);
+    // DEBUG 2026-05-25 — expose cid + sec presence in error payload so we can
+    // confirm what `oauth_cid_Journal` resolves to without grepping logs.
+    // Remove `debug` field after Apex/Live login is verified working.
+    return json({ error: msg, code, debug: { cid: CID, secLength: SEC?.length ?? 0 } }, status);
   }
 });
 
