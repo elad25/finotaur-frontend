@@ -960,11 +960,16 @@ Deno.serve(async (req: Request) => {
     // on the same Tradovate cloud API and need the same sync handling. The
     // trade rows themselves are still tagged broker='tradovate' (data source)
     // while the connection row keeps its branded broker value for UI display.
+    // Exclude rows with null account_id (OAuth rows where account discovery has not
+    // yet succeeded — they throw at line 714's numeric coercion). Self-healing in
+    // oauth-refresh will populate account_id once Tradovate returns accounts; those
+    // rows will rejoin the sync on the next tick automatically.
     let credentialsQuery = supabaseAdmin
       .from('broker_connections')
       .select('id, user_id, environment, connection_data, account_id, created_at')
       .in('broker', ['tradovate', 'ninja_trader'])
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .not('account_id', 'is', null);
 
     // Single user (manual / initial)
     if (mode !== 'cron' && body.userId) {

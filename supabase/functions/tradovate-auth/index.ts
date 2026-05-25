@@ -318,11 +318,15 @@ Deno.serve(async (req: Request) => {
       // Find active broker_connections whose token expires within RENEW_AHEAD_MS.
       // Includes both 'tradovate' and 'ninja_trader' since NT Web accounts run
       // on the same Tradovate cloud and need identical token-refresh handling.
+      // OAuth rows are refreshed by the separate oauth-refresh function/cron (jobid 1380).
+      // The legacy /auth/renewaccesstoken flow used here only works for CID 11045
+      // username/password tokens and would corrupt OAuth row state if applied to them.
       const { data: connected } = await supabaseAdmin
         .from('broker_connections')
         .select('id, user_id, environment, connection_data, account_id, purpose')
         .in('broker', ['tradovate', 'ninja_trader'])
         .eq('is_active', true)
+        .neq('auth_method', 'oauth')
         .lt('token_expires_at', new Date(Date.now() + RENEW_AHEAD_MS).toISOString());
 
       let refreshed = 0;

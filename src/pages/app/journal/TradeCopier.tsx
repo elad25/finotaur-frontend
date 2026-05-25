@@ -1495,6 +1495,16 @@ export default function TradeCopier() {
   const { connections, reconnect } = useBrokerConnections({ active: true, purpose: 'copier' });
   const { liveCredentialIds } = useEngineSessions();
 
+  // OAuth-issued connections (Tradovate Vendor scope=trading_read) are journal-only:
+  // they show up in the Connections tab (informational) but Trade Copier filters them
+  // out and shows a banner. Backend enforces the same rule (router.js 403 with
+  // code=oauth_journal_only). The full `connections` list stays unfiltered so users
+  // can see and reconnect their journal-only brokers from this page.
+  const oauthConnectionCount = useMemo(
+    () => connections.filter((c) => (c as BrokerConnection & { auth_method?: string }).auth_method === 'oauth').length,
+    [connections],
+  );
+
   const { portfolios, isLoading: portfoliosLoading } = usePortfolios();
   const [showAddBroker, setShowAddBroker] = useState(false);
   const [showCopierModal, setShowCopierModal] = useState(false);
@@ -1677,6 +1687,19 @@ export default function TradeCopier() {
         {/* ── Tab 2: Trade Copier ── */}
         {activeTab === 'copy-trading' && (
           <>
+            {oauthConnectionCount > 0 && (
+              <div className="flex items-start gap-ds-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-ds-4 py-ds-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
+                <div className="text-sm text-amber-200">
+                  <span className="font-semibold">
+                    {oauthConnectionCount} OAuth-connected broker{oauthConnectionCount === 1 ? '' : 's'} excluded from Trade Copier.
+                  </span>{' '}
+                  OAuth connections (Tradovate Vendor) are journal-only — they read your trades for the journal
+                  but cannot place or close orders. To enable Trade Copier on those accounts, reconnect with full
+                  trading permissions.
+                </div>
+              </div>
+            )}
             {hasAnyConnection ? (
               <>
                 <SectionCard>
