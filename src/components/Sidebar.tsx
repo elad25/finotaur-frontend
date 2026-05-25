@@ -521,7 +521,7 @@ export const Sidebar = ({ isOpen, collapseMode = 'persistent' }: SidebarProps) =
   return (
     <aside
       className={cn(
-        'fixed left-0 z-30 overflow-hidden border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
+        'fixed left-0 z-30 border-r border-border bg-base-800 transition-all duration-300 ease-in-out md:translate-x-0',
         sidebarTopClass,
         isExpanded ? 'w-56' : 'w-[60px]'
       )}
