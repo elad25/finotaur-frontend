@@ -1,17 +1,24 @@
-// interactive-brokers-sync v3 — IBRIT (Flex Query) + cron mode
+// interactive-brokers-sync v5 — IBRIT (Flex Query) + cron mode + portfolio snapshots
+//
+// CRITICAL invariant (v5 fix): `last_positions` is NEVER overwritten with an empty array.
+// Cash-only IBRIT accounts produce zero trades → aggregatePositions returns []. If we wrote
+// that, we'd wipe whatever cash/position data exists from prior runs or other ingestion paths.
+// v5 only overwrites last_positions when the new array is non-empty; otherwise preserves prior.
 //
 // Modes:
-//   - user-invoked (Bearer = user JWT, body = {userId})       → sync a single user
-//   - cron        (Bearer = service-role, body = {mode:'cron'}) → loop all active IB connections
+//   - user-invoked          (Bearer = user JWT, body = {userId})                 → sync one user
+//   - cron                  (Bearer = service-role, body = {mode:'cron'})        → loop all active IB connections
+//   - backfill_from_trades  (Bearer = user JWT, body = {userId, mode:'backfill_from_trades', days?:365}) → derive historical snapshots from trades
 //
 // Auth: dualAuth pattern (inlined). Accepts vault.secret_api_key OR SUPABASE_SERVICE_ROLE_KEY
 // for cron path, falls through to Supabase JWT validation for user path.
 //
 // Data source: IBRIT Activity report (CSV) at https://ndcdyn.interactivebrokers.com/Reporting/IBRITService
 // Writes:
-//   - trades table (upsert on user_id + broker + external_id)
-//   - broker_connections.connection_data.last_positions (aggregated from trades, IBRIT shape)
+//   - trades                       (upsert on user_id + broker + external_id)
+//   - broker_connections.connection_data.last_positions  (aggregated from trades, IBRIT shape)
 //   - broker_connections.last_sync_at / last_successful_sync_at / error_count / status
+//   - portfolio_snapshots                                 (one row per day per connection — powers COPILOT chart)
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -196,6 +203,50 @@ interface UserSyncSummary {
   daysErrored: number;
   firstError: string | null;
   skipped?: string;
+  snapshotInserted?: boolean;
+}
+
+// Sum PositionValue across all positions (cash positions in IBRIT carry their balance as PositionValue).
+function computeTotalsFromPositions(positions: Record<string, unknown>[]): { totalValue: number; cash: number } {
+  let totalValue = 0;
+  let cash = 0;
+  for (const p of positions) {
+    const v = Number(p.PositionValue) || 0;
+    totalValue += v;
+    if (String(p.AssetClass || '').toUpperCase() === 'CASH') cash += v;
+  }
+  return { totalValue, cash };
+}
+
+async function upsertSnapshotForToday(
+  connectionId: string,
+  userId: string,
+  positions: Record<string, unknown>[],
+): Promise<boolean> {
+  // Cash-only IBRIT accounts always have at least one CASH position; empty array = sync produced nothing meaningful.
+  if (positions.length === 0) return false;
+  const { totalValue, cash } = computeTotalsFromPositions(positions);
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD UTC
+  const { error } = await supabaseAdmin
+    .from('portfolio_snapshots')
+    .upsert(
+      {
+        user_id: userId,
+        broker_connection_id: connectionId,
+        snapshot_date: today,
+        total_value: totalValue,
+        cash,
+        buying_power: cash, // no margin info from Activity report; equals cash for cash-only accounts
+        source: 'live',
+        metadata: { positions_count: positions.length },
+      },
+      { onConflict: 'broker_connection_id,snapshot_date' },
+    );
+  if (error) {
+    console.error('[ib-sync v4] portfolio_snapshots upsert failed:', error.message);
+    return false;
+  }
+  return true;
 }
 
 async function syncOneUser(userId: string): Promise<UserSyncSummary> {
@@ -248,15 +299,98 @@ async function syncOneUser(userId: string): Promise<UserSyncSummary> {
   }
 
   const positionsSnapshot = aggregatePositions(allRecords);
+  // v5 fix: do not overwrite existing last_positions with [] (cash-only accounts produce no trades).
+  const existingPositions = (cd.last_positions as Record<string, unknown>[] | undefined) || [];
+  const positionsForWrite = positionsSnapshot.length > 0 ? positionsSnapshot : existingPositions;
+
   const now = new Date().toISOString();
   await supabaseAdmin.from('broker_connections').update({
     last_sync_at: now, last_successful_sync_at: now,
     error_count: 0, last_error: firstErrorMsg, last_error_at: firstErrorMsg ? now : null,
     status: 'connected',
-    connection_data: { ...cd, last_positions: positionsSnapshot, last_synced_date: formatYYYYMMDD(today), sync_meta: { http_ok: httpOk, http_empty: httpEmpty, http_err: httpErr, last_run: now } },
+    connection_data: { ...cd, last_positions: positionsForWrite, last_synced_date: formatYYYYMMDD(today), sync_meta: { http_ok: httpOk, http_empty: httpEmpty, http_err: httpErr, last_run: now } },
   }).eq('id', conn.id);
 
-  return { userId, tradesInserted, tradeErrors, positionsCount: positionsSnapshot.length, daysQueried: dates.length, daysWithData: httpOk, daysEmpty: httpEmpty, daysErrored: httpErr, firstError: firstErrorMsg };
+  // Snapshot uses whichever positions array we kept (live aggregation OR preserved prior).
+  const snapshotInserted = await upsertSnapshotForToday(conn.id, userId, positionsForWrite);
+
+  return { userId, tradesInserted, tradeErrors, positionsCount: positionsSnapshot.length, daysQueried: dates.length, daysWithData: httpOk, daysEmpty: httpEmpty, daysErrored: httpErr, firstError: firstErrorMsg, snapshotInserted };
+}
+
+// Backfill historical snapshots from existing trades. Walks day-by-day, computes cumulative
+// realized P&L and net cash outlay, derives an estimated total_value at EOD. Imprecise — current
+// cash balance is assumed constant historically. Used as a one-time bootstrap so the COPILOT chart
+// has shape before the daily cron has accumulated real snapshots.
+async function backfillFromTrades(userId: string, days: number): Promise<{ inserted: number; skipped: number; range: string; error?: string }> {
+  const { data: conn, error: connErr } = await supabaseAdmin
+    .from('broker_connections').select('id, connection_data')
+    .eq('user_id', userId).eq('broker', 'interactive_brokers').eq('is_active', true).maybeSingle();
+  if (connErr || !conn) return { inserted: 0, skipped: 0, range: '', error: 'no_active_connection' };
+
+  // Anchor: current cash balance from latest snapshot (live or null).
+  const positions = (conn.connection_data?.last_positions as Record<string, unknown>[]) || [];
+  const { cash: currentCash } = computeTotalsFromPositions(positions);
+
+  const { data: trades, error: tradesErr } = await supabaseAdmin
+    .from('trades')
+    .select('open_at, side, quantity, entry_price, fees')
+    .eq('user_id', userId).eq('broker', 'interactive_brokers')
+    .order('open_at', { ascending: true });
+  if (tradesErr) return { inserted: 0, skipped: 0, range: '', error: tradesErr.message };
+
+  const endDate = new Date();
+  const startDate = new Date(); startDate.setUTCDate(endDate.getUTCDate() - days);
+
+  // Pre-aggregate net cash outflow per day (buy = outflow, sell = inflow).
+  const dailyNetFlow = new Map<string, number>();
+  for (const t of (trades || [])) {
+    const dt = t.open_at ? String(t.open_at).slice(0, 10) : null;
+    if (!dt) continue;
+    const qty = Number(t.quantity) || 0;
+    const px = Number(t.entry_price) || 0;
+    const fee = Number(t.fees) || 0;
+    const sign = String(t.side).toLowerCase() === 'buy' ? -1 : 1;
+    const flow = sign * (qty * px) - fee;
+    dailyNetFlow.set(dt, (dailyNetFlow.get(dt) || 0) + flow);
+  }
+
+  // Walk from endDate backwards, unwinding cash flow to reconstruct estimated EOD totalValue.
+  // At today: totalValue = currentCash. Going back: add buy outflow back, subtract sell inflow.
+  const rows: Record<string, unknown>[] = [];
+  let cursorValue = currentCash;
+  for (let i = 0; i <= days; i++) {
+    const d = new Date(endDate); d.setUTCDate(endDate.getUTCDate() - i);
+    const dt = d.toISOString().slice(0, 10);
+    const flow = dailyNetFlow.get(dt) || 0;
+    rows.push({
+      user_id: userId,
+      broker_connection_id: conn.id,
+      snapshot_date: dt,
+      total_value: Math.max(0, cursorValue),
+      cash: null,
+      buying_power: null,
+      source: 'backfill_trades',
+      metadata: { reconstructed_at: new Date().toISOString() },
+    });
+    cursorValue -= flow; // walking backward: undo the flow
+  }
+
+  let inserted = 0; let skipped = 0;
+  for (const row of rows) {
+    const { error } = await supabaseAdmin
+      .from('portfolio_snapshots')
+      .insert(row);
+    if (error) {
+      // 23505 = unique violation → day already has live snapshot, skip (live wins).
+      if (error.code === '23505') skipped++;
+      else console.error('[ib-sync v4 backfill] insert error:', error.message);
+    } else inserted++;
+  }
+
+  return {
+    inserted, skipped,
+    range: `${startDate.toISOString().slice(0, 10)} → ${endDate.toISOString().slice(0, 10)}`,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -264,8 +398,18 @@ Deno.serve(async (req: Request) => {
   const auth = await authenticate(req, supabaseAdmin);
   if (!auth.ok) return new Response(JSON.stringify({ error: auth.message }), { status: auth.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-  let body: { userId?: string; mode?: string };
+  let body: { userId?: string; mode?: string; days?: number };
   try { body = await req.json(); } catch { body = {}; }
+
+  // BACKFILL MODE: reconstruct historical portfolio_snapshots from trades (one-shot bootstrap)
+  if (body.mode === 'backfill_from_trades') {
+    const { userId } = body;
+    if (!userId) return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!auth.isCron && auth.userId !== userId) return new Response(JSON.stringify({ error: 'Forbidden: userId mismatch' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const days = Math.max(1, Math.min(Number(body.days) || 365, 730));
+    const result = await backfillFromTrades(userId, days);
+    return new Response(JSON.stringify({ ok: !result.error, mode: 'backfill_from_trades', ...result }), { status: result.error ? 500 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 
   // CRON MODE: loop all active IB connections (service-role auth only)
   if (body.mode === 'cron') {

@@ -1,7 +1,16 @@
 // src/pages/app/ai/copilot/hooks/usePortfolioData.ts
 // =====================================================
 // Portfolio data hook — real IB data when connected, mock fallback otherwise.
-// Phase 1 MVP: snapshot-based (single point series for performance chart).
+//
+// Performance chart series is sourced (in order):
+//   1. portfolio_snapshots table, range-filtered (written daily by
+//      interactive-brokers-sync v4) — real historical line
+//   2. flat-line at current totalValue when <2 snapshots accumulated
+//   3. mock data when not connected
+//
+// The time-range buttons (1M/3M/6M/YTD/1Y/ALL) drive the query so the chart
+// re-renders with a different X-axis span and the visible series actually
+// changes shape (when enough snapshots exist).
 // =====================================================
 
 import { useMemo } from 'react';
@@ -21,11 +30,20 @@ const RANGE_DAYS: Record<TimeRange, number> = {
   '1M': 30, '3M': 90, '6M': 180, 'YTD': 130, '1Y': 365, 'ALL': 730,
 };
 
+function rangeStartDate(range: TimeRange): string {
+  if (range === 'YTD') {
+    const jan1 = new Date(new Date().getUTCFullYear(), 0, 1);
+    return jan1.toISOString().slice(0, 10);
+  }
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - RANGE_DAYS[range]);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * Generates a flat series at `totalValue` for the selected range.
- * Used when we have a real portfolio value but no historical time series
- * (IB gateway doesn't return trade history in the snapshot).
- * TODO future: replace with real trade-history time series from IB.
+ * Fallback when fewer than 2 portfolio_snapshots exist for the user.
+ * Visually honest: signals "we have your current value but no history yet".
  */
 function makeFlatSeries(totalValue: number, range: TimeRange): PerformancePoint[] {
   const days = RANGE_DAYS[range];
@@ -73,6 +91,8 @@ export interface PortfolioDataResult extends PortfolioSnapshot {
   /** 'live' when data comes from IB, 'mock' otherwise. */
   source: 'mock' | 'live';
   lastSyncAt: string | null;
+  /** True when the chart series came from portfolio_snapshots (≥2 rows). False = flat-line fallback. */
+  hasHistoricalSeries: boolean;
 }
 
 // ─── Supabase fetch ─────────────────────────────────────────────────────────
@@ -94,6 +114,29 @@ async function fetchIBPortfolio(userId: string): Promise<{
   if (error?.code === '42P01') return null; // table missing — fresh dev DB
   if (error) throw error;
   return data as { connection_data: IBConnectionData | null; last_sync_at: string | null } | null;
+}
+
+interface SnapshotRow {
+  snapshot_date: string;
+  total_value: string | number; // numeric → string in some PG client configs
+}
+
+async function fetchSnapshots(userId: string, range: TimeRange): Promise<PerformancePoint[]> {
+  const fromDate = rangeStartDate(range);
+  const { data, error } = await supabase
+    .from('portfolio_snapshots')
+    .select('snapshot_date,total_value')
+    .eq('user_id', userId)
+    .gte('snapshot_date', fromDate)
+    .order('snapshot_date', { ascending: true });
+
+  if (error?.code === '42P01') return []; // table missing — fresh dev DB
+  if (error) throw error;
+
+  return ((data as SnapshotRow[] | null) ?? []).map((row) => ({
+    date: row.snapshot_date,
+    value: Number(row.total_value) || 0,
+  }));
 }
 
 // ─── Transformation ─────────────────────────────────────────────────────────
@@ -127,22 +170,36 @@ function transformPositions(positions: IBRITPosition[]): Holding[] {
 function buildSnapshot(
   holdings: Holding[],
   accountSummary: IBAccountSummary | undefined,
-  lastSyncAt: string | null,
+  historicalSeries: PerformancePoint[],
   range: TimeRange,
-): PortfolioSnapshot {
+): { snapshot: PortfolioSnapshot; hasHistoricalSeries: boolean } {
   const sumMarketValue = holdings.reduce((sum, h) => sum + h.marketValue, 0);
   const totalValue = accountSummary?.netliquidation?.amount ?? sumMarketValue;
 
-  // Flat series at current totalValue for the selected range.
-  // A flat line is honest: we have one snapshot point, not a real time series.
-  // TODO: replace with real trade-history time series from IB when available.
-  const series: PerformancePoint[] = makeFlatSeries(totalValue, range);
+  // Use real historical series when we have ≥2 distinct points; else honest flat-line.
+  const hasHistoricalSeries = historicalSeries.length >= 2;
+  const series: PerformancePoint[] = hasHistoricalSeries
+    ? historicalSeries
+    : makeFlatSeries(totalValue, range);
 
-  const changeAbs = holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
-  const costBase = totalValue - changeAbs;
-  const changePercent = costBase > 0 ? (changeAbs / costBase) * 100 : 0;
+  // changeAbs/changePercent prefer the series (first→last), fall back to unrealized PnL.
+  let changeAbs: number;
+  let changePercent: number;
+  if (hasHistoricalSeries) {
+    const first = series[0].value;
+    const last = series[series.length - 1].value;
+    changeAbs = last - first;
+    changePercent = first > 0 ? (changeAbs / first) * 100 : 0;
+  } else {
+    changeAbs = holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
+    const costBase = totalValue - changeAbs;
+    changePercent = costBase > 0 ? (changeAbs / costBase) * 100 : 0;
+  }
 
-  return { totalValue, changeAbs, changePercent, holdings, series };
+  return {
+    snapshot: { totalValue, changeAbs, changePercent, holdings, series },
+    hasHistoricalSeries,
+  };
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -160,23 +217,33 @@ export function usePortfolioData(range: TimeRange): PortfolioDataResult {
     gcTime: 30 * 60 * 1000,
   });
 
+  // Range-keyed: switching time-range re-runs the query → chart redraws with new shape.
+  const { data: snapshotSeries, isLoading: seriesLoading } = useQuery({
+    queryKey: ['portfolio-snapshots', userId ?? '', range],
+    queryFn: () => fetchSnapshots(userId!, range),
+    enabled: !!userId && isConnected,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+  });
+
   return useMemo((): PortfolioDataResult => {
     // Not connected, or still loading connection state → mock (no flicker)
     if (!isConnected || ibLoading || queryLoading) {
-      return { ...mockSnapshot, source: 'mock', lastSyncAt: null };
+      return { ...mockSnapshot, source: 'mock', lastSyncAt: null, hasHistoricalSeries: false };
     }
 
     // Connected but sync hasn't run yet (no positions in connection_data)
     const positions = ibRow?.connection_data?.last_positions;
     if (!positions || positions.length === 0) {
-      return { ...mockSnapshot, source: 'mock', lastSyncAt: ibLastSyncAt };
+      return { ...mockSnapshot, source: 'mock', lastSyncAt: ibLastSyncAt, hasHistoricalSeries: false };
     }
 
     const holdings = transformPositions(positions);
     const accountSummary = ibRow?.connection_data?.last_account_summary;
     const lastSyncAt = ibRow?.last_sync_at ?? ibLastSyncAt;
-    const snapshot = buildSnapshot(holdings, accountSummary, lastSyncAt, range);
+    const historicalSeries = seriesLoading ? [] : (snapshotSeries ?? []);
+    const { snapshot, hasHistoricalSeries } = buildSnapshot(holdings, accountSummary, historicalSeries, range);
 
-    return { ...snapshot, source: 'live', lastSyncAt };
-  }, [isConnected, ibLoading, queryLoading, mockSnapshot, ibRow, ibLastSyncAt, range]);
+    return { ...snapshot, source: 'live', lastSyncAt, hasHistoricalSeries };
+  }, [isConnected, ibLoading, queryLoading, mockSnapshot, ibRow, ibLastSyncAt, range, snapshotSeries, seriesLoading]);
 }

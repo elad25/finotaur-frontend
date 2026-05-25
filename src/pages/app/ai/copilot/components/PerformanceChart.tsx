@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/ds/Card';
 import { PerformancePoint, TimeRange } from '../hooks/usePortfolioMockData';
+import { calculatePortfolioMetrics, fmtPercent, fmtNumber } from '@/lib/portfolio/metrics';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -19,6 +20,10 @@ const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
 
 export function PerformanceChart({ series, range, onRangeChange }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
+  const metrics = useMemo(() => calculatePortfolioMetrics(series), [series]);
+  const returnLabel = range === '1Y' || range === 'ALL' || !range
+    ? `RETURN (${range ?? '1Y'})`
+    : `RETURN (${range})`;
 
   const chart = useMemo(() => {
     if (series.length === 0) {
@@ -211,16 +216,15 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
           <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
 
-        {/* TODO: wire RETURN/ALPHA/SHARPE/DRAWDOWN/VOLATILITY/WINNING DAYS to real IB data when trade history API is available */}
         <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
-          {[
-            ['RETURN (1Y)', '+24.67%', 'text-emerald-300'],
-            ['ALPHA', '+7.38%', 'text-emerald-300'],
-            ['SHARPE RATIO', '1.68', 'text-white'],
-            ['MAX DRAWDOWN', '-8.91%', 'text-white'],
-            ['VOLATILITY', '14.32%', 'text-gold-primary'],
-            ['WINNING DAYS', '63.2%', 'text-white'],
-          ].map(([label, value, color]) => (
+          {([
+            [returnLabel, fmtPercent(metrics.returnRange, { signed: true }), 'text-gold-primary'],
+            ['ALPHA', fmtPercent(metrics.alpha, { signed: true }), 'text-ink-tertiary'],
+            ['SHARPE RATIO', fmtNumber(metrics.sharpe), 'text-white'],
+            ['MAX DRAWDOWN', fmtPercent(metrics.maxDrawdown), 'text-num-negative'],
+            ['VOLATILITY', fmtPercent(metrics.volatility), 'text-gold-primary'],
+            ['WINNING DAYS', fmtPercent(metrics.winningDays), 'text-white'],
+          ] as const).map(([label, value, color]) => (
             <div key={label} className="px-3 py-3 border-r border-gold-primary/10 last:border-r-0">
               <p className="text-[9px] uppercase text-ink-tertiary">{label}</p>
               <p className={`mt-2 font-mono text-sm tabular-nums ${color}`}>{value}</p>
