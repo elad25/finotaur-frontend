@@ -212,13 +212,21 @@ export function useTradovate() {
     password: string,
     connectionLabel?: string,
     broker: TradovateAuthBroker = 'tradovate',
-    purpose?: 'journal' | 'copier'
+    purpose?: 'journal' | 'copier',
+    apiKey?: { cid: number; sec: string },
   ) => {
     if (!userId) return { success: false, error: 'Not authenticated' };
     setIsLoading(true);
     try {
       const body: Record<string, unknown> = { userId, environment, username, password, connectionLabel, broker };
       if (purpose) body.purpose = purpose;
+      // Copier-purpose: customer-supplied API Key (cid + sec) ride along in body.
+      // Journal-purpose: omitted (edge function falls back to vendor OAuth env).
+      // See .claude/architecture/tradovate-copier-api-key-architecture.md
+      if (apiKey?.cid && apiKey?.sec) {
+        body.cid = apiKey.cid;
+        body.sec = apiKey.sec;
+      }
       const { data, error } = await supabase.functions.invoke('tradovate-auth', { body });
       if (error) {
         // Read the real reason from the response body (FunctionsHttpError wraps

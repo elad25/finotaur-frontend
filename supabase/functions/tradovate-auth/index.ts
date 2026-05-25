@@ -48,14 +48,32 @@ const RENEW_AHEAD_MS = 15 * 60 * 1000;
 
 const APP_ID      = 'FINOTAUR';
 const APP_VERSION = '1.0';
-// Unified Tradovate app credentials — Journal=OAuth strategy means one app
-// services both the OAuth flow (oauth-start/callback) and the legacy
-// renewTradovateToken path for existing legacy connections.
-// Source: Supabase Dashboard → Edge Functions → Secrets:
-//   oauth_cid_Journal      = Tradovate Ecosystem app's CID (numeric)
-//   secret_oauth_journal   = Tradovate Ecosystem app's client_secret
-const CID         = parseInt(Deno.env.get('oauth_cid_Journal') ?? '0', 10);
-const SEC         = Deno.env.get('secret_oauth_journal') ?? '';
+
+// ─── Per-purpose Tradovate app credentials ───────────────────────
+//
+// CANONICAL ARCHITECTURE — see
+// `finotaur/.claude/architecture/tradovate-copier-api-key-architecture.md`
+//
+// Two completely separate auth mechanisms:
+//
+//   JOURNAL purpose — Vendor/Ecosystem OAuth app (FINOTAUR-held)
+//     env: oauth_cid_Journal + secret_oauth_journal (CID 13543)
+//     Used for: read-only journal sync (fills → trades table)
+//
+//   COPIER purpose — Per-user API Key (CUSTOMER-supplied)
+//     Each customer generates their own API Key in
+//     Tradovate Web Trader → Application Settings → API Access.
+//     They paste cid+sec into FINOTAUR's ConnectCopierModal.
+//     We pass those values straight through to accesstokenrequest.
+//     NEVER store a copier-purpose cid/sec in env — it would force
+//     all customers' trades into one account.
+//
+// 🚨 OAuth is FORBIDDEN for copier per the Tradovate / NinjaTrader
+//    Vendor agreement (signed 2026-05-25). Do not re-introduce
+//    copier_cid / copier_sec / tradovate_cid env vars.
+const JOURNAL_CID = parseInt(Deno.env.get('oauth_cid_Journal') ?? '0', 10);
+const JOURNAL_SEC = Deno.env.get('secret_oauth_journal') ?? '';
+
 
 const supabaseAdmin = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -81,12 +99,39 @@ interface LoginResult {
 // ─── Full login (new session) ─────────────────────────────────
 // Use only on first connect or when renewal has failed.
 // Per Tradovate docs: limited to 2 concurrent sessions.
+/**
+ * Resolve the cid/sec pair for an accesstokenrequest.
+ *
+ *   purpose='journal' → always env-based (vendor OAuth app for journal sync)
+ *   purpose='copier'  → MUST come from `userApiKey` (customer-supplied);
+ *                        env vars are never used for copier — see compliance
+ *                        doc in .claude/architecture/.
+ */
+function resolveCreds(
+  purpose: 'journal' | 'copier',
+  userApiKey?: { cid: number; sec: string },
+): { cid: number; sec: string } {
+  if (purpose === 'copier') {
+    if (!userApiKey || !userApiKey.cid || !userApiKey.sec) {
+      throw new Error(
+        "Tradovate auth error: copier-purpose login requires customer-supplied API Key (cid + sec). " +
+        "Generate one at Tradovate Web Trader → Application Settings → API Access."
+      );
+    }
+    return { cid: userApiKey.cid, sec: userApiKey.sec };
+  }
+  return { cid: JOURNAL_CID, sec: JOURNAL_SEC };
+}
+
 async function tradovateLogin(
   environment: 'live' | 'demo',
   username: string,
-  password: string
+  password: string,
+  purpose: 'journal' | 'copier' = 'journal',
+  userApiKey?: { cid: number; sec: string },
 ): Promise<LoginResult> {
   const base = TRADOVATE_URLS[environment];
+  const { cid, sec } = resolveCreds(purpose, userApiKey);
 
   const res = await tradovateFetch(`${base}/auth/accesstokenrequest`, {
     method: 'POST',
@@ -96,8 +141,8 @@ async function tradovateLogin(
       password,
       appId:      APP_ID,
       appVersion: APP_VERSION,
-      cid:        CID,
-      sec:        SEC,
+      cid,
+      sec,
     }),
   });
 
@@ -113,11 +158,10 @@ async function tradovateLogin(
 
   // Tradovate returns errorText on HTTP 200 for invalid credentials
   if (data.errorText) {
-    // DEBUG 2026-05-25 — include cid + env in the error message so the frontend
-    // surfaces them in the toast. Without this we cannot tell whether the failure
-    // is a credential mismatch vs. CID-not-registered-for-this-env (Apex case).
-    // Remove the [DEBUG ...] suffix once GUARD/login is stable.
-    throw new Error(`Tradovate auth error: ${data.errorText} [DEBUG cid=${CID} env=${environment}]`);
+    // DEBUG 2026-05-25 — include cid + env + purpose in the error message so the
+    // frontend surfaces them in the toast. For copier-purpose the cid is the
+    // customer's own (echoed back so they can verify they typed it correctly).
+    throw new Error(`Tradovate auth error: ${data.errorText} [DEBUG cid=${cid} env=${environment} purpose=${purpose}]`);
   }
   if (!data.accessToken) {
     throw new Error('No accessToken in Tradovate response');
@@ -179,9 +223,20 @@ async function storeInVault(
   username: string,
   password: string,
   accessToken: string,
-  connectionId: string | null = null
+  connectionId: string | null = null,
+  userApiKey?: { cid: number; sec: string },
 ): Promise<string> {
-  const payload    = JSON.stringify({ username, password, accessToken });
+  // Vault payload shape:
+  //   - journal connections: { username, password, accessToken }  (3 fields)
+  //   - copier connections:  { username, password, accessToken, cid, sec }  (5 fields)
+  // cid+sec are stored so the refresh path can re-authenticate without
+  // asking the customer to re-paste their API Key every 90 minutes.
+  const payloadObj: Record<string, unknown> = { username, password, accessToken };
+  if (userApiKey?.cid && userApiKey?.sec) {
+    payloadObj.cid = userApiKey.cid;
+    payloadObj.sec = userApiKey.sec;
+  }
+  const payload    = JSON.stringify(payloadObj);
   const secretName = `tradovate_${userId}_${environment}`;
 
   const { data, error } = await supabaseAdmin.rpc('tradovate_vault_upsert_atomic', {
@@ -265,7 +320,7 @@ Deno.serve(async (req: Request) => {
       // on the same Tradovate cloud and need identical token-refresh handling.
       const { data: connected } = await supabaseAdmin
         .from('broker_connections')
-        .select('id, user_id, environment, connection_data, account_id')
+        .select('id, user_id, environment, connection_data, account_id, purpose')
         .in('broker', ['tradovate', 'ninja_trader'])
         .eq('is_active', true)
         .lt('token_expires_at', new Date(Date.now() + RENEW_AHEAD_MS).toISOString());
@@ -297,6 +352,7 @@ Deno.serve(async (req: Request) => {
         environment: string;
         connection_data: { vault_secret_id?: string } | null;
         account_id: string;
+        purpose: 'journal' | 'copier' | null;
       };
 
       const refreshOne = async (cred: ConnRow) => {
@@ -319,8 +375,22 @@ Deno.serve(async (req: Request) => {
             return { status: 'skipped' as const };
           }
 
-          const { username, password, accessToken: oldToken } = JSON.parse(secret);
+          // Vault payload shape:
+          //   journal: { username, password, accessToken }
+          //   copier:  { username, password, accessToken, cid, sec }
+          const parsed = JSON.parse(secret) as {
+            username: string;
+            password: string;
+            accessToken: string;
+            cid?: number;
+            sec?: string;
+          };
+          const { username, password, accessToken: oldToken } = parsed;
           const env = cred.environment as 'live' | 'demo';
+          const purposeForLogin = (cred.purpose ?? 'journal') as 'journal' | 'copier';
+          const storedApiKey = (purposeForLogin === 'copier' && parsed.cid && parsed.sec)
+            ? { cid: parsed.cid, sec: parsed.sec }
+            : undefined;
 
           // ① Try renewal first (preferred — keeps same session)
           let newToken = await renewTradovateToken(env, oldToken);
@@ -328,14 +398,15 @@ Deno.serve(async (req: Request) => {
           // ② Fall back to full re-login if renewal failed
           if (!newToken) {
             console.log(`[tradovate-auth] renewal failed for ${cred.id} — re-logging in`);
-            const result = await tradovateLogin(env, username, password);
+            const result = await tradovateLogin(env, username, password, purposeForLogin, storedApiKey);
             newToken = result.accessToken;
           }
 
           // Update vault AND realign broker_connections.vault_secret_id atomically (single txn).
           // OQ-VAULT-DRIFT fix: the RPC writes both vault.secrets and the pointer; no drift window.
+          // Re-pass storedApiKey so the cid+sec stay in the vault payload for the next refresh.
           await storeInVault(
-            cred.user_id, cred.environment, username, password, newToken, cred.id
+            cred.user_id, cred.environment, username, password, newToken, cred.id, storedApiKey,
           );
 
           // Post-RPC metadata update. Re-read connection_data so the pointer just written by
@@ -444,7 +515,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: cred } = await supabaseAdmin
         .from('broker_connections')
-        .select('id, user_id, broker, environment, account_id, connection_name, account_name, connection_data')
+        .select('id, user_id, broker, environment, account_id, connection_name, account_name, connection_data, purpose')
         .eq('id', credentialId)
         .in('broker', ['tradovate', 'ninja_trader'])
         .single();
@@ -513,14 +584,29 @@ Deno.serve(async (req: Request) => {
         return await handleVaultMiss('vault_read_null');
       }
 
-      const { username, password } = JSON.parse(secret);
+      // Vault payload shape:
+      //   journal: { username, password, accessToken }
+      //   copier:  { username, password, accessToken, cid, sec }
+      const parsedReconnect = JSON.parse(secret) as {
+        username: string;
+        password: string;
+        accessToken?: string;
+        cid?: number;
+        sec?: string;
+      };
+      const { username, password } = parsedReconnect;
       const env = cred.environment as 'live' | 'demo';
 
-      // Full re-login with stored credentials
-      const { accessToken } = await tradovateLogin(env, username, password);
+      // Full re-login with stored credentials — purpose-scoped.
+      const reconnectPurpose = ((cred as { purpose?: string }).purpose === 'copier' ? 'copier' : 'journal') as 'journal' | 'copier';
+      const reconnectApiKey = (reconnectPurpose === 'copier' && parsedReconnect.cid && parsedReconnect.sec)
+        ? { cid: parsedReconnect.cid, sec: parsedReconnect.sec }
+        : undefined;
+      const { accessToken } = await tradovateLogin(env, username, password, reconnectPurpose, reconnectApiKey);
 
       // OQ-VAULT-DRIFT fix: atomic vault + pointer alignment via the RPC (single txn).
-      await storeInVault(cred.user_id, env, username, password, accessToken, cred.id);
+      // Re-pass reconnectApiKey so the cid+sec stay in the vault payload.
+      await storeInVault(cred.user_id, env, username, password, accessToken, cred.id, reconnectApiKey);
 
       // Re-read fresh connection_data so the pointer just written by the atomic RPC
       // isn't clobbered by the stale `cdata` snapshot.
@@ -584,23 +670,50 @@ Deno.serve(async (req: Request) => {
     const brokerName: 'tradovate' | 'ninja_trader' =
       body.broker === 'ninja_trader' ? 'ninja_trader' : 'tradovate';
 
+    // Copier purpose: customer-supplied API Key (cid + sec) must accompany the login.
+    // Journal purpose: cid+sec come from env (vendor OAuth app).
+    // See .claude/architecture/tradovate-copier-api-key-architecture.md for rationale.
+    let userApiKey: { cid: number; sec: string } | undefined;
+    if (purpose === 'copier') {
+      const rawCid = body.cid ?? body.apiKeyCid;
+      const rawSec = body.sec ?? body.apiKeySec;
+      const cidNum = typeof rawCid === 'string' ? parseInt(rawCid, 10) : rawCid;
+      if (!cidNum || !Number.isFinite(cidNum) || !rawSec || typeof rawSec !== 'string') {
+        return json({
+          error:
+            "Copier connections require your Tradovate API Key (cid + sec). " +
+            "Generate one at Web Trader → Application Settings → API Access, then paste the values here.",
+          code: 'copier_api_key_required',
+        }, 400);
+      }
+      userApiKey = { cid: cidNum, sec: rawSec };
+    }
+
+    const debugCid = purpose === 'copier' ? userApiKey!.cid : JOURNAL_CID;
+    const debugSecLen = purpose === 'copier' ? userApiKey!.sec.length : JOURNAL_SEC.length;
     // DEBUG — remove after testing
     console.log('[tradovate-auth] login attempt:', {
       username,
       passwordLength: password?.length,
       env,
-      cid: CID,
-      secLength: SEC?.length,
+      purpose,
+      cid: debugCid,
+      secLength: debugSecLen,
+      source: purpose === 'copier' ? 'customer-api-key' : 'vendor-env',
     });
 
     // 1. Authenticate with Tradovate (full login)
-    const { accessToken, accounts } = await tradovateLogin(env, username, password);
+    //    - copier → customer's own API Key cid+sec (from body)
+    //    - journal → vendor OAuth env cid+sec
+    const { accessToken, accounts } = await tradovateLogin(env, username, password, purpose, userApiKey);
 
     // 2. Persist credentials in Vault (encrypted)
     // First-connect path: broker_connections row doesn't exist yet → pass null for
     // p_connection_id (the upsert below sets vault_secret_id atomically with the rest).
+    // For copier connections we also store cid+sec so the refresh path can renew
+    // without re-prompting the customer.
     console.log('[tradovate-auth] storing in vault...');
-    const vaultId = await storeInVault(userId, env, username, password, accessToken, null);
+    const vaultId = await storeInVault(userId, env, username, password, accessToken, null, userApiKey);
     console.log('[tradovate-auth] vault stored:', vaultId);
 
     // 3. Primary account = first active, else first in list
@@ -723,14 +836,23 @@ Deno.serve(async (req: Request) => {
     } else if (/Missing required fields/i.test(msg)) {
       code = 'bad_request';
       status = 400;
+    } else if (/copier-purpose login requires customer-supplied API Key/i.test(msg)) {
+      code = 'copier_api_key_required';
+      status = 400;
     } else if (/broker_connections upsert failed/i.test(msg)) {
       code = 'db_error';
       status = 500;
     }
-    // DEBUG 2026-05-25 — expose cid + sec presence in error payload so we can
-    // confirm what `oauth_cid_Journal` resolves to without grepping logs.
-    // Remove `debug` field after Apex/Live login is verified working.
-    return json({ error: msg, code, debug: { cid: CID, secLength: SEC?.length ?? 0 } }, status);
+    // Debug payload — journal env values only; copier values are per-customer
+    // (echoed back inside the [DEBUG cid=...] suffix on the error string itself).
+    return json({
+      error: msg,
+      code,
+      debug: {
+        journal_cid: JOURNAL_CID,
+        journal_secLength: JOURNAL_SEC?.length ?? 0,
+      },
+    }, status);
   }
 });
 

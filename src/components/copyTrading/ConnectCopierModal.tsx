@@ -76,6 +76,11 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
   const [environment, setEnvironment] = useState<TradovateEnv>('demo');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // API Key fields — customer generates these in Tradovate Web Trader → Application
+  // Settings → API Access. Per the canonical architecture doc, copier-purpose
+  // connections MUST use the customer's own API Key (cid + sec); OAuth is forbidden.
+  const [apiKeyCid, setApiKeyCid] = useState('');
+  const [apiKeySec, setApiKeySec] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +107,16 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
       return;
     }
     if (!username.trim() || !password.trim()) {
-      setError('Username and password are required.');
+      setError('Username and dedicated API password are required.');
+      return;
+    }
+    const cidNum = parseInt(apiKeyCid.trim(), 10);
+    if (!Number.isFinite(cidNum) || cidNum <= 0) {
+      setError('CID must be the numeric ID shown when you generated your API Key.');
+      return;
+    }
+    if (!apiKeySec.trim()) {
+      setError('API Secret is required (shown once when you generated your API Key).');
       return;
     }
     setIsConnecting(true);
@@ -114,6 +128,7 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
         connectionName.trim() || undefined,
         'tradovate',
         'copier',
+        { cid: cidNum, sec: apiKeySec.trim() },
       );
       if (result && !result.success) {
         setError(result.error ?? 'Connection failed. Check your credentials and try again.');
@@ -142,11 +157,11 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
         <div className="px-ds-5 pt-ds-5 pb-ds-3">
           <h3 className="text-base font-semibold text-ink-primary">Connect Trade Copier</h3>
           <p className="text-xs text-ink-secondary mt-1">
-            Enter your Tradovate credentials — used to copy trades between your accounts. Separate from your Journal connection.
+            Connect via your personal Tradovate API Key — copies trades between your own accounts. Separate from Journal.
           </p>
           <div className="mt-ds-2 rounded-md border border-gold-border/40 bg-gold-primary/5 px-ds-3 py-ds-2">
             <p className="text-[11px] leading-snug text-ink-secondary">
-              💡 If you already have this account in Journal, you can connect it here again for Copier — they work independently.
+              💡 Generate your API Key at <span className="text-gold-primary">Tradovate Web Trader → Application Settings → API Access</span>. You'll get a CID (number) and Secret (string). Use a <strong>dedicated API password</strong> — not your master password.
             </p>
           </div>
           {isPropFirm && (
@@ -253,20 +268,61 @@ export const ConnectCopierModal = memo(function ConnectCopierModal({
                 </div>
               )}
 
-              {/* Password */}
+              {/* Dedicated API Password */}
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
-                  Password
+                  Dedicated API Password
                 </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-gold-border outline-none transition-colors duration-base"
+                />
+                <p className="text-[10px] text-ink-tertiary mt-1">
+                  The password you set when generating the API Key — <strong>not</strong> your master password.
+                </p>
+              </div>
+
+              {/* API Key CID */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
+                  API Key CID
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={apiKeyCid}
+                  onChange={(e) => setApiKeyCid(e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 12345"
+                  autoComplete="off"
+                  className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-gold-border outline-none transition-colors duration-base font-mono"
+                />
+                <p className="text-[10px] text-ink-tertiary mt-1">
+                  Numeric ID shown when the API Key was created.
+                </p>
+              </div>
+
+              {/* API Key Secret */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-ink-secondary mb-1">
+                  API Key Secret
+                </label>
+                <input
+                  type="password"
+                  value={apiKeySec}
+                  onChange={(e) => setApiKeySec(e.target.value)}
+                  placeholder="Client secret string"
+                  autoComplete="off"
                   onKeyDown={(e) => e.key === 'Enter' && !isConnecting && handleConnect()}
                   className="w-full px-ds-3 py-ds-2 rounded-md bg-surface-base border border-border-ds-subtle text-sm text-ink-primary placeholder:text-ink-tertiary focus:border-gold-border outline-none transition-colors duration-base"
                 />
+                <p className="text-[10px] text-ink-tertiary mt-1">
+                  Shown once at API Key generation. Cannot be retrieved later — regenerate the key if lost.
+                </p>
               </div>
             </div>
           )}
