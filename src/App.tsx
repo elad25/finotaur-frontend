@@ -203,7 +203,10 @@ const AllMarketsHeatmap = lazy(() => import("@/pages/app/all-markets/Heatmap"));
 const WarZonePage = lazy(() => import("@/pages/app/all-markets/Warzonepage"));
 const AdminSupportTickets = lazy(() => import("@/pages/app/all-markets/admin/Supporttickets"));
 const AdminSupportAiDrafts = lazy(() => import("@/pages/app/all-markets/admin/SupportAiDrafts"));
-const AdminSiteDashboard = lazy(() => import("@/pages/app/all-markets/admin/SiteDashboard"));
+// Admin CRM (unified — replaces legacy SiteDashboard route).
+// Old file at pages/app/all-markets/admin/SiteDashboard.tsx is kept on disk
+// as an orphan until Phase 0.5 verifies the new shell is stable in prod.
+const AdminCRMShell = lazy(() => import("@/pages/app/admin"));
 const AffiliateSmartPage = lazy(() => import("@/pages/app/all-markets/affiliate/AffiliateSmartPage"));  // 🤝 NEW
 const TopSecretAdmin = lazy(() => import("@/pages/app/all-markets/TopSecretAdmin"));
 const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
@@ -404,7 +407,10 @@ function AppContent() {
           <Route path="all-markets/affiliate" element={FEATURES.AFFILIATE_TRACKING ? <SuspenseRoute><AffiliateSmartPage /></SuspenseRoute> : <Navigate to="/app" replace />} />
           <Route path="all-markets/admin/support" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportTickets /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/admin/support-ai" element={<ProtectedAdminRoute><SuspenseRoute><AdminSupportAiDrafts /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="all-markets/admin/site-dashboard" element={<ProtectedAdminRoute><SuspenseRoute><AdminSiteDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
+          {/* Legacy SiteDashboard URL — redirected to unified Admin CRM */}
+          <Route path="all-markets/admin/site-dashboard" element={<Navigate to="/app/admin" replace />} />
+          {/* Unified Admin CRM — Phase 0 ships Overview; later phases add more tabs */}
+          <Route path="admin/*" element={<ProtectedAdminRoute><SuspenseRoute><AdminCRMShell /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="all-markets/top-secret" element={<SuspenseRoute><TopSecretPage /></SuspenseRoute>} />
           <Route path="top-secret/admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />

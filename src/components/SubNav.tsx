@@ -166,9 +166,10 @@ export const SubNav = () => {
       return location.pathname.startsWith('/app/ai/copilot');
     }
     
-    // SITE DASHBOARD - Exact matching
-    if (itemPath === '/app/all-markets/admin/site-dashboard') {
-      return location.pathname === '/app/all-markets/admin/site-dashboard';
+    // ADMIN CRM — match anything under /app/admin (unified shell)
+    if (itemPath === '/app/admin') {
+      return location.pathname === '/app/admin' ||
+             location.pathname.startsWith('/app/admin/');
     }
     
     // SUPPORT - Exact matching  

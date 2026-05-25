@@ -17,6 +17,9 @@ const NO_SIDEBAR_ROUTES = [
   '/app/all-markets/chart',
   '/app/all-markets/top-secret',
   '/app/settings',
+  // Admin CRM ships its own internal sidebar (12 tabs), so the global one
+  // would collide. Keep TopNav + SubNav visible — those are app-level chrome.
+  '/app/admin',
 ];
 
 export const ProtectedAppLayout = () => {
