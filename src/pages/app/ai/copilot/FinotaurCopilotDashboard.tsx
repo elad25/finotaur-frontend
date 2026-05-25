@@ -37,7 +37,7 @@ export function FinotaurCopilotDashboard() {
       </div>
 
       <AllocationPanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
-      <SectorExposurePanel className="xl:col-span-4" />
+      <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
       <RiskAnalysisPanel className="xl:col-span-4" />
     </div>
   );
@@ -260,6 +260,30 @@ function bucketAssetClass(cls: string | undefined): string {
   return 'OTHER';
 }
 
+// Palette for allocation donut / sector bars — gold variants + neutrals (design system ADL-020, no green).
+const ALLOC_PALETTE: Array<{ swatch: string; conic: string }> = [
+  { swatch: 'bg-[#f4d97b]',      conic: '#f4d97b' },
+  { swatch: 'bg-[#c9a646]',      conic: '#c9a646' },
+  { swatch: 'bg-[#a98220]',      conic: '#a98220' },
+  { swatch: 'bg-[#7a5e16]',      conic: '#7a5e16' },
+  { swatch: 'bg-[#4a3a0e]',      conic: '#4a3a0e' },
+  { swatch: 'bg-white/15',       conic: 'rgba(255,255,255,0.15)' },
+];
+
+/** Build a CSS conic-gradient string from a list of (label, percent) rows. */
+function buildConicGradient(rows: Array<[string, number]>): string {
+  if (rows.length === 0) return 'rgba(255,255,255,0.13)';
+  let cursor = 0;
+  const stops: string[] = [];
+  rows.forEach(([_, pct], i) => {
+    const color = ALLOC_PALETTE[i % ALLOC_PALETTE.length].conic;
+    const start = cursor;
+    cursor += pct;
+    stops.push(`${color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`);
+  });
+  return `conic-gradient(${stops.join(', ')})`;
+}
+
 function AllocationPanel({
   className,
   snapshot,
@@ -269,15 +293,16 @@ function AllocationPanel({
   snapshot: PortfolioSnapshot;
   isConnected: boolean;
 }) {
-  const mockRows: Array<[string, string]> = [
-    ['EQUITIES', '68.4%'],
-    ['ETFs', '15.7%'],
-    ['BONDS', '7.3%'],
-    ['CASH', '5.6%'],
-    ['OTHER', '2.0%'],
+  // Mock allocation used pre-connection. After connect, real holdings drive the donut + rows.
+  const mockRows: Array<[string, number]> = [
+    ['EQUITIES', 68.4],
+    ['ETFs', 15.7],
+    ['BONDS', 7.3],
+    ['CASH', 5.6],
+    ['OTHER', 2.0],
   ];
 
-  let rows: Array<[string, string]> = mockRows;
+  let rows: Array<[string, number]> = mockRows;
   let totalDisplay = '$1.25M';
 
   if (isConnected) {
@@ -289,9 +314,8 @@ function AllocationPanel({
     }
     rows = Array.from(groups.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, `${((val / total) * 100).toFixed(1)}%`]);
-    if (rows.length === 0) rows = [['CASH', '100.0%']]; // defensive: empty holdings
-    // Format total value compactly
+      .map(([label, val]) => [label, (val / total) * 100]);
+    if (rows.length === 0) rows = [['CASH', 100]]; // defensive: empty holdings
     if (snapshot.totalValue >= 1_000_000) {
       totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
     } else if (snapshot.totalValue >= 10_000) {
@@ -301,23 +325,25 @@ function AllocationPanel({
     }
   }
 
+  const conic = buildConicGradient(rows);
+
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="HOLDINGS" action="VIEW ALL" actionTo="/app/ai/copilot/holdings" />
         <div className="mt-4 flex items-center gap-5">
-          <div className="relative h-28 w-28 rounded-full bg-[conic-gradient(#f4d97b_0_34%,#c9a646_34%_68%,rgba(201,166,70,0.52)_68%_84%,rgba(255,255,255,0.13)_84%_100%)] p-4">
+          <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
             <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
               <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
               <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
             </div>
           </div>
           <div className="flex-1 space-y-2">
-            {rows.map(([label, value]) => (
+            {rows.map(([label, pct], i) => (
               <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
-                <span className="h-2 w-2 bg-gold-primary/70" />
+                <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
                 <span className="text-ink-secondary">{label}</span>
-                <span className="font-mono text-ink-primary">{value}</span>
+                <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
               </div>
             ))}
           </div>
@@ -327,8 +353,34 @@ function AllocationPanel({
   );
 }
 
-function SectorExposurePanel({ className }: { className?: string }) {
-  const sectors: Array<[string, number]> = [
+/**
+ * Map IB AssetClass to a human-readable macro bucket. For now we group by asset
+ * class because the IBRIT Activity report doesn't carry ticker→sector data; a
+ * future enhancement could enrich equity holdings with sector lookups
+ * (Polygon / IEX), but until then "Cash" / "Equities" / "Options" etc. is the
+ * honest classification we can prove from the source data.
+ */
+function bucketSector(cls: string | undefined): string {
+  const c = (cls || '').toUpperCase();
+  if (c === 'STK' || c === 'WAR' || c === 'EQUITIES') return 'Equities';
+  if (c === 'OPT' || c === 'FOP' || c === 'OPTIONS') return 'Options';
+  if (c === 'FUT' || c === 'FUTURES') return 'Futures';
+  if (c === 'BOND' || c === 'BONDS') return 'Bonds';
+  if (c === 'CASH' || c === 'FOREX') return 'Cash';
+  if (c === 'CMDTY' || c === 'COMMODITIES') return 'Commodities';
+  return 'Other';
+}
+
+function SectorExposurePanel({
+  className,
+  snapshot,
+  isConnected,
+}: {
+  className?: string;
+  snapshot: PortfolioSnapshot;
+  isConnected: boolean;
+}) {
+  const mockSectors: Array<[string, number]> = [
     ['Technology', 28.7],
     ['Financials', 14.3],
     ['Health Care', 12.6],
@@ -336,6 +388,24 @@ function SectorExposurePanel({ className }: { className?: string }) {
     ['Industrials', 8.7],
     ['Other', 23.9],
   ];
+
+  let sectors: Array<[string, number]> = mockSectors;
+  if (isConnected) {
+    const total = snapshot.totalValue || 1;
+    const groups = new Map<string, number>();
+    for (const h of snapshot.holdings) {
+      const label = bucketSector(h.assetClass);
+      groups.set(label, (groups.get(label) || 0) + h.marketValue);
+    }
+    sectors = Array.from(groups.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, val]) => [label, (val / total) * 100]);
+    if (sectors.length === 0) sectors = [['Other', 100]];
+  }
+
+  // Bars scale so the largest sector fills the available width; tiny allocations stay visible.
+  const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
+
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
@@ -345,9 +415,12 @@ function SectorExposurePanel({ className }: { className?: string }) {
             <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
               <span className="text-ink-secondary truncate">{name}</span>
               <div className="h-2 rounded-full bg-white/8 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]" style={{ width: `${value * 2.1}%` }} />
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
+                  style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
+                />
               </div>
-              <span className="font-mono text-ink-tertiary text-right">{value}%</span>
+              <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
             </div>
           ))}
         </div>

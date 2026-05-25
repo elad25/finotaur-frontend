@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/ds/Card';
 import { PerformancePoint, TimeRange } from '../hooks/usePortfolioMockData';
+import { calculatePortfolioMetrics, fmtPercent, fmtNumber } from '@/lib/portfolio/metrics';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -19,6 +20,35 @@ const PADDING = { top: 14, right: 16, bottom: 28, left: 58 };
 
 export function PerformanceChart({ series, range, onRangeChange }: Props) {
   const [mode, setMode] = useState<Mode>('dollar');
+  const metrics = useMemo(() => calculatePortfolioMetrics(series), [series]);
+  const returnLabel = range === '1Y' || range === 'ALL' || !range
+    ? `RETURN (${range ?? '1Y'})`
+    : `RETURN (${range})`;
+
+  // X-axis date labels — derived from the actual series, so the user can see the time-range changed
+  // even when the value line itself is flat (cash-only or static-balance accounts).
+  const xAxisLabels = useMemo(() => {
+    if (series.length < 2) return [];
+    const ratios = [0, 0.25, 0.5, 0.75, 1];
+    const totalDays = (new Date(series[series.length - 1].date).getTime() - new Date(series[0].date).getTime()) / 86_400_000;
+    // Short ranges → "MMM DD" ; long ranges → "MMM YYYY"
+    const fmt: Intl.DateTimeFormatOptions = totalDays > 180
+      ? { month: 'short', year: 'numeric' }
+      : { month: 'short', day: 'numeric' };
+    return ratios.map((r) => {
+      const idx = Math.min(series.length - 1, Math.max(0, Math.round(r * (series.length - 1))));
+      const point = series[idx];
+      return { ratio: r, label: new Date(point.date).toLocaleDateString('en-US', fmt) };
+    });
+  }, [series]);
+
+  const rangeSummary = useMemo(() => {
+    if (series.length < 2) return null;
+    const first = new Date(series[0].date);
+    const last = new Date(series[series.length - 1].date);
+    const days = Math.round((last.getTime() - first.getTime()) / 86_400_000);
+    return { days, first, last };
+  }, [series]);
 
   const chart = useMemo(() => {
     if (series.length === 0) {
@@ -209,18 +239,48 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
 
           <path d={chart.areaPath} fill="url(#copilotSvgArea)" />
           <path d={chart.path} fill="none" stroke="url(#copilotSvgLine)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+
+          {xAxisLabels.map(({ ratio, label }) => {
+            const x = PADDING.left + ratio * (CHART_WIDTH - PADDING.left - PADDING.right);
+            const anchor = ratio === 0 ? 'start' : ratio === 1 ? 'end' : 'middle';
+            return (
+              <text
+                key={`xl-${ratio}`}
+                x={x}
+                y={CHART_HEIGHT - PADDING.bottom + 16}
+                textAnchor={anchor}
+                fill="rgba(255,255,255,0.42)"
+                fontSize="10"
+              >
+                {label}
+              </text>
+            );
+          })}
         </svg>
 
-        {/* TODO: wire RETURN/ALPHA/SHARPE/DRAWDOWN/VOLATILITY/WINNING DAYS to real IB data when trade history API is available */}
+        {rangeSummary && (
+          <div className="-mt-2 mb-2 flex items-center justify-between px-4 text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">
+            <span>
+              {rangeSummary.first.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {' → '}
+              {rangeSummary.last.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+            <span>
+              {rangeSummary.days} days
+              {chart.isFlat && <span className="ml-2 text-gold-primary/70">· flat (no movement in range)</span>}
+            </span>
+          </div>
+        )}
+
         <div className="mt-2 grid grid-cols-2 md:grid-cols-6 border-t border-gold-primary/10">
-          {[
-            ['RETURN (1Y)', '+24.67%', 'text-emerald-300'],
-            ['ALPHA', '+7.38%', 'text-emerald-300'],
-            ['SHARPE RATIO', '1.68', 'text-white'],
-            ['MAX DRAWDOWN', '-8.91%', 'text-white'],
-            ['VOLATILITY', '14.32%', 'text-gold-primary'],
-            ['WINNING DAYS', '63.2%', 'text-white'],
-          ].map(([label, value, color]) => (
+          {([
+            [returnLabel, fmtPercent(metrics.returnRange, { signed: true }), 'text-gold-primary'],
+            ['ALPHA', fmtPercent(metrics.alpha, { signed: true }), 'text-ink-tertiary'],
+            ['SHARPE RATIO', fmtNumber(metrics.sharpe), 'text-white'],
+            ['MAX DRAWDOWN', fmtPercent(metrics.maxDrawdown), 'text-num-negative'],
+            ['VOLATILITY', fmtPercent(metrics.volatility), 'text-gold-primary'],
+            ['WINNING DAYS', fmtPercent(metrics.winningDays), 'text-white'],
+          ] as const).map(([label, value, color]) => (
             <div key={label} className="px-3 py-3 border-r border-gold-primary/10 last:border-r-0">
               <p className="text-[9px] uppercase text-ink-tertiary">{label}</p>
               <p className={`mt-2 font-mono text-sm tabular-nums ${color}`}>{value}</p>
