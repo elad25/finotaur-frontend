@@ -1,10 +1,25 @@
 // src/pages/app/admin/tabs/IntegrationsPlaceholder.tsx
-// Tab 10 — Integrations. Planned in Phase 5.
-// Shows what's already wired (Whop, Resend) and what's planned (Slack,
-// Discord, WhatsApp, optional analytics).
+// ============================================
+// Integrations — every external system FINOTAUR talks to.
+// Phase 2: live health snapshot from existing RPCs + Matan dashboard
+// quick-link to the finotaur-marketing project.
+// ============================================
 
-import { Plug, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Plug,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  ExternalLink,
+  Megaphone,
+} from 'lucide-react';
 import { PlaceholderShell, type PlannedFeature } from './PlaceholderShell';
+import {
+  getSubscriberStats,
+  getAdminStats,
+} from '@/services/adminService';
+import type { SubscriberStats, AdminStats } from '@/types/admin';
 
 type IntegrationStatus = 'live' | 'partial' | 'planned';
 
@@ -13,7 +28,12 @@ interface Integration {
   purpose: string;
   status: IntegrationStatus;
   note: string;
+  url?: string;
 }
+
+const MARKETING_DASHBOARD_URL =
+  (import.meta.env.VITE_MARKETING_DASHBOARD_URL as string | undefined) ??
+  'http://localhost:4747';
 
 const INTEGRATIONS: Integration[] = [
   {
@@ -44,7 +64,7 @@ const INTEGRATIONS: Integration[] = [
     name: 'Slack',
     purpose: 'Admin alerts (new $109 signup, churn risk spike, deploy)',
     status: 'planned',
-    note: 'Webhook in Slack workspace → server-side proxy → channel.',
+    note: 'Webhook in Slack workspace -> server-side proxy -> channel.',
   },
   {
     name: 'Discord',
@@ -103,7 +123,41 @@ const STATUS_META: Record<
   planned: { icon: Clock, cls: 'text-gray-500', label: 'Planned' },
 };
 
+interface LiveSnapshot {
+  whopSubscribers: number;
+  newWhopThisMonth: number;
+  totalUsers: number;
+  activeUsers: number;
+}
+
 export function IntegrationsPlaceholder() {
+  const [snapshot, setSnapshot] = useState<LiveSnapshot | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [subStats, adminStats] = await Promise.all([
+          getSubscriberStats() as Promise<SubscriberStats>,
+          getAdminStats() as Promise<AdminStats>,
+        ]);
+        if (cancelled) return;
+        setSnapshot({
+          whopSubscribers: subStats.activeSubscribers,
+          newWhopThisMonth: subStats.newSubscribersThisMonth,
+          totalUsers: adminStats.totalUsers,
+          activeUsers: adminStats.activeUsers,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[IntegrationsPlaceholder] snapshot load failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <PlaceholderShell
       title="Integrations"
@@ -113,39 +167,104 @@ export function IntegrationsPlaceholder() {
       intro="The platform already integrates with Whop, Resend, and Supabase in production. Phase 5 surfaces all of them here with health pings, recent event logs, and one-click test invocations — so when something silently breaks (cron failing, webhook 401, expired token), it's visible at a glance instead of buried in server logs."
       features={FEATURES}
       liveData={
-        <ul className="divide-y divide-gray-800 -mx-6">
-          {INTEGRATIONS.map((integration) => {
-            const meta = STATUS_META[integration.status];
-            const StatusIcon = meta.icon;
-            return (
-              <li
-                key={integration.name}
-                className="px-6 py-3 flex items-start gap-3"
-              >
-                <StatusIcon className={`w-4 h-4 shrink-0 mt-0.5 ${meta.cls}`} />
+        <div className="space-y-4 -mx-6">
+          {/* Marketing dashboard quick-link card */}
+          <div className="px-6">
+            <a
+              href={MARKETING_DASHBOARD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block bg-[#D4AF37]/[0.06] border border-[#D4AF37]/30 hover:border-[#D4AF37]/60 rounded-lg p-4 transition-colors group"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-md bg-[#D4AF37]/20 flex items-center justify-center shrink-0">
+                  <Megaphone className="w-5 h-5 text-[#D4AF37]" />
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-white text-sm font-medium">
-                      {integration.name}
+                    <span className="text-white font-semibold">
+                      Matan Dashboard
                     </span>
-                    <span className="text-gray-500 text-xs">·</span>
-                    <span className="text-gray-400 text-xs">
-                      {integration.purpose}
-                    </span>
-                    <span
-                      className={`text-[10px] uppercase tracking-wide font-semibold ml-auto ${meta.cls}`}
-                    >
-                      {meta.label}
+                    <span className="text-[10px] uppercase tracking-wide font-semibold text-[#D4AF37]">
+                      External
                     </span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {integration.note}
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                    Marketing operations control plane — campaign performance,
+                    ad spend, landing-page experiments. Lives in the
+                    {' '}<code className="text-[#D4AF37] text-[10px]">../finotaur-marketing</code>{' '}
+                    project.
                   </p>
+                  <div className="flex items-center gap-1 text-[11px] text-[#D4AF37]/80 mt-2 group-hover:text-[#D4AF37]">
+                    <span>{MARKETING_DASHBOARD_URL}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </div>
                 </div>
-              </li>
-            );
-          })}
-        </ul>
+              </div>
+            </a>
+          </div>
+
+          {/* Whop live snapshot — pulls from existing RPCs */}
+          {snapshot && (
+            <div className="px-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <SnapshotCard
+                label="Whop subscribers"
+                value={snapshot.whopSubscribers.toLocaleString()}
+                hint="active billing"
+              />
+              <SnapshotCard
+                label="New this month"
+                value={snapshot.newWhopThisMonth.toLocaleString()}
+                hint="via Whop webhook"
+              />
+              <SnapshotCard
+                label="Supabase users"
+                value={snapshot.totalUsers.toLocaleString()}
+                hint="auth.users total"
+              />
+              <SnapshotCard
+                label="Active (30d)"
+                value={snapshot.activeUsers.toLocaleString()}
+                hint="last_login window"
+              />
+            </div>
+          )}
+
+          {/* Existing list */}
+          <ul className="divide-y divide-gray-800">
+            {INTEGRATIONS.map((integration) => {
+              const meta = STATUS_META[integration.status];
+              const StatusIcon = meta.icon;
+              return (
+                <li
+                  key={integration.name}
+                  className="px-6 py-3 flex items-start gap-3"
+                >
+                  <StatusIcon className={`w-4 h-4 shrink-0 mt-0.5 ${meta.cls}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white text-sm font-medium">
+                        {integration.name}
+                      </span>
+                      <span className="text-gray-500 text-xs">·</span>
+                      <span className="text-gray-400 text-xs">
+                        {integration.purpose}
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase tracking-wide font-semibold ml-auto ${meta.cls}`}
+                      >
+                        {meta.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {integration.note}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       }
       whyItMatters={
         <>
@@ -156,5 +275,25 @@ export function IntegrationsPlaceholder() {
         </>
       }
     />
+  );
+}
+
+function SnapshotCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
+  return (
+    <div className="bg-[#0E0E0E] border border-gray-800 rounded-md p-3">
+      <div className="text-[10px] uppercase tracking-wide text-gray-500">
+        {label}
+      </div>
+      <div className="text-lg font-semibold text-white mt-1">{value}</div>
+      <div className="text-[10px] text-gray-600 mt-0.5">{hint}</div>
+    </div>
   );
 }
