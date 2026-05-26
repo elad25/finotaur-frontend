@@ -7,7 +7,7 @@
 // ============================================
 
 import { NavLink } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ArrowLeft } from 'lucide-react';
 import { ADMIN_TABS, type AdminTab } from '../config/adminTabs';
 import { cn } from '@/lib/utils';
 
@@ -21,8 +21,15 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
   );
 
   return (
-    <aside className="w-64 shrink-0 bg-[#0E0E0E] border-r border-gray-800 min-h-[calc(100vh-120px)]">
+    <aside className="w-64 shrink-0 bg-[#0E0E0E] border-r border-gray-800 min-h-screen">
       <div className="px-5 py-5 border-b border-gray-800">
+        <a
+          href="/app/all-markets/warzone"
+          className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-[#D4AF37] transition-colors mb-3"
+        >
+          <ArrowLeft className="w-3 h-3" />
+          Back to FINOTAUR
+        </a>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-md bg-[#D4AF37]/15 flex items-center justify-center">
             <span className="text-[#D4AF37] font-bold text-sm">CRM</span>
@@ -32,7 +39,7 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
               Admin CRM
             </h2>
             <p className="text-gray-500 text-[10px] leading-tight mt-0.5">
-              Phase 1 · Unified
+              Phase 2 · Standalone
             </p>
           </div>
         </div>

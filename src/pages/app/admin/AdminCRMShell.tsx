@@ -91,7 +91,7 @@ export function AdminCRMShell() {
   const { isSuperAdmin } = useAdminAuth();
 
   return (
-    <div className="flex bg-[#080808] min-h-[calc(100vh-120px)]">
+    <div className="flex bg-[#080808] min-h-screen">
       <AdminSidebar isSuperAdmin={isSuperAdmin} />
 
       <div className="flex-1 min-w-0">

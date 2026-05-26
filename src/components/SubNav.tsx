@@ -232,6 +232,17 @@ export const SubNav = () => {
       return;
     }
 
+    // ADMIN CRM: opens in a separate browser tab — the CRM is a standalone
+    // surface that renders without the marketing/trading TopNav + SubNav
+    // chrome (see ProtectedAppLayout HIDE_CHROME_ROUTES). Same shared-auth
+    // pattern as Copilot above.
+    if (path === '/app/admin' || path.startsWith('/app/admin/')) {
+      if (typeof window !== 'undefined') {
+        window.open(path, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
     // BACKTEST LOCKED CHECK
     if (path.includes('/backtest') && isPathLocked(path) && !hasBetaAccess) {
       console.log('🔒 Backtest is locked - Coming Soon');
