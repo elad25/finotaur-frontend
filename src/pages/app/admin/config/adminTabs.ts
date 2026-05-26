@@ -155,10 +155,9 @@ export const ADMIN_TABS: AdminTab[] = [
     label: 'Executive Dashboard',
     path: '/app/admin/executive',
     icon: TrendingUp,
-    phase: 5,
+    phase: 2,
     enabled: true,
     description: 'Forecasting, anomaly detection, KPI alerts',
-    planned: true,
   },
 ];
 
