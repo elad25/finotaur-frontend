@@ -278,14 +278,14 @@ export default function NewsletterAdmin() {
   // ==========================================
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white p-6" dir="rtl">
+    <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2" style={{ color: '#C9A646' }}>
-            📧 ניהול ניוזלטר
+            📧 Newsletter Management
           </h1>
-          <p className="text-gray-400">יצירה, תצוגה מקדימה ושליחת ניוזלטרים</p>
+          <p className="text-gray-400">Create, preview, and send newsletters</p>
         </div>
 
         {/* Alerts */}
@@ -307,7 +307,7 @@ export default function NewsletterAdmin() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">💎</span>
               <div>
-                <p className="text-gray-400 text-sm">מנויי פרימיום</p>
+                <p className="text-gray-400 text-sm">Premium subscribers</p>
                 <p className="text-2xl font-bold" style={{ color: '#C9A646' }}>{audienceCounts.premium}</p>
               </div>
             </div>
@@ -316,7 +316,7 @@ export default function NewsletterAdmin() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">📧</span>
               <div>
-                <p className="text-gray-400 text-sm">מנויי ניוזלטר</p>
+                <p className="text-gray-400 text-sm">Newsletter subscribers</p>
                 <p className="text-2xl font-bold" style={{ color: '#C9A646' }}>{audienceCounts.newsletter}</p>
               </div>
             </div>
@@ -325,7 +325,7 @@ export default function NewsletterAdmin() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">🎯</span>
               <div>
-                <p className="text-gray-400 text-sm">סה״כ נמענים</p>
+                <p className="text-gray-400 text-sm">Total recipients</p>
                 <p className="text-2xl font-bold" style={{ color: '#C9A646' }}>
                   {audienceCounts.premium + audienceCounts.newsletter}
                 </p>
@@ -337,10 +337,10 @@ export default function NewsletterAdmin() {
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-[#2a2a2a] pb-4">
           {[
-            { id: 'preview', label: 'תצוגה מקדימה', emoji: '👁️' },
-            { id: 'subscribers', label: 'מנויים', emoji: '👥' },
-            { id: 'history', label: 'היסטוריה', emoji: '📜' },
-            { id: 'settings', label: 'הגדרות', emoji: '⚙️' },
+            { id: 'preview', label: 'Preview', emoji: '👁️' },
+            { id: 'subscribers', label: 'Subscribers', emoji: '👥' },
+            { id: 'history', label: 'History', emoji: '📜' },
+            { id: 'settings', label: 'Settings', emoji: '⚙️' },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -369,14 +369,14 @@ export default function NewsletterAdmin() {
                   className="px-6 py-3 rounded-lg font-medium transition-all disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #C9A646 0%, #B8963F 100%)', color: '#0F0F0F' }}
                 >
-                  {loading ? '⏳ טוען...' : '🔄 צור תצוגה מקדימה'}
+                  {loading ? '⏳ Loading...' : '🔄 Generate preview'}
                 </button>
 
                 {/* Test Email */}
                 <div className="flex gap-2 flex-1">
                   <input
                     type="email"
-                    placeholder="אימייל לבדיקה"
+                    placeholder="Test email address"
                     value={testEmail}
                     onChange={(e) => setTestEmail(e.target.value)}
                     className="flex-1 px-4 py-2 bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg text-white"
@@ -387,7 +387,7 @@ export default function NewsletterAdmin() {
                     disabled={loading || !preview}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
                   >
-                    🧪 שלח בדיקה
+                    🧪 Send test
                   </button>
                 </div>
               </div>
@@ -395,12 +395,12 @@ export default function NewsletterAdmin() {
               {/* Audience Selector */}
               {preview && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">בחר קהל יעד:</h3>
+                  <h3 className="text-lg font-medium">Select target audience:</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {[
-                      { type: 'premium' as AudienceType, label: 'מנויי פרימיום', emoji: '💎', count: audienceCounts.premium },
-                      { type: 'newsletter' as AudienceType, label: 'מנויי ניוזלטר', emoji: '📧', count: audienceCounts.newsletter },
-                      { type: 'both' as AudienceType, label: 'שניהם', emoji: '🎯', count: audienceCounts.premium + audienceCounts.newsletter },
+                      { type: 'premium' as AudienceType, label: 'Premium subscribers', emoji: '💎', count: audienceCounts.premium },
+                      { type: 'newsletter' as AudienceType, label: 'Newsletter subscribers', emoji: '📧', count: audienceCounts.newsletter },
+                      { type: 'both' as AudienceType, label: 'Both', emoji: '🎯', count: audienceCounts.premium + audienceCounts.newsletter },
                     ].map((option) => (
                       <button
                         key={option.type}
@@ -413,7 +413,7 @@ export default function NewsletterAdmin() {
                       >
                         <span className="text-3xl block mb-2">{option.emoji}</span>
                         <span className="block font-medium">{option.label}</span>
-                        <span className="text-sm text-gray-400">{option.count} נמענים</span>
+                        <span className="text-sm text-gray-400">{option.count} recipients</span>
                       </button>
                     ))}
                   </div>
@@ -425,7 +425,7 @@ export default function NewsletterAdmin() {
                     className="w-full py-4 rounded-xl font-bold text-lg transition-all disabled:opacity-50"
                     style={{ background: 'linear-gradient(135deg, #f97316 0%, #dc2626 100%)' }}
                   >
-                    {loading ? '⏳ שולח...' : `🚀 שלח ל-${getAudienceInfo().count} ${getAudienceInfo().label} ${getAudienceInfo().emoji}`}
+                    {loading ? '⏳ Sending...' : `🚀 Send to ${getAudienceInfo().count} ${getAudienceInfo().label} ${getAudienceInfo().emoji}`}
                   </button>
                 </div>
               )}
@@ -434,7 +434,7 @@ export default function NewsletterAdmin() {
               {preview && (
                 <div className="space-y-4 mt-6">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium">תוכן הניוזלטר:</h3>
+                    <h3 className="text-lg font-medium">Newsletter content:</h3>
                     <button
                       onClick={() => setShowHtml(!showHtml)}
                       className="px-3 py-1 bg-[#2a2a2a] rounded-lg text-sm"
@@ -476,11 +476,11 @@ export default function NewsletterAdmin() {
             <div className="space-y-6">
               {/* Add Subscriber Form */}
               <div className="bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-4">
-                <h3 className="font-medium mb-4">הוסף מנוי חדש</h3>
+                <h3 className="font-medium mb-4">Add new subscriber</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <input
                     type="email"
-                    placeholder="אימייל *"
+                    placeholder="Email *"
                     value={newSubscriber.email}
                     onChange={(e) => setNewSubscriber({ ...newSubscriber, email: e.target.value })}
                     className="px-4 py-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg"
@@ -488,14 +488,14 @@ export default function NewsletterAdmin() {
                   />
                   <input
                     type="text"
-                    placeholder="שם פרטי"
+                    placeholder="First name"
                     value={newSubscriber.first_name}
                     onChange={(e) => setNewSubscriber({ ...newSubscriber, first_name: e.target.value })}
                     className="px-4 py-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg"
                   />
                   <input
                     type="text"
-                    placeholder="שם משפחה"
+                    placeholder="Last name"
                     value={newSubscriber.last_name}
                     onChange={(e) => setNewSubscriber({ ...newSubscriber, last_name: e.target.value })}
                     className="px-4 py-2 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg"
@@ -505,7 +505,7 @@ export default function NewsletterAdmin() {
                     disabled={loading}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg disabled:opacity-50"
                   >
-                    ➕ הוסף
+                    ➕ Add
                   </button>
                 </div>
               </div>
@@ -515,11 +515,11 @@ export default function NewsletterAdmin() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-[#2a2a2a]">
-                      <th className="text-right py-3 px-4">אימייל</th>
-                      <th className="text-right py-3 px-4">שם</th>
-                      <th className="text-right py-3 px-4">סטטוס</th>
-                      <th className="text-right py-3 px-4">אימיילים שנשלחו</th>
-                      <th className="text-right py-3 px-4">פעולות</th>
+                      <th className="text-left py-3 px-4">Email</th>
+                      <th className="text-left py-3 px-4">Name</th>
+                      <th className="text-left py-3 px-4">Status</th>
+                      <th className="text-left py-3 px-4">Emails sent</th>
+                      <th className="text-left py-3 px-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -540,7 +540,7 @@ export default function NewsletterAdmin() {
                             onClick={() => deleteSubscriber(sub.id)}
                             className="px-3 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
                           >
-                            🗑️ מחק
+                            🗑️ Delete
                           </button>
                         </td>
                       </tr>
@@ -548,7 +548,7 @@ export default function NewsletterAdmin() {
                     {subscribers.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-gray-500">
-                          אין מנויים עדיין
+                          No subscribers yet
                         </td>
                       </tr>
                     )}
@@ -564,11 +564,11 @@ export default function NewsletterAdmin() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-[#2a2a2a]">
-                    <th className="text-right py-3 px-4">נושא</th>
-                    <th className="text-right py-3 px-4">סטטוס</th>
-                    <th className="text-right py-3 px-4">תאריך שליחה</th>
-                    <th className="text-right py-3 px-4">נמענים</th>
-                    <th className="text-right py-3 px-4">נשלח/נכשל</th>
+                    <th className="text-left py-3 px-4">Subject</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-left py-3 px-4">Sent at</th>
+                    <th className="text-left py-3 px-4">Recipients</th>
+                    <th className="text-left py-3 px-4">Sent / Failed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -596,7 +596,7 @@ export default function NewsletterAdmin() {
                   {history.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-gray-500">
-                        אין היסטוריה עדיין
+                        No history yet
                       </td>
                     </tr>
                   )}
@@ -609,8 +609,8 @@ export default function NewsletterAdmin() {
           {activeTab === 'settings' && (
             <div className="text-center py-12">
               <span className="text-6xl mb-4 block">⚙️</span>
-              <h3 className="text-xl font-medium mb-2">הגדרות Prompts</h3>
-              <p className="text-gray-500">בקרוב - אפשרות להתאמת הפרומפטים והסגנון</p>
+              <h3 className="text-xl font-medium mb-2">Prompt Settings</h3>
+              <p className="text-gray-500">Coming soon — customize prompts and style.</p>
             </div>
           )}
         </div>
