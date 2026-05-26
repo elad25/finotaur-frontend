@@ -35,11 +35,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
     sector: 'Technology',
     score: 92,
     thesis: 'AI infrastructure demand accelerating. Strong earnings momentum and institutional accumulation.',
-    upside: '+18.4%',
-    price: '$1,152.00',
-    current: '$973.47',
-    confidence: 'High',
-    bars: 5,
     timeframe: '1-3 Weeks',
     catalysts: ['Earnings Beat', 'Blackwell Ramp', 'Institutional Flow'],
   },
@@ -50,11 +45,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
     sector: 'Technology',
     score: 89,
     thesis: 'Cloud + AI growth re-acceleration. Strong Copilot adoption and enterprise demand.',
-    upside: '+11.2%',
-    price: '$468.00',
-    current: '$421.10',
-    confidence: 'High',
-    bars: 4,
     timeframe: '1-3 Weeks',
     catalysts: ['Copilot Adoption', 'Azure Growth', 'Cost Efficiency'],
   },
@@ -65,11 +55,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
     sector: 'Consumer Cyclical',
     score: 86,
     thesis: 'Margin expansion + AWS acceleration. E-commerce stabilization and ad growth.',
-    upside: '+9.6%',
-    price: '$205.00',
-    current: '$188.93',
-    confidence: 'High',
-    bars: 4,
     timeframe: '1-4 Weeks',
     catalysts: ['AWS Growth', 'Ad Revenue', 'Prime Engagement'],
   },
@@ -80,11 +65,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
     sector: 'Communication Services',
     score: 84,
     thesis: 'Ad revenue strength and cost discipline driving margin expansion.',
-    upside: '+8.8%',
-    price: '$582.00',
-    current: '$535.10',
-    confidence: 'High',
-    bars: 4,
     timeframe: '1-4 Weeks',
     catalysts: ['Ad Demand', 'AI Efficiency', 'Reality Labs Progress'],
   },
@@ -95,11 +75,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
     sector: 'Consumer Cyclical',
     score: 81,
     thesis: 'Volume recovery and energy business growth. FSD monetization ramp.',
-    upside: '+12.3%',
-    price: '$198.00',
-    current: '$176.21',
-    confidence: 'Medium-High',
-    bars: 3,
     timeframe: '2-6 Weeks',
     catalysts: ['Volume Recovery', 'FSD Progress', 'Energy Growth'],
   },
@@ -309,7 +284,7 @@ export function CopilotTopOpportunitiesPage() {
             <table className="w-full min-w-[1260px] border-separate border-spacing-0 text-left">
               <thead>
                 <tr className="h-10 bg-[#060606]">
-                  {['RANK', 'OPPORTUNITY', 'AI SCORE', 'THESIS', 'UPSIDE POTENTIAL', 'CONFIDENCE', 'TIMEFRAME', 'KEY CATALYSTS', ''].map((heading) => (
+                  {['RANK', 'OPPORTUNITY', 'AI SCORE', 'THESIS', 'TIMEFRAME', 'KEY CATALYSTS', ''].map((heading) => (
                     <th key={heading} className="border-b border-gold-primary/12 px-2 text-[9px] font-semibold uppercase tracking-[0.07em] text-ink-tertiary">
                       {heading}
                     </th>
@@ -403,19 +378,6 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
             Why for you: {opportunity.whyForYou}
           </p>
         )}
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <p className="font-mono text-xl font-semibold text-[#64f56a]">{opportunity.upside}</p>
-        <p className="mt-1.5 font-mono text-xs text-ink-secondary">{opportunity.price}</p>
-        <p className="mt-0.5 text-[11px] text-ink-tertiary">Current: {opportunity.current}</p>
-      </td>
-      <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex gap-1">
-          {Array.from({ length: 5 }, (_, index) => (
-            <span key={index} className={`h-5 w-2.5 rounded-[2px] ${index < opportunity.bars ? 'bg-[#31bd72]' : 'bg-white/[0.07]'}`} />
-          ))}
-        </div>
-        <p className="mt-2 text-xs text-ink-secondary">{opportunity.confidence}</p>
       </td>
       <td className="border-b border-gold-primary/10 px-2">
         <div className="flex items-center gap-1.5">

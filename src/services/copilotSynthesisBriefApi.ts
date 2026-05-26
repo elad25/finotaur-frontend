@@ -45,12 +45,6 @@ export interface TradeIdea {
   time_horizon: 'short' | 'medium' | 'long';
   source: 'war_zone' | 'weekly' | 'ism' | 'synthesis';
   thesis: string;
-  entry?: string | number;
-  stop?: string | number;
-  target?: string | number;
-  rr?: number;
-  conviction: 'high' | 'medium' | 'low';
-  /** Two to three short catalyst tags added by Task C backend update */
   catalysts?: string[];
 }
 

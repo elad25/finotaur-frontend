@@ -49,26 +49,13 @@ function SourcePill({ source }: { source: TradeIdea['source'] }) {
   );
 }
 
-function ConvictionDots({ conviction }: { conviction: TradeIdea['conviction'] }) {
-  const count = conviction === 'high' ? 3 : conviction === 'medium' ? 2 : 1;
-  return (
-    <div className="flex gap-1" aria-label={`Conviction: ${conviction}`}>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className={`h-2 w-2 rounded-full ${i < count ? 'bg-gold-primary' : 'bg-white/[0.12]'}`}
-        />
-      ))}
-    </div>
-  );
-}
 
 function SkeletonRows() {
   return (
     <>
       {[...Array(4)].map((_, i) => (
         <tr key={i} className="h-[72px] animate-pulse bg-[#050505]">
-          {[...Array(8)].map((__, j) => (
+          {[...Array(6)].map((__, j) => (
             <td key={j} className="border-b border-gold-primary/10 px-2">
               <div className="h-3 rounded bg-white/[0.06]" />
             </td>
@@ -165,7 +152,7 @@ export function SynthesisBriefTradeIdeas({ tradeIdeas, loading, error, rankedTra
         <table className="w-full min-w-[900px] border-separate border-spacing-0 text-left">
           <thead>
             <tr className="h-9 bg-[#060606]">
-              {['#', 'Ticker', 'Sector', 'Horizon', 'Source', 'Thesis', 'R:R', 'Conviction'].map(
+              {['#', 'Ticker', 'Sector', 'Horizon', 'Source', 'Thesis'].map(
                 (heading) => (
                   <th
                     key={heading}
@@ -183,7 +170,7 @@ export function SynthesisBriefTradeIdeas({ tradeIdeas, loading, error, rankedTra
             ) : filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={6}
                   className="py-10 text-center text-[12px] text-ink-tertiary"
                 >
                   This week's brief publishes Sunday 17:45 IL
@@ -211,19 +198,6 @@ export function SynthesisBriefTradeIdeas({ tradeIdeas, loading, error, rankedTra
 }
 
 function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number; whyForYou?: string }) {
-  const rrDisplay =
-    idea.rr != null
-      ? `${idea.rr.toFixed(1)}R`
-      : idea.entry != null && idea.stop != null && idea.target != null
-        ? (() => {
-            const entry  = Number(idea.entry);
-            const stop   = Number(idea.stop);
-            const target = Number(idea.target);
-            const risk   = Math.abs(entry - stop);
-            const reward = Math.abs(target - entry);
-            return risk > 0 ? `${(reward / risk).toFixed(1)}R` : '—';
-          })()
-        : '—';
 
   return (
     <tr className="group h-[72px] bg-[#050505] align-middle transition hover:bg-[#060604]">
@@ -266,15 +240,6 @@ function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number
         )}
       </td>
 
-      {/* R:R */}
-      <td className="border-b border-gold-primary/10 px-2">
-        <p className="font-mono text-[13px] font-semibold text-ink-primary">{rrDisplay}</p>
-      </td>
-
-      {/* Conviction */}
-      <td className="border-b border-gold-primary/10 px-2">
-        <ConvictionDots conviction={idea.conviction} />
-      </td>
     </tr>
   );
 }

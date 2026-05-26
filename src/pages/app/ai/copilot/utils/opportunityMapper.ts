@@ -4,7 +4,7 @@
 import type { TradeIdea, RankedTradeIdea } from '@/services/copilotSynthesisBriefApi';
 
 // ---------------------------------------------------------------------------
-// Opportunity type — superset of the old hardcoded array shape.
+// Opportunity type
 // ---------------------------------------------------------------------------
 
 export interface Opportunity {
@@ -14,11 +14,6 @@ export interface Opportunity {
   sector: string;
   score: number;
   thesis: string;
-  upside: string;
-  price: string;
-  current: string;
-  confidence: 'High' | 'Medium-High' | 'Medium' | 'Low';
-  bars: number;
   timeframe: string;
   catalysts: string[];
   // Live-data extensions (undefined on fallback rows)
@@ -35,14 +30,6 @@ export const HORIZON_TO_TIMEFRAME: Record<string, string> = {
   short: '1-5 Days',
   medium: '1-4 Weeks',
   long: '1-3 Months',
-};
-
-type ConvictionKey = 'high' | 'medium' | 'low';
-
-const CONVICTION_META: Record<ConvictionKey, { score: number; bars: number; confidence: Opportunity['confidence'] }> = {
-  high:   { score: 90, bars: 5, confidence: 'High' },
-  medium: { score: 80, bars: 4, confidence: 'Medium' },
-  low:    { score: 70, bars: 3, confidence: 'Low' },
 };
 
 export const TICKER_TO_NAME: Record<string, string> = {
@@ -90,31 +77,22 @@ export function ideaToOpportunity(
   idx: number,
   ranked?: RankedTradeIdea[],
 ): Opportunity {
-  const convictionKey = (idea.conviction?.toLowerCase() ?? 'medium') as ConvictionKey;
-  const conv = CONVICTION_META[convictionKey] ?? CONVICTION_META.medium;
-
-  // Score computation
-  const sourceBonus = idea.source === 'ism' ? 5 : idea.source === 'war_zone' ? 3 : 0;
-  const rank = ranked?.find(r => r.ideaIndex === idx);
-  const personalizedBoost = rank ? Math.round(rank.relevanceScore / 20) : 0; // up to +5
-  const finalScore = Math.min(99, conv.score + sourceBonus + personalizedBoost);
-
-  // Price strings
-  const entryNum = typeof idea.entry === 'number'
-    ? idea.entry
-    : Number.parseFloat(String(idea.entry ?? ''));
-  const targetNum = typeof idea.target === 'number'
-    ? idea.target
-    : Number.parseFloat(String(idea.target ?? ''));
-
-  let upside = '—';
-  const priceStr  = Number.isFinite(targetNum) ? `$${targetNum.toFixed(2)}` : '—';
-  const currentStr = Number.isFinite(entryNum)  ? `$${entryNum.toFixed(2)}`  : '—';
-
-  if (Number.isFinite(entryNum) && Number.isFinite(targetNum) && entryNum > 0) {
-    const pct = ((targetNum - entryNum) / entryNum) * 100;
-    upside = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-  }
+  // Deterministic scoring (no conviction, no pricing)
+  const base = 75;
+  const sourceBonus =
+    idea.source === 'ism'      ? 10 :
+    idea.source === 'weekly'   ?  8 :
+    idea.source === 'war_zone' ?  6 :
+    idea.source === 'synthesis'?  3 : 0;
+  const catalystBonus =
+    (idea.catalysts?.length ?? 0) === 3 ? 5 :
+    (idea.catalysts?.length ?? 0) === 2 ? 3 : 0;
+  const thesisBonus =
+    idea.thesis.length >= 200 ? 5 :
+    idea.thesis.length >= 120 ? 3 : 0;
+  const ranked_ = ranked?.find(r => r.ideaIndex === idx);
+  const personalBoost = ranked_ ? Math.round(ranked_.relevanceScore / 20) : 0; // up to +5
+  const score = Math.min(99, base + sourceBonus + catalystBonus + thesisBonus + personalBoost);
 
   // Catalysts — use model-supplied array (capped at 3) or derive from thesis
   const catalysts =
@@ -127,17 +105,12 @@ export function ideaToOpportunity(
     ticker: idea.symbol,
     name: TICKER_TO_NAME[idea.symbol] ?? idea.symbol,
     sector: idea.sector ?? '',
-    score: finalScore,
+    score,
     thesis: idea.thesis,
-    upside,
-    price: priceStr,
-    current: currentStr,
-    confidence: conv.confidence,
-    bars: conv.bars,
     timeframe: HORIZON_TO_TIMEFRAME[idea.time_horizon] ?? '1-4 Weeks',
     catalysts,
     source: idea.source,
     timeHorizon: idea.time_horizon,
-    whyForYou: rank?.whyForYou,
+    whyForYou: ranked_?.whyForYou,
   };
 }
