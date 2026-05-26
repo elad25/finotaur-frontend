@@ -42,6 +42,7 @@ import {
   getUserGrowthData,
   getSubscriptionBreakdown,
 } from '@/services/adminService';
+import { CohortRetention } from './sections/CohortRetention';
 import type {
   AdminStats,
   SubscriberStats,
@@ -84,7 +85,7 @@ export function OverviewTab() {
           await Promise.all([
             getAdminStats(),
             getSubscriberStats(),
-            getUserGrowthData(30),
+            getUserGrowthData(90),
             getSubscriptionBreakdown(),
           ]);
 
@@ -148,6 +149,9 @@ export function OverviewTab() {
       revenue: b.revenue * b.count,
       planKey: b.accountType,
     }));
+
+  // Last 30 days for the existing growth line chart
+  const growthLast30 = growth.slice(-30);
 
   return (
     <div className="p-6 space-y-6">
@@ -240,13 +244,13 @@ export function OverviewTab() {
             </span>
           </header>
 
-          {growth.length === 0 ? (
+          {growthLast30.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-12">
               No growth data available.
             </p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={growth}>
+              <LineChart data={growthLast30}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
                 <XAxis
                   dataKey="date"
@@ -343,6 +347,9 @@ export function OverviewTab() {
           )}
         </div>
       </section>
+
+      {/* Cohort retention — 90d weekly heatmap */}
+      <CohortRetention growth={growth} />
 
       {/* Plan-level breakdown table */}
       <section className="bg-[#111111] border border-gray-800 rounded-lg overflow-hidden">

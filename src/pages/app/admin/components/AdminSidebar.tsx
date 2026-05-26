@@ -46,8 +46,8 @@ export function AdminSidebar({ isSuperAdmin }: AdminSidebarProps) {
 
       <div className="px-4 py-3 mt-2 border-t border-gray-800">
         <p className="text-[10px] text-gray-600 leading-relaxed">
-          תגי <span className="text-[#D4AF37]">soon</span> מסמנים מודולים בתכנון —
-          התוכן הוא תצוגה מקדימה של הפיצ׳רים שיגיעו.
+          <span className="text-[#D4AF37]">soon</span> tags mark modules still
+          in planning — content is a preview of upcoming features.
         </p>
       </div>
     </aside>
