@@ -50,6 +50,8 @@ export interface TradeIdea {
   target?: string | number;
   rr?: number;
   conviction: 'high' | 'medium' | 'low';
+  /** Two to three short catalyst tags added by Task C backend update */
+  catalysts?: string[];
 }
 
 export interface KeyRisk {

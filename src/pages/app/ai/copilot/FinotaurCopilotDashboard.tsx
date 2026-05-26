@@ -15,6 +15,10 @@ import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
 import type { PortfolioSnapshot } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
+import { useSynthesisBrief } from './hooks/useSynthesisBrief';
+import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
+import { getCompanyLogo } from './utils/companyLogo';
+import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 
 // Time-range list lives inside PerformanceChart now.
 
@@ -210,30 +214,60 @@ function InsightRow({ icon: Icon, title, text }: { icon: ElementType; title: str
   );
 }
 
+// Derive category chip label from TradeIdea source
+function sourceToTag(idea: { source: TradeIdea['source']; sector?: string }): string {
+  if (idea.source === 'ism')       return 'ISM';
+  if (idea.source === 'war_zone')  return 'TACTICAL';
+  if (idea.source === 'weekly')    return 'WEEKLY';
+  return idea.sector || 'MULTI-FACTOR';
+}
+
+const FALLBACK_ITEMS = [
+  { ticker: 'NVDA', company: 'NVIDIA Corporation',   tag: 'AI/TECHNOLOGY', score: 92 },
+  { ticker: 'TSLA', company: 'Tesla, Inc.',           tag: 'GROWTH',        score: 88 },
+  { ticker: 'MSFT', company: 'Microsoft Corporation', tag: 'LONG TERM',     score: 85 },
+  { ticker: 'AMZN', company: 'Amazon.com, Inc.',      tag: 'E-COMMERCE',    score: 83 },
+] as const;
+
 function TopOpportunitiesPanel() {
-  const items = [
-    ['NVDA', 'NVIDIA Corporation', 'AI/TECHNOLOGY', 92],
-    ['TSLA', 'Tesla, Inc.', 'GROWTH', 88],
-    ['MSFT', 'Microsoft Corporation', 'LONG TERM', 85],
-    ['AMZN', 'Amazon.com, Inc.', 'E-COMMERCE', 83],
-  ] as const;
+  const { brief } = useSynthesisBrief();
+
+  // Build display items — use live data when available, fallback otherwise
+  const items: Array<{ ticker: string; company: string; tag: string; score: number }> =
+    brief?.trade_ideas?.length
+      ? brief.trade_ideas.slice(0, 4).map((idea, i) => {
+          const opp = ideaToOpportunity(idea, i);
+          return {
+            ticker:  opp.ticker,
+            company: TICKER_TO_NAME[opp.ticker] ?? opp.ticker,
+            tag:     sourceToTag(idea),
+            score:   opp.score,
+          };
+        })
+      : FALLBACK_ITEMS.map(f => ({ ...f }));
 
   return (
     <PremiumFrame className="min-h-[338px]">
       <div className="p-5">
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
-          {items.map(([ticker, company, tag, score]) => (
-            <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
-              <TickerMark ticker={ticker} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">{ticker}</p>
-                <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
+          {items.map(({ ticker, company, tag, score }) => {
+            const logo = getCompanyLogo(ticker);
+            return (
+              <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
+                {logo
+                  ? <img src={logo} alt={ticker} className="h-8 w-8 rounded-[3px] object-contain" />
+                  : <TickerMark ticker={ticker} />
+                }
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{ticker}</p>
+                  <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
+                </div>
+                <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary">{tag}</span>
+                <div className="h-9 w-9 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
               </div>
-              <span className="rounded-[4px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[9px] uppercase text-gold-primary">{tag}</span>
-              <div className="h-9 w-9 rounded-full border border-gold-primary/55 flex items-center justify-center font-mono text-xs text-gold-primary">{score}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       <Link to="/app/ai/copilot/top-opportunities" className="absolute inset-x-0 bottom-0 flex h-12 items-center justify-center gap-2 border-t border-gold-primary/12 bg-gold-primary/[0.055] text-[11px] uppercase text-gold-primary">
