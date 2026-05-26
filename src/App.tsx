@@ -213,6 +213,9 @@ const TopSecretPage = lazy(() => import("@/pages/app/TopSecret/TopSecretPage"));
 // Catalyst Intelligence Deck — admin Pattern Library (Tree #2, 2026-05-26)
 const AdminPatternLibrary = lazy(() => import("@/pages/app/admin/PatternLibrary"));
 const AdminPatternLibraryList = lazy(() => import("@/pages/app/admin/PatternLibraryList"));
+// Upcoming Events — forward-looking event calendar (Tree #2, 2026-05-27)
+const UpcomingEventsView = lazy(() => import("@/pages/app/ai/UpcomingEventsView"));
+const AdminUpcomingEvents = lazy(() => import("@/pages/app/admin/UpcomingEventsAdmin"));
 // Stocks
 const StocksOverview = lazy(() => import("@/pages/app/stocks/Overview"));
 const StocksScreener = lazy(() => import("@/pages/app/stocks/Screener"));
@@ -420,6 +423,7 @@ function AppContent() {
           <Route path="all-markets/top-secret-admin" element={<ProtectedAdminRoute><SuspenseRoute><TopSecretAdmin /></SuspenseRoute></ProtectedAdminRoute>} />
           {/* Catalyst Intelligence Deck — admin Pattern Library (Tree #2) */}
           <Route path="admin/pattern-library" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibrary /></SuspenseRoute></ProtectedAdminRoute>} />
+          <Route path="admin/upcoming-events" element={<ProtectedAdminRoute><SuspenseRoute><AdminUpcomingEvents /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="admin/patterns" element={<ProtectedAdminRoute><SuspenseRoute><AdminPatternLibraryList /></SuspenseRoute></ProtectedAdminRoute>} />
           <Route path="all-markets/pricing" element={<SuspenseRoute><AllMarketsPricing /></SuspenseRoute>} />
 
@@ -516,6 +520,7 @@ function AppContent() {
           <Route path="ai/options-intelligence" element={<SuspenseRoute><AIOptionsIntelligence /></SuspenseRoute>} />
           <Route path="ai/flow-scanner" element={<SuspenseRoute><AIFlowScanner /></SuspenseRoute>} />
           <Route path="ai/top-5" element={<SuspenseRoute><AITop5 /></SuspenseRoute>} />
+          <Route path="ai/upcoming-events" element={<SuspenseRoute><UpcomingEventsView /></SuspenseRoute>} />
           <Route path="ai/assistant" element={<SuspenseRoute><AIAssistant /></SuspenseRoute>} />
           {/* JOURNAL */}
           <Route path="journal" element={<Navigate to="/app/journal/overview" replace />} />
