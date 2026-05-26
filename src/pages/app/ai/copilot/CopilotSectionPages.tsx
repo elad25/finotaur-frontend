@@ -17,7 +17,11 @@ import {
 } from 'lucide-react';
 import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { HoldingsTable } from './components/HoldingsTable';
+import { SynthesisBriefTradeIdeas } from './components/SynthesisBriefTradeIdeas';
+import { SynthesisBriefNarrative } from './components/SynthesisBriefNarrative';
+import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonalTwist';
 import { usePortfolioData } from './hooks/usePortfolioData';
+import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { getCompanyLogo } from './utils/companyLogo';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -247,9 +251,28 @@ const riskMitigationIdeas = [
 ] as const;
 
 export function CopilotTopOpportunitiesPage() {
+  const { brief, loading: briefLoading, error: briefError, personal, personalLoading } = useSynthesisBrief();
+
   return (
     <CopilotPageShell title="Top Opportunities" eyebrow="AI-ranked portfolio actions" icon={Zap} frameless>
       <div className="space-y-3">
+        {/* Phase 2: Per-user personalization banner */}
+        <SynthesisBriefPersonalTwist
+          personal={personal}
+          personalLoading={personalLoading}
+          degenerate={personal?.degenerate}
+        />
+
+        {/* Phase 1: Weekly Synthesis Brief — replaces hardcoded content once stable */}
+        <SynthesisBriefTradeIdeas
+          tradeIdeas={brief?.trade_ideas}
+          loading={briefLoading}
+          error={briefError}
+          rankedTradeIdeas={personal?.rankedTradeIdeas}
+        />
+
+        <hr className="border-gold-primary/10" />
+
         <section className="overflow-hidden rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
           <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-gold-primary/14 bg-[#050505] px-1.5 py-1.5">
             <div className="flex flex-wrap items-center gap-1">
@@ -763,9 +786,22 @@ export function CopilotHoldingsPage() {
 }
 
 export function CopilotAIAnalystPage() {
+  const { brief, loading: briefLoading, error: briefError, personal, personalLoading } = useSynthesisBrief();
+
   return (
     <CopilotPageShell title="AI Analyst" eyebrow="Detailed per-user intelligence report" icon={Brain}>
       <div className="space-y-3">
+        {/* Phase 2: Per-user personalization banner */}
+        <SynthesisBriefPersonalTwist
+          personal={personal}
+          personalLoading={personalLoading}
+          degenerate={personal?.degenerate}
+        />
+
+        {/* Phase 1: Weekly Synthesis Brief — replaces hardcoded content once stable */}
+        <SynthesisBriefNarrative brief={brief} loading={briefLoading} error={briefError} />
+
+        <hr className="border-gold-primary/10" />
         <section className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gold-primary/12 pb-5">
             <div>
