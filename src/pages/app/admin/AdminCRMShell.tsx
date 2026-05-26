@@ -35,6 +35,7 @@ import { OnboardingPlaceholder } from './tabs/OnboardingPlaceholder';
 import { IntegrationsPlaceholder } from './tabs/IntegrationsPlaceholder';
 import { ExecutivePlaceholder } from './tabs/ExecutivePlaceholder';
 import { ToolsHub } from './tabs/tools/ToolsHub';
+import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
 const Users = lazy(() => import('@/pages/app/journal/admin/Users'));
@@ -157,6 +158,7 @@ export function AdminCRMShell() {
           {/* Admin Tools (super-admin) — hub + sub-routes */}
           <Route path="tools" element={<ToolsHub />} />
           <Route path="tools/maintenance" element={<Lazy><Maintenance /></Lazy>} />
+          <Route path="tools/health" element={<HealthRiskPanel />} />
 
           {/* Executive Dashboard (planned) */}
           <Route path="executive" element={<ExecutivePlaceholder />} />

@@ -4,7 +4,14 @@
 // no schema changes.
 
 import { Link } from 'react-router-dom';
-import { Wrench, ArrowRight, ShieldAlert, Eye, Database } from 'lucide-react';
+import {
+  Wrench,
+  ArrowRight,
+  ShieldAlert,
+  Eye,
+  Database,
+  Heart,
+} from 'lucide-react';
 import { AuditLogPanel } from './AuditLogPanel';
 import { ImpersonationPanel } from './ImpersonationPanel';
 
@@ -25,7 +32,14 @@ export function ToolsHub() {
       </header>
 
       {/* Quick-link cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <QuickLink
+          to="/app/admin/tools/health"
+          icon={Heart}
+          label="Risk Watch"
+          hint="Health Score per user · reach-out list"
+          featured
+        />
         <QuickLink
           to="/app/admin/tools/maintenance"
           icon={Database}
@@ -61,26 +75,41 @@ function QuickLink({
   label,
   hint,
   disabled = false,
+  featured = false,
 }: {
   to: string;
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   hint: string;
   disabled?: boolean;
+  featured?: boolean;
 }) {
   const inner = (
     <div
-      className={`bg-[#111111] border border-gray-800 rounded-lg p-4
-                  flex items-start gap-3
-                  ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-[#D4AF37]/30'}`}
+      className={`rounded-lg p-4 flex items-start gap-3 transition-colors
+                  ${
+                    featured
+                      ? 'bg-[#D4AF37]/[0.06] border border-[#D4AF37]/30 hover:border-[#D4AF37]/50'
+                      : 'bg-[#111111] border border-gray-800 hover:border-[#D4AF37]/30'
+                  }
+                  ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
     >
-      <div className="w-9 h-9 rounded-md bg-[#D4AF37]/10 flex items-center justify-center shrink-0">
+      <div
+        className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 ${
+          featured ? 'bg-[#D4AF37]/20' : 'bg-[#D4AF37]/10'
+        }`}
+      >
         <Icon className="w-4 h-4 text-[#D4AF37]" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <span className="text-white text-sm font-medium">{label}</span>
-          {!disabled && (
+          {featured && (
+            <span className="text-[9px] uppercase tracking-wide text-[#D4AF37] shrink-0">
+              new
+            </span>
+          )}
+          {!disabled && !featured && (
             <ArrowRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
           )}
           {disabled && (
