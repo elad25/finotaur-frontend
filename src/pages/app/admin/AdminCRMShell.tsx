@@ -37,6 +37,7 @@ import { ExecutivePlaceholder } from './tabs/ExecutivePlaceholder';
 import { ToolsHub } from './tabs/tools/ToolsHub';
 import { HealthRiskPanel } from './tabs/tools/HealthRiskPanel';
 import { BulkActions } from './tabs/tools/BulkActions';
+import { GDPRTools } from './tabs/tools/GDPRTools';
 
 // Mounted existing admin pages — lazy so they don't bloat the Overview chunk.
 const Users = lazy(() => import('@/pages/app/journal/admin/Users'));
@@ -161,6 +162,7 @@ export function AdminCRMShell() {
           <Route path="tools/maintenance" element={<Lazy><Maintenance /></Lazy>} />
           <Route path="tools/health" element={<HealthRiskPanel />} />
           <Route path="tools/bulk" element={<BulkActions />} />
+          <Route path="tools/gdpr" element={<GDPRTools />} />
 
           {/* Executive Dashboard (planned) */}
           <Route path="executive" element={<ExecutivePlaceholder />} />
