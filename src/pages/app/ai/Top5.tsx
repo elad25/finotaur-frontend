@@ -27,6 +27,10 @@ import {
   Brain, Eye, ChevronUp, BarChart2, Layers, Gauge, LineChart, ListChecks,
 } from 'lucide-react';
 import { fetchAllPicks, fetchLogos } from '../../../services/top5Scanner.api';
+// Catalyst Intelligence Deck (Tree #2, 2026-05-26) — feature-flagged renderer.
+// When server returns response.mode === 'catalyst_deck', we early-return the
+// new view instead of the legacy LITE / catalysts rendering below.
+import CatalystDeckView, { type CatalystDeckResponse } from './CatalystDeckView';
 import type { ScanResult, CatalystResult, CatalystPick, AnalystAction, SpilloverCompany } from '../../../services/top5Scanner.api';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
@@ -1619,6 +1623,17 @@ function Top5Content() {
     if (!d) return '';
     return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET';
   }, []);
+
+  // Catalyst Intelligence Deck early-return: server flips response.mode to
+  // 'catalyst_deck' when CATALYST_DECK_ENABLED=true on Railway. The legacy
+  // LITE / catalyst rendering below is preserved unchanged for rollback.
+  if (earningsData && (earningsData as unknown as { mode?: string }).mode === 'catalyst_deck') {
+    return (
+      <div className="min-h-screen" style={{ background: 'linear-gradient(180deg, #080808 0%, #0c0a07 40%, #080808 100%)' }}>
+        <CatalystDeckView data={earningsData as unknown as CatalystDeckResponse} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #080808 0%, #0c0a07 40%, #080808 100%)', overflowAnchor: 'none' }}>
