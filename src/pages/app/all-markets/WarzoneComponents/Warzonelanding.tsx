@@ -1749,19 +1749,44 @@ const finotaurPlanId = 'plan_ICooR8aqtdXad';
     }
   }, [user, billingInterval, isTopSecretMember, topSecretMembershipId]);
 
-  // Cancel subscription handler - ORIGINAL LOGIC
-  const handleCancelSubscription = useCallback(async () => {
+  // Cancel subscription handler — captures feedback FIRST (mandatory), then triggers Whop cancel.
+  // Updated 2026-05-26: feedback popup is required; feedback POST → /api/users/me/cancellation-feedback
+  // happens BEFORE the Whop cancel so the lifecycle_events table is populated even if Whop fails.
+  const handleCancelSubscription = useCallback(async (feedbackData: {
+    reason_id: string;
+    reason_label: string;
+    feedback: string;
+  }) => {
     if (!user?.id) return;
-    
+
     setIsCancelling(true);
-    
+
     try {
+      // Step 1: capture feedback to the new lifecycle table (best-effort; do not block cancel on failure)
+      try {
+        const { submitCancellationFeedback } = await import('@/services/accountLifecycleService');
+        await submitCancellationFeedback({
+          reasonId: feedbackData.reason_id,
+          feedbackText: feedbackData.feedback,
+          planCancelled: 'newsletter',
+          sourceAction: 'user_initiated_in_app',
+        });
+      } catch (feedbackErr) {
+        console.warn('cancellation-feedback submit failed (continuing with Whop cancel):', feedbackErr);
+      }
+
+      // Step 2: invoke the Whop cancel via the existing newsletter-cancel edge function
       const { data, error } = await supabase.functions.invoke('newsletter-cancel', {
-        body: { action: 'cancel' }
+        body: {
+          action: 'cancel',
+          reason_id: feedbackData.reason_id,
+          reason_label: feedbackData.reason_label,
+          feedback: feedbackData.feedback,
+        },
       });
-      
+
       if (error) throw error;
-      
+
       if (data?.success) {
         refreshWarZone();
         setShowCancelModal(false);
