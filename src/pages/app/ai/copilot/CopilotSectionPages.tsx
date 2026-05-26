@@ -23,6 +23,7 @@ import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonal
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { TickerLogo } from './components/TickerLogo';
+import { SectorCallsPanel } from './components/SectorCallsPanel';
 import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -252,7 +253,7 @@ const riskMitigationIdeas = [
 ] as const;
 
 export function CopilotTopOpportunitiesPage() {
-  const { brief, personal, personalLoading } = useSynthesisBrief();
+  const { brief, loading: briefLoading, personal, personalLoading } = useSynthesisBrief();
 
   const opportunities = React.useMemo<Opportunity[]>(() => {
     if (!brief?.trade_ideas?.length) return FALLBACK_OPPORTUNITIES;
@@ -324,6 +325,7 @@ export function CopilotTopOpportunitiesPage() {
             </table>
           </div>
         </section>
+        <SectorCallsPanel brief={brief} loading={briefLoading} />
         <OpportunityInsightsFooter />
       </div>
     </CopilotPageShell>
@@ -397,9 +399,9 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
         <ScoreRing score={opportunity.score} />
       </td>
       <td className="border-b border-gold-primary/10 px-2">
-        <p className="max-w-[230px] text-[12px] leading-[1.45] text-ink-secondary">{opportunity.thesis}</p>
+        <p className="line-clamp-2 max-w-[230px] text-sm text-ink-secondary" title={opportunity.thesis}>{opportunity.thesis}</p>
         {opportunity.whyForYou && (
-          <p className="mt-1 max-w-[230px] text-[11px] italic leading-[1.4] text-gold-primary/70">
+          <p className="line-clamp-1 mt-1 max-w-[230px] text-[11px] italic text-gold-primary/70">
             Why for you: {opportunity.whyForYou}
           </p>
         )}
