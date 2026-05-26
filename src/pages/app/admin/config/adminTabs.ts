@@ -21,6 +21,7 @@ import {
   Plug,
   Crown,
   TrendingUp,
+  Brain,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -68,6 +69,15 @@ export const ADMIN_TABS: AdminTab[] = [
     enabled: true,
     description: 'Activity heatmaps, top traders, feature usage',
     mountedFrom: 'pages/app/journal/admin/Analytics.tsx',
+  },
+  {
+    id: 'ai-usage',
+    label: 'AI Consumption',
+    path: '/app/admin/analytics/ai-usage',
+    icon: Brain,
+    phase: 2,
+    enabled: true,
+    description: 'Per-user AI usage leaderboard + per-tier cost averages',
   },
   {
     id: 'billing',
@@ -164,7 +174,14 @@ export const ADMIN_TABS: AdminTab[] = [
 export function findTabByPath(pathname: string): AdminTab | undefined {
   const exact = ADMIN_TABS.find((t) => t.path === pathname);
   if (exact) return exact;
-  return ADMIN_TABS.find(
-    (t) => t.path !== '/app/admin' && pathname.startsWith(t.path)
-  );
+
+  // Longest-prefix wins so nested routes (e.g. /app/admin/analytics/ai-usage)
+  // resolve to the most specific tab rather than the parent prefix.
+  let best: AdminTab | undefined;
+  for (const t of ADMIN_TABS) {
+    if (t.path === '/app/admin') continue;
+    if (!pathname.startsWith(t.path)) continue;
+    if (!best || t.path.length > best.path.length) best = t;
+  }
+  return best;
 }
