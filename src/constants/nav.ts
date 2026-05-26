@@ -57,7 +57,7 @@ export const domains: Record<string, Domain> = {
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
       { label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true },  // 🤝 NEW
-      { label: 'Site Dashboard', path: '/app/all-markets/admin/site-dashboard', adminOnly: true },
+      { label: 'Admin CRM', path: '/app/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],
     sidebar: [
