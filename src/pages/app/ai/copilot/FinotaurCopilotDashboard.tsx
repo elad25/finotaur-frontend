@@ -17,7 +17,7 @@ import type { PortfolioSnapshot } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
-import { getCompanyLogo } from './utils/companyLogo';
+import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 
 // Time-range list lives inside PerformanceChart now.
@@ -252,13 +252,10 @@ function TopOpportunitiesPanel() {
         <PanelHeader title="TOP OPPORTUNITIES" action="VIEW ALL" actionTo="/app/ai/copilot/top-opportunities" />
         <div className="mt-4 space-y-2">
           {items.map(({ ticker, company, tag, score }) => {
-            const logo = getCompanyLogo(ticker);
             return (
               <div key={ticker} className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-3 rounded-[6px] px-2 py-2 hover:bg-gold-primary/[0.045]">
-                {logo
-                  ? <img src={logo} alt={ticker} className="h-8 w-8 rounded-[3px] object-contain" />
-                  : <TickerMark ticker={ticker} />
-                }
+                <TickerLogo ticker={ticker} size={32} className="h-8 w-8 rounded-[3px]" />
+
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white">{ticker}</p>
                   <p className="text-[11px] text-ink-tertiary truncate">{company}</p>
@@ -275,11 +272,6 @@ function TopOpportunitiesPanel() {
       </Link>
     </PremiumFrame>
   );
-}
-
-function TickerMark({ ticker }: { ticker: string }) {
-  const color = ticker === 'TSLA' ? 'text-red-500' : ticker === 'NVDA' ? 'text-lime-400' : ticker === 'MSFT' ? 'text-sky-300' : 'text-amber-400';
-  return <div className={`h-8 w-8 flex items-center justify-center font-black ${color}`}>{ticker.slice(0, 1)}</div>;
 }
 
 /** Map IB AssetClass codes to human-readable display labels for the allocation panel. */
