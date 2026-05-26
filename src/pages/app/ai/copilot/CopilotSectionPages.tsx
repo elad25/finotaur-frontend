@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
@@ -17,12 +18,16 @@ import {
 } from 'lucide-react';
 import { CopilotChatPanel } from './components/CopilotChatPanel';
 import { HoldingsTable } from './components/HoldingsTable';
+import { SynthesisBriefNarrative } from './components/SynthesisBriefNarrative';
+import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonalTwist';
 import { usePortfolioData } from './hooks/usePortfolioData';
+import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { getCompanyLogo } from './utils/companyLogo';
+import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 
-const opportunities = [
+const FALLBACK_OPPORTUNITIES: Opportunity[] = [
   {
     rank: 1,
     ticker: 'NVDA',
@@ -247,9 +252,42 @@ const riskMitigationIdeas = [
 ] as const;
 
 export function CopilotTopOpportunitiesPage() {
+  const { brief, personal, personalLoading } = useSynthesisBrief();
+
+  const opportunities = React.useMemo<Opportunity[]>(() => {
+    if (!brief?.trade_ideas?.length) return FALLBACK_OPPORTUNITIES;
+
+    const mapped = brief.trade_ideas.map((idea, i) =>
+      ideaToOpportunity(idea, i, personal?.rankedTradeIdeas)
+    );
+
+    // If personal ranking exists, sort by relevance score DESC
+    if (personal?.rankedTradeIdeas?.length) {
+      const relevanceMap = new Map(
+        personal.rankedTradeIdeas.map(r => [r.ideaIndex, r.relevanceScore])
+      );
+      mapped.sort((a, b) => {
+        const ra = relevanceMap.get(a.rank - 1) ?? 0;
+        const rb = relevanceMap.get(b.rank - 1) ?? 0;
+        return rb - ra;
+      });
+      // Re-number after sort
+      mapped.forEach((o, i) => { o.rank = i + 1; });
+    }
+
+    return mapped;
+  }, [brief?.trade_ideas, personal?.rankedTradeIdeas]);
+
   return (
     <CopilotPageShell title="Top Opportunities" eyebrow="AI-ranked portfolio actions" icon={Zap} frameless>
       <div className="space-y-3">
+        {/* Phase 2: Per-user personalization banner */}
+        <SynthesisBriefPersonalTwist
+          personal={personal}
+          personalLoading={personalLoading}
+          degenerate={personal?.degenerate}
+        />
+
         <section className="overflow-hidden rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
           <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-gold-primary/14 bg-[#050505] px-1.5 py-1.5">
             <div className="flex flex-wrap items-center gap-1">
@@ -318,8 +356,16 @@ function SelectPill({ label, value, width }: { label: string; value?: string; wi
   );
 }
 
-function OpportunityTableRow({ opportunity }: { opportunity: (typeof opportunities)[number] }) {
+// Dot color for time horizon
+const HORIZON_DOT: Record<string, string> = {
+  short:  'bg-[#4ade80]',   // green
+  medium: 'bg-[#f59e0b]',   // amber
+  long:   'bg-[#6366f1]',   // indigo
+};
+
+function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
   const logo = getCompanyLogo(opportunity.ticker);
+  const horizonDot = opportunity.timeHorizon ? HORIZON_DOT[opportunity.timeHorizon] : undefined;
 
   return (
     <tr className="group h-[88px] bg-[#050505] align-middle">
@@ -334,7 +380,14 @@ function OpportunityTableRow({ opportunity }: { opportunity: (typeof opportuniti
             {logo ? <img src={logo} alt="" className="h-7 w-7 object-contain" /> : <span className="font-mono text-base text-gold-primary">{opportunity.ticker.slice(0, 1)}</span>}
           </div>
           <div className="min-w-0">
-            <p className="font-mono text-base font-semibold leading-tight text-ink-primary">{opportunity.ticker}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="font-mono text-base font-semibold leading-tight text-ink-primary">{opportunity.ticker}</p>
+              {opportunity.source === 'ism' && (
+                <span className="inline-flex items-center rounded-[4px] bg-[#c9a646]/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-[#f4d97b]">
+                  ISM
+                </span>
+              )}
+            </div>
             <p className="mt-1 max-w-[170px] truncate text-[11px] font-medium text-ink-secondary">{opportunity.name}</p>
             <span className="mt-1.5 inline-flex rounded-[4px] bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-ink-tertiary">{opportunity.sector}</span>
           </div>
@@ -345,6 +398,11 @@ function OpportunityTableRow({ opportunity }: { opportunity: (typeof opportuniti
       </td>
       <td className="border-b border-gold-primary/10 px-2">
         <p className="max-w-[230px] text-[12px] leading-[1.45] text-ink-secondary">{opportunity.thesis}</p>
+        {opportunity.whyForYou && (
+          <p className="mt-1 max-w-[230px] text-[11px] italic leading-[1.4] text-gold-primary/70">
+            Why for you: {opportunity.whyForYou}
+          </p>
+        )}
       </td>
       <td className="border-b border-gold-primary/10 px-2">
         <p className="font-mono text-xl font-semibold text-[#64f56a]">{opportunity.upside}</p>
@@ -360,7 +418,10 @@ function OpportunityTableRow({ opportunity }: { opportunity: (typeof opportuniti
         <p className="mt-2 text-xs text-ink-secondary">{opportunity.confidence}</p>
       </td>
       <td className="border-b border-gold-primary/10 px-2">
-        <p className="text-xs text-ink-primary">{opportunity.timeframe}</p>
+        <div className="flex items-center gap-1.5">
+          {horizonDot && <span className={`h-2 w-2 flex-none rounded-full ${horizonDot}`} />}
+          <p className="text-xs text-ink-primary">{opportunity.timeframe}</p>
+        </div>
       </td>
       <td className="border-b border-gold-primary/10 px-2">
         <ul className="space-y-1 text-[11px] text-ink-secondary">
@@ -763,9 +824,22 @@ export function CopilotHoldingsPage() {
 }
 
 export function CopilotAIAnalystPage() {
+  const { brief, loading: briefLoading, error: briefError, personal, personalLoading } = useSynthesisBrief();
+
   return (
     <CopilotPageShell title="AI Analyst" eyebrow="Detailed per-user intelligence report" icon={Brain}>
       <div className="space-y-3">
+        {/* Phase 2: Per-user personalization banner */}
+        <SynthesisBriefPersonalTwist
+          personal={personal}
+          personalLoading={personalLoading}
+          degenerate={personal?.degenerate}
+        />
+
+        {/* Phase 1: Weekly Synthesis Brief — replaces hardcoded content once stable */}
+        <SynthesisBriefNarrative brief={brief} loading={briefLoading} error={briefError} />
+
+        <hr className="border-gold-primary/10" />
         <section className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gold-primary/12 pb-5">
             <div>
