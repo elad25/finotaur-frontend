@@ -22,7 +22,7 @@ import { SynthesisBriefNarrative } from './components/SynthesisBriefNarrative';
 import { SynthesisBriefPersonalTwist } from './components/SynthesisBriefPersonalTwist';
 import { usePortfolioData } from './hooks/usePortfolioData';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
-import { getCompanyLogo } from './utils/companyLogo';
+import { TickerLogo } from './components/TickerLogo';
 import { ideaToOpportunity, type Opportunity } from './utils/opportunityMapper';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
@@ -364,7 +364,6 @@ const HORIZON_DOT: Record<string, string> = {
 };
 
 function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
-  const logo = getCompanyLogo(opportunity.ticker);
   const horizonDot = opportunity.timeHorizon ? HORIZON_DOT[opportunity.timeHorizon] : undefined;
 
   return (
@@ -377,7 +376,8 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
       <td className="border-b border-gold-primary/10 px-2">
         <div className="flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-[4px] border border-white/8 bg-[#0b0b0b] shadow-[inset_0_0_18px_rgba(255,255,255,0.02)]">
-            {logo ? <img src={logo} alt="" className="h-7 w-7 object-contain" /> : <span className="font-mono text-base text-gold-primary">{opportunity.ticker.slice(0, 1)}</span>}
+            <TickerLogo ticker={opportunity.ticker} size={28} className="h-7 w-7" />
+
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
