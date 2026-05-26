@@ -50,8 +50,12 @@ export interface SectorSnapshot {
   ticker: string;
 
   // Price
-  price: number;
-  change_percent: number;
+  price: number | null;
+  /** Last trading session's close (Yahoo `regularMarketPreviousClose`).
+   * Populated by the cron even on weekends/holidays, so the UI always has
+   * a meaningful number to show in the headline. */
+  prev_close: number | null;
+  change_percent: number | null;
   week_change: number;
   month_change: number;
   ytd_change: number;

@@ -20,6 +20,7 @@ import {
   ShoppingBag,
   Wheat,
 } from 'lucide-react';
+import { useMarketStatus } from '@/lib/marketStatus';
 import type { Sector } from '../types';
 
 const iconMap: Record<string, LucideIcon> = { Cpu, Heart, Banknote, Fuel, ShoppingBag, Factory, Gem, Lightbulb, Building2, Wheat, Globe };
@@ -60,7 +61,7 @@ interface SectorIntel {
   spark: string;
 }
 
-function buildSectorIntel(sector: Sector): SectorIntel {
+function buildSectorIntel(sector: Sector, marketOpen: boolean): SectorIntel {
   const top3 = (sector.topHoldings ?? [])
     .slice(0, 3)
     .map(h => h.ticker)
@@ -68,7 +69,10 @@ function buildSectorIntel(sector: Sector): SectorIntel {
     .join(' / ');
 
   const wk = sector.weekChange ?? 0;
-  const momentum = `${wk >= 0 ? '+' : ''}${wk.toFixed(1)}%`;
+  // When the market is closed and the snapshot has no week-change yet, render
+  // an em-dash instead of a misleading "+0.0%". See marketStatus.ts.
+  const momentumMissing = !marketOpen && (!Number.isFinite(wk) || wk === 0);
+  const momentum = momentumMissing ? '—' : `${wk >= 0 ? '+' : ''}${wk.toFixed(1)}%`;
 
   const sentiment = capitalize(sector.sentiment ?? 'neutral');
 
@@ -110,7 +114,8 @@ interface SectorCardProps {
 export const SectorCard = memo<SectorCardProps>(({ sector, onClick, index }) => {
   const Icon = useMemo(() => getSectorIcon(sector.icon), [sector.icon]);
   const visual = visualMap[sector.ticker] ?? visualMap.XLK;
-  const intel = useMemo(() => buildSectorIntel(sector), [sector]);
+  const { isOpen: marketOpen } = useMarketStatus();
+  const intel = useMemo(() => buildSectorIntel(sector, marketOpen), [sector, marketOpen]);
 
   return (
     <motion.button

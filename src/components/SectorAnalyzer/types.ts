@@ -176,6 +176,10 @@ export interface Sector {
   ticker: string;
   icon: string;
   price: number;
+  /** Last trading session's close. Populated by sector-refresh cron from
+   * Yahoo/FMP `regularMarketPreviousClose`. UI falls back to this when
+   * `price` is 0/null (weekends, holidays, pre-market). */
+  prevClose?: number;
   changePercent: number;
   weekChange: number;
   monthChange: number;
