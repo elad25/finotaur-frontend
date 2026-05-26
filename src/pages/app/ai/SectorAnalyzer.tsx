@@ -38,6 +38,13 @@ import type { SectorSnapshot } from '@/hooks/useSectorAnalysis';
 // =====================================================
 function snapshotToSector(snap: SectorSnapshot): Sector {
   const meta = sectorMetadata[snap.id];
+  // Price waterfall: live price (intraday) → prev_close (weekends/holidays)
+  // → 0 (only if the cron has never written anything, e.g. brand-new sector).
+  // The header surfaces `prevClose` explicitly so it can label the headline
+  // "Showing Friday's Close" instead of pretending the live tape is alive.
+  const livePrice = snap.price != null && snap.price > 0 ? snap.price : null;
+  const prevClose = snap.prev_close != null && snap.prev_close > 0 ? snap.prev_close : undefined;
+  const effectivePrice = livePrice ?? prevClose ?? 0;
   return {
     id: snap.id,
     name: snap.sector_name,
@@ -45,7 +52,8 @@ function snapshotToSector(snap: SectorSnapshot): Sector {
     icon: meta?.icon ?? 'Cpu',
     description: meta?.description ?? '',
     companies: meta?.companies ?? 0,
-    price: snap.price ?? 0,
+    price: effectivePrice,
+    prevClose,
     changePercent: snap.change_percent ?? 0,
     weekChange: snap.week_change ?? 0,
     monthChange: snap.month_change ?? 0,

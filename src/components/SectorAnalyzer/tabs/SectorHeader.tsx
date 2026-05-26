@@ -8,6 +8,7 @@ import {
   BarChart3,
   Building2,
   Crown,
+  Lock,
   PieChart,
   Shield,
   Target,
@@ -15,6 +16,7 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import { useMarketStatus, type MarketStatusResult } from '@/lib/marketStatus';
 import type { Sector, SentimentType } from '../types';
 
 const gold = '#C9A646';
@@ -51,13 +53,24 @@ type CachedSectorAnalysis = {
 type PerformanceRange = '1D' | '1W' | '1M' | 'YTD' | '1Y';
 const performanceRanges: PerformanceRange[] = ['1D', '1W', '1M', 'YTD', '1Y'];
 
-const getMarketStatus = () => {
-  const now = new Date();
-  const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const day = eastern.getDay();
-  const time = eastern.getHours() * 60 + eastern.getMinutes();
-  return day > 0 && day < 6 && time >= 570 && time < 960;
+// =====================================================
+// Defensive display helpers for market-closed periods.
+// When the US equity market is closed and the cron snapshot didn't write
+// a meaningful spot price (`price === 0` is what the snapshot writes on
+// weekends/holidays via `?? 0` in snapshotToSector), we render an em-dash
+// instead of misleading "$0.00" / "+0.00%". The market-status pill above
+// the price provides the "Showing Friday's Close" context.
+// =====================================================
+const formatPriceOrDash = (value: number, marketOpen: boolean): string =>
+  !marketOpen && (!Number.isFinite(value) || value === 0) ? '—' : `$${value.toFixed(2)}`;
+
+const formatPercentOrDash = (value: number, marketOpen: boolean): string => {
+  if (!marketOpen && (!Number.isFinite(value) || value === 0)) return '—';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 };
+
+const isMissingWhenClosed = (value: number, marketOpen: boolean): boolean =>
+  !marketOpen && (!Number.isFinite(value) || value === 0);
 
 const sentimentLabel = (sentiment: SentimentType) => (
   sentiment === 'bullish' ? 'Bullish' : sentiment === 'bearish' ? 'Bearish' : 'Neutral'
@@ -67,9 +80,11 @@ const sentimentColor = (sentiment: SentimentType) => (
   sentiment === 'bullish' ? green : sentiment === 'bearish' ? red : amber
 );
 
-const MiniPerfBar = memo<{ label: string; value: number }>(({ label, value }) => {
+const MiniPerfBar = memo<{ label: string; value: number; marketOpen: boolean }>(({ label, value, marketOpen }) => {
+  const missing = isMissingWhenClosed(value, marketOpen);
   const positive = value >= 0;
-  const width = Math.min(Math.abs(value) * 18, 90);
+  const width = missing ? 0 : Math.min(Math.abs(value) * 18, 90);
+  const barColor = missing ? 'rgba(183,189,199,0.35)' : positive ? green : red;
   return (
     <div className="grid grid-cols-[28px_1fr_64px] items-center gap-3">
       <span className="text-xs text-[#B7BDC7]">{label}</span>
@@ -79,19 +94,49 @@ const MiniPerfBar = memo<{ label: string; value: number }>(({ label, value }) =>
           animate={{ width: `${width}%` }}
           transition={{ duration: 0.75, ease: 'easeOut' }}
           className="h-full rounded-full"
-          style={{ background: positive ? green : red }}
+          style={{ background: barColor }}
         />
       </div>
-      <span className="text-right text-xs font-bold tabular-nums" style={{ color: positive ? green : red }}>
-        {positive ? '+' : ''}{value.toFixed(2)}%
+      <span
+        className="text-right text-xs font-bold tabular-nums"
+        style={{ color: missing ? '#8E96A3' : positive ? green : red }}
+      >
+        {formatPercentOrDash(value, marketOpen)}
       </span>
     </div>
   );
 });
 MiniPerfBar.displayName = 'MiniPerfBar';
 
+// =====================================================
+// Derive 1W / 1M / YTD period returns from cachedAnalysis.vs_market when
+// available — these are Polygon-sourced daily-bar returns, real values
+// that survive weekends. Falls back to sector.weekChange/monthChange/
+// ytdChange (which are bogus etfChange*N approximations from the cron
+// and end up 0 outside market hours).
+// =====================================================
+function deriveBarValue(
+  period: 'W' | 'M' | 'YTD',
+  sector: Sector,
+  cachedAnalysis?: CachedSectorAnalysis,
+): number {
+  const rows = ((cachedAnalysis?.vsMarket || cachedAnalysis?.vs_market || sector.vsMarket || []) as VsMarketRow[])
+    .filter((row) => Number.isFinite(row.sectorReturn));
+  const periodKey = period === 'W' ? '1W' : period === 'M' ? '1M' : 'YTD';
+  const row = rows.find((r) => r.period === periodKey);
+  if (row && Number.isFinite(row.sectorReturn)) return row.sectorReturn;
+  // Fallback to (bogus, weekend-zero) snapshot approximation
+  if (period === 'W') return sector.weekChange ?? 0;
+  if (period === 'M') return sector.monthChange ?? 0;
+  return sector.ytdChange ?? 0;
+}
+
 const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAnalysis }>(({ sector, cachedAnalysis }) => {
   const [range, setRange] = useState<PerformanceRange>('YTD');
+  // Index of the data point currently hovered by the user (null = no hover).
+  // Drives the crosshair + tooltip rendering at the bottom of the SVG.
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const svgRef = React.useRef<SVGSVGElement | null>(null);
 
   const chart = useMemo(() => {
     const rows = ((cachedAnalysis?.vsMarket || cachedAnalysis?.vs_market || sector.vsMarket || []) as VsMarketRow[])
@@ -154,6 +199,12 @@ const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAna
     const zeroY = scaleY(0);
     const last = chart.series.at(-1);
     const lastX = scaleX(chart.series.length - 1);
+    // Per-point coordinates the tooltip layer needs to draw crosshair + dots.
+    const pointCoords = chart.series.map((point, i) => ({
+      x: scaleX(i),
+      sectorY: scaleY(point.sectorReturn),
+      spyY: scaleY(point.spyReturn),
+    }));
 
     return {
       sectorPoints,
@@ -161,6 +212,11 @@ const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAna
       area,
       zeroY,
       lastX,
+      left,
+      right,
+      top,
+      bottom,
+      width,
       lastSectorY: last ? scaleY(last.sectorReturn) : bottom,
       lastSpyY: last ? scaleY(last.spyReturn) : bottom,
       ticks: [hi - pad, (hi + lo) / 2, lo + pad].map((value) => ({ value, y: scaleY(value) })),
@@ -171,8 +227,44 @@ const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAna
           { label: chart.series.at(-1)?.label || '', x: right - 24 },
         ]
         : chart.series.map((point, i) => ({ label: point.label || '', x: scaleX(i) - 8 })),
+      pointCoords,
     };
   }, [chart.series]);
+
+  // =====================================================
+  // Hover tracking — translates pointer X (in client space) into the
+  // SVG's viewBox coordinate system, then picks the nearest series index.
+  // The SVG uses viewBox="0 0 330 165"; we scale clientX to that range
+  // via getBoundingClientRect so the math stays correct at any width.
+  // =====================================================
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (chart.series.length < 2 || !svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * paths.width;
+    // Map svgX back to a series index by inverting scaleX().
+    const span = paths.right - paths.left;
+    const rel = (svgX - paths.left) / Math.max(span, 1);
+    const rawIndex = rel * Math.max(chart.series.length - 1, 1);
+    const idx = Math.max(0, Math.min(chart.series.length - 1, Math.round(rawIndex)));
+    setHoverIndex(idx);
+  };
+  const handleMouseLeave = () => setHoverIndex(null);
+
+  // The active point — what the tooltip is rendering values for.
+  const hovered = hoverIndex != null ? chart.series[hoverIndex] : null;
+  const hoveredCoord = hoverIndex != null ? paths.pointCoords[hoverIndex] : null;
+  // Tooltip bubble position: flip to left side if cursor is past the chart's midpoint
+  // so the bubble never escapes the canvas. Width budget ~104 px.
+  const bubbleW = 104;
+  const bubbleH = 56;
+  const tipX = hoveredCoord
+    ? hoveredCoord.x > paths.width / 2
+      ? Math.max(paths.left, hoveredCoord.x - bubbleW - 10)
+      : Math.min(paths.right - bubbleW, hoveredCoord.x + 10)
+    : 0;
+  const tipY = hoveredCoord
+    ? Math.max(paths.top, Math.min(hoveredCoord.sectorY - bubbleH - 6, paths.bottom - bubbleH - 4))
+    : 0;
 
   const latest = chart.selected || chart.rows.at(-1);
   const latestSector = latest?.sectorReturn ?? chart.series.at(-1)?.sectorReturn ?? sector.ytdChange;
@@ -225,7 +317,13 @@ const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAna
         </div>
       </div>
 
-      <svg viewBox="0 0 330 165" className="relative h-[165px] w-full overflow-visible">
+      <svg
+        ref={svgRef}
+        viewBox="0 0 330 165"
+        className="relative h-[165px] w-full overflow-visible cursor-crosshair"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
         <defs>
           <linearGradient id="sectorPerfArea" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="rgba(34,197,94,0.26)" />
@@ -266,6 +364,48 @@ const PerformanceChart = memo<{ sector: Sector; cachedAnalysis?: CachedSectorAna
         {paths.labels.map((item, i) => (
           <text key={`${item.label}-${i}`} x={item.x} y="158" fill="#8E96A3" fontSize="10">{item.label}</text>
         ))}
+        {/* ===== Hover crosshair + tooltip (only while hovering) ===== */}
+        {hovered && hoveredCoord && (
+          <g pointerEvents="none">
+            {/* Vertical crosshair line */}
+            <line
+              x1={hoveredCoord.x}
+              x2={hoveredCoord.x}
+              y1={paths.top - 4}
+              y2={paths.bottom + 4}
+              stroke="rgba(244,217,123,0.45)"
+              strokeWidth="1"
+              strokeDasharray="2 3"
+            />
+            {/* Highlight dots */}
+            <circle cx={hoveredCoord.x} cy={hoveredCoord.spyY} r="3.5" fill="#B7BDC7" stroke="#07100B" strokeWidth="1.5" />
+            <circle cx={hoveredCoord.x} cy={hoveredCoord.sectorY} r="4.5" fill="#22C55E" stroke="#07100B" strokeWidth="1.8" />
+            {/* Tooltip bubble */}
+            <g transform={`translate(${tipX} ${tipY})`}>
+              <rect
+                width={bubbleW}
+                height={bubbleH}
+                rx="6"
+                fill="rgba(8,12,18,0.96)"
+                stroke="rgba(201,166,70,0.35)"
+                strokeWidth="1"
+              />
+              <text x="8" y="13" fill="#8E96A3" fontSize="8" fontWeight="600" letterSpacing="0.4">
+                {((hovered.label || ('date' in hovered ? hovered.date : '') || '—') as string).toUpperCase()}
+              </text>
+              <text x="8" y="27" fill="#22C55E" fontSize="10" fontWeight="700" fontFamily="ui-monospace, monospace">
+                {sector.ticker} {hovered.sectorReturn >= 0 ? '+' : ''}{hovered.sectorReturn.toFixed(2)}%
+              </text>
+              <text x="8" y="40" fill="#B7BDC7" fontSize="10" fontWeight="600" fontFamily="ui-monospace, monospace">
+                SPY {hovered.spyReturn >= 0 ? '+' : ''}{hovered.spyReturn.toFixed(2)}%
+              </text>
+              <text x="8" y="51" fill="#D8BE68" fontSize="9" fontWeight="700" fontFamily="ui-monospace, monospace">
+                α {((hovered.alpha ?? hovered.sectorReturn - hovered.spyReturn) >= 0 ? '+' : '')}
+                {(hovered.alpha ?? hovered.sectorReturn - hovered.spyReturn).toFixed(2)}%
+              </text>
+            </g>
+          </g>
+        )}
       </svg>
 
       <div className="relative mt-1 flex items-center justify-between text-[10px] text-[#8E96A3]">
@@ -349,26 +489,35 @@ const MetricCard = memo<{ label: string; value: string; icon: React.ComponentTyp
 ));
 MetricCard.displayName = 'MetricCard';
 
-const RangePanel = memo<{ sector: Sector }>(({ sector }) => {
+const RangePanel = memo<{ sector: Sector; marketOpen: boolean }>(({ sector, marketOpen }) => {
+  const priceMissing = isMissingWhenClosed(sector.price, marketOpen);
   const low = sector.price * (1 - Math.abs(sector.ytdChange) / 100 - 0.15);
   const high = sector.price * (1 + Math.abs(sector.ytdChange) / 100 + 0.08);
-  const position = Math.min(Math.max(((sector.price - low) / (high - low)) * 100, 4), 96);
+  const position = priceMissing
+    ? 50
+    : Math.min(Math.max(((sector.price - low) / (high - low)) * 100, 4), 96);
   return (
     <div className="fin-dark-card p-5">
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm font-semibold uppercase text-[#AAB2BF]">52-Week Range</p>
-        <p className="text-sm font-bold text-[#C9A646]">{Math.round(((sector.price - low) / low) * 100)}% from low</p>
+        <p className="text-sm font-bold text-[#C9A646]">
+          {priceMissing ? 'Awaiting next session' : `${Math.round(((sector.price - low) / low) * 100)}% from low`}
+        </p>
       </div>
-      <div className="relative h-1.5 rounded-full bg-gradient-to-r from-[#EF4444] via-[#FACC15] to-[#22C55E]">
+      <div
+        className="relative h-1.5 rounded-full bg-gradient-to-r from-[#EF4444] via-[#FACC15] to-[#22C55E]"
+        style={{ opacity: priceMissing ? 0.35 : 1 }}
+      >
         <motion.div
           initial={{ left: '4%' }}
           animate={{ left: `calc(${position}% - 5px)` }}
           className="absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-[#F4D97B] shadow-[0_0_22px_rgba(244,217,123,0.65)]"
+          style={{ opacity: priceMissing ? 0.4 : 1 }}
         />
       </div>
       <div className="mt-4 flex justify-between text-xs font-semibold text-white">
-        <span>${low.toFixed(2)}</span>
-        <span>${high.toFixed(2)}</span>
+        <span>{priceMissing ? '—' : `$${low.toFixed(2)}`}</span>
+        <span>{priceMissing ? '—' : `$${high.toFixed(2)}`}</span>
       </div>
     </div>
   );
@@ -441,9 +590,41 @@ const BottomPanels = memo<{ sector: Sector }>(({ sector }) => {
 });
 BottomPanels.displayName = 'BottomPanels';
 
+const STATUS_DOT_COLOR: Record<MarketStatusResult['status'], string> = {
+  'open': '#22C55E',
+  'closed-after-hours': '#F59E0B',
+  'closed-pre-market': '#F59E0B',
+  'closed-weekend': '#C9A646',
+  'closed-holiday': '#C9A646',
+};
+
+const STATUS_TEXT_COLOR: Record<MarketStatusResult['status'], string> = {
+  'open': green,
+  'closed-after-hours': amber,
+  'closed-pre-market': amber,
+  'closed-weekend': '#C9A646',
+  'closed-holiday': '#C9A646',
+};
+
+const statusHeadline = (status: MarketStatusResult): string => {
+  switch (status.status) {
+    case 'open': return 'Market Open';
+    case 'closed-after-hours': return 'After Hours';
+    case 'closed-pre-market': return 'Pre-Market';
+    case 'closed-weekend': return 'Closed — Weekend';
+    case 'closed-holiday': return `Closed — ${status.holidayName ?? 'Holiday'}`;
+  }
+};
+
 export const SectorHeader = memo<{ sector: Sector; onBack: () => void; cachedAnalysis?: CachedSectorAnalysis }>(({ sector, cachedAnalysis }) => {
-  const marketOpen = useMemo(() => getMarketStatus(), []);
+  const marketStatus = useMarketStatus();
+  const marketOpen = marketStatus.isOpen;
+  const priceMissing = isMissingWhenClosed(sector.price, marketOpen);
+  const changeMissing = isMissingWhenClosed(sector.changePercent, marketOpen);
   const isPositive = sector.changePercent >= 0;
+  const statusDot = STATUS_DOT_COLOR[marketStatus.status];
+  const statusColor = STATUS_TEXT_COLOR[marketStatus.status];
+  const headline = statusHeadline(marketStatus);
 
   return (
     <motion.div
@@ -459,19 +640,40 @@ export const SectorHeader = memo<{ sector: Sector; onBack: () => void; cachedAna
         <div className="relative grid gap-3">
           <div className="grid gap-3 xl:grid-cols-[0.95fr_1.18fr_0.95fr]">
             <div className="p-1">
-              <div className="mb-4 flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${marketOpen ? 'bg-[#22C55E]' : 'bg-[#F59E0B]'}`} />
-                <span className="text-xs font-semibold" style={{ color: marketOpen ? green : amber }}>{marketOpen ? 'Market Open' : 'After Hours'}</span>
+              <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full" style={{ background: statusDot }} />
+                  <span className="text-xs font-semibold" style={{ color: statusColor }}>{headline}</span>
+                </span>
+                {!marketOpen && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#C9A646]/25 bg-[#C9A646]/8 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#D8BE68]">
+                    <Lock className="h-3 w-3" />
+                    Showing {marketStatus.lastTradingDayLabel}
+                  </span>
+                )}
               </div>
               <h1 className="text-4xl font-bold tracking-tight text-white">
                 {sector.name} <span className="text-[#C9A646]">{sector.ticker}</span>
               </h1>
               <p className="mt-3 text-base text-[#CDD3DD]">{sector.description}</p>
               <div className="mt-7 flex flex-wrap items-center gap-4">
-                <span className="text-5xl font-bold tracking-tight text-white">${sector.price.toFixed(2)}</span>
-                <span className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold" style={{ color: isPositive ? green : red, background: `${isPositive ? green : red}12`, borderColor: `${isPositive ? green : red}24` }}>
-                  {isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                  {isPositive ? '+' : ''}{sector.changePercent.toFixed(2)}%
+                <span
+                  className="text-5xl font-bold tracking-tight"
+                  style={{ color: priceMissing ? '#8E96A3' : '#FFFFFF' }}
+                  title={priceMissing ? `Last close pending — markets closed (${marketStatus.reason})` : undefined}
+                >
+                  {formatPriceOrDash(sector.price, marketOpen)}
+                </span>
+                <span
+                  className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold"
+                  style={
+                    changeMissing
+                      ? { color: '#8E96A3', background: 'rgba(142,150,163,0.10)', borderColor: 'rgba(142,150,163,0.24)' }
+                      : { color: isPositive ? green : red, background: `${isPositive ? green : red}12`, borderColor: `${isPositive ? green : red}24` }
+                  }
+                >
+                  {!changeMissing && (isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />)}
+                  {formatPercentOrDash(sector.changePercent, marketOpen)}
                 </span>
                 <span className="flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold capitalize" style={{ color: sentimentColor(sector.sentiment), background: `${sentimentColor(sector.sentiment)}12`, borderColor: `${sentimentColor(sector.sentiment)}24` }}>
                   <TrendingUp className="h-4 w-4" />
@@ -479,9 +681,9 @@ export const SectorHeader = memo<{ sector: Sector; onBack: () => void; cachedAna
                 </span>
               </div>
               <div className="mt-7 max-w-[370px] space-y-4">
-                <MiniPerfBar label="1W" value={sector.weekChange} />
-                <MiniPerfBar label="1M" value={sector.monthChange} />
-                <MiniPerfBar label="YTD" value={sector.ytdChange} />
+                <MiniPerfBar label="1W"  value={deriveBarValue('W',   sector, cachedAnalysis)} marketOpen={marketOpen} />
+                <MiniPerfBar label="1M"  value={deriveBarValue('M',   sector, cachedAnalysis)} marketOpen={marketOpen} />
+                <MiniPerfBar label="YTD" value={deriveBarValue('YTD', sector, cachedAnalysis)} marketOpen={marketOpen} />
               </div>
             </div>
 
@@ -499,7 +701,7 @@ export const SectorHeader = memo<{ sector: Sector; onBack: () => void; cachedAna
           </div>
 
           <div className="grid gap-3 xl:grid-cols-[1.55fr_0.95fr]">
-            <RangePanel sector={sector} />
+            <RangePanel sector={sector} marketOpen={marketOpen} />
             <div className="fin-dark-card grid grid-cols-2 gap-3 p-5">
               <div>
                 <p className="mb-3 text-sm font-semibold text-white">Key Drivers</p>

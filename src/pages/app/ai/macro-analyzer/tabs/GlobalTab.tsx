@@ -8,15 +8,40 @@
 
 import React, { memo, useMemo, useState, useCallback } from 'react';
 import {
-  Globe, Brain, DollarSign, TrendingUp, TrendingDown,
+  Globe, Brain, DollarSign,
   RefreshCw, AlertTriangle, BarChart2, Activity,
-  Layers, Shield, Clock, Target, Zap
+  Layers, Lock, Shield, Clock, Target
 } from 'lucide-react';
 import {
   Card, SectionHeader, Badge, ProgressBar, LazySection,
-  cn, SectionSkeleton, SignalDot
+  cn, SectionSkeleton
 } from '../shared/ui';
 import { useGlobal, type GlobalData } from '../shared/api';
+import { useMarketStatus } from '@/lib/marketStatus';
+
+// =====================================================
+// Defensive display: when US equity market is closed and the snapshot has
+// nothing meaningful to show (0 / NaN), render "—" instead of misleading
+// "0.00%" or "$0.00". Foreign indices and US futures both close on
+// weekends/holidays, so the US-equity closed signal is a good proxy here.
+// (Per CLAUDE.md §📅 Market Status & Weekend Handling.)
+// =====================================================
+const formatNumOrDash = (value: number | undefined | null, marketOpen: boolean, fractionDigits = 2): string => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (!marketOpen && value === 0) return '—';
+  return value.toLocaleString(undefined, { maximumFractionDigits: fractionDigits });
+};
+
+const formatPctOrDash = (value: number | undefined | null, marketOpen: boolean): string => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (!marketOpen && value === 0) return '—';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+};
+
+const isMissingWhenClosed = (value: number | undefined | null, marketOpen: boolean): boolean => {
+  if (value == null || !Number.isFinite(value)) return true;
+  return !marketOpen && value === 0;
+};
 
 // =====================================================
 // MARKET FOCUS TABS
@@ -167,7 +192,7 @@ GlobalPMITable.displayName = 'GlobalPMITable';
 // GLOBAL INDICES
 // =====================================================
 
-const GlobalIndices = memo(({ indices, filter }: { indices: GlobalData['indices']; filter: MarketFocus }) => {
+const GlobalIndices = memo(({ indices, filter, marketOpen }: { indices: GlobalData['indices']; filter: MarketFocus; marketOpen: boolean }) => {
   const filteredIndices = useMemo(() => {
     if (filter === 'all') return indices;
     const countryMap: Record<string, string[]> = {
@@ -187,25 +212,30 @@ const GlobalIndices = memo(({ indices, filter }: { indices: GlobalData['indices'
   return (
     <Card>
       <div className="p-6">
-        <SectionHeader icon={BarChart2} title="Market Indices" subtitle="Real-time from Yahoo Finance" />
+        <SectionHeader icon={BarChart2} title="Market Indices" subtitle={marketOpen ? 'Real-time from Yahoo Finance' : "Last close — markets closed"} />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {filteredIndices.map((index, idx) => (
-            <div key={idx} className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
-              <div className="flex items-center gap-1 mb-2">
-                <span className="text-sm">{index.flag}</span>
-                <span className="text-xs text-white truncate">{index.name}</span>
+          {filteredIndices.map((index, idx) => {
+            const changeMissing = isMissingWhenClosed(index.changePercent, marketOpen);
+            return (
+              <div key={idx} className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="text-sm">{index.flag}</span>
+                  <span className="text-xs text-white truncate">{index.name}</span>
+                </div>
+                <p className="text-sm text-[#8B8B8B] mb-1">
+                  {formatNumOrDash(index.value, marketOpen)}
+                </p>
+                <p className={cn("text-sm font-bold",
+                  changeMissing
+                    ? "text-[#8B8B8B]"
+                    : index.changePercent >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
+                )}>
+                  {formatPctOrDash(index.changePercent, marketOpen)}
+                </p>
               </div>
-              <p className="text-sm text-[#8B8B8B] mb-1">
-                {index.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              </p>
-              <p className={cn("text-sm font-bold",
-                index.changePercent >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
-              )}>
-                {index.changePercent >= 0 ? '+' : ''}{index.changePercent.toFixed(2)}%
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </Card>
@@ -217,11 +247,17 @@ GlobalIndices.displayName = 'GlobalIndices';
 // DXY & CURRENCY IMPACT
 // =====================================================
 
-const DXYSection = memo(({ dxy }: { dxy: GlobalData['dxy'] }) => {
+const DXYSection = memo(({ dxy, marketOpen }: { dxy: GlobalData['dxy']; marketOpen: boolean }) => {
   if (!dxy) return null;
 
-  const strength = dxy.change > 1 ? 'STRENGTHENING' : dxy.change < -1 ? 'WEAKENING' : 'STABLE';
-  const strengthColor = dxy.change > 1 ? '#22C55E' : dxy.change < -1 ? '#EF4444' : '#F59E0B';
+  const valueMissing = isMissingWhenClosed(dxy.value, marketOpen);
+  const changeMissing = isMissingWhenClosed(dxy.change, marketOpen);
+  const strength = changeMissing
+    ? 'AWAITING NEXT SESSION'
+    : dxy.change > 1 ? 'STRENGTHENING' : dxy.change < -1 ? 'WEAKENING' : 'STABLE';
+  const strengthColor = changeMissing
+    ? '#8B8B8B'
+    : dxy.change > 1 ? '#22C55E' : dxy.change < -1 ? '#EF4444' : '#F59E0B';
 
   return (
     <Card>
@@ -232,11 +268,15 @@ const DXYSection = memo(({ dxy }: { dxy: GlobalData['dxy'] }) => {
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-[#8B8B8B]">Dollar Index (DXY)</span>
             <div className="text-right">
-              <span className="text-3xl font-bold text-white">{dxy.value}</span>
+              <span className="text-3xl font-bold" style={{ color: valueMissing ? '#8B8B8B' : '#FFFFFF' }}>
+                {formatNumOrDash(dxy.value, marketOpen)}
+              </span>
               <span className={cn("text-xs ml-2 font-medium",
-                dxy.change > 0 ? 'text-[#22C55E]' : dxy.change < 0 ? 'text-[#EF4444]' : 'text-[#F59E0B]'
+                changeMissing
+                  ? 'text-[#8B8B8B]'
+                  : dxy.change > 0 ? 'text-[#22C55E]' : dxy.change < 0 ? 'text-[#EF4444]' : 'text-[#F59E0B]'
               )}>
-                {dxy.change > 0 ? '+' : ''}{dxy.change.toFixed(2)}%
+                {formatPctOrDash(dxy.change, marketOpen)}
               </span>
             </div>
           </div>
@@ -290,26 +330,34 @@ DXYSection.displayName = 'DXYSection';
 // COMMODITIES
 // =====================================================
 
-const CommoditiesSection = memo(({ commodities }: { commodities: GlobalData['commodities'] }) => {
+const CommoditiesSection = memo(({ commodities, marketOpen }: { commodities: GlobalData['commodities']; marketOpen: boolean }) => {
   if (!commodities || commodities.length === 0) return null;
 
   return (
     <Card>
       <div className="p-6">
-        <SectionHeader icon={Layers} title="Commodities" subtitle="Key commodity prices" />
+        <SectionHeader icon={Layers} title="Commodities" subtitle={marketOpen ? 'Key commodity prices' : 'Last close — markets closed'} />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {commodities.map((commodity, idx) => (
-            <div key={idx} className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
-              <p className="text-xs text-[#6B6B6B] mb-1">{commodity.name}</p>
-              <p className="text-lg font-bold text-white">${commodity.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-              <p className={cn("text-xs font-medium",
-                commodity.changePercent >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
-              )}>
-                {commodity.changePercent >= 0 ? '+' : ''}{commodity.changePercent.toFixed(2)}%
-              </p>
-            </div>
-          ))}
+          {commodities.map((commodity, idx) => {
+            const valueMissing = isMissingWhenClosed(commodity.value, marketOpen);
+            const changeMissing = isMissingWhenClosed(commodity.changePercent, marketOpen);
+            return (
+              <div key={idx} className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+                <p className="text-xs text-[#6B6B6B] mb-1">{commodity.name}</p>
+                <p className="text-lg font-bold" style={{ color: valueMissing ? '#8B8B8B' : '#FFFFFF' }}>
+                  {valueMissing ? '—' : `$${commodity.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+                </p>
+                <p className={cn("text-xs font-medium",
+                  changeMissing
+                    ? "text-[#8B8B8B]"
+                    : commodity.changePercent >= 0 ? "text-[#22C55E]" : "text-[#EF4444]"
+                )}>
+                  {formatPctOrDash(commodity.changePercent, marketOpen)}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </Card>
@@ -440,6 +488,8 @@ AIGlobalInsight.displayName = 'AIGlobalInsight';
 function GlobalTab() {
   const { data, isLoading, error, refresh, lastUpdated } = useGlobal();
   const [marketFocus, setMarketFocus] = useState<MarketFocus>('all');
+  const marketStatus = useMarketStatus();
+  const marketOpen = marketStatus.isOpen;
 
   const handleFocusChange = useCallback((m: MarketFocus) => setMarketFocus(m), []);
 
@@ -473,6 +523,26 @@ function GlobalTab() {
 
   return (
     <div className="space-y-6">
+      {/* Market-closed banner (US equity market). Indices, DXY, and commodities
+          fall back to last-close values; em-dashes mean the snapshot has no
+          last-close yet. */}
+      {!marketOpen && (
+        <Card>
+          <div className="flex flex-wrap items-center gap-3 p-4">
+            <span className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-[#C9A646]" />
+              <span className="text-sm font-semibold text-white">
+                Markets Closed — {marketStatus.holidayName ?? marketStatus.reason}
+              </span>
+            </span>
+            <span className="text-xs text-[#8B8B8B]">·</span>
+            <span className="text-xs font-mono tabular-nums text-[#D8BE68]">
+              Showing {marketStatus.lastTradingDayLabel}
+            </span>
+          </div>
+        </Card>
+      )}
+
       {/* Market Focus Tabs */}
       <MarketFocusTabs active={marketFocus} onChange={handleFocusChange} />
 
@@ -494,11 +564,11 @@ function GlobalTab() {
       {/* Indices + DXY */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <LazySection fallbackHeight="h-64">
-          <GlobalIndices indices={data.indices || []} filter={marketFocus} />
+          <GlobalIndices indices={data.indices || []} filter={marketFocus} marketOpen={marketOpen} />
         </LazySection>
         {marketFocus === 'all' && (
           <LazySection fallbackHeight="h-64">
-            <DXYSection dxy={data.dxy} />
+            <DXYSection dxy={data.dxy} marketOpen={marketOpen} />
           </LazySection>
         )}
       </div>
@@ -506,7 +576,7 @@ function GlobalTab() {
       {/* Commodities */}
       {marketFocus === 'all' && (
         <LazySection fallbackHeight="h-48">
-          <CommoditiesSection commodities={data.commodities || []} />
+          <CommoditiesSection commodities={data.commodities || []} marketOpen={marketOpen} />
         </LazySection>
       )}
 
