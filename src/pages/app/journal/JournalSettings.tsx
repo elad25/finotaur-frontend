@@ -952,16 +952,27 @@ const CancelSubscriptionModal = ({
               </div>
 
               <div>
-                <label className="block text-xs text-zinc-500 mb-1">Feedback (optional)</label>
+                <label className="flex items-center gap-2 text-xs text-zinc-300 font-medium mb-1">
+                  Tell us more <span className="text-red-400">*</span>
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-500 font-normal">required</span>
+                </label>
                 <textarea
                   value={feedback}
                   onChange={(e) => setFeedback(e.target.value)}
-                  placeholder="Tell us how we can improve..."
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-red-500/50 resize-none"
-                  rows={2}
+                  placeholder="What would have kept you? At least one word — the team reads every response."
+                  className={`w-full px-3 py-2 bg-zinc-800 border rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 resize-none transition-colors ${
+                    feedback.trim().length > 0 ? 'border-zinc-700 focus:ring-red-500/50' : 'border-red-500/40 focus:ring-red-500/60'
+                  }`}
+                  rows={3}
                   maxLength={500}
+                  aria-required="true"
                 />
-                <p className="text-xs text-zinc-600 text-right">{feedback.length}/500</p>
+                <div className="flex justify-between mt-1">
+                  <p className={`text-[11px] ${feedback.trim().length > 0 ? 'text-zinc-500' : 'text-red-400'}`}>
+                    {feedback.trim().length > 0 ? '✓ Looks good' : 'Required — at least one word'}
+                  </p>
+                  <p className="text-[11px] text-zinc-600">{feedback.length}/500</p>
+                </div>
               </div>
             </div>
           ) : (
@@ -1014,7 +1025,7 @@ const CancelSubscriptionModal = ({
               </button>
               <button
                 onClick={handleNext}
-                disabled={!selectedReason}
+                disabled={!selectedReason || feedback.trim().length === 0}
                 className="flex-1 px-3 py-2 bg-red-600 hover:bg-red-500 disabled:bg-red-600/50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Continue
