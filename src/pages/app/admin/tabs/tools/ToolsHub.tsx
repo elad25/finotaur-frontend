@@ -11,6 +11,8 @@ import {
   Eye,
   Database,
   Heart,
+  Users as UsersIcon,
+  FileDown,
 } from 'lucide-react';
 import { AuditLogPanel } from './AuditLogPanel';
 import { ImpersonationPanel } from './ImpersonationPanel';
@@ -32,12 +34,26 @@ export function ToolsHub() {
       </header>
 
       {/* Quick-link cards */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <QuickLink
           to="/app/admin/tools/health"
           icon={Heart}
           label="Risk Watch"
           hint="Health Score per user · reach-out list"
+          featured
+        />
+        <QuickLink
+          to="/app/admin/tools/bulk"
+          icon={UsersIcon}
+          label="Bulk Actions"
+          hint="Multi-select users · grant / ban / email"
+          featured
+        />
+        <QuickLink
+          to="/app/admin/tools/gdpr"
+          icon={FileDown}
+          label="GDPR Export"
+          hint="Download a user's data as JSON on request"
           featured
         />
         <QuickLink
