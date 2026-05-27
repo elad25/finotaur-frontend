@@ -108,6 +108,31 @@ const FINOTAUR_DARK_THEME = {
   fontSizeAxis: 11,
 } as const;
 
+// ─── Light theme — TradingView-style white canvas ──────────────
+const FINOTAUR_LIGHT_THEME = {
+  background:        '#ffffff',
+  grid:              '#e1e3eb',
+  border:            '#d1d4dc',
+  text:              '#131722',
+  textAxis:          '#787b86',
+  candleUp:          '#26a69a',
+  candleDown:        '#ef5350',
+  candleWickUp:      '#26a69a',
+  candleWickDown:    '#ef5350',
+  candleBorderUp:    '#26a69a',
+  candleBorderDown:  '#ef5350',
+  brandGold:         '#C9A646',
+  brandGoldDim:      'rgba(201, 166, 70, 0.10)',
+  crosshair:         '#787b86',
+  priceLineColor:    '#787b86',
+  fontFamily:        FINOTAUR_DARK_THEME.fontFamily,
+  fontSizeAxis:      11,
+} as const;
+
+function pickTheme(mode: ChartTheme) {
+  return mode === 'light' ? FINOTAUR_LIGHT_THEME : FINOTAUR_DARK_THEME;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Indicator palette
 // ═══════════════════════════════════════════════════════════════
@@ -222,6 +247,7 @@ function createSeriesForType(
   chart: IChartApi,
   type: IndicatorType,
   primaryColor: string,
+  themeTokens: typeof FINOTAUR_DARK_THEME | typeof FINOTAUR_LIGHT_THEME,
 ): ISeriesApi<'Line' | 'Histogram'>[] {
   switch (type) {
     case 'RSI': {
@@ -236,7 +262,7 @@ function createSeriesForType(
       // Classic 30 / 70 reference lines — dotted, neutral, no axis label.
       line.createPriceLine({
         price: 30,
-        color: FINOTAUR_DARK_THEME.textAxis,
+        color: themeTokens.textAxis,
         lineWidth: 1,
         lineStyle: 1,
         axisLabelVisible: false,
@@ -244,7 +270,7 @@ function createSeriesForType(
       });
       line.createPriceLine({
         price: 70,
-        color: FINOTAUR_DARK_THEME.textAxis,
+        color: themeTokens.textAxis,
         lineWidth: 1,
         lineStyle: 1,
         axisLabelVisible: false,
@@ -280,7 +306,7 @@ function createSeriesForType(
       // Zero reference line — common-sense visual anchor for momentum sign
       macdLine.createPriceLine({
         price: 0,
-        color: FINOTAUR_DARK_THEME.textAxis,
+        color: themeTokens.textAxis,
         lineWidth: 1,
         lineStyle: 1,
         axisLabelVisible: false,
@@ -348,9 +374,7 @@ function createSeriesForType(
 // Chart options builder
 // ═══════════════════════════════════════════════════════════════
 function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
-  // Phase 0 is dark-only; reserved branch for Phase 1+ light theme.
-  void theme;
-  const t = FINOTAUR_DARK_THEME;
+  const t = pickTheme(theme);
   return {
     layout: {
       background: { type: ColorType.Solid, color: t.background },
@@ -433,6 +457,13 @@ export interface FinotaurChartProps {
   height?: number | string;
   /** Fired on fetch failure. Caller decides whether to render a fallback UI. */
   onError?: (err: Error) => void;
+  /**
+   * Optional time range to focus the visible viewport on after bars load.
+   * If omitted, the chart calls fitContent() (existing behavior).
+   * Useful for trade journal: show the trade with tight context, not the
+   * entire fetched data window.
+   */
+  focusRange?: { from: number; to: number };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -449,10 +480,13 @@ export function FinotaurChart({
   theme = 'dark',
   height = 600,
   onError,
+  focusRange,
 }: FinotaurChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  // Active theme tokens — derived once, used by both JSX and effects.
+  const themeTokens = pickTheme(theme);
   /** Latest bars fetched, kept so the indicators effect can recompute on toggle. */
   const barsRef = useRef<Bar[]>([]);
   /**
@@ -479,7 +513,7 @@ export function FinotaurChart({
       height: containerRef.current.clientHeight,
     });
 
-    const t = FINOTAUR_DARK_THEME;
+    const t = pickTheme(theme);
     const series = chart.addCandlestickSeries({
       upColor: t.candleUp,
       downColor: t.candleDown,
@@ -508,8 +542,8 @@ export function FinotaurChart({
       indicatorSeriesRef.current.clear();
       scalesConfiguredRef.current.clear();
     };
-    // Re-create only when theme changes (Phase 0: theme is constant).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-create when theme changes — full remount swaps the candle palette,
+    // background, grid, crosshair, and all subpane scale colors atomically.
   }, [theme]);
 
   // ─── ResizeObserver — keep chart fitting its container ──────
@@ -542,7 +576,14 @@ export function FinotaurChart({
         barsRef.current = bars;
         setBarCount(bars.length);
         if (bars.length > 0) {
-          chartRef.current?.timeScale().fitContent();
+          if (focusRange) {
+            chartRef.current?.timeScale().setVisibleRange({
+              from: focusRange.from as never,
+              to: focusRange.to as never,
+            });
+          } else {
+            chartRef.current?.timeScale().fitContent();
+          }
         }
         setLoading(false);
       })
@@ -557,7 +598,7 @@ export function FinotaurChart({
     return () => {
       cancelled = true;
     };
-  }, [symbol, interval, from, to, dataSource, onError]);
+  }, [symbol, interval, from, to, dataSource, onError, focusRange]);
 
   // ─── Apply markers ──────────────────────────────────────────
   useEffect(() => {
@@ -617,7 +658,7 @@ export function FinotaurChart({
       // ── Create on first sight, or fetch existing ──────────
       let seriesList = current.get(type);
       if (!seriesList) {
-        seriesList = createSeriesForType(chart, type, color);
+        seriesList = createSeriesForType(chart, type, color, pickTheme(theme));
         current.set(type, seriesList);
       } else if (seriesList.length > 0 && type !== 'MACD' && type !== 'BBANDS') {
         // Single-series indicator: color may have changed
@@ -679,7 +720,7 @@ export function FinotaurChart({
     const styleScaleOnce = (scaleId: string) => {
       if (scalesConfiguredRef.current.has(scaleId)) return;
       chart.priceScale(scaleId).applyOptions({
-        borderColor: FINOTAUR_DARK_THEME.border,
+        borderColor: pickTheme(theme).border,
       });
       scalesConfiguredRef.current.add(scaleId);
     };
@@ -709,7 +750,7 @@ export function FinotaurChart({
         scaleMargins: margins.atr,
       });
     }
-  }, [indicators, barCount]); // barCount → recompute after fresh data load
+  }, [indicators, barCount, theme]); // barCount → recompute after fresh data load; theme → re-style scales on switch
 
   // ─── Render ─────────────────────────────────────────────────
   return (
@@ -717,13 +758,13 @@ export function FinotaurChart({
       className="relative w-full overflow-hidden"
       style={{
         height: typeof height === 'number' ? `${height}px` : height,
-        background: FINOTAUR_DARK_THEME.background,
+        background: themeTokens.background,
       }}
     >
       {/* Brand bar — 1px gold accent at the top edge */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px"
-        style={{ background: FINOTAUR_DARK_THEME.brandGold, opacity: 0.5 }}
+        style={{ background: themeTokens.brandGold, opacity: 0.5 }}
       />
 
       {/* Chart canvas mount */}
@@ -732,7 +773,7 @@ export function FinotaurChart({
       {/* Watermark — subtle Finotaur signature, bottom-right above the timescale */}
       <div
         className="pointer-events-none absolute bottom-7 right-16 z-10 select-none text-[10px] font-bold uppercase tracking-[0.3em]"
-        style={{ color: FINOTAUR_DARK_THEME.brandGold, opacity: 0.18 }}
+        style={{ color: themeTokens.brandGold, opacity: 0.18 }}
         aria-hidden="true"
       >
         FINOTAUR
@@ -743,13 +784,13 @@ export function FinotaurChart({
         <div
           className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
           style={{
-            borderColor: FINOTAUR_DARK_THEME.border,
-            background: 'rgba(8,8,10,0.7)',
-            color: FINOTAUR_DARK_THEME.text,
+            borderColor: themeTokens.border,
+            background: theme === 'light' ? 'rgba(255,255,255,0.75)' : 'rgba(8,8,10,0.7)',
+            color: themeTokens.text,
             backdropFilter: 'blur(4px)',
           }}
         >
-          <span style={{ color: FINOTAUR_DARK_THEME.brandGold }}>{symbol}</span>
+          <span style={{ color: themeTokens.brandGold }}>{symbol}</span>
           <span className="mx-1.5 opacity-30">·</span>
           <span>{interval}</span>
         </div>
@@ -758,12 +799,12 @@ export function FinotaurChart({
       {loading && (
         <div
           className="absolute inset-0 flex items-center justify-center text-xs text-zinc-500"
-          style={{ background: 'rgba(8,8,10,0.6)' }}
+          style={{ background: theme === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(8,8,10,0.6)' }}
         >
           <div className="flex items-center gap-2">
             <span
               className="h-2 w-2 animate-pulse rounded-full"
-              style={{ background: FINOTAUR_DARK_THEME.brandGold }}
+              style={{ background: themeTokens.brandGold }}
             />
             Loading {symbol} {interval} bars…
           </div>
@@ -773,7 +814,7 @@ export function FinotaurChart({
       {!loading && error && (
         <div
           className="absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-rose-400"
-          style={{ background: 'rgba(8,8,10,0.85)' }}
+          style={{ background: theme === 'light' ? 'rgba(255,255,255,0.9)' : 'rgba(8,8,10,0.85)' }}
         >
           <div className="max-w-md">
             <div className="mb-1 font-semibold uppercase tracking-wider">Chart unavailable</div>

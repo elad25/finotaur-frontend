@@ -16,7 +16,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, TrendingUp, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, Moon, Sun, TrendingUp, X } from 'lucide-react';
 import type { UTCTimestamp } from 'lightweight-charts';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
@@ -30,6 +30,7 @@ import {
 import { isIntradayInterval } from '@/components/charting/indicators';
 import { IndicatorToolbar } from '@/components/charting/IndicatorToolbar';
 import { useIndicatorPreferences } from '@/components/charting/useIndicatorPreferences';
+import { useChartTheme } from '@/components/charting/useChartTheme';
 import type { ChartMarker, Indicator } from '@/components/charting/types';
 import { INDICATOR_PERIODS } from '@/components/charting/types';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -57,14 +58,10 @@ interface TradeChartProps {
 // are trade-specific semantics, not generic chart styling.
 // ═══════════════════════════════════════════════════════════════
 const MARKER_COLORS = {
-  // Elad 2026-05-20: entry vs exit semantics — not LONG vs SHORT semantics.
-  // The arrow shape (arrowUp/arrowDown) already encodes direction; color
-  // signals "is this opening or closing the position".
-  //   ENTRY (any side) → green   = "active / opening"
-  //   EXIT  (any side) → red     = "closing / position done"
-  long:  '#10b981',  // emerald-500 — entry (LONG side, arrowUp belowBar)
-  short: '#10b981',  // emerald-500 — entry (SHORT side, arrowDown aboveBar)
-  exit:  '#ef4444',  // red-500     — exit (square, opposite side of entry arrow)
+  // Soft pink palette matching TradingView's native light-mode markers.
+  // Entry vs Exit telegraphed by SHAPE (arrowUp/Down vs square), not by hue.
+  entry: '#f87171',  // red-400
+  exit:  '#fca5a5',  // red-300
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -112,11 +109,10 @@ function formatDuration(openAt: string, closeAt: string | null | undefined): str
 // Trade → ChartMarker[] (entry + exit arrows)
 //
 // Marker semantics:
-//   - Entry: arrow points INTO the trade direction (LONG = arrowUp from
-//     below, SHORT = arrowDown from above). Colored by side.
-//   - Exit:  square shape on the opposite side. Sky-blue to be visually
-//     distinct from entry arrows. Square (not arrow) reinforces "this is
-//     the close, not another entry."
+//   - Entry: arrow points INTO the trade direction (LONG = arrowUp belowBar,
+//     SHORT = arrowDown aboveBar). Soft pink — matches TradingView light theme.
+//   - Exit:  square on the opposite side, paler pink. Shape distinguishes entry
+//     from exit; hue difference is subtle but reinforces the read.
 // ═══════════════════════════════════════════════════════════════
 function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
   const out: ChartMarker[] = [];
@@ -132,7 +128,7 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
       time: entryTime,
       position: trade.side === 'LONG' ? 'belowBar' : 'aboveBar',
       shape: trade.side === 'LONG' ? 'arrowUp' : 'arrowDown',
-      color: trade.side === 'LONG' ? MARKER_COLORS.long : MARKER_COLORS.short,
+      color: MARKER_COLORS.entry,
       // ▲ prefix telegraphs "this is the open" before the eye reaches the text
       text: `▲ ${trade.side} @ ${entryPriceStr}`,
       size: 2,
@@ -160,50 +156,47 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Window computation — Option B: ASYMMETRIC hybrid (per Elad 2026-05-17)
+// Window computation — duration-tier table
 //
-// PHILOSOPHY: a journal chart needs:
-//   - ENOUGH context BEFORE the entry to see the setup (min 3 days)
-//   - ENOUGH context AFTER the exit / now to see immediate aftermath (min 1 day)
-//   - For longer trades, scale the PRE-entry padding 1:1 so a 7-day swing
-//     still shows the structure that led into it (capped at 14 days)
-//   - POST-exit padding scales gentler (0.3x) — once the trade is over,
-//     traders care more about "what happened immediately after" than
-//     extended weeks of follow-through
-//
-// Output guarantees:
-//   - Scalp (30 min): window = 3d + 30m + 1d = ~4 days
-//   - Day trade (4h): window = 3d + 4h + 1d = ~4.2 days
-//   - Swing (5d):     window = 5d + 5d + 1.5d = ~11.5 days
-//   - Position (14d): window = 14d + 14d + 4.2d = ~32 days
-//   - Position (30d): window = 14d + 30d + 9d = ~53 days (cap kicks in)
-//
-// For OPEN trades, close_at = now(), so `to` = now + ~1 day — Yahoo returns
-// no future bars, lightweight-charts renders the empty space as "live edge".
+// Tier philosophy: fetch window scales proportionally to trade duration so
+// scalps get tight 1-hour windows (~60 bars) while swings get days of context.
+// The fetched window is always wider than the focusRange so setVisibleRange
+// never paints blank candles at the edges.
 // ═══════════════════════════════════════════════════════════════
-const MIN_PADDING_BEFORE_SEC = 3 * 24 * 60 * 60;  // 3 days minimum before entry
-const MIN_PADDING_AFTER_SEC = 1 * 24 * 60 * 60;   // 1 day minimum after exit
-const PADDING_BEFORE_FRACTION = 1.0;              // 100% of trade duration before
-const PADDING_AFTER_FRACTION = 0.3;               // 30% of trade duration after
-const MAX_PADDING_SEC = 14 * 24 * 60 * 60;        // cap at 2 weeks per side
-
 function computeWindow(trade: TradeChartTrade): { from: number; to: number; durationMs: number } {
   const openMs = new Date(trade.open_at).getTime();
   const closeMs = trade.close_at ? new Date(trade.close_at).getTime() : Date.now();
   const durationMs = Math.max(closeMs - openMs, 0);
   const durationSec = Math.floor(durationMs / 1000);
+  const MIN = 60;
+  const HOUR = 60 * 60;
+  const DAY = 24 * HOUR;
 
-  const paddingBefore = Math.min(
-    MAX_PADDING_SEC,
-    Math.max(MIN_PADDING_BEFORE_SEC, Math.floor(durationSec * PADDING_BEFORE_FRACTION)),
-  );
-  const paddingAfter = Math.min(
-    MAX_PADDING_SEC,
-    Math.max(MIN_PADDING_AFTER_SEC, Math.floor(durationSec * PADDING_AFTER_FRACTION)),
-  );
+  let padBefore: number;
+  let padAfter: number;
 
-  const from = Math.floor(openMs / 1000) - paddingBefore;
-  const to = Math.floor(closeMs / 1000) + paddingAfter;
+  if (durationSec < 5 * MIN) {
+    padBefore = 30 * MIN;
+    padAfter = 30 * MIN;
+  } else if (durationSec < HOUR) {
+    padBefore = 60 * MIN;
+    padAfter = 30 * MIN;
+  } else if (durationSec < 4 * HOUR) {
+    padBefore = Math.max(HOUR, 2 * durationSec);
+    padAfter = Math.max(30 * MIN, durationSec);
+  } else if (durationSec < DAY) {
+    padBefore = durationSec;
+    padAfter = Math.floor(durationSec * 0.5);
+  } else if (durationSec < 7 * DAY) {
+    padBefore = Math.min(7 * DAY, durationSec);
+    padAfter = Math.min(7 * DAY, Math.floor(durationSec * 0.5));
+  } else {
+    padBefore = Math.min(14 * DAY, durationSec);
+    padAfter = Math.min(14 * DAY, Math.floor(durationSec * 0.3));
+  }
+
+  const from = Math.floor(openMs / 1000) - padBefore;
+  const to = Math.floor(closeMs / 1000) + padAfter;
   return { from, to, durationMs };
 }
 
@@ -214,10 +207,12 @@ function ChartBody({
   trade,
   height,
   indicators,
+  theme,
 }: {
   trade: TradeChartTrade;
   height: number | string;
   indicators?: Indicator[];
+  theme: 'light' | 'dark';
 }) {
   // Resolve symbol once per render — pure function of raw symbol
   const isCrypto = useMemo(() => isCryptoSymbol(trade.symbol ?? ''), [trade.symbol]);
@@ -232,6 +227,21 @@ function ChartBody({
 
   // Route to the right source based on the raw broker symbol (router knows crypto vs equity)
   const dataSource = useMemo(() => pickDataSource(trade.symbol), [trade.symbol]);
+
+  const focusRange = useMemo(() => {
+    // Tight visible range — slightly tighter than the fetched window, so
+    // setVisibleRange lands the user looking directly at the trade.
+    const openSec = Math.floor(new Date(trade.open_at).getTime() / 1000);
+    const closeSec = trade.close_at
+      ? Math.floor(new Date(trade.close_at).getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+    const tradeSpanSec = Math.max(closeSec - openSec, 60); // at least 1 min wide
+    const visiblePad = Math.max(60, Math.floor(tradeSpanSec * 0.5));
+    return {
+      from: openSec - visiblePad,
+      to: closeSec + visiblePad,
+    };
+  }, [trade.open_at, trade.close_at]);
 
   if (!resolvedSymbol) {
     return (
@@ -250,7 +260,8 @@ function ChartBody({
       dataSource={dataSource}
       markers={markers}
       indicators={indicators}
-      theme="dark"
+      theme={theme}
+      focusRange={focusRange}
       height={height}
     />
   );
@@ -321,6 +332,7 @@ function MarkerChips({ trade }: { trade: TradeChartTrade }) {
 // ═══════════════════════════════════════════════════════════════
 export function TradeChart({ trade }: TradeChartProps) {
   const [fullscreen, setFullscreen] = useState(false);
+  const [chartTheme, setChartTheme] = useChartTheme('light');
   const [indicatorSettings, setIndicatorSettings] = useIndicatorPreferences();
 
   // Interval is the same calculation ChartBody does internally — recomputed
@@ -361,19 +373,31 @@ export function TradeChart({ trade }: TradeChartProps) {
           <TrendingUp className="h-5 w-5" />
           Price Chart
         </h3>
-        <button
-          type="button"
-          onClick={() => setFullscreen(true)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
-          aria-label="Expand chart"
-        >
-          <Maximize2 className="h-3.5 w-3.5" />
-          Fullscreen
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChartTheme(chartTheme === 'light' ? 'dark' : 'light')}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+            aria-label="Toggle chart theme"
+            title={`Switch to ${chartTheme === 'light' ? 'dark' : 'light'} theme`}
+          >
+            {chartTheme === 'light' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
+            {chartTheme === 'light' ? 'Dark' : 'Light'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700/60 bg-zinc-800/60 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:border-yellow-500/40 hover:bg-zinc-800 hover:text-yellow-300"
+            aria-label="Expand chart"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+            Fullscreen
+          </button>
+        </div>
       </div>
 
       <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 shadow-2xl">
-        <ChartBody trade={trade} height="100%" indicators={indicators} />
+        <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
       </div>
 
       <div className="mt-4">
@@ -395,7 +419,7 @@ export function TradeChart({ trade }: TradeChartProps) {
             />
           </div>
           <div className="flex-1 overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950">
-            <ChartBody trade={trade} height="100%" indicators={indicators} />
+            <ChartBody trade={trade} height="100%" indicators={indicators} theme={chartTheme} />
           </div>
           <MarkerChips trade={trade} />
         </DialogContent>
