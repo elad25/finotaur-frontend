@@ -1,6 +1,7 @@
 // src/pages/app/ai/OptionsIntelligenceAI.tsx
 
-import { memo, lazy, Suspense } from 'react';
+import { memo, Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { motion, AnimatePresence } from 'framer-motion';
 import { XCircle, RefreshCw, Loader2, Zap, Flame, Eye, Brain } from 'lucide-react';
 import { useOptionsIntelligence, Card, TabNav, OptionsLoadingSkeleton, FlowDrawer } from '@/features/options-ai';

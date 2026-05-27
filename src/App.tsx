@@ -15,7 +15,8 @@ import { DomainGuard } from "@/components/DomainGuard";
 import { ProtectedAppLayout } from "@/layouts/ProtectedAppLayout";
 import { CopilotStandaloneLayout } from "@/layouts/CopilotStandaloneLayout";
 import { ProtectedAdminRoute } from "@/components/ProtectedAdminRoute";
-import { lazy, Suspense, memo } from "react";
+import { Suspense, memo } from "react";
+import { lazy } from "@/lib/lazyWithRetry";
 import { JournalRoute } from "@/components/routes/JournalRoute";
 import JournalPublicPage from "@/pages/JournalPublicPage";
 import GlossaryIndex from "@/pages/glossary/GlossaryIndex";
@@ -155,8 +156,17 @@ const JournalAnalytics = lazy(() => import("@/pages/app/journal/Analytics"));
 const JournalAIReview = lazy(() => import("@/pages/app/journal/AIReview"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
-const Strategies = lazy(() => import("@/pages/app/journal/Strategies").then(m => ({ default: m.default })));
-const StrategyDetailView = lazy(() => import("@/pages/app/journal/Strategies").then(m => ({ default: m.StrategyDetailView })));
+const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
+const StrategyDetailView = lazy(() =>
+  import("@/pages/app/journal/Strategies").then((m) => {
+    if (!m.StrategyDetailView) {
+      throw new Error(
+        "[App] Strategies.tsx is missing the `StrategyDetailView` named export — was it renamed?",
+      );
+    }
+    return { default: m.StrategyDetailView };
+  }),
+);
 const JournalScenarios = lazy(() => import("@/pages/app/journal/Scenarios"));
 const JournalCommunity = lazy(() => import("@/pages/app/journal/Community"));
 const JournalAcademy = lazy(() => import("@/pages/app/journal/Academy"));

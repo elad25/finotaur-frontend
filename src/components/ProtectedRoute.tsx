@@ -28,7 +28,8 @@
 
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { useSubscription } from '@/hooks/useSubscription';
 
 // 🔥 Lazy load the JournalLandingPage to avoid circular imports

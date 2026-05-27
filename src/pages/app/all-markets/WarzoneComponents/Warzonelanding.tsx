@@ -11,7 +11,8 @@
 // ✅ 100% SAME UI & LOGIC - Just faster!
 // =====================================================
 
-import { useState, useCallback, memo, lazy, Suspense, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, memo, Suspense, useEffect, useRef, useMemo } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/providers/AuthProvider';
 import { useNavigate, useSearchParams } from 'react-router-dom';

@@ -24,7 +24,8 @@
 //   /app/admin/executive      — forecasting / anomaly detection
 // ============================================
 
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import LoadingSkeleton from '@/components/LoadingSkeleton';

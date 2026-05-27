@@ -21,7 +21,8 @@
 //    - Simpler workflow for quick trade logging
 // ================================================
 
-import { useEffect, useState, useCallback, useMemo, lazy, Suspense, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense, useRef } from "react";
+import { lazy } from '@/lib/lazyWithRetry';
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from '@/components/ui/card';

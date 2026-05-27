@@ -31,11 +31,13 @@ interface RawRow {
   questions_count: number | null;
   tokens_used: number | null;
   estimated_cost_usd: number | string | null;
-  profiles?: {
-    email: string | null;
-    display_name: string | null;
-    account_type: string | null;
-  } | null;
+}
+
+interface ProfileRow {
+  id: string;
+  email: string | null;
+  display_name: string | null;
+  account_type: string | null;
 }
 
 interface UserAgg {
@@ -76,6 +78,9 @@ const WINDOW_OPTIONS: WindowDays[] = [7, 30, 90];
 export function AIUsageTab() {
   const [windowDays, setWindowDays] = useState<WindowDays>(30);
   const [rows, setRows] = useState<RawRow[]>([]);
+  const [profilesById, setProfilesById] = useState<Map<string, ProfileRow>>(
+    () => new Map(),
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,22 +91,45 @@ export function AIUsageTab() {
         setLoading(true);
         setError(null);
         const since = isoNDaysAgo(windowDays);
-        const { data, error: qErr } = await supabase
+
+        // Step 1: pull ai_usage rows. The FK on ai_usage.user_id targets
+        // auth.users(id), NOT public.profiles, so a PostgREST embed
+        // (profiles!inner(...)) fails with "no relationship found".
+        // Two-step fetch is the supported approach for this shape.
+        const { data: usageData, error: usageErr } = await supabase
           .from('ai_usage')
-          .select(
-            'user_id, questions_count, tokens_used, estimated_cost_usd, profiles!inner(email, display_name, account_type)'
-          )
+          .select('user_id, questions_count, tokens_used, estimated_cost_usd')
           .gte('date', since)
           .limit(5000);
 
-        if (qErr) throw qErr;
+        if (usageErr) throw usageErr;
+        const usageRows = (usageData ?? []) as RawRow[];
+
+        // Step 2: fetch the profile rows for the unique user_ids we saw.
+        // Empty input → skip the round-trip.
+        const uniqueIds = Array.from(
+          new Set(usageRows.map((r) => r.user_id).filter(Boolean)),
+        );
+        let profileMap = new Map<string, ProfileRow>();
+        if (uniqueIds.length > 0) {
+          const { data: profileData, error: profileErr } = await supabase
+            .from('profiles')
+            .select('id, email, display_name, account_type')
+            .in('id', uniqueIds);
+          if (profileErr) throw profileErr;
+          profileMap = new Map(
+            ((profileData ?? []) as ProfileRow[]).map((p) => [p.id, p]),
+          );
+        }
+
         if (cancelled) return;
-        setRows((data ?? []) as unknown as RawRow[]);
+        setRows(usageRows);
+        setProfilesById(profileMap);
       } catch (err) {
         if (cancelled) return;
         console.error('[AIUsageTab] load failed:', err);
         setError(
-          err instanceof Error ? err.message : 'Failed to load AI usage data'
+          err instanceof Error ? err.message : 'Failed to load AI usage data',
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -118,7 +146,7 @@ export function AIUsageTab() {
     for (const row of rows) {
       const id = row.user_id;
       if (!id) continue;
-      const profile = row.profiles ?? null;
+      const profile = profilesById.get(id) ?? null;
       const existing = map.get(id);
       const q = toNumber(row.questions_count);
       const t = toNumber(row.tokens_used);
@@ -184,7 +212,7 @@ export function AIUsageTab() {
     );
 
     return { users: userList, byTier: tiers, totals: totalsAgg };
-  }, [rows]);
+  }, [rows, profilesById]);
 
   const leaderboard = users.slice(0, 20);
 

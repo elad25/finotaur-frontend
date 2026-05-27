@@ -4,7 +4,8 @@
 // Overview, Applications, Affiliates List, Referrals, Payouts
 // ============================================
 
-import { useState, lazy, Suspense } from 'react';
+import { useState, Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { 
   LayoutDashboard,
   FileText,

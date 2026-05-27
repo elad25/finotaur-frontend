@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { useFundamentals } from '@/hooks/useFundamentals';
 import { useSymbol } from '@/hooks/useSymbol';
 import SkeletonBlock from '@/components/fundamentals/SkeletonBlock';

@@ -1,4 +1,5 @@
-import { useState, useMemo, memo, lazy, Suspense } from "react";
+import { useState, useMemo, memo, Suspense } from "react";
+import { lazy } from '@/lib/lazyWithRetry';
 import { useSearchParams } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, Target, Award, Calendar,

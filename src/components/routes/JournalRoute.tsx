@@ -34,7 +34,8 @@
 // no broker lives in JournalEmptyState (variant="no-broker").
 // =====================================================
 
-import { memo, Suspense, ReactNode, lazy } from 'react';
+import { memo, Suspense, ReactNode } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { useAuth } from '@/providers/AuthProvider';
 import { useSubscription } from '@/hooks/useSubscription';
 import { ErrorBoundary } from '@/components/ErrorBoundary';

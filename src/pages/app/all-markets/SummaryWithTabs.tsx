@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { NavLink } from 'react-router-dom';
 import { useTabSync } from '@/hooks/useTabSync';
 import FundamentalsTabEntry from '@/components/fundamentals/FundamentalsTabEntry';

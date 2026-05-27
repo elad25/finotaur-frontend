@@ -7,7 +7,8 @@
 // All components are in ./WarzoneComponents/
 // =====================================================
 
-import { lazy, Suspense, memo } from 'react';
+import { Suspense, memo } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { useUserMeta } from '@/hooks/useUserStatus';
 
 // Loading component

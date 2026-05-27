@@ -5,7 +5,8 @@
 // ✅ Optimized for 10K users — no extra API calls
 // =====================================================
 
-import { useState, lazy, Suspense, memo, useCallback } from 'react';
+import { useState, Suspense, memo, useCallback } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, GitMerge, PieChart, Users, Zap } from 'lucide-react';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';

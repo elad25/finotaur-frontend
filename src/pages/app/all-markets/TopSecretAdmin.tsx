@@ -72,7 +72,8 @@ import {
 import { toast } from 'sonner';
 import PublishReportModal from '@/components/admin/PublishReportModal';
 import PublishedReportsManager from '@/components/admin/PublishedReportsManager';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 
 // Lazy load Landing and Dashboard for preview modes
 const TopSecretLanding = lazy(() => import('@/pages/app/TopSecret/TopSecretLanding'));
