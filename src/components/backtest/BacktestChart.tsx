@@ -23,7 +23,7 @@
 
 import { useMemo, useState } from 'react';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -33,6 +33,7 @@ import {
   type PaperPosition,
   type PaperSide,
 } from '@/hooks/useBacktestSession';
+import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -142,6 +143,12 @@ export function BacktestChart({
   const session = useBacktestSession(startingBalance);
   const { state, openPosition, closePosition, updateStopLoss, updateTakeProfit, reset } = session;
 
+  // Phase 2: Supabase persistence for "Save Session" button.
+  const persistence = useBacktestPersistence();
+  type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
   const { from, to } = useMemo(() => {
@@ -188,6 +195,39 @@ export function BacktestChart({
       return;
     }
     closePosition({ price, time: Math.floor(Date.now() / 1000), reason });
+  };
+
+  const handleSaveSession = async () => {
+    if (state.closedPositions.length === 0 && !state.activePosition) {
+      setSaveError('Nothing to save — open or close a trade first.');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+      return;
+    }
+    setSaveStatus('saving');
+    setSaveError(null);
+    try {
+      const finalBalance = state.startingBalance + state.stats.netPnl;
+      await persistence.saveSession({
+        symbol,
+        interval: barInterval,
+        asset_class: assetClass,
+        startDate: new Date(from * 1000),
+        endDate: new Date(to * 1000),
+        initialBalance: state.startingBalance,
+        finalBalance,
+        statistics: state.stats,
+        trades: state.closedPositions,
+        // Auto-name: "<symbol> · <interval> · <date>"
+        name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
+      });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save session');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 4000);
+    }
   };
 
   const activePos = state.activePosition;
@@ -261,6 +301,28 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
+          <button
+            onClick={handleSaveSession}
+            disabled={saveStatus === 'saving'}
+            className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+              saveStatus === 'saved'
+                ? 'border-emerald-700 bg-emerald-950 text-emerald-400'
+                : saveStatus === 'error'
+                ? 'border-rose-700 bg-rose-950 text-rose-400'
+                : saveStatus === 'saving'
+                ? 'border-zinc-700 bg-zinc-900 text-zinc-500 cursor-wait'
+                : 'border-[#C9A646]/40 bg-[#C9A646]/5 text-[#C9A646] hover:bg-[#C9A646]/10'
+            }`}
+            title={saveError ?? 'Save this session to your journal'}
+          >
+            {saveStatus === 'saved' ? (
+              <><Check size={12} />Saved</>
+            ) : saveStatus === 'error' ? (
+              <><AlertCircle size={12} />Error</>
+            ) : (
+              <><Save size={12} />{saveStatus === 'saving' ? 'Saving…' : 'Save'}</>
+            )}
+          </button>
           <button
             onClick={() => reset()}
             className="flex items-center gap-1 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-rose-700 hover:text-rose-400"
