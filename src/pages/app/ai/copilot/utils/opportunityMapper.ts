@@ -2,6 +2,8 @@
 // Maps TradeIdea (from synthesis brief) → Opportunity (table row shape).
 
 import type { TradeIdea, RankedTradeIdea } from '@/services/copilotSynthesisBriefApi';
+import type { PatternType } from '@/lib/patterns/types';
+import { toPatternType } from '@/lib/patterns/types';
 
 // ---------------------------------------------------------------------------
 // Opportunity type — superset of the old hardcoded array shape.
@@ -25,6 +27,12 @@ export interface Opportunity {
   source?: TradeIdea['source'];
   timeHorizon?: TradeIdea['time_horizon'];
   whyForYou?: string;
+  /** Pattern classification (Phase 0 — Foundation, ADL-039). Always present after mapping; defaults to 'other' if upstream omits. */
+  patternType?: PatternType;
+  /** ONE sentence quoting source data justifying patternType. */
+  patternEvidence?: string;
+  /** ONE sentence stating what would break the thesis. */
+  invalidation?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,5 +147,8 @@ export function ideaToOpportunity(
     source: idea.source,
     timeHorizon: idea.time_horizon,
     whyForYou: rank?.whyForYou,
+    patternType: toPatternType(idea.pattern_type),
+    patternEvidence: idea.pattern_evidence ?? undefined,
+    invalidation: idea.invalidation ?? undefined,
   };
 }

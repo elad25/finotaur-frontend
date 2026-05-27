@@ -2,6 +2,7 @@
 // FINOTAUR — Weekly Synthesis Brief API (Phase 1: global, Phase 2: personalized)
 
 import { supabase } from '@/lib/supabase';
+import type { PatternType } from '@/lib/patterns/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
 
@@ -52,6 +53,12 @@ export interface TradeIdea {
   conviction: 'high' | 'medium' | 'low';
   /** Two to three short catalyst tags added by Task C backend update */
   catalysts?: string[];
+  /** Pattern classification (Phase 0 — Foundation, ADL-039). Optional for backward compat with old briefs. */
+  pattern_type?: PatternType | null;
+  /** ONE sentence quoting source data supporting pattern_type. */
+  pattern_evidence?: string | null;
+  /** ONE sentence stating the specific event that would break the thesis. */
+  invalidation?: string | null;
 }
 
 export interface KeyRisk {

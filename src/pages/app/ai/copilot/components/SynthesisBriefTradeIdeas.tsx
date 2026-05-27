@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import type { TradeIdea, RankedTradeIdea } from '@/services/copilotSynthesisBriefApi';
+import { PATTERN_LABELS, toPatternType, type PatternType } from '@/lib/patterns/types';
 
 type HorizonFilter = 'all' | 'short' | 'medium' | 'long';
 
@@ -45,6 +46,20 @@ function SourcePill({ source }: { source: TradeIdea['source'] }) {
   return (
     <span className="inline-flex items-center rounded-sm border border-gold-primary/20 bg-gold-primary/[0.06] px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-gold-primary">
       {labels[source]}
+    </span>
+  );
+}
+
+function PatternBadge({ patternType }: { patternType: PatternType | null | undefined }) {
+  const safe = toPatternType(patternType);
+  const label = PATTERN_LABELS.en[safe];
+  // Muted neutral styling — pattern_type is the data, label is the readability.
+  return (
+    <span
+      className="inline-flex items-center rounded-sm border border-ink-tertiary/30 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-ink-secondary"
+      title={safe}
+    >
+      {label}
     </span>
   );
 }
@@ -165,7 +180,7 @@ export function SynthesisBriefTradeIdeas({ tradeIdeas, loading, error, rankedTra
         <table className="w-full min-w-[900px] border-separate border-spacing-0 text-left">
           <thead>
             <tr className="h-9 bg-[#060606]">
-              {['#', 'Ticker', 'Sector', 'Horizon', 'Source', 'Thesis', 'R:R', 'Conviction'].map(
+              {['#', 'Ticker', 'Sector', 'Horizon', 'Source', 'Pattern', 'Thesis', 'R:R', 'Conviction'].map(
                 (heading) => (
                   <th
                     key={heading}
@@ -183,7 +198,7 @@ export function SynthesisBriefTradeIdeas({ tradeIdeas, loading, error, rankedTra
             ) : filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="py-10 text-center text-[12px] text-ink-tertiary"
                 >
                   This week's brief publishes Sunday 17:45 IL
@@ -254,6 +269,11 @@ function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number
       {/* Source */}
       <td className="border-b border-gold-primary/10 px-2">
         <SourcePill source={idea.source} />
+      </td>
+
+      {/* Pattern */}
+      <td className="border-b border-gold-primary/10 px-2">
+        <PatternBadge patternType={idea.pattern_type} />
       </td>
 
       {/* Thesis */}
