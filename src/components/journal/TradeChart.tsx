@@ -229,19 +229,54 @@ function ChartBody({
   const dataSource = useMemo(() => pickDataSource(trade.symbol), [trade.symbol]);
 
   const focusRange = useMemo(() => {
-    // Tight visible range — slightly tighter than the fetched window, so
-    // setVisibleRange lands the user looking directly at the trade.
+    // Target ~40 bars visible regardless of timeframe — the trader's eye
+    // expects roughly that density when reviewing a single trade. The trade
+    // itself is centered; for trades shorter than 40 bars the extra width is
+    // split evenly around it, for trades longer than 40 bars we just pad a
+    // few bars on each side.
     const openSec = Math.floor(new Date(trade.open_at).getTime() / 1000);
     const closeSec = trade.close_at
       ? Math.floor(new Date(trade.close_at).getTime() / 1000)
       : Math.floor(Date.now() / 1000);
-    const tradeSpanSec = Math.max(closeSec - openSec, 60); // at least 1 min wide
-    const visiblePad = Math.max(60, Math.floor(tradeSpanSec * 0.5));
+    const tradeSpanSec = Math.max(closeSec - openSec, 1);
+
+    // Interval → seconds. Mirrors pickInterval's output mapping plus a few
+    // alternates the type allows (2m / 30m / 1h / 4h / 1wk / 1mo).
+    const intervalSec =
+      interval === '1m'  ? 60 :
+      interval === '2m'  ? 120 :
+      interval === '5m'  ? 300 :
+      interval === '15m' ? 900 :
+      interval === '30m' ? 1800 :
+      interval === '60m' || interval === '1h' ? 3600 :
+      interval === '4h'  ? 14400 :
+      interval === '1d'  ? 86400 :
+      interval === '1wk' ? 604800 :
+      interval === '1mo' ? 2592000 :
+      60;
+
+    const TARGET_BARS = 40;
+    const targetSpanSec = TARGET_BARS * intervalSec;
+
+    let from: number;
+    let to: number;
+    if (tradeSpanSec < targetSpanSec) {
+      const extra = targetSpanSec - tradeSpanSec;
+      from = openSec - Math.floor(extra / 2);
+      to = closeSec + Math.ceil(extra / 2);
+    } else {
+      // Trade longer than the target window — show it plus a 5-bar pad each side.
+      const pad = intervalSec * 5;
+      from = openSec - pad;
+      to = closeSec + pad;
+    }
+    // Clamp to the fetched data window so setVisibleRange never paints empty
+    // space beyond what FinotaurChart actually has bars for.
     return {
-      from: openSec - visiblePad,
-      to: closeSec + visiblePad,
+      from: Math.max(from, window.from),
+      to: Math.min(to, window.to),
     };
-  }, [trade.open_at, trade.close_at]);
+  }, [trade.open_at, trade.close_at, interval, window.from, window.to]);
 
   if (!resolvedSymbol) {
     return (
