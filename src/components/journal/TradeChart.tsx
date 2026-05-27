@@ -58,10 +58,13 @@ interface TradeChartProps {
 // are trade-specific semantics, not generic chart styling.
 // ═══════════════════════════════════════════════════════════════
 const MARKER_COLORS = {
-  // Soft pink palette matching TradingView's native light-mode markers.
-  // Entry vs Exit telegraphed by SHAPE (arrowUp/Down vs square), not by hue.
-  entry: '#f87171',  // red-400
-  exit:  '#fca5a5',  // red-300
+  // Direction-based markers (TradingView convention):
+  //   BUY  → green arrow BELOW the bar (filled in from the bottom)
+  //   SELL → red   arrow ABOVE the bar (filled in from the top)
+  // A LONG trade is buy-then-sell; a SHORT trade is sell-then-buy. The
+  // direction (not the entry/exit role) drives the marker.
+  buy:  '#26a69a',  // teal-green — matches light-theme candleUp
+  sell: '#ef5350',  // soft red   — matches light-theme candleDown
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -106,16 +109,19 @@ function formatDuration(openAt: string, closeAt: string | null | undefined): str
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Trade → ChartMarker[] (entry + exit arrows)
+// Trade → ChartMarker[] (direction-based buy/sell arrows)
 //
-// Marker semantics:
-//   - Entry: arrow points INTO the trade direction (LONG = arrowUp belowBar,
-//     SHORT = arrowDown aboveBar). Soft pink — matches TradingView light theme.
-//   - Exit:  square on the opposite side, paler pink. Shape distinguishes entry
-//     from exit; hue difference is subtle but reinforces the read.
+// Marker semantics (TradingView convention):
+//   - BUY  (LONG entry, SHORT exit) → green arrowUp BELOW the bar
+//   - SELL (SHORT entry, LONG exit) → red arrowDown ABOVE the bar
+// The direction — not the entry/exit role — drives the visual. Text still
+// labels which one is which (LONG / SHORT / EXIT).
 // ═══════════════════════════════════════════════════════════════
 function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
   const out: ChartMarker[] = [];
+
+  // Entry direction: LONG opens with a BUY, SHORT opens with a SELL.
+  const entryIsBuy = trade.side === 'LONG';
 
   const entryTime = Math.floor(new Date(trade.open_at).getTime() / 1000) as UTCTimestamp;
   if (Number.isFinite(entryTime as number)) {
@@ -126,27 +132,28 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
         : '—';
     out.push({
       time: entryTime,
-      position: trade.side === 'LONG' ? 'belowBar' : 'aboveBar',
-      shape: trade.side === 'LONG' ? 'arrowUp' : 'arrowDown',
-      color: MARKER_COLORS.entry,
-      // ▲ prefix telegraphs "this is the open" before the eye reaches the text
-      text: `▲ ${trade.side} @ ${entryPriceStr}`,
+      position: entryIsBuy ? 'belowBar' : 'aboveBar',
+      shape: entryIsBuy ? 'arrowUp' : 'arrowDown',
+      color: entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
+      // Arrow glyph in text mirrors the shape so the legend reads naturally
+      text: `${entryIsBuy ? '▲' : '▼'} ${trade.side} @ ${entryPriceStr}`,
       size: 2,
     });
   }
 
   if (trade.close_at && trade.exit_price != null) {
+    // Exit direction is the inverse of the entry.
+    const exitIsBuy = !entryIsBuy;
     const exitTime = Math.floor(new Date(trade.close_at).getTime() / 1000) as UTCTimestamp;
     if (Number.isFinite(exitTime as number)) {
-      // P&L hint in the text — green/red comes from the color, this just numerifies it
       const pnlSign = trade.pnl != null && trade.pnl > 0 ? '+' : '';
       const pnlSuffix = trade.pnl != null ? ` (${pnlSign}${trade.pnl.toFixed(2)})` : '';
       out.push({
         time: exitTime,
-        position: trade.side === 'LONG' ? 'aboveBar' : 'belowBar',
-        shape: 'square', // distinct from entry's arrow
-        color: MARKER_COLORS.exit,
-        text: `■ EXIT @ ${trade.exit_price.toFixed(2)}${pnlSuffix}`,
+        position: exitIsBuy ? 'belowBar' : 'aboveBar',
+        shape: exitIsBuy ? 'arrowUp' : 'arrowDown',
+        color: exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
+        text: `${exitIsBuy ? '▲' : '▼'} EXIT @ ${trade.exit_price.toFixed(2)}${pnlSuffix}`,
         size: 2,
       });
     }
@@ -229,10 +236,10 @@ function ChartBody({
   const dataSource = useMemo(() => pickDataSource(trade.symbol), [trade.symbol]);
 
   const focusRange = useMemo(() => {
-    // Target ~40 bars visible regardless of timeframe — the trader's eye
+    // Target ~70 bars visible regardless of timeframe — the trader's eye
     // expects roughly that density when reviewing a single trade. The trade
-    // itself is centered; for trades shorter than 40 bars the extra width is
-    // split evenly around it, for trades longer than 40 bars we just pad a
+    // itself is centered; for trades shorter than 70 bars the extra width is
+    // split evenly around it, for trades longer than 70 bars we just pad a
     // few bars on each side.
     const openSec = Math.floor(new Date(trade.open_at).getTime() / 1000);
     const closeSec = trade.close_at
@@ -255,7 +262,7 @@ function ChartBody({
       interval === '1mo' ? 2592000 :
       60;
 
-    const TARGET_BARS = 40;
+    const TARGET_BARS = 70;
     const targetSpanSec = TARGET_BARS * intervalSec;
 
     let from: number;
