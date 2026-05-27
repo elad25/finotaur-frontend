@@ -114,7 +114,7 @@ const BacktestLockedPage = memo(() => (
 BacktestLockedPage.displayName = 'BacktestLockedPage';
 
 // Lazy load BacktestLanding
-import { lazy } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
 const BacktestLanding = lazy(() => import('@/pages/app/journal/backtest/BacktestLanding'));
 
 // 🧪 BACKTEST PROTECTION COMPONENT
