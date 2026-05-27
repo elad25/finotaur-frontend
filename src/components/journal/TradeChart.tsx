@@ -163,43 +163,41 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Window computation — duration-tier table
+// Window computation — fetch ≥ 3 days, scale up for longer trades
 //
-// Tier philosophy: fetch window scales proportionally to trade duration so
-// scalps get tight 1-hour windows (~60 bars) while swings get days of context.
-// The fetched window is always wider than the focusRange so setVisibleRange
-// never paints blank candles at the edges.
+// The DEFAULT viewport is tight (~70 bars via focusRange), but the FETCHED
+// window is intentionally generous so the trader can scroll/zoom out and
+// see context up to ~3 days back. This is the data range available — not
+// what's visible by default.
 // ═══════════════════════════════════════════════════════════════
+const HOUR_SEC = 60 * 60;
+const DAY_SEC = 24 * HOUR_SEC;
+const MIN_PAD_BEFORE_SEC = 3 * DAY_SEC;  // 3 full days of pre-entry context
+const MIN_PAD_AFTER_SEC = 1 * DAY_SEC;   // 1 day of post-exit follow-through
+
 function computeWindow(trade: TradeChartTrade): { from: number; to: number; durationMs: number } {
   const openMs = new Date(trade.open_at).getTime();
   const closeMs = trade.close_at ? new Date(trade.close_at).getTime() : Date.now();
   const durationMs = Math.max(closeMs - openMs, 0);
   const durationSec = Math.floor(durationMs / 1000);
-  const MIN = 60;
-  const HOUR = 60 * 60;
-  const DAY = 24 * HOUR;
 
   let padBefore: number;
   let padAfter: number;
 
-  if (durationSec < 5 * MIN) {
-    padBefore = 30 * MIN;
-    padAfter = 30 * MIN;
-  } else if (durationSec < HOUR) {
-    padBefore = 60 * MIN;
-    padAfter = 30 * MIN;
-  } else if (durationSec < 4 * HOUR) {
-    padBefore = Math.max(HOUR, 2 * durationSec);
-    padAfter = Math.max(30 * MIN, durationSec);
-  } else if (durationSec < DAY) {
-    padBefore = durationSec;
-    padAfter = Math.floor(durationSec * 0.5);
-  } else if (durationSec < 7 * DAY) {
-    padBefore = Math.min(7 * DAY, durationSec);
-    padAfter = Math.min(7 * DAY, Math.floor(durationSec * 0.5));
+  if (durationSec < DAY_SEC) {
+    // Scalps + intra-day trades — fixed 3d / 1d padding so the user can
+    // scroll out and see multi-session context.
+    padBefore = MIN_PAD_BEFORE_SEC;
+    padAfter = MIN_PAD_AFTER_SEC;
+  } else if (durationSec < 7 * DAY_SEC) {
+    // Multi-day swing — scale 1× duration each side, but never below the
+    // 3d / 1d floor.
+    padBefore = Math.max(MIN_PAD_BEFORE_SEC, durationSec);
+    padAfter = Math.max(MIN_PAD_AFTER_SEC, Math.floor(durationSec * 0.5));
   } else {
-    padBefore = Math.min(14 * DAY, durationSec);
-    padAfter = Math.min(14 * DAY, Math.floor(durationSec * 0.3));
+    // Position trade (≥7d) — cap at 14d each side so we don't drag in months.
+    padBefore = Math.min(14 * DAY_SEC, Math.max(MIN_PAD_BEFORE_SEC, durationSec));
+    padAfter = Math.min(14 * DAY_SEC, Math.max(MIN_PAD_AFTER_SEC, Math.floor(durationSec * 0.3)));
   }
 
   const from = Math.floor(openMs / 1000) - padBefore;
