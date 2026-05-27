@@ -23,7 +23,7 @@
 
 import { useMemo, useState } from 'react';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -34,6 +34,8 @@ import {
   type PaperSide,
 } from '@/hooks/useBacktestSession';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
+import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
+import { runStrategy } from '@/core/backtest/runStrategy';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -141,13 +143,21 @@ export function BacktestChart({
   const [livePrice, setLivePrice] = useState('');
 
   const session = useBacktestSession(startingBalance);
-  const { state, openPosition, closePosition, updateStopLoss, updateTakeProfit, reset } = session;
+  const { state, openPosition, closePosition, updateStopLoss, updateTakeProfit, reset, loadTrades } = session;
 
   // Phase 2: Supabase persistence for "Save Session" button.
   const persistence = useBacktestPersistence();
   type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Phase 3: rule-based strategy executor.
+  const strategyLib = useStrategyLibrary();
+  type RunStatus = 'idle' | 'running' | 'done' | 'error';
+  const [runStatus, setRunStatus] = useState<RunStatus>('idle');
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runSummary, setRunSummary] = useState<string | null>(null);
+  const [strategyPickerOpen, setStrategyPickerOpen] = useState(false);
 
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
@@ -230,6 +240,38 @@ export function BacktestChart({
     }
   };
 
+  const handleRunStrategy = async (strategyId: string) => {
+    const strategy = strategyLib.strategies.find((s) => s.id === strategyId);
+    if (!strategy) {
+      setRunError('Strategy not found');
+      setRunStatus('error');
+      return;
+    }
+    setStrategyPickerOpen(false);
+    setRunStatus('running');
+    setRunError(null);
+    setRunSummary(null);
+    try {
+      // Fetch the same bar window the chart is currently showing.
+      const bars = await dataSource.getBars(symbol, barInterval, from as never, to as never);
+      if (!bars || bars.length < 2) {
+        throw new Error('Not enough bars in window to run strategy');
+      }
+      const result = runStrategy(strategy, bars);
+      loadTrades(result.trades);
+      setRunSummary(
+        `Ran "${strategy.name}" → ${result.trades.length} trade${result.trades.length === 1 ? '' : 's'} on ${result.barsScanned} bars` +
+        (result.unusedRuleIds.length > 0 ? ` (${result.unusedRuleIds.length} rule${result.unusedRuleIds.length === 1 ? '' : 's'} never fired)` : ''),
+      );
+      setRunStatus('done');
+      setTimeout(() => { setRunStatus('idle'); setRunSummary(null); }, 8000);
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : 'Strategy run failed');
+      setRunStatus('error');
+      setTimeout(() => setRunStatus('idle'), 4000);
+    }
+  };
+
   const activePos = state.activePosition;
   const unrealizedPnl = useMemo(() => {
     if (!activePos) return null;
@@ -300,6 +342,55 @@ export function BacktestChart({
             <div className={`text-sm font-semibold ${state.stats.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
+          </div>
+          {/* Run Strategy dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setStrategyPickerOpen((v) => !v)}
+              disabled={runStatus === 'running'}
+              className={`flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                runStatus === 'done'
+                  ? 'border-emerald-700 bg-emerald-950 text-emerald-400'
+                  : runStatus === 'error'
+                  ? 'border-rose-700 bg-rose-950 text-rose-400'
+                  : runStatus === 'running'
+                  ? 'border-zinc-700 bg-zinc-900 text-zinc-500 cursor-wait'
+                  : 'border-emerald-700/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-950/60'
+              }`}
+              title={runError ?? runSummary ?? 'Run a saved strategy on this chart'}
+            >
+              <Play size={12} />
+              {runStatus === 'running' ? 'Running…' : runStatus === 'done' ? 'Ran' : runStatus === 'error' ? 'Failed' : 'Run Strategy'}
+              <ChevronDown size={12} />
+            </button>
+            {strategyPickerOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+                {strategyLib.strategies.length === 0 ? (
+                  <div className="px-2 py-3 text-center text-xs text-zinc-500">
+                    No saved strategies. Build one in the
+                    <span className="ml-1 text-[#C9A646]">Builder</span> tab first.
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-1 px-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                      Saved strategies ({strategyLib.strategies.length})
+                    </div>
+                    {strategyLib.strategies.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleRunStrategy(s.id)}
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-zinc-300 hover:bg-zinc-900"
+                      >
+                        {s.name}
+                        <span className="ml-2 text-[10px] text-zinc-600">
+                          {s.rules.length} rule{s.rules.length !== 1 && 's'}
+                        </span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <button
             onClick={handleSaveSession}

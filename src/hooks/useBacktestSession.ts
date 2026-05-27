@@ -81,7 +81,10 @@ type Action =
   | { type: 'CLOSE'; payload: ClosePayload }
   | { type: 'UPDATE_SL'; payload: { price: number } }
   | { type: 'UPDATE_TP'; payload: { price: number } }
-  | { type: 'RESET'; payload: { startingBalance: number } };
+  | { type: 'RESET'; payload: { startingBalance: number } }
+  // Phase 3: bulk-load closed trades from a strategy run, replacing the
+  // current session contents (also clears any active position).
+  | { type: 'LOAD_TRADES'; payload: { trades: PaperPosition[] } };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -232,6 +235,15 @@ function reducer(state: SessionState, action: Action): SessionState {
         stats: EMPTY_STATS,
       };
     }
+    case 'LOAD_TRADES': {
+      const closedPositions = action.payload.trades;
+      return {
+        ...state,
+        activePosition: undefined,
+        closedPositions,
+        stats: computeStats(closedPositions, state.startingBalance),
+      };
+    }
     default:
       return state;
   }
@@ -244,6 +256,8 @@ export interface UseBacktestSessionReturn {
   updateStopLoss: (price: number) => void;
   updateTakeProfit: (price: number) => void;
   reset: (startingBalance?: number) => void;
+  /** Bulk-replace closed trades from a strategy run. Clears active position. */
+  loadTrades: (trades: PaperPosition[]) => void;
 }
 
 export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
@@ -274,5 +288,17 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'RESET', payload: { startingBalance } });
   }, [initialBalance]);
 
-  return { state, openPosition, closePosition, updateStopLoss, updateTakeProfit, reset };
+  const loadTrades = useCallback((trades: PaperPosition[]) => {
+    dispatch({ type: 'LOAD_TRADES', payload: { trades } });
+  }, []);
+
+  return {
+    state,
+    openPosition,
+    closePosition,
+    updateStopLoss,
+    updateTakeProfit,
+    reset,
+    loadTrades,
+  };
 }
