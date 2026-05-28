@@ -36,6 +36,8 @@ import { WelcomePopup } from "@/components/WelcomePopup";
 import WelcomeScreen from "@/pages/onboarding/WelcomeScreen";
 
 import '@/scripts/migrationRunner';
+import GlobalErrorBoundary from '@/components/GlobalErrorBoundary';
+import { logger } from '@/lib/logger';
 
 // =====================================================
 // 🔄 AUTO-RELOAD ON CHUNK LOAD FAILURE (after deploy)
@@ -98,9 +100,13 @@ if (typeof window !== 'undefined') {
   window.addEventListener('unhandledrejection', (event) => {
     const msg =
       (event.reason && (event.reason.message || event.reason.toString?.())) || '';
+    // ChunkLoadError is handled by GlobalErrorBoundary (manual refresh UI).
+    // Do NOT auto-reload here — it causes infinite reload loops after deploys.
     if (matchesChunkError(msg)) {
-      tryReloadOnce();
+      logger.warn('[App] Chunk load rejection detected — GlobalErrorBoundary will handle UI', { msg });
+      return;
     }
+    logger.error('[App] Unhandled promise rejection', event.reason);
   });
 }
 
@@ -659,26 +665,28 @@ function AppContent() {
 
 // MAIN APP
 export const App = () => (
-  <AppQueryProvider>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <ScrollToTop />
-          <AuthProvider>
-            <TimezoneProvider>
-              <RiskSettingsRealtimeProvider>
-                <ImpersonationProvider>
-                  <AppContent />
-                </ImpersonationProvider>
-              </RiskSettingsRealtimeProvider>
-            </TimezoneProvider>
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </AppQueryProvider>
+  <GlobalErrorBoundary>
+    <AppQueryProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <ScrollToTop />
+            <AuthProvider>
+              <TimezoneProvider>
+                <RiskSettingsRealtimeProvider>
+                  <ImpersonationProvider>
+                    <AppContent />
+                  </ImpersonationProvider>
+                </RiskSettingsRealtimeProvider>
+              </TimezoneProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </AppQueryProvider>
+  </GlobalErrorBoundary>
 );
 
 export default App;

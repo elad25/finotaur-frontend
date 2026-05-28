@@ -1,11 +1,13 @@
 // src/providers/AuthProvider.tsx
 // 🔥 v2: REDUCED LOGGING - Only errors and critical events
 import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback, useMemo } from 'react';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
+import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
+import { logger } from '@/lib/logger';
 
 interface AuthContextType {
   user: User | null;
@@ -151,28 +153,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logOnce('auth-init', '[Auth] Initializing auth system...');
 
     const initializeAuth = async () => {
+      let session: Session | null = null;
+      let getSessionError: unknown = null;
       try {
         // 🔥 Removed log: '[Auth] Checking for existing session...'
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('[Auth] Session check error:', error);
-          setUser(null);
-          setIsLoading(false);
-          return;
+        const result = await withTimeout(
+          supabase.auth.getSession(),
+          TIMEOUTS.AUTH,
+          'AuthProvider.getSession'
+        );
+        session = result.data.session;
+        if (result.error) getSessionError = result.error;
+      } catch (err) {
+        getSessionError = err;
+        if (err instanceof TimeoutError) {
+          logger.error('[Auth] Session timeout — treating as no session', err);
+        } else {
+          logger.error('[Auth] Session fetch failed', err);
+        }
+      } finally {
+        if (getSessionError && !(getSessionError instanceof TimeoutError)) {
+          console.error('[Auth] Session check error:', getSessionError);
         }
 
         if (session?.user) {
           logOnce('auth-session', '[Auth] ✅ Session found:', session.user.email);
           setUser(session.user);
+          logger.setContext({ userId: session.user.id, email: session.user.email });
         } else {
           logOnce('auth-no-session', '[Auth] No session found');
           setUser(null);
         }
-      } catch (error) {
-        console.error('[Auth] Session initialization failed:', error);
-        setUser(null);
-      } finally {
+
         setIsLoading(false);
       }
     };
@@ -182,17 +194,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      logger.info('[Auth] state change', { event, hasSession: !!session, userId: session?.user?.id });
       // 🔥 Log each event type only once
       logOnce(`auth-event-${event}`, '[Auth] State change:', event);
-      
+
       setUser(session?.user ?? null);
-      
+
       if (isLoading) {
         setIsLoading(false);
       }
 
       if (event === 'SIGNED_IN' && session?.user) {
         const userId = session.user.id;
+        logger.setContext({ userId: session.user.id, email: session.user.email });
         // 🔥 Log only once per user
         logOnce(`auth-signin-${userId}`, '[Auth] User signed in:', session.user.email);
         localStorage.setItem('finotaur_user_id', userId);
@@ -262,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } else if (event === 'SIGNED_OUT') {
+        logger.clearContext();
         logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
         _authLoggedOnce.delete('auth-session');
         _authLoggedOnce.delete('auth-init');
