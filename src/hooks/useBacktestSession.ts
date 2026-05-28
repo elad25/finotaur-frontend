@@ -26,6 +26,10 @@ export interface PaperPosition {
   size: number;               // contracts / shares / units
   stopLoss?: number;
   takeProfit?: number;
+  // Phase 4: optional tag identifying which strategy was active when the trade
+  // was opened. `null` / undefined = manual / unattributed. Carried from OPEN
+  // through to CLOSE so per-strategy stats can be reconstructed.
+  strategyId?: string | null;
   // Filled on close:
   exitTime?: number;
   exitPrice?: number;
@@ -68,6 +72,8 @@ interface OpenPayload {
   size: number;
   stopLoss?: number;
   takeProfit?: number;
+  /** Phase 4: tag this trade with the active strategy id (null = manual). */
+  strategyId?: string | null;
 }
 
 interface ClosePayload {
@@ -181,7 +187,7 @@ function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
       if (state.activePosition) return state;
-      const { side, price, time, size, stopLoss, takeProfit } = action.payload;
+      const { side, price, time, size, stopLoss, takeProfit, strategyId } = action.payload;
       const newPos: PaperPosition = {
         id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
         side,
@@ -190,6 +196,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         size,
         stopLoss,
         takeProfit,
+        strategyId: strategyId ?? null,
       };
       return { ...state, activePosition: newPos };
     }
@@ -258,6 +265,29 @@ export interface UseBacktestSessionReturn {
   reset: (startingBalance?: number) => void;
   /** Bulk-replace closed trades from a strategy run. Clears active position. */
   loadTrades: (trades: PaperPosition[]) => void;
+}
+
+/**
+ * Phase 4: per-strategy stats breakdown. Returns a map keyed by strategyId
+ * (or `'manual'` for unattributed trades). Each value is a full SessionStats
+ * computed over only the trades tagged with that strategy.
+ */
+export function computeStatsByStrategy(
+  closed: PaperPosition[],
+  startingBalance: number,
+): Map<string, SessionStats> {
+  const buckets = new Map<string, PaperPosition[]>();
+  for (const p of closed) {
+    const key = p.strategyId || 'manual';
+    const arr = buckets.get(key);
+    if (arr) arr.push(p);
+    else buckets.set(key, [p]);
+  }
+  const out = new Map<string, SessionStats>();
+  for (const [key, trades] of buckets) {
+    out.set(key, computeStats(trades, startingBalance));
+  }
+  return out;
 }
 
 export function useBacktestSession(initialBalance: number = 10000): UseBacktestSessionReturn {
