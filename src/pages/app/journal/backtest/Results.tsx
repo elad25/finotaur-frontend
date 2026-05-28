@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
 import {
   useBacktestPersistence,
@@ -21,19 +22,36 @@ export const BacktestResults = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const list = await persistence.listSessions();
-      setSessions(list);
+      const result = await persistence.listSessions();
+      setSessions(result.sessions);
+      setNextCursor(result.nextCursor);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load sessions');
     } finally {
       setLoading(false);
     }
   }, [persistence]);
+
+  const loadMore = useCallback(async () => {
+    if (nextCursor === null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await persistence.listSessions({ before: nextCursor });
+      setSessions((prev) => [...prev, ...result.sessions]);
+      setNextCursor(result.nextCursor);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load more sessions');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, persistence]);
 
   useEffect(() => {
     refresh();
@@ -55,6 +73,7 @@ export const BacktestResults = () => {
   return (
     <div className="min-h-screen bg-[#0A0A0A] p-6 text-[#F4F4F4]">
       <div className="mx-auto max-w-6xl">
+        <CftcDisclosureBanner />
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -168,6 +187,17 @@ export const BacktestResults = () => {
                 ))}
               </tbody>
             </table>
+            {nextCursor !== null && (
+              <div className="border-t border-zinc-800 px-4 py-3">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="rounded-md border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition-colors hover:border-[#C9A646] hover:text-[#C9A646] disabled:cursor-wait disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading…' : 'Load older'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, TrendingUp, TrendingDown, Search, Filter, ArrowUpDown,
@@ -149,6 +150,7 @@ export default function BacktestTrades() {
   return (
     <div className="min-h-screen bg-[#0A0A0A] p-6 text-zinc-100">
       <div className="mx-auto max-w-7xl">
+        <CftcDisclosureBanner />
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>

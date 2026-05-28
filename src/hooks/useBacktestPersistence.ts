@@ -98,9 +98,19 @@ function paperToWire(p: PaperPosition) {
 }
 
 // ─── Hook ──────────────────────────────────────────────────────
+export interface ListSessionsOptions {
+  limit?: number;
+  before?: string; // ISO timestamp cursor
+}
+
+export interface ListSessionsResult {
+  sessions: SavedSessionSummary[];
+  nextCursor: string | null;
+}
+
 export interface UseBacktestPersistenceReturn {
   saveSession: (input: SaveSessionInput) => Promise<{ id: string; created_at: string }>;
-  listSessions: () => Promise<SavedSessionSummary[]>;
+  listSessions: (options?: ListSessionsOptions) => Promise<ListSessionsResult>;
   loadSession: (id: string) => Promise<SavedSessionDetail>;
   deleteSession: (id: string) => Promise<void>;
 }
@@ -140,13 +150,25 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
     return data;
   }, []);
 
-  const listSessions = useCallback(async () => {
-    const { data, error } = await supabase.functions.invoke<{ sessions: SavedSessionSummary[] }>(
-      'backtest-sessions',
-      { method: 'GET' },
-    );
+  const listSessions = useCallback(async (options?: ListSessionsOptions): Promise<ListSessionsResult> => {
+    // Build query string mirroring the loadSession pattern (append to function name).
+    const qs = new URLSearchParams();
+    if (options?.limit != null) qs.set('limit', String(options.limit));
+    if (options?.before != null) qs.set('before', options.before);
+    const qsStr = qs.toString();
+    const fnPath = qsStr ? `backtest-sessions?${qsStr}` : 'backtest-sessions';
+
+    // Wire type includes next_cursor (snake_case) as returned by the edge function.
+    const { data, error } = await supabase.functions.invoke<{
+      sessions: SavedSessionSummary[];
+      next_cursor?: string | null;
+    }>(fnPath, { method: 'GET' });
     if (error) throw error;
-    return data?.sessions ?? [];
+    return {
+      sessions: data?.sessions ?? [],
+      // Defensive: coerce missing next_cursor (pre-deploy edge fn) to null.
+      nextCursor: data?.next_cursor ?? null,
+    };
   }, []);
 
   const loadSession = useCallback(async (id: string) => {

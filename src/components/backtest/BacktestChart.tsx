@@ -22,6 +22,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
+import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
@@ -468,6 +469,7 @@ export function BacktestChart({
 
   return (
     <div className={containerCls}>
+      <CftcDisclosureBanner className="mx-4 mt-3" />
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
         {/* Exit fullscreen — back to backtest overview (only in fullscreen) */}
