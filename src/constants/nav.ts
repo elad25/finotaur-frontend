@@ -245,7 +245,7 @@ ai: {
   'journal-backtest': {
     id: 'journal-backtest',
     label: 'Backtest',
-    locked: true,
+    locked: false,
     beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },

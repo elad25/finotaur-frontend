@@ -5,7 +5,7 @@ import { useAuth } from '@/providers/AuthProvider';
 export const useBacktestAccess = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
-  const [accountType, setAccountType] = useState<'free' | 'basic' | 'premium'>('free');
+  const [accountType, setAccountType] = useState<'free' | 'basic' | 'premium' | 'admin'>('free');
 
   useEffect(() => {
     async function fetchAccountType() {
@@ -36,13 +36,14 @@ export const useBacktestAccess = () => {
     fetchAccountType();
   }, [user?.id]);
 
-  const hasAccess = accountType === 'premium';
+  const hasAccess = accountType === 'premium' || accountType === 'admin';
 
   return {
     hasAccess,
     accountType,
     isLoading,
-    isPremium: hasAccess,
+    isPremium: accountType === 'premium',
+    isAdmin: accountType === 'admin',
     isBasic: accountType === 'basic',
     isFree: accountType === 'free',
   };
