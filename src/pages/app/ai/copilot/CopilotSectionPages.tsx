@@ -369,7 +369,7 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
   const horizonDot = opportunity.timeHorizon ? HORIZON_DOT[opportunity.timeHorizon] : undefined;
 
   return (
-    <tr className="group h-[88px] bg-[#050505] align-middle">
+    <tr className="group min-h-[88px] bg-[#050505] align-middle">
       <td className="border-b border-gold-primary/10 px-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold-primary/65 bg-[radial-gradient(circle_at_50%_42%,rgba(201,166,70,0.16),rgba(201,166,70,0.04)_52%,transparent_74%)] font-mono text-sm font-semibold text-gold-primary shadow-[0_0_18px_rgba(201,166,70,0.12),inset_0_0_12px_rgba(201,166,70,0.08)]">
           {opportunity.rank}
@@ -404,6 +404,22 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
           <p className="line-clamp-1 mt-1 max-w-[230px] text-[11px] italic text-gold-primary/70">
             Why for you: {opportunity.whyForYou}
           </p>
+        )}
+        {opportunity.patternEvidence && (
+          <details className="mt-1.5 max-w-[230px] text-[10px] leading-[1.45]">
+            <summary className="cursor-pointer text-gold-primary/70 hover:text-gold-primary transition">
+              Why this pattern?
+            </summary>
+            <div className="mt-1 ps-2 border-s border-gold-primary/20">
+              <p className="text-ink-secondary">{opportunity.patternEvidence}</p>
+              {opportunity.invalidation && (
+                <p className="mt-1 text-ink-tertiary">
+                  <strong className="text-ink-secondary">Invalidation:</strong>{' '}
+                  {opportunity.invalidation}
+                </p>
+              )}
+            </div>
+          </details>
         )}
       </td>
       <td className="border-b border-gold-primary/10 px-2">
