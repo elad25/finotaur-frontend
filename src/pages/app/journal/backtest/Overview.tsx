@@ -11,6 +11,7 @@
 // ================================================
 
 import React, { useState, lazy, Suspense, useMemo, useCallback } from "react";
+import CftcDisclosureBanner from "@/components/backtest/CftcDisclosureBanner";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageTitle from "@/components/PageTitle";
 import dayjs from "dayjs";
@@ -835,6 +836,7 @@ function BacktestOverviewContent() {
       <style>{ANIMATION_STYLES}</style>
       
       <div className="p-6 space-y-6">
+        <CftcDisclosureBanner />
         {/* Header - NO BACK ARROW */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <PageTitle 

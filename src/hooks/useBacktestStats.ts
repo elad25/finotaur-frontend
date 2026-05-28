@@ -79,7 +79,15 @@ export interface BacktestStatsResult {
   byStrategy: Map<string, SessionStats>;
   /** Number of distinct saved sessions feeding the stats. */
   sessionCount: number;
+  /** True when the trade history was clipped at BACKTEST_TRADES_PAGE_SIZE
+   *  and additional older trades exist server-side. The UI should hint at
+   *  per-session view for older trades. */
+  hasMore: boolean;
 }
+
+// Cap per-user trade fetch on the Dashboard. Power users with hundreds of
+// saved sessions can easily exceed this; bypass via the per-session view.
+const BACKTEST_TRADES_PAGE_SIZE = 5000;
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -230,11 +238,13 @@ export function useBacktestStats() {
           equitySeries: [],
           byStrategy: new Map(),
           sessionCount: 0,
+          hasMore: false,
         };
       }
 
       // Fetch all trades joined to their session (so we get symbol/interval/name
       // per row). RLS on backtest_sessions_v2 enforces user ownership transitively.
+      // Over-fetch by 1 to detect whether more pages exist server-side.
       const { data, error } = await supabase
         .from('backtest_trades_v2')
         .select(`
@@ -244,11 +254,14 @@ export function useBacktestStats() {
         `)
         .eq('session.user_id', userId)
         .not('exit_time', 'is', null)   // closed trades only
-        .order('exit_time', { ascending: false });
+        .order('exit_time', { ascending: false })
+        .limit(BACKTEST_TRADES_PAGE_SIZE + 1);
 
       if (error) throw error;
 
-      const rows = (data ?? []) as unknown as BacktestTradeRow[];
+      const allRows = (data ?? []) as unknown as BacktestTradeRow[];
+      const hasMore = allRows.length > BACKTEST_TRADES_PAGE_SIZE;
+      const rows = hasMore ? allRows.slice(0, BACKTEST_TRADES_PAGE_SIZE) : allRows;
       const trades = rows.map(rowToTrade);
       const paperPositions = tradesToPaperPositions(trades);
       const stats = computeStats(paperPositions, 10000);  // 10k baseline for pct
@@ -256,7 +269,7 @@ export function useBacktestStats() {
       const equitySeries = buildEquitySeries(trades);
       const sessionCount = new Set(trades.map((t) => t.sessionId)).size;
 
-      return { stats, trades, equitySeries, byStrategy, sessionCount };
+      return { stats, trades, equitySeries, byStrategy, sessionCount, hasMore };
     },
   });
 }
