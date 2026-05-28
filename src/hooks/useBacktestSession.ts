@@ -122,6 +122,12 @@ interface ClosePayload {
   reason: ExitReason;
 }
 
+export interface LoadSessionPayload {
+  startingBalance: number;
+  closedPositions: PaperPosition[];
+  pendingOrders: PendingOrder[];
+}
+
 type Action =
   | { type: 'OPEN'; payload: OpenPayload }
   | { type: 'CLOSE'; payload: ClosePayload }
@@ -134,7 +140,8 @@ type Action =
   // Phase 6
   | { type: 'ADD_PENDING'; payload: AddPendingPayload }
   | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
-  | { type: 'FILL_PENDING'; payload: FillPendingPayload };
+  | { type: 'FILL_PENDING'; payload: FillPendingPayload }
+  | { type: 'LOAD_SESSION'; payload: LoadSessionPayload };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -297,6 +304,16 @@ function reducer(state: SessionState, action: Action): SessionState {
         stats: computeStats(closedPositions, state.startingBalance),
       };
     }
+    case 'LOAD_SESSION': {
+      const { startingBalance, closedPositions, pendingOrders } = action.payload;
+      return {
+        startingBalance,
+        activePosition: undefined,
+        closedPositions,
+        pendingOrders,
+        stats: computeStats(closedPositions, startingBalance),
+      };
+    }
     case 'ADD_PENDING': {
       const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
       const order: PendingOrder = {
@@ -366,6 +383,8 @@ export interface UseBacktestSessionReturn {
   addPendingOrder: (payload: AddPendingPayload) => void;
   cancelPendingOrder: (orderId: string) => void;
   fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
+  /** Hydrate the full session from a saved record (Phase 7+ load flow). */
+  loadSession: (payload: LoadSessionPayload) => void;
 }
 
 /**
@@ -436,6 +455,10 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
   }, []);
 
+  const loadSession = useCallback((payload: LoadSessionPayload) => {
+    dispatch({ type: 'LOAD_SESSION', payload });
+  }, []);
+
   return {
     state,
     openPosition,
@@ -447,5 +470,6 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
+    loadSession,
   };
 }

@@ -219,8 +219,13 @@ export function BacktestReplayChart({
 
   // ─── Chart lifecycle ─────────────────────────────────────────
   useEffect(() => {
+    // Guard: only create the chart once bars are ready.
+    // Using `bars` directly in deps (not the ternary) so React sees a stable
+    // reference identity change rather than null→array flips on rapid re-picks.
+    let cancelled = false;
     if (!containerRef.current) return;
     if (load.kind !== 'ready') return;
+    if (cancelled) return;
 
     const container = containerRef.current;
     const chart = createChart(container, {
@@ -325,18 +330,24 @@ export function BacktestReplayChart({
     ro.observe(container);
 
     return () => {
+      cancelled = true;
       ro.disconnect();
       container.removeEventListener('contextmenu', handleContextMenu);
       priceLinesRef.current.clear();
+      // chart.remove() is idempotent in lightweight-charts — safe to call
+      // even if the container was already detached by concurrent mode.
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
     // We intentionally re-mount the chart only on window changes (bars
     // identity). Cursor changes are handled via series.update() above,
-    // which doesn't need a full re-mount.
+    // which doesn't need a full re-mount. `bars` is used directly (not the
+    // ternary `load.kind === 'ready' ? bars : null`) so the dep is a stable
+    // array reference; the early-return on `load.kind !== 'ready'` above
+    // guards against running before data is available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [load.kind === 'ready' ? bars : null]);
+  }, [bars]);
 
   // ─── Markers ────────────────────────────────────────────────
   // Repaint markers whenever positions change. Only include markers up to

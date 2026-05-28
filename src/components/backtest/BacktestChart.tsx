@@ -407,6 +407,7 @@ export function BacktestChart({
         finalBalance,
         statistics: state.stats,
         trades: state.closedPositions,
+        pendingOrders: state.pendingOrders,
         // Auto-name: "<symbol> · <interval> · <date>"
         name: `${symbol} · ${barInterval} · ${new Date().toLocaleDateString()}`,
       });
@@ -584,8 +585,11 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
-          {/* Run Strategy dropdown — Live mode only */}
-          {chartMode === 'live' && (
+          {/* Run Strategy dropdown — Bug D fast-path (Sprint C1 of backtest-launch-ready):
+              hidden globally because clicking it in Live mode triggers a browser
+              freeze (CDP timeout 30s). Investigation deferred to Sprint D. To
+              re-enable, remove the `false &&` prefix from the gate below. */}
+          {false && chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}

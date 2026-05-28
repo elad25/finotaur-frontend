@@ -13,7 +13,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { PaperPosition, SessionStats } from './useBacktestSession';
+import type { PaperPosition, PendingOrder, SessionStats } from './useBacktestSession';
 
 // ─── Wire types — match Edge Function payloads ─────────────────
 export interface SaveSessionInput {
@@ -27,6 +27,7 @@ export interface SaveSessionInput {
   finalBalance?: number;
   statistics: SessionStats;
   trades: PaperPosition[];
+  pendingOrders: PendingOrder[];
   notes?: string;
 }
 
@@ -54,6 +55,17 @@ export interface SavedSessionDetail {
     notes: string | null;
     config: Record<string, unknown> | null;
     updated_at: string;
+    pending_orders: Array<{
+      id: string;
+      side: 'LONG' | 'SHORT';
+      type: 'LIMIT' | 'STOP';
+      trigger_price: number;
+      size: number;
+      stop_loss: number | null;
+      take_profit: number | null;
+      strategy_id: string | null;
+      created_at: number;
+    }>;
   };
   trades: Array<{
     id: string;
@@ -97,6 +109,20 @@ function paperToWire(p: PaperPosition) {
   };
 }
 
+function pendingToWire(o: PendingOrder) {
+  return {
+    id: o.id,
+    side: o.side,
+    type: o.type,
+    trigger_price: o.triggerPrice,
+    size: o.size,
+    stop_loss: o.stopLoss,
+    take_profit: o.takeProfit,
+    strategy_id: o.strategyId,
+    created_at: o.createdAt,
+  };
+}
+
 // ─── Hook ──────────────────────────────────────────────────────
 export interface ListSessionsOptions {
   limit?: number;
@@ -136,6 +162,7 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
         : 9999,
       notes: input.notes,
       trades: input.trades.map(paperToWire),
+      pending_orders: input.pendingOrders.map(pendingToWire),
     };
 
     const { data, error } = await supabase.functions.invoke<{
