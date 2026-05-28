@@ -30,12 +30,35 @@ export interface PaperPosition {
   // was opened. `null` / undefined = manual / unattributed. Carried from OPEN
   // through to CLOSE so per-strategy stats can be reconstructed.
   strategyId?: string | null;
+  // Phase 6: order type that opened the position. 'MARKET' = entered
+  // immediately at user's clicked price. 'LIMIT' / 'STOP' = filled from a
+  // pending order whose trigger price was touched by a later bar.
+  entryOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
   // Filled on close:
   exitTime?: number;
   exitPrice?: number;
   pnl?: number;
   pnlPercent?: number;
   exitReason?: ExitReason;
+}
+
+// Phase 6: Pending orders — placed via right-click on the replay chart,
+// fired automatically when a future bar's range touches the trigger price.
+//   LIMIT BUY  fills when bar.low  ≤ triggerPrice   (buy the dip — price came down)
+//   LIMIT SELL fills when bar.high ≥ triggerPrice   (sell the rally — price came up)
+//   STOP  BUY  fills when bar.high ≥ triggerPrice   (breakout — price broke above)
+//   STOP  SELL fills when bar.low  ≤ triggerPrice   (breakdown — price broke below)
+export type PendingOrderType = 'LIMIT' | 'STOP';
+export interface PendingOrder {
+  id: string;
+  side: PaperSide;
+  type: PendingOrderType;
+  triggerPrice: number;
+  size: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  strategyId?: string | null;
+  createdAt: number;          // unix seconds (bar.time when placed)
 }
 
 export interface SessionStats {
@@ -62,6 +85,7 @@ export interface SessionState {
   startingBalance: number;
   activePosition?: PaperPosition;
   closedPositions: PaperPosition[];
+  pendingOrders: PendingOrder[];   // Phase 6
   stats: SessionStats;
 }
 
@@ -74,7 +98,23 @@ interface OpenPayload {
   takeProfit?: number;
   /** Phase 4: tag this trade with the active strategy id (null = manual). */
   strategyId?: string | null;
+  /** Phase 6: order type that opened this position. Defaults to MARKET. */
+  entryOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
 }
+
+// Phase 6 payloads
+interface AddPendingPayload {
+  side: PaperSide;
+  type: PendingOrderType;
+  triggerPrice: number;
+  size: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  strategyId?: string | null;
+  time: number;
+}
+interface CancelPendingPayload { orderId: string; }
+interface FillPendingPayload { orderId: string; fillPrice: number; fillTime: number; }
 
 interface ClosePayload {
   price: number;
@@ -90,7 +130,11 @@ type Action =
   | { type: 'RESET'; payload: { startingBalance: number } }
   // Phase 3: bulk-load closed trades from a strategy run, replacing the
   // current session contents (also clears any active position).
-  | { type: 'LOAD_TRADES'; payload: { trades: PaperPosition[] } };
+  | { type: 'LOAD_TRADES'; payload: { trades: PaperPosition[] } }
+  // Phase 6
+  | { type: 'ADD_PENDING'; payload: AddPendingPayload }
+  | { type: 'CANCEL_PENDING'; payload: CancelPendingPayload }
+  | { type: 'FILL_PENDING'; payload: FillPendingPayload };
 
 const EMPTY_STATS: SessionStats = {
   totalTrades: 0,
@@ -187,7 +231,7 @@ function reducer(state: SessionState, action: Action): SessionState {
   switch (action.type) {
     case 'OPEN': {
       if (state.activePosition) return state;
-      const { side, price, time, size, stopLoss, takeProfit, strategyId } = action.payload;
+      const { side, price, time, size, stopLoss, takeProfit, strategyId, entryOrderType } = action.payload;
       const newPos: PaperPosition = {
         id: `pos_${time}_${Math.random().toString(36).slice(2, 8)}`,
         side,
@@ -197,6 +241,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         stopLoss,
         takeProfit,
         strategyId: strategyId ?? null,
+        entryOrderType: entryOrderType ?? 'MARKET',
       };
       return { ...state, activePosition: newPos };
     }
@@ -239,6 +284,7 @@ function reducer(state: SessionState, action: Action): SessionState {
         startingBalance: action.payload.startingBalance,
         activePosition: undefined,
         closedPositions: [],
+        pendingOrders: [],
         stats: EMPTY_STATS,
       };
     }
@@ -249,6 +295,57 @@ function reducer(state: SessionState, action: Action): SessionState {
         activePosition: undefined,
         closedPositions,
         stats: computeStats(closedPositions, state.startingBalance),
+      };
+    }
+    case 'ADD_PENDING': {
+      const { side, type: orderType, triggerPrice, size, stopLoss, takeProfit, strategyId, time } = action.payload;
+      const order: PendingOrder = {
+        id: `ord_${time}_${Math.random().toString(36).slice(2, 8)}`,
+        side,
+        type: orderType,
+        triggerPrice,
+        size,
+        stopLoss,
+        takeProfit,
+        strategyId: strategyId ?? null,
+        createdAt: time,
+      };
+      return { ...state, pendingOrders: [...state.pendingOrders, order] };
+    }
+    case 'CANCEL_PENDING': {
+      return {
+        ...state,
+        pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
+      };
+    }
+    case 'FILL_PENDING': {
+      // Single-position invariant: if a position is already open, drop the
+      // order without filling (it would be safer to keep it, but for
+      // Phase 6 MVP we silently cancel — caller decides via gate before
+      // dispatching).
+      if (state.activePosition) {
+        return {
+          ...state,
+          pendingOrders: state.pendingOrders.filter((o) => o.id !== action.payload.orderId),
+        };
+      }
+      const order = state.pendingOrders.find((o) => o.id === action.payload.orderId);
+      if (!order) return state;
+      const newPos: PaperPosition = {
+        id: `pos_${action.payload.fillTime}_${Math.random().toString(36).slice(2, 8)}`,
+        side: order.side,
+        entryTime: action.payload.fillTime,
+        entryPrice: action.payload.fillPrice,
+        size: order.size,
+        stopLoss: order.stopLoss,
+        takeProfit: order.takeProfit,
+        strategyId: order.strategyId ?? null,
+        entryOrderType: order.type,
+      };
+      return {
+        ...state,
+        activePosition: newPos,
+        pendingOrders: state.pendingOrders.filter((o) => o.id !== order.id),
       };
     }
     default:
@@ -265,6 +362,10 @@ export interface UseBacktestSessionReturn {
   reset: (startingBalance?: number) => void;
   /** Bulk-replace closed trades from a strategy run. Clears active position. */
   loadTrades: (trades: PaperPosition[]) => void;
+  // Phase 6
+  addPendingOrder: (payload: AddPendingPayload) => void;
+  cancelPendingOrder: (orderId: string) => void;
+  fillPendingOrder: (orderId: string, fillPrice: number, fillTime: number) => void;
 }
 
 /**
@@ -295,6 +396,7 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     startingBalance: initialBalance,
     activePosition: undefined,
     closedPositions: [],
+    pendingOrders: [],
     stats: EMPTY_STATS,
   });
 
@@ -322,6 +424,18 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     dispatch({ type: 'LOAD_TRADES', payload: { trades } });
   }, []);
 
+  const addPendingOrder = useCallback((payload: AddPendingPayload) => {
+    dispatch({ type: 'ADD_PENDING', payload });
+  }, []);
+
+  const cancelPendingOrder = useCallback((orderId: string) => {
+    dispatch({ type: 'CANCEL_PENDING', payload: { orderId } });
+  }, []);
+
+  const fillPendingOrder = useCallback((orderId: string, fillPrice: number, fillTime: number) => {
+    dispatch({ type: 'FILL_PENDING', payload: { orderId, fillPrice, fillTime } });
+  }, []);
+
   return {
     state,
     openPosition,
@@ -330,5 +444,8 @@ export function useBacktestSession(initialBalance: number = 10000): UseBacktestS
     updateTakeProfit,
     reset,
     loadTrades,
+    addPendingOrder,
+    cancelPendingOrder,
+    fillPendingOrder,
   };
 }
