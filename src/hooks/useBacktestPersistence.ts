@@ -11,7 +11,7 @@
  * arrays without re-running effects.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { PaperPosition, SessionStats } from './useBacktestSession';
 
@@ -170,5 +170,10 @@ export function useBacktestPersistence(): UseBacktestPersistenceReturn {
     if (error) throw error;
   }, []);
 
-  return { saveSession, listSessions, loadSession, deleteSession };
+  // Return a stable object reference so callers can safely list this in
+  // useEffect/useCallback dependency arrays without triggering refetch loops.
+  return useMemo(
+    () => ({ saveSession, listSessions, loadSession, deleteSession }),
+    [saveSession, listSessions, loadSession, deleteSession],
+  );
 }
