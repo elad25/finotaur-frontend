@@ -27,7 +27,9 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
+  LineStyle,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   type UTCTimestamp,
   type SeriesMarker,
@@ -35,7 +37,7 @@ import {
 } from 'lightweight-charts';
 
 import type { Bar, ChartDataSource, Interval } from '@/components/charting/types';
-import type { PaperPosition } from '@/hooks/useBacktestSession';
+import type { PaperPosition, PendingOrder } from '@/hooks/useBacktestSession';
 import { useReplayPlayback } from '@/hooks/useReplayPlayback';
 import { ReplayControls } from './ReplayControls';
 
@@ -75,6 +77,16 @@ function intervalSeconds(iv: Interval): number {
   }
 }
 
+export interface ContextMenuPriceInfo {
+  /** Price the user right-clicked at (computed from screen Y via priceScale). */
+  price: number;
+  /** Current cursor bar's close — for above/below decision in the menu. */
+  currentPrice: number;
+  /** Screen coordinates so the parent can position a popover. */
+  x: number;
+  y: number;
+}
+
 export interface BacktestReplayChartProps {
   symbol: string;
   interval: Interval;
@@ -85,10 +97,14 @@ export interface BacktestReplayChartProps {
   activePosition?: PaperPosition;
   /** Closed positions — painted as historical markers. */
   closedPositions: PaperPosition[];
-  /** Called when a bar is revealed (after cursor advance). Parent uses this to fire SL/TP. */
+  /** Phase 6: pending orders — painted as horizontal price lines on the chart. */
+  pendingOrders?: PendingOrder[];
+  /** Called when a bar is revealed (after cursor advance). Parent uses this to fire SL/TP + pending order fills. */
   onBarReveal?: (bar: Bar) => void;
   /** Called when the user clicks a candle. Parent uses this to open a position at that bar's close. */
   onBarClick?: (bar: Bar) => void;
+  /** Phase 6: right-click — parent renders the order-type context menu at given screen coords. */
+  onContextMenu?: (info: ContextMenuPriceInfo) => void;
   /** Height in px (or any CSS height string). */
   height?: string | number;
 }
@@ -105,8 +121,10 @@ export function BacktestReplayChart({
   replayStartTime,
   activePosition,
   closedPositions,
+  pendingOrders = [],
   onBarReveal,
   onBarClick,
+  onContextMenu,
   height = '100%',
 }: BacktestReplayChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -114,9 +132,12 @@ export function BacktestReplayChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const onBarClickRef = useRef(onBarClick);
   const onBarRevealRef = useRef(onBarReveal);
+  const onContextMenuRef = useRef(onContextMenu);
+  const priceLinesRef = useRef<Map<string, IPriceLine>>(new Map());
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
+  useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -265,6 +286,31 @@ export function BacktestReplayChart({
       if (found) onBarClickRef.current(found);
     });
 
+    // Phase 6: right-click → order context menu. Compute the clicked price
+    // by converting the local Y coordinate via the candlestick series.
+    // lightweight-charts has no native contextmenu hook, so we listen on
+    // the container DOM and translate ourselves.
+    const handleContextMenu = (e: MouseEvent) => {
+      if (!onContextMenuRef.current || !seriesRef.current || !containerRef.current) return;
+      e.preventDefault();
+      const rect = containerRef.current.getBoundingClientRect();
+      const localY = e.clientY - rect.top;
+      const price = seriesRef.current.coordinateToPrice(localY);
+      if (price == null || !Number.isFinite(price)) return;
+      // Current price = last visible bar's close (the cursor bar). Use ref
+      // to grab the freshest value at click time.
+      const lastBarIdxAtClick = lastUpdatedIdxRef.current;
+      const lastBar = bars[lastBarIdxAtClick];
+      if (!lastBar) return;
+      onContextMenuRef.current({
+        price: Number(price),
+        currentPrice: lastBar.close,
+        x: e.clientX,
+        y: e.clientY,
+      });
+    };
+    container.addEventListener('contextmenu', handleContextMenu);
+
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -280,6 +326,8 @@ export function BacktestReplayChart({
 
     return () => {
       ro.disconnect();
+      container.removeEventListener('contextmenu', handleContextMenu);
+      priceLinesRef.current.clear();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -331,6 +379,44 @@ export function BacktestReplayChart({
     markers.sort((a, b) => (a.time as number) - (b.time as number));
     seriesRef.current.setMarkers(markers);
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
+
+  // Phase 6: sync price lines for pending orders. Each order gets a single
+  // horizontal line at its trigger price, colored by side (BUY=green,
+  // SELL=red) and dashed to distinguish from any future SL/TP overlay.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    const existing = priceLinesRef.current;
+
+    // Remove lines whose order is no longer in the active set.
+    const liveIds = new Set(pendingOrders.map((o) => o.id));
+    for (const [id, line] of existing) {
+      if (!liveIds.has(id)) {
+        series.removePriceLine(line);
+        existing.delete(id);
+      }
+    }
+
+    // Add or update lines for current pending orders.
+    for (const o of pendingOrders) {
+      const color = o.side === 'LONG' ? THEME.candleUp : THEME.candleDown;
+      const title = `${o.side === 'LONG' ? 'BUY' : 'SELL'} ${o.type} ${o.size}× @ ${o.triggerPrice.toFixed(2)}`;
+      const cached = existing.get(o.id);
+      if (cached) {
+        cached.applyOptions({ price: o.triggerPrice, color, title });
+      } else {
+        const line = series.createPriceLine({
+          price: o.triggerPrice,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title,
+        });
+        existing.set(o.id, line);
+      }
+    }
+  }, [pendingOrders]);
 
   // ─── Render ─────────────────────────────────────────────────
   return (

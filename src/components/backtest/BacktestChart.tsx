@@ -34,11 +34,13 @@ import {
   computeStatsByStrategy,
   type PaperPosition,
   type PaperSide,
+  type PendingOrder,
+  type PendingOrderType,
 } from '@/hooks/useBacktestSession';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
-import { BacktestReplayChart } from './BacktestReplayChart';
+import { BacktestReplayChart, type ContextMenuPriceInfo } from './BacktestReplayChart';
 import { DateTimePicker } from './DateTimePicker';
 
 // ─── Asset class presets ────────────────────────────────────────
@@ -147,7 +149,18 @@ export function BacktestChart({
   const [livePrice, setLivePrice] = useState('');
 
   const session = useBacktestSession(startingBalance);
-  const { state, openPosition, closePosition, updateStopLoss, updateTakeProfit, reset, loadTrades } = session;
+  const {
+    state,
+    openPosition,
+    closePosition,
+    updateStopLoss,
+    updateTakeProfit,
+    reset,
+    loadTrades,
+    addPendingOrder,
+    cancelPendingOrder,
+    fillPendingOrder,
+  } = session;
 
   // Phase 2: Supabase persistence for "Save Session" button.
   const persistence = useBacktestPersistence();
@@ -186,6 +199,11 @@ export function BacktestChart({
     setTradeError(msg);
     setTimeout(() => setTradeError(null), 3000);
   }, []);
+
+  // Phase 6: right-click context menu for pending order types. Position
+  // captured from the chart click; menu closes on outside click or after
+  // a selection is made.
+  const [contextMenu, setContextMenu] = useState<ContextMenuPriceInfo | null>(null);
 
   // Phase 4: replay start moment. Defaults to "now − 4 hours" so the trader
   // immediately sees recent history with room to PLAY forward.
@@ -264,10 +282,39 @@ export function BacktestChart({
     setLivePrice(bar.close.toString());
   }, [state.activePosition, openPosition, size, slInput, tpInput, activeStrategyId]);
 
-  // Replay: each bar revealed by the playback cursor — check SL/TP against
-  // any active position. Same-bar-as-entry skip mirrors runStrategy.ts to
-  // avoid phantom stopouts on the entry bar.
+  // Replay: each bar revealed by the playback cursor.
+  //   Phase 4: check SL/TP for any active position; auto-close on hit.
+  //   Phase 6: check pending order triggers (LIMIT/STOP); auto-fill on hit
+  //            ONLY when no position is open (single-position invariant).
+  // Same-bar-as-entry skip mirrors runStrategy.ts to avoid phantom stopouts
+  // on the entry bar.
   const handleReplayBarReveal = useCallback((bar: Bar) => {
+    // Phase 6: pending order fills come FIRST. If a fill happens, the new
+    // position is the entry bar — same-bar skip prevents same-bar SL/TP.
+    if (!state.activePosition && state.pendingOrders.length > 0) {
+      for (const order of state.pendingOrders) {
+        let triggered = false;
+        let fillPrice = order.triggerPrice;
+        if (order.type === 'LIMIT') {
+          if (order.side === 'LONG' && bar.low <= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          } else if (order.side === 'SHORT' && bar.high >= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          }
+        } else { // STOP
+          if (order.side === 'LONG' && bar.high >= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          } else if (order.side === 'SHORT' && bar.low <= order.triggerPrice) {
+            triggered = true; fillPrice = order.triggerPrice;
+          }
+        }
+        if (triggered) {
+          fillPendingOrder(order.id, fillPrice, bar.time as number);
+          return; // single-position invariant — skip SL/TP this bar
+        }
+      }
+    }
+
     const pos = state.activePosition;
     if (!pos) return;
     if ((pos.entryTime as number) === (bar.time as number)) return; // same-bar skip
@@ -291,7 +338,24 @@ export function BacktestChart({
         return;
       }
     }
-  }, [state.activePosition, closePosition]);
+  }, [state.activePosition, state.pendingOrders, closePosition, fillPendingOrder]);
+
+  // Phase 6: place a pending order from the context-menu selection. SL/TP
+  // come from the side-panel inputs (same as MARKET orders). Size from the
+  // size input. Strategy tag from active.
+  const handlePlacePendingOrder = useCallback((side: PaperSide, type: PendingOrderType, info: ContextMenuPriceInfo) => {
+    addPendingOrder({
+      side,
+      type,
+      triggerPrice: info.price,
+      size,
+      stopLoss: slInput ? parseFloat(slInput) : undefined,
+      takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      strategyId: activeStrategyId,
+      time: Math.floor(Date.now() / 1000),
+    });
+    setContextMenu(null);
+  }, [addPendingOrder, size, slInput, tpInput, activeStrategyId]);
 
   // Stats breakdown by strategy — only show panel when ≥1 trade has been
   // tagged with a (non-manual) strategy id, so live-only sessions stay clean.
@@ -625,8 +689,10 @@ export function BacktestChart({
               replayStartTime={Math.floor(replayStart.getTime() / 1000)}
               activePosition={state.activePosition}
               closedPositions={state.closedPositions}
+              pendingOrders={state.pendingOrders}
               onBarReveal={handleReplayBarReveal}
               onBarClick={handleReplayBarClick}
+              onContextMenu={(info) => setContextMenu(info)}
               height="100%"
             />
           )}
@@ -694,19 +760,30 @@ export function BacktestChart({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => handleOpen('LONG')}
-                    className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-emerald-600 px-3 py-2 text-white transition-colors hover:bg-emerald-500"
                   >
-                    <TrendingUp size={16} />
-                    LONG
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp size={14} />
+                      <span className="text-sm font-bold">BUY</span>
+                    </div>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
                   </button>
                   <button
                     onClick={() => handleOpen('SHORT')}
-                    className="flex items-center justify-center gap-1.5 rounded-md bg-rose-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500"
+                    className="flex flex-col items-center justify-center gap-0.5 rounded-md bg-rose-600 px-3 py-2 text-white transition-colors hover:bg-rose-500"
                   >
-                    <TrendingDown size={16} />
-                    SHORT
+                    <div className="flex items-center gap-1.5">
+                      <TrendingDown size={14} />
+                      <span className="text-sm font-bold">SELL</span>
+                    </div>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
                   </button>
                 </div>
+                {chartMode === 'replay' && (
+                  <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
+                    💡 Right-click on the chart to place LIMIT or STOP orders
+                  </div>
+                )}
                 {tradeError && (
                   <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
                     <AlertCircle size={12} className="mt-0.5 shrink-0" />
@@ -846,6 +923,46 @@ export function BacktestChart({
             )}
           </div>
 
+          {/* Phase 6: Pending orders */}
+          {state.pendingOrders.length > 0 && (
+            <div className="border-b border-zinc-800 p-4">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
+                Pending Orders ({state.pendingOrders.length})
+              </h3>
+              <div className="space-y-1.5">
+                {state.pendingOrders.map((o) => (
+                  <div
+                    key={o.id}
+                    className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/50 px-2.5 py-1.5 text-xs"
+                  >
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                          o.side === 'LONG' ? 'bg-emerald-600/20 text-emerald-400' : 'bg-rose-600/20 text-rose-400'
+                        }`}>
+                          {o.side === 'LONG' ? 'BUY' : 'SELL'} {o.type}
+                        </span>
+                        <span className="text-zinc-500">{o.size}×</span>
+                      </div>
+                      <span className="mt-0.5 font-mono text-[10px] text-zinc-400">
+                        @ ${o.triggerPrice.toFixed(2)}
+                        {o.stopLoss != null && <span className="ml-1.5 text-rose-500/70">SL {o.stopLoss.toFixed(2)}</span>}
+                        {o.takeProfit != null && <span className="ml-1.5 text-emerald-500/70">TP {o.takeProfit.toFixed(2)}</span>}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => cancelPendingOrder(o.id)}
+                      title="Cancel order"
+                      className="rounded p-1 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Trade history */}
           <div className="flex-1 p-4">
             <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
@@ -889,6 +1006,67 @@ export function BacktestChart({
           </div>
         </aside>
       </div>
+
+      {/* Phase 6: right-click context menu for pending order types.
+          Position is fixed to the screen coords from the click. Two options
+          are valid depending on price vs current: above current → BUY STOP
+          + SELL LIMIT; below current → BUY LIMIT + SELL STOP. */}
+      {contextMenu && (
+        <>
+          {/* Backdrop catches outside clicks to close the menu */}
+          <div
+            className="fixed inset-0 z-[110]"
+            onClick={() => setContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}
+          />
+          <div
+            className="fixed z-[120] min-w-[200px] rounded-md border border-zinc-700 bg-zinc-950 p-1 shadow-2xl"
+            style={{
+              left: Math.min(contextMenu.x, window.innerWidth - 220),
+              top: Math.min(contextMenu.y, window.innerHeight - 160),
+            }}
+          >
+            <div className="mb-1 border-b border-zinc-800 px-2 py-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+              Place order @ <span className="font-mono text-[#C9A646]">${contextMenu.price.toFixed(2)}</span>
+            </div>
+            {contextMenu.price > contextMenu.currentPrice ? (
+              <>
+                <button
+                  onClick={() => handlePlacePendingOrder('LONG', 'STOP', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
+                >
+                  <span className="font-bold">BUY STOP</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakout buy)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('SHORT', 'LIMIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
+                >
+                  <span className="font-bold">SELL LIMIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(sell into rally)</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handlePlacePendingOrder('LONG', 'LIMIT', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-emerald-400 hover:bg-emerald-950/60"
+                >
+                  <span className="font-bold">BUY LIMIT</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(buy the dip)</span>
+                </button>
+                <button
+                  onClick={() => handlePlacePendingOrder('SHORT', 'STOP', contextMenu)}
+                  className="block w-full rounded px-2 py-1.5 text-left text-sm text-rose-400 hover:bg-rose-950/60"
+                >
+                  <span className="font-bold">SELL STOP</span>
+                  <span className="ml-2 text-[10px] text-zinc-500">(breakdown short)</span>
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
