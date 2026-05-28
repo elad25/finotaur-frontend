@@ -159,10 +159,27 @@ export function BacktestReplayChart({
   const startIndex = load.kind === 'ready' ? load.startIndex : 0;
   const maxIndex = bars.length - 1;
 
+  // Track the highest cursor index whose bar has been pushed to the series
+  // via update(). lightweight-charts throws "Cannot update oldest data" if
+  // we hand it a time older than the last data point — which would happen
+  // if cursor sync re-fires advance for an already-seeded bar. Guard.
+  const lastUpdatedIdxRef = useRef<number>(-1);
+
+  // Whenever bars change (new window loaded), reset the high-water mark to
+  // the seeded end (= startIndex). New advances after that are real.
+  useEffect(() => {
+    lastUpdatedIdxRef.current = startIndex;
+  }, [bars, startIndex]);
+
   const handleAdvance = useCallback((newCursor: number) => {
     const bar = bars[newCursor];
     if (!bar || !seriesRef.current) return;
-    // Reveal the new bar on the chart.
+    // Skip if this bar was already drawn during seeding or a prior advance.
+    if (newCursor <= lastUpdatedIdxRef.current) {
+      onBarRevealRef.current?.(bar);
+      return;
+    }
+    lastUpdatedIdxRef.current = newCursor;
     seriesRef.current.update({
       time: bar.time,
       open: bar.open,
@@ -171,7 +188,7 @@ export function BacktestReplayChart({
       close: bar.close,
     });
     onBarRevealRef.current?.(bar);
-  }, [bars]);
+  }, [bars, startIndex]);
 
   const playback = useReplayPlayback({
     maxIndex,
