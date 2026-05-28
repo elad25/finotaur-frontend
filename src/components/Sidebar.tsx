@@ -311,7 +311,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Subscribers', path: '/app/journal/admin/subscribers', icon: CreditCard },
     { label: 'Support', path: '/app/journal/admin/support', icon: HeadphonesIcon },
     { label: 'Cancellations', path: '/app/journal/admin/Cancellations', icon: UserX },
-    { label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift },
+    ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/journal/admin/affiliate', icon: Gift }] : []),
     { label: 'Top Traders', path: '/app/journal/admin/top-traders', icon: Trophy },
     { label: 'divider', path: '', icon: null, divider: true },
     { label: 'Back to Journal', path: '/app/journal/overview', icon: ArrowLeft },
