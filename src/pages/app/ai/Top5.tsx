@@ -13,7 +13,9 @@
 //   ✅ Admin Mode Toggle preserved
 // =====================================================
 
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { lazy } from '@/lib/lazyWithRetry';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePlatformAccess } from '@/hooks/usePlatformAccess';
 import { UpgradeGate } from '@/components/access/UpgradeGate';
@@ -1882,5 +1884,9 @@ export default function Top5() {
       />
     );
   }
-  return <Top5Content />;
+  return (
+    <ErrorBoundary boundary="ai-top5">
+      <Top5Content />
+    </ErrorBoundary>
+  );
 }

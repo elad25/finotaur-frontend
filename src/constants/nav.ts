@@ -15,10 +15,11 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
   Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
 } from 'lucide-react';
+import { FEATURES } from '@/config/features';
 
 export interface NavItem { 
   label: string; 
@@ -56,7 +57,7 @@ export const domains: Record<string, Domain> = {
       { label: 'War Zone', path: '/app/all-markets/warzone', locked: false },
       { label: 'Top Secret', path: '/app/top-secret', locked: false, hideForAdmin: true },
       { label: 'Top Secret Admin', path: '/app/top-secret/admin', adminOnly: true },
-      { label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true },  // 🤝 NEW
+      ...(FEATURES.AFFILIATE_TRACKING ? [{ label: 'Affiliate', path: '/app/all-markets/affiliate', affiliateSmartPage: true }] : []),  // gated: AFFILIATE_TRACKING
       { label: 'Admin CRM', path: '/app/admin', adminOnly: true },
       { label: 'Support', path: '/app/all-markets/admin/support', adminOnly: true },
     ],

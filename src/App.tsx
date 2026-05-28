@@ -358,7 +358,7 @@ function AppContent() {
     <>
       {/* Cookie consent banner — mounts once for all routes (public + authenticated) */}
       <CookieConsentBanner />
-      <AffiliateTracker />
+      {FEATURES.AFFILIATE_TRACKING && <AffiliateTracker />}
       {/* 🎯 Guided Tour Overlay - renders on top of everything */}
       <GuidedTour />
       <WelcomeOffer />
