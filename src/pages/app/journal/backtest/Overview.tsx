@@ -836,7 +836,6 @@ function BacktestOverviewContent() {
       <style>{ANIMATION_STYLES}</style>
       
       <div className="p-6 space-y-6">
-        <CftcDisclosureBanner />
         {/* Header - NO BACK ARROW */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <PageTitle 
@@ -962,6 +961,11 @@ function BacktestOverviewContent() {
           <TradeTimePerformanceChart data={tradeTimeData} />
           <TradeDurationPerformanceChart data={tradeDurationData} />
         </div>
+
+        {/* Hypothetical Performance Disclosure — placed at the bottom as a
+            footer-style note (Elad 2026-05-28: legal compliance retained,
+            visual prominence reduced — users don't need the alert framing). */}
+        <CftcDisclosureBanner className="mt-8" />
       </div>
     </div>
   );

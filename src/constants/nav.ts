@@ -261,12 +261,10 @@ ai: {
       { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
       { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Code },
       { label: 'Historical Data', path: '/app/journal/backtest/data', icon: Database },
-      { label: 'Performance Analytics', path: '/app/journal/backtest/analytics', icon: BarChart3 },
-      { label: 'Monte Carlo', path: '/app/journal/backtest/monte-carlo', icon: Activity },
-      { label: 'Walk Forward', path: '/app/journal/backtest/walk-forward', icon: TrendingUp },
-      { label: 'Optimization', path: '/app/journal/backtest/optimization', icon: Target },
-      { label: 'AI Insights', path: '/app/journal/backtest/ai-insights', icon: Brain },
       { label: 'Market Replay', path: '/app/journal/backtest/replay', icon: PlayCircle },
+      // Sprint C8 (backtest-launch-ready): Performance Analytics / Monte Carlo /
+      // Walk Forward / Optimization / AI Insights are stub pages — hidden from
+      // sidebar pre-launch. Re-add when each ships real content.
     ],
   },
 

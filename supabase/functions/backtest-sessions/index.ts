@@ -31,6 +31,11 @@ const corsHeaders = {
 // availability under a small number of bad-actor requests.
 const MAX_TRADES_PER_SESSION = 10000;
 
+// JSONB column size cap (statistics / config). 100KB is well above the
+// largest legitimate payload (real stats blobs are ~2KB) and far below
+// what would force Postgres to TOAST or impact query latency.
+const MAX_JSON_BYTES = 100 * 1024;
+
 // ─── Types (mirror frontend useBacktestSession) ─────────────────
 interface TradePayload {
   side: 'LONG' | 'SHORT';
@@ -44,6 +49,18 @@ interface TradePayload {
   pnl?: number;
   pnl_percent?: number;
   exit_reason?: 'manual' | 'sl' | 'tp';
+}
+
+interface PendingOrderPayload {
+  id: string;
+  side: 'LONG' | 'SHORT';
+  type: 'LIMIT' | 'STOP';
+  trigger_price: number;
+  size: number;
+  stop_loss?: number;
+  take_profit?: number;
+  strategy_id?: string | null;
+  created_at: number;
 }
 
 interface SaveSessionPayload {
@@ -63,6 +80,7 @@ interface SaveSessionPayload {
   notes?: string;
   config?: Record<string, unknown>;
   trades: TradePayload[];
+  pending_orders?: PendingOrderPayload[];
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -128,6 +146,14 @@ serve(async (req) => {
           413,
         );
       }
+      const statsBytes = JSON.stringify(payload.statistics ?? {}).length;
+      const configBytes = JSON.stringify(payload.config ?? {}).length;
+      if (statsBytes > MAX_JSON_BYTES || configBytes > MAX_JSON_BYTES) {
+        return errorResponse(
+          `Payload too large (max ${MAX_JSON_BYTES} bytes per JSON field)`,
+          413,
+        );
+      }
 
       // 1. Insert session row.
       const { data: session, error: sessErr } = await supabase
@@ -149,6 +175,7 @@ serve(async (req) => {
           profit_factor: payload.profit_factor,
           notes: payload.notes ?? null,
           config: payload.config ?? null,
+          pending_orders: payload.pending_orders ?? [],
         })
         .select('id, created_at')
         .single();
