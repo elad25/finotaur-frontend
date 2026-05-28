@@ -1507,7 +1507,7 @@ function Top5Content() {
       .from('profiles')
       .select('role, email, is_tester')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           const admin = data.role === 'admin' || data.role === 'super_admin' || data.email === 'elad2550@gmail.com';
