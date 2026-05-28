@@ -22,8 +22,9 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -162,11 +163,29 @@ export function BacktestChart({
   const [runSummary, setRunSummary] = useState<string | null>(null);
   const [strategyPickerOpen, setStrategyPickerOpen] = useState(false);
 
+  const navigate = useNavigate();
+
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
   // current FinotaurChart with manual current-price input.
+  // Phase 5: Replay is the default — Elad: "תדאג שהIMERSSIVE יעבוד חלק כמו REPLAY"
   type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('live');
+  const [chartMode, setChartMode] = useState<ChartMode>('replay');
+
+  // Phase 5: Chart link goes straight to fullscreen immersive — covers
+  // app topnav + journal sub-nav. Exit button returns user to backtest
+  // overview (= the dashboard listing). Toggle exists for power users who
+  // want a windowed view (rare).
+  const [isFullScreen, setIsFullScreen] = useState(true);
+
+  // Phase 5: inline error message replaces the blocking alert() calls.
+  // Native alert() freezes the renderer in browser-automation contexts
+  // and is poor UX. This shows below the trade buttons for ~3s.
+  const [tradeError, setTradeError] = useState<string | null>(null);
+  const flashTradeError = useCallback((msg: string) => {
+    setTradeError(msg);
+    setTimeout(() => setTradeError(null), 3000);
+  }, []);
 
   // Phase 4: replay start moment. Defaults to "now − 4 hours" so the trader
   // immediately sees recent history with room to PLAY forward.
@@ -207,7 +226,7 @@ export function BacktestChart({
   const handleOpen = (side: PaperSide) => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
-      alert('Enter a valid current price before opening a position.');
+      flashTradeError('Enter a valid current price before opening a position.');
       return;
     }
     openPosition({
@@ -296,7 +315,7 @@ export function BacktestChart({
   const handleClose = (reason: 'manual' | 'sl' | 'tp' = 'manual') => {
     const price = parseFloat(livePrice);
     if (!price || isNaN(price) || price <= 0) {
-      alert('Enter the exit price before closing the position.');
+      flashTradeError('Enter the exit price before closing the position.');
       return;
     }
     closePosition({ price, time: Math.floor(Date.now() / 1000), reason });
@@ -377,10 +396,28 @@ export function BacktestChart({
   }, [activePos, livePrice]);
 
   // ─── Render ──────────────────────────────────────────────────
+  // Phase 5: fullscreen-by-default. position:fixed inset-0 covers the
+  // app-level topnav + journal sub-nav. Exit button returns to overview.
+  const containerCls = isFullScreen
+    ? 'fixed inset-0 z-[100] flex flex-col bg-[#08080a] text-zinc-100'
+    : 'flex h-full w-full flex-col bg-[#08080a] text-zinc-100';
+
   return (
-    <div className="flex h-full w-full flex-col bg-[#08080a] text-zinc-100">
+    <div className={containerCls}>
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
+        {/* Exit fullscreen — back to backtest overview (only in fullscreen) */}
+        {isFullScreen && (
+          <button
+            onClick={() => navigate('/app/journal/backtest/overview')}
+            title="Exit chart — back to Backtest dashboard"
+            className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:border-[#C9A646]/40 hover:text-[#C9A646]"
+          >
+            <ArrowLeft size={12} />
+            Exit
+          </button>
+        )}
+
         {/* Asset class tabs */}
         <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
           {(['futures', 'stocks', 'crypto'] as AssetClass[]).map((ac) => (
@@ -653,21 +690,29 @@ export function BacktestChart({
             </div>
 
             {!activePos ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleOpen('LONG')}
-                  className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
-                >
-                  <TrendingUp size={16} />
-                  LONG
-                </button>
-                <button
-                  onClick={() => handleOpen('SHORT')}
-                  className="flex items-center justify-center gap-1.5 rounded-md bg-rose-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500"
-                >
-                  <TrendingDown size={16} />
-                  SHORT
-                </button>
+              <div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleOpen('LONG')}
+                    className="flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-500"
+                  >
+                    <TrendingUp size={16} />
+                    LONG
+                  </button>
+                  <button
+                    onClick={() => handleOpen('SHORT')}
+                    className="flex items-center justify-center gap-1.5 rounded-md bg-rose-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-500"
+                  >
+                    <TrendingDown size={16} />
+                    SHORT
+                  </button>
+                </div>
+                {tradeError && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
+                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                    <span>{tradeError}</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
