@@ -1,0 +1,130 @@
+/**
+ * ReplayControls — PLAY / PAUSE / STEP / SPEED bar for Replay mode.
+ *
+ * Pure presentational. All state lives in `useReplayPlayback`; this component
+ * just renders buttons and forwards clicks. Sits in the BacktestReplayChart
+ * toolbar above the chart.
+ */
+
+import { Play, Pause, ChevronLeft, ChevronRight, SkipBack, Gauge } from 'lucide-react';
+import { REPLAY_SPEEDS, type ReplaySpeed } from '@/hooks/useReplayPlayback';
+
+export interface ReplayControlsProps {
+  isPlaying: boolean;
+  speed: ReplaySpeed;
+  cursor: number;
+  maxIndex: number;
+  onPlay: () => void;
+  onPause: () => void;
+  onStep: () => void;
+  onStepBack: () => void;
+  onReset: () => void;
+  onSpeedChange: (s: ReplaySpeed) => void;
+}
+
+function speedLabel(s: ReplaySpeed): string {
+  if (s === Infinity) return 'MAX';
+  if (s === 0.5) return '0.5×';
+  return `${s}×`;
+}
+
+export function ReplayControls({
+  isPlaying,
+  speed,
+  cursor,
+  maxIndex,
+  onPlay,
+  onPause,
+  onStep,
+  onStepBack,
+  onReset,
+  onSpeedChange,
+}: ReplayControlsProps) {
+  const atEnd = cursor >= maxIndex;
+  const atStart = cursor <= -1;
+  const visibleBars = Math.max(0, cursor + 1);
+  const totalBars = Math.max(0, maxIndex + 1);
+  const pct = totalBars > 0 ? Math.round((visibleBars / totalBars) * 100) : 0;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-4 py-2">
+      {/* RESET — back to bar -1 */}
+      <button
+        onClick={onReset}
+        disabled={atStart}
+        title="Reset to start"
+        className="rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <SkipBack size={14} />
+      </button>
+
+      {/* STEP-BACK */}
+      <button
+        onClick={onStepBack}
+        disabled={atStart}
+        title="Step back one bar"
+        className="rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronLeft size={14} />
+      </button>
+
+      {/* PLAY / PAUSE */}
+      <button
+        onClick={isPlaying ? onPause : onPlay}
+        disabled={atEnd && !isPlaying}
+        title={isPlaying ? 'Pause' : 'Play'}
+        className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          isPlaying
+            ? 'border-rose-700 bg-rose-950 text-rose-400 hover:bg-rose-900'
+            : 'border-emerald-700/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-950/60'
+        }`}
+      >
+        {isPlaying ? <Pause size={12} /> : <Play size={12} />}
+        {isPlaying ? 'PAUSE' : 'PLAY'}
+      </button>
+
+      {/* STEP forward */}
+      <button
+        onClick={onStep}
+        disabled={atEnd}
+        title="Step forward one bar"
+        className="rounded-md border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronRight size={14} />
+      </button>
+
+      {/* SPEED */}
+      <div className="ml-2 flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
+        <Gauge size={12} className="text-zinc-500" />
+        <select
+          value={speed === Infinity ? 'Infinity' : String(speed)}
+          onChange={(e) => {
+            const v = e.target.value;
+            onSpeedChange(v === 'Infinity' ? Infinity : (Number(v) as ReplaySpeed));
+          }}
+          className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
+        >
+          {REPLAY_SPEEDS.map((s) => (
+            <option key={String(s)} value={s === Infinity ? 'Infinity' : String(s)}>
+              {speedLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Progress */}
+      <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">
+        <span>
+          Bar <span className="font-mono text-zinc-300">{Math.max(0, cursor + 1)}</span> / {totalBars}
+        </span>
+        <div className="h-1.5 w-32 overflow-hidden rounded-full bg-zinc-900">
+          <div
+            className="h-full bg-[#C9A646] transition-[width] duration-200"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="font-mono tabular-nums text-zinc-400">{pct}%</span>
+      </div>
+    </div>
+  );
+}

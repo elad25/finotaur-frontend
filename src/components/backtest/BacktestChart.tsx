@@ -21,21 +21,24 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
-import type { ChartMarker, Interval } from '@/components/charting/types';
+import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
 import {
   useBacktestSession,
+  computeStatsByStrategy,
   type PaperPosition,
   type PaperSide,
 } from '@/hooks/useBacktestSession';
 import { useBacktestPersistence } from '@/hooks/useBacktestPersistence';
 import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import { runStrategy } from '@/core/backtest/runStrategy';
+import { BacktestReplayChart } from './BacktestReplayChart';
+import { DateTimePicker } from './DateTimePicker';
 
 // ─── Asset class presets ────────────────────────────────────────
 // Each preset resolves to a source-native symbol. Yahoo handles futures
@@ -159,6 +162,27 @@ export function BacktestChart({
   const [runSummary, setRunSummary] = useState<string | null>(null);
   const [strategyPickerOpen, setStrategyPickerOpen] = useState(false);
 
+  // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
+  // BacktestReplayChart (cursor-controlled). In Live mode it's the
+  // current FinotaurChart with manual current-price input.
+  type ChartMode = 'live' | 'replay';
+  const [chartMode, setChartMode] = useState<ChartMode>('live');
+
+  // Phase 4: replay start moment. Defaults to "now − 4 hours" so the trader
+  // immediately sees recent history with room to PLAY forward.
+  const [replayStart, setReplayStart] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  });
+
+  // Phase 4: active strategy tag. Every trade opened while this is set will
+  // be attributed to the strategy in stats breakdown + saved session record.
+  const [activeStrategyId, setActiveStrategyId] = useState<string | null>(null);
+  const activeStrategy = useMemo(
+    () => strategyLib.strategies.find((s) => s.id === activeStrategyId) ?? null,
+    [strategyLib.strategies, activeStrategyId],
+  );
+
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
   const { from, to } = useMemo(() => {
@@ -193,10 +217,81 @@ export function BacktestChart({
       size,
       stopLoss: slInput ? parseFloat(slInput) : undefined,
       takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      strategyId: activeStrategyId,
     });
     setSlInput('');
     setTpInput('');
   };
+
+  // ─── Phase 4 handlers ──────────────────────────────────────
+  // Replay: open a position at the clicked bar's close. SL/TP come from the
+  // side-panel inputs, size from the size input. Strategy tag from active.
+  const handleReplayBarClick = useCallback((bar: Bar) => {
+    if (state.activePosition) {
+      // Single-position-at-a-time invariant — don't auto-stack. UI just
+      // ignores the click; trader closes or waits for SL/TP first.
+      return;
+    }
+    // Default to LONG on bar click. Future tweak: shift+click for SHORT.
+    openPosition({
+      side: 'LONG',
+      price: bar.close,
+      time: bar.time as number,
+      size,
+      stopLoss: slInput ? parseFloat(slInput) : undefined,
+      takeProfit: tpInput ? parseFloat(tpInput) : undefined,
+      strategyId: activeStrategyId,
+    });
+    setLivePrice(bar.close.toString());
+  }, [state.activePosition, openPosition, size, slInput, tpInput, activeStrategyId]);
+
+  // Replay: each bar revealed by the playback cursor — check SL/TP against
+  // any active position. Same-bar-as-entry skip mirrors runStrategy.ts to
+  // avoid phantom stopouts on the entry bar.
+  const handleReplayBarReveal = useCallback((bar: Bar) => {
+    const pos = state.activePosition;
+    if (!pos) return;
+    if ((pos.entryTime as number) === (bar.time as number)) return; // same-bar skip
+
+    if (pos.side === 'LONG') {
+      if (pos.stopLoss != null && bar.low <= pos.stopLoss) {
+        closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
+        return;
+      }
+      if (pos.takeProfit != null && bar.high >= pos.takeProfit) {
+        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
+        return;
+      }
+    } else {
+      if (pos.stopLoss != null && bar.high >= pos.stopLoss) {
+        closePosition({ price: pos.stopLoss, time: bar.time as number, reason: 'sl' });
+        return;
+      }
+      if (pos.takeProfit != null && bar.low <= pos.takeProfit) {
+        closePosition({ price: pos.takeProfit, time: bar.time as number, reason: 'tp' });
+        return;
+      }
+    }
+  }, [state.activePosition, closePosition]);
+
+  // Stats breakdown by strategy — only show panel when ≥1 trade has been
+  // tagged with a (non-manual) strategy id, so live-only sessions stay clean.
+  const statsByStrategy = useMemo(
+    () => computeStatsByStrategy(state.closedPositions, state.startingBalance),
+    [state.closedPositions, state.startingBalance],
+  );
+  const strategyBreakdown = useMemo(() => {
+    const rows: Array<{ key: string; label: string; trades: number; winRate: number; netPnl: number }> = [];
+    for (const [key, stats] of statsByStrategy) {
+      const label = key === 'manual'
+        ? 'Manual'
+        : strategyLib.strategies.find((s) => s.id === key)?.name ?? 'Unknown';
+      rows.push({ key, label, trades: stats.totalTrades, winRate: stats.winRate, netPnl: stats.netPnl });
+    }
+    // Largest contributor first.
+    rows.sort((a, b) => Math.abs(b.netPnl) - Math.abs(a.netPnl));
+    return rows;
+  }, [statsByStrategy, strategyLib.strategies]);
 
   const handleClose = (reason: 'manual' | 'sl' | 'tp' = 'manual') => {
     const price = parseFloat(livePrice);
@@ -331,6 +426,49 @@ export function BacktestChart({
           ))}
         </div>
 
+        {/* Live | Replay mode toggle (Phase 4) */}
+        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
+          {(['live', 'replay'] as ChartMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setChartMode(mode)}
+              className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
+                chartMode === mode
+                  ? 'bg-[#C9A646] text-black'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+              title={mode === 'live' ? 'Live historical chart with manual price entry' : 'Time-travel replay — pick a moment, PLAY, trade live'}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        {/* Date picker — Replay mode only */}
+        {chartMode === 'replay' && (
+          <DateTimePicker
+            value={replayStart}
+            interval={barInterval}
+            onChange={setReplayStart}
+          />
+        )}
+
+        {/* Active Strategy dropdown (Phase 4) — both modes */}
+        <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
+          <Sparkles size={12} className="text-[#C9A646]" />
+          <select
+            value={activeStrategyId ?? ''}
+            onChange={(e) => setActiveStrategyId(e.target.value || null)}
+            className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
+            title="Tag new trades with this strategy for per-strategy stats"
+          >
+            <option value="">No strategy (Manual)</option>
+            {strategyLib.strategies.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
           <div className="text-right">
@@ -343,7 +481,8 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
-          {/* Run Strategy dropdown */}
+          {/* Run Strategy dropdown — Live mode only */}
+          {chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}
@@ -392,6 +531,7 @@ export function BacktestChart({
               </div>
             )}
           </div>
+          )}
           <button
             onClick={handleSaveSession}
             disabled={saveStatus === 'saving'}
@@ -426,19 +566,33 @@ export function BacktestChart({
 
       {/* Main split: chart + side panel */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chart */}
+        {/* Chart — Live (FinotaurChart) or Replay (BacktestReplayChart) */}
         <div className="flex-1 min-w-0 bg-[#08080a]">
-          <FinotaurChart
-            symbol={symbol}
-            interval={barInterval}
-            from={from}
-            to={to}
-            dataSource={dataSource}
-            markers={markers}
-            theme={theme}
-            height="100%"
-            onError={(err) => console.warn('[BacktestChart] data fetch failed', err)}
-          />
+          {chartMode === 'live' ? (
+            <FinotaurChart
+              symbol={symbol}
+              interval={barInterval}
+              from={from}
+              to={to}
+              dataSource={dataSource}
+              markers={markers}
+              theme={theme}
+              height="100%"
+              onError={(err) => console.warn('[BacktestChart] data fetch failed', err)}
+            />
+          ) : (
+            <BacktestReplayChart
+              symbol={symbol}
+              interval={barInterval}
+              dataSource={dataSource}
+              replayStartTime={Math.floor(replayStart.getTime() / 1000)}
+              activePosition={state.activePosition}
+              closedPositions={state.closedPositions}
+              onBarReveal={handleReplayBarReveal}
+              onBarClick={handleReplayBarClick}
+              height="100%"
+            />
+          )}
         </div>
 
         {/* Side panel — paper trading + stats + history */}
@@ -617,6 +771,34 @@ export function BacktestChart({
               <StatRow label="Win streak" value={state.stats.longestWinStreak.toString()} />
               <StatRow label="Loss streak" value={state.stats.longestLossStreak.toString()} />
             </div>
+
+            {/* Phase 4: per-strategy breakdown. Shown only when there's ≥1 trade. */}
+            {strategyBreakdown.length > 0 && (
+              <div className="mt-4 border-t border-zinc-900 pt-3">
+                <div className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <Sparkles size={10} className="text-[#C9A646]" />
+                  By strategy
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  {strategyBreakdown.map((row) => (
+                    <div
+                      key={row.key}
+                      className="flex items-center justify-between rounded-md border border-zinc-900 bg-zinc-900/40 px-2 py-1.5"
+                    >
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium text-zinc-300">{row.label}</span>
+                        <span className="text-[10px] text-zinc-600">
+                          {row.trades} trade{row.trades !== 1 && 's'} · {row.winRate.toFixed(0)}% win
+                        </span>
+                      </div>
+                      <span className={`font-bold tabular-nums ${row.netPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {row.netPnl >= 0 ? '+' : ''}${row.netPnl.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Trade history */}
