@@ -5,7 +5,7 @@
 //
 // Operator tool for tracking every ticker mentioned in
 // WAR ZONE reports — why it was mentioned and how it
-// performed over 30/60/90 days.
+// performed over same-day / 30/60/90 days.
 //
 // Auth: Supabase session JWT → requireAdminWarzone middleware
 // Data: Three backend endpoints under /api/warzone/admin/mentions
@@ -27,6 +27,7 @@ import {
   Loader2,
   Target,
   Activity,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
@@ -57,6 +58,9 @@ interface WarzoneMention {
   return_60d: number | null;
   return_90d: number | null;
   alpha_90d_pct: number | null;
+  // Task 1: same-day impact derived from metadata.move_pct
+  immediate_impact_pct: number | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface MentionAggregates {
@@ -69,11 +73,16 @@ interface MentionAggregates {
   worst_mention_type: string | null;
   worst_mention_type_avg: number | null;
   heatmap: HeatmapCell[];
+  // Task 6: same-day aggregate fields
+  avg_immediate_impact_pct: number | null;
+  same_day_hit_rate: number | null;
+  strongest_move: { ticker: string; impact_pct: number } | null;
 }
 
+// Task 3: extended to 4 timeframes
 interface HeatmapCell {
   mention_type: MentionType;
-  timeframe: '30d' | '60d' | '90d';
+  timeframe: 'same_day' | '30d' | '60d' | '90d';
   avg_return: number | null;
   count: number;
   median_return: number | null;
@@ -167,6 +176,20 @@ function heatmapCellStyle(avgReturn: number | null): React.CSSProperties {
 }
 
 // ---------------------------------------------------------------------------
+// Task 1: extract immediate_impact_pct from raw API row metadata
+// ---------------------------------------------------------------------------
+function extractImmediateImpact(metadata: Record<string, unknown> | null): number | null {
+  if (!metadata) return null;
+  const movePct = (metadata as { move_pct?: unknown }).move_pct;
+  if (typeof movePct === 'number') return movePct;
+  if (typeof movePct === 'string') {
+    const parsed = parseFloat(movePct);
+    return isNaN(parsed) ? null : parsed;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Mention type display config
 // ---------------------------------------------------------------------------
 const MENTION_TYPE_CONFIG: Record<
@@ -209,6 +232,14 @@ const HEATMAP_TYPES: { type: MentionType; label: string }[] = [
   { type: 'tactical_macro', label: 'Tactical Macro' },
 ];
 
+// Task 3: heatmap timeframes extended to 4
+const HEATMAP_TIMEFRAMES: { tf: HeatmapCell['timeframe']; label: string }[] = [
+  { tf: 'same_day', label: 'Same-Day' },
+  { tf: '30d', label: '+30d' },
+  { tf: '60d', label: '+60d' },
+  { tf: '90d', label: '+90d' },
+];
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -229,10 +260,10 @@ const MentionBadge: React.FC<{ type: MentionType }> = ({ type }) => {
   );
 };
 
-// Skeleton row for table loading state
+// Skeleton row for table loading state — 11 cols now (added Same-Day Impact)
 const SkeletonRow: React.FC = () => (
   <tr className="border-b border-border-ds-subtle">
-    {Array.from({ length: 10 }).map((_, i) => (
+    {Array.from({ length: 11 }).map((_, i) => (
       <td key={i} className="px-3 py-3">
         <div className="h-4 bg-surface-2 rounded animate-pulse" style={{ width: `${60 + (i % 3) * 20}%` }} />
       </td>
@@ -310,6 +341,16 @@ const DrilldownModal: React.FC<{
     staleTime: 30_000,
   });
 
+  // Task 7: compute avg same-day impact from ticker's mentions
+  const avgSameDayImpact: number | null = (() => {
+    if (!data?.mentions?.length) return null;
+    const vals = data.mentions
+      .map((m) => extractImmediateImpact(m.metadata))
+      .filter((v): v is number => v !== null);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  })();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -358,9 +399,18 @@ const DrilldownModal: React.FC<{
 
           {data && !isLoading && (
             <>
-              {/* Summary stats row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Summary stats row — Task 7: added Avg Same-Day Impact */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <StatTile label="Total Mentions" value={data.total_mentions} />
+                {/* Task 7: same-day impact per ticker */}
+                <StatTile
+                  label="Avg Same-Day"
+                  value={
+                    <span className={pctColorClass(avgSameDayImpact)}>
+                      {formatPct(avgSameDayImpact)}
+                    </span>
+                  }
+                />
                 <StatTile
                   label="Avg Return 30d"
                   value={
@@ -405,31 +455,38 @@ const DrilldownModal: React.FC<{
                   All Mentions
                 </p>
                 <div className="space-y-3">
-                  {data.mentions.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-4 rounded-lg bg-surface-1 border border-border-ds-subtle"
-                    >
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-small text-ink-tertiary">{formatDate(m.mentioned_at)}</span>
-                          <MentionBadge type={m.mention_type} />
-                          {m.firm_source && (
-                            <span className="text-small text-ink-tertiary">{m.firm_source}</span>
-                          )}
+                  {data.mentions.map((m) => {
+                    const immediatePct = extractImmediateImpact(m.metadata);
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-4 rounded-lg bg-surface-1 border border-border-ds-subtle"
+                      >
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-small text-ink-tertiary">{formatDate(m.mentioned_at)}</span>
+                            <MentionBadge type={m.mention_type} />
+                            {m.firm_source && (
+                              <span className="text-small text-ink-tertiary">{m.firm_source}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 font-mono text-small">
+                            {m.price_at_mention !== null && (
+                              <span className="text-ink-tertiary">{formatPrice(m.price_at_mention)}</span>
+                            )}
+                            {/* Task 7: same-day in drilldown row */}
+                            {immediatePct !== null && (
+                              <span className={pctColorClass(immediatePct)}>0d {formatPct(immediatePct)}</span>
+                            )}
+                            <span className={pctColorClass(m.return_30d)}>30d {formatPct(m.return_30d)}</span>
+                            <span className={pctColorClass(m.return_60d)}>60d {formatPct(m.return_60d)}</span>
+                            <span className={pctColorClass(m.return_90d)}>90d {formatPct(m.return_90d)}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 font-mono text-small">
-                          {m.price_at_mention !== null && (
-                            <span className="text-ink-tertiary">{formatPrice(m.price_at_mention)}</span>
-                          )}
-                          <span className={pctColorClass(m.return_30d)}>30d {formatPct(m.return_30d)}</span>
-                          <span className={pctColorClass(m.return_60d)}>60d {formatPct(m.return_60d)}</span>
-                          <span className={pctColorClass(m.return_90d)}>90d {formatPct(m.return_90d)}</span>
-                        </div>
+                        <p className="mt-2 text-small text-ink-secondary leading-relaxed">{m.reason}</p>
                       </div>
-                      <p className="mt-2 text-small text-ink-secondary leading-relaxed">{m.reason}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {data.mentions.length === 0 && (
                     <p className="text-small text-ink-tertiary py-4 text-center">No mention records found.</p>
@@ -443,6 +500,125 @@ const DrilldownModal: React.FC<{
     </div>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Task 6: client-side aggregates computation from raw mentions data
+// ---------------------------------------------------------------------------
+function computeClientAggregates(
+  serverAggregates: MentionAggregates | undefined,
+  allMentions: WarzoneMention[],
+  todayStr: string,
+): MentionAggregates | undefined {
+  if (!serverAggregates) return undefined;
+
+  const withImpact = allMentions
+    .map((m) => ({
+      ...m,
+      immediate_impact_pct: extractImmediateImpact(m.metadata),
+    }))
+    .filter((m) => m.immediate_impact_pct !== null && m.mentioned_at.startsWith(todayStr));
+
+  if (!withImpact.length) {
+    return {
+      ...serverAggregates,
+      avg_immediate_impact_pct: null,
+      same_day_hit_rate: null,
+      strongest_move: null,
+    };
+  }
+
+  const impacts = withImpact.map((m) => m.immediate_impact_pct as number);
+  const avg_immediate_impact_pct = impacts.reduce((a, b) => a + b, 0) / impacts.length;
+  const positiveCount = impacts.filter((v) => v > 0).length;
+  const same_day_hit_rate = (positiveCount / impacts.length) * 100;
+
+  const strongestRow = withImpact.reduce((best, cur) => {
+    const curAbs = Math.abs(cur.immediate_impact_pct as number);
+    const bestAbs = Math.abs(best.immediate_impact_pct as number);
+    return curAbs > bestAbs ? cur : best;
+  });
+
+  const strongest_move = {
+    ticker: strongestRow.ticker,
+    impact_pct: strongestRow.immediate_impact_pct as number,
+  };
+
+  // Also compute client-side heatmap same_day cells
+  const sameDayCells: HeatmapCell[] = HEATMAP_TYPES.map(({ type }) => {
+    const typeRows = allMentions
+      .filter((m) => m.mention_type === type)
+      .map((m) => extractImmediateImpact(m.metadata))
+      .filter((v): v is number => v !== null);
+
+    if (!typeRows.length) {
+      return {
+        mention_type: type,
+        timeframe: 'same_day' as const,
+        avg_return: null,
+        count: 0,
+        median_return: null,
+        win_rate: null,
+      };
+    }
+
+    const sorted = [...typeRows].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median_return =
+      sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+    const avg_return = typeRows.reduce((a, b) => a + b, 0) / typeRows.length;
+    const win_rate = (typeRows.filter((v) => v > 0).length / typeRows.length) * 100;
+
+    return {
+      mention_type: type,
+      timeframe: 'same_day' as const,
+      avg_return,
+      count: typeRows.length,
+      median_return,
+      win_rate,
+    };
+  });
+
+  // Merge same_day cells with existing heatmap (server returns 30d/60d/90d)
+  const existingCells = (serverAggregates.heatmap ?? []).filter(
+    (c) => c.timeframe !== 'same_day',
+  );
+
+  // Determine best_mention_type: prefer 30d if available, fallback to same_day
+  let best_mention_type = serverAggregates.best_mention_type;
+  let best_mention_type_avg = serverAggregates.best_mention_type_avg;
+  let worst_mention_type = serverAggregates.worst_mention_type;
+  let worst_mention_type_avg = serverAggregates.worst_mention_type_avg;
+
+  if (!best_mention_type && sameDayCells.some((c) => c.count > 0)) {
+    const withData = sameDayCells.filter((c) => c.count > 0 && c.avg_return !== null);
+    if (withData.length) {
+      const bestCell = withData.reduce((a, b) =>
+        (a.avg_return ?? -Infinity) > (b.avg_return ?? -Infinity) ? a : b,
+      );
+      const worstCell = withData.reduce((a, b) =>
+        (a.avg_return ?? Infinity) < (b.avg_return ?? Infinity) ? a : b,
+      );
+      best_mention_type = bestCell.mention_type;
+      best_mention_type_avg = bestCell.avg_return;
+      worst_mention_type = worstCell.mention_type;
+      worst_mention_type_avg = worstCell.avg_return;
+    }
+  }
+
+  return {
+    ...serverAggregates,
+    best_mention_type,
+    best_mention_type_avg,
+    worst_mention_type,
+    worst_mention_type_avg,
+    avg_immediate_impact_pct,
+    same_day_hit_rate,
+    strongest_move,
+    heatmap: [...sameDayCells, ...existingCells],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -476,6 +652,7 @@ const WarZoneAdmin: React.FC = () => {
   }, []);
 
   const queryClient = useQueryClient();
+  const today = todayDate();
 
   // Debounce ticker search 300ms
   useEffect(() => {
@@ -505,7 +682,7 @@ const WarZoneAdmin: React.FC = () => {
     win_loss: { sortBy: 'return_30d', sortDir: 'desc' },
   };
 
-  // Query: paginated mentions list
+  // Query: paginated mentions list — Task 1: metadata included in API response
   const mentionsQueryKey = [
     'warzone-mentions',
     dateFrom, dateTo, mentionTypeFilter, debouncedTicker, sortBy, pageSize, offset,
@@ -534,14 +711,24 @@ const WarZoneAdmin: React.FC = () => {
         { headers: authHeadersRef.current },
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      const json = await res.json() as PaginatedMentions;
+      // Task 1: map metadata → immediate_impact_pct on each row
+      return {
+        ...json,
+        data: json.data.map((row) => ({
+          ...row,
+          immediate_impact_pct: extractImmediateImpact(
+            (row.metadata as Record<string, unknown> | null) ?? null,
+          ),
+        })),
+      };
     },
     staleTime: 60_000,
   });
 
-  // Query: aggregates
+  // Query: aggregates — Task 6: metadata fetched server-side, client enriches
   const {
-    data: aggregates,
+    data: serverAggregates,
     isLoading: aggregatesLoading,
   } = useQuery<MentionAggregates>({
     queryKey: ['warzone-aggregates', dateFrom, dateTo],
@@ -562,9 +749,12 @@ const WarZoneAdmin: React.FC = () => {
   const totalPages = Math.ceil(totalMentions / pageSize);
   const currentPage = Math.floor(offset / pageSize) + 1;
 
-  // Heatmap cell lookup helper
+  // Task 6: enrich aggregates with client-side same-day computation
+  const aggregates = computeClientAggregates(serverAggregates, mentions, today);
+
+  // Heatmap cell lookup helper — Task 3: now handles 4 timeframes
   const getHeatmapCell = useCallback(
-    (type: MentionType, timeframe: '30d' | '60d' | '90d'): HeatmapCell | null => {
+    (type: MentionType, timeframe: HeatmapCell['timeframe']): HeatmapCell | null => {
       return aggregates?.heatmap?.find(
         (c) => c.mention_type === type && c.timeframe === timeframe,
       ) ?? null;
@@ -583,6 +773,16 @@ const WarZoneAdmin: React.FC = () => {
     setDebouncedTicker('');
     setSortBy('mentioned_at');
   };
+
+  // Task 5: filter today's tracked catalysts for the callout panel
+  const todayCatalysts = mentions
+    .filter(
+      (m) =>
+        m.immediate_impact_pct !== null &&
+        m.mentioned_at.startsWith(today),
+    )
+    .sort((a, b) => Math.abs(b.immediate_impact_pct!) - Math.abs(a.immediate_impact_pct!))
+    .slice(0, 6);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -606,29 +806,35 @@ const WarZoneAdmin: React.FC = () => {
         >
           <p className="text-ink-primary font-semibold mb-1">
             {MENTION_TYPE_CONFIG[tooltip.cell.mention_type]?.label ?? tooltip.cell.mention_type}
-            {' / '}{tooltip.cell.timeframe}
+            {' / '}{tooltip.cell.timeframe === 'same_day' ? 'Same-Day' : tooltip.cell.timeframe}
           </p>
-          <p className="text-ink-secondary">
-            Avg return:{' '}
-            <span className={`font-mono ${pctColorClass(tooltip.cell.avg_return)}`}>
-              {formatPct(tooltip.cell.avg_return)}
-            </span>
-          </p>
-          {tooltip.cell.median_return !== null && (
-            <p className="text-ink-secondary">
-              Median:{' '}
-              <span className={`font-mono ${pctColorClass(tooltip.cell.median_return)}`}>
-                {formatPct(tooltip.cell.median_return)}
-              </span>
-            </p>
+          {tooltip.cell.count === 0 ? (
+            <p className="text-ink-tertiary">No data yet</p>
+          ) : (
+            <>
+              <p className="text-ink-secondary">
+                Avg return:{' '}
+                <span className={`font-mono ${pctColorClass(tooltip.cell.avg_return)}`}>
+                  {formatPct(tooltip.cell.avg_return)}
+                </span>
+              </p>
+              {tooltip.cell.median_return !== null && (
+                <p className="text-ink-secondary">
+                  Median:{' '}
+                  <span className={`font-mono ${pctColorClass(tooltip.cell.median_return)}`}>
+                    {formatPct(tooltip.cell.median_return)}
+                  </span>
+                </p>
+              )}
+              {tooltip.cell.win_rate !== null && (
+                <p className="text-ink-secondary">
+                  Win rate:{' '}
+                  <span className="font-mono text-ink-primary">{tooltip.cell.win_rate.toFixed(1)}%</span>
+                </p>
+              )}
+              <p className="text-ink-tertiary mt-1">{tooltip.cell.count} mention{tooltip.cell.count !== 1 ? 's' : ''}</p>
+            </>
           )}
-          {tooltip.cell.win_rate !== null && (
-            <p className="text-ink-secondary">
-              Win rate:{' '}
-              <span className="font-mono text-ink-primary">{tooltip.cell.win_rate.toFixed(1)}%</span>
-            </p>
-          )}
-          <p className="text-ink-tertiary mt-1">{tooltip.cell.count} mention{tooltip.cell.count !== 1 ? 's' : ''}</p>
         </div>
       )}
 
@@ -641,7 +847,7 @@ const WarZoneAdmin: React.FC = () => {
             WAR ZONE — Ticker Tracking
           </h1>
           <p className="text-small text-ink-tertiary mt-1">
-            Every ticker mentioned, every reason, performance at 30/60/90 days
+            Every ticker mentioned, every reason, same-day impact + performance at 30/60/90 days
           </p>
         </div>
 
@@ -702,7 +908,82 @@ const WarZoneAdmin: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 2 — Stats grid                                              */}
+      {/* Section 2 — Catalyst Tracking callout (Task 5)                      */}
+      {/* ------------------------------------------------------------------ */}
+      <Card padding="default">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="p-2 rounded-lg bg-[#7c3aed]/15 flex-shrink-0">
+            <Zap className="w-4 h-4 text-[#a78bfa]" />
+          </div>
+          <div>
+            <p className="text-small font-semibold text-ink-primary">
+              Catalyst Tracking — Today
+            </p>
+            <p className="text-small text-ink-tertiary mt-0.5">
+              What WAR ZONE flagged this morning, and how the market responded by close.
+            </p>
+          </div>
+        </div>
+
+        {mentionsLoading ? (
+          <div className="h-20 flex items-center justify-center text-ink-tertiary gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-gold-primary" />
+            <span className="text-small">Loading catalyst data...</span>
+          </div>
+        ) : todayCatalysts.length === 0 ? (
+          <p className="text-small text-ink-tertiary py-2">No tracked catalysts yet today.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-small border-collapse">
+              <thead>
+                <tr className="border-b border-border-ds-subtle/50">
+                  <th className="text-left pb-2 pr-4 text-ink-tertiary font-medium uppercase tracking-[0.5px] whitespace-nowrap">Ticker</th>
+                  <th className="text-left pb-2 pr-4 text-ink-tertiary font-medium uppercase tracking-[0.5px]">Catalyst</th>
+                  <th className="text-left pb-2 pr-4 text-ink-tertiary font-medium uppercase tracking-[0.5px] whitespace-nowrap">Same-Day Move</th>
+                  <th className="text-left pb-2 text-ink-tertiary font-medium uppercase tracking-[0.5px]">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayCatalysts.map((m) => (
+                  <tr key={m.id} className="border-b border-border-ds-subtle/30">
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <button
+                        onClick={() => setDrilldownTicker(m.ticker)}
+                        className="font-mono font-semibold text-gold-primary hover:text-gold-hover transition-colors duration-fast underline-offset-2 hover:underline"
+                      >
+                        {m.ticker}
+                      </button>
+                    </td>
+                    <td className="py-2 pr-4 max-w-[320px]">
+                      <span
+                        className="text-ink-secondary line-clamp-1 cursor-help"
+                        title={m.reason}
+                      >
+                        {m.reason.length > 60 ? m.reason.slice(0, 60) + '…' : m.reason}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 whitespace-nowrap">
+                      <span className={`font-mono font-semibold ${pctColorClass(m.immediate_impact_pct)}`}>
+                        {formatPct(m.immediate_impact_pct)}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <MentionBadge type={m.mention_type} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <p className="mt-3 text-[11px] text-ink-muted leading-relaxed">
+          Tracking continues — return columns (+30d / +60d / +90d) populate automatically as time passes via the daily price follow-up cron.
+        </p>
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 3 — Stats grid (Task 2)                                     */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatTile
@@ -717,8 +998,49 @@ const WarZoneAdmin: React.FC = () => {
           icon={Target}
           loading={aggregatesLoading}
         />
+        {/* Task 2: Avg Same-Day Impact */}
         <StatTile
-          label="Avg 30d Return"
+          label="Avg Same-Day Impact"
+          value={
+            <span className={pctColorClass(aggregates?.avg_immediate_impact_pct ?? null)}>
+              {formatPct(aggregates?.avg_immediate_impact_pct ?? null)}
+            </span>
+          }
+          icon={Zap}
+          loading={aggregatesLoading}
+        />
+        {/* Task 2: Same-Day Hit Rate */}
+        <StatTile
+          label="Same-Day Hit Rate"
+          value={
+            aggregates?.same_day_hit_rate !== null && aggregates?.same_day_hit_rate !== undefined
+              ? `${aggregates.same_day_hit_rate.toFixed(1)}%`
+              : '—'
+          }
+          icon={Activity}
+          loading={aggregatesLoading}
+        />
+        {/* Task 2: Strongest Single Move */}
+        <StatTile
+          label="Strongest Move"
+          value={
+            aggregates?.strongest_move ? (
+              <span className="text-num-small font-sans leading-snug">
+                <span className="font-mono font-semibold text-gold-primary">
+                  {aggregates.strongest_move.ticker}
+                </span>
+                <span className={`block font-mono ${pctColorClass(aggregates.strongest_move.impact_pct)}`}>
+                  {formatPct(aggregates.strongest_move.impact_pct)}
+                </span>
+              </span>
+            ) : '—'
+          }
+          icon={TrendingUp}
+          loading={aggregatesLoading}
+        />
+        {/* Task 2: Avg Return 30d (was tile 3) — kept as reference */}
+        <StatTile
+          label="Avg Return 30d"
           value={
             <span className={pctColorClass(aggregates?.avg_return_30d ?? null)}>
               {formatPct(aggregates?.avg_return_30d ?? null)}
@@ -726,54 +1048,10 @@ const WarZoneAdmin: React.FC = () => {
           }
           loading={aggregatesLoading}
         />
-        <StatTile
-          label="Win Rate 30d"
-          value={
-            aggregates?.win_rate_30d !== null && aggregates?.win_rate_30d !== undefined
-              ? `${aggregates.win_rate_30d.toFixed(1)}%`
-              : '—'
-          }
-          icon={Activity}
-          loading={aggregatesLoading}
-        />
-        <StatTile
-          label="Best Type"
-          value={
-            aggregates?.best_mention_type ? (
-              <span className="text-num-small font-sans leading-snug">
-                {MENTION_TYPE_CONFIG[aggregates.best_mention_type as MentionType]?.label ?? aggregates.best_mention_type}
-                {aggregates.best_mention_type_avg !== null && (
-                  <span className="block text-ink-primary font-mono">
-                    {formatPct(aggregates.best_mention_type_avg)} avg 30d
-                  </span>
-                )}
-              </span>
-            ) : '—'
-          }
-          icon={TrendingUp}
-          loading={aggregatesLoading}
-        />
-        <StatTile
-          label="Worst Type"
-          value={
-            aggregates?.worst_mention_type ? (
-              <span className="text-num-small font-sans leading-snug">
-                {MENTION_TYPE_CONFIG[aggregates.worst_mention_type as MentionType]?.label ?? aggregates.worst_mention_type}
-                {aggregates.worst_mention_type_avg !== null && (
-                  <span className={`block font-mono ${pctColorClass(aggregates.worst_mention_type_avg)}`}>
-                    {formatPct(aggregates.worst_mention_type_avg)} avg 30d
-                  </span>
-                )}
-              </span>
-            ) : '—'
-          }
-          icon={TrendingDown}
-          loading={aggregatesLoading}
-        />
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 3 — Heatmap (type × timeframe)                             */}
+      {/* Section 4 — Heatmap (type × timeframe) — Task 3: 4 columns         */}
       {/* ------------------------------------------------------------------ */}
       <Card padding="default">
         <div className="mb-4">
@@ -798,9 +1076,16 @@ const WarZoneAdmin: React.FC = () => {
                   <th className="text-left pb-3 pr-4 text-ink-tertiary font-medium text-small min-w-[140px]">
                     Mention Type
                   </th>
-                  {(['30d', '60d', '90d'] as const).map((tf) => (
-                    <th key={tf} className="text-center pb-3 px-3 text-ink-secondary font-medium w-28">
-                      {tf}
+                  {HEATMAP_TIMEFRAMES.map(({ tf, label }) => (
+                    <th
+                      key={tf}
+                      className={`text-center pb-3 px-3 font-medium w-28 ${
+                        tf === 'same_day'
+                          ? 'text-[#a78bfa]'
+                          : 'text-ink-secondary'
+                      }`}
+                    >
+                      {label}
                     </th>
                   ))}
                 </tr>
@@ -809,14 +1094,15 @@ const WarZoneAdmin: React.FC = () => {
                 {HEATMAP_TYPES.map(({ type, label }) => (
                   <tr key={type} className="border-t border-border-ds-subtle/50">
                     <td className="py-2 pr-4 text-ink-secondary">{label}</td>
-                    {(['30d', '60d', '90d'] as const).map((tf) => {
+                    {HEATMAP_TIMEFRAMES.map(({ tf }) => {
                       const cell = getHeatmapCell(type, tf);
                       const avgRet = cell?.avg_return ?? null;
+                      const isEmpty = !cell || cell.count === 0;
                       return (
                         <td
                           key={tf}
                           className="py-2 px-3 text-center rounded cursor-default select-none transition-opacity duration-fast"
-                          style={heatmapCellStyle(avgRet)}
+                          style={isEmpty ? { background: 'rgba(255,255,255,0.03)' } : heatmapCellStyle(avgRet)}
                           onMouseEnter={(e) => {
                             if (!cell) return;
                             const rect = (e.target as HTMLElement).getBoundingClientRect();
@@ -829,8 +1115,8 @@ const WarZoneAdmin: React.FC = () => {
                           }}
                           onMouseLeave={() => setTooltip((t) => ({ ...t, visible: false }))}
                         >
-                          {avgRet === null ? (
-                            <span className="text-ink-muted">—</span>
+                          {isEmpty ? (
+                            <span className="text-ink-muted text-[11px]">—</span>
                           ) : (
                             <span
                               className={`font-mono font-medium ${pctColorClass(avgRet)}`}
@@ -850,7 +1136,7 @@ const WarZoneAdmin: React.FC = () => {
       </Card>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 4 — Filter bar                                              */}
+      {/* Section 5 — Filter bar                                              */}
       {/* ------------------------------------------------------------------ */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Mention type */}
@@ -917,7 +1203,7 @@ const WarZoneAdmin: React.FC = () => {
       </div>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 5 — Main table                                              */}
+      {/* Section 6 — Main table (Task 4: Same-Day Impact column added)       */}
       {/* ------------------------------------------------------------------ */}
       <Card padding="compact">
         {mentionsError ? (
@@ -936,11 +1222,15 @@ const WarZoneAdmin: React.FC = () => {
                   <tr className="border-b border-border-ds-default">
                     {[
                       'Ticker', 'Date', 'Type', 'Firm / Source', 'Reason',
-                      'Price @', '+30d', '+60d', '+90d', 'vs SPY 90d',
+                      'Price @', 'Same-Day Impact', '+30d', '+60d', '+90d', 'vs SPY 90d',
                     ].map((col) => (
                       <th
                         key={col}
-                        className="text-left px-3 py-3 text-ink-tertiary font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap"
+                        className={`text-left px-3 py-3 font-medium text-small uppercase tracking-[0.5px] whitespace-nowrap ${
+                          col === 'Same-Day Impact'
+                            ? 'text-[#a78bfa]'
+                            : 'text-ink-tertiary'
+                        }`}
                       >
                         {col}
                       </th>
@@ -993,6 +1283,11 @@ const WarZoneAdmin: React.FC = () => {
                           {/* Price @ mention */}
                           <td className="px-3 py-3 font-mono text-ink-secondary whitespace-nowrap">
                             {formatPrice(m.price_at_mention)}
+                          </td>
+
+                          {/* Task 4: Same-Day Impact */}
+                          <td className={`px-3 py-3 font-mono whitespace-nowrap font-semibold ${pctColorClass(m.immediate_impact_pct)}`}>
+                            {formatPct(m.immediate_impact_pct)}
                           </td>
 
                           {/* +30d */}
