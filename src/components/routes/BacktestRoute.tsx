@@ -155,7 +155,7 @@ export const BacktestRoute = memo(({ children }: { children: ReactNode }) => {
     return <BacktestLockedPage />;
   }
 
-  if (accountType !== 'premium') {
+  if (accountType !== 'premium' && accountType !== 'admin') {
     return (
       <Suspense fallback={<PageLoader />}>
         <BacktestLanding />
