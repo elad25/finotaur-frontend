@@ -8,10 +8,16 @@
 -- Trade row mirrors the shape produced by useBacktestSession.ts on the
 -- frontend (`PaperPosition`) — but flattened from JSONB to columns so the
 -- analytics views can query without unnesting.
+--
+-- ⚠️ Table suffix `_v2`: production already has `backtest_runs` +
+-- `backtest_trades` from an unrelated 2026-05-16 migration with a
+-- different schema (and 9 rows in `strategies`). Suffix avoids a silent
+-- name collision on `backtest_trades`. Migration to a single set of
+-- tables is deferred to Phase 3.5+ once we decide which schema wins.
 -- ════════════════════════════════════════════════════════════════════
 
 -- ─── Sessions ───────────────────────────────────────────────────────
-create table if not exists public.backtest_sessions (
+create table if not exists public.backtest_sessions_v2 (
   id                uuid          primary key default gen_random_uuid(),
   user_id           uuid          not null references auth.users(id) on delete cascade,
   name              text,
@@ -38,16 +44,16 @@ create table if not exists public.backtest_sessions (
   updated_at        timestamptz   not null default now()
 );
 
-create index if not exists idx_backtest_sessions_user_created
-  on public.backtest_sessions (user_id, created_at desc);
+create index if not exists idx_backtest_sessions_v2_user_created
+  on public.backtest_sessions_v2 (user_id, created_at desc);
 
-create index if not exists idx_backtest_sessions_user_symbol
-  on public.backtest_sessions (user_id, symbol);
+create index if not exists idx_backtest_sessions_v2_user_symbol
+  on public.backtest_sessions_v2 (user_id, symbol);
 
 -- ─── Trades (1-many per session) ─────────────────────────────────────
-create table if not exists public.backtest_trades (
+create table if not exists public.backtest_trades_v2 (
   id              uuid          primary key default gen_random_uuid(),
-  session_id      uuid          not null references public.backtest_sessions(id) on delete cascade,
+  session_id      uuid          not null references public.backtest_sessions_v2(id) on delete cascade,
   side            text          not null check (side in ('LONG', 'SHORT')),
   entry_time      timestamptz   not null,
   entry_price     numeric(18,8) not null,
@@ -62,69 +68,68 @@ create table if not exists public.backtest_trades (
   created_at      timestamptz   not null default now()
 );
 
-create index if not exists idx_backtest_trades_session
-  on public.backtest_trades (session_id, entry_time);
+create index if not exists idx_backtest_trades_v2_session
+  on public.backtest_trades_v2 (session_id, entry_time);
 
 -- ─── RLS ─────────────────────────────────────────────────────────────
-alter table public.backtest_sessions enable row level security;
-alter table public.backtest_trades   enable row level security;
+alter table public.backtest_sessions_v2 enable row level security;
+alter table public.backtest_trades_v2   enable row level security;
 
 -- Sessions: owner-only access. CASCADE on delete via FK above.
-drop policy if exists "users own sessions — select" on public.backtest_sessions;
-create policy "users own sessions — select"
-  on public.backtest_sessions for select
+drop policy if exists "users own sessions v2 — select" on public.backtest_sessions_v2;
+create policy "users own sessions v2 — select"
+  on public.backtest_sessions_v2 for select
   using (auth.uid() = user_id);
 
-drop policy if exists "users own sessions — insert" on public.backtest_sessions;
-create policy "users own sessions — insert"
-  on public.backtest_sessions for insert
+drop policy if exists "users own sessions v2 — insert" on public.backtest_sessions_v2;
+create policy "users own sessions v2 — insert"
+  on public.backtest_sessions_v2 for insert
   with check (auth.uid() = user_id);
 
-drop policy if exists "users own sessions — update" on public.backtest_sessions;
-create policy "users own sessions — update"
-  on public.backtest_sessions for update
+drop policy if exists "users own sessions v2 — update" on public.backtest_sessions_v2;
+create policy "users own sessions v2 — update"
+  on public.backtest_sessions_v2 for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-drop policy if exists "users own sessions — delete" on public.backtest_sessions;
-create policy "users own sessions — delete"
-  on public.backtest_sessions for delete
+drop policy if exists "users own sessions v2 — delete" on public.backtest_sessions_v2;
+create policy "users own sessions v2 — delete"
+  on public.backtest_sessions_v2 for delete
   using (auth.uid() = user_id);
 
--- Trades: inherit ownership through session_id. EXISTS subquery is
--- index-friendly given idx_backtest_sessions PK.
-drop policy if exists "users own trades — select" on public.backtest_trades;
-create policy "users own trades — select"
-  on public.backtest_trades for select
+-- Trades: inherit ownership through session_id.
+drop policy if exists "users own trades v2 — select" on public.backtest_trades_v2;
+create policy "users own trades v2 — select"
+  on public.backtest_trades_v2 for select
   using (
     exists (
-      select 1 from public.backtest_sessions s
-      where s.id = backtest_trades.session_id and s.user_id = auth.uid()
+      select 1 from public.backtest_sessions_v2 s
+      where s.id = backtest_trades_v2.session_id and s.user_id = auth.uid()
     )
   );
 
-drop policy if exists "users own trades — insert" on public.backtest_trades;
-create policy "users own trades — insert"
-  on public.backtest_trades for insert
+drop policy if exists "users own trades v2 — insert" on public.backtest_trades_v2;
+create policy "users own trades v2 — insert"
+  on public.backtest_trades_v2 for insert
   with check (
     exists (
-      select 1 from public.backtest_sessions s
-      where s.id = backtest_trades.session_id and s.user_id = auth.uid()
+      select 1 from public.backtest_sessions_v2 s
+      where s.id = backtest_trades_v2.session_id and s.user_id = auth.uid()
     )
   );
 
-drop policy if exists "users own trades — delete" on public.backtest_trades;
-create policy "users own trades — delete"
-  on public.backtest_trades for delete
+drop policy if exists "users own trades v2 — delete" on public.backtest_trades_v2;
+create policy "users own trades v2 — delete"
+  on public.backtest_trades_v2 for delete
   using (
     exists (
-      select 1 from public.backtest_sessions s
-      where s.id = backtest_trades.session_id and s.user_id = auth.uid()
+      select 1 from public.backtest_sessions_v2 s
+      where s.id = backtest_trades_v2.session_id and s.user_id = auth.uid()
     )
   );
 
 -- ─── updated_at trigger ──────────────────────────────────────────────
-create or replace function public.backtest_sessions_touch_updated_at()
+create or replace function public.backtest_sessions_v2_touch_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -134,11 +139,11 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_backtest_sessions_touch on public.backtest_sessions;
-create trigger trg_backtest_sessions_touch
-  before update on public.backtest_sessions
-  for each row execute function public.backtest_sessions_touch_updated_at();
+drop trigger if exists trg_backtest_sessions_v2_touch on public.backtest_sessions_v2;
+create trigger trg_backtest_sessions_v2_touch
+  before update on public.backtest_sessions_v2
+  for each row execute function public.backtest_sessions_v2_touch_updated_at();
 
 -- ─── Grants (anon needs nothing; authenticated is enough) ────────────
-grant select, insert, update, delete on public.backtest_sessions to authenticated;
-grant select, insert,         delete on public.backtest_trades   to authenticated;
+grant select, insert, update, delete on public.backtest_sessions_v2 to authenticated;
+grant select, insert,         delete on public.backtest_trades_v2   to authenticated;

@@ -112,7 +112,7 @@ serve(async (req) => {
 
       // 1. Insert session row.
       const { data: session, error: sessErr } = await supabase
-        .from('backtest_sessions')
+        .from('backtest_sessions_v2')
         .insert({
           user_id: user.id,
           name: payload.name ?? null,
@@ -155,10 +155,10 @@ serve(async (req) => {
           exit_reason: t.exit_reason ?? null,
         }));
 
-        const { error: tradesErr } = await supabase.from('backtest_trades').insert(tradeRows);
+        const { error: tradesErr } = await supabase.from('backtest_trades_v2').insert(tradeRows);
         if (tradesErr) {
           // Best-effort rollback so we don't leave an empty session orphaned.
-          await supabase.from('backtest_sessions').delete().eq('id', session.id);
+          await supabase.from('backtest_sessions_v2').delete().eq('id', session.id);
           return errorResponse(`Failed to save trades: ${tradesErr.message}`, 500);
         }
       }
@@ -172,9 +172,9 @@ serve(async (req) => {
       if (id) {
         const [{ data: session, error: sessErr }, { data: trades, error: tradesErr }] =
           await Promise.all([
-            supabase.from('backtest_sessions').select('*').eq('id', id).single(),
+            supabase.from('backtest_sessions_v2').select('*').eq('id', id).single(),
             supabase
-              .from('backtest_trades')
+              .from('backtest_trades_v2')
               .select('*')
               .eq('session_id', id)
               .order('entry_time', { ascending: true }),
@@ -188,7 +188,7 @@ serve(async (req) => {
 
       // ── List (summary only — no trades) ──
       const { data, error } = await supabase
-        .from('backtest_sessions')
+        .from('backtest_sessions_v2')
         .select(
           'id, name, symbol, interval, asset_class, total_trades, win_rate, net_pnl, profit_factor, created_at',
         )
@@ -202,7 +202,7 @@ serve(async (req) => {
     // ─── DELETE /backtest-sessions?id=… ───────────────────────
     if (req.method === 'DELETE') {
       if (!id) return errorResponse('Query param "id" is required for DELETE');
-      const { error } = await supabase.from('backtest_sessions').delete().eq('id', id);
+      const { error } = await supabase.from('backtest_sessions_v2').delete().eq('id', id);
       if (error) return errorResponse(`Failed to delete session: ${error.message}`, 500);
       return jsonResponse({ ok: true, id });
     }
