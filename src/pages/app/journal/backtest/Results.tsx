@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
 import {
@@ -17,6 +18,7 @@ import {
 } from '@/hooks/useBacktestPersistence';
 
 export const BacktestResults = () => {
+  const navigate = useNavigate();
   const persistence = useBacktestPersistence();
   const [sessions, setSessions] = useState<SavedSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,13 +137,15 @@ export const BacktestResults = () => {
                   <th className="px-4 py-3 text-right">Profit factor</th>
                   <th className="px-4 py-3 text-left">Saved</th>
                   <th className="px-4 py-3" />
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {sessions.map((s) => (
                   <tr
                     key={s.id}
-                    className="border-t border-zinc-900 transition-colors hover:bg-zinc-900/40"
+                    onClick={() => navigate(`/app/journal/backtest/chart?sessionId=${s.id}`)}
+                    className="cursor-pointer border-t border-zinc-900 transition-colors hover:bg-zinc-900/40"
                   >
                     <td className="px-4 py-3 font-medium">
                       {s.name ?? <span className="text-zinc-500 italic">Untitled</span>}
@@ -173,9 +177,12 @@ export const BacktestResults = () => {
                         {new Date(s.created_at).toLocaleDateString()}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-right text-xs text-zinc-600">
+                      → Open
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => handleDelete(s.id)}
+                        onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
                         disabled={deletingId === s.id}
                         className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-rose-950 hover:text-rose-400 disabled:cursor-wait"
                         title="Delete session"

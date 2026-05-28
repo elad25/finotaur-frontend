@@ -21,9 +21,9 @@
  *   - Rule-based strategy executor (Phase 3)
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
@@ -158,6 +158,7 @@ export function BacktestChart({
     updateTakeProfit,
     reset,
     loadTrades,
+    loadSession,
     addPendingOrder,
     cancelPendingOrder,
     fillPendingOrder,
@@ -234,6 +235,68 @@ export function BacktestChart({
     if (state.activePosition) all.push(...positionToMarkers(state.activePosition));
     return all.sort((a, b) => (a.time as number) - (b.time as number));
   }, [state.activePosition, state.closedPositions]);
+
+  // Phase 7: load a saved session from the URL ?sessionId= param.
+  const [searchParams] = useSearchParams();
+  const sessionIdParam = searchParams.get('sessionId');
+  const hydratedRef = useRef<string | null>(null);
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionIdParam) return;
+    if (hydratedRef.current === sessionIdParam) return; // prevent double-hydrate
+    hydratedRef.current = sessionIdParam;
+    let cancelled = false;
+    (async () => {
+      try {
+        const detail = await persistence.loadSession(sessionIdParam);
+        if (cancelled) return;
+        // 1. Restore chart context.
+        const ac = detail.session.asset_class;
+        if (ac === 'futures' || ac === 'stocks' || ac === 'crypto') setAssetClass(ac);
+        setSymbol(detail.session.symbol);
+        setBarInterval(detail.session.interval as Interval);
+        setReplayStart(new Date(detail.session.start_date));
+        setChartMode('replay');
+        // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
+        const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
+          id: t.id,
+          side: t.side,
+          entryTime: Math.floor(new Date(t.entry_time).getTime() / 1000),
+          entryPrice: t.entry_price,
+          size: t.size,
+          stopLoss: t.stop_loss ?? undefined,
+          takeProfit: t.take_profit ?? undefined,
+          exitTime: t.exit_time != null ? Math.floor(new Date(t.exit_time).getTime() / 1000) : undefined,
+          exitPrice: t.exit_price ?? undefined,
+          pnl: t.pnl ?? undefined,
+          pnlPercent: t.pnl_percent ?? undefined,
+          exitReason: t.exit_reason ?? undefined,
+        }));
+        const pendingOrders: PendingOrder[] = (detail.session.pending_orders ?? []).map((o) => ({
+          id: o.id,
+          side: o.side,
+          type: o.type,
+          triggerPrice: o.trigger_price,
+          size: o.size,
+          stopLoss: o.stop_loss ?? undefined,
+          takeProfit: o.take_profit ?? undefined,
+          strategyId: o.strategy_id ?? null,
+          createdAt: o.created_at,
+        }));
+        // 3. Hydrate the session reducer.
+        loadSession({
+          startingBalance: detail.session.initial_balance,
+          closedPositions,
+          pendingOrders,
+        });
+        setHydrateError(null);
+      } catch (err) {
+        if (!cancelled) setHydrateError(err instanceof Error ? err.message : 'Failed to load saved session');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionIdParam, persistence, loadSession]);
 
   // ─── Handlers ────────────────────────────────────────────────
   const handleAssetClassChange = (next: AssetClass) => {
@@ -471,6 +534,13 @@ export function BacktestChart({
   return (
     <div className={containerCls}>
       <CftcDisclosureBanner className="mx-4 mt-3" />
+      {/* Session hydration error — shown when ?sessionId= fetch fails */}
+      {hydrateError && (
+        <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-xs text-rose-300">
+          <span><AlertCircle size={12} className="mr-1.5 inline" />Failed to load saved session: {hydrateError}</span>
+          <button onClick={() => setHydrateError(null)} className="shrink-0 text-rose-400 hover:text-rose-200"><X size={12} /></button>
+        </div>
+      )}
       {/* Top toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
         {/* Exit fullscreen — back to backtest overview (only in fullscreen) */}
