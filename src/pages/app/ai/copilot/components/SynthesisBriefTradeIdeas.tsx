@@ -241,7 +241,7 @@ function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number
         : '—';
 
   return (
-    <tr className="group h-[72px] bg-[#050505] align-middle transition hover:bg-[#060604]">
+    <tr className="group min-h-[72px] bg-[#050505] align-middle transition hover:bg-[#060604]">
       {/* Rank */}
       <td className="border-b border-gold-primary/10 px-2">
         <div className="flex h-7 w-7 items-center justify-center rounded-full border border-gold-primary/50 bg-gold-primary/[0.07] font-mono text-[11px] font-semibold text-gold-primary">
@@ -283,6 +283,22 @@ function TradeIdeaRow({ idea, rank, whyForYou }: { idea: TradeIdea; rank: number
           <p className="mt-1 max-w-[320px] text-[10px] leading-[1.45] text-gold-primary/70">
             Why for you: {whyForYou}
           </p>
+        )}
+        {idea.pattern_evidence && (
+          <details className="mt-1.5 max-w-[320px] text-[10px] leading-[1.45]">
+            <summary className="cursor-pointer text-gold-primary/70 hover:text-gold-primary transition">
+              למה הפטרן הזה? (Why this pattern?)
+            </summary>
+            <div className="mt-1 ps-2 border-s border-gold-primary/20">
+              <p className="text-ink-secondary">{idea.pattern_evidence}</p>
+              {idea.invalidation && (
+                <p className="mt-1 text-ink-tertiary">
+                  <strong className="text-ink-secondary">תנאי שלילה / Invalidation:</strong>{' '}
+                  {idea.invalidation}
+                </p>
+              )}
+            </div>
+          </details>
         )}
       </td>
 
