@@ -31,6 +31,7 @@
 //   - user-invoked          (Bearer = user JWT, body = {userId})                 → sync one user
 //   - cron                  (Bearer = service-role, body = {mode:'cron'})        → loop all active IB connections
 //   - backfill_from_trades  (Bearer = user JWT, body = {userId, mode:'backfill_from_trades', days?:365}) → derive historical snapshots from trades
+//   - backfill_with_marks   (Bearer = user JWT, body = {userId, mode:'backfill_with_marks', days?:30}) → mark-to-market historical reconstruction using Polygon closes via shared cache
 //
 // Auth: dualAuth pattern (inlined). Accepts vault.secret_api_key OR SUPABASE_SERVICE_ROLE_KEY
 // for cron path, falls through to Supabase JWT validation for user path.
@@ -652,6 +653,317 @@ async function backfillFromTrades(userId: string, days: number): Promise<{ inser
   };
 }
 
+// Backfill historical snapshots using mark-to-market prices from Polygon.
+// Computes total_value(d) = cash(d) + Σ(holding[t](d).qty × close[t][d] × multiplier[t])
+// where multiplier=100 for options, 1 for stocks/ETFs. Close prices are fetched from Polygon
+// and cached in the shared postgres table `polygon_close_cache` to avoid redundant API calls.
+async function backfillWithMarks(userId: string, days: number): Promise<{
+  inserted: number;
+  skipped: number;
+  range: string;
+  marks_cache_hit: number;
+  marks_cache_miss: number;
+  tickers_priced: number;
+  error?: string;
+}> {
+  const POLYGON_API_KEY = Deno.env.get('POLYGON_API_KEY');
+  if (!POLYGON_API_KEY) {
+    console.log('[ib-sync backfill-marks] POLYGON_API_KEY not set');
+    return { inserted: 0, skipped: 0, range: '', marks_cache_hit: 0, marks_cache_miss: 0, tickers_priced: 0, error: 'missing_polygon_api_key' };
+  }
+
+  // 1. Fetch broker_connection with last_positions
+  const { data: conn, error: connErr } = await supabaseAdmin
+    .from('broker_connections').select('id, connection_data')
+    .eq('user_id', userId).eq('broker', 'interactive_brokers').eq('is_active', true).maybeSingle();
+  if (connErr || !conn) return { inserted: 0, skipped: 0, range: '', marks_cache_hit: 0, marks_cache_miss: 0, tickers_priced: 0, error: 'no_active_connection' };
+
+  // 2. currentCash from last_positions
+  const lastPositions = (conn.connection_data?.last_positions as Record<string, unknown>[]) || [];
+  const { cash: currentCash } = computeTotalsFromPositions(lastPositions);
+
+  // 3. Build current holdings map (exclude CASH rows)
+  const currentHoldings = new Map<string, { qty: number; assetClass: string }>();
+  for (const p of lastPositions) {
+    const ac = String(p.AssetClass || '').toUpperCase();
+    if (ac === 'CASH') continue;
+    const sym = String(p.Symbol || '');
+    if (!sym) continue;
+    const qty = Number(p.Quantity) || 0;
+    if (qty !== 0) currentHoldings.set(sym, { qty, assetClass: String(p.AssetClass || 'STK') });
+  }
+
+  // 4. Fetch trades — need symbol + asset_class for qty reconstruction
+  const { data: tradesRaw, error: tradesErr } = await supabaseAdmin
+    .from('trades')
+    .select('open_at, side, quantity, entry_price, fees, symbol, asset_class, underlying_symbol')
+    .eq('user_id', userId).eq('broker', 'interactive_brokers')
+    .order('open_at', { ascending: true });
+  if (tradesErr) return { inserted: 0, skipped: 0, range: '', marks_cache_hit: 0, marks_cache_miss: 0, tickers_priced: 0, error: tradesErr.message };
+  const trades = tradesRaw || [];
+
+  // Edge case: no trades at all
+  if (trades.length === 0) {
+    console.log('[ib-sync backfill-marks] no trades found for user');
+    return { inserted: 0, skipped: 0, range: '', marks_cache_hit: 0, marks_cache_miss: 0, tickers_priced: 0, error: 'no_trades' };
+  }
+
+  // 5. Date range
+  const endDate = new Date();
+  endDate.setUTCHours(0, 0, 0, 0); // midnight UTC
+  const startDate = new Date(endDate);
+  startDate.setUTCDate(endDate.getUTCDate() - days);
+  const startStr = startDate.toISOString().slice(0, 10);
+  const endStr = endDate.toISOString().slice(0, 10);
+
+  // 6a. dailyNetFlow (buy = negative, sell = positive; fees subtracted) — same sign as v1
+  const dailyNetFlow = new Map<string, number>();
+  // 6b. dailyQtyDelta: date → symbol → signed qty delta (buy = +, sell = -)
+  const dailyQtyDelta = new Map<string, Map<string, number>>();
+  // Also collect asset class per symbol from trades (for multiplier detection)
+  const tradeAssetClass = new Map<string, string>();
+
+  for (const t of trades) {
+    const dt = t.open_at ? String(t.open_at).slice(0, 10) : null;
+    if (!dt) continue;
+
+    const sym = String(t.symbol || '');
+    const qty = Number(t.quantity) || 0;
+    const px = Number(t.entry_price) || 0;
+    const fee = Number(t.fees) || 0;
+    const sideUp = String(t.side || '').toUpperCase();
+    const isBuy = sideUp === 'BUY' || sideUp === 'LONG';
+
+    // net flow: buy = outflow (negative), sell = inflow (positive); fees always reduce
+    const sign = isBuy ? -1 : 1;
+    const flow = sign * (qty * px) - fee;
+    dailyNetFlow.set(dt, (dailyNetFlow.get(dt) || 0) + flow);
+
+    // qty delta: buy = positive, sell = negative
+    if (sym) {
+      const qtySign = isBuy ? 1 : -1;
+      const dayMap = dailyQtyDelta.get(dt) ?? new Map<string, number>();
+      dayMap.set(sym, (dayMap.get(sym) || 0) + qtySign * qty);
+      dailyQtyDelta.set(dt, dayMap);
+
+      if (t.asset_class && !tradeAssetClass.has(sym)) {
+        tradeAssetClass.set(sym, String(t.asset_class));
+      }
+    }
+  }
+
+  // 7. Unique tickers: union of currentHoldings + all symbols from dailyQtyDelta within backfill window
+  const uniqueTickers = new Set<string>();
+  for (const sym of currentHoldings.keys()) uniqueTickers.add(sym);
+  for (const [dt, dayMap] of dailyQtyDelta.entries()) {
+    if (dt >= startStr && dt <= endStr) {
+      for (const sym of dayMap.keys()) uniqueTickers.add(sym);
+    }
+  }
+
+  // 8. Fetch marks per ticker with polygon_close_cache
+  // marks: ticker → date(YYYY-MM-DD) → close | null
+  const allMarks = new Map<string, Map<string, number | null>>();
+  let marksCacheHit = 0;
+  let marksCacheMiss = 0;
+
+  // Generate array of all dates in window (YYYY-MM-DD) for cache miss detection
+  const windowDates: string[] = [];
+  for (let i = 0; i <= days; i++) {
+    const d = new Date(startDate);
+    d.setUTCDate(startDate.getUTCDate() + i);
+    windowDates.push(d.toISOString().slice(0, 10));
+  }
+
+  for (const ticker of uniqueTickers) {
+    const tickerMarks = new Map<string, number | null>();
+
+    // Query cache
+    const { data: cached } = await supabaseAdmin
+      .from('polygon_close_cache')
+      .select('date, close')
+      .eq('ticker', ticker)
+      .gte('date', startStr)
+      .lte('date', endStr);
+
+    const cachedDates = new Set<string>();
+    for (const row of (cached || [])) {
+      const dateStr = String(row.date).slice(0, 10);
+      tickerMarks.set(dateStr, row.close !== null && row.close !== undefined ? Number(row.close) : null);
+      cachedDates.add(dateStr);
+      marksCacheHit++;
+    }
+
+    // Find uncached dates
+    const uncachedDates = windowDates.filter(d => !cachedDates.has(d));
+    marksCacheMiss += uncachedDates.length;
+
+    if (uncachedDates.length > 0) {
+      // Fetch from Polygon (one call covers the full range)
+      const polygonUrl = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${startStr}/${endStr}?adjusted=true&sort=asc&limit=5000&apiKey=${POLYGON_API_KEY}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30_000);
+      let polygonResults: Array<{ t: number; c: number }> = [];
+      try {
+        const res = await fetch(polygonUrl, { signal: controller.signal });
+        if (res.ok) {
+          const json = await res.json();
+          polygonResults = (json.results as Array<{ t: number; c: number }>) || [];
+        } else {
+          console.log(`[ib-sync backfill-marks] Polygon HTTP ${res.status} for ${ticker} — will use null marks`);
+        }
+      } catch (e) {
+        console.log(`[ib-sync backfill-marks] Polygon fetch error for ${ticker}:`, e instanceof Error ? e.message : String(e));
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // Build fetched date → close map
+      const fetchedMap = new Map<string, number>();
+      for (const bar of polygonResults) {
+        const dateStr = new Date(bar.t).toISOString().slice(0, 10);
+        fetchedMap.set(dateStr, bar.c);
+      }
+
+      console.log(`[ib-sync backfill-marks] ${ticker}: cache_miss=${uncachedDates.length}, polygon_bars=${polygonResults.length}`);
+
+      // Bulk upsert: fetched dates get real close; other uncached dates get null (known no-trading)
+      const upsertRows: Array<{ ticker: string; date: string; close: number | null; fetched_at: string }> = [];
+      const nowIso = new Date().toISOString();
+      for (const d of uncachedDates) {
+        const close = fetchedMap.has(d) ? fetchedMap.get(d)! : null;
+        tickerMarks.set(d, close);
+        upsertRows.push({ ticker, date: d, close: close !== undefined ? close : null, fetched_at: nowIso });
+      }
+      if (upsertRows.length > 0) {
+        const { error: upsertErr } = await supabaseAdmin
+          .from('polygon_close_cache')
+          .upsert(upsertRows, { onConflict: 'ticker,date', ignoreDuplicates: false });
+        if (upsertErr) console.log(`[ib-sync backfill-marks] cache upsert error for ${ticker}:`, upsertErr.message);
+      }
+
+      // Throttle between tickers
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    allMarks.set(ticker, tickerMarks);
+  }
+
+  // 9. Compute multipliers (100 for options, 1 for everything else)
+  const multipliers = new Map<string, number>();
+  for (const ticker of uniqueTickers) {
+    // Check current holdings first, then trade asset class
+    const acFromHoldings = currentHoldings.get(ticker)?.assetClass ?? '';
+    const acFromTrades = tradeAssetClass.get(ticker) ?? '';
+    const ac = (acFromHoldings || acFromTrades).toLowerCase();
+    const isOption = ac === 'opt' || ac === 'option' || ac === 'options';
+    multipliers.set(ticker, isOption ? 100 : 1);
+  }
+
+  // Helper: last-known-good close price at or before date d, within 7-day look-back
+  function priorClose(ticker: string, d: string): number | null {
+    const tickerMap = allMarks.get(ticker);
+    if (!tickerMap) return null;
+    // Try the date itself first, then walk back up to 7 days
+    const dDate = new Date(d);
+    for (let back = 0; back <= 7; back++) {
+      const candidate = new Date(dDate);
+      candidate.setUTCDate(dDate.getUTCDate() - back);
+      const candidateStr = candidate.toISOString().slice(0, 10);
+      if (tickerMap.has(candidateStr)) {
+        const val = tickerMap.get(candidateStr);
+        if (val !== null && val !== undefined) return val;
+      }
+    }
+    return null; // no usable price found → caller treats as 0
+  }
+
+  // 10. Walk backward
+  const reconstructedAt = new Date().toISOString();
+  const rows: Record<string, unknown>[] = [];
+  let cash = currentCash;
+  // Initialize holdings from currentHoldings
+  const holdings = new Map<string, number>();
+  for (const [sym, h] of currentHoldings.entries()) holdings.set(sym, h.qty);
+
+  for (let i = 0; i <= days; i++) {
+    const d = new Date(endDate);
+    d.setUTCDate(endDate.getUTCDate() - i);
+    const dt = d.toISOString().slice(0, 10);
+
+    // Compute mark-to-market total value
+    let positionsValue = 0;
+    let marksUsed = 0;
+    const multiplierOverrides: Record<string, number> = {};
+    for (const [sym, qty] of holdings.entries()) {
+      if (qty === 0) continue;
+      const close = priorClose(sym, dt);
+      const multiplier = multipliers.get(sym) ?? 1;
+      const effectiveClose = close ?? 0;
+      if (close === null) {
+        console.log(`[ib-sync backfill-marks] warning: no price for ${sym} on ${dt} — using 0`);
+      }
+      positionsValue += qty * effectiveClose * multiplier;
+      marksUsed++;
+      if (multiplier !== 1) multiplierOverrides[sym] = multiplier;
+    }
+
+    const totalValue = Math.max(0, cash + positionsValue);
+
+    rows.push({
+      user_id: userId,
+      broker_connection_id: conn.id,
+      snapshot_date: dt,
+      total_value: totalValue,
+      cash,
+      buying_power: cash,
+      source: 'backfill_with_marks',
+      metadata: {
+        reconstructed_at: reconstructedAt,
+        marks_used: marksUsed,
+        multiplier_overrides: Object.keys(multiplierOverrides).length > 0 ? multiplierOverrides : undefined,
+      },
+    });
+
+    // Undo this day's deltas to reconstruct prior day state
+    const flow = dailyNetFlow.get(dt) || 0;
+    cash -= flow;
+
+    const dayQtyDeltas = dailyQtyDelta.get(dt);
+    if (dayQtyDeltas) {
+      for (const [sym, delta] of dayQtyDeltas.entries()) {
+        holdings.set(sym, (holdings.get(sym) || 0) - delta);
+      }
+    }
+  }
+
+  // 11. Insert rows (23505 → skip)
+  let inserted = 0;
+  let skipped = 0;
+  for (const row of rows) {
+    const { error } = await supabaseAdmin
+      .from('portfolio_snapshots')
+      .insert(row);
+    if (error) {
+      if (error.code === '23505') skipped++;
+      else console.error('[ib-sync backfill-marks] insert error:', error.message);
+    } else inserted++;
+  }
+
+  const tickers_priced = uniqueTickers.size;
+  console.log(`[ib-sync backfill-marks] done: inserted=${inserted} skipped=${skipped} cache_hit=${marksCacheHit} cache_miss=${marksCacheMiss} tickers=${tickers_priced}`);
+
+  // 12. Return
+  return {
+    inserted,
+    skipped,
+    range: `${startStr} → ${endStr}`,
+    marks_cache_hit: marksCacheHit,
+    marks_cache_miss: marksCacheMiss,
+    tickers_priced,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   const auth = await authenticate(req, supabaseAdmin);
@@ -659,6 +971,16 @@ Deno.serve(async (req: Request) => {
 
   let body: { userId?: string; mode?: string; days?: number };
   try { body = await req.json(); } catch { body = {}; }
+
+  // BACKFILL WITH MARKS MODE: mark-to-market historical reconstruction using Polygon closes
+  if (body.mode === 'backfill_with_marks') {
+    const { userId } = body;
+    if (!userId) return new Response(JSON.stringify({ error: 'userId required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!auth.isCron && auth.userId !== userId) return new Response(JSON.stringify({ error: 'Forbidden: userId mismatch' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    const days = body.days ?? 30;
+    const result = await backfillWithMarks(userId, days);
+    return new Response(JSON.stringify(result), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
 
   // BACKFILL MODE: reconstruct historical portfolio_snapshots from trades (one-shot bootstrap)
   if (body.mode === 'backfill_from_trades') {
