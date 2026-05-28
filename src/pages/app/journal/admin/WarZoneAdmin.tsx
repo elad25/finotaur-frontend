@@ -7,11 +7,15 @@
 // WAR ZONE reports — why it was mentioned and how it
 // performed over 30/60/90 days.
 //
-// Auth: Supabase session JWT → requireAdminWarzone middleware
-// Data: Three backend endpoints under /api/warzone/admin/mentions
+// Auth: Supabase session JWT — RLS policy allows admin reads
+// Data: Direct Supabase PostgREST queries on public.warzone_ticker_mentions
+//
+// v2.0 (2026-05-28): direct Supabase queries via PostgREST + RLS
+//   — was /api/warzone/admin/* routes (404 after parallel Railway
+//     deploy overwrote our backend).
 // =====================================================
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import {
@@ -31,7 +35,7 @@ import {
 import { Button } from '@/components/ds/Button';
 import { Card } from '@/components/ds/Card';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://finotaur-server-production.up.railway.app';
+// No API_BASE needed — all queries go directly to Supabase via PostgREST.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,12 +107,23 @@ interface PaginatedMentions {
 type SortBy = 'mentioned_at' | 'return_30d_desc' | 'return_30d_asc' | 'alpha_90d_desc' | 'win_loss';
 
 // ---------------------------------------------------------------------------
-// Auth helper — copies NewsletterSub pattern (supabase.auth.getSession)
+// Aggregate helpers (used for client-side stats computation)
 // ---------------------------------------------------------------------------
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+function mean(arr: number[]): number | null {
+  if (arr.length === 0) return null;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+function median(arr: number[]): number | null {
+  if (arr.length === 0) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function round2(val: number | null): number | null {
+  if (val === null) return null;
+  return Math.round(val * 100) / 100;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,8 +299,7 @@ interface TooltipState {
 const DrilldownModal: React.FC<{
   ticker: string;
   onClose: () => void;
-  authHeaders: HeadersInit;
-}> = ({ ticker, onClose, authHeaders }) => {
+}> = ({ ticker, onClose }) => {
   // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -299,13 +313,54 @@ const DrilldownModal: React.FC<{
 
   const { data, isLoading, isError } = useQuery<TickerDrilldown>({
     queryKey: ['warzone-drilldown', ticker],
-    queryFn: async () => {
-      const res = await fetch(
-        `${API_BASE}/api/warzone/admin/mentions/ticker/${encodeURIComponent(ticker)}`,
-        { headers: authHeaders },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+    queryFn: async (): Promise<TickerDrilldown> => {
+      const { data: rows, error } = await supabase
+        .from('warzone_ticker_mentions')
+        .select(
+          'id, ticker, report_date, mention_type, source_firm, reason_short, reason_full, price_at_mention, change_30d_pct, change_60d_pct, change_90d_pct, alpha_90d_pct',
+        )
+        .eq('ticker', ticker)
+        .order('report_date', { ascending: false });
+
+      if (error) throw new Error(error.message);
+
+      const safeRows = rows ?? [];
+
+      const mentions: WarzoneMention[] = safeRows.map((r) => ({
+        id: r.id,
+        ticker: r.ticker,
+        mentioned_at: r.report_date,
+        mention_type: r.mention_type as MentionType,
+        firm_source: r.source_firm ?? null,
+        reason: r.reason_short ?? '',
+        price_at_mention: r.price_at_mention ?? null,
+        return_30d: round2(r.change_30d_pct ?? null),
+        return_60d: round2(r.change_60d_pct ?? null),
+        return_90d: round2(r.change_90d_pct ?? null),
+        alpha_90d_pct: round2(r.alpha_90d_pct ?? null),
+      }));
+
+      const returns30 = safeRows
+        .map((r) => r.change_30d_pct)
+        .filter((v): v is number => v !== null && v !== undefined);
+      const returns90 = safeRows
+        .map((r) => r.change_90d_pct)
+        .filter((v): v is number => v !== null && v !== undefined);
+
+      const sortedDates = safeRows.map((r) => r.report_date).sort();
+
+      return {
+        ticker,
+        company_name: null,
+        total_mentions: safeRows.length,
+        first_mention: sortedDates[0] ?? null,
+        last_mention: sortedDates[sortedDates.length - 1] ?? null,
+        avg_return_30d: round2(mean(returns30)),
+        avg_return_90d: round2(mean(returns90)),
+        best_single_mention_30d: returns30.length > 0 ? round2(Math.max(...returns30)) : null,
+        worst_single_mention_30d: returns30.length > 0 ? round2(Math.min(...returns30)) : null,
+        mentions,
+      };
     },
     staleTime: 30_000,
   });
@@ -469,12 +524,6 @@ const WarZoneAdmin: React.FC = () => {
   // Heatmap tooltip
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, cell: null });
 
-  // Auth headers — fetched once and cached in ref (re-fetched on expiry isn't needed for admin)
-  const authHeadersRef = useRef<HeadersInit>({});
-  useEffect(() => {
-    getAuthHeaders().then((h) => { authHeadersRef.current = h; });
-  }, []);
-
   const queryClient = useQueryClient();
 
   // Debounce ticker search 300ms
@@ -496,13 +545,13 @@ const WarZoneAdmin: React.FC = () => {
     return () => clearInterval(interval);
   }, [autoRefresh, queryClient]);
 
-  // Build sort params
-  const sortParamMap: Record<SortBy, { sortBy: string; sortDir: string }> = {
-    mentioned_at: { sortBy: 'mentioned_at', sortDir: 'desc' },
-    return_30d_desc: { sortBy: 'return_30d', sortDir: 'desc' },
-    return_30d_asc: { sortBy: 'return_30d', sortDir: 'asc' },
-    alpha_90d_desc: { sortBy: 'alpha_90d_pct', sortDir: 'desc' },
-    win_loss: { sortBy: 'return_30d', sortDir: 'desc' },
+  // Map SortBy enum to DB column + direction
+  const sortDbMap: Record<SortBy, { column: string; ascending: boolean }> = {
+    mentioned_at:    { column: 'report_date',    ascending: false },
+    return_30d_desc: { column: 'change_30d_pct', ascending: false },
+    return_30d_asc:  { column: 'change_30d_pct', ascending: true  },
+    alpha_90d_desc:  { column: 'alpha_90d_pct',  ascending: false },
+    win_loss:        { column: 'change_30d_pct', ascending: false }, // fallback: PostgREST can't sort by arbitrary expression
   };
 
   // Query: paginated mentions list
@@ -518,41 +567,144 @@ const WarZoneAdmin: React.FC = () => {
     refetch: refetchMentions,
   } = useQuery<PaginatedMentions>({
     queryKey: mentionsQueryKey,
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        from: dateFrom,
-        to: dateTo,
-        limit: String(pageSize),
-        offset: String(offset),
-        ...sortParamMap[sortBy],
-      });
-      if (mentionTypeFilter !== 'all') params.set('type', mentionTypeFilter);
-      if (debouncedTicker) params.set('ticker', debouncedTicker.toUpperCase());
+    queryFn: async (): Promise<PaginatedMentions> => {
+      const { column, ascending } = sortDbMap[sortBy];
 
-      const res = await fetch(
-        `${API_BASE}/api/warzone/admin/mentions?${params.toString()}`,
-        { headers: authHeadersRef.current },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+      let q = supabase
+        .from('warzone_ticker_mentions')
+        .select(
+          'id, ticker, report_date, mention_type, source_firm, reason_short, price_at_mention, change_30d_pct, change_60d_pct, change_90d_pct, alpha_90d_pct',
+          { count: 'exact' },
+        )
+        .gte('report_date', dateFrom)
+        .lte('report_date', dateTo)
+        .order(column, { ascending, nullsFirst: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (mentionTypeFilter !== 'all') {
+        q = q.eq('mention_type', mentionTypeFilter);
+      }
+      if (debouncedTicker) {
+        q = q.ilike('ticker', `%${debouncedTicker.toUpperCase()}%`);
+      }
+
+      const { data: rows, count, error } = await q;
+      if (error) throw new Error(error.message);
+
+      const mappedRows: WarzoneMention[] = (rows ?? []).map((r) => ({
+        id: r.id,
+        ticker: r.ticker,
+        mentioned_at: r.report_date,
+        mention_type: r.mention_type as MentionType,
+        firm_source: r.source_firm ?? null,
+        reason: r.reason_short ?? '',
+        price_at_mention: r.price_at_mention ?? null,
+        return_30d: round2(r.change_30d_pct ?? null),
+        return_60d: round2(r.change_60d_pct ?? null),
+        return_90d: round2(r.change_90d_pct ?? null),
+        alpha_90d_pct: round2(r.alpha_90d_pct ?? null),
+      }));
+
+      return { data: mappedRows, total: count ?? 0, offset, limit: pageSize };
     },
     staleTime: 60_000,
   });
 
-  // Query: aggregates
+  // Query: aggregates (computed client-side from a minimal full-range fetch)
   const {
     data: aggregates,
     isLoading: aggregatesLoading,
   } = useQuery<MentionAggregates>({
     queryKey: ['warzone-aggregates', dateFrom, dateTo],
-    queryFn: async () => {
-      const params = new URLSearchParams({ from: dateFrom, to: dateTo });
-      const res = await fetch(
-        `${API_BASE}/api/warzone/admin/mentions/aggregates?${params.toString()}`,
-        { headers: authHeadersRef.current },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
+    queryFn: async (): Promise<MentionAggregates> => {
+      const { data: rows, error } = await supabase
+        .from('warzone_ticker_mentions')
+        .select('ticker, mention_type, change_30d_pct, change_60d_pct, change_90d_pct')
+        .gte('report_date', dateFrom)
+        .lte('report_date', dateTo);
+
+      if (error) throw new Error(error.message);
+
+      const safeRows = rows ?? [];
+      const MENTION_TYPES: MentionType[] = [
+        'analyst_rating', 'significant_catalyst', 'insider_buy',
+        'earnings', 'institutional_13f', 'tactical_macro',
+      ];
+
+      // Top-level stats
+      const total_mentions = safeRows.length;
+      const active_tickers = new Set(safeRows.map((r) => r.ticker)).size;
+
+      const returns30 = safeRows
+        .map((r) => r.change_30d_pct)
+        .filter((v): v is number => v !== null && v !== undefined);
+      const avg_return_30d = round2(mean(returns30));
+      const win_rate_30d =
+        returns30.length > 0
+          ? round2((returns30.filter((v) => v > 0).length / returns30.length) * 100)
+          : null;
+
+      // Per-type avg 30d → derive best/worst
+      const typeAvgs: Array<{ type: MentionType; avg: number | null }> = MENTION_TYPES.map((t) => {
+        const vals = safeRows
+          .filter((r) => r.mention_type === t)
+          .map((r) => r.change_30d_pct)
+          .filter((v): v is number => v !== null && v !== undefined);
+        return { type: t, avg: round2(mean(vals)) };
+      });
+      const withData = typeAvgs.filter((x) => x.avg !== null) as Array<{ type: MentionType; avg: number }>;
+      let best_mention_type: string | null = null;
+      let best_mention_type_avg: number | null = null;
+      let worst_mention_type: string | null = null;
+      let worst_mention_type_avg: number | null = null;
+      if (withData.length > 0) {
+        const best = withData.reduce((a, b) => (b.avg > a.avg ? b : a));
+        const worst = withData.reduce((a, b) => (b.avg < a.avg ? b : a));
+        best_mention_type = best.type;
+        best_mention_type_avg = best.avg;
+        worst_mention_type = worst.type;
+        worst_mention_type_avg = worst.avg;
+      }
+
+      // Heatmap: 6 types × 3 timeframes = 18 cells
+      const TIMEFRAMES: Array<{ key: '30d' | '60d' | '90d'; col: 'change_30d_pct' | 'change_60d_pct' | 'change_90d_pct' }> = [
+        { key: '30d', col: 'change_30d_pct' },
+        { key: '60d', col: 'change_60d_pct' },
+        { key: '90d', col: 'change_90d_pct' },
+      ];
+
+      const heatmap: HeatmapCell[] = [];
+      for (const mentionType of MENTION_TYPES) {
+        const typeRows = safeRows.filter((r) => r.mention_type === mentionType);
+        for (const { key: timeframe, col } of TIMEFRAMES) {
+          const vals = typeRows
+            .map((r) => r[col])
+            .filter((v): v is number => v !== null && v !== undefined);
+          const count = vals.length;
+          heatmap.push({
+            mention_type: mentionType,
+            timeframe,
+            avg_return: round2(mean(vals)),
+            count,
+            median_return: round2(median(vals)),
+            win_rate: count > 0
+              ? round2((vals.filter((v) => v > 0).length / count) * 100)
+              : null,
+          });
+        }
+      }
+
+      return {
+        total_mentions,
+        active_tickers,
+        avg_return_30d,
+        win_rate_30d,
+        best_mention_type,
+        best_mention_type_avg,
+        worst_mention_type,
+        worst_mention_type_avg,
+        heatmap,
+      };
     },
     staleTime: 60_000,
   });
@@ -594,7 +746,6 @@ const WarZoneAdmin: React.FC = () => {
         <DrilldownModal
           ticker={drilldownTicker}
           onClose={() => setDrilldownTicker(null)}
-          authHeaders={authHeadersRef.current}
         />
       )}
 
