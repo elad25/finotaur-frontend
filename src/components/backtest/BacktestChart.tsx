@@ -589,6 +589,7 @@ export function BacktestChart({
               hidden globally because clicking it in Live mode triggers a browser
               freeze (CDP timeout 30s). Investigation deferred to Sprint D. To
               re-enable, remove the `false &&` prefix from the gate below. */}
+          {/* eslint-disable-next-line no-constant-binary-expression */}
           {false && chartMode === 'live' && (
           <div className="relative">
             <button
