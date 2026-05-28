@@ -77,26 +77,23 @@ export function useReplayPlayback({
   const onAdvanceRef = useRef(onAdvance);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Tracks whether we've already synced from initialCursor — so we only do
-  // the initial jump once when bars finish loading async, and don't fight
-  // the user's manual cursor moves afterwards.
-  const initialSyncedRef = useRef(false);
-
   useEffect(() => { cursorRef.current = cursor; }, [cursor]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
   useEffect(() => { maxIndexRef.current = maxIndex; }, [maxIndex]);
   useEffect(() => { onAdvanceRef.current = onAdvance; }, [onAdvance]);
 
-  // Sync cursor with initialCursor on its first valid value.
-  // Background: callers commonly do `useReplayPlayback({ initialCursor: bars.indexOf(now) })`
-  // where bars are fetched async. On first render bars is empty → initialCursor = 0 or -1.
-  // On second render bars loaded → initialCursor jumps to (say) 200. Without this effect,
-  // cursor would stay at the first-render value and PLAY would try to "advance" through
-  // bars already shown — lightweight-charts rejects that with "Cannot update oldest data".
+  // Sync cursor with initialCursor whenever the caller passes a different
+  // value. Use case: bars load async, so `initialCursor` flips from a
+  // placeholder (e.g. 0 while loading) to the true start index (e.g. 200)
+  // once the bar window is ready. useState ignores subsequent initial
+  // values, so we explicitly re-seed cursor here.
+  //
+  // This effect re-runs only when initialCursor actually changes — user
+  // actions (play/pause/step) mutate `cursor` but not `initialCursor`, so
+  // we don't fight them. The caller (BacktestReplayChart) passes a stable
+  // `startIndex` derived from the loaded bars; that stays put unless the
+  // window itself is reloaded (date change).
   useEffect(() => {
-    if (initialSyncedRef.current) return;
-    if (initialCursor < 0) return;
-    initialSyncedRef.current = true;
     cursorRef.current = initialCursor;
     setCursorState(initialCursor);
   }, [initialCursor]);
