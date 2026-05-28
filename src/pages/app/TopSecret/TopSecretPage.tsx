@@ -10,6 +10,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import TopSecretErrorBoundary from './TopSecretErrorBoundary';
 
 // Lazy load components
 const TopSecretLanding = lazy(() => import('./TopSecretLanding'));
@@ -26,9 +27,19 @@ interface TopSecretStatus {
   expiresAt: Date | null;
 }
 
-type PageState = 'loading' | 'checking_payment' | 'payment_success' | 'show_landing' | 'show_dashboard';
+type PageState = 'loading' | 'checking_payment' | 'payment_success' | 'show_landing' | 'show_dashboard' | 'error';
 
 const PAYMENT_SUCCESS_DELAY = 2000;
+const SUPABASE_TIMEOUT_MS = 15000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms)
+    ),
+  ]);
+}
 
 // ========================================
 // MEMOIZED LOADING COMPONENT
@@ -88,6 +99,32 @@ const PaymentSuccessMessage = memo(function PaymentSuccessMessage({
 });
 
 // ========================================
+// MEMOIZED ERROR STATE COMPONENT
+// ========================================
+
+const ErrorState = memo(function ErrorState() {
+  return (
+    <div className="min-h-screen bg-[#0a0b0f] flex items-center justify-center p-4">
+      <div className="text-center max-w-md">
+        <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-6">
+          <Loader2 className="w-8 h-8 text-amber-400" />
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-3">Taking longer than expected</h2>
+        <p className="text-gray-400 mb-6">
+          We couldn&apos;t reach the server. Check your connection and try again.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-3 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-black font-semibold hover:from-amber-400 hover:to-orange-400 transition-all"
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// ========================================
 // MAIN COMPONENT
 // ========================================
 
@@ -109,11 +146,15 @@ export default function TopSecretPage() {
     if (!user?.id) return null;
 
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('role, top_secret_enabled, top_secret_status, top_secret_expires_at')
-        .eq('id', user.id)
-        .maybeSingle();
+      const { data: profile, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('role, top_secret_enabled, top_secret_status, top_secret_expires_at')
+          .eq('id', user.id)
+          .maybeSingle(),
+        SUPABASE_TIMEOUT_MS,
+        'checkTopSecretStatus'
+      );
 
       if (error) throw error;
 
@@ -177,6 +218,13 @@ export default function TopSecretPage() {
       // Check current status
       const currentStatus = await checkTopSecretStatus();
 
+      // Hard failure (timeout / network) — show error UI with retry
+      if (currentStatus === null && user?.id) {
+        console.error('[TopSecret] Failed to load profile status; showing error UI');
+        setPageState('error');
+        return;
+      }
+
       // Admin redirect
       if (currentStatus?.isAdmin) {
         navigate('/app/top-secret/admin', { replace: true });
@@ -217,14 +265,21 @@ export default function TopSecretPage() {
     return <PaymentSuccessMessage />;
   }
 
+  // Error state
+  if (pageState === 'error') {
+    return <ErrorState />;
+  }
+
   // Main content
   return (
-    <Suspense fallback={<PageLoader />}>
-      {pageState === 'show_dashboard' ? (
-        <TopSecretDashboard userId={user?.id} />
-      ) : (
-        <TopSecretLanding />
-      )}
-    </Suspense>
+    <TopSecretErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        {pageState === 'show_dashboard' ? (
+          <TopSecretDashboard userId={user?.id} />
+        ) : (
+          <TopSecretLanding />
+        )}
+      </Suspense>
+    </TopSecretErrorBoundary>
   );
 }
