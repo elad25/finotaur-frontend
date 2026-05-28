@@ -190,6 +190,7 @@ const BacktestMonteCarlo = lazy(() => import("@/pages/app/journal/backtest/Monte
 const BacktestWalkForward = lazy(() => import("@/pages/app/journal/backtest/Walkforward"));
 const BacktestOptimization = lazy(() => import("@/pages/app/journal/backtest/Optimization"));
 const BacktestReplay = lazy(() => import("@/pages/app/journal/backtest/Replay"));
+const BacktestTrades = lazy(() => import("@/pages/app/journal/backtest/BacktestTrades"));
 
 // Affiliate Center Pages
 const AffiliateOverview = lazy(() => import("@/features/affiliate/pages/Affiliateoverview"));
@@ -561,6 +562,7 @@ function AppContent() {
           <Route path="journal/backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />
           <Route path="journal/backtest/chart" element={<BacktestRoute><BacktestChart /></BacktestRoute>} />
           <Route path="journal/backtest/results" element={<BacktestRoute><BacktestResults /></BacktestRoute>} />
+          <Route path="journal/backtest/trades" element={<BacktestRoute><BacktestTrades /></BacktestRoute>} />
           <Route path="journal/backtest/builder" element={<BacktestRoute><BacktestBuilder /></BacktestRoute>} />
           <Route path="journal/backtest/data" element={<BacktestRoute><BacktestData /></BacktestRoute>} />
           <Route path="journal/backtest/analytics" element={<BacktestRoute><BacktestAnalytics /></BacktestRoute>} />

@@ -249,11 +249,13 @@ ai: {
     beta: false,
     subNav: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview' },
+      { label: 'My Trades', path: '/app/journal/backtest/trades' },
       { label: 'New Backtest', path: '/app/journal/backtest/new' },
       { label: 'Results', path: '/app/journal/backtest/results' },
     ],
     sidebar: [
       { label: 'Dashboard', path: '/app/journal/backtest/overview', icon: LayoutDashboard },
+      { label: 'My Trades', path: '/app/journal/backtest/trades', icon: BarChart3 },
       { label: 'New Backtest', path: '/app/journal/backtest/new', icon: FlaskConical },
       { label: 'My Backtests', path: '/app/journal/backtest/results', icon: FileText },
       { label: 'Strategy Builder', path: '/app/journal/backtest/builder', icon: Code },

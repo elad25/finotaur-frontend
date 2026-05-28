@@ -29,6 +29,7 @@ import {
 import { BORDER_STYLE, CARD_STYLE, ANIMATION_STYLES } from "@/constants/dashboard";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DashboardKpiCard } from "@/components/DashboardKpiCard";
+import { useBacktestStats } from "@/hooks/useBacktestStats";
 
 // ================================================
 // LAZY LOAD HEAVY COMPONENTS
@@ -123,79 +124,143 @@ interface BacktestStats {
 }
 
 // ================================================
-// MOCK BACKTEST DATA (replace with actual API call)
+// REAL BACKTEST STATS — adapter over useBacktestStats hook
+// Phase 7: replaces mock data with aggregate of all saved backtest sessions
+// from backtest_sessions_v2 + backtest_trades_v2 (RLS-scoped).
 // ================================================
 
 const useMockBacktestStats = (): { data: BacktestStats | null; isLoading: boolean } => {
-  const [isLoading, setIsLoading] = useState(true);
-  
+  const { data: real, isLoading } = useBacktestStats();
+
   const data = useMemo<BacktestStats | null>(() => {
-    // Simulate API loading
-    setTimeout(() => setIsLoading(false), 500);
-    
-    return {
-      strategy_name: "Moving Average Crossover Strategy",
-      backtest_period_start: "2023-01-01",
-      backtest_period_end: "2024-12-31",
-      initial_capital: 100000,
-      final_capital: 142750,
-      net_pnl: 42750,
-      net_pnl_percent: 42.75,
-      
-      total_trades: 156,
-      winning_trades: 94,
-      losing_trades: 58,
-      breakeven_trades: 4,
-      win_rate: 0.603,
-      
-      sharpe_ratio: 1.85,
-      sortino_ratio: 2.42,
-      max_drawdown: -8450,
-      max_drawdown_percent: -7.2,
-      recovery_factor: 5.06,
-      profit_factor: 2.34,
-      
-      avg_win: 856,
-      avg_loss: -542,
-      avg_win_percent: 2.8,
-      avg_loss_percent: -1.6,
-      avg_rr: 1.58,
-      avg_trade_duration_hours: 72,
-      
-      best_trade: {
-        id: "bt_1",
-        symbol: "AAPL",
-        open_at: "2024-03-15T09:30:00Z",
-        close_at: "2024-03-18T16:00:00Z",
-        pnl: 4250,
-        pnl_percent: 8.5,
-        side: "long" as const,
-        entry_price: 170.50,
-        exit_price: 185.00,
-        size: 100,
-        rr: 3.2
-      },
-      worst_trade: {
-        id: "bt_2",
-        symbol: "TSLA",
-        open_at: "2024-07-22T09:30:00Z",
-        close_at: "2024-07-23T16:00:00Z",
-        pnl: -2180,
-        pnl_percent: -4.8,
-        side: "long" as const,
-        entry_price: 245.00,
-        exit_price: 233.00,
-        size: 50,
-        rr: -1.8
-      },
-      longest_winning_streak: 12,
-      longest_losing_streak: 5,
-      
-      equity_curve: generateMockEquityCurve(),
-      monthly_returns: generateMockMonthlyReturns(),
-      trades: generateMockTrades(156)
+    if (!real) return null;
+    const { stats, trades, equitySeries } = real;
+    const INITIAL_CAPITAL = 10000;
+    const finalCapital = INITIAL_CAPITAL + stats.netPnl;
+
+    // Build cumulative equity curve from equitySeries (date label → cumulative).
+    // For the Overview chart we approximate ISO dates by adding day offsets
+    // from the first trade — sufficient for "last 2 years" display.
+    const baseDate = trades.length > 0
+      ? dayjs((trades[trades.length - 1]?.exitTime ?? trades[trades.length - 1]?.entryTime ?? Date.now() / 1000) * 1000)
+      : dayjs();
+    let runningPeak = 0;
+    const equityCurve: BacktestStats['equity_curve'] = equitySeries.map((pt, i) => {
+      const eqAbs = INITIAL_CAPITAL + pt.equity;
+      if (eqAbs > runningPeak) runningPeak = eqAbs;
+      const dd = runningPeak > 0 ? ((eqAbs - runningPeak) / runningPeak) * 100 : 0;
+      return {
+        date: baseDate.add(i, 'day').format('YYYY-MM-DD'),
+        value: Math.round(eqAbs),
+        drawdown: Math.round(dd * 100) / 100,
+      };
+    });
+    const maxDrawdown = equityCurve.length > 0
+      ? Math.min(...equityCurve.map((p) => p.drawdown)) * (INITIAL_CAPITAL / 100)
+      : 0;
+    const maxDrawdownPercent = equityCurve.length > 0
+      ? Math.min(...equityCurve.map((p) => p.drawdown))
+      : 0;
+
+    // Monthly returns: bucket equity series by month.
+    const monthly = new Map<string, number>();
+    for (const pt of equitySeries) {
+      const month = baseDate.add(equitySeries.indexOf(pt), 'day').format('YYYY-MM');
+      monthly.set(month, (monthly.get(month) ?? 0) + pt.pnl);
+    }
+    const monthlyReturns: BacktestStats['monthly_returns'] = Array.from(monthly.entries()).map(([month, pnl]) => ({
+      month,
+      return: (pnl / INITIAL_CAPITAL) * 100,
+    }));
+
+    // Best/worst trade
+    let bestTrade: BacktestStats['best_trade'] = {
+      id: '', symbol: '?', open_at: '', close_at: '', pnl: 0, pnl_percent: 0,
+      side: 'long', entry_price: 0, exit_price: 0, size: 0, rr: 0,
     };
-  }, []);
+    let worstTrade: BacktestStats['worst_trade'] = { ...bestTrade };
+    if (trades.length > 0) {
+      const best = trades.reduce((a, b) => (b.pnl > a.pnl ? b : a));
+      const worst = trades.reduce((a, b) => (b.pnl < a.pnl ? b : a));
+      const mapTrade = (t: typeof best): BacktestStats['best_trade'] => ({
+        id: t.id,
+        symbol: t.symbol,
+        open_at: new Date(t.entryTime * 1000).toISOString(),
+        close_at: t.exitTime ? new Date(t.exitTime * 1000).toISOString() : new Date(t.entryTime * 1000).toISOString(),
+        pnl: t.pnl,
+        pnl_percent: t.pnlPercent,
+        side: t.side === 'LONG' ? 'long' : 'short',
+        entry_price: t.entryPrice,
+        exit_price: t.exitPrice ?? t.entryPrice,
+        size: t.size,
+        rr: stats.avgRR,
+      });
+      bestTrade = mapTrade(best);
+      worstTrade = mapTrade(worst);
+    }
+
+    // Avg trade duration
+    const durations = trades
+      .filter((t) => t.exitTime != null)
+      .map((t) => (t.exitTime! - t.entryTime) / 3600);
+    const avgDurationHours = durations.length > 0
+      ? durations.reduce((a, b) => a + b, 0) / durations.length
+      : 0;
+
+    // Backtest period from trade extremes
+    const allTimes = trades.flatMap((t) => [t.entryTime, t.exitTime ?? t.entryTime]);
+    const startTs = allTimes.length > 0 ? Math.min(...allTimes) : Date.now() / 1000;
+    const endTs = allTimes.length > 0 ? Math.max(...allTimes) : Date.now() / 1000;
+
+    // Map all trades to the BacktestTrade shape Overview expects.
+    const mappedTrades: BacktestTrade[] = trades.map((t) => ({
+      id: t.id,
+      symbol: t.symbol,
+      open_at: new Date(t.entryTime * 1000).toISOString(),
+      close_at: t.exitTime ? new Date(t.exitTime * 1000).toISOString() : null,
+      pnl: t.pnl,
+      pnl_percent: t.pnlPercent,
+      side: t.side === 'LONG' ? 'long' : 'short',
+      entry_price: t.entryPrice,
+      exit_price: t.exitPrice ?? 0,
+      size: t.size,
+      rr: 0,
+    }));
+
+    return {
+      strategy_name: real.sessionCount === 1 ? 'Single Session' : `${real.sessionCount} Sessions`,
+      backtest_period_start: new Date(startTs * 1000).toISOString().slice(0, 10),
+      backtest_period_end: new Date(endTs * 1000).toISOString().slice(0, 10),
+      initial_capital: INITIAL_CAPITAL,
+      final_capital: finalCapital,
+      net_pnl: stats.netPnl,
+      net_pnl_percent: stats.netPnlPercent,
+      total_trades: stats.totalTrades,
+      winning_trades: stats.winners,
+      losing_trades: stats.losers,
+      breakeven_trades: stats.breakeven,
+      win_rate: stats.winRate / 100,
+      sharpe_ratio: 0,   // not computed yet — would need daily-return time series
+      sortino_ratio: 0,
+      max_drawdown: maxDrawdown,
+      max_drawdown_percent: maxDrawdownPercent,
+      recovery_factor: maxDrawdown !== 0 ? stats.netPnl / Math.abs(maxDrawdown) : 0,
+      profit_factor: isFinite(stats.profitFactor) ? stats.profitFactor : 0,
+      avg_win: stats.avgWin,
+      avg_loss: -stats.avgLoss,
+      avg_win_percent: INITIAL_CAPITAL > 0 ? (stats.avgWin / INITIAL_CAPITAL) * 100 : 0,
+      avg_loss_percent: INITIAL_CAPITAL > 0 ? -(stats.avgLoss / INITIAL_CAPITAL) * 100 : 0,
+      avg_rr: stats.avgRR,
+      avg_trade_duration_hours: avgDurationHours,
+      best_trade: bestTrade,
+      worst_trade: worstTrade,
+      longest_winning_streak: stats.longestWinStreak,
+      longest_losing_streak: stats.longestLossStreak,
+      equity_curve: equityCurve.length > 0 ? equityCurve : [],
+      monthly_returns: monthlyReturns,
+      trades: mappedTrades,
+    };
+  }, [real]);
   
   return { data, isLoading };
 };

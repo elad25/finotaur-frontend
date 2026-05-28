@@ -963,47 +963,8 @@ export function BacktestChart({
             </div>
           )}
 
-          {/* Trade history */}
-          <div className="flex-1 p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#C9A646]">
-              <Target size={12} />
-              History ({state.closedPositions.length})
-            </h3>
-            {state.closedPositions.length === 0 ? (
-              <div className="rounded-md border border-dashed border-zinc-800 px-3 py-6 text-center text-xs text-zinc-600">
-                No closed trades yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {state.closedPositions.slice().reverse().map((trade, i) => {
-                  const idx = state.closedPositions.length - i;
-                  const pnl = trade.pnl ?? 0;
-                  return (
-                    <div
-                      key={trade.id}
-                      className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5 text-xs"
-                    >
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-zinc-500">#{idx}</span>
-                          <span className={`font-semibold ${trade.side === 'LONG' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {trade.side}
-                          </span>
-                        </div>
-                        <span className={`font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[10px] text-zinc-500">
-                        <span>${trade.entryPrice.toFixed(2)} → ${trade.exitPrice?.toFixed(2)}</span>
-                        <span>{trade.size}×</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* History panel removed per Elad — closed trades land in My Trades */}
+          <div className="flex-1" />
         </aside>
       </div>
 
