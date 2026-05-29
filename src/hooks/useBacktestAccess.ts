@@ -36,7 +36,7 @@ async function fetchAccountType(userId: string): Promise<AccountType> {
  * The first load is bounded by an 8s abort so `isLoading` can never stick.
  */
 export const useBacktestAccess = () => {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const userId = user?.id;
 
   const { data: accountType = 'free', isLoading } = useQuery<AccountType>({
@@ -48,8 +48,12 @@ export const useBacktestAccess = () => {
     retry: 1,
   });
 
-  // With no user yet we're not truly loading — treat as resolved (free).
-  const resolvedLoading = !!userId && isLoading;
+  // Loading only while auth itself is resolving, or while the entitlement
+  // fetch is in flight for a known user. A resolved-but-logged-out visitor
+  // (authLoading false, no userId) is NOT loading → falls through to the
+  // landing/upsell rather than spinning forever. This also avoids flashing the
+  // upsell to a premium user during the brief auth-resolution window.
+  const resolvedLoading = authLoading || (!!userId && isLoading);
   const hasAccess = accountType === 'premium' || accountType === 'admin';
 
   return {
