@@ -36,6 +36,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 // ─── Interval → seconds ──────────────────────────────────────
@@ -240,14 +241,30 @@ function mergeBars(cached: Bar[], fresh: Bar[]): Bar[] {
 }
 
 // ═════════════════════════════════════════════════════════════
+// Request parser — supports GET (query string) and POST (JSON body)
+// ═════════════════════════════════════════════════════════════
+async function parseRequest(req: Request): Promise<ChartBarsRequest> {
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    return {
+      symbol: url.searchParams.get('symbol') ?? '',
+      interval: url.searchParams.get('interval') ?? '',
+      from: Number(url.searchParams.get('from')),
+      to: Number(url.searchParams.get('to')),
+    };
+  }
+  return await req.json();
+}
+
+// ═════════════════════════════════════════════════════════════
 // HTTP handler
 // ═════════════════════════════════════════════════════════════
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'POST only' }), {
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return new Response(JSON.stringify({ error: 'GET or POST only' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -255,7 +272,7 @@ Deno.serve(async (req) => {
 
   let body: ChartBarsRequest;
   try {
-    body = await req.json();
+    body = await parseRequest(req);
   } catch {
     return new Response(JSON.stringify({ error: 'invalid JSON body' }), {
       status: 400,
@@ -325,6 +342,14 @@ Deno.serve(async (req) => {
     // 4. Merge + respond
     const bars = mergeBars(cached, fresh);
 
+    // Determine whether the response window is fully historical (no forming bar).
+    // If `to` is at or before the completeBoundary, every bar in the response has
+    // permanently closed and the data is immutable — safe for long CDN caching.
+    const fullyHistorical = to <= completeBoundary;
+    const cacheControl = fullyHistorical
+      ? 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800, immutable'
+      : 'public, max-age=5, s-maxage=10, stale-while-revalidate=60';
+
     return new Response(
       JSON.stringify({
         bars,
@@ -335,7 +360,15 @@ Deno.serve(async (req) => {
           source: 'yahoo',
         },
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': cacheControl,
+          'Vary': 'Accept-Encoding',
+        },
+      },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
