@@ -2,7 +2,7 @@
 // Auth: credentials: 'include' passes the Supabase session cookie.
 // The server's requireAuthJWT middleware validates the JWT from the cookie.
 
-import type { BriefingResponse, FinotaurScore } from '../types';
+import type { BriefingResponse, ConversationListItem, FinotaurScore, ToolExecuteResponse } from '../types';
 
 export async function fetchFinotaurScore(windowDays: number = 30): Promise<FinotaurScore> {
   const res = await fetch(`/api/journal-ai/score?window=${windowDays}`, {
@@ -87,4 +87,69 @@ export async function refreshBriefing(): Promise<BriefingResponse> {
 
   const data: BriefingResponse = await res.json();
   return data;
+}
+
+// ─── Phase 5: Chat API ────────────────────────────────────────────────────────
+
+export interface ExecuteToolCallArgs {
+  preview_id: string;
+  idempotency_key: string;
+  confirm: true;
+  typed_confirmation?: string;
+}
+
+export async function executeToolCall(args: ExecuteToolCallArgs): Promise<ToolExecuteResponse> {
+  const res = await fetch('/api/journal-ai/tool/execute', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `executeToolCall failed (${res.status})`,
+      res.status,
+      body?.error,
+      body?.message_he,
+      body,
+    );
+  }
+  return res.json() as Promise<ToolExecuteResponse>;
+}
+
+export async function listConversations(): Promise<ConversationListItem[]> {
+  const res = await fetch('/api/journal-ai/conversations', {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `listConversations failed (${res.status})`,
+      res.status,
+      body?.code,
+      body?.message_he,
+      body,
+    );
+  }
+  const data = await res.json();
+  return (data?.conversations ?? []) as ConversationListItem[];
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  const res = await fetch(`/api/journal-ai/conversations/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `deleteConversation failed (${res.status})`,
+      res.status,
+      body?.code,
+      body?.message_he,
+      body,
+    );
+  }
 }
