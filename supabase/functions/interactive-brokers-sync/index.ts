@@ -668,8 +668,7 @@ async function backfillWithMarks(userId: string, days: number): Promise<{
 }> {
   const POLYGON_API_KEY = Deno.env.get('POLYGON_API_KEY');
   if (!POLYGON_API_KEY) {
-    console.log('[ib-sync backfill-marks] POLYGON_API_KEY not set');
-    return { inserted: 0, skipped: 0, range: '', marks_cache_hit: 0, marks_cache_miss: 0, tickers_priced: 0, error: 'missing_polygon_api_key' };
+    console.log('[ib-sync backfill-marks] POLYGON_API_KEY not set — cache-only mode (missing dates will be null)');
   }
 
   // 1. Fetch broker_connection with last_positions
@@ -798,7 +797,7 @@ async function backfillWithMarks(userId: string, days: number): Promise<{
     const uncachedDates = windowDates.filter(d => !cachedDates.has(d));
     marksCacheMiss += uncachedDates.length;
 
-    if (uncachedDates.length > 0) {
+    if (uncachedDates.length > 0 && POLYGON_API_KEY) {
       // Fetch from Polygon (one call covers the full range)
       const polygonUrl = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${startStr}/${endStr}?adjusted=true&sort=asc&limit=5000&apiKey=${POLYGON_API_KEY}`;
       const controller = new AbortController();
@@ -844,6 +843,10 @@ async function backfillWithMarks(userId: string, days: number): Promise<{
 
       // Throttle between tickers
       await new Promise(r => setTimeout(r, 200));
+    } else if (uncachedDates.length > 0) {
+      // No Polygon key — populate uncached dates as null (cache-only graceful degradation)
+      for (const d of uncachedDates) tickerMarks.set(d, null);
+      console.log(`[ib-sync backfill-marks] ${ticker}: ${uncachedDates.length} dates uncached, no Polygon key — using null`);
     }
 
     allMarks.set(ticker, tickerMarks);
