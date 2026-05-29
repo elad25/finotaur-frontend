@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, ChevronLeft, ChevronRight, ChevronDown, SkipBack, Gauge } from 'lucide-react';
+import { Play, Pause, ChevronLeft, ChevronRight, ChevronDown, SkipBack, Gauge, Scissors } from 'lucide-react';
 import { REPLAY_SPEEDS, type ReplaySpeed } from '@/hooks/useReplayPlayback';
 
 export interface ReplayControlsProps {
@@ -21,6 +21,12 @@ export interface ReplayControlsProps {
   onStepBack: () => void;
   onReset: () => void;
   onSpeedChange: (s: ReplaySpeed) => void;
+  /** Show the scissors (jump-tool) toggle — only relevant in replay-cursor mode. */
+  showScissors?: boolean;
+  /** Whether the scissors jump tool is currently armed. */
+  scissorsArmed?: boolean;
+  /** Toggle the scissors jump tool on/off. */
+  onToggleScissors?: () => void;
 }
 
 function speedLabel(s: ReplaySpeed): string {
@@ -46,6 +52,9 @@ export function ReplayControls({
   onStepBack,
   onReset,
   onSpeedChange,
+  showScissors = false,
+  scissorsArmed = false,
+  onToggleScissors,
 }: ReplayControlsProps) {
   const atEnd = cursor >= maxIndex;
   const atStart = cursor <= -1;
@@ -152,6 +161,26 @@ export function ReplayControls({
           </div>
         )}
       </div>
+
+      {/* SCISSORS — jump-tool toggle (TV-style time rewind). Armed = next chart
+          click rewinds to that bar, then auto-disarms. Re-arm to rewind again. */}
+      {showScissors && onToggleScissors && (
+        <button
+          type="button"
+          onClick={onToggleScissors}
+          title={scissorsArmed
+            ? 'Jump tool armed — click the chart to rewind to that bar'
+            : 'Activate jump tool — then click the chart to rewind'}
+          className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
+            scissorsArmed
+              ? 'border-[#7AB6F4]/50 bg-[#7AB6F4]/10 text-[#7AB6F4]'
+              : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+          }`}
+        >
+          <Scissors size={12} />
+          Jump
+        </button>
+      )}
 
       {/* Progress */}
       <div className="ml-auto flex items-center gap-2 text-xs text-zinc-500">

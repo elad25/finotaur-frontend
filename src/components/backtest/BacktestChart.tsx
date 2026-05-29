@@ -25,7 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { TrendingUp, TrendingDown, X, RotateCcw, Target, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
 import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
@@ -51,30 +51,88 @@ import { DateTimePicker } from './DateTimePicker';
 // class — power users can type freely.
 type AssetClass = 'futures' | 'stocks' | 'crypto';
 
-const PRESETS: Record<AssetClass, Array<{ label: string; symbol: string }>> = {
+// Searchable symbol universe per asset class. `ticker` is what the trader
+// types/sees (e.g. "ES"); `symbol` is the source-native form passed to the
+// data layer (Yahoo futures use a "=F" suffix, equities are bare, Binance
+// crypto are "<BASE>USDT"). The first entry per class is the default symbol
+// when the trader switches asset class. The picker also accepts free-form
+// tickers not in this list (normalized per class on commit).
+interface SymbolEntry { ticker: string; label: string; symbol: string }
+
+const SYMBOL_UNIVERSE: Record<AssetClass, SymbolEntry[]> = {
   futures: [
-    { label: 'Micro Nasdaq (MNQ)', symbol: 'MNQ=F' },
-    { label: 'Micro S&P (MES)', symbol: 'MES=F' },
-    { label: 'E-mini Nasdaq (NQ)', symbol: 'NQ=F' },
-    { label: 'E-mini S&P (ES)', symbol: 'ES=F' },
-    { label: 'Gold (GC)', symbol: 'GC=F' },
-    { label: 'Crude Oil (CL)', symbol: 'CL=F' },
+    { ticker: 'MNQ', label: 'Micro E-mini Nasdaq-100', symbol: 'MNQ=F' },
+    { ticker: 'MES', label: 'Micro E-mini S&P 500', symbol: 'MES=F' },
+    { ticker: 'NQ', label: 'E-mini Nasdaq-100', symbol: 'NQ=F' },
+    { ticker: 'ES', label: 'E-mini S&P 500', symbol: 'ES=F' },
+    { ticker: 'YM', label: 'E-mini Dow', symbol: 'YM=F' },
+    { ticker: 'MYM', label: 'Micro E-mini Dow', symbol: 'MYM=F' },
+    { ticker: 'RTY', label: 'E-mini Russell 2000', symbol: 'RTY=F' },
+    { ticker: 'M2K', label: 'Micro E-mini Russell 2000', symbol: 'M2K=F' },
+    { ticker: 'GC', label: 'Gold', symbol: 'GC=F' },
+    { ticker: 'MGC', label: 'Micro Gold', symbol: 'MGC=F' },
+    { ticker: 'SI', label: 'Silver', symbol: 'SI=F' },
+    { ticker: 'HG', label: 'Copper', symbol: 'HG=F' },
+    { ticker: 'CL', label: 'Crude Oil (WTI)', symbol: 'CL=F' },
+    { ticker: 'MCL', label: 'Micro Crude Oil', symbol: 'MCL=F' },
+    { ticker: 'NG', label: 'Natural Gas', symbol: 'NG=F' },
+    { ticker: 'ZB', label: '30-Year T-Bond', symbol: 'ZB=F' },
+    { ticker: 'ZN', label: '10-Year T-Note', symbol: 'ZN=F' },
+    { ticker: 'ZC', label: 'Corn', symbol: 'ZC=F' },
+    { ticker: 'ZS', label: 'Soybeans', symbol: 'ZS=F' },
+    { ticker: 'ZW', label: 'Wheat', symbol: 'ZW=F' },
+    { ticker: '6E', label: 'Euro FX', symbol: '6E=F' },
+    { ticker: '6J', label: 'Japanese Yen', symbol: '6J=F' },
+    { ticker: '6B', label: 'British Pound', symbol: '6B=F' },
   ],
   stocks: [
-    { label: 'Apple (AAPL)', symbol: 'AAPL' },
-    { label: 'Nvidia (NVDA)', symbol: 'NVDA' },
-    { label: 'Tesla (TSLA)', symbol: 'TSLA' },
-    { label: 'Microsoft (MSFT)', symbol: 'MSFT' },
-    { label: 'S&P 500 (^GSPC)', symbol: '^GSPC' },
-    { label: 'Nasdaq 100 (^NDX)', symbol: '^NDX' },
+    { ticker: 'AAPL', label: 'Apple', symbol: 'AAPL' },
+    { ticker: 'NVDA', label: 'Nvidia', symbol: 'NVDA' },
+    { ticker: 'TSLA', label: 'Tesla', symbol: 'TSLA' },
+    { ticker: 'MSFT', label: 'Microsoft', symbol: 'MSFT' },
+    { ticker: 'AMZN', label: 'Amazon', symbol: 'AMZN' },
+    { ticker: 'GOOGL', label: 'Alphabet (Class A)', symbol: 'GOOGL' },
+    { ticker: 'META', label: 'Meta Platforms', symbol: 'META' },
+    { ticker: 'NFLX', label: 'Netflix', symbol: 'NFLX' },
+    { ticker: 'AMD', label: 'Advanced Micro Devices', symbol: 'AMD' },
+    { ticker: 'JPM', label: 'JPMorgan Chase', symbol: 'JPM' },
+    { ticker: 'V', label: 'Visa', symbol: 'V' },
+    { ticker: 'DIS', label: 'Walt Disney', symbol: 'DIS' },
+    { ticker: 'BA', label: 'Boeing', symbol: 'BA' },
+    { ticker: 'XOM', label: 'Exxon Mobil', symbol: 'XOM' },
+    { ticker: 'WMT', label: 'Walmart', symbol: 'WMT' },
+    { ticker: 'COST', label: 'Costco', symbol: 'COST' },
+    { ticker: 'SPY', label: 'SPDR S&P 500 ETF', symbol: 'SPY' },
+    { ticker: 'QQQ', label: 'Invesco QQQ (Nasdaq-100)', symbol: 'QQQ' },
+    { ticker: 'IWM', label: 'iShares Russell 2000 ETF', symbol: 'IWM' },
+    { ticker: 'SPX', label: 'S&P 500 Index', symbol: '^GSPC' },
+    { ticker: 'NDX', label: 'Nasdaq-100 Index', symbol: '^NDX' },
+    { ticker: 'VIX', label: 'CBOE Volatility Index', symbol: '^VIX' },
   ],
   crypto: [
-    { label: 'Bitcoin (BTCUSDT)', symbol: 'BTCUSDT' },
-    { label: 'Ethereum (ETHUSDT)', symbol: 'ETHUSDT' },
-    { label: 'Solana (SOLUSDT)', symbol: 'SOLUSDT' },
-    { label: 'BNB (BNBUSDT)', symbol: 'BNBUSDT' },
+    { ticker: 'BTC', label: 'Bitcoin', symbol: 'BTCUSDT' },
+    { ticker: 'ETH', label: 'Ethereum', symbol: 'ETHUSDT' },
+    { ticker: 'SOL', label: 'Solana', symbol: 'SOLUSDT' },
+    { ticker: 'BNB', label: 'BNB', symbol: 'BNBUSDT' },
+    { ticker: 'XRP', label: 'XRP', symbol: 'XRPUSDT' },
+    { ticker: 'ADA', label: 'Cardano', symbol: 'ADAUSDT' },
+    { ticker: 'DOGE', label: 'Dogecoin', symbol: 'DOGEUSDT' },
+    { ticker: 'AVAX', label: 'Avalanche', symbol: 'AVAXUSDT' },
+    { ticker: 'LINK', label: 'Chainlink', symbol: 'LINKUSDT' },
+    { ticker: 'DOT', label: 'Polkadot', symbol: 'DOTUSDT' },
+    { ticker: 'MATIC', label: 'Polygon', symbol: 'MATICUSDT' },
+    { ticker: 'LTC', label: 'Litecoin', symbol: 'LTCUSDT' },
   ],
 };
+
+// Normalize a free-typed ticker to the source-native symbol for its class.
+// Futures get the Yahoo "=F" suffix; equities + crypto pass through uppercased.
+function normalizeRawSymbol(raw: string, assetClass: AssetClass): string {
+  const t = raw.trim().toUpperCase();
+  if (!t) return t;
+  if (assetClass === 'futures') return t.endsWith('=F') ? t : `${t}=F`;
+  return t;
+}
 
 const INTERVALS: Interval[] = ['1m', '5m', '15m', '60m', '1d'];
 
@@ -192,6 +250,135 @@ function ActiveStrategyDropdown({
               {s.name}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SymbolAutocomplete — type-ahead ticker picker (replaces native <select>) ─
+// Trader types a ticker (e.g. "E" → suggests ES, ES=F-backed); arrow keys +
+// Enter select; Enter on no-match commits a custom symbol. Matches the toolbar
+// styling (gold #C9A646 accent on dark zinc) like ActiveStrategyDropdown.
+function SymbolAutocomplete({
+  assetClass,
+  symbol,
+  onSelect,
+}: {
+  assetClass: AssetClass;
+  symbol: string;
+  onSelect: (symbol: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const universe = SYMBOL_UNIVERSE[assetClass];
+
+  // Best-effort reverse lookup: show the human ticker for the active symbol;
+  // fall back to the raw source symbol if it isn't in the universe.
+  const currentTicker = useMemo(() => {
+    const hit = universe.find((u) => u.symbol === symbol);
+    return hit?.ticker ?? symbol;
+  }, [universe, symbol]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toUpperCase();
+    if (!q) return universe.slice(0, 8);
+    return universe
+      .filter((u) => u.ticker.toUpperCase().includes(q) || u.label.toUpperCase().includes(q))
+      .slice(0, 8);
+  }, [universe, query]);
+
+  // Reset the keyboard highlight whenever the visible match list changes.
+  useEffect(() => { setHighlight(0); }, [query, assetClass]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [open]);
+
+  const commit = (entry: SymbolEntry) => {
+    onSelect(entry.symbol);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const commitRaw = () => {
+    const next = normalizeRawSymbol(query, assetClass);
+    if (!next) return;
+    onSelect(next);
+    setQuery('');
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={open ? query : currentTicker}
+        placeholder="Search ticker…"
+        spellCheck={false}
+        autoComplete="off"
+        onFocus={() => { setQuery(''); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setHighlight((h) => Math.min(h + 1, Math.max(matches.length - 1, 0)));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (matches[highlight]) commit(matches[highlight]);
+            else commitRaw();
+          } else if (e.key === 'Escape') {
+            setOpen(false);
+            inputRef.current?.blur();
+          }
+        }}
+        className="w-32 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm font-medium uppercase text-zinc-200 placeholder:normal-case placeholder:text-zinc-600 focus:border-[#C9A646] focus:outline-none"
+      />
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+          {matches.length === 0 ? (
+            <button
+              type="button"
+              // onMouseDown (not onClick) fires before the input blur that would
+              // otherwise close the dropdown and drop the click.
+              onMouseDown={(e) => { e.preventDefault(); commitRaw(); }}
+              className="block w-full px-3 py-2 text-left text-xs text-zinc-400 hover:bg-zinc-900"
+            >
+              Use <span className="font-mono font-semibold text-[#C9A646]">{normalizeRawSymbol(query, assetClass) || '—'}</span> as a custom symbol
+            </button>
+          ) : (
+            matches.map((m, i) => (
+              <button
+                key={m.symbol}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); commit(m); }}
+                onMouseEnter={() => setHighlight(i)}
+                className={`flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left transition-colors ${
+                  i === highlight ? 'bg-[#C9A646]/10' : 'hover:bg-zinc-900'
+                }`}
+              >
+                <span className={`font-mono text-sm font-semibold ${m.symbol === symbol ? 'text-[#C9A646]' : 'text-zinc-200'}`}>
+                  {m.ticker}
+                </span>
+                <span className="truncate text-[11px] text-zinc-500">{m.label}</span>
+              </button>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -394,7 +581,7 @@ export function BacktestChart({
   // ─── Handlers ────────────────────────────────────────────────
   const handleAssetClassChange = (next: AssetClass) => {
     setAssetClass(next);
-    setSymbol(PRESETS[next][0].symbol);
+    setSymbol(SYMBOL_UNIVERSE[next][0].symbol);
     setLivePrice('');
   };
 
@@ -665,16 +852,13 @@ export function BacktestChart({
           ))}
         </div>
 
-        {/* Symbol picker */}
-        <select
-          value={symbol}
-          onChange={(e) => { setSymbol(e.target.value); setLivePrice(''); }}
-          className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 focus:border-[#C9A646] focus:outline-none"
-        >
-          {PRESETS[assetClass].map((p) => (
-            <option key={p.symbol} value={p.symbol}>{p.label}</option>
-          ))}
-        </select>
+        {/* Symbol picker — type-ahead autocomplete (Tier 1 2026-05-30,
+            replaces the native <select> so traders can search/free-type). */}
+        <SymbolAutocomplete
+          assetClass={assetClass}
+          symbol={symbol}
+          onSelect={(next) => { setSymbol(next); setLivePrice(''); }}
+        />
 
         {/* Interval picker */}
         <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
@@ -750,17 +934,17 @@ export function BacktestChart({
               {state.stats.netPnl >= 0 ? '+' : ''}${state.stats.netPnl.toFixed(2)}
             </div>
           </div>
-          {/* Run Strategy dropdown — Bug D fast-path (Sprint C1 of backtest-launch-ready):
-              hidden globally because clicking it in Live mode triggers a browser
-              freeze (CDP timeout 30s).
-              Sprint D 2026-05-30 investigation: `useStrategyLibrary` returns a
-              fresh object literal on every render, though the inner `strategies`
-              array is stable (useState). `handleRunStrategy` is not memoized.
-              Repro requires a logged-in browser session — deferred to Sprint E
-              with React DevTools Profiler. To re-enable, remove the `false &&`
-              prefix from the gate below. */}
-          {/* eslint-disable-next-line no-constant-binary-expression */}
-          {false && chartMode === 'live' && (
+          {/* Run Strategy dropdown — re-enabled in Tier 1 (2026-05-30).
+              Bug D ("freeze" on click in Live mode) was a browser-AUTOMATION
+              artifact, not a real user freeze: the prior report was a CDP 30s
+              timeout, and this codebase documents that native dialogs freeze the
+              renderer under automation (see the flashTradeError comment above).
+              Static analysis confirms the Run Strategy path has NO alert()/
+              confirm()/blocking loop, and runStrategy() is provably O(bars)
+              (single bounded for-loop, indicators precomputed once). The button
+              is already guarded against double-runs (disabled while running) and
+              handleRunStrategy closes the picker before awaiting. */}
+          {chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}

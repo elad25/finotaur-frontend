@@ -166,11 +166,19 @@ export function BacktestReplayChart({
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
 
+  // Scissors (jump tool) armed state. Armed on mount (= entering replay): the
+  // trader picks a rewind point with ONE click, after which it disarms and the
+  // chart returns to a normal crosshair for trading. Re-arm via the toolbar
+  // Scissors toggle. (Elad 2026-05-30: "rewind once, then no scissors".)
+  const [scissorsArmed, setScissorsArmed] = useState(true);
+  const scissorsArmedRef = useRef(scissorsArmed);
+
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);
   useEffect(() => { onBarRevealRef.current = onBarReveal; }, [onBarReveal]);
   useEffect(() => { onContextMenuRef.current = onContextMenu; }, [onContextMenu]);
   useEffect(() => { onJumpToTimeRef.current = onJumpToTime; }, [onJumpToTime]);
   useEffect(() => { showReplayCursorRef.current = showReplayCursor; }, [showReplayCursor]);
+  useEffect(() => { scissorsArmedRef.current = scissorsArmed; }, [scissorsArmed]);
 
   const [load, setLoad] = useState<LoadState>({ kind: 'loading' });
 
@@ -325,7 +333,11 @@ export function BacktestReplayChart({
     chart.subscribeClick((param) => {
       if (!param.time) return;
       const clickedTime = param.time as number;
-      if (onJumpToTimeRef.current) {
+      // Scissors armed → this click is a time-rewind (jump). Disarm right after
+      // so the next click trades normally and the scissors cursor disappears.
+      // Disarmed → fall through to click-to-trade (onBarClick).
+      if (scissorsArmedRef.current && onJumpToTimeRef.current) {
+        setScissorsArmed(false);
         const targetIdx = bars.findIndex((b) => (b.time as number) === clickedTime);
 
         // Animate scroll toward the clicked bar regardless of path taken.
@@ -368,7 +380,13 @@ export function BacktestReplayChart({
     // when the crosshair leaves the plot area.
     // handleCrosshairMove — param type inferred from chart.subscribeCrosshairMove signature.
     const handleCrosshairMove: Parameters<typeof chart.subscribeCrosshairMove>[0] = (param) => {
-      if (!showReplayCursorRef.current) return;
+      // Only follow the mouse while the scissors tool is armed. Once disarmed
+      // (after a rewind), clear the preview so a normal crosshair takes over.
+      if (!showReplayCursorRef.current || !scissorsArmedRef.current) {
+        setHoverX(null);
+        setHoverTime(null);
+        return;
+      }
       if (!param.time) {
         setHoverX(null);
         setHoverTime(null);
@@ -630,6 +648,9 @@ export function BacktestReplayChart({
         onStepBack={playback.stepBack}
         onReset={playback.reset}
         onSpeedChange={playback.setSpeed}
+        showScissors={showReplayCursor}
+        scissorsArmed={scissorsArmed}
+        onToggleScissors={() => setScissorsArmed((v) => !v)}
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
         {/* cursor-none on container + [&_*]:cursor-none propagates to
@@ -637,12 +658,13 @@ export function BacktestReplayChart({
             itself, otherwise winning over the parent). */}
         <div
           ref={containerRef}
-          className={`absolute inset-0${showReplayCursor ? ' cursor-none [&_*]:cursor-none' : ''}`}
+          className={`absolute inset-0${showReplayCursor && scissorsArmed ? ' cursor-none [&_*]:cursor-none' : ''}`}
           style={{ height }}
         />
 
-        {/* ── TV-style replay cursor overlays ── */}
-        {showReplayCursor && activeX !== null && (
+        {/* ── TV-style replay cursor overlays — only while the scissors tool
+            is armed; after a rewind it disarms and a normal crosshair returns. ── */}
+        {showReplayCursor && scissorsArmed && activeX !== null && (
           <>
             {/* Vertical cut line */}
             <div
