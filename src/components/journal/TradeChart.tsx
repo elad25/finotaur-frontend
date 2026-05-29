@@ -19,7 +19,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, Clock, Maximize2, Moon, Sun, TrendingUp, X } from 'lucide-react';
 import type { UTCTimestamp } from 'lightweight-charts';
 
-import { FinotaurChart } from '@/components/charting/FinotaurChart';
+import { FinotaurChart, type MarkerIcon } from '@/components/charting/FinotaurChart';
 import {
   pickDataSource,
   pickInterval,
@@ -111,35 +111,44 @@ function formatDuration(openAt: string, closeAt: string | null | undefined): str
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Trade → ChartMarker[] (direction-based buy/sell arrows)
+// Trade → { markers, markerIcons }
 //
 // Marker semantics (TradingView convention):
-//   - BUY  (LONG entry, SHORT exit) → green arrowUp BELOW the bar
-//   - SELL (SHORT entry, LONG exit) → red arrowDown ABOVE the bar
-// The direction — not the entry/exit role — drives the visual. Text still
-// labels which one is which (LONG / SHORT / EXIT).
+//   - BUY  (LONG entry, SHORT exit) → gold  circle BELOW the bar  + ArrowUp icon
+//   - SELL (SHORT entry, LONG exit) → red   circle ABOVE the bar  + ArrowDown icon
+// The direction — not the entry/exit role — drives the visual.
+// `markers`     → lightweight-charts native colored circles (canvas layer).
+// `markerIcons` → HTML overlay arrows centered inside each circle.
 // ═══════════════════════════════════════════════════════════════
-function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
-  const out: ChartMarker[] = [];
+function tradeToMarkers(trade: TradeChartTrade): {
+  markers: ChartMarker[];
+  markerIcons: MarkerIcon[];
+} {
+  const markers: ChartMarker[] = [];
+  const markerIcons: MarkerIcon[] = [];
 
   // Entry direction: LONG opens with a BUY, SHORT opens with a SELL.
   const entryIsBuy = trade.side === 'LONG';
 
   const entryTime = Math.floor(new Date(trade.open_at).getTime() / 1000) as UTCTimestamp;
   if (Number.isFinite(entryTime as number)) {
-    // Defensive: entry_price is typed `number` but real data sometimes nulls it
-    const entryPriceStr =
-      trade.entry_price != null && Number.isFinite(trade.entry_price)
-        ? trade.entry_price.toFixed(2)
-        : '—';
-    out.push({
+    const entryColor = entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
+    markers.push({
       time: entryTime,
       position: entryIsBuy ? 'belowBar' : 'aboveBar',
       shape: 'circle',
-      color: entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
-      // Arrow glyph in text label still mirrors direction for legibility
-      text: `${entryIsBuy ? '▲' : '▼'} ${trade.side} @ ${entryPriceStr}`,
+      color: entryColor,
+      // No text — the icon overlay replaces the text label.
       size: 2,
+    });
+    markerIcons.push({
+      time: entryTime,
+      price: trade.entry_price,
+      direction: entryIsBuy ? 'up' : 'down',
+      color: entryColor,
+      // belowBar → icon sits below the candle low; positive offsetY pushes further down.
+      // aboveBar → icon sits above the candle high; negative offsetY pushes further up.
+      offsetY: entryIsBuy ? 14 : -14,
     });
   }
 
@@ -148,20 +157,25 @@ function tradeToMarkers(trade: TradeChartTrade): ChartMarker[] {
     const exitIsBuy = !entryIsBuy;
     const exitTime = Math.floor(new Date(trade.close_at).getTime() / 1000) as UTCTimestamp;
     if (Number.isFinite(exitTime as number)) {
-      const pnlSign = trade.pnl != null && trade.pnl > 0 ? '+' : '';
-      const pnlSuffix = trade.pnl != null ? ` (${pnlSign}${trade.pnl.toFixed(2)})` : '';
-      out.push({
+      const exitColor = exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
+      markers.push({
         time: exitTime,
         position: exitIsBuy ? 'belowBar' : 'aboveBar',
         shape: 'circle',
-        color: exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell,
-        text: `${exitIsBuy ? '▲' : '▼'} EXIT @ ${trade.exit_price.toFixed(2)}${pnlSuffix}`,
+        color: exitColor,
         size: 2,
+      });
+      markerIcons.push({
+        time: exitTime,
+        price: trade.exit_price,
+        direction: exitIsBuy ? 'up' : 'down',
+        color: exitColor,
+        offsetY: exitIsBuy ? 14 : -14,
       });
     }
   }
 
-  return out;
+  return { markers, markerIcons };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -230,7 +244,7 @@ function ChartBody({
 
   const window = useMemo(() => computeWindow(trade), [trade]);
   const interval = useMemo(() => pickInterval(window.durationMs), [window.durationMs]);
-  const markers = useMemo(() => tradeToMarkers(trade), [trade]);
+  const { markers, markerIcons } = useMemo(() => tradeToMarkers(trade), [trade]);
 
   // Route to the right source based on the raw broker symbol (router knows crypto vs equity)
   const dataSource = useMemo(() => pickDataSource(trade.symbol), [trade.symbol]);
@@ -301,6 +315,7 @@ function ChartBody({
       to={window.to}
       dataSource={dataSource}
       markers={markers}
+      markerIcons={markerIcons}
       indicators={indicators}
       theme={theme}
       focusRange={focusRange}
