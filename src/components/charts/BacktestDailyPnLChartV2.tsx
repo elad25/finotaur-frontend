@@ -1,0 +1,267 @@
+// ================================================
+// BACKTEST DAILY P&L CHART V2 — cloned from DailyPnLChart.tsx, blue accent
+// Gold (#C9A646 / rgba(201,166,70,...)) replaced with blue (#7AB6F4)
+// Bars remain semantic green/red (positive/negative P&L).
+// Do NOT modify DailyPnLChart.tsx — this file is Backtest-only.
+// ================================================
+
+import React, { useMemo } from 'react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  Cell,
+} from 'recharts';
+import { BarChart3, HelpCircle } from 'lucide-react';
+import { CHART_COLORS } from '@/constants/dashboard';
+
+// Blue accent (replaces gold reference line + empty state icon)
+const BLUE = '#7AB6F4';
+
+interface DailyPnLData {
+  date: string;
+  equity: number;
+  pnl: number;
+}
+
+interface RawTrade {
+  open_at: string;
+  pnl: number | null;
+}
+
+interface BacktestDailyPnLChartV2Props {
+  data: DailyPnLData[];
+  trades?: RawTrade[];
+}
+
+const BacktestDailyPnLChartV2 = React.memo(({ data, trades }: BacktestDailyPnLChartV2Props) => {
+  const optimizedData = useMemo(() => {
+    if (trades && trades.length > 0) {
+      const grouped = new Map<string, { date: string; pnl: number; equity: number }>();
+
+      trades.forEach(trade => {
+        if (!trade.open_at || trade.pnl == null) return;
+        const d = new Date(trade.open_at);
+        const key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (!grouped.has(key)) {
+          grouped.set(key, { date: key, pnl: 0, equity: 0 });
+        }
+        grouped.get(key)!.pnl += trade.pnl;
+      });
+
+      const sorted = Array.from(grouped.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      if (sorted.length > 100) {
+        const step = Math.ceil(sorted.length / 100);
+        return sorted.filter((_, i) => i % step === 0 || i === sorted.length - 1);
+      }
+      return sorted;
+    }
+
+    if (!data || data.length === 0) return [];
+    if (data.length > 100) {
+      const step = Math.ceil(data.length / 100);
+      return data.filter((_, index) => index % step === 0);
+    }
+    return data;
+  }, [trades, data]);
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[#F4F4F4] font-semibold text-lg tracking-tight">Net Daily P&L</h3>
+              <HelpCircle
+                className="h-3.5 w-3.5 cursor-help text-white/38 transition-colors hover:text-[#7AB6F4]"
+                aria-label="Shows net profit or loss grouped by trading day."
+                title="Shows net profit or loss grouped by trading day."
+              />
+            </div>
+            <p className="text-[#A0A0A0] text-sm font-light">Daily performance tracking</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-center h-80">
+          <div className="w-16 h-16 rounded-full bg-[#7AB6F4]/10 flex items-center justify-center mb-4">
+            <BarChart3 className="w-8 h-8 text-[#7AB6F4]" />
+          </div>
+          <div className="text-[#F4F4F4] text-base font-medium mb-2">No Trading Data</div>
+          <div className="text-[#A0A0A0] text-sm font-light text-center max-w-xs">
+            Complete your first trades to see your daily P&L performance
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="animate-fadeIn rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)]"
+    >
+      <div className="mb-3 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-[14px] font-semibold tracking-normal text-white">Net Daily P&L</h3>
+            <HelpCircle
+              className="h-3.5 w-3.5 cursor-help text-white/38 transition-colors hover:text-[#7AB6F4]"
+              aria-label="Shows one bar per day with that day's net closed-trade P&L."
+              title="Shows one bar per day with that day's net closed-trade P&L."
+            />
+          </div>
+          <p className="text-[11px] font-normal text-white/58">Daily performance tracking (one bar per day)</p>
+        </div>
+        <div className="flex items-center gap-4 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-sm bg-[#3BC76E]"></div>
+            <span className="font-normal text-white/62">Profit</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-sm bg-[#EF4444]"></div>
+            <span className="font-normal text-white/62">Loss</span>
+          </div>
+          <button className="ml-3 rounded-md border border-white/[0.08] px-3 py-1.5 text-[11px] text-white/78">Daily</button>
+        </div>
+      </div>
+
+      <div style={{ width: "100%", height: 210 }}>
+        <ResponsiveContainer>
+          <BarChart
+            data={optimizedData}
+            margin={{ top: 20, right: 20, left: 10, bottom: 30 }}
+            barGap={3}
+            barCategoryGap="25%"
+          >
+            <defs>
+              <linearGradient id="btProfitGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_COLORS.profitGradientStart} stopOpacity={1}/>
+                <stop offset="100%" stopColor={CHART_COLORS.profitGradientEnd} stopOpacity={0.9}/>
+              </linearGradient>
+              <linearGradient id="btLossGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={CHART_COLORS.lossGradientStart} stopOpacity={0.9}/>
+                <stop offset="100%" stopColor={CHART_COLORS.lossGradientEnd} stopOpacity={1}/>
+              </linearGradient>
+              <filter id="btBarShadow">
+                <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3"/>
+              </filter>
+            </defs>
+            <CartesianGrid
+              stroke={CHART_COLORS.gridDark}
+              strokeDasharray="3 3"
+              vertical={false}
+            />
+            <XAxis
+              dataKey="date"
+              tick={{
+                fill: CHART_COLORS.textMuted,
+                fontSize: 10,
+                fontWeight: 400
+              }}
+              stroke="rgba(255,255,255,0.1)"
+              axisLine={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
+              tickLine={false}
+              height={50}
+            />
+            <YAxis
+              tick={{
+                fill: CHART_COLORS.text,
+                fontSize: 11,
+                fontWeight: 500
+              }}
+              stroke="rgba(255,255,255,0.1)"
+              axisLine={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
+              tickLine={false}
+              width={60}
+              tickFormatter={(value) => {
+                if (value === 0) return '$0';
+                const absValue = Math.abs(value);
+                if (absValue >= 1000) {
+                  const formatted = (absValue / 1000).toFixed(1);
+                  return `${value < 0 ? '-' : ''}$${formatted}k`;
+                }
+                return `${value < 0 ? '-' : ''}$${Math.round(absValue)}`;
+              }}
+            />
+            {/* Blue zero reference line (replaces gold) */}
+            <ReferenceLine
+              y={0}
+              stroke={BLUE}
+              strokeWidth={1.5}
+              strokeOpacity={0.3}
+            />
+            <Tooltip
+              cursor={{ fill: 'rgba(122,182,244,0.05)' }}
+              content={({ active, payload, label }: any) => {
+                if (active && payload && payload.length) {
+                  const value = payload[0].value;
+                  const isPositive = value >= 0;
+                  const color = isPositive ? CHART_COLORS.profitGradientStart : CHART_COLORS.lossGradientStart;
+                  const absValue = Math.abs(value);
+                  const formatted = isPositive
+                    ? `+$${absValue.toFixed(2)}`
+                    : `-$${absValue.toFixed(2)}`;
+
+                  return (
+                    <div
+                      style={{
+                        background: 'linear-gradient(135deg, #141414 0%, #1A1A1A 100%)',
+                        border: `1.5px solid ${color}`,
+                        borderRadius: 12,
+                        padding: '12px 14px',
+                        boxShadow: `0 8px 24px ${color}40`,
+                      }}
+                    >
+                      <div style={{
+                        color: CHART_COLORS.textMuted,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        marginBottom: 6,
+                        textTransform: 'uppercase',
+                      }}>
+                        {label}
+                      </div>
+                      <div style={{
+                        color: color,
+                        fontSize: 15,
+                        fontWeight: 700,
+                      }}>
+                        {formatted}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Bar
+              dataKey="pnl"
+              maxBarSize={14}
+              filter="url(#btBarShadow)"
+              isAnimationActive={false}
+              radius={[4, 4, 4, 4]}
+            >
+              {optimizedData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.pnl >= 0 ? "url(#btProfitGradient)" : "url(#btLossGradient)"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
+
+BacktestDailyPnLChartV2.displayName = 'BacktestDailyPnLChartV2';
+
+export default BacktestDailyPnLChartV2;
