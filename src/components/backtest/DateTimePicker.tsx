@@ -89,35 +89,17 @@ export function DateTimePicker({ value, interval, onChange, disabled }: DateTime
     onChange(next);
   };
 
+  // Elad 2026-05-29: only the calendar icon. The visible date + time
+  // inputs were removed because the in-chart click-to-jump (set in
+  // BacktestReplayChart) is now the primary way to change the replay
+  // moment. The icon is preserved as a visual cue + future popover
+  // expansion point. dateStr/timeStr state retained so future expansion
+  // can re-enable a popup without restoring the inputs inline.
+  void dateStr; void timeStr; void commit; void warning;
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <Calendar size={14} className="text-zinc-500" />
-        <input
-          type="date"
-          value={dateStr}
-          max={maxDate ?? undefined}
-          disabled={disabled}
-          onChange={(e) => {
-            setDateStr(e.target.value);
-            commit(e.target.value, timeStr);
-          }}
-          className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-[#C9A646] focus:outline-none disabled:opacity-50"
-        />
-        <input
-          type="time"
-          value={timeStr}
-          disabled={disabled}
-          onChange={(e) => {
-            setTimeStr(e.target.value);
-            commit(dateStr, e.target.value);
-          }}
-          className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 focus:border-[#C9A646] focus:outline-none disabled:opacity-50"
-        />
-      </div>
-      {warning && (
-        <div className="text-[10px] text-amber-400/80">{warning}</div>
-      )}
+    <div className="flex items-center" title="Replay start time — click on the chart to jump">
+      <Calendar size={14} className="text-zinc-500" aria-hidden="true" />
     </div>
   );
 }
