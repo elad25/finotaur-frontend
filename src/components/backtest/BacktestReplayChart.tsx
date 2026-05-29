@@ -173,11 +173,11 @@ export function BacktestReplayChart({
     entryX: number;
   } | null>(null);
 
-  // Scissors (jump tool) armed state. Armed on mount (= entering replay): the
-  // trader picks a rewind point with ONE click, after which it disarms and the
-  // chart returns to a normal crosshair for trading. Re-arm via the toolbar
-  // Scissors toggle. (Elad 2026-05-30: "rewind once, then no scissors".)
-  const [scissorsArmed, setScissorsArmed] = useState(true);
+  // Replay-rewind ("REPLAY" button) armed state. Default OFF (Elad 2026-05-29):
+  // the chart opens in normal mode — a click trades, no surprise jump. The
+  // trader arms rewind via the toolbar REPLAY button, then ONE click jumps the
+  // cursor to that bar and it auto-disarms back to normal crosshair.
+  const [scissorsArmed, setScissorsArmed] = useState(false);
   const scissorsArmedRef = useRef(scissorsArmed);
 
   useEffect(() => { onBarClickRef.current = onBarClick; }, [onBarClick]);

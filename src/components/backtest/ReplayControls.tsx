@@ -172,8 +172,8 @@ export function ReplayControls({
           type="button"
           onClick={onToggleScissors}
           title={scissorsArmed
-            ? 'Jump tool armed — click the chart to rewind to that bar'
-            : 'Activate jump tool — then click the chart to rewind'}
+            ? 'Replay rewind armed — click the chart to jump to that bar'
+            : 'Activate replay rewind — then click the chart to jump to that bar'}
           className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors ${
             scissorsArmed
               ? 'border-[#7AB6F4]/50 bg-[#7AB6F4]/10 text-[#7AB6F4]'
@@ -181,7 +181,7 @@ export function ReplayControls({
           }`}
         >
           <Scissors size={12} />
-          Jump
+          REPLAY
         </button>
       )}
 
