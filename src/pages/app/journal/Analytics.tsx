@@ -139,7 +139,7 @@ export default function AnalyticsDashboard() {
 
         {/* Tab Content */}
         {activeTab === 'overview' && (
-          <OverviewTab 
+          <OverviewTab
             stats={analytics.stats}
             insights={analytics.insights}
             trades={analytics.filteredTrades as Trade[]}
@@ -147,6 +147,7 @@ export default function AnalyticsDashboard() {
             bestWorst={analytics.bestWorst}
             momentum={analytics.momentum}
             byDayOfWeek={analytics.breakdown.byDayOfWeek || []}
+            timeRange={timeRange}
           />
         )}
         
@@ -176,22 +177,24 @@ export default function AnalyticsDashboard() {
 // TAB COMPONENTS
 // ==========================================
 
-function OverviewTab({ 
-  stats, 
-  insights, 
-  trades, 
+function OverviewTab({
+  stats,
+  insights,
+  trades,
   changes,
   bestWorst,
   momentum,
-  byDayOfWeek
-}: { 
-  stats: StrategyStats; 
-  insights: AIInsight[]; 
+  byDayOfWeek,
+  timeRange,
+}: {
+  stats: StrategyStats;
+  insights: AIInsight[];
   trades: Trade[];
   changes: { winRateChange: number; pnlChange: number; avgRChange: number };
   bestWorst: { best: BestWorstTrade | null; worst: BestWorstTrade | null };
   momentum: { score: number; label: string; color: string };
   byDayOfWeek: { name: string; stats: StrategyStats }[];
+  timeRange: TimeRange;
 }) {
   return (
     <div className="space-y-5">
@@ -204,13 +207,13 @@ function OverviewTab({
           accent="blue"
           icon={BarChart3}
         />
-        {/* TODO: add trend prop to JournalKpiCard for Win Rate change indicator (was: change={changes?.winRateChange}) */}
         <JournalKpiCard
           label="Win Rate"
           value={`${stats.winRate.toFixed(0)}%`}
           hint={`${stats.wins} / ${stats.totalTrades} trades`}
           accent={stats.winRate >= 50 ? 'green' : 'red'}
           icon={Target}
+          trend={timeRange === 'ALL' ? undefined : changes?.winRateChange}
           gauge={
             <JournalGauge
               mode="winRate"
@@ -220,7 +223,6 @@ function OverviewTab({
             />
           }
         />
-        {/* TODO: add trend prop to JournalKpiCard for Net P&L change indicator (was: change={changes?.pnlChange}) */}
         <JournalKpiCard
           label="Net P&L"
           value={`$${stats.netPnL.toFixed(0)}`}
@@ -228,6 +230,7 @@ function OverviewTab({
           accent="gold"
           icon={DollarSign}
           valueSize="lg"
+          trend={timeRange === 'ALL' ? undefined : changes?.pnlChange}
         />
         <JournalKpiCard
           label="Avg R:R"
@@ -240,12 +243,12 @@ function OverviewTab({
 
       {/* Row 2 — 4-up secondary KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* TODO: add trend prop to JournalKpiCard for Expectancy change indicator (was: change={changes?.avgRChange}) */}
         <JournalKpiCard
           label="Expectancy"
           value={`${stats.expectancy >= 0 ? '+' : ''}${stats.expectancy.toFixed(2)}R`}
           hint="Per trade"
           accent={stats.expectancy >= 0 ? 'green' : 'red'}
+          trend={timeRange === 'ALL' ? undefined : changes?.avgRChange}
         />
         <JournalKpiCard
           label="Profit Factor"

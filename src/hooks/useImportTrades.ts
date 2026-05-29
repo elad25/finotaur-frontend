@@ -118,22 +118,20 @@ export function useImportTrades(): UseImportTradesReturn {
         open_at: trade.open_at,
         close_at: trade.close_at || null,
         pnl: trade.pnl || null,
-        commission: trade.commission || null,
+        fees: trade.fees ?? trade.commission ?? null, // DB column is fees (no commission column)
         notes: trade.notes || null,
         strategy_id: trade.strategy_id || null,
         setup: trade.setup || null,
         session: trade.session || null,
-        asset_type: trade.asset_type || 'STOCK',
-        stop_loss: trade.stop_loss || null,
-        take_profit: trade.take_profit || null,
-        risk_amount: trade.risk_amount || null,
+        asset_class: trade.asset_type || 'STOCK', // DB column is asset_class (no asset_type)
+        stop_price: trade.stop_loss ?? 0,         // DB column is stop_price (numeric NOT NULL)
+        take_profit_price: trade.take_profit || null, // DB column is take_profit_price
+        risk_usd: trade.risk_amount || null,      // DB column is risk_usd (no risk_amount)
         rr: trade.rr || null,
-        account_id: trade.account_id || null,
         tags: trade.tags || [],
-        emotions: trade.emotions || null,
-        mistakes: trade.mistakes || [],
-        grade: trade.grade || null,
-        imported_from: trade.imported_from || null,
+        mistake: trade.mistakes || null,          // DB column is mistake (singular, text)
+        quality_tag: trade.grade || null,         // DB column is quality_tag (no grade)
+        import_source: trade.imported_from || 'csv', // DB column is import_source (not imported_from)
         external_id: trade.external_id || null,
         idempotency_key: await buildCSVIdempotencyKey(
           trade.user_id,
