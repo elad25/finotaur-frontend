@@ -22,6 +22,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { JournalKpiCard } from '@/components/journal/ds/JournalKpiCard';
 import { useBacktestStats, type EquityPoint, type BacktestTrade } from '@/hooks/useBacktestStats';
 import type { SessionStats } from '@/hooks/useBacktestSession';
+import { useStrategyLibrary } from '@/hooks/useStrategyLibrary';
 import dayjs from 'dayjs';
 
 // ================================================
@@ -30,6 +31,10 @@ import dayjs from 'dayjs';
 
 const JOURNAL_PANEL =
   'relative overflow-hidden rounded-[12px] border border-white/[0.08] bg-[linear-gradient(135deg,rgba(22,22,22,0.92),rgba(11,11,11,0.96))] shadow-[0_18px_44px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.04)] p-4';
+
+// Stable empty fallback so the per-strategy panel's useMemo doesn't churn on
+// loading renders (a fresh `new Map()` each render would invalidate it).
+const EMPTY_BY_STRATEGY: Map<string, SessionStats> = new Map();
 
 // ================================================
 // QUANT MATH HELPERS
@@ -351,6 +356,98 @@ const MonthlyReturnsPanel: React.FC<{ trades: BacktestTrade[] }> = ({
 };
 
 // ================================================
+// SECTION 4.5 — PER-STRATEGY BREAKDOWN
+// ================================================
+// Sourced from useBacktestStats().byStrategy (computeStatsByStrategy keyed by
+// the trade's strategy_id). Trades with no strategy tag bucket under 'manual'.
+// Strategy names resolve from the client strategy library; ids that no longer
+// resolve (deleted strategy) fall back to a neutral label.
+
+const StrategyBreakdownPanel: React.FC<{
+  byStrategy: Map<string, SessionStats>;
+}> = ({ byStrategy }) => {
+  const { strategies } = useStrategyLibrary();
+
+  const nameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of strategies) m.set(s.id, s.name);
+    return m;
+  }, [strategies]);
+
+  const rows = useMemo(() => {
+    const out: Array<{ id: string; name: string; isManual: boolean; stats: SessionStats }> = [];
+    for (const [id, stats] of byStrategy) {
+      if (stats.totalTrades === 0) continue;
+      const isManual = id === 'manual';
+      const name = isManual
+        ? 'Manual / untagged'
+        : (nameById.get(id) ?? 'Deleted strategy');
+      out.push({ id, name, isManual, stats });
+    }
+    // Best net P&L first.
+    return out.sort((a, b) => b.stats.netPnl - a.stats.netPnl);
+  }, [byStrategy, nameById]);
+
+  // Hide entirely when there's no real attribution to show — i.e. nothing, or
+  // only the 'manual' bucket (which the headline KPIs already cover).
+  const meaningful = rows.length > 1 || (rows.length === 1 && !rows[0].isManual);
+  if (!meaningful) return null;
+
+  return (
+    <div className={JOURNAL_PANEL}>
+      <h2 className="text-[14px] font-semibold text-white mb-1">Per-Strategy Breakdown</h2>
+      <p className="text-[10px] text-white/40 mb-3">
+        Performance attributed to each saved strategy. Untagged trades are grouped as manual.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[11px] border-collapse">
+          <thead>
+            <tr className="text-white/40">
+              <th className="text-left font-medium pb-2 pr-2">Strategy</th>
+              <th className="text-right font-medium pb-2 px-2">Trades</th>
+              <th className="text-right font-medium pb-2 px-2">Win rate</th>
+              <th className="text-right font-medium pb-2 px-2">Net P&amp;L</th>
+              <th className="text-right font-medium pb-2 px-2">Profit factor</th>
+              <th className="text-right font-medium pb-2 pl-2">Avg R</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-white/[0.06]">
+                <td className="py-1.5 pr-2 font-medium">
+                  {r.isManual
+                    ? <span className="italic text-white/50">{r.name}</span>
+                    : <span className="text-[#7AB6F4]">{r.name}</span>}
+                </td>
+                <td className="py-1.5 px-2 text-right tabular-nums text-white/70">{r.stats.totalTrades}</td>
+                <td
+                  className="py-1.5 px-2 text-right tabular-nums font-medium"
+                  style={{ color: r.stats.winRate >= 50 ? '#4AD295' : '#A0A0A0' }}
+                >
+                  {r.stats.winRate.toFixed(1)}%
+                </td>
+                <td
+                  className="py-1.5 px-2 text-right tabular-nums font-semibold"
+                  style={{ color: r.stats.netPnl >= 0 ? '#4AD295' : '#E36363' }}
+                >
+                  {r.stats.netPnl >= 0 ? '+' : ''}${r.stats.netPnl.toFixed(2)}
+                </td>
+                <td className="py-1.5 px-2 text-right tabular-nums text-[#C9A646]">
+                  {Number.isFinite(r.stats.profitFactor) ? r.stats.profitFactor.toFixed(2) : '∞'}
+                </td>
+                <td className="py-1.5 pl-2 text-right tabular-nums text-white/70">
+                  {r.stats.avgRR > 0 ? r.stats.avgRR.toFixed(2) : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ================================================
 // SECTION 5 — P&L DISTRIBUTION HISTOGRAM
 // ================================================
 
@@ -642,6 +739,7 @@ const BacktestAnalyticsInner: React.FC = () => {
   const equitySeries = data?.equitySeries ?? [];
   const stats = data?.stats;
   const sessionCount = data?.sessionCount ?? 0;
+  const byStrategy = data?.byStrategy ?? EMPTY_BY_STRATEGY;
 
   const returns = useMemo(() => dailyReturns(equitySeries), [equitySeries]);
   const sharpe = useMemo(() => sharpeRatio(returns), [returns]);
@@ -755,6 +853,9 @@ const BacktestAnalyticsInner: React.FC = () => {
 
         {/* ── Section 4: Monthly Returns Heatmap ───────────────────────────── */}
         <MonthlyReturnsPanel trades={trades} />
+
+        {/* ── Section 4.5: Per-Strategy Breakdown (hidden when only manual) ── */}
+        <StrategyBreakdownPanel byStrategy={byStrategy} />
 
         {/* ── Section 5: P&L Distribution ──────────────────────────────────── */}
         <PnlDistributionPanel trades={trades} />

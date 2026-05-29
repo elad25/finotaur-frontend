@@ -49,6 +49,7 @@ interface TradePayload {
   pnl?: number;
   pnl_percent?: number;
   exit_reason?: 'manual' | 'sl' | 'tp';
+  strategy_id?: string | null;   // strategy attribution tag (NULL = manual)
 }
 
 interface PendingOrderPayload {
@@ -199,6 +200,7 @@ serve(async (req) => {
           pnl: t.pnl ?? null,
           pnl_percent: t.pnl_percent ?? null,
           exit_reason: t.exit_reason ?? null,
+          strategy_id: t.strategy_id ?? null,
         }));
 
         const { error: tradesErr } = await supabase.from('backtest_trades_v2').insert(tradeRows);

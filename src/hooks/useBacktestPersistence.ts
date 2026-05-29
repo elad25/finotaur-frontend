@@ -81,6 +81,7 @@ export interface SavedSessionDetail {
     pnl: number | null;
     pnl_percent: number | null;
     exit_reason: 'manual' | 'sl' | 'tp' | null;
+    strategy_id: string | null;
   }>;
 }
 
@@ -106,6 +107,7 @@ function paperToWire(p: PaperPosition) {
     pnl: p.pnl,
     pnl_percent: p.pnlPercent,
     exit_reason: p.exitReason,
+    strategy_id: p.strategyId ?? null,
   };
 }
 

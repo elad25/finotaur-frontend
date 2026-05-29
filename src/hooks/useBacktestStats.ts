@@ -32,6 +32,7 @@ interface BacktestTradeRow {
   pnl: number | null;
   pnl_percent: number | null;
   exit_reason: 'manual' | 'sl' | 'tp' | null;
+  strategy_id: string | null;
   // Joined columns from backtest_sessions_v2:
   session: {
     id: string;
@@ -62,6 +63,7 @@ export interface BacktestTrade {
   pnl: number;
   pnlPercent: number;
   exitReason: 'manual' | 'sl' | 'tp' | null;
+  strategyId: string | null;
   savedAt: string;         // ISO from session.created_at
   outcome: 'WIN' | 'LOSS' | 'BE';
 }
@@ -136,6 +138,7 @@ function rowToTrade(row: BacktestTradeRow): BacktestTrade {
     pnl,
     pnlPercent: row.pnl_percent ?? 0,
     exitReason: row.exit_reason,
+    strategyId: row.strategy_id ?? null,
     savedAt: row.session?.created_at ?? row.exit_time ?? row.entry_time,
     outcome,
   };
@@ -155,6 +158,7 @@ function tradesToPaperPositions(trades: BacktestTrade[]): PaperPosition[] {
     pnl: t.pnl,
     pnlPercent: t.pnlPercent,
     exitReason: t.exitReason ?? undefined,
+    strategyId: t.strategyId ?? null,
   }));
 }
 
@@ -213,7 +217,7 @@ export function useBacktestStats() {
         .from('backtest_trades_v2')
         .select(`
           id, session_id, side, entry_time, entry_price, exit_time, exit_price,
-          size, stop_loss, take_profit, pnl, pnl_percent, exit_reason,
+          size, stop_loss, take_profit, pnl, pnl_percent, exit_reason, strategy_id,
           session:backtest_sessions_v2!inner(id, name, symbol, interval, asset_class, created_at, user_id, initial_balance)
         `)
         .eq('session.user_id', userId)
