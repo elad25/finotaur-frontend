@@ -648,6 +648,7 @@ export function BacktestReplayChart({
         onStepBack={playback.stepBack}
         onReset={playback.reset}
         onSpeedChange={playback.setSpeed}
+        onSeek={playback.setCursor}
         showScissors={showReplayCursor}
         scissorsArmed={scissorsArmed}
         onToggleScissors={() => setScissorsArmed((v) => !v)}
