@@ -1,38 +1,30 @@
 import * as React from 'react';
-import { useState } from 'react';
+import ToolResultRenderer from './ToolResultRenderer';
 import type { ChatMessage } from '../types';
 
 interface MessageBubbleProps {
   message: ChatMessage;
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps): JSX.Element {
-  const [isToolExpanded, setIsToolExpanded] = useState(false);
+// Friendly action labels for the tool-message eyebrow
+const ACTION_LABELS: Record<string, string> = {
+  get_trades: 'looked up your trades',
+  find_trades: 'searched your trades',
+  list_trades: 'listed your trades',
+  get_score: 'computed your score',
+};
 
+export default function MessageBubble({ message }: MessageBubbleProps): JSX.Element {
   // ── tool message ────────────────────────────────────────────────────────────
   if (message.role === 'tool') {
-    const toolName = message.tool_result
-      ? (message as { tool_result?: { action?: string } }).tool_result?.action ?? 'tool'
-      : 'tool';
-    const outputJson = message.tool_result
-      ? JSON.stringify(message.tool_result, null, 2)
-      : '';
+    const action =
+      (message as { tool_result?: { action?: string } }).tool_result?.action ?? 'tool';
+    const label = ACTION_LABELS[action] ?? `used ${action}`;
 
     return (
       <div className="w-full border-l-2 border-border-ds-subtle pl-ds-3 py-ds-2">
-        <button
-          type="button"
-          onClick={() => setIsToolExpanded((v) => !v)}
-          className="flex items-center gap-ds-2 text-ink-secondary text-sm transition-all duration-200 ease-out hover:text-ink-primary"
-        >
-          <span>🛠 used {toolName}</span>
-          <span className="text-ink-muted text-xs">{isToolExpanded ? '▲' : '▼'}</span>
-        </button>
-        {isToolExpanded && outputJson && (
-          <pre className="overflow-x-auto text-xs mt-ds-2 text-ink-secondary bg-surface-2 rounded-md p-ds-3">
-            {outputJson}
-          </pre>
-        )}
+        <p className="text-ink-secondary text-xs mb-ds-2">🛠 {label}</p>
+        <ToolResultRenderer result={message.tool_result} />
       </div>
     );
   }

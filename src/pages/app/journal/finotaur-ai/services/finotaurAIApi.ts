@@ -2,7 +2,7 @@
 // Auth: credentials: 'include' passes the Supabase session cookie.
 // The server's requireAuthJWT middleware validates the JWT from the cookie.
 
-import type { BriefingResponse, ConversationListItem, FinotaurScore, ToolExecuteResponse } from '../types';
+import type { BriefingResponse, ConversationListItem, FinotaurScore, ToolExecuteResponse, UsageResponse } from '../types';
 
 export async function fetchFinotaurScore(windowDays: number = 30): Promise<FinotaurScore> {
   const res = await fetch(`/api/journal-ai/score?window=${windowDays}`, {
@@ -135,6 +135,24 @@ export async function listConversations(): Promise<ConversationListItem[]> {
   }
   const data = await res.json();
   return (data?.conversations ?? []) as ConversationListItem[];
+}
+
+export async function fetchUsage(): Promise<UsageResponse> {
+  const res = await fetch('/api/journal-ai/usage', {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new BriefingApiError(
+      body?.message_en ?? `fetchUsage failed (${res.status})`,
+      res.status,
+      body?.code,
+      body?.message_he,
+      body,
+    );
+  }
+  return res.json() as Promise<UsageResponse>;
 }
 
 export async function deleteConversation(id: string): Promise<void> {

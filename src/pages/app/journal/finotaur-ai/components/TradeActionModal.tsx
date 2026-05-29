@@ -147,6 +147,12 @@ function DeleteTradeBody({
         </div>
       </div>
 
+      {/* Soft-delete disclosure — explain reversibility before user types DELETE */}
+      <p className="text-xs text-ink-tertiary leading-relaxed">
+        This is a reversible action — the trade will be hidden from your journal but
+        kept in our system for 30 days. Contact support to restore it before then.
+      </p>
+
       {/* Typed confirmation */}
       <div className="flex flex-col gap-ds-2">
         <label className="text-sm text-ink-secondary">

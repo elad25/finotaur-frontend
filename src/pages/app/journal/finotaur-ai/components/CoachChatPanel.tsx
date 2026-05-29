@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import MessageBubble from './MessageBubble';
@@ -207,6 +207,16 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
           )}
         </div>
 
+        {/* Error banner (desktop) — surfaces SSE / chat errors that would otherwise be silent */}
+        {(chat.error || chat.errorHe) && (
+          <div
+            role="alert"
+            className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
+          >
+            <p className="text-sm text-num-negative">{chat.error ?? chat.errorHe}</p>
+          </div>
+        )}
+
         {/* Pending tool call — between message list and input */}
         {pendingToolCallUI && (
           <div className="shrink-0 mt-ds-3">
@@ -226,6 +236,8 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
           onSend={handleSend}
           onKeyDown={handleKeyDown}
           disabled={inputDisabled}
+          isStreaming={chat.isStreaming}
+          onStop={chat.abort}
         />
       </Card>
 
@@ -277,6 +289,16 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
             </div>
           )}
 
+          {/* Error banner (mobile) — only visible when sheet expanded */}
+          {isExpanded && (chat.error || chat.errorHe) && (
+            <div
+              role="alert"
+              className="shrink-0 mt-ds-3 rounded-[8px] border border-num-negative/40 bg-num-negative/5 px-ds-3 py-ds-2"
+            >
+              <p className="text-sm text-num-negative">{chat.error ?? chat.errorHe}</p>
+            </div>
+          )}
+
           {/* Pending tool call */}
           {isExpanded && pendingToolCallUI && (
             <div className="shrink-0 mt-ds-3">
@@ -296,6 +318,8 @@ export default function CoachChatPanel({ className, prefillRequest }: CoachChatP
             onSend={handleSend}
             onKeyDown={handleKeyDown}
             disabled={inputDisabled}
+            isStreaming={chat.isStreaming}
+            onStop={chat.abort}
           />
         </Card>
       </div>
@@ -347,10 +371,17 @@ interface InputRowProps {
   onSend: () => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   disabled: boolean;
+  /** When true, replace Send button with Stop button (calls onStop). */
+  isStreaming: boolean;
+  /** Abort handler — called when user clicks Stop. */
+  onStop: () => void;
 }
 
 const InputRow = React.forwardRef<HTMLTextAreaElement, InputRowProps>(
-  function InputRow({ value, onChange, onSend, onKeyDown, disabled }, ref) {
+  function InputRow(
+    { value, onChange, onSend, onKeyDown, disabled, isStreaming, onStop },
+    ref,
+  ) {
     return (
       <div className="flex items-end gap-ds-2 mt-ds-3 shrink-0">
         <textarea
@@ -370,16 +401,28 @@ const InputRow = React.forwardRef<HTMLTextAreaElement, InputRowProps>(
             'overflow-hidden',
           ].join(' ')}
         />
-        <Button
-          variant="ghost"
-          size="compact"
-          showArrow={false}
-          disabled={disabled || !value.trim()}
-          onClick={onSend}
-          aria-label="Send message"
-        >
-          <Send size={16} />
-        </Button>
+        {isStreaming ? (
+          <Button
+            variant="ghost"
+            size="compact"
+            showArrow={false}
+            onClick={onStop}
+            aria-label="Stop streaming"
+          >
+            <Square size={14} />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="compact"
+            showArrow={false}
+            disabled={disabled || !value.trim()}
+            onClick={onSend}
+            aria-label="Send message"
+          >
+            <Send size={16} />
+          </Button>
+        )}
       </div>
     );
   },

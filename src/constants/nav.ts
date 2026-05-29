@@ -226,6 +226,7 @@ ai: {
     beta: false,
     subNav: [
       { label: 'Journal', path: '/app/journal/overview' },
+      { label: 'AI Coach', path: '/app/journal/finotaur-ai' },
       { label: 'Backtest', path: '/app/journal/backtest/overview' },
       { label: 'Admin Dashboard', path: '/app/journal/admin', adminOnly: true },
     ],
