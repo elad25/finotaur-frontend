@@ -898,8 +898,8 @@ export function FinotaurChart({
             if (x === null || y === null) return null;
             if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
-            // Push the marker clearly off the candle: 18px gap from the high/low.
-            const top = icon.direction === 'down' ? (y as number) - 18 : (y as number) + 18;
+            // Push the marker clearly off the candle: 28px gap from the high/low.
+            const top = icon.direction === 'down' ? (y as number) - 28 : (y as number) + 28;
             const left = x as number;
 
             return (
@@ -917,7 +917,7 @@ export function FinotaurChart({
                   alignItems: 'center',
                   justifyContent: 'center',
                   border: '2px solid #ffffff',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.6), 0 0 12px ' + icon.color + '66',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
                   pointerEvents: 'none',
                 }}
               >

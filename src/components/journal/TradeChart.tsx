@@ -63,10 +63,10 @@ const MARKER_COLORS = {
   //   SELL → red  circle ABOVE the bar
   // A LONG trade is buy-then-sell; a SHORT trade is sell-then-buy. The
   // direction (not the entry/exit role) drives the marker.
-  // Bright trading-chart palette so markers stand out against red/green candles.
-  // Chart context overrides the DS no-green rule per user preference.
-  buy:  '#10dc66',  // vivid bright green — buy direction
-  sell: '#ff453a',  // vivid bright red   — sell direction
+  // Solid trading palette — substantial colors that read as "professional"
+  // rather than neon. Chart context overrides the DS no-green rule.
+  buy:  '#16a34a',  // solid green (tailwind green-600) — buy direction
+  sell: '#dc2626',  // solid red   (tailwind red-600)   — sell direction
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
