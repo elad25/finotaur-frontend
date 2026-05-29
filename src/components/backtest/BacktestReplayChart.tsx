@@ -503,6 +503,27 @@ export function BacktestReplayChart({
     seriesRef.current.setMarkers(markers);
   }, [activePosition, closedPositions, playback.cursor, bars, load.kind]);
 
+  // Step-back support. lightweight-charts' series.update() is monotonic-
+  // forward only; `handleAdvance` short-circuits when newCursor moves back
+  // (it just no-ops to avoid corrupting the series). To actually re-render
+  // with N fewer bars when the user clicks the step-back chevron, watch the
+  // cursor and re-seed the series with bars[0..cursor+1] whenever it
+  // decreases below `lastUpdatedIdxRef`.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (playback.cursor < lastUpdatedIdxRef.current) {
+      const visible = bars.slice(0, Math.max(0, playback.cursor + 1)).map((b) => ({
+        time: b.time,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+      }));
+      seriesRef.current.setData(visible);
+      lastUpdatedIdxRef.current = playback.cursor;
+    }
+  }, [playback.cursor, bars]);
+
   // Phase 6: sync price lines for pending orders. Each order gets a single
   // horizontal line at its trigger price, colored by side (BUY=green,
   // SELL=red) and dashed to distinguish from any future SL/TP overlay.
