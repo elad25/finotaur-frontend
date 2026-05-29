@@ -582,7 +582,14 @@ export function BacktestReplayChart({
         onSpeedChange={playback.setSpeed}
       />
       <div className="relative flex-1" style={{ minHeight: 0 }}>
-        <div ref={containerRef} className={`absolute inset-0${showReplayCursor ? ' cursor-none' : ''}`} style={{ height }} />
+        {/* cursor-none on container + [&_*]:cursor-none propagates to
+            lightweight-charts' inner <canvas> (which sets cursor:crosshair
+            itself, otherwise winning over the parent). */}
+        <div
+          ref={containerRef}
+          className={`absolute inset-0${showReplayCursor ? ' cursor-none [&_*]:cursor-none' : ''}`}
+          style={{ height }}
+        />
 
         {/* ── TV-style replay cursor overlays ── */}
         {showReplayCursor && activeX !== null && (
