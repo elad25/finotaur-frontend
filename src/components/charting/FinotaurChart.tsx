@@ -864,12 +864,34 @@ export function FinotaurChart({
             const series = seriesRef.current;
             if (!chart || !series) return null;
 
-            const x = chart.timeScale().timeToCoordinate(icon.time as UTCTimestamp);
+            // Snap marker time to the nearest available bar — lightweight-charts
+            // returns null from timeToCoordinate for times that don't EXACTLY
+            // match a bar timestamp (fills between bar starts, after-hours
+            // executions). Without snapping, the overlay never renders for most
+            // real trades. Binary search over barsRef which the chart already
+            // keeps up to date.
+            const bars = barsRef.current;
+            if (bars.length === 0) return null;
+            let lo = 0, hi = bars.length - 1;
+            const targetTime = icon.time as unknown as number;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1;
+              if ((bars[mid].time as unknown as number) < targetTime) lo = mid + 1;
+              else hi = mid;
+            }
+            const candidateAfter = bars[lo];
+            const candidateBefore = lo > 0 ? bars[lo - 1] : candidateAfter;
+            const beforeT = candidateBefore.time as unknown as number;
+            const afterT = candidateAfter.time as unknown as number;
+            const snappedTime = (
+              Math.abs(targetTime - beforeT) <= Math.abs(afterT - targetTime)
+                ? candidateBefore.time
+                : candidateAfter.time
+            ) as UTCTimestamp;
+
+            const x = chart.timeScale().timeToCoordinate(snappedTime);
             const y = series.priceToCoordinate(icon.price);
 
-            // null = outside viewport; NaN = chart not yet laid out (first paint).
-            // The RAF deferral in the subscribe effect handles the NaN case on the
-            // next bump, but defend at the boundary too.
             if (x === null || y === null) return null;
             if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
