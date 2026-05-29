@@ -6,13 +6,13 @@ import { memo } from 'react';
 import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 import {
   useDefiSummary,
   useDefiProtocols,
   useDefiYields,
 } from '@/hooks/crypto/useDefiTvl';
 import {
-  GlassCard,
   GlassStat,
   SectionHeader,
   GlassStatSkeleton,
@@ -35,48 +35,6 @@ function fmtPct(n: number | null): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 }
 
-// ─── AI Summary Card (deferred — stub) ───────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  totalTvl,
-  dominantChain,
-}: {
-  totalTvl: number | undefined;
-  dominantChain: { name: string; tvl: number } | null | undefined;
-}) {
-  // TODO(wave-1): replace this static card with a live POST /api/ai-reports/defi-tvl call
-  // once the Anthropic client integration is wired on the server side.
-  // The endpoint returns { summary: string, generatedAt: number }.
-
-  const tvlText = totalTvl ? formatCompact(totalTvl) : '—';
-  const dominanceText =
-    totalTvl && dominantChain
-      ? `${((dominantChain.tvl / totalTvl) * 100).toFixed(1)}%`
-      : '—';
-  const chainName = dominantChain?.name ?? '—';
-
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI DeFi Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            Total DeFi TVL:{' '}
-            <span className="font-semibold text-gold-primary">{tvlText}</span>.{' '}
-            {chainName} dominates with{' '}
-            <span className="font-semibold">{dominanceText}</span> of total locked value.
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-            {/* TODO(wave-1): replace with generatedAt timestamp once AI endpoint is live */}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── TVL by Chain Grid ────────────────────────────────────────────────────────
 
@@ -336,8 +294,6 @@ const TvlHeader = memo(function TvlHeader() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const DefiTvl = memo(function DefiTvl() {
-  const { data: summary } = useDefiSummary();
-
   return (
     <PageTemplate
       title="DeFi TVL"
@@ -345,10 +301,7 @@ const DefiTvl = memo(function DefiTvl() {
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        <AiSummaryCard
-          totalTvl={summary?.totalTvl}
-          dominantChain={summary?.dominantChain}
-        />
+        <AiSummaryCard feature="defi-tvl" />
 
         {/* Total TVL Header */}
         <TvlHeader />

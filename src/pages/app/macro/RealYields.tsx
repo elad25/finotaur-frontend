@@ -11,6 +11,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 import {
   useRealYieldsSnapshot,
   useRealYieldsSeries,
@@ -50,53 +51,6 @@ function breakevenColor(n: number): string {
   return 'text-sky-400';
 }
 
-// ─── AI Summary Card (stub) ──────────────────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  snapshot,
-}: {
-  snapshot: ReturnType<typeof useRealYieldsSnapshot>['data'];
-}) {
-  // TODO(wave-1): replace with live POST /api/ai-reports/real-yields call
-  // once Anthropic client integration is wired on the server side.
-
-  const tips10 = snapshot?.tips10;
-  const be10 = snapshot?.breakeven10;
-  const gold = snapshot?.gold;
-
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI Real Yields Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            10Y Real Yield:{' '}
-            <span className="font-semibold text-gold-primary">
-              {tips10 != null ? fmtYield(tips10) : '—'}
-            </span>
-            {'. '}
-            10Y Breakeven:{' '}
-            <span className={`font-semibold ${be10 != null ? breakevenColor(be10) : ''}`}>
-              {be10 != null ? fmtYield(be10) : '—'}
-            </span>
-            {'. '}
-            Gold:{' '}
-            <span className="font-semibold text-amber-400">
-              {fmtGold(gold ?? null)}
-            </span>
-            .
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-            {/* TODO(wave-1): replace with generatedAt timestamp once AI endpoint is live */}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── Hero: TIPS 10Y primary + 5Y/30Y secondary ───────────────────────────────
 
@@ -383,8 +337,6 @@ const TipsGoldOverlay = memo(function TipsGoldOverlay() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const RealYields = memo(function RealYields() {
-  const { data: snapshot } = useRealYieldsSnapshot();
-
   return (
     <PageTemplate
       title="Real Yields & TIPS"
@@ -395,7 +347,7 @@ const RealYields = memo(function RealYields() {
 
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        <AiSummaryCard snapshot={snapshot} />
+        <AiSummaryCard feature="real-yields" />
 
         {/* Hero stat: TIPS 10Y + 5Y/30Y secondary pills */}
         <RealYieldsHero />

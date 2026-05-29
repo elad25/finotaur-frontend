@@ -12,6 +12,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 import {
   useLiquiditySnapshot,
   useLiquiditySeries,
@@ -50,55 +51,6 @@ function deltaPct(current: number, prev: number): number {
   return ((current - prev) / Math.abs(prev)) * 100;
 }
 
-// ─── AI Summary Card (stub — TODO wave-1) ────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  snapshot,
-}: {
-  snapshot: ReturnType<typeof useLiquiditySnapshot>['data'];
-}) {
-  // TODO(wave-1): replace with live POST /api/ai-reports/liquidity call
-  // once Anthropic client integration is wired on the server side.
-  // The endpoint returns { summary: string, generatedAt: number }.
-
-  const net = snapshot?.latest?.netLiquidity;
-  const mom = snapshot?.deltaMoMPct;
-  const yoy = snapshot?.deltaYoYPct;
-
-  const netText = net != null ? fmtCompactNoSign(net) : '—';
-  const momText = mom != null ? fmtPct(mom) : '—';
-  const yoyText = yoy != null ? fmtPct(yoy) : '—';
-
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI Liquidity Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            Net Liquidity:{' '}
-            <span className="font-semibold text-gold-primary">{netText}</span>.{' '}
-            MoM:{' '}
-            <span className={`font-semibold ${mom != null ? pctColor(mom) : ''}`}>
-              {momText}
-            </span>
-            {'. '}
-            YoY:{' '}
-            <span className={`font-semibold ${yoy != null ? pctColor(yoy) : ''}`}>
-              {yoyText}
-            </span>
-            .
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-            {/* TODO(wave-1): replace with generatedAt timestamp once AI endpoint is live */}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── Hero: Net Liquidity stat + MoM/YoY pills ────────────────────────────────
 
@@ -354,8 +306,6 @@ const MonthlyTable = memo(function MonthlyTable() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const Liquidity = memo(function Liquidity() {
-  const { data: snapshot } = useLiquiditySnapshot();
-
   return (
     <PageTemplate
       title="Net Liquidity"
@@ -366,7 +316,7 @@ const Liquidity = memo(function Liquidity() {
 
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        <AiSummaryCard snapshot={snapshot} />
+        <AiSummaryCard feature="liquidity" />
 
         {/* Hero stat: Net Liquidity + MoM/YoY pills */}
         <LiquidityHero />

@@ -11,6 +11,7 @@ import { Button } from '@/components/ds/Button';
 import { useHeatmap, type HeatmapCoin } from '@/hooks/crypto/useHeatmap';
 import { formatCompact } from './_shared/formatters';
 import { SectionHeader } from './_shared/GlassUI';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,42 +51,6 @@ function pctTextColor(n: number | null): string {
 type Category = 'All';
 const CATEGORIES: Category[] = ['All'];
 
-// ─── AI Summary Card (stub) ───────────────────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  totalMcap,
-  gainers,
-  losers,
-}: {
-  totalMcap: number;
-  gainers: number;
-  losers: number;
-}) {
-  // TODO(wave-2): replace with a live POST /api/ai-reports/heatmap call
-  // once the Anthropic client integration is wired on the server side.
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI Market Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            Total crypto market cap:{' '}
-            <span className="font-semibold text-gold-primary">{formatCompact(totalMcap)}</span>.{' '}
-            <span className="text-emerald-400 font-medium">{gainers} gainers</span>
-            {' '}vs{' '}
-            <span className="text-red-400 font-medium">{losers} losers</span>
-            {' '}in the top 100.
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── Top Stats Bar ────────────────────────────────────────────────────────────
 
@@ -302,8 +267,6 @@ const HeatmapGrid = memo(function HeatmapGrid() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const Heatmap = memo(function Heatmap() {
-  const { totalMcap, gainers, losers, isLoading } = useHeatmap(100);
-
   return (
     <PageTemplate
       title="Crypto Heatmap"
@@ -311,9 +274,7 @@ const Heatmap = memo(function Heatmap() {
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        {!isLoading && (
-          <AiSummaryCard totalMcap={totalMcap} gainers={gainers} losers={losers} />
-        )}
+        <AiSummaryCard feature="heatmap" />
 
         {/* Main treemap section */}
         <section>
