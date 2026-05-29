@@ -373,12 +373,12 @@ export const SubNav = () => {
                   borderBottom: isBetaItem ? '2px solid #f97316' : '2px solid #C9A646'
                 } : {}}
               >
-                {item.label === 'FINOTAUR Copilot' ? (
+                {item.label.startsWith('FINOTAUR ') ? (
                   <span className="relative z-10">
                     <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text font-bold tracking-[0.04em] text-transparent">
                       FINOTAUR
                     </span>{' '}
-                    <span className="font-semibold text-ink-primary">Copilot</span>
+                    <span className="font-semibold text-ink-primary">{item.label.slice('FINOTAUR '.length)}</span>
                   </span>
                 ) : item.label}
                 {locked && <Lock className="h-3 w-3 opacity-60" />}
