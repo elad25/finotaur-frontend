@@ -65,8 +65,8 @@ const MARKER_COLORS = {
   // direction (not the entry/exit role) drives the marker.
   // Solid trading palette — substantial colors that read as "professional"
   // rather than neon. Chart context overrides the DS no-green rule.
-  buy:  '#16a34a',  // solid green (tailwind green-600) — buy direction
-  sell: '#dc2626',  // solid red   (tailwind red-600)   — sell direction
+  buy:  '#15803d',  // darker solid green (tailwind green-700) — buy direction
+  sell: '#b91c1c',  // darker solid red   (tailwind red-700)   — sell direction
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
