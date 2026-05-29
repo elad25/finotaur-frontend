@@ -18,7 +18,7 @@
  * ===============================================
  */
 
-import { useEffect, useState, useMemo, useCallback, memo, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback, memo, useRef, lazy, Suspense } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -38,7 +38,30 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Plus, Search, TrendingUp, TrendingDown, DollarSign, Target, Download, MoreVertical, Edit, Trash2, Clock, Award, FileText, Image, AlertTriangle, RefreshCw, Layers, ChevronDown, CalendarDays, Settings, Trophy, Percent, BadgeDollarSign, BarChart3, Scale, ArrowRightLeft, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatNumber } from "@/utils/smartCalc";
-import { TradeChart } from "@/components/journal/TradeChart";
+
+// Lazy-load TradeChart so lightweight-charts (~200KB) is NOT in the initial bundle.
+// The chunk starts downloading as soon as the journal page mounts (see useEffect below).
+const TradeChart = lazy(() =>
+  import('@/components/journal/TradeChart').then((m) => ({ default: m.TradeChart }))
+);
+
+// Skeleton shown while the lazy chunk resolves and while bars are loading.
+function TradeChartSkeleton() {
+  return (
+    <div className="rounded-xl border-2 border-zinc-700/50 bg-gradient-to-br from-zinc-900/80 to-zinc-900/40 p-6 shadow-2xl">
+      <div className="mb-4 h-5 w-28 animate-pulse rounded bg-zinc-800" />
+      <div className="h-[600px] w-full overflow-hidden rounded-xl border-2 border-zinc-800 bg-zinc-950 flex items-end justify-around px-6 pb-6 gap-3">
+        {[42, 65, 38, 80, 55, 70, 45].map((h, i) => (
+          <div
+            key={i}
+            className="animate-pulse rounded-sm bg-zinc-800"
+            style={{ height: `${h}%`, flex: 1 }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { toast } from "sonner";
 import {
@@ -560,9 +583,17 @@ const TradeRow = memo(({
   }, [trade, onAssignStrategy]);
 
   return (
-    <TableRow 
+    <TableRow
       className="border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
       onClick={handleClick}
+      onMouseEnter={() => {
+        // Dynamic import keeps TradeChart out of MyTrades' eager bundle.
+        // The page-mount useEffect already triggered the chunk load, so on
+        // hover the Promise resolves synchronously from the module cache.
+        void import("@/components/journal/TradeChart").then((m) =>
+          m.prewarmTradeChart(trade),
+        );
+      }}
     >
       {/* Date */}
       <TableCell className="text-zinc-400">
@@ -1005,6 +1036,13 @@ export default function MyTrades() {
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
 
   // ✅ 3. useEffect
+
+  // Prime the TradeChart chunk immediately on page mount so that by the time
+  // the user clicks a trade, the lazy import is already resolved and parsed.
+  useEffect(() => {
+    void import('@/components/journal/TradeChart');
+  }, []);
+
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = `
@@ -1893,7 +1931,9 @@ const { pnl, outcome, multiplier, actualR, riskUSD, isClosed } = getTradeData(se
                 <div className="p-6 space-y-5 min-h-full">
                   
                   {/* 📊 CHART SECTION - FIRST */}
-                  <TradeChart trade={selectedTrade} />
+                  <Suspense fallback={<TradeChartSkeleton />}>
+                    <TradeChart trade={selectedTrade} />
+                  </Suspense>
 
                   {/* 📸 SCREENSHOT SECTION - SECOND (BLUE) - 🔥 UPDATED! */}
                   <div className="rounded-xl border-2 border-blue-500/30 bg-gradient-to-br from-blue-900/20 via-zinc-900/60 to-zinc-900/30 p-5 shadow-xl">

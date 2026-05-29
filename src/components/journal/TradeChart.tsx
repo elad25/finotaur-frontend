@@ -210,6 +210,29 @@ function computeWindow(trade: TradeChartTrade): { from: number; to: number; dura
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Prewarm helper — fire-and-forget bar prefetch on hover
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Fire-and-forget prewarm — fetches the bars this trade's chart will need
+ * and populates the client LRU. Safe to call on hover; multiple calls are
+ * deduped at the LRU layer.
+ */
+export function prewarmTradeChart(trade: TradeChartTrade): void {
+  try {
+    const isCrypto = isCryptoSymbol(trade.symbol ?? '');
+    const resolvedSymbol = isCrypto ? toBinanceSymbol(trade.symbol) : toYahooSymbol(trade.symbol);
+    if (!resolvedSymbol) return;
+    const dataSource = pickDataSource(trade.symbol);
+    const { from, to, durationMs } = computeWindow(trade);
+    const interval = pickInterval(durationMs);
+    void dataSource.getBars(resolvedSymbol, interval, from as UTCTimestamp, to as UTCTimestamp);
+  } catch {
+    // Prewarm is best-effort — never throw to the caller.
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Inner chart body — shared by inline + fullscreen views
 // ═══════════════════════════════════════════════════════════════
 function ChartBody({

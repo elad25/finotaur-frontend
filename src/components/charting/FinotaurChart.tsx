@@ -932,16 +932,21 @@ export function FinotaurChart({
 
       {loading && (
         <div
-          className="absolute inset-0 flex items-center justify-center text-xs text-zinc-500"
+          className="absolute inset-0 flex items-end justify-around gap-1.5 px-6 pb-6"
           style={{ background: theme === 'light' ? 'rgba(255,255,255,0.7)' : 'rgba(8,8,10,0.6)' }}
+          aria-hidden="true"
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="h-2 w-2 animate-pulse rounded-full"
-              style={{ background: themeTokens.brandGold }}
+          {[38, 62, 45, 80, 55, 70, 42, 68].map((h, i) => (
+            <div
+              key={i}
+              className="animate-pulse rounded-sm"
+              style={{
+                flex: 1,
+                height: `${h}%`,
+                background: theme === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
+              }}
             />
-            Loading {symbol} {interval} bars…
-          </div>
+          ))}
         </div>
       )}
 
