@@ -186,10 +186,14 @@ export const domains: Record<string, Domain> = {
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
       { label: 'Liquidity', path: '/app/macro/liquidity' },
+      { label: 'Real Yields', path: '/app/macro/real-yields' },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads' },
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
       { label: 'Net Liquidity', path: '/app/macro/liquidity', icon: Droplet },
+      { label: 'Real Yields & TIPS', path: '/app/macro/real-yields', icon: TrendingUp },
+      { label: 'Credit Spreads', path: '/app/macro/credit-spreads', icon: Activity },
       { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
       { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
       { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },

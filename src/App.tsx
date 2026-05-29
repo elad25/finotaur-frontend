@@ -292,6 +292,8 @@ const MacroReports = lazy(() => import("@/pages/app/macro/Reports"));
 const MacroSentiment = lazy(() => import("@/pages/app/macro/Sentiment"));
 const MacroNews = lazy(() => import("@/pages/app/macro/News"));
 const MacroLiquidity = lazy(() => import("@/pages/app/macro/Liquidity"));
+const MacroRealYields = lazy(() => import("@/pages/app/macro/RealYields"));
+const MacroCreditSpreads = lazy(() => import("@/pages/app/macro/CreditSpreads"));
 
 // Options
 const OptionsChain = lazy(() => import("@/pages/app/options/Chain"));
@@ -510,6 +512,8 @@ function AppContent() {
           {/* MACRO */}
           <Route path="macro/overview" element={<LockedRoute domainId="macro"><MacroOverview /></LockedRoute>} />
           <Route path="macro/liquidity" element={<LockedRoute domainId="macro"><MacroLiquidity /></LockedRoute>} />
+          <Route path="macro/real-yields" element={<LockedRoute domainId="macro"><MacroRealYields /></LockedRoute>} />
+          <Route path="macro/credit-spreads" element={<LockedRoute domainId="macro"><MacroCreditSpreads /></LockedRoute>} />
           <Route path="macro/cross-asset" element={<LockedRoute domainId="macro"><MacroCrossAsset /></LockedRoute>} />
           <Route path="macro/global-heatmap" element={<LockedRoute domainId="macro"><MacroGlobalHeatmap /></LockedRoute>} />
           <Route path="macro/models" element={<LockedRoute domainId="macro"><MacroModels /></LockedRoute>} />
