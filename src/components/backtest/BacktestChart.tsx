@@ -118,6 +118,86 @@ function positionToMarkers(p: PaperPosition): ChartMarker[] {
   return [entryMarker];
 }
 
+// ─── ActiveStrategyDropdown — custom dropdown (replaces native <select>) ─────
+function ActiveStrategyDropdown({
+  activeStrategyId,
+  strategies,
+  onChange,
+}: {
+  activeStrategyId: string | null;
+  strategies: Array<{ id: string; name: string }>;
+  onChange: (id: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const activeName = activeStrategyId
+    ? strategies.find((s) => s.id === activeStrategyId)?.name ?? 'Unknown'
+    : 'No strategy (Manual)';
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+        title="Tag new trades with this strategy for per-strategy stats"
+      >
+        <Sparkles size={12} className="text-[#7AB6F4]" />
+        <span className="max-w-[160px] truncate">{activeName}</span>
+        <ChevronDown size={12} className="text-zinc-500" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <button
+            type="button"
+            onClick={() => { onChange(null); setOpen(false); }}
+            className={`block w-full px-3 py-1.5 text-left text-xs transition-colors ${
+              activeStrategyId === null
+                ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                : 'text-zinc-300 hover:bg-zinc-900'
+            }`}
+          >
+            No strategy (Manual)
+          </button>
+          {strategies.length > 0 && (
+            <div className="border-t border-zinc-800" />
+          )}
+          {strategies.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => { onChange(s.id); setOpen(false); }}
+              className={`block w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
+                activeStrategyId === s.id
+                  ? 'bg-[#7AB6F4]/10 text-[#7AB6F4]'
+                  : 'text-zinc-300 hover:bg-zinc-900'
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ─────────────────────────────────────────────────
 export interface BacktestChartProps {
   initialSymbol?: string;
@@ -627,21 +707,14 @@ export function BacktestChart({
           />
         )}
 
-        {/* Active Strategy dropdown (Phase 4) — both modes */}
-        <div className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1">
-          <Sparkles size={12} className="text-[#C9A646]" />
-          <select
-            value={activeStrategyId ?? ''}
-            onChange={(e) => setActiveStrategyId(e.target.value || null)}
-            className="bg-transparent text-xs font-medium text-zinc-300 focus:outline-none"
-            title="Tag new trades with this strategy for per-strategy stats"
-          >
-            <option value="">No strategy (Manual)</option>
-            {strategyLib.strategies.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
+        {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
+            was browser-default ugly; replaced with a button + popover panel
+            that matches the rest of the toolbar). */}
+        <ActiveStrategyDropdown
+          activeStrategyId={activeStrategyId}
+          strategies={strategyLib.strategies}
+          onChange={setActiveStrategyId}
+        />
 
         {/* Balance display */}
         <div className="ml-auto flex items-center gap-4">
@@ -792,8 +865,8 @@ export function BacktestChart({
                 value={livePrice}
                 onChange={(e) => setLivePrice(e.target.value)}
                 placeholder="e.g. 20425.50"
-                step="0.01"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -804,8 +877,8 @@ export function BacktestChart({
                 value={size}
                 onChange={(e) => setSize(Math.max(0.01, Number(e.target.value)))}
                 min="0.01"
-                step="0.1"
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none"
+                step="any"
+                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm focus:border-[#C9A646] focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
             </label>
 
@@ -817,8 +890,8 @@ export function BacktestChart({
                   value={slInput}
                   onChange={(e) => setSlInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-rose-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
               <label className="block">
@@ -828,8 +901,8 @@ export function BacktestChart({
                   value={tpInput}
                   onChange={(e) => setTpInput(e.target.value)}
                   placeholder="optional"
-                  step="0.01"
-                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  step="any"
+                  className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm focus:border-emerald-500 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </label>
             </div>
