@@ -15,9 +15,9 @@ import {
   LayoutDashboard, TrendingUp, Flame, Target, Calendar, BarChart3, FileText, Activity,
   Globe, Newspaper, Building, Coins, LineChart, Search, Bell, Users, Zap, Map,
   DollarSign, Wallet, Award, BookOpen, Layers, MessageSquare, PlusSquare,
-  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon, 
-  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard, 
-  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy
+  ListChecks, GraduationCap, Settings as SettingsIcon, HeadphonesIcon,
+  FlaskConical, PlayCircle, Brain, Database, Code, UserPlus, CreditCard,
+  Link, Gift, type LucideIcon, Swords, Crown, Shield, Sparkles, Copy, Droplet
 } from 'lucide-react';
 
 export interface NavItem { 
@@ -183,9 +183,11 @@ export const domains: Record<string, Domain> = {
     beta: false,
     subNav: [
       { label: 'Overview', path: '/app/macro/overview' },
+      { label: 'Liquidity', path: '/app/macro/liquidity' },
     ],
     sidebar: [
       { label: 'Market Overview', path: '/app/macro/overview', icon: LayoutDashboard },
+      { label: 'Net Liquidity', path: '/app/macro/liquidity', icon: Droplet },
       { label: 'Cross-Asset', path: '/app/macro/cross-asset', icon: Layers },
       { label: 'Macro Models', path: '/app/macro/models', icon: Brain },
       { label: 'Global Heatmap', path: '/app/macro/global-heatmap', icon: Map },
