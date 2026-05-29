@@ -950,7 +950,16 @@ function BacktestOverviewContent() {
     // TODO: Navigate to backtest configuration with same parameters
     navigate('/app/journal/backtest/new');
   }, [navigate]);
-  
+
+  // Expectancy = (winRate * avgWin) - ((1 - winRate) * |avgLoss|)
+  // win_rate from the adapter is already 0–1 (stats.winRate / 100).
+  // MUST be declared before any early return — hooks rule (#310 fix).
+  const expectancy = useMemo(() => {
+    if (!stats) return 0;
+    const winRate = stats.win_rate; // 0–1
+    return (winRate * stats.avg_win) - ((1 - winRate) * Math.abs(stats.avg_loss));
+  }, [stats]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#070808]">
@@ -982,13 +991,6 @@ function BacktestOverviewContent() {
   // gold; Backtest distinguishes itself with #7AB6F4 sky-blue across neutral
   // KPIs. Profit Factor + Net P&L still use semantic colors (green/red).
   const netPnlPositive = stats.net_pnl >= 0;
-
-  // Expectancy = (winRate * avgWin) - ((1 - winRate) * |avgLoss|)
-  // win_rate from the adapter is already 0–1 (stats.winRate / 100).
-  const expectancy = useMemo(() => {
-    const winRate = stats.win_rate; // 0–1
-    return (winRate * stats.avg_win) - ((1 - winRate) * Math.abs(stats.avg_loss));
-  }, [stats.win_rate, stats.avg_win, stats.avg_loss]);
 
   return (
     <div className="min-h-screen bg-[#070808] text-white">
