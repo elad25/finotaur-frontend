@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -122,7 +123,7 @@ function KpiTile({ label, value, sub, accent }: {
 }
 
 // ─── Main page ────────────────────────────────────────────────
-export default function BacktestTrades() {
+function BacktestTradesInner() {
   const navigate = useNavigate();
   const { data, isLoading, error } = useBacktestStats();
   const [search, setSearch] = useState('');
@@ -394,5 +395,13 @@ export default function BacktestTrades() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BacktestTrades() {
+  return (
+    <ErrorBoundary boundary="backtest-trades">
+      <BacktestTradesInner />
+    </ErrorBoundary>
   );
 }

@@ -1149,7 +1149,7 @@ function BacktestOverviewContent() {
 
 export default function BacktestOverview() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary boundary="backtest-overview">
       <BacktestOverviewContent />
     </ErrorBoundary>
   );

@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useNavigate } from 'react-router-dom';
 import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { Trash2, BarChart3, TrendingUp, TrendingDown, Clock, AlertCircle } from 'lucide-react';
@@ -269,4 +270,10 @@ export const BacktestResults = () => {
   );
 };
 
-export default BacktestResults;
+export default function BacktestResultsRoute() {
+  return (
+    <ErrorBoundary boundary="backtest-results">
+      <BacktestResults />
+    </ErrorBoundary>
+  );
+}

@@ -18,7 +18,7 @@ PageLoader.displayName = 'PageLoader';
 
 // Suspense wrapper
 const SuspenseRoute = memo(({ children }: { children: ReactNode }) => (
-  <ErrorBoundary>
+  <ErrorBoundary boundary="backtest">
     <Suspense fallback={<PageLoader />}>{children}</Suspense>
   </ErrorBoundary>
 ));
