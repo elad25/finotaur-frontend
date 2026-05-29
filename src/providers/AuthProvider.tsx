@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { FEATURES } from '@/config/features';
 import { withTimeout, TIMEOUTS, TimeoutError } from '@/lib/withTimeout';
 import { logger } from '@/lib/logger';
+import { setSentryUser } from '@/lib/sentry';
 
 interface AuthContextType {
   user: User | null;
@@ -180,6 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           logOnce('auth-session', '[Auth] ✅ Session found:', session.user.email);
           setUser(session.user);
           logger.setContext({ userId: session.user.id, email: session.user.email });
+          setSentryUser({ id: session.user.id });
         } else {
           logOnce('auth-no-session', '[Auth] No session found');
           setUser(null);
@@ -207,6 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'SIGNED_IN' && session?.user) {
         const userId = session.user.id;
         logger.setContext({ userId: session.user.id, email: session.user.email });
+        setSentryUser({ id: session.user.id });
         // 🔥 Log only once per user
         logOnce(`auth-signin-${userId}`, '[Auth] User signed in:', session.user.email);
         localStorage.setItem('finotaur_user_id', userId);
@@ -277,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else if (event === 'SIGNED_OUT') {
         logger.clearContext();
+        setSentryUser(null);
         logOnce(`auth-signout-${Date.now()}`, '[Auth] User signed out');
         _authLoggedOnce.delete('auth-session');
         _authLoggedOnce.delete('auth-init');

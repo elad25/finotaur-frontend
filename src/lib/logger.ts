@@ -1,3 +1,5 @@
+import { reportError } from '@/lib/sentry';
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type LogContext = Record<string, unknown>;
 
@@ -53,7 +55,14 @@ class Logger {
           ? { errorRaw: error }
           : {};
     console.error('[error]', message, this.buildPayload('error', message, { ...errorPayload, ...(ctx ?? {}) }));
-    // Future: Sentry.captureException(error instanceof Error ? error : new Error(message), { extra: ctx });
+
+    // Forward to Sentry (no-op if DSN not configured). User identity is
+    // handled separately by setSentryUser — we deliberately omit
+    // baseContext here to avoid leaking PII (e.g. email) into extras.
+    reportError(
+      error instanceof Error ? error : new Error(message),
+      { message, ...(ctx ?? {}), ...errorPayload },
+    );
   }
 }
 

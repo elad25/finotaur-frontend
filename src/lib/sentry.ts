@@ -78,3 +78,33 @@ export function captureException(
     Sentry.captureException(error, { extra: optsOrExtra as Record<string, unknown> | undefined });
   }
 }
+
+/**
+ * Set the active user on Sentry for breadcrumb/issue attribution.
+ * Passing null clears the user (call on signOut).
+ *
+ * Only `id` is persisted — never email or other PII — to keep the
+ * Sentry payload minimal. Email scrubbing in beforeSend is a second
+ * layer of defence; this is the first.
+ */
+export function setSentryUser(user: { id: string } | null): void {
+  if (!sentryReady) return;
+  if (user === null) {
+    Sentry.setUser(null);
+  } else {
+    Sentry.setUser({ id: user.id });
+  }
+}
+
+/**
+ * Forward an error to Sentry. No-op if Sentry isn't initialized
+ * (DSN not configured — local dev). Always safe to call.
+ *
+ * Internally delegates to captureException so the same beforeSend
+ * scrub applies (JWT/OAuth token redaction in extras + messages).
+ */
+export function reportError(error: unknown, extra?: Record<string, unknown>): void {
+  if (!sentryReady) return;
+  const err = error instanceof Error ? error : new Error(typeof error === 'string' ? error : 'Unknown error');
+  captureException(err, extra);
+}
