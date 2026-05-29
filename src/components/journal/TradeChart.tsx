@@ -63,10 +63,10 @@ const MARKER_COLORS = {
   //   SELL → red  circle ABOVE the bar
   // A LONG trade is buy-then-sell; a SHORT trade is sell-then-buy. The
   // direction (not the entry/exit role) drives the marker.
-  // Classic trading-chart palette: bright green (buy) / bright red (sell).
+  // Bright trading-chart palette so markers stand out against red/green candles.
   // Chart context overrides the DS no-green rule per user preference.
-  buy:  '#22c55e',  // tailwind green-500 — buy direction
-  sell: '#ef4444',  // tailwind red-500   — sell direction
+  buy:  '#10dc66',  // vivid bright green — buy direction
+  sell: '#ff453a',  // vivid bright red   — sell direction
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -133,20 +133,11 @@ function tradeToMarkers(trade: TradeChartTrade): {
   const entryTime = Math.floor(new Date(trade.open_at).getTime() / 1000) as UTCTimestamp;
   if (Number.isFinite(entryTime as number)) {
     const entryColor = entryIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
-    // Belt-and-suspenders: native lightweight-charts marker as the fallback
-    // colored circle (always reliable), plus the React overlay icon that sits
-    // on top when the chart's timing/refs cooperate. Worst case the user sees
-    // a clean colored circle; best case they see the circle with an arrow in.
-    markers.push({
-      time: entryTime,
-      position: entryIsBuy ? 'belowBar' : 'aboveBar',
-      shape: 'circle',
-      color: entryColor,
-      size: 2,
-    });
+    // Overlay-only — the React overlay positions itself relative to the
+    // nearest bar's high/low so it floats above/below the candle, not on it.
     markerIcons.push({
       time: entryTime,
-      price: trade.entry_price,
+      price: trade.entry_price,  // kept for legacy/Y fallback but overlay uses bar.high/low
       direction: entryIsBuy ? 'up' : 'down',
       color: entryColor,
       offsetY: entryIsBuy ? 18 : -18,
@@ -159,13 +150,6 @@ function tradeToMarkers(trade: TradeChartTrade): {
     const exitTime = Math.floor(new Date(trade.close_at).getTime() / 1000) as UTCTimestamp;
     if (Number.isFinite(exitTime as number)) {
       const exitColor = exitIsBuy ? MARKER_COLORS.buy : MARKER_COLORS.sell;
-      markers.push({
-        time: exitTime,
-        position: exitIsBuy ? 'belowBar' : 'aboveBar',
-        shape: 'circle',
-        color: exitColor,
-        size: 2,
-      });
       markerIcons.push({
         time: exitTime,
         price: trade.exit_price,
