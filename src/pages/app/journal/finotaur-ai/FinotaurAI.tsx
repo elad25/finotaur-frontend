@@ -12,6 +12,8 @@ import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
 import CoachChatPanel from './components/CoachChatPanel';
+import { DailyLimitBanner } from './components/DailyLimitBanner';
+import { useUsage } from './hooks/useUsage';
 import { Eyebrow } from '@/components/ds/Card';
 import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
@@ -68,6 +70,7 @@ export default function FinotaurAI() {
 
   const briefingQuery = useBriefing(isPremium);
   const refreshMutation = useRefreshBriefing();
+  const usageQuery = useUsage(isPremium);
 
   const refreshing429 =
     refreshMutation.error instanceof BriefingApiError &&
@@ -114,7 +117,8 @@ export default function FinotaurAI() {
 
   return (
     <PageShell>
-      <div className="grid grid-cols-1 gap-ds-6 lg:grid-cols-[1fr_380px]">
+      <DailyLimitBanner usage={usageQuery.data ?? null} />
+      <div className="mt-ds-4 grid grid-cols-1 gap-ds-6 lg:grid-cols-[1fr_380px]">
         <div>
           <ScoreHero
             score={score}

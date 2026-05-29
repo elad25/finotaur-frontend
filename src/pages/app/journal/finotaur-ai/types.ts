@@ -105,6 +105,27 @@ export interface ConversationListItem {
   updated_at: string;
 }
 
+// ─── Phase 5b: Daily usage (banner) ───────────────────────────────────────────
+export interface UsageToday {
+  briefing_refreshes_used?: number;
+  briefing_refreshes_max?: number;
+  journal_coach_calls_used?: number;
+  journal_coach_calls_max?: number;
+}
+
+export interface UsageResponse {
+  schema_version?: 'v1';
+  today?: UsageToday;
+  resets_at?: string;  // ISO timestamp
+}
+
+// ─── Phase 5b: Narrowed tool_result shapes for inline renderers ───────────────
+/** Common envelope — every read-tool result carries an `action`. */
+export interface ToolResultEnvelope {
+  action: string;
+  [key: string]: unknown;
+}
+
 /** Phase 5 — convenience alias used by useFinotaurChat and sidebar components */
 export type ConversationSummary = ConversationListItem;
 
