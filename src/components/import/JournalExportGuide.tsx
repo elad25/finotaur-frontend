@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   X, ArrowRight, ArrowLeft, CheckCircle2, MousePointer2,
-  Target, BarChart3, Activity, LineChart, TrendingUp, Layers,
+  BarChart3, Activity, LineChart, TrendingUp, Layers,
   Briefcase, Zap, Database, FileText,
 } from 'lucide-react';
 import type { JournalSource } from '@/utils/importUtils';
@@ -174,7 +174,7 @@ const buildGenericGuide = (source: JournalSource, name: string): JournalGuide =>
 });
 
 const SOURCE_DISPLAY: Record<JournalSource, { name: string; icon: ReactNode; color: string }> = {
-  tradezella: { name: 'TradeZella', icon: <Target className="w-4 h-4" />, color: 'text-emerald-400' },
+  tradezella: { name: 'TradeZella', icon: <img src="/import-guides/tradezella/logo.png" alt="" className="w-5 h-5 object-contain" />, color: 'text-emerald-400' },
   tradervue: { name: 'Tradervue', icon: <BarChart3 className="w-4 h-4" />, color: 'text-blue-400' },
   edgewonk: { name: 'Edgewonk', icon: <Activity className="w-4 h-4" />, color: 'text-orange-400' },
   tradesviz: { name: 'TradesViz', icon: <LineChart className="w-4 h-4" />, color: 'text-purple-400' },

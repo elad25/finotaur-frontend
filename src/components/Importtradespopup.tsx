@@ -9,7 +9,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   X, Upload, FileSpreadsheet, CheckCircle2, AlertCircle,
   ArrowRight, ArrowLeft, Loader2, HelpCircle, Check, Eye, RefreshCw,
-  BarChart3, LineChart, Target, TrendingUp, Briefcase, Activity,
+  BarChart3, LineChart, TrendingUp, Briefcase, Activity,
   Layers, Zap, Database, FileText
 } from 'lucide-react';
 
@@ -48,12 +48,13 @@ const JOURNAL_SOURCES: {
   color: string;
   description: string;
 }[] = [
-  { 
-    id: 'tradezella', 
-    name: 'TradeZella', 
-    icon: <Target className="w-4 h-4" />,
+  {
+    id: 'tradezella',
+    name: 'TradeZella',
+    // Official TradeZella brand mark (apple-touch-icon from tradezella.com CDN, downloaded to public/)
+    icon: <img src="/import-guides/tradezella/logo.png" alt="" className="w-5 h-5 object-contain" />,
     color: 'text-emerald-400',
-    description: 'Full support for TradeZella exports' 
+    description: 'Full support for TradeZella exports'
   },
   { 
     id: 'tradervue', 
