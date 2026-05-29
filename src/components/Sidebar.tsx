@@ -253,6 +253,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
     { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
     { label: 'Macro', path: '/copilot/macro', icon: Globe, beta: true },
+    { label: 'Sector Flow', path: '/copilot/sector-flow', icon: Activity, beta: true },
     { label: 'Holdings', path: '/copilot/holdings', icon: Layers, beta: true },
     { label: 'Risks', path: '/copilot/risks', icon: Shield, beta: true },
     { label: 'AI Analyst', path: '/copilot/ai-analyst', icon: Brain, beta: true },

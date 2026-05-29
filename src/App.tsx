@@ -326,6 +326,7 @@ const CopilotAIAnalystPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSe
 const CopilotHoldingsPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotHoldingsPage })));
 const CopilotRisksPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotRisksPage })));
 const CopilotAIChatPage = lazy(() => import("@/pages/app/ai/copilot/CopilotSectionPages").then((m) => ({ default: m.CopilotAIChatPage })));
+const CopilotSectorFlowPage = lazy(() => import("@/pages/app/ai/copilot/components/SectorFlowPage").then((m) => ({ default: m.SectorFlowPage })));
 
 // Funding
 const FundingOverview = lazy(() => import("@/pages/app/funding/Overview"));
@@ -529,6 +530,7 @@ function AppContent() {
           <Route path="ai/copilot" element={<Navigate to="/copilot" replace />} />
           <Route path="ai/copilot/top-opportunities" element={<Navigate to="/copilot/top-opportunities" replace />} />
           <Route path="ai/copilot/macro" element={<Navigate to="/copilot/macro" replace />} />
+          <Route path="ai/copilot/sector-flow" element={<Navigate to="/copilot/sector-flow" replace />} />
           <Route path="ai/copilot/ai-analyst" element={<Navigate to="/copilot/ai-analyst" replace />} />
           <Route path="ai/copilot/holdings" element={<Navigate to="/copilot/holdings" replace />} />
           <Route path="ai/copilot/risks" element={<Navigate to="/copilot/risks" replace />} />
@@ -643,6 +645,7 @@ function AppContent() {
           <Route index element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><AIMyPortfolio /></BetaRoute>} />
           <Route path="top-opportunities" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotTopOpportunitiesPage /></BetaRoute>} />
           <Route path="macro" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotMacroPage /></BetaRoute>} />
+          <Route path="sector-flow" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotSectorFlowPage /></BetaRoute>} />
           <Route path="ai-analyst" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotAIAnalystPage /></BetaRoute>} />
           <Route path="holdings" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotHoldingsPage /></BetaRoute>} />
           <Route path="risks" element={<BetaRoute fallbackPath="/app/ai/stock-analyzer"><CopilotRisksPage /></BetaRoute>} />
