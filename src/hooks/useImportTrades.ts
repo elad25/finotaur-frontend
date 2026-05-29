@@ -118,7 +118,7 @@ export function useImportTrades(): UseImportTradesReturn {
         open_at: trade.open_at,
         close_at: trade.close_at || null,
         pnl: trade.pnl || null,
-        fees: trade.fees ?? trade.commission ?? null, // DB column is fees (no commission column)
+        fees: trade.commission ?? null, // DB column is fees; FinotaurTrade carries it as commission
         notes: trade.notes || null,
         strategy_id: trade.strategy_id || null,
         setup: trade.setup || null,
@@ -129,7 +129,7 @@ export function useImportTrades(): UseImportTradesReturn {
         risk_usd: trade.risk_amount || null,      // DB column is risk_usd (no risk_amount)
         rr: trade.rr || null,
         tags: trade.tags || [],
-        mistake: trade.mistakes || null,          // DB column is mistake (singular, text)
+        mistake: Array.isArray(trade.mistakes) ? (trade.mistakes.join(', ') || null) : (trade.mistakes || null), // DB column is mistake (singular text)
         quality_tag: trade.grade || null,         // DB column is quality_tag (no grade)
         import_source: trade.imported_from || 'csv', // DB column is import_source (not imported_from)
         external_id: trade.external_id || null,
