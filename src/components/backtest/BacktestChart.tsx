@@ -22,7 +22,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import CftcDisclosureBanner from '@/components/backtest/CftcDisclosureBanner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
@@ -818,7 +817,6 @@ export function BacktestChart({
 
   return (
     <div className={containerCls}>
-      <CftcDisclosureBanner className="mx-4 mt-3" />
       {/* Session hydration error — shown when ?sessionId= fetch fails */}
       {hydrateError && (
         <div className="mx-4 mt-2 flex items-center justify-between gap-3 rounded-md border border-rose-800 bg-rose-950/60 px-3 py-2 text-xs text-rose-300">
