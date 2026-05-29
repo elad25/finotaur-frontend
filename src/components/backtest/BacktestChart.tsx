@@ -263,9 +263,10 @@ export function BacktestChart({
   // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
   // BacktestReplayChart (cursor-controlled). In Live mode it's the
   // current FinotaurChart with manual current-price input.
-  // Phase 5: Replay is the default — Elad: "תדאג שהIMERSSIVE יעבוד חלק כמו REPLAY"
+  // Elad 2026-05-29: switch the default back to Live. Replay is one click
+  // away via the LIVE/REPLAY toggle in the toolbar.
   type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('replay');
+  const [chartMode, setChartMode] = useState<ChartMode>('live');
 
   // Phase 5: Chart link goes straight to fullscreen immersive — covers
   // app topnav + journal sub-nav. Exit button returns user to backtest

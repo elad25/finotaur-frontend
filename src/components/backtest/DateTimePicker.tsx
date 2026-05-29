@@ -18,7 +18,8 @@
  */
 
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar as CalendarIcon } from 'lucide-react';
+import { Calendar } from '@/components/ui/calendar';
 import type { Interval } from '@/components/charting/types';
 
 export interface DateTimePickerProps {
@@ -119,21 +120,18 @@ export function DateTimePicker({ value, interval, onChange, disabled }: DateTime
     }
   }, [value, isOpen]);
 
-  // ─── Lookback warning for the draft date ─────────────────────
+  // ─── Allowed date range for the picker (data-source limits) ──
+  // The Calendar is clamped to [oldest, now] so users can only pick dates
+  // we can actually fetch bars for. No hidden warning needed.
   const lookbackDays = LOOKBACK_DAYS_BY_INTERVAL[interval];
-  const { warning, maxDate } = useMemo(() => {
-    if (lookbackDays == null || !draftDate) return { warning: null, maxDate: null };
+  const { fromDate, toDate, selectedDate } = useMemo(() => {
     const now = new Date();
-    const oldest = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
-    const picked = new Date(draftDate + 'T00:00:00');
-    if (picked < oldest) {
-      return {
-        warning: `Yahoo only serves ${lookbackDays}-day history for ${interval} bars. Pick a date after ${oldest.toLocaleDateString()}.`,
-        maxDate: toDateInputValue(now),
-      };
-    }
-    return { warning: null, maxDate: toDateInputValue(now) };
-  }, [draftDate, interval, lookbackDays]);
+    const oldest = lookbackDays != null
+      ? new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000)
+      : new Date(1970, 0, 1);
+    const picked = draftDate ? new Date(draftDate + 'T00:00:00') : undefined;
+    return { fromDate: oldest, toDate: now, selectedDate: picked };
+  }, [draftDate, lookbackDays]);
 
   // ─── Apply: build combined Date and fire onChange ─────────────
   const handleApply = () => {
@@ -157,14 +155,14 @@ export function DateTimePicker({ value, interval, onChange, disabled }: DateTime
         className="flex items-center text-zinc-500 hover:text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         aria-label="Pick replay start date and time"
       >
-        <Calendar size={14} aria-hidden="true" />
+        <CalendarIcon size={14} aria-hidden="true" />
       </button>
 
       {/* 2-step popover wizard */}
       {isOpen && (
         <div
           ref={popoverRef}
-          className="absolute top-full mt-1 right-0 z-50 w-60 rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl"
+          className="absolute top-full mt-1 right-0 z-50 w-72 rounded-md border border-zinc-800 bg-zinc-950 shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
@@ -179,18 +177,19 @@ export function DateTimePicker({ value, interval, onChange, disabled }: DateTime
           <div className="p-3 space-y-3">
             {popoverStep === 'date' && (
               <>
-                {/* Date input */}
-                <input
-                  type="date"
-                  value={draftDate}
-                  max={maxDate ?? undefined}
-                  onChange={(e) => setDraftDate(e.target.value)}
-                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 focus:border-zinc-500 focus:outline-none"
+                {/* Visual calendar — clamped to the data-source lookback so
+                    users can only pick a date we can fetch bars for. */}
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(d) => {
+                    if (d) setDraftDate(toDateInputValue(d));
+                  }}
+                  fromDate={fromDate}
+                  toDate={toDate}
+                  defaultMonth={selectedDate ?? toDate}
+                  className="p-0"
                 />
-                {/* Lookback warning */}
-                {warning && (
-                  <p className="text-[11px] leading-snug text-amber-400">{warning}</p>
-                )}
                 {/* Actions */}
                 <button
                   type="button"
