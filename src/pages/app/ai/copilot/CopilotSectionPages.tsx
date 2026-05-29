@@ -6,14 +6,11 @@ import {
   ArrowLeft,
   BarChart3,
   Brain,
-  ChevronDown,
   ChevronRight,
-  Filter,
   Globe,
   Layers,
   MessageSquare,
   Shield,
-  Star,
   Zap,
 } from 'lucide-react';
 import { CopilotChatPanel } from './components/CopilotChatPanel';
@@ -109,54 +106,6 @@ const FALLBACK_OPPORTUNITIES: Opportunity[] = [
   },
 ];
 
-const sectorOpportunityRows = [
-  { sector: 'Technology', score: 92, pick: 'NVDA', upside: '+18.4%' },
-  { sector: 'Communication Services', score: 87, pick: 'META', upside: '+8.8%' },
-  { sector: 'Consumer Cyclical', score: 83, pick: 'AMZN', upside: '+9.6%' },
-  { sector: 'Industrials', score: 76, pick: 'CAT', upside: '+7.1%' },
-  { sector: 'Financials', score: 72, pick: 'JPM', upside: '+6.3%' },
-];
-
-const timeframeRows = [
-  { label: '1-2 Weeks', count: 18, share: '38%', color: '#33f08a' },
-  { label: '2-4 Weeks', count: 16, share: '33%', color: '#f1c74d' },
-  { label: '1-3 Months', count: 10, share: '21%', color: '#c77b38' },
-  { label: '3+ Months', count: 4, share: '8%', color: '#c84a4a' },
-];
-
-
-const analystSummaryRows = [
-  { label: 'Analyst Rating', value: 'A-', note: 'High conviction, controlled risk' },
-  { label: 'Behavior Score', value: '82', note: 'Discipline improving across recent sessions' },
-  { label: 'Portfolio Fit', value: '78%', note: 'Growth tilt matches current macro regime' },
-  { label: 'Action Items', value: '4', note: 'Two allocation, one hedge, one watchlist update' },
-] as const;
-
-const analystSections = [
-  {
-    title: 'Executive Summary',
-    text: 'The user profile shows strong growth exposure, improving trade discipline, and portfolio construction that benefits from the current disinflationary growth backdrop. Main weakness is concentration in AI infrastructure names during high-beta sessions.',
-  },
-  {
-    title: 'Portfolio Diagnosis',
-    text: 'Core holdings are liquid and institutionally owned. Allocation is efficient for upside capture, but drawdown sensitivity rises when mega-cap technology correlations compress toward one.',
-  },
-  {
-    title: 'Behavioral Read',
-    text: 'Recent activity suggests cleaner decision timing and fewer reactive exits. The system should keep monitoring late-session entries, oversized conviction trades, and repeated exposure to the same catalyst.',
-  },
-  {
-    title: 'Recommended Next Moves',
-    text: 'Keep the AI/semiconductor overweight, trim redundant exposure on strength, add a defensive watchlist layer, and require a pre-trade thesis check for positions above portfolio-average risk.',
-  },
-] as const;
-
-const analystRiskRows = [
-  ['Concentration', 'Medium', 'Top holdings create meaningful single-theme dependency.'],
-  ['Execution Discipline', 'Improving', 'Entry timing has become more selective over the latest review window.'],
-  ['Macro Sensitivity', 'Medium', 'Risk-on backdrop helps, but duration shocks can pressure growth exposure.'],
-  ['User Readiness', 'High', 'Profile is suitable for detailed weekly AI analyst reporting.'],
-] as const;
 
 export function CopilotTopOpportunitiesPage() {
   const { brief, loading: briefLoading, personal, personalLoading } = useSynthesisBrief();
@@ -196,22 +145,6 @@ export function CopilotTopOpportunitiesPage() {
         />
 
         <section className="overflow-hidden rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
-          <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-gold-primary/14 bg-[#050505] px-1.5 py-1.5">
-            <div className="flex flex-wrap items-center gap-1">
-              <TabButton active label="All Opportunities" />
-              <TabButton label="Stocks" />
-              <TabButton label="Sectors" />
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <SelectPill label="All Sectors" width="w-[146px]" />
-              <SelectPill label="Timeframe" value="1W" width="w-[150px]" />
-              <SelectPill label="Sort By" value="AI Score" width="w-[172px]" />
-              <button className="flex h-10 w-10 items-center justify-center rounded-[7px] border border-gold-primary/14 bg-[#0b0a07] text-gold-primary shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)]">
-                <Filter className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1260px] border-separate border-spacing-0 text-left">
               <thead>
@@ -232,35 +165,8 @@ export function CopilotTopOpportunitiesPage() {
           </div>
         </section>
         <SectorCallsPanel brief={brief} loading={briefLoading} />
-        <OpportunityInsightsFooter />
       </div>
     </CopilotPageShell>
-  );
-}
-
-function TabButton({ label, active = false }: { label: string; active?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`flex h-11 items-center gap-2 rounded-[7px] px-4 text-sm transition ${
-        active ? 'bg-gold-primary/8 text-gold-primary' : 'text-ink-secondary hover:bg-white/[0.03] hover:text-ink-primary'
-      }`}
-    >
-      <span className={`h-3.5 w-3.5 rounded-full border ${active ? 'border-gold-primary' : 'border-ink-tertiary/60'}`} />
-      {label}
-    </button>
-  );
-}
-
-function SelectPill({ label, value, width }: { label: string; value?: string; width: string }) {
-  return (
-    <button type="button" className={`flex h-11 ${width} items-center justify-between rounded-[7px] border border-gold-primary/14 bg-[#0b0a07] px-4 text-xs text-ink-secondary`}>
-      <span>{label}</span>
-      <span className="flex items-center gap-3 text-ink-primary">
-        {value}
-        <ChevronDown className="h-3.5 w-3.5 text-gold-primary" />
-      </span>
-    </button>
   );
 }
 
@@ -355,17 +261,15 @@ function OpportunityTableRow({ opportunity }: { opportunity: Opportunity }) {
         </ul>
       </td>
       <td className="border-b border-gold-primary/10 px-2">
-        <div className="flex w-[150px] flex-col gap-1.5">
-          <button type="button" className="flex h-8 items-center justify-between rounded-[6px] border border-gold-primary/18 bg-gold-primary/[0.075] px-3 text-[11px] font-semibold text-gold-primary">
-            View Analysis
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-          <button type="button" className="flex h-7 items-center justify-center gap-1.5 rounded-[6px] border border-white/8 bg-white/[0.03] px-2 text-[10px] text-ink-tertiary">
-            <Star className="h-3 w-3" />
-            Add to Watchlist
-            <Star className="h-3 w-3 fill-ink-tertiary/20" />
-          </button>
-        </div>
+        {/* View Analysis → Stock Analyzer with ticker pre-filled. Add-to-Watchlist
+            removed until a real watchlist service is wired (was non-functional). */}
+        <Link
+          to={`/app/ai/stock-analyzer?ticker=${encodeURIComponent(opportunity.ticker)}`}
+          className="flex h-8 w-[150px] items-center justify-between rounded-[6px] border border-gold-primary/18 bg-gold-primary/[0.075] px-3 text-[11px] font-semibold text-gold-primary hover:bg-gold-primary/[0.12] transition"
+        >
+          View Analysis
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
       </td>
     </tr>
   );
@@ -382,110 +286,6 @@ function ScoreRing({ score }: { score: number }) {
       </div>
       <span className="relative font-mono text-lg font-bold text-[#bff26f]">{score}</span>
     </div>
-  );
-}
-
-function OpportunityInsightsFooter() {
-  return (
-    <div className="grid gap-3 xl:grid-cols-[1.13fr_0.82fr_1.12fr]">
-      <section className="overflow-hidden rounded-[7px] border border-gold-primary/14 bg-[#050505]/96">
-        <div className="flex h-10 items-center justify-between border-b border-gold-primary/10 px-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-gold-primary">Sector Opportunities</p>
-          <button type="button" className="text-[10px] font-semibold text-gold-primary">View All</button>
-        </div>
-        <div className="grid grid-cols-[1fr_58px_86px_58px_70px] items-center border-b border-gold-primary/8 px-3 py-2 text-[9px] font-semibold uppercase tracking-[0.05em] text-ink-tertiary">
-          <span>Sector</span>
-          <span>AI Score</span>
-          <span>Trend</span>
-          <span>Top Pick</span>
-          <span className="text-right">Upside</span>
-        </div>
-        <div>
-          {sectorOpportunityRows.map((row, index) => (
-            <div key={row.sector} className="grid min-h-9 grid-cols-[1fr_58px_86px_58px_70px] items-center border-b border-gold-primary/8 px-3 text-[11px] last:border-b-0">
-              <span className="font-medium text-ink-primary">{row.sector}</span>
-              <span className="font-mono font-semibold text-[#5af06e]">{row.score}</span>
-              <SectorSparkline offset={index} />
-              <span className="font-mono font-semibold text-ink-primary">{row.pick}</span>
-              <span className="text-right font-mono font-semibold text-[#4bea7a]">{row.upside}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="rounded-[7px] border border-gold-primary/14 bg-[#050505]/96 p-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-gold-primary">Opportunities By Timeframe</p>
-        <div className="mt-3 flex items-center gap-4">
-          <TimeframeDonut />
-          <div className="min-w-0 flex-1 space-y-3">
-            {timeframeRows.map((row) => (
-              <div key={row.label} className="grid grid-cols-[12px_1fr_30px_34px] items-center gap-2 text-[11px]">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: row.color }} />
-                <span className="text-ink-secondary">{row.label}</span>
-                <span className="text-right font-mono text-ink-primary">{row.count}</span>
-                <span className="font-mono text-ink-secondary">({row.share})</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-[7px] border border-gold-primary/14 bg-[#050505]/96 p-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-gold-primary">AI Summary</p>
-        <div className="mt-4 flex gap-3">
-          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border border-gold-primary/18 bg-gold-primary/12 font-mono text-sm font-bold text-gold-primary shadow-[0_0_18px_rgba(201,166,70,0.18)]">
-            AI
-          </div>
-          <p className="max-w-[410px] text-[12px] leading-[1.65] text-ink-secondary">
-            Strong bullish setup in Technology and Communication Services. AI infrastructure demand and cloud adoption remain key growth drivers. Monitor earnings this week for momentum <span className="text-gold-primary">confirmation.</span>
-          </p>
-        </div>
-        <div className="mt-5 flex items-end justify-between gap-3 border-t border-gold-primary/10 pt-3">
-          <div className="flex flex-wrap items-center gap-4 text-[11px]">
-            <span className="font-semibold text-gold-primary">Market Bias: <span className="text-[#5af06e]">Bullish</span></span>
-            <span className="text-ink-tertiary">Confidence: <span className="font-semibold text-[#5af06e]">High</span></span>
-          </div>
-          <MiniMomentumTrend />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function SectorSparkline({ offset }: { offset: number }) {
-  const paths = [
-    'M2 20 L16 17 L27 11 L38 13 L51 8 L66 4',
-    'M2 18 L14 15 L28 16 L41 9 L53 10 L66 5',
-    'M2 21 L15 18 L26 18 L38 12 L50 11 L66 6',
-    'M2 20 L15 19 L29 14 L43 15 L54 9 L66 7',
-    'M2 19 L14 20 L28 17 L41 12 L52 14 L66 8',
-  ];
-
-  return (
-    <svg viewBox="0 0 68 24" className="h-6 w-[74px] text-[#34e177]" aria-hidden="true">
-      <path d={paths[offset % paths.length]} fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function TimeframeDonut() {
-  return (
-    <div className="relative flex h-[112px] w-[112px] flex-none items-center justify-center">
-      <div className="absolute inset-0 rounded-full bg-[conic-gradient(#2fa86a_0deg_137deg,#e5bd45_137deg_256deg,#b66a34_256deg_332deg,#b94242_332deg_360deg)] shadow-[0_0_26px_rgba(201,166,70,0.1)]" />
-      <div className="absolute inset-[12px] rounded-full bg-[#050505]" />
-      <div className="relative text-center">
-        <p className="font-mono text-3xl font-semibold text-gold-primary">48</p>
-        <p className="mt-1 text-[10px] text-ink-tertiary">Total</p>
-      </div>
-    </div>
-  );
-}
-
-function MiniMomentumTrend() {
-  return (
-    <svg viewBox="0 0 140 40" className="h-10 w-[140px] flex-none text-[#35e376]" aria-hidden="true">
-      <path d="M3 33 C18 31 24 25 37 26 C48 27 52 17 64 19 C76 21 77 26 88 24 C100 22 103 16 114 14 C126 12 130 7 137 4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
   );
 }
 
@@ -615,14 +415,41 @@ export function CopilotMacroPage() {
 }
 
 export function CopilotHoldingsPage() {
+  const ib = useIBConnection();
   const snapshot = usePortfolioData('1Y');
+
+  if (ib.loading) {
+    return (
+      <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        </div>
+      </CopilotPageShell>
+    );
+  }
+
+  if (!ib.isConnected) {
+    return (
+      <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
+        <CopilotEmptyState
+          title="Connect to see your holdings"
+          description="Positions, market value, and unrealized P&L pulled live from your Interactive Brokers account."
+        />
+      </CopilotPageShell>
+    );
+  }
+
+  // Sum unrealized P&L; sign drives the positive/negative tone on the Metric card.
+  const totalPnl = snapshot.holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0);
+  const pnlSign = totalPnl >= 0 ? '+' : '−';
+  const pnlDisplay = `${pnlSign}$${Math.round(Math.abs(totalPnl)).toLocaleString('en')}`;
 
   return (
     <CopilotPageShell title="Holdings" eyebrow="Positions, exposure, and P&L" icon={Layers}>
       <div className="grid gap-3 md:grid-cols-3">
         <Metric label="Positions" value={String(snapshot.holdings.length)} />
         <Metric label="Market value" value={`$${Math.round(snapshot.totalValue).toLocaleString('en')}`} />
-        <Metric label="Unrealized P&L" value={`+$${Math.round(snapshot.holdings.reduce((sum, h) => sum + h.unrealizedPnl, 0)).toLocaleString('en')}`} positive />
+        <Metric label="Unrealized P&L" value={pnlDisplay} positive={totalPnl >= 0} />
       </div>
       <div className="mt-3">
         <HoldingsTable holdings={snapshot.holdings} />
@@ -637,87 +464,15 @@ export function CopilotAIAnalystPage() {
   return (
     <CopilotPageShell title="AI Analyst" eyebrow="Detailed per-user intelligence report" icon={Brain}>
       <div className="space-y-3">
-        {/* Phase 2: Per-user personalization banner */}
+        {/* Per-user personalization banner — short, live */}
         <SynthesisBriefPersonalTwist
           personal={personal}
           personalLoading={personalLoading}
           degenerate={personal?.degenerate}
         />
 
-        {/* Phase 1: Weekly Synthesis Brief — replaces hardcoded content once stable */}
+        {/* Live weekly synthesis brief — central thesis, weekly context, tactical view, key risks */}
         <SynthesisBriefNarrative brief={brief} loading={briefLoading} error={briefError} />
-
-        <hr className="border-gold-primary/10" />
-        <section className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5 shadow-[0_0_34px_rgba(0,0,0,0.45)]">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-gold-primary/12 pb-5">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-gold-primary/78">User Report</p>
-              <h2 className="mt-2 text-2xl font-semibold text-ink-primary">Detailed AI analyst report per user</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink-secondary">
-                A dedicated space for user-level analysis: portfolio fit, behavior, risk profile, macro exposure,
-                and prioritized analyst actions in one structured report.
-              </p>
-            </div>
-            <div className="rounded-[7px] border border-gold-primary/20 bg-black/32 px-4 py-3 text-right">
-              <p className="text-[10px] uppercase text-ink-tertiary">Current profile</p>
-              <p className="mt-1 font-mono text-sm text-ink-primary">USER-001</p>
-              <p className="mt-1 text-[11px] text-gold-primary">Ready for weekly report</p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-4">
-            {analystSummaryRows.map((row) => (
-              <div key={row.label} className="rounded-[7px] border border-gold-primary/14 bg-black/28 p-4">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-ink-tertiary">{row.label}</p>
-                <p className="mt-3 font-mono text-2xl tabular-nums text-gold-primary">{row.value}</p>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-secondary">{row.note}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="grid gap-3 xl:grid-cols-[1.25fr_0.75fr]">
-          <div className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5">
-            <div className="flex items-center gap-3">
-              <Brain className="h-5 w-5 text-gold-primary" />
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-ink-tertiary">Analyst Narrative</p>
-                <h3 className="text-lg font-semibold text-ink-primary">Full report structure</h3>
-              </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {analystSections.map((section) => (
-                <article key={section.title} className="rounded-[7px] border border-gold-primary/12 bg-black/24 p-4">
-                  <p className="text-sm font-semibold text-gold-primary">{section.title}</p>
-                  <p className="mt-2 text-sm leading-relaxed text-ink-secondary">{section.text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[8px] border border-gold-primary/16 bg-[#050505]/96 p-5">
-            <div className="flex items-center gap-3">
-              <BarChart3 className="h-5 w-5 text-gold-primary" />
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-ink-tertiary">Risk & Readiness</p>
-                <h3 className="text-lg font-semibold text-ink-primary">User-level checks</h3>
-              </div>
-            </div>
-            <div className="mt-5 divide-y divide-gold-primary/10">
-              {analystRiskRows.map(([label, value, text]) => (
-                <div key={label} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm text-ink-primary">{label}</p>
-                    <span className="rounded-[5px] border border-gold-primary/18 bg-gold-primary/8 px-2 py-1 text-[10px] uppercase text-gold-primary">
-                      {value}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-relaxed text-ink-secondary">{text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </CopilotPageShell>
   );
