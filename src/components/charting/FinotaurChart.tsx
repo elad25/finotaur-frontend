@@ -31,6 +31,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import {
   createChart,
   ColorType,
@@ -39,6 +40,7 @@ import {
   type ISeriesApi,
   type DeepPartial,
   type ChartOptions,
+  type UTCTimestamp,
 } from 'lightweight-charts';
 
 import type {
@@ -425,6 +427,30 @@ function buildChartOptions(theme: ChartTheme): DeepPartial<ChartOptions> {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Marker icon overlay type
+// ═══════════════════════════════════════════════════════════════
+/**
+ * Describes a single icon-in-circle marker rendered as an HTML overlay on top
+ * of the lightweight-charts canvas. Parallel to ChartMarker — the native circle
+ * dot lives on the canvas; the arrow icon lives in this overlay.
+ */
+export interface MarkerIcon {
+  /** UTC timestamp (seconds) matching the corresponding ChartMarker. */
+  time: UTCTimestamp;
+  /** Price level the icon should be anchored to. */
+  price: number;
+  /** 'up' = ArrowUp icon (BUY direction); 'down' = ArrowDown icon (SELL direction). */
+  direction: 'up' | 'down';
+  /** Background color of the circle (e.g. '#C9A646' or '#E24B4A'). */
+  color: string;
+  /**
+   * Vertical offset from the computed price coordinate.
+   * Positive = below (for belowBar markers), negative = above (for aboveBar markers).
+   */
+  offsetY: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Component props
 // ═══════════════════════════════════════════════════════════════
 export interface FinotaurChartProps {
@@ -440,6 +466,12 @@ export interface FinotaurChartProps {
   dataSource: ChartDataSource;
   /** Optional markers (entry/exit arrows etc.). */
   markers?: ChartMarker[];
+  /**
+   * Optional icon-in-circle overlay markers (ArrowUp / ArrowDown) positioned
+   * over the lightweight-charts canvas. Pass in parallel with `markers` —
+   * the native colored circle is the background dot; these icons sit on top.
+   */
+  markerIcons?: MarkerIcon[];
   /**
    * Optional technical indicators rendered as line overlays.
    *
@@ -476,6 +508,7 @@ export function FinotaurChart({
   to,
   dataSource,
   markers,
+  markerIcons,
   indicators,
   theme = 'dark',
   height = 600,
@@ -503,6 +536,11 @@ export function FinotaurChart({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [barCount, setBarCount] = useState(0);
+  /**
+   * Bumping counter that triggers a re-render of the icon overlay whenever
+   * the chart viewport changes (pan / zoom / resize). Increment to reposition.
+   */
+  const [overlayTick, setOverlayTick] = useState(0);
 
   // ─── Mount / unmount the chart ──────────────────────────────
   useEffect(() => {
@@ -561,6 +599,35 @@ export function FinotaurChart({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // ─── Overlay reposition: subscribe to pan/zoom + resize ────
+  // Fires setOverlayTick (bumping counter) whenever the visible time range
+  // changes or the container resizes — both events require re-computing pixel
+  // coordinates for each marker icon.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const bump = () => setOverlayTick((n) => n + 1);
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(bump);
+
+    // ResizeObserver on the container fires on container-size changes, which
+    // also shift pixel coordinates. We attach a second observer here rather
+    // than reusing the sizing observer above so the two concerns stay separate.
+    const el = containerRef.current;
+    let ro: ResizeObserver | null = null;
+    if (el) {
+      ro = new ResizeObserver(bump);
+      ro.observe(el);
+    }
+
+    return () => {
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(bump);
+      ro?.disconnect();
+    };
+    // Re-subscribe whenever the chart is remounted (theme change rebuilds chartRef).
+  }, [barCount]); // barCount > 0 guarantees chart+series are initialized
 
   // ─── Fetch bars when symbol / interval / window changes ────
   useEffect(() => {
@@ -769,6 +836,58 @@ export function FinotaurChart({
 
       {/* Chart canvas mount */}
       <div ref={containerRef} className="absolute inset-0" />
+
+      {/* Icon-in-circle overlay — ArrowUp / ArrowDown markers positioned via
+          pixel coordinates from the chart API. pointer-events:none so the overlay
+          never steals hover/click from the lightweight-charts canvas below. */}
+      {markerIcons && markerIcons.length > 0 && chartRef.current && seriesRef.current && (
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ pointerEvents: 'none' }}
+          // overlayTick in key forces React to recompute coordinates on pan/zoom/resize
+          key={overlayTick}
+        >
+          {markerIcons.map((icon, idx) => {
+            const chart = chartRef.current;
+            const series = seriesRef.current;
+            if (!chart || !series) return null;
+
+            const x = chart.timeScale().timeToCoordinate(icon.time as UTCTimestamp);
+            const y = series.priceToCoordinate(icon.price);
+
+            // null means the marker is outside the visible viewport — skip it.
+            if (x === null || y === null) return null;
+
+            const top = y + icon.offsetY;
+            const left = x;
+
+            return (
+              <div
+                key={idx}
+                style={{
+                  position: 'absolute',
+                  top: top - 9,   // center the 18px circle vertically on the anchor point
+                  left: left - 9, // center the 18px circle horizontally on the bar
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: icon.color,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.5)',
+                  pointerEvents: 'none',
+                }}
+              >
+                {icon.direction === 'up'
+                  ? <ArrowUp size={10} color="#fff" strokeWidth={2.5} />
+                  : <ArrowDown size={10} color="#fff" strokeWidth={2.5} />
+                }
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Watermark — subtle Finotaur signature, bottom-right above the timescale */}
       <div
