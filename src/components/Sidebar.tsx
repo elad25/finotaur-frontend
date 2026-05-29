@@ -273,6 +273,8 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
     { label: 'Reports', path: '/app/journal/reports', icon: FileBarChart },
+    { label: 'Notebook', path: '/app/journal/notes', icon: BookOpen },
+    { label: 'Auto-Tagger', path: '/app/journal/auto-tagger', icon: Sparkles },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },

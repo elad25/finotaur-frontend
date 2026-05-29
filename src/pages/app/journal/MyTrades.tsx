@@ -26,7 +26,8 @@ import { usePortfolioContext } from "@/contexts/PortfolioContext";
 import { supabase } from "@/lib/supabase";
 import { useRiskSettings, calculateActualR, formatRValue } from "@/hooks/useRiskSettings";
 import PageTitle from "@/components/PageTitle";
-import { useTrades, useDeleteTrade, useUpdateTrade } from "@/hooks/useTradesData";
+import { useTrades, useDeleteTrade, useUpdateTrade, useBulkDeleteTrades } from "@/hooks/useTradesData";
+import { BulkActionBar } from "@/components/journal/BulkActionBar";
 import { useStrategiesOptimized } from "@/hooks/useStrategies";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -544,17 +545,19 @@ const StatsCard = memo(({
 
 StatsCard.displayName = 'StatsCard';
 
-// 🚀 OPTIMIZATION: Memoized TradeRow Component - 🔥 UPDATED WITH SESSION!
-const TradeRow = memo(({ 
+// 🚀 OPTIMIZATION: Memoized TradeRow Component - 🔥 UPDATED WITH SESSION + BULK SELECTION!
+const TradeRow = memo(({
   trade,
   oneR,
   timezone,
   strategies,
-  onOpen, 
-  onEdit, 
+  onOpen,
+  onEdit,
   onDelete,
   onAssignStrategy,
-}: { 
+  isSelected,
+  onToggleSelect,
+}: {
   trade: Trade;
   oneR: number;
   timezone: string;
@@ -563,6 +566,8 @@ const TradeRow = memo(({
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onAssignStrategy: (trade: Trade, strategyId: string) => void;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
 }) => {
   const { pnl, actualR, outcome, isClosed, isRiskOnlyMode, riskUSD, rewardUSD } = useMemo(
     () => getTradeData(trade, oneR), 
@@ -582,9 +587,18 @@ const TradeRow = memo(({
     onAssignStrategy(trade, strategyId);
   }, [trade, onAssignStrategy]);
 
+  const handleCheckboxChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    onToggleSelect(trade.id);
+  }, [trade.id, onToggleSelect]);
+
+  const handleCheckboxClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <TableRow
-      className="border-zinc-800 hover:bg-zinc-900/50 cursor-pointer"
+      className={`border-zinc-800 hover:bg-zinc-900/50 cursor-pointer transition-colors ${isSelected ? "bg-[#C9A646]/5 hover:bg-[#C9A646]/8" : ""}`}
       onClick={handleClick}
       onMouseEnter={() => {
         // Dynamic import keeps TradeChart out of MyTrades' eager bundle.
@@ -595,6 +609,17 @@ const TradeRow = memo(({
         );
       }}
     >
+      {/* Checkbox */}
+      <TableCell className="w-10 pr-0" onClick={handleCheckboxClick}>
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={handleCheckboxChange}
+          aria-label={`Select trade ${trade.symbol}`}
+          className="h-4 w-4 cursor-pointer rounded border border-zinc-600 bg-zinc-900 accent-[#C9A646] checked:border-[#C9A646] focus:outline-none focus:ring-2 focus:ring-[#C9A646]/40 focus:ring-offset-0"
+        />
+      </TableCell>
+
       {/* Date */}
       <TableCell className="text-zinc-400">
         {formatTradeDate(trade.open_at, timezone)}
@@ -1013,6 +1038,7 @@ export default function MyTrades() {
   // 🔥 NEW: Using centralized mutations from hooks
   const { mutate: deleteTradeMutation } = useDeleteTrade();
   const { mutateAsync: updateTradeMutation } = useUpdateTrade();
+  const { mutateAsync: bulkDeleteMutation } = useBulkDeleteTrades();
   
   // ✅ 2. All useState together
   const [searchQuery, setSearchQuery] = useState("");
@@ -1034,6 +1060,9 @@ export default function MyTrades() {
     return () => document.removeEventListener('mousedown', handle);
   }, []);
   const [tradeToDelete, setTradeToDelete] = useState<string | null>(null);
+
+  // ── Bulk selection state ───────────────────────────────────────────────────
+  const [selectedTradeIds, setSelectedTradeIds] = useState<Set<string>>(() => new Set());
 
   // ✅ 3. useEffect
 
@@ -1223,6 +1252,59 @@ const stats = useMemo<Stats>(() => {
       toast.error(error?.message || "Failed to update trade");
     }
   }, [queryClient]);
+
+  // ── Bulk selection callbacks ───────────────────────────────────────────────
+
+  const handleToggleTradeSelection = useCallback((tradeId: string) => {
+    setSelectedTradeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tradeId)) {
+        next.delete(tradeId);
+      } else {
+        next.add(tradeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedTradeIds((prev) => {
+      const allVisible = filteredTrades.map((t) => t.id);
+      // If all visible are already selected → deselect all; otherwise select all.
+      const allSelected = allVisible.length > 0 && allVisible.every((id) => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(allVisible);
+    });
+  }, [filteredTrades]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTradeIds(new Set());
+  }, []);
+
+  // ── Bulk-delete handler (passed to BulkActionBar) ─────────────────────────
+
+  const handleBulkDelete = useCallback(async (ids: string[]) => {
+    await bulkDeleteMutation(ids);
+    await queryClient.invalidateQueries({ queryKey: ['trades'] });
+    await queryClient.invalidateQueries({ queryKey: ['subscription'] });
+  }, [bulkDeleteMutation, queryClient]);
+
+  // ── Bulk-tag handler (passed to BulkActionBar) ────────────────────────────
+  // Merges a new tag into each selected trade's tags array (union).
+
+  const handleBulkTag = useCallback(async (ids: string[], tag: string) => {
+    const tradeMap = new Map(filteredTrades.map((t) => [t.id, t]));
+    await Promise.all(
+      ids.map(async (id) => {
+        const trade = tradeMap.get(id);
+        if (!trade) return;
+        const existingTags: string[] = Array.isArray(trade.tags) ? trade.tags : [];
+        if (existingTags.includes(tag)) return; // already has tag — skip
+        await updateTradeMutation({ id, data: { tags: [...existingTags, tag] } });
+      }),
+    );
+    await queryClient.invalidateQueries({ queryKey: ['trades'] });
+  }, [filteredTrades, updateTradeMutation, queryClient]);
 
   const exportTrades = useCallback(() => {
     if (filteredTrades.length === 0) {
@@ -1526,6 +1608,26 @@ const stats = useMemo<Stats>(() => {
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0"><Table>
             <TableHeader>
   <TableRow className="border-zinc-800 hover:bg-transparent">
+    {/* Select-all checkbox */}
+    <TableHead className="w-10 pr-0">
+      {(() => {
+        const allVisibleIds = filteredTrades.map((t) => t.id);
+        const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedTradeIds.has(id));
+        const someSelected = allVisibleIds.some((id) => selectedTradeIds.has(id));
+        return (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected && !allSelected;
+            }}
+            onChange={handleToggleSelectAll}
+            aria-label="Select all visible trades"
+            className="h-4 w-4 cursor-pointer rounded border border-zinc-600 bg-zinc-900 accent-[#C9A646] checked:border-[#C9A646] focus:outline-none focus:ring-2 focus:ring-[#C9A646]/40 focus:ring-offset-0"
+          />
+        );
+      })()}
+    </TableHead>
     <TableHead className="text-zinc-500">Date</TableHead>
     <TableHead className="text-zinc-500">Symbol</TableHead>
     <TableHead className="text-zinc-500">Side</TableHead>
@@ -1551,12 +1653,22 @@ const stats = useMemo<Stats>(() => {
                   onEdit={handleEditTrade}
                   onDelete={handleDeleteClick}
                   onAssignStrategy={handleAssignStrategy}
+                  isSelected={selectedTradeIds.has(trade.id)}
+                  onToggleSelect={handleToggleTradeSelection}
                 />
               ))}
             </TableBody>
           </Table></div>
         )}
       </div>
+
+      {/* Bulk Action Bar — mounts globally, visible when >=1 trade is selected */}
+      <BulkActionBar
+        selectedIds={selectedTradeIds}
+        onClearSelection={handleClearSelection}
+        onBulkDelete={handleBulkDelete}
+        onBulkTag={handleBulkTag}
+      />
 
       {/* Trade Details Dialog */}
       <Dialog open={drawerOpen} onOpenChange={setDrawerOpen}>

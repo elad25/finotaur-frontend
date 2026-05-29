@@ -1,6 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+import { useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { useEffectiveUser } from '@/hooks/useEffectiveUser';
+
+// ============================================================
+// Types — public API (UI depends on these exact shapes)
+// ============================================================
 
 export type ProgressRule = {
   id: string;
@@ -16,39 +21,37 @@ export type ProgressEntry = {
   completed: boolean;
 };
 
-function rulesKey(userId: string) {
-  return `finotaur:journal:progress:rules:${userId}`;
+// ============================================================
+// DB row → domain type mappers
+// ============================================================
+
+function mapRule(row: {
+  id: string;
+  text: string;
+  order: number;
+  is_active: boolean;
+  created_at: string;
+}): ProgressRule {
+  return {
+    id: row.id,
+    text: row.text,
+    order: row.order,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+  };
 }
 
-function entriesKey(userId: string) {
-  return `finotaur:journal:progress:entries:${userId}`;
+function mapEntry(row: {
+  rule_id: string;
+  date: string;
+  completed: boolean;
+}): ProgressEntry {
+  return { ruleId: row.rule_id, date: row.date, completed: row.completed };
 }
 
-function loadRules(userId: string): ProgressRule[] {
-  try {
-    const raw = localStorage.getItem(rulesKey(userId));
-    return raw ? (JSON.parse(raw) as ProgressRule[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadEntries(userId: string): ProgressEntry[] {
-  try {
-    const raw = localStorage.getItem(entriesKey(userId));
-    return raw ? (JSON.parse(raw) as ProgressEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveRules(userId: string, rules: ProgressRule[]) {
-  localStorage.setItem(rulesKey(userId), JSON.stringify(rules));
-}
-
-function saveEntries(userId: string, entries: ProgressEntry[]) {
-  localStorage.setItem(entriesKey(userId), JSON.stringify(entries));
-}
+// ============================================================
+// Date helpers
+// ============================================================
 
 function todayStr(): string {
   return new Date().toISOString().slice(0, 10);
@@ -59,6 +62,10 @@ function dateNDaysAgo(n: number): string {
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
+
+// ============================================================
+// Pure compute functions (unchanged logic from localStorage era)
+// ============================================================
 
 function computeStreak(rules: ProgressRule[], entries: ProgressEntry[]): number {
   const activeRules = rules.filter(r => r.isActive);
@@ -92,7 +99,7 @@ function computeStreak(rules: ProgressRule[], entries: ProgressEntry[]): number 
 function computePeriodScore(
   rules: ProgressRule[],
   entries: ProgressEntry[],
-  days: number
+  days: number,
 ): number {
   const activeRules = rules.filter(r => r.isActive);
   if (activeRules.length === 0) return 0;
@@ -108,36 +115,54 @@ function computePeriodScore(
   return Math.round((completed / total) * 100);
 }
 
+// ============================================================
+// Hook
+// ============================================================
+
 export function useProgressTracker() {
-  const { user } = useAuth();
-  const userId = user?.id ?? 'anon';
+  const { id: userId } = useEffectiveUser();
+  const qc = useQueryClient();
 
-  const [rules, setRules] = useState<ProgressRule[]>(() => loadRules(userId));
-  const [entries, setEntries] = useState<ProgressEntry[]>(() => loadEntries(userId));
-  const [isLoading] = useState(false);
-
-  // Reload from localStorage when userId changes (e.g. after login)
-  useEffect(() => {
-    setRules(loadRules(userId));
-    setEntries(loadEntries(userId));
-  }, [userId]);
-
-  const persistRules = useCallback(
-    (next: ProgressRule[]) => {
-      setRules(next);
-      saveRules(userId, next);
+  // ── Rules query (only active rules, ordered) ──────────────
+  const rulesQuery = useQuery({
+    queryKey: ['journal-progress-rules', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('journal_progress_rules')
+        .select('id, text, "order", is_active, created_at')
+        .eq('user_id', userId!)
+        .eq('is_active', true)
+        .order('"order"', { ascending: true });
+      if (error) throw error;
+      return (data ?? []).map(mapRule);
     },
-    [userId]
-  );
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
-  const persistEntries = useCallback(
-    (next: ProgressEntry[]) => {
-      setEntries(next);
-      saveEntries(userId, next);
+  // ── Entries query: last 30 days (covers streak + monthly) ──
+  const entriesQuery = useQuery({
+    queryKey: ['journal-progress-entries', userId],
+    queryFn: async () => {
+      const from = dateNDaysAgo(365); // covers full streak window
+      const { data, error } = await supabase
+        .from('journal_progress_entries')
+        .select('rule_id, date, completed')
+        .eq('user_id', userId!)
+        .gte('date', from);
+      if (error) throw error;
+      return (data ?? []).map(mapEntry);
     },
-    [userId]
-  );
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
 
+  const rules = rulesQuery.data ?? [];
+  const entries = entriesQuery.data ?? [];
+
+  // ── Derived state ──────────────────────────────────────────
   const todayEntries = useMemo<Map<string, boolean>>(() => {
     const today = todayStr();
     const map = new Map<string, boolean>();
@@ -153,68 +178,97 @@ export function useProgressTracker() {
   const weeklyScore = useMemo(() => computePeriodScore(rules, entries, 7), [rules, entries]);
   const monthlyScore = useMemo(() => computePeriodScore(rules, entries, 30), [rules, entries]);
 
-  const addRule = useCallback(
-    (text: string) => {
-      const activeCount = rules.filter(r => r.isActive).length;
-      if (activeCount >= 10) {
-        toast.error('Maximum 10 active rules allowed.');
-        return;
-      }
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['journal-progress-rules', userId] });
+    qc.invalidateQueries({ queryKey: ['journal-progress-entries', userId] });
+  };
+
+  // ── Mutations ──────────────────────────────────────────────
+
+  const addRuleMutation = useMutation({
+    mutationFn: async (text: string) => {
+      if (!userId) throw new Error('No user ID');
       const maxOrder = rules.length > 0 ? Math.max(...rules.map(r => r.order)) : -1;
-      const newRule: ProgressRule = {
-        id: crypto.randomUUID(),
+      const { error } = await supabase.from('journal_progress_rules').insert({
+        user_id: userId,
         text: text.slice(0, 200),
         order: maxOrder + 1,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
-      persistRules([...rules, newRule]);
+        is_active: true,
+      });
+      if (error) throw error;
     },
-    [rules, persistRules]
-  );
+    onSuccess: invalidate,
+  });
 
-  const updateRule = useCallback(
-    (id: string, text: string) => {
-      persistRules(rules.map(r => (r.id === id ? { ...r, text: text.slice(0, 200) } : r)));
+  const updateRuleMutation = useMutation({
+    mutationFn: async ({ id, text }: { id: string; text: string }) => {
+      if (!userId) throw new Error('No user ID');
+      const { error } = await supabase
+        .from('journal_progress_rules')
+        .update({ text: text.slice(0, 200) })
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (error) throw error;
     },
-    [rules, persistRules]
-  );
+    onSuccess: invalidate,
+  });
 
-  const deleteRule = useCallback(
-    (id: string) => {
-      persistRules(rules.filter(r => r.id !== id));
+  // Soft delete — flip is_active=false to preserve historical entries
+  const deleteRuleMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!userId) throw new Error('No user ID');
+      const { error } = await supabase
+        .from('journal_progress_rules')
+        .update({ is_active: false })
+        .eq('id', id)
+        .eq('user_id', userId);
+      if (error) throw error;
     },
-    [rules, persistRules]
-  );
+    onSuccess: invalidate,
+  });
 
-  const reorderRules = useCallback(
-    (newOrder: ProgressRule[]) => {
-      const reindexed = newOrder.map((r, i) => ({ ...r, order: i }));
-      persistRules(reindexed);
-    },
-    [persistRules]
-  );
-
-  const toggleEntry = useCallback(
-    (ruleId: string, date?: string) => {
-      const d = date ?? todayStr();
-      const existing = entries.find(e => e.ruleId === ruleId && e.date === d);
-
-      if (!existing) {
-        persistEntries([...entries, { ruleId, date: d, completed: true }]);
-      } else if (!existing.completed) {
-        persistEntries(
-          entries.map(e =>
-            e.ruleId === ruleId && e.date === d ? { ...e, completed: true } : e
-          )
-        );
-      } else {
-        // flip to false → remove the record
-        persistEntries(entries.filter(e => !(e.ruleId === ruleId && e.date === d)));
+  const reorderRulesMutation = useMutation({
+    mutationFn: async (newOrder: ProgressRule[]) => {
+      if (!userId) throw new Error('No user ID');
+      const updates = newOrder.map((r, i) =>
+        supabase
+          .from('journal_progress_rules')
+          .update({ order: i })
+          .eq('id', r.id)
+          .eq('user_id', userId),
+      );
+      const results = await Promise.all(updates);
+      for (const { error } of results) {
+        if (error) throw error;
       }
     },
-    [entries, persistEntries]
-  );
+    onSuccess: invalidate,
+  });
+
+  const toggleEntryMutation = useMutation({
+    mutationFn: async ({ ruleId, date }: { ruleId: string; date: string }) => {
+      if (!userId) throw new Error('No user ID');
+      // Determine current state to flip it
+      const existing = entries.find(e => e.ruleId === ruleId && e.date === date);
+      const nextCompleted = existing ? !existing.completed : true;
+
+      const { error } = await supabase.from('journal_progress_entries').upsert(
+        {
+          user_id: userId,
+          rule_id: ruleId,
+          date,
+          completed: nextCompleted,
+        },
+        { onConflict: 'user_id,rule_id,date' },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['journal-progress-entries', userId] });
+    },
+  });
+
+  // ── Public API ─────────────────────────────────────────────
 
   return {
     rules,
@@ -222,11 +276,13 @@ export function useProgressTracker() {
     streak,
     weeklyScore,
     monthlyScore,
-    isLoading,
-    addRule,
-    updateRule,
-    deleteRule,
-    reorderRules,
-    toggleEntry,
+    isLoading: rulesQuery.isLoading,
+
+    addRule: (text: string) => addRuleMutation.mutate(text),
+    updateRule: (id: string, text: string) => updateRuleMutation.mutate({ id, text }),
+    deleteRule: (id: string) => deleteRuleMutation.mutate(id),
+    reorderRules: (newOrder: ProgressRule[]) => reorderRulesMutation.mutate(newOrder),
+    toggleEntry: (ruleId: string, date?: string) =>
+      toggleEntryMutation.mutate({ ruleId, date: date ?? todayStr() }),
   };
 }

@@ -167,6 +167,11 @@ const JournalReports = lazy(() => import("@/pages/app/journal/Reports"));
 const JournalReportsProgress = lazy(() => import("@/pages/app/journal/reports/ProgressTracker"));
 const JournalReportsDayView = lazy(() => import("@/pages/app/journal/reports/DayView"));
 const JournalReportsRecaps = lazy(() => import("@/pages/app/journal/reports/AIRecaps"));
+const JournalReportsBreakdowns = lazy(() => import("@/pages/app/journal/reports/Breakdowns"));
+const JournalReportsAnnualCalendar = lazy(() => import("@/pages/app/journal/reports/AnnualCalendar"));
+const JournalReportsCompare = lazy(() => import("@/pages/app/journal/reports/CompareReports"));
+const JournalReportsScores = lazy(() => import("@/pages/app/journal/reports/Scores"));
+const JournalAutoTagger = lazy(() => import("@/pages/app/journal/AutoTagger"));
 const JournalCalendar = lazy(() => import("@/pages/app/journal/Calendar"));
 const JournalPerformance = lazy(() => import("@/pages/app/journal/Performance"));
 const Strategies = lazy(() => import("@/pages/app/journal/Strategies"));
@@ -582,6 +587,11 @@ function AppContent() {
 <Route path="journal/reports/progress" element={<JournalRoute><JournalReportsProgress /></JournalRoute>} />
 <Route path="journal/reports/day-view" element={<JournalRoute><JournalReportsDayView /></JournalRoute>} />
 <Route path="journal/reports/recaps" element={<JournalRoute><JournalReportsRecaps /></JournalRoute>} />
+<Route path="journal/reports/breakdowns" element={<JournalRoute><JournalReportsBreakdowns /></JournalRoute>} />
+<Route path="journal/reports/calendar" element={<JournalRoute><JournalReportsAnnualCalendar /></JournalRoute>} />
+<Route path="journal/reports/compare" element={<JournalRoute><JournalReportsCompare /></JournalRoute>} />
+<Route path="journal/reports/scores" element={<JournalRoute><JournalReportsScores /></JournalRoute>} />
+<Route path="journal/auto-tagger" element={<JournalRoute><JournalAutoTagger /></JournalRoute>} />
 <Route path="journal/calendar" element={<JournalRoute><JournalCalendar /></JournalRoute>} />
 <Route path="journal/performance" element={<JournalRoute><JournalPerformance /></JournalRoute>} />
 <Route path="journal/prop-firms" element={<JournalRoute><PropFirmsPage /></JournalRoute>} />
