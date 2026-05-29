@@ -1,4 +1,6 @@
-// Top-N sub-sector cards driven by composite score.
+// Top-N industry cards driven by composite score.
+// Quant Flow: industry name (Semiconductors, Cybersecurity) is the headline;
+// ETF ticker and parent sector are reference chrome.
 
 import { Card, Eyebrow } from '@/components/ds/Card';
 import { Change } from '@/components/ds/NumberDisplay';
@@ -16,14 +18,16 @@ function MoverCard({ etf, tone }: { etf: ScoredEtf; tone: 'gold' | 'negative' })
   return (
     <div className="flex flex-col rounded-[12px] border border-border-ds-subtle bg-surface-1 p-ds-4 transition-transform duration-150 hover:scale-[1.02]">
       <div className="flex items-start justify-between mb-ds-2">
-        <span className="font-mono text-xs text-ink-tertiary tabular-nums">#{etf.rank}</span>
-        <span className="text-[10px] tracking-[0.18em] uppercase rounded-sm border border-gold-primary/40 text-gold-primary px-2 py-0.5">
+        <span className="font-mono text-[11px] text-ink-tertiary tabular-nums">#{etf.rank}</span>
+        <span className="text-[10px] tracking-[0.16em] uppercase text-ink-tertiary">
           {etf.parentSector}
         </span>
       </div>
-      <div className="font-mono text-2xl text-ink-primary tracking-tight">{etf.etf}</div>
-      <div className="text-xs text-ink-secondary mb-ds-3 truncate" title={etf.subSector}>
+      <div className="text-lg text-ink-primary leading-tight mb-ds-1" title={etf.subSector}>
         {etf.subSector}
+      </div>
+      <div className="font-mono text-[10px] text-ink-secondary tracking-wide mb-ds-3">
+        via {etf.etf}
       </div>
       <div className={`font-mono text-xl tabular-nums ${compositeColor}`}>
         {etf.composite >= 0 ? '+' : ''}{etf.composite.toFixed(1)}

@@ -33,7 +33,7 @@ export function SectorFlowAIBriefing({ briefing, loading, error, onRegenerate }:
       <div className="flex items-start justify-between mb-ds-4">
         <div className="flex items-center gap-ds-2">
           <span className="inline-block w-1 h-1 rounded-full bg-gold-primary shadow-glow-gold-resting" />
-          <Eyebrow className="text-gold-primary">AI BRIEFING</Eyebrow>
+          <Eyebrow className="text-gold-primary">AI QUANT BRIEF</Eyebrow>
         </div>
         {briefing && (
           <div className="flex flex-col items-end gap-1">
@@ -60,7 +60,7 @@ export function SectorFlowAIBriefing({ briefing, loading, error, onRegenerate }:
         <SkeletonBriefing />
       ) : !briefing ? (
         <div className="text-ink-secondary text-sm py-ds-3">
-          Briefing not yet generated for today. Check back at 9 AM ET.
+          Quant brief not yet generated for today. Check back at 9 AM ET.
         </div>
       ) : (
         <>
