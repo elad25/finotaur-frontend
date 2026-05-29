@@ -12,6 +12,7 @@ import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
 import { MarketStatusBadge } from '@/components/ai-arena/MarketStatusBadge';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 import {
   useCreditSpreadsSnapshot,
   useCreditSpreadsSeries,
@@ -68,54 +69,6 @@ const REGIME_CONFIG: Record<CreditRegime, { label: string; emoji: string; color:
   },
 };
 
-// ─── AI Summary Card (stub) ──────────────────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  snapshot,
-}: {
-  snapshot: ReturnType<typeof useCreditSpreadsSnapshot>['data'];
-}) {
-  // TODO(wave-1): replace with live POST /api/ai-reports/credit-spreads call
-  // once Anthropic client integration is wired on the server side.
-
-  const regime = snapshot?.regime;
-  const hy = snapshot?.hy;
-  const ig = snapshot?.ig;
-  const regimeCfg = regime ? REGIME_CONFIG[regime] : null;
-
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI Credit Spreads Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            Regime:{' '}
-            <span className={`font-semibold ${regimeCfg?.color ?? ''}`}>
-              {regimeCfg ? `${regimeCfg.emoji} ${regimeCfg.label}` : '—'}
-            </span>
-            {'. '}
-            HY OAS:{' '}
-            <span className="font-semibold text-gold-primary">
-              {hy != null ? fmtBps(hy) : '—'}
-            </span>
-            {'. '}
-            IG OAS:{' '}
-            <span className="font-semibold text-gold-primary">
-              {ig != null ? fmtBps(ig) : '—'}
-            </span>
-            .
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-            {/* TODO(wave-1): replace with generatedAt timestamp once AI endpoint is live */}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── Hero: Regime classifier pill + current regime duration ──────────────────
 
@@ -447,8 +400,6 @@ const RegimeHistoryBar = memo(function RegimeHistoryBar() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const CreditSpreads = memo(function CreditSpreads() {
-  const { data: snapshot } = useCreditSpreadsSnapshot();
-
   return (
     <PageTemplate
       title="Credit Spreads"
@@ -459,7 +410,7 @@ const CreditSpreads = memo(function CreditSpreads() {
 
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        <AiSummaryCard snapshot={snapshot} />
+        <AiSummaryCard feature="credit-spreads" />
 
         {/* Hero: Regime classifier pill + duration */}
         <RegimeHero />

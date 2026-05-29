@@ -6,6 +6,7 @@ import { memo } from 'react';
 import { PageTemplate } from '@/components/PageTemplate';
 import { Card } from '@/components/ds/Card';
 import { Button } from '@/components/ds/Button';
+import { AiSummaryCard } from '@/components/ai-summary/AiSummaryCard';
 import {
   useStablecoinsList,
   useStablecoinsHistory,
@@ -53,40 +54,6 @@ function PegHealthBadge({ health }: { health: Stablecoin['pegHealth'] }) {
   );
 }
 
-// ─── AI Summary Card (stub) ───────────────────────────────────────────────────
-
-const AiSummaryCard = memo(function AiSummaryCard({
-  totalCirculating,
-}: {
-  totalCirculating: number | undefined;
-}) {
-  // TODO(wave-1): replace this static card with a live POST /api/ai-reports/stablecoins call
-  // once the Anthropic client integration is wired on the server side.
-  // The endpoint returns { summary: string, generatedAt: number }.
-
-  const capText = totalCirculating ? formatCompact(totalCirculating) : '—';
-
-  return (
-    <Card variant="featured" className="w-full mb-6">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] uppercase tracking-widest text-gold-muted font-medium mb-1">
-            AI Stablecoins Summary
-          </p>
-          <p className="text-sm text-ink-primary leading-relaxed">
-            Total stablecoin market cap:{' '}
-            <span className="font-semibold text-gold-primary">{capText}</span>.{' '}
-            USDT, USDC, and DAI dominate circulating supply.
-          </p>
-          <p className="text-xs text-ink-tertiary mt-1">
-            AI narrative — coming soon
-            {/* TODO(wave-1): replace with generatedAt timestamp once AI endpoint is live */}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-});
 
 // ─── Hero: Total Cap Header ───────────────────────────────────────────────────
 
@@ -372,10 +339,6 @@ const DominanceChart = memo(function DominanceChart() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const Stablecoins = memo(function Stablecoins() {
-  const { data: listResp } = useStablecoinsList();
-  const stablecoins = listResp?.data ?? [];
-  const totalCirculating = stablecoins.reduce((sum, s) => sum + s.circulating, 0) || undefined;
-
   return (
     <PageTemplate
       title="Stablecoins"
@@ -383,7 +346,7 @@ const Stablecoins = memo(function Stablecoins() {
     >
       <div className="space-y-6 pb-8">
         {/* AI Summary Card — top, full width */}
-        <AiSummaryCard totalCirculating={totalCirculating} />
+        <AiSummaryCard feature="stablecoins" />
 
         {/* Hero: Total stablecoin cap + change pills */}
         <TotalCapHeader />
