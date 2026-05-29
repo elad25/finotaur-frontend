@@ -251,7 +251,6 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 
   'ai-copilot': [
     { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
-    { label: 'AI Chat', path: '/copilot/ai-chat', icon: MessageSquare, beta: true },
     { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
     { label: 'Macro', path: '/copilot/macro', icon: Globe, beta: true },
     { label: 'Quant Flow', path: '/copilot/quant-flow', icon: Activity, beta: true },
