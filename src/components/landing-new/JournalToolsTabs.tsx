@@ -6,8 +6,9 @@
 // ================================================
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, LineChart, Brain, PlayCircle, Lock } from "lucide-react";
+import { BookOpen, LineChart, Brain, PlayCircle, Lock, TrendingUp, Coins } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SectionShell } from "./_shared/SectionShell";
 import { SectionEyebrow } from "./_shared/SectionEyebrow";
@@ -36,17 +37,16 @@ const tabs: Tab[] = [
     eyebrow: "Automated Journal",
     title: "Every fill, journaled automatically.",
     description:
-      "Connect once. Trades flow in real time from NinjaTrader and Tradovate — auto-tagged, fee-aware, and ready to review. Never log a trade by hand again.",
+      "Connect once. Trades flow in real time from NinjaTrader and Tradovate — auto-tagged, fee-aware, and graded against your strategy.",
     bullets: [
-      "NinjaTrader & Tradovate sync",
-      "Real-time fills, no refresh",
+      "Real-time NinjaTrader & Tradovate sync",
       "Auto strategy & setup tagging",
       "Notes, screenshots, voice memos",
     ],
     screenshot: {
       src: "/assets/finotaur-calender.png",
-      alt: "Finotaur Trading Journal — calendar view with daily P&L tracking",
-      url: "finotaur.com/app/journal/calendar",
+      alt: "Finotaur Trading Journal — performance dashboard with equity curve",
+      url: "finotaur.com/app/journal/dashboard",
     },
   },
   {
@@ -149,13 +149,182 @@ const ComingSoonPlaceholder = ({
   );
 };
 
+// NOTE: status-success (green) used here per user's marketing-mockup reference style (their actual journal page uses green for positives). DS §14 says no green for new code; this is a marketing-mockup exception.
+const JournalDashboardMock = () => {
+  return (
+    <div className="bg-section-card-deep p-3 lg:p-4">
+      {/* 4 stat cards row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">
+        <StatCard
+          label="Net P&L"
+          value="+$8,247.30"
+          valueClass="text-status-success"
+          sub="18 closed trades"
+          accent={<TrendingUp className="h-4 w-4 text-gold-primary" aria-hidden="true" />}
+        />
+        <StatCard
+          label="Win Rate"
+          value="64.3%"
+          valueClass="text-status-success"
+          sub="11W / 6L / 1BE"
+          accent={<DonutAccent percent={64} />}
+        />
+        <StatCard
+          label="Profit Factor"
+          value="4.12"
+          valueClass="text-status-success"
+          sub="Per dollar risked"
+          accent={<MiniSparkline />}
+        />
+        <StatCard
+          label="Expectancy"
+          value="+$458.18"
+          valueClass="text-status-success"
+          sub="Per Trade"
+          accent={<Coins className="h-4 w-4 text-gold-primary" aria-hidden="true" />}
+        />
+      </div>
+
+      {/* Equity curve panel */}
+      <div className="bg-section-card-rest border border-gold-border rounded-[12px] p-3">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <div className="text-ink-primary font-semibold text-xs">Equity Curve</div>
+            <div className="text-ink-tertiary text-[10px] mt-0.5">Cumulative P&L over time</div>
+          </div>
+          <div className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary border border-gold-border rounded-sm px-1.5 py-0.5">
+            Daily ▾
+          </div>
+        </div>
+        <EquityCurveSVG />
+        <div className="flex justify-between text-[9px] text-ink-tertiary mt-1.5 font-mono tabular-nums">
+          <span>Start</span>
+          <span>Dec 16</span>
+          <span>Jan 04</span>
+          <span>Feb 12</span>
+          <span>Mar 19</span>
+          <span>Apr 22</span>
+          <span>May 21</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({
+  label,
+  value,
+  valueClass,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  valueClass: string;
+  sub: string;
+  accent: ReactNode;
+}) => {
+  return (
+    <div className="relative bg-section-card-rest border border-gold-border rounded-[12px] px-3 py-2.5 overflow-hidden">
+      <div className="flex items-start justify-between mb-1.5">
+        <span className="text-[9px] uppercase tracking-[0.1em] text-ink-tertiary">
+          {label}
+        </span>
+        <div className="shrink-0">{accent}</div>
+      </div>
+      <div className={`font-sans tabular-nums text-base lg:text-lg font-semibold leading-none ${valueClass}`}>
+        {value}
+      </div>
+      <div className="text-[9px] text-ink-tertiary mt-1 tabular-nums">{sub}</div>
+    </div>
+  );
+};
+
+const DonutAccent = ({ percent }: { percent: number }) => {
+  const r = 7;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - percent / 100);
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx="9" cy="9" r={r} fill="none" stroke="currentColor" strokeOpacity="0.15" strokeWidth="2" className="text-gold-primary" />
+      <circle
+        cx="9"
+        cy="9"
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeDasharray={c}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="text-gold-primary"
+        transform="rotate(-90 9 9)"
+      />
+    </svg>
+  );
+};
+
+const MiniSparkline = () => (
+  <svg width="32" height="14" viewBox="0 0 32 14" fill="none" aria-hidden="true">
+    <path
+      d="M0 11 L5 10 L9 8 L13 9 L17 5 L21 6 L25 3 L29 4 L32 1"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-status-success"
+    />
+  </svg>
+);
+
+const EquityCurveSVG = () => (
+  <svg
+    viewBox="0 0 600 140"
+    preserveAspectRatio="none"
+    className="w-full h-[80px] block"
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient id="equity-fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="var(--gold-primary)" stopOpacity="0.35" />
+        <stop offset="100%" stopColor="var(--gold-primary)" stopOpacity="0" />
+      </linearGradient>
+    </defs>
+    {/* horizontal grid lines */}
+    <line x1="0" y1="35" x2="600" y2="35" stroke="var(--gold-border)" strokeDasharray="2 4" />
+    <line x1="0" y1="70" x2="600" y2="70" stroke="var(--gold-border)" strokeDasharray="2 4" />
+    <line x1="0" y1="105" x2="600" y2="105" stroke="var(--gold-border)" strokeDasharray="2 4" />
+
+    {/* Y-axis labels */}
+    <text x="6" y="33" fontSize="9" fill="var(--ink-tertiary, rgba(255,255,255,0.45))" fontFamily="ui-monospace, monospace">$8.2k</text>
+    <text x="6" y="68" fontSize="9" fill="var(--ink-tertiary, rgba(255,255,255,0.45))" fontFamily="ui-monospace, monospace">$4.1k</text>
+    <text x="6" y="103" fontSize="9" fill="var(--ink-tertiary, rgba(255,255,255,0.45))" fontFamily="ui-monospace, monospace">$0</text>
+
+    {/* Filled area under curve */}
+    <path
+      d="M 0 130 L 50 128 L 100 125 L 150 122 L 200 115 L 250 70 L 300 60 L 350 55 L 400 52 L 450 25 L 500 22 L 550 18 L 600 16 L 600 140 L 0 140 Z"
+      fill="url(#equity-fill)"
+    />
+
+    {/* Curve line */}
+    <path
+      d="M 0 130 L 50 128 L 100 125 L 150 122 L 200 115 L 250 70 L 300 60 L 350 55 L 400 52 L 450 25 L 500 22 L 550 18 L 600 16"
+      stroke="var(--gold-primary)"
+      strokeWidth="2"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const JournalToolsTabs = () => {
   const [active, setActive] = useState<TabKey>("journal");
   const activeTab = tabs.find((t) => t.key === active)!;
 
   return (
     <SectionShell id="journal-toolkit" atmosphere="subtle" beam={false}>
-      <div className="text-center mb-12">
+      <div className="text-center mb-8">
         <SectionEyebrow className="mb-4">The Journal Toolkit</SectionEyebrow>
         <SectionTitle gradient="split" size="default" className="mb-4">
           One journal.{" "}
@@ -171,7 +340,7 @@ const JournalToolsTabs = () => {
       <div
         role="tablist"
         aria-label="Journal toolkit features"
-        className="flex flex-wrap justify-center gap-3 mb-10"
+        className="flex flex-wrap justify-center gap-3 mb-8"
       >
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -236,10 +405,10 @@ const JournalToolsTabs = () => {
             <div className="text-[11px] font-medium uppercase tracking-[1.5px] text-gold-primary/80 mb-3">
               {activeTab.eyebrow}
             </div>
-            <h3 className="font-wordmark font-medium text-3xl lg:text-4xl text-ink-primary leading-tight mb-4">
+            <h3 className="font-wordmark font-medium text-2xl lg:text-3xl text-ink-primary leading-tight mb-3">
               {activeTab.title}
             </h3>
-            <p className="font-sans font-light text-ink-secondary text-base leading-relaxed mb-6">
+            <p className="font-sans font-light text-ink-secondary text-base leading-relaxed mb-5">
               {activeTab.description}
             </p>
             <ul className="space-y-2.5">
@@ -304,7 +473,9 @@ const JournalToolsTabs = () => {
               </div>
 
               {/* Body */}
-              {activeTab.screenshot ? (
+              {activeTab.key === "journal" ? (
+                <JournalDashboardMock />
+              ) : activeTab.screenshot ? (
                 <img
                   src={activeTab.screenshot.src}
                   alt={activeTab.screenshot.alt}
