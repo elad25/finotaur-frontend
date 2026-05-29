@@ -14,12 +14,14 @@ import { Change, Price } from '@/components/ds/NumberDisplay';
 import { PerformanceChart } from './components/PerformanceChart';
 import { GlobeLoader } from './components/GlobeLoader';
 import { usePortfolioData, TimeRange } from './hooks/usePortfolioData';
-import type { PortfolioSnapshot } from './hooks/usePortfolioData';
+import type { PortfolioSnapshot, PerformancePoint } from './hooks/usePortfolioData';
 import { useIBConnection } from '@/hooks/brokers/useIBConnection';
 import { useSynthesisBrief } from './hooks/useSynthesisBrief';
 import { ideaToOpportunity, TICKER_TO_NAME } from './utils/opportunityMapper';
 import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
+import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
+import { CopilotEmptyState } from './components/CopilotEmptyState';
 
 // Time-range list lives inside PerformanceChart now.
 
@@ -28,24 +30,56 @@ export function FinotaurCopilotDashboard() {
   const snapshot = usePortfolioData(range);
   const ib = useIBConnection();
 
+  if (ib.loading) {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#C9A646]" />
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  if (!ib.isConnected) {
+    return (
+      <ErrorBoundary boundary="ai-copilot">
+        <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+          <div className="xl:col-span-8 xl:row-span-2">
+            <CopilotEmptyState
+              title="Connect to unlock your portfolio command center"
+              description="Real-time portfolio value, allocation, sector exposure, risk analysis, and AI insights — all computed from your live broker holdings. Top opportunities and market signals work without a broker."
+            />
+          </div>
+          <AiBrainPanel className="xl:col-span-4" />
+          <div className="xl:col-span-4">
+            <TopOpportunitiesPanel />
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  // Connected — compute risk once and pass down
+  const analysis = computeRiskAnalysis(snapshot.holdings, snapshot.totalValue);
+
   return (
     <ErrorBoundary boundary="ai-copilot">
-    <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
-      <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} isConnected={ib.isConnected} />
-      <AiBrainPanel className="xl:col-span-4" />
-      <InsightsPanel className="xl:col-span-4" />
+      <div className="mt-5 grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+        <PortfolioValuePanel className="xl:col-span-4" range={range} snapshot={snapshot} />
+        <AiBrainPanel className="xl:col-span-4" />
+        <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
-      <div className="xl:col-span-8">
-        <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
-      </div>
-      <div className="xl:col-span-4">
-        <TopOpportunitiesPanel />
-      </div>
+        <div className="xl:col-span-8">
+          <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
+        </div>
+        <div className="xl:col-span-4">
+          <TopOpportunitiesPanel />
+        </div>
 
-      <AllocationPanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
-      <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} isConnected={ib.isConnected} />
-      <RiskAnalysisPanel className="xl:col-span-4" />
-    </div>
+        <AllocationPanel className="xl:col-span-4" snapshot={snapshot} />
+        <SectorExposurePanel className="xl:col-span-4" snapshot={snapshot} />
+        <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />
+      </div>
     </ErrorBoundary>
   );
 }
@@ -64,21 +98,16 @@ function PortfolioValuePanel({
   className,
   range,
   snapshot,
-  isConnected,
 }: {
   className?: string;
   range: TimeRange;
   snapshot: PortfolioSnapshot;
-  isConnected: boolean;
 }) {
   // Sum all CASH-class holdings to derive cash balance.
   // assetClass is carried on Holding when sourced from IBRIT; absent on mock holdings.
   const cashBalance = snapshot.holdings
     .filter((h) => h.assetClass === 'CASH')
     .reduce((sum, h) => sum + h.marketValue, 0);
-  // Buying power = cash balance for cash-only accounts.
-  // TODO: when margin data is available from IB account summary, add margin here.
-  const buyingPower = cashBalance;
 
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
@@ -89,22 +118,24 @@ function PortfolioValuePanel({
             <Eye className="h-3.5 w-3.5 text-ink-tertiary" />
           </div>
           <Price
-            value={isConnected ? snapshot.totalValue : 1247842.35}
+            value={snapshot.totalValue}
             size="display"
             className="mt-5 block whitespace-nowrap bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-[48px] font-normal leading-none text-transparent"
           />
-          <div className="mt-6 grid grid-cols-2 gap-5">
+          {/* Period change (% + $ sub) on the left, real sparkline on the right. */}
+          <div className="mt-6 grid grid-cols-[1fr_auto] gap-5 items-end">
             <Stat
-              label="24H CHANGE"
-              value={isConnected ? <span className="text-ink-tertiary">—</span> : <Change value={2.34} />}
-              sub={isConnected ? null : <Change value={28472.11} format="currency" />}
+              label="PERIOD CHANGE"
+              value={<Change value={snapshot.changePercent} />}
+              sub={<Change value={snapshot.changeAbs} format="currency" />}
             />
-            <MiniReturn changePercent={snapshot.changePercent} isConnected={isConnected} />
+            <PortfolioSparkline series={snapshot.series} />
           </div>
         </div>
-        <div className="grid grid-cols-2 border-t border-gold-primary/12 mt-6 pt-5">
-          <Stat label="CASH BALANCE" value={<Price value={isConnected ? cashBalance : 87432.21} size="small" />} />
-          <Stat label="BUYING POWER" value={<Price value={isConnected ? buyingPower : 163210.09} size="small" />} />
+        {/* Single AVAILABLE CASH stat — cash and buying power are identical for cash-only accounts. */}
+        {/* TODO: when IB account summary surfaces margin, split into two stats again. */}
+        <div className="border-t border-gold-primary/12 mt-6 pt-5">
+          <Stat label="AVAILABLE CASH" value={<Price value={cashBalance} size="small" />} />
         </div>
         <div className="absolute right-4 top-4 text-[10px] text-gold-primary/70">{range}</div>
       </div>
@@ -122,19 +153,38 @@ function Stat({ label, value, sub }: { label: string; value: ReactNode; sub?: Re
   );
 }
 
-function MiniReturn({ changePercent, isConnected }: { changePercent?: number; isConnected?: boolean }) {
-  const display = isConnected ? (changePercent ?? 0) : 24.67;
+/**
+ * PortfolioSparkline — small inline curve derived from the live series.
+ * Replaces the previous MiniReturn component whose SVG path was hardcoded
+ * (mock decoration that never reflected real portfolio history).
+ * Shows the last 30 points so the curve has visible shape even for short ranges.
+ */
+function PortfolioSparkline({ series }: { series: PerformancePoint[] }) {
+  if (series.length < 2) {
+    // No history yet — render an empty box at the same footprint to keep layout stable.
+    return <div className="h-7 w-28" aria-hidden="true" />;
+  }
+  const recent = series.slice(-30);
+  const values = recent.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const valueRange = max - min || 1;
+  const W = 120;
+  const H = 28;
+
+  const points = recent.map((p, i) => {
+    const x = (i / Math.max(recent.length - 1, 1)) * W;
+    const y = H - ((p.value - min) / valueRange) * H;
+    return [x, y] as const;
+  });
+  const line = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const area = `${line} L${W} ${H} L0 ${H} Z`;
+
   return (
-    <div>
-      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-tertiary">ALL TIME RETURN</p>
-      <p className="mt-2 text-sm leading-none">
-        <Change value={display} />
-      </p>
-      <svg viewBox="0 0 120 28" className="mt-2 h-7 w-28 text-gold-primary">
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10" fill="none" stroke="currentColor" strokeWidth="2" />
-        <path d="M0 22L10 18L19 20L28 13L37 16L47 8L56 11L65 6L75 13L84 10L94 14L104 7L120 10V28H0Z" fill="currentColor" opacity="0.12" />
-      </svg>
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-7 w-28 text-gold-primary" aria-hidden="true">
+      <path d={area} fill="currentColor" opacity="0.12" />
+      <path d={line} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
@@ -160,26 +210,54 @@ function AiBrainPanel({ className }: { className?: string }) {
   );
 }
 
-function InsightsPanel({ className }: { className?: string }) {
+// Map driver iconKey → Lucide icon. Aligned with portfolioRisk.ts's iconKey enum.
+const DRIVER_ICON_MAP: Record<RiskDriver['iconKey'], ElementType> = {
+  concentration: Layers3,
+  equity: TrendingUp,
+  options: Zap,
+  liquidity: ShieldCheck,
+};
+
+function InsightsPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
+  // Health = inverse of risk score. 100 = perfectly safe, 0 = max risk.
+  const health = Math.max(0, 100 - analysis.score);
+  const healthLabel = analysis.level === 'Low' ? 'Strong' : analysis.level === 'Moderate' ? 'Balanced' : 'Concentrated';
+  const healthDescription =
+    analysis.level === 'Low' ? 'Portfolio is well balanced across exposures.' :
+    analysis.level === 'Moderate' ? 'Some exposures elevated — monitor key drivers.' :
+    'High concentration or leverage — consider rebalancing.';
+
+  // Top 3 drivers by progress, descending — most material risks first
+  const topDrivers = [...analysis.drivers].sort((a, b) => b.progress - a.progress).slice(0, 3);
+
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="AI INSIGHTS" action="CHAT" actionTo="/app/ai/copilot/ai-chat" />
+        <PanelHeader title="AI INSIGHTS" action="CHAT" actionTo="/copilot/ai-chat" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
           <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
             <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
-              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">78%</span>
+              <span className="bg-gradient-to-b from-gold-bright via-gold-primary to-gold-deep bg-clip-text text-transparent">{health}%</span>
             </div>
           </div>
           <div>
             <p className="text-[10px] uppercase text-ink-tertiary">PORTFOLIO HEALTH</p>
-            <p className="mt-1 text-lg text-gold-primary">Strong</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-secondary">Your portfolio is well balanced with optimal risk exposure.</p>
+            <p className="mt-1 text-lg text-gold-primary">{healthLabel}</p>
+            <p className="mt-1 text-xs leading-relaxed text-ink-secondary">{healthDescription}</p>
           </div>
         </div>
-        <InsightRow icon={Layers3} title="DIVERSIFICATION" text="Well diversified across assets and sectors." />
-        <InsightRow icon={ShieldCheck} title="RISK EXPOSURE" text="Risk level is optimal for your profile." />
-        <InsightRow icon={TrendingUp} title="PERFORMANCE" text="Outperforming 78% of similar portfolios." />
+        {topDrivers.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">Holdings will appear here once positions are loaded.</p>
+        ) : (
+          topDrivers.map((d) => (
+            <InsightRow
+              key={d.label}
+              icon={DRIVER_ICON_MAP[d.iconKey]}
+              title={d.label.toUpperCase()}
+              text={d.text}
+            />
+          ))
+        )}
       </div>
     </PremiumFrame>
   );
@@ -316,42 +394,27 @@ function buildConicGradient(rows: Array<[string, number]>): string {
 function AllocationPanel({
   className,
   snapshot,
-  isConnected,
 }: {
   className?: string;
   snapshot: PortfolioSnapshot;
-  isConnected: boolean;
 }) {
-  // Mock allocation used pre-connection. After connect, real holdings drive the donut + rows.
-  const mockRows: Array<[string, number]> = [
-    ['EQUITIES', 68.4],
-    ['ETFs', 15.7],
-    ['BONDS', 7.3],
-    ['CASH', 5.6],
-    ['OTHER', 2.0],
-  ];
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketAssetClass(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
+  }
+  const rows: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
 
-  let rows: Array<[string, number]> = mockRows;
-  let totalDisplay = '$1.25M';
-
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketAssetClass(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    rows = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (rows.length === 0) rows = [['CASH', 100]]; // defensive: empty holdings
-    if (snapshot.totalValue >= 1_000_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
-    } else if (snapshot.totalValue >= 10_000) {
-      totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
-    } else {
-      totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
-    }
+  let totalDisplay: string;
+  if (snapshot.totalValue >= 1_000_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000_000).toFixed(2)}M`;
+  } else if (snapshot.totalValue >= 10_000) {
+    totalDisplay = `$${(snapshot.totalValue / 1_000).toFixed(1)}K`;
+  } else {
+    totalDisplay = `$${snapshot.totalValue.toFixed(2)}`;
   }
 
   const conic = buildConicGradient(rows);
@@ -360,23 +423,29 @@ function AllocationPanel({
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="HOLDINGS" action="VIEW ALL" actionTo="/app/ai/copilot/holdings" />
-        <div className="mt-4 flex items-center gap-5">
-          <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
-            <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
-              <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
-              <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
+        {rows.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">
+            No positions to allocate yet — once your broker sync completes, your allocation will appear here.
+          </p>
+        ) : (
+          <div className="mt-4 flex items-center gap-5">
+            <div className="relative h-28 w-28 rounded-full p-4" style={{ background: conic }}>
+              <div className="h-full w-full rounded-full bg-[#080704] flex flex-col items-center justify-center">
+                <span className="font-mono text-sm text-gold-primary">{totalDisplay}</span>
+                <span className="text-[9px] uppercase text-ink-tertiary">TOTAL</span>
+              </div>
+            </div>
+            <div className="flex-1 space-y-2">
+              {rows.map(([label, pct], i) => (
+                <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
+                  <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
+                  <span className="text-ink-secondary">{label}</span>
+                  <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex-1 space-y-2">
-            {rows.map(([label, pct], i) => (
-              <div key={label} className="grid grid-cols-[10px_1fr_auto] items-center gap-2 text-[11px]">
-                <span className={`h-2 w-2 ${ALLOC_PALETTE[i % ALLOC_PALETTE.length].swatch}`} />
-                <span className="text-ink-secondary">{label}</span>
-                <span className="font-mono text-ink-primary">{pct.toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
     </PremiumFrame>
   );
@@ -403,34 +472,19 @@ function bucketSector(cls: string | undefined): string {
 function SectorExposurePanel({
   className,
   snapshot,
-  isConnected,
 }: {
   className?: string;
   snapshot: PortfolioSnapshot;
-  isConnected: boolean;
 }) {
-  const mockSectors: Array<[string, number]> = [
-    ['Technology', 28.7],
-    ['Financials', 14.3],
-    ['Health Care', 12.6],
-    ['Consumer Cyclical', 11.8],
-    ['Industrials', 8.7],
-    ['Other', 23.9],
-  ];
-
-  let sectors: Array<[string, number]> = mockSectors;
-  if (isConnected) {
-    const total = snapshot.totalValue || 1;
-    const groups = new Map<string, number>();
-    for (const h of snapshot.holdings) {
-      const label = bucketSector(h.assetClass);
-      groups.set(label, (groups.get(label) || 0) + h.marketValue);
-    }
-    sectors = Array.from(groups.entries())
-      .sort((a, b) => b[1] - a[1])
-      .map(([label, val]) => [label, (val / total) * 100]);
-    if (sectors.length === 0) sectors = [['Other', 100]];
+  const total = snapshot.totalValue || 1;
+  const groups = new Map<string, number>();
+  for (const h of snapshot.holdings) {
+    const label = bucketSector(h.assetClass);
+    groups.set(label, (groups.get(label) || 0) + h.marketValue);
   }
+  const sectors: Array<[string, number]> = Array.from(groups.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, val]) => [label, (val / total) * 100]);
 
   // Bars scale so the largest sector fills the available width; tiny allocations stay visible.
   const maxPct = Math.max(...sectors.map((s) => s[1]), 1);
@@ -439,46 +493,53 @@ function SectorExposurePanel({
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
         <PanelHeader title="MACRO" action="VIEW ALL" actionTo="/app/ai/copilot/macro" />
-        <div className="mt-4 space-y-3">
-          {sectors.map(([name, value]) => (
-            <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
-              <span className="text-ink-secondary truncate">{name}</span>
-              <div className="h-2 rounded-full bg-white/8 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
-                  style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
-                />
+        {sectors.length === 0 ? (
+          <p className="mt-4 text-xs text-ink-tertiary">
+            No sector data yet — connect a broker and sync your holdings to see exposure.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {sectors.map(([name, value]) => (
+              <div key={name} className="grid grid-cols-[1fr_130px_42px] items-center gap-3 text-[11px]">
+                <span className="text-ink-secondary truncate">{name}</span>
+                <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#9b7d22] to-[#f4d97b]"
+                    style={{ width: `${Math.min(100, (value / maxPct) * 100)}%` }}
+                  />
+                </div>
+                <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
               </div>
-              <span className="font-mono text-ink-tertiary text-right">{value.toFixed(1)}%</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </PremiumFrame>
   );
 }
 
-function RiskAnalysisPanel({ className }: { className?: string }) {
-  const rows = [
-    ['Market Risk', 'Medium'],
-    ['Credit Risk', 'Low'],
-    ['Liquidity Risk', 'Low'],
-    ['Volatility Risk', 'Medium'],
-    ['Concentration Risk', 'Low'],
-  ];
+function RiskAnalysisPanel({ className, analysis }: { className?: string; analysis: PortfolioRiskAnalysis }) {
   return (
     <PremiumFrame className={`min-h-[210px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/app/ai/copilot/risks" />
+        <PanelHeader title="RISK ANALYSIS" action="VIEW ALL" actionTo="/copilot/risks" />
         <div className="mt-4 grid grid-cols-[130px_1fr] gap-4 items-center">
           <RiskManagementGoldMark />
           <div className="space-y-2">
-            {rows.map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="text-ink-secondary">{label}</span>
-                <span className={value === 'Medium' ? 'text-gold-primary' : 'text-ink-primary'}>{value}</span>
-              </div>
-            ))}
+            <div className="flex items-center justify-between gap-3 pb-2 border-b border-gold-primary/10 text-[11px]">
+              <span className="text-ink-tertiary">Overall</span>
+              <span className="font-mono text-gold-primary">{analysis.score}/100 · {analysis.level}</span>
+            </div>
+            {analysis.drivers.length === 0 ? (
+              <p className="text-[11px] text-ink-tertiary">No drivers computed yet.</p>
+            ) : (
+              analysis.drivers.map((d) => (
+                <div key={d.label} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="text-ink-secondary">{d.label}</span>
+                  <span className={d.tone === 'red' ? 'text-num-negative' : d.tone === 'green' ? 'text-status-success' : 'text-gold-primary'}>{d.level}</span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

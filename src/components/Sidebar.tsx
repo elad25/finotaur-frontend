@@ -59,8 +59,7 @@ import {
   Coins,
   Flame,
   Sparkles,  // נ”¥ For beta items
-  Link2,
-  FileBarChart
+  Link2
 } from 'lucide-react';
 import { 
   prefetchSettingsData, 
@@ -252,6 +251,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
 
   'ai-copilot': [
     { label: 'FINOTAUR Copilot', path: '/copilot', icon: LayoutDashboard, beta: true },
+    { label: 'AI Chat', path: '/copilot/ai-chat', icon: MessageSquare, beta: true },
     { label: 'Top Opportunities', path: '/copilot/top-opportunities', icon: Zap, beta: true },
     { label: 'Macro', path: '/copilot/macro', icon: Globe, beta: true },
     { label: 'Quant Flow', path: '/copilot/quant-flow', icon: Activity, beta: true },
@@ -272,7 +272,7 @@ const ENVIRONMENT_MENUS: Record<EnvironmentType, Array<{
     { label: 'My Strategies', path: '/app/journal/strategies', icon: Layers },
     { label: 'Statistics', path: '/app/journal/analytics', icon: BarChart3 },
     { label: 'Calendar', path: '/app/journal/calendar', icon: Calendar },
-    { label: 'Reports', path: '/app/journal/reports', icon: FileBarChart },
+    { label: 'AI Chat', path: '/app/journal/ai-review', icon: MessageSquare },
     { label: 'Prop Firms', path: '/app/journal/prop-firms', icon: Building },
     { label: 'Gameplan', path: '/app/journal/scenarios', icon: Target },
     { label: 'Academy', path: '/app/journal/academy', icon: GraduationCap },
