@@ -686,7 +686,16 @@ export function BacktestChart({
           {(['live', 'replay'] as ChartMode[]).map((mode) => (
             <button
               key={mode}
-              onClick={() => setChartMode(mode)}
+              onClick={() => {
+                // Elad 2026-05-29: switching LIVE → REPLAY should feel
+                // continuous. Snap replayStart to NOW so the replay window
+                // shows the same recent bars the user was looking at on
+                // LIVE, instead of jumping back 4 hours.
+                if (mode === 'replay' && chartMode === 'live') {
+                  setReplayStart(new Date());
+                }
+                setChartMode(mode);
+              }}
               className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
                 chartMode === mode
                   ? 'bg-[#C9A646] text-black'
