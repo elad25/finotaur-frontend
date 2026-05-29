@@ -17,6 +17,8 @@ interface GuideSlide {
   title: string;
   body: string;
   imageSrc?: string;
+  secondaryImageSrc?: string; // optional companion image (e.g. zoom-in with annotations)
+  secondaryCaption?: string;  // small label rendered above the secondary image
   mockup?: ReactNode;
 }
 
@@ -119,8 +121,10 @@ const GUIDES: Partial<Record<JournalSource, JournalGuide>> = {
       {
         kind: 'image',
         title: 'Step 1 — Open Trade View',
-        body: 'Log in to TradeZella and click "Trade View" in the left sidebar. You\'ll see all your trades in a table.',
+        body: 'Log in to TradeZella and click "Trade View" in the left sidebar. The zoom on the right shows exactly where to click.',
         imageSrc: '/import-guides/tradezella/01-trade-view.png',
+        secondaryImageSrc: '/import-guides/tradezella/01-trade-view-zoom.png',
+        secondaryCaption: 'Zoom in',
       },
       {
         kind: 'mockup',
@@ -258,11 +262,35 @@ export default function JournalExportGuide({ source, onClose }: Props) {
 
           <div className="rounded-xl bg-zinc-900/50 border border-zinc-800 p-4 flex items-center justify-center min-h-[260px]">
             {slide.kind === 'image' && slide.imageSrc && (
-              <img
-                src={slide.imageSrc}
-                alt={slide.title}
-                className="max-w-full max-h-[420px] rounded-lg border border-zinc-800/60"
-              />
+              slide.secondaryImageSrc ? (
+                // Side-by-side layout: blurred page on the left, zoom-in callout on the right.
+                // Stacks vertically on narrow viewports.
+                <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr] gap-4 w-full items-center">
+                  <img
+                    src={slide.imageSrc}
+                    alt={slide.title}
+                    className="w-full max-h-[420px] object-contain rounded-lg border border-zinc-800/60"
+                  />
+                  <div className="flex flex-col items-center gap-1.5">
+                    {slide.secondaryCaption && (
+                      <span className="text-[10px] uppercase tracking-widest text-[#C9A646]/80">
+                        {slide.secondaryCaption}
+                      </span>
+                    )}
+                    <img
+                      src={slide.secondaryImageSrc}
+                      alt={`${slide.title} — zoom`}
+                      className="w-full max-h-[420px] object-contain rounded-lg border border-[#C9A646]/30 shadow-[0_0_24px_rgba(201,166,70,0.15)]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={slide.imageSrc}
+                  alt={slide.title}
+                  className="max-w-full max-h-[420px] rounded-lg border border-zinc-800/60"
+                />
+              )
             )}
             {slide.kind === 'mockup' && slide.mockup}
           </div>
