@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { Card } from '@/components/ds/Card';
 import { PerformancePoint, TimeRange } from '../hooks/usePortfolioMockData';
-import { calculatePortfolioMetrics, fmtPercent, fmtNumber } from '@/lib/portfolio/metrics';
+import { calculatePortfolioMetrics, fmtPercent, fmtNumber, robustExtent, clampToRange } from '@/lib/portfolio/metrics';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -62,8 +62,7 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
     const values = series.map((point) =>
       mode === 'dollar' ? point.value : ((point.value - start) / start) * 100
     );
-    let min = Math.min(...values);
-    let max = Math.max(...values);
+    let { min, max } = robustExtent(values);
     const isFlat = max - min === 0;
 
     // Flat line (e.g., cash-only account, no historical movement): synthesize a
@@ -83,7 +82,8 @@ export function PerformanceChart({ series, range, onRangeChange }: Props) {
 
     const coords = values.map((value, index) => {
       const x = PADDING.left + (index / Math.max(values.length - 1, 1)) * innerWidth;
-      const y = PADDING.top + (1 - (value - min) / valueRange) * innerHeight;
+      const clampedValue = clampToRange(value, min, max);
+      const y = PADDING.top + (1 - (clampedValue - min) / valueRange) * innerHeight;
       return [x, y] as const;
     });
 

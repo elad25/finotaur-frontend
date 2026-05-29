@@ -91,6 +91,37 @@ export function calculatePortfolioMetrics(series: PerformancePoint[]): Portfolio
   };
 }
 
+// ─── Chart Scaling Helpers ───────────────────────────────────────────────────
+
+/**
+ * Robust value extent for charts. Winsorizes the top/bottom `pct` of values so a
+ * single anomalous data point (e.g. a bad portfolio snapshot) cannot dominate the
+ * min/max scale and flatten the rest of the curve. Values are NOT mutated — callers
+ * clamp rendered coordinates into [min,max] and still surface true values in tooltips.
+ * Falls back to raw min/max when there are too few points or values are ~identical.
+ */
+export function robustExtent(values: number[], pct = 0.05): { min: number; max: number } {
+  if (values.length === 0) return { min: 0, max: 0 };
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  if (values.length < 8) return { min: rawMin, max: rawMax };
+  const sorted = [...values].sort((a, b) => a - b);
+  const quantile = (p: number) => {
+    const idx = (sorted.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  };
+  const min = quantile(pct);
+  const max = quantile(1 - pct);
+  if (max - min < 1e-9) return { min: rawMin, max: rawMax }; // degenerate → let caller's flat handling apply
+  return { min, max };
+}
+
+export function clampToRange(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
 // ─── Formatters ──────────────────────────────────────────────────────────────
 // Display helpers: turn null into '—', percentages into '+x.xx%', etc.
 

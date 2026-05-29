@@ -22,6 +22,7 @@ import { TickerLogo } from './components/TickerLogo';
 import type { TradeIdea } from '@/services/copilotSynthesisBriefApi';
 import { computeRiskAnalysis, type PortfolioRiskAnalysis, type RiskDriver } from './utils/portfolioRisk';
 import { CopilotEmptyState } from './components/CopilotEmptyState';
+import { robustExtent, clampToRange } from '@/lib/portfolio/metrics';
 
 // Time-range list lives inside PerformanceChart now.
 
@@ -281,15 +282,15 @@ function PortfolioSparkline({ series }: { series: PerformancePoint[] }) {
   }
   const recent = series.slice(-30);
   const values = recent.map((p) => p.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const { min, max } = robustExtent(values);
   const valueRange = max - min || 1;
   const W = 120;
   const H = 28;
 
   const points = recent.map((p, i) => {
     const x = (i / Math.max(recent.length - 1, 1)) * W;
-    const y = H - ((p.value - min) / valueRange) * H;
+    const clampedValue = clampToRange(p.value, min, max);
+    const y = H - ((clampedValue - min) / valueRange) * H;
     return [x, y] as const;
   });
   const line = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
@@ -348,7 +349,7 @@ function InsightsPanel({ className, analysis }: { className?: string; analysis: 
   return (
     <PremiumFrame className={`min-h-[260px] ${className}`}>
       <div className="p-5">
-        <PanelHeader title="AI INSIGHTS" action="CHAT" actionTo="/copilot/ai-chat" />
+        <PanelHeader title="AI INSIGHTS" action="ANALYST" actionTo="/copilot/ai-analyst" />
         <div className="mt-4 flex items-center gap-4 border-b border-gold-primary/12 pb-4">
           <div className="relative h-24 w-24 flex-none aspect-square rounded-full bg-[conic-gradient(from_210deg,var(--gold-bright)_0_18%,var(--gold-primary)_44%,var(--gold-deep)_78%,rgba(255,255,255,0.08)_78%_100%)] p-2 shadow-[0_0_26px_rgba(201,166,70,0.22)]">
             <div className="flex h-full w-full items-center justify-center rounded-full bg-[#090704] font-mono text-2xl tabular-nums">
