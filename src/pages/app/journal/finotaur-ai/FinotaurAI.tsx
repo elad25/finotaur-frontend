@@ -3,6 +3,7 @@
 // Decision tree: Free → UpsellGate (no API), 0-trades → EmptyState, error → ErrorCard, happy path → ScoreHero + BriefingHero.
 
 import * as React from 'react';
+import { useState } from 'react';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useFinotaurScore } from './hooks/useFinotaurScore';
 import { useBriefing, useRefreshBriefing } from './hooks/useBriefing';
@@ -10,6 +11,7 @@ import { BriefingHero } from './components/BriefingHero';
 import { ScoreHero } from './components/ScoreHero';
 import { EmptyState } from './components/EmptyState';
 import { UpsellGate } from './components/UpsellGate';
+import CoachChatPanel from './components/CoachChatPanel';
 import { Eyebrow } from '@/components/ds/Card';
 import { BriefingApiError } from './services/finotaurAIApi';
 import type { Insight } from './types';
@@ -75,9 +77,10 @@ export default function FinotaurAI() {
     refreshMutation.mutate();
   };
 
+  const [prefillRequest, setPrefillRequest] = useState<string | null>(null);
+
   const handleDiscuss = (insight: Insight) => {
-    // Phase 5 will wire this to the chat panel
-    console.log('[journal-ai] discuss:', insight.id);
+    setPrefillRequest(`Tell me more about: ${insight.title ?? insight.body ?? insight.id}`);
   };
 
   // Subscription not resolved yet
@@ -111,26 +114,32 @@ export default function FinotaurAI() {
 
   return (
     <PageShell>
-      <ScoreHero
-        score={score}
-        isLoading={isLoading}
-        error={error as Error | null}
-        onRefresh={refetch}
-      />
-      <div className="mt-ds-6">
-        <BriefingHero
-          briefing={briefingQuery.data?.briefing ?? null}
-          stale={briefingQuery.data?.stale ?? false}
-          refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
-          generatedAt={briefingQuery.data?.generated_at ?? null}
-          isLoading={briefingQuery.isLoading}
-          error={briefingQuery.error as Error | null}
-          onRefresh={handleRefresh}
-          refreshing429={refreshing429}
-          onDiscuss={handleDiscuss}
-        />
+      <div className="grid grid-cols-1 gap-ds-6 lg:grid-cols-[1fr_380px]">
+        <div>
+          <ScoreHero
+            score={score}
+            isLoading={isLoading}
+            error={error as Error | null}
+            onRefresh={refetch}
+          />
+          <div className="mt-ds-6">
+            <BriefingHero
+              briefing={briefingQuery.data?.briefing ?? null}
+              stale={briefingQuery.data?.stale ?? false}
+              refreshing={briefingQuery.data?.refreshing ?? refreshMutation.isPending}
+              generatedAt={briefingQuery.data?.generated_at ?? null}
+              isLoading={briefingQuery.isLoading}
+              error={briefingQuery.error as Error | null}
+              onRefresh={handleRefresh}
+              refreshing429={refreshing429}
+              onDiscuss={handleDiscuss}
+            />
+          </div>
+        </div>
+        <aside className="lg:sticky lg:top-ds-6 lg:self-start">
+          <CoachChatPanel prefillRequest={prefillRequest} />
+        </aside>
       </div>
-      {/* CoachChatPanel (Phase 5) — placeholder */}
     </PageShell>
   );
 }
