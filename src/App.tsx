@@ -135,15 +135,6 @@ import { useAnalytics } from "@/lib/analytics";
 
 // LAZY LOADED PAGES
 const FinotaurAI = lazy(() => import("@/pages/app/journal/finotaur-ai/FinotaurAI"));
-const AdminDashboard = lazy(() => import("@/pages/app/journal/admin/Dashboard"));
-const AdminUsers = lazy(() => import("@/pages/app/journal/admin/Users"));
-const AdminAnalytics = lazy(() => import("@/pages/app/journal/admin/Analytics"));
-const AdminSubscribers = lazy(() => import("@/pages/app/journal/admin/Subscribers"));
-const AdminTopTraders = lazy(() => import("@/pages/app/journal/admin/TopTraders"));
-const AdminAffiliate = lazy(() => import("@/pages/app/journal/admin/Affiliate"));
-const Cancellations = lazy(() => import("@/pages/app/journal/admin/Cancellations"));
-const UserDetails = lazy(() => import("@/pages/app/journal/admin/UserDetails"));
-const AdminNewsletterSub = lazy(() => import("@/pages/app/journal/admin/NewsletterSub"));
 const SettingsLayout = lazy(() => import("@/layouts/SettingsLayout"));
 const Pricing = lazy(() => import("@/pages/app/journal/Pricing"));
 const JournalPricingPage = lazy(() => import("@/pages/app/journal/JournalPricingPage"));
@@ -189,6 +180,8 @@ const JournalSettings = lazy(async () => {
   return { default: Component };
 });
 const TradeCopier = lazy(() => import("@/pages/app/journal/TradeCopier"));
+const Mentor = lazy(() => import("@/pages/app/journal/Mentor"));
+const MentorStudentView = lazy(() => import("@/pages/app/journal/MentorStudentView"));
 
 // Backtest Pages
 const BacktestLanding = lazy(() => import("@/pages/app/journal/backtest/BacktestLanding"));
@@ -589,6 +582,9 @@ function AppContent() {
 <Route path="journal/copy-trading" element={<Navigate to="/app/copy-trade/overview" replace />} />
 {/* Phase 3 AI — hidden page, no nav entry yet (Phase 7 swaps nav) */}
 <Route path="journal/finotaur-ai" element={<JournalRoute><FinotaurAI /></JournalRoute>} />
+{/* Mentor Mode — must be before journal/:id to avoid wildcard match */}
+<Route path="journal/mentor" element={<JournalRoute><Mentor /></JournalRoute>} />
+<Route path="journal/mentor/:studentId" element={<JournalRoute><MentorStudentView /></JournalRoute>} />
 <Route path="journal/:id" element={<JournalRoute><JournalTradeDetail /></JournalRoute>} />
 
           {/* BACKTEST */}
@@ -621,17 +617,6 @@ function AppContent() {
             </>
           )}
 
-          {/* JOURNAL ADMIN */}
-          <Route path="journal/admin" element={<ProtectedAdminRoute><SuspenseRoute><AdminDashboard /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/users" element={<ProtectedAdminRoute><SuspenseRoute><AdminUsers /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/users/:userId" element={<ProtectedAdminRoute><SuspenseRoute><UserDetails /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/analytics" element={<ProtectedAdminRoute><SuspenseRoute><AdminAnalytics /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/subscribers" element={<ProtectedAdminRoute><SuspenseRoute><AdminSubscribers /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/affiliate" element={<ProtectedAdminRoute><SuspenseRoute><AdminAffiliate /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/top-traders" element={<ProtectedAdminRoute><SuspenseRoute><AdminTopTraders /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/Cancellations" element={<ProtectedAdminRoute><SuspenseRoute><Cancellations /></SuspenseRoute></ProtectedAdminRoute>} />
-          <Route path="journal/admin/newsletter-sub" element={<ProtectedAdminRoute><SuspenseRoute><AdminNewsletterSub /></SuspenseRoute></ProtectedAdminRoute>} />
-          
           {/* BACKTEST BACKWARD COMPAT */}
           <Route path="backtest/landing" element={<BacktestRoute><BacktestLanding /></BacktestRoute>} />
           <Route path="backtest/overview" element={<BacktestRoute><BacktestOverview /></BacktestRoute>} />

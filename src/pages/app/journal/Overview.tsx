@@ -1215,7 +1215,12 @@ DashboardDatePicker.displayName = 'DashboardDatePicker';
 // MAIN DASHBOARD COMPONENT
 // ================================================
 
-function JournalOverviewContent() {
+interface JournalOverviewProps {
+  overrideUserId?: string;
+  readOnly?: boolean;
+}
+
+function JournalOverviewContent({ overrideUserId, readOnly = false }: JournalOverviewProps) {
   const navigate = useNavigate();
   
   // ✅ NEW: Timezone context
@@ -1385,7 +1390,8 @@ function JournalOverviewContent() {
     return () => document.removeEventListener('mousedown', handle);
   }, []);
 
-  const { id: userId, isImpersonating } = useEffectiveUser();
+  const { id: fallbackUserId, isImpersonating } = useEffectiveUser();
+  const userId = overrideUserId ?? fallbackUserId;
   // queryClient hoisted ~90 lines up to fix TDZ in handleSyncAllTrades deps.
 
   // Convert date range to days for useDashboardStats (null = ALL TIME)
@@ -1402,7 +1408,11 @@ function JournalOverviewContent() {
   
   const { limits, loading: subscriptionLoading } = useSubscription();
   const canUseSnapTrade = false; // disabled during SnapTrade removal (Phase A1)
-  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, effectivePortfolioId, effectivePortfolioIds);
+  // When viewing another user's journal (mentor view), do not apply the
+  // logged-in mentor's portfolio filter — show all of the student's data.
+  const mentorPortfolioId = overrideUserId ? undefined : effectivePortfolioId;
+  const mentorPortfolioIds = overrideUserId ? undefined : effectivePortfolioIds;
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats(dashboardDays, userId, mentorPortfolioId, mentorPortfolioIds);
   
   // 🔥 FIX v2: Listen for BOTH 'updated' AND 'invalidated' events on trades query
   // Covers: create, edit, delete from MyTrades + NewTrade page
@@ -1689,42 +1699,46 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
                 connection it triggers a broker sync; without one it still
                 refetches trades + dashboard queries so the user always has a
                 manual way to force-refresh the page data. */}
-            <Button
-              onClick={handleSyncAllTrades}
-              disabled={isSyncingAll}
-              variant="goldOutline"
-              size="compact"
-              className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
-              aria-label={
-                isSyncingAll
-                  ? 'Refreshing'
-                  : tradovateConnections.length > 0
-                    ? 'Sync Trades'
-                    : 'Refresh Dashboard'
-              }
-              title={
-                isSyncingAll
-                  ? 'Refreshing…'
-                  : tradovateConnections.length > 0
-                    ? 'Sync Trades'
-                    : 'Refresh Dashboard'
-              }
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
-            </Button>
+            {!readOnly && (
+              <Button
+                onClick={handleSyncAllTrades}
+                disabled={isSyncingAll}
+                variant="goldOutline"
+                size="compact"
+                className="h-10 w-10 shrink-0 border-[#C9A646]/80 p-0 text-white shadow-[0_0_18px_rgba(201,166,70,0.12)] hover:border-[#E8C766] hover:text-[#E8C766] disabled:opacity-60"
+                aria-label={
+                  isSyncingAll
+                    ? 'Refreshing'
+                    : tradovateConnections.length > 0
+                      ? 'Sync Trades'
+                      : 'Refresh Dashboard'
+                }
+                title={
+                  isSyncingAll
+                    ? 'Refreshing…'
+                    : tradovateConnections.length > 0
+                      ? 'Sync Trades'
+                      : 'Refresh Dashboard'
+                }
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncingAll ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
 
             {/* F2.5: Import Trades — compact (handler unchanged) */}
-            <Button
-              onClick={() => setShowImportPopup(true)}
-              variant="gold"
-              size="compact"
-              className="h-10 gap-2 px-6 text-[12px]"
-              aria-label="Import Trades"
-              showArrow={false}
-            >
-              <PlusSquare className="w-3.5 h-3.5" />
-              Import Trades
-            </Button>
+            {!readOnly && (
+              <Button
+                onClick={() => setShowImportPopup(true)}
+                variant="gold"
+                size="compact"
+                className="h-10 gap-2 px-6 text-[12px]"
+                aria-label="Import Trades"
+                showArrow={false}
+              >
+                <PlusSquare className="w-3.5 h-3.5" />
+                Import Trades
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1734,8 +1748,9 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections. */}
-        {!brokersLoading && degradedConnection && (
+        {/* Phase 1B.4 — Reconnect CTA for degraded / canceled broker connections.
+            Hidden in mentor/read-only view — mentor cannot act on student's broker. */}
+        {!readOnly && !brokersLoading && degradedConnection && (
           <div className="rounded-2xl border border-[#E36363]/30 bg-[#E36363]/8 px-5 py-4 mb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-[#E36363]/15 flex items-center justify-center flex-shrink-0">
@@ -1761,7 +1776,8 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
           </div>
         )}
 
-        {!brokersLoading
+        {!readOnly
+          && !brokersLoading
           && allBrokerConnections.length === 0
           && !emptyStateDismissed
           && (!stats || !stats.trades || stats.trades.length === 0) && (
@@ -1992,10 +2008,10 @@ const handleImportComplete = useCallback(async (trades: FinotaurTrade[]) => {
   );
 }
 
-export default function JournalOverview() {
+export default function JournalOverview(props: JournalOverviewProps = {}) {
   return (
     <ErrorBoundary>
-      <JournalOverviewContent />
+      <JournalOverviewContent {...props} />
     </ErrorBoundary>
   );
 }
