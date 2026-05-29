@@ -1,6 +1,7 @@
 // vite.config.ts - WORKING VERSION (object syntax)
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
 import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig(({ mode }) => {
@@ -11,8 +12,31 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.VITE_PROXY_TARGET || 'https://finotaur-server-production.up.railway.app'
   const proxySecure = proxyTarget.startsWith('https://')
 
+  // Sentry source-maps upload: enabled only in prod builds when the auth token
+  // is present (Cloudflare Pages env). Local `npm run build` without the token
+  // is a no-op — the plugin warns but the build still succeeds.
+  const sentryEnabled = mode === 'production' && !!process.env.SENTRY_AUTH_TOKEN
+
   return {
-  plugins: [react()],
+  plugins: [
+    react(),
+    sentryEnabled && sentryVitePlugin({
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      sourcemaps: {
+        assets: './dist/**',
+        // Keep maps out of the public bundle once Sentry has them.
+        filesToDeleteAfterUpload: ['./dist/**/*.map'],
+      },
+      // Auto-detects release from `process.env.CF_PAGES_COMMIT_SHA` on
+      // Cloudflare Pages; falls back to local git SHA otherwise.
+      release: {
+        name: process.env.CF_PAGES_COMMIT_SHA || undefined,
+      },
+      telemetry: false,
+    }),
+  ].filter(Boolean),
 
   resolve: {
     alias: {
@@ -72,17 +96,13 @@ proxy: {
     target: 'esnext',
     minify: 'esbuild',
     // 2026-05-19: source maps enabled so Sentry can resolve minified frames
-    // back to original source positions. The first reproducing TDZ error
-    // ("Cannot access 'V' before initialization" on /app/journal/overview)
-    // landed in Sentry with only a minified variable name, which made it
-    // un-actionable. With sourcemaps, every future production exception in
-    // Sentry resolves to a real file + line + column. Trade-off accepted:
-    // build is slightly slower and dist/ ships .map files alongside .js
-    // (public). No secrets in frontend bundle — secret handling is in
-    // edge functions + finotaur-server, both of which have no client
-    // exposure of source. If sourcemap surface becomes a concern later,
-    // switch to 'hidden' + upload via sentry-cli in the CF Pages build step.
-    sourcemap: true,
+    // back to original source positions.
+    // 2026-05-29: switched to 'hidden' — maps are produced for sentryVitePlugin
+    // to upload, but no `//# sourceMappingURL=` comment is emitted in the bundle,
+    // so browsers don't auto-fetch them. The plugin's `filesToDeleteAfterUpload`
+    // then strips .map files from dist/ after upload, so the public bundle ships
+    // without source maps. Sentry still resolves stack frames via uploaded maps.
+    sourcemap: 'hidden',
     chunkSizeWarningLimit: 500,
     
     rollupOptions: {
