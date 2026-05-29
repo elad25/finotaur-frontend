@@ -17,7 +17,7 @@ import CftcDisclosureBanner from "@/components/backtest/CftcDisclosureBanner";
 import { useNavigate, useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import {
-  TrendingUp, TrendingDown, Crown, Sparkles,
+  TrendingUp, TrendingDown, Crown,
   RefreshCw, Download, Share2, HelpCircle, Target
 } from "lucide-react";
 import { useEffectiveUser } from "@/hooks/useEffectiveUser";
@@ -692,60 +692,6 @@ const BacktestBestWorstTrades = React.memo(({ stats }: { stats: BacktestStats })
 BacktestBestWorstTrades.displayName = 'BacktestBestWorstTrades';
 
 // ================================================
-// AI BACKTEST INSIGHT
-// ================================================
-
-const BacktestAIInsight = React.memo(({ stats }: { stats: BacktestStats }) => {
-  const insight = useMemo(() => {
-    if (stats.total_trades < 20) {
-      return "Limited sample size. Consider running a longer backtest for more reliable results.";
-    }
-    
-    if (stats.sharpe_ratio > 2 && stats.profit_factor > 2) {
-      return "Excellent risk-adjusted returns! Strategy shows strong edge with solid Sharpe ratio and profit factor.";
-    }
-    
-    if (stats.win_rate > 0.75) {
-      return "Very high win rate detected. Verify results for potential overfitting—consider walk-forward analysis.";
-    }
-    
-    if (Math.abs(stats.max_drawdown_percent) > 20) {
-      return "High drawdown detected. Consider reducing position size or tightening risk management.";
-    }
-    
-    if (stats.sharpe_ratio > 1.5) {
-      return "Good risk-adjusted performance. Strategy demonstrates consistent edge over backtest period.";
-    }
-    
-    return "Backtest complete. Review all metrics carefully before live trading.";
-  }, [stats]);
-  
-  return (
-    <div 
-      className="rounded-[20px] border p-5 flex items-start gap-4 shadow-[0_0_30px_rgba(201,166,70,0.08)] animate-fadeIn relative overflow-hidden"
-      style={{ 
-        background: 'linear-gradient(90deg, rgba(201,166,70,0.1), rgba(201,166,70,0.05))',
-        borderColor: 'rgba(255, 215, 0, 0.08)',
-        borderLeft: '3px solid #C9A646'
-      }}
-    >
-      <div className="rounded-lg bg-[#C9A646]/10 p-2.5 animate-pulse-gold">
-        <Sparkles className="w-5 h-5 text-[#C9A646]" />
-      </div>
-      <div className="flex-1">
-        <div className="text-[#C9A646] text-[10px] font-semibold uppercase tracking-[0.15em] mb-1.5">
-          AI Backtest Insights
-        </div>
-        <div className="text-[#F4F4F4] text-sm leading-relaxed font-light">
-          {insight}
-        </div>
-      </div>
-    </div>
-  );
-});
-BacktestAIInsight.displayName = 'BacktestAIInsight';
-
-// ================================================
 // BACKTEST KPI PRIMITIVES (blue accent — mirrors Journal gold strip)
 // ================================================
 
@@ -1097,9 +1043,6 @@ function BacktestOverviewContent() {
             </button>
           </div>
         </div>
-
-        {/* AI Insights */}
-        <BacktestAIInsight stats={stats} />
 
         {/* Main KPIs — BacktestKpiCard blue accent, 5-col on lg (mirrors Journal strip) */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
