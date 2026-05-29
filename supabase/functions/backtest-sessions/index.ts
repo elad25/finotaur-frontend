@@ -80,6 +80,9 @@ interface SaveSessionPayload {
   profit_factor: number;
   notes?: string;
   config?: Record<string, unknown>;
+  /** Optional FK to strategies.id — links this backtest to a stated strategy
+   *  for FINOTAUR AI live-vs-backtest comparison. Added 2026-05-29 Phase F. */
+  strategy_id?: string | null;
   trades: TradePayload[];
   pending_orders?: PendingOrderPayload[];
 }
@@ -177,6 +180,7 @@ serve(async (req) => {
           notes: payload.notes ?? null,
           config: payload.config ?? null,
           pending_orders: payload.pending_orders ?? [],
+          strategy_id: payload.strategy_id ?? null,
         })
         .select('id, created_at')
         .single();
