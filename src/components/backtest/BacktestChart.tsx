@@ -26,7 +26,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { UTCTimestamp } from 'lightweight-charts';
 import { TrendingUp, TrendingDown, X, RotateCcw, Save, Check, AlertCircle, Play, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
-import { FinotaurChart } from '@/components/charting/FinotaurChart';
 import { pickDataSource, isCryptoSymbol } from '@/components/charting/dataSources';
 import type { Bar, ChartMarker, Interval } from '@/components/charting/types';
 import {
@@ -451,13 +450,6 @@ export function BacktestChart({
 
   const navigate = useNavigate();
 
-  // Phase 4: Live ↔ Replay mode toggle. In Replay mode, the chart is
-  // BacktestReplayChart (cursor-controlled). In Live mode it's the
-  // current FinotaurChart with manual current-price input.
-  // Elad 2026-05-29: switch the default back to Live. Replay is one click
-  // away via the LIVE/REPLAY toggle in the toolbar.
-  type ChartMode = 'live' | 'replay';
-  const [chartMode, setChartMode] = useState<ChartMode>('live');
 
   // Phase 5: Chart link goes straight to fullscreen immersive — covers
   // app topnav + journal sub-nav. Exit button returns user to backtest
@@ -496,6 +488,7 @@ export function BacktestChart({
 
   const dataSource = useMemo(() => pickDataSource(symbol), [symbol]);
 
+  // Bar window for the Run Strategy fetch (data-driven, mode-independent).
   const { from, to } = useMemo(() => {
     const now = Math.floor(Date.now() / 1000);
     return { from: now - lookbackSeconds(barInterval), to: now };
@@ -523,10 +516,9 @@ export function BacktestChart({
       try {
         const detail = await persistence.loadSession(sessionIdParam);
         if (cancelled) return;
-        // 1. Restore chart context (asset/symbol/interval/mode).
+        // 1. Restore chart context (asset/symbol/interval).
         setSymbol(detail.session.symbol);
         setBarInterval(detail.session.interval as Interval);
-        setChartMode('replay');
         // 2. Map DB rows (snake_case) → in-memory shapes (camelCase).
         const closedPositions: PaperPosition[] = detail.trades.map((t) => ({
           id: t.id,
@@ -859,41 +851,12 @@ export function BacktestChart({
           ))}
         </div>
 
-        {/* Live | Replay mode toggle (Phase 4) */}
-        <div className="flex rounded-md border border-zinc-800 bg-zinc-900 p-0.5">
-          {(['live', 'replay'] as ChartMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => {
-                // Elad 2026-05-29: switching LIVE → REPLAY should feel
-                // continuous. Snap replayStart to NOW so the replay window
-                // shows the same recent bars the user was looking at on
-                // LIVE, instead of jumping back 4 hours.
-                if (mode === 'replay' && chartMode === 'live') {
-                  setReplayStart(new Date());
-                }
-                setChartMode(mode);
-              }}
-              className={`px-2.5 py-1.5 text-xs font-medium uppercase tracking-wider transition-colors ${
-                chartMode === mode
-                  ? 'bg-[#C9A646] text-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-              title={mode === 'live' ? 'Live historical chart with manual price entry' : 'Time-travel replay — pick a moment, PLAY, trade live'}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-
-        {/* Date picker — Replay mode only */}
-        {chartMode === 'replay' && (
-          <DateTimePicker
-            value={replayStart}
-            interval={barInterval}
-            onChange={setReplayStart}
-          />
-        )}
+        {/* Date picker */}
+        <DateTimePicker
+          value={replayStart}
+          interval={barInterval}
+          onChange={setReplayStart}
+        />
 
         {/* Active Strategy dropdown — custom (Sprint F: native <select> styling
             was browser-default ugly; replaced with a button + popover panel
@@ -926,7 +889,6 @@ export function BacktestChart({
               (single bounded for-loop, indicators precomputed once). The button
               is already guarded against double-runs (disabled while running) and
               handleRunStrategy closes the picker before awaiting. */}
-          {chartMode === 'live' && (
           <div className="relative">
             <button
               onClick={() => setStrategyPickerOpen((v) => !v)}
@@ -975,7 +937,6 @@ export function BacktestChart({
               </div>
             )}
           </div>
-          )}
           <button
             onClick={handleSaveSession}
             disabled={saveStatus === 'saving'}
@@ -1010,37 +971,23 @@ export function BacktestChart({
 
       {/* Main split: chart + side panel */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Chart — Live (FinotaurChart) or Replay (BacktestReplayChart) */}
+        {/* Chart — always Replay (BacktestReplayChart) */}
         <div className="flex-1 min-w-0 bg-[#08080a]">
-          {chartMode === 'live' ? (
-            <FinotaurChart
-              symbol={symbol}
-              interval={barInterval}
-              from={from}
-              to={to}
-              dataSource={dataSource}
-              markers={markers}
-              theme={theme}
-              height="100%"
-              onError={(err) => console.warn('[BacktestChart] data fetch failed', err)}
-            />
-          ) : (
-            <BacktestReplayChart
-              symbol={symbol}
-              interval={barInterval}
-              dataSource={dataSource}
-              replayStartTime={Math.floor(replayStart.getTime() / 1000)}
-              activePosition={state.activePosition}
-              closedPositions={state.closedPositions}
-              pendingOrders={state.pendingOrders}
-              onBarReveal={handleReplayBarReveal}
-              onBarClick={handleReplayBarClick}
-              onContextMenu={(info) => setContextMenu(info)}
-              onJumpToTime={(date) => setReplayStart(date)}
-              showReplayCursor
-              height="100%"
-            />
-          )}
+          <BacktestReplayChart
+            symbol={symbol}
+            interval={barInterval}
+            dataSource={dataSource}
+            replayStartTime={Math.floor(replayStart.getTime() / 1000)}
+            activePosition={state.activePosition}
+            closedPositions={state.closedPositions}
+            pendingOrders={state.pendingOrders}
+            onBarReveal={handleReplayBarReveal}
+            onBarClick={handleReplayBarClick}
+            onContextMenu={(info) => setContextMenu(info)}
+            onJumpToTime={(date) => setReplayStart(date)}
+            showReplayCursor
+            height="100%"
+          />
         </div>
 
         {/* Side panel — paper trading + stats + history */}
@@ -1124,11 +1071,9 @@ export function BacktestChart({
                     <span className="text-[9px] font-semibold uppercase tracking-wider opacity-80">Market</span>
                   </button>
                 </div>
-                {chartMode === 'replay' && (
-                  <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
-                    💡 Right-click on the chart to place LIMIT or STOP orders
-                  </div>
-                )}
+                <div className="mt-2 rounded-md border border-zinc-800 bg-zinc-900/50 px-2 py-1.5 text-[10px] text-zinc-500">
+                  💡 Right-click on the chart to place LIMIT or STOP orders
+                </div>
                 {tradeError && (
                   <div className="mt-2 flex items-start gap-2 rounded-md border border-rose-800 bg-rose-950/50 px-2.5 py-1.5 text-xs text-rose-300">
                     <AlertCircle size={12} className="mt-0.5 shrink-0" />
