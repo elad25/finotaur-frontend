@@ -1,8 +1,72 @@
 // vite.config.ts - WORKING VERSION (object syntax)
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve as pathResolve } from 'node:path'
+
+// P0.2 guard (OQ-93): assert every lazy(() => import("@/X")) target file
+// exists and contains `export default`. Without this, a refactor that drops
+// the default export OR a `.then((m) => ({ default: m.X }))` pattern where
+// `m.X` is undefined slips through static checks and surfaces only at
+// runtime in production as the Sentry "[lazyWithRetry] no default export" /
+// MZ-2D errors. Run in buildStart so CI fails fast on the offending PR.
+// ADL-040 enforcement: make this entire class of bug impossible going
+// forward instead of patching each instance after it ships.
+function assertLazyImportsHaveDefault(opts: { entry: string; srcRoot: string }): Plugin {
+  return {
+    name: 'finotaur:assert-lazy-default-exports',
+    apply: 'build',
+    buildStart() {
+      if (!existsSync(opts.entry)) return // dev / partial build — skip silently
+      const src = readFileSync(opts.entry, 'utf-8')
+      // Match: lazy(() => import("@/foo/bar")) AND
+      //        lazy(() => import("@/foo/bar").then(...))
+      const re = /import\(\s*["']@\/([^"']+)["']\s*\)/g
+      const failures: string[] = []
+      const seen = new Set<string>()
+      for (const m of src.matchAll(re)) {
+        const raw = m[1]
+        if (seen.has(raw)) continue
+        seen.add(raw)
+        const base = pathResolve(opts.srcRoot, raw)
+        const exts = ['.tsx', '.ts', '.jsx', '.js', '/index.tsx', '/index.ts', '/index.jsx', '/index.js']
+        const found = exts.map((ext) => base + ext).find((p) => existsSync(p))
+        if (!found) {
+          failures.push(`  • Lazy import target missing on disk: @/${raw} (tried ${exts.join(', ')})`)
+          continue
+        }
+        const content = readFileSync(found, 'utf-8')
+        // Accept either `export default <expr>` (direct) or
+        // `export { default[, ...] } from '...'` / `export { X as default } from '...'`
+        // (re-export from a barrel file — also produces a valid `.default`).
+        const hasDirectDefault = /^\s*export\s+default\b/m.test(content)
+        const hasReexportDefault = /^\s*export\s*\{[^}]*\bdefault\b[^}]*\}\s*from\b/m.test(content)
+        if (!hasDirectDefault && !hasReexportDefault) {
+          failures.push(`  • Lazy import has no \`export default\`: @/${raw} → ${found.replace(opts.srcRoot, 'src')}`)
+        }
+      }
+      if (failures.length > 0) {
+        const msg = [
+          '',
+          '┌─ [finotaur:assert-lazy-default-exports] ─────────────────────────────',
+          '│ One or more lazy(() => import(...)) targets are unsafe:',
+          ...failures.map((f) => '│' + f),
+          '│',
+          '│ Every lazy-loaded module must have `export default X` at minimum,',
+          '│ even when App.tsx uses the .then((m) => ({ default: m.Y })) pattern.',
+          '│ Without an explicit default, Vite/Rollup may strip the named export',
+          '│ under chunking conditions, leaving runtime `m.Y === undefined` and',
+          '│ surfacing as Sentry "[lazyWithRetry] no default export" errors.',
+          '└─────────────────────────────────────────────────────────────────────',
+          '',
+        ].join('\n')
+        this.error(msg)
+      }
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => {
   // Read VITE_PROXY_TARGET from .env / .env.local / OS env so dev can be pointed
@@ -17,9 +81,13 @@ export default defineConfig(({ mode }) => {
   // is a no-op — the plugin warns but the build still succeeds.
   const sentryEnabled = mode === 'production' && !!process.env.SENTRY_AUTH_TOKEN
 
+  const srcRoot = fileURLToPath(new URL('./src', import.meta.url))
+  const appEntry = pathResolve(srcRoot, 'App.tsx')
+
   return {
   plugins: [
     react(),
+    assertLazyImportsHaveDefault({ entry: appEntry, srcRoot }),
     sentryEnabled && sentryVitePlugin({
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
