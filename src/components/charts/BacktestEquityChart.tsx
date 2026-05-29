@@ -15,30 +15,50 @@ interface EquityPoint {
 
 interface BacktestEquityChartProps {
   data: EquityPoint[];
+  /** Starting account balance before any trades. Used to prepend the baseline
+   *  point so single-trade backtests show a slope instead of a lone dot.
+   *  Defaults to 10 000 (the INITIAL_CAPITAL used in the useMockBacktestStats adapter). */
+  initialCapital?: number;
 }
 
-const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data }) => {
+const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data, initialCapital = 10000 }) => {
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
-    
-    return data.map(point => ({
+
+    const mapped = data.map(point => ({
       date: dayjs(point.date).format('MMM DD'),
       fullDate: point.date,
       value: point.value,
       displayValue: `$${point.value.toLocaleString()}`
     }));
-  }, [data]);
+
+    // Prepend a synthetic baseline point at INITIAL_CAPITAL so the equity
+    // curve always shows a visible slope from baseline → first trade, even
+    // when there is only one trade in the data set.  The equity_curve values
+    // are INITIAL_CAPITAL + cumulative_pnl, so data[0].value is already
+    // post-first-trade.  Inserting a "Start" point at initialCapital gives
+    // the correct visual: flat-then-rising-or-falling into the first trade.
+    const baselinePoint = {
+      date: 'Start',
+      fullDate: '',
+      value: initialCapital,
+      displayValue: `$${initialCapital.toLocaleString()}`
+    };
+
+    return [baselinePoint, ...mapped];
+  }, [data, initialCapital]);
 
   const { minValue, maxValue, initialValue } = useMemo(() => {
-    if (!data || data.length === 0) return { minValue: 0, maxValue: 0, initialValue: 0 };
-    
+    if (!data || data.length === 0) return { minValue: 0, maxValue: 0, initialValue: initialCapital };
+
     const values = data.map(d => d.value);
     return {
-      minValue: Math.min(...values),
-      maxValue: Math.max(...values),
-      initialValue: data[0]?.value || 0
+      minValue: Math.min(initialCapital, ...values),
+      maxValue: Math.max(initialCapital, ...values),
+      // ReferenceLine anchors at the true starting capital, not the first trade value.
+      initialValue: initialCapital
     };
-  }, [data]);
+  }, [data, initialCapital]);
 
   if (!data || data.length === 0) {
     return (
@@ -102,25 +122,25 @@ const BacktestEquityChart: React.FC<BacktestEquityChartProps> = ({ data }) => {
             itemStyle={{ color: '#4AD295' }}
             formatter={(value: any) => [`$${value.toLocaleString()}`, 'Equity']}
           />
-          <ReferenceLine 
-            y={initialValue} 
-            stroke="#C9A646" 
-            strokeDasharray="5 5" 
+          <ReferenceLine
+            y={initialValue}
+            stroke="#7AB6F4"
+            strokeDasharray="5 5"
             strokeOpacity={0.5}
-            label={{ 
-              value: 'Initial Capital', 
-              fill: '#C9A646', 
+            label={{
+              value: 'Initial Capital',
+              fill: '#7AB6F4',
               fontSize: 11,
               position: 'right'
             }}
           />
-          <Line 
-            type="monotone" 
-            dataKey="value" 
-            stroke="#4AD295" 
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="#7AB6F4"
             strokeWidth={2.5}
             dot={false}
-            activeDot={{ r: 5, fill: '#4AD295' }}
+            activeDot={{ r: 5, fill: '#7AB6F4' }}
           />
         </LineChart>
       </ResponsiveContainer>
