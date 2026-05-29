@@ -69,6 +69,10 @@ export function FinotaurCopilotDashboard() {
         <AiBrainPanel className="xl:col-span-4" />
         <InsightsPanel className="xl:col-span-4" analysis={analysis} />
 
+        {/* Action Items strip — the portfolio-manager voice. Turns analysis into
+            "what should I do today" cards. Each card links to the relevant page. */}
+        <ActionItemsStrip analysis={analysis} />
+
         <div className="xl:col-span-8">
           <PerformanceChart series={snapshot.series} range={range} onRangeChange={setRange} />
         </div>
@@ -81,6 +85,117 @@ export function FinotaurCopilotDashboard() {
         <RiskAnalysisPanel className="xl:col-span-4" analysis={analysis} />
       </div>
     </ErrorBoundary>
+  );
+}
+
+interface ActionItem {
+  icon: ElementType;
+  title: string;
+  body: string;
+  toneClass: string;
+  href: string;
+}
+
+/**
+ * Build up to 3 prioritized action items from real analysis + live brief.
+ * Items are ordered by severity — red drivers first, then gold, then the
+ * weekly thesis fallback so the strip is never empty.
+ */
+function buildActionItems(
+  analysis: PortfolioRiskAnalysis,
+  centralThesis: string | undefined,
+): ActionItem[] {
+  const items: ActionItem[] = [];
+
+  const concentration = analysis.drivers.find((d) => d.iconKey === 'concentration');
+  if (concentration && concentration.tone !== 'green') {
+    const top = analysis.topExposures[0];
+    items.push({
+      icon: Layers3,
+      title: top ? `${top.ticker} is ${top.weightPct.toFixed(0)}% of the portfolio` : 'High concentration',
+      body: 'Consider trimming to reduce single-name risk.',
+      toneClass: concentration.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/risks',
+    });
+  }
+
+  const cashBuffer = analysis.drivers.find((d) => d.iconKey === 'liquidity');
+  if (cashBuffer && cashBuffer.tone !== 'green') {
+    items.push({
+      icon: ShieldCheck,
+      title: 'Low cash buffer',
+      body: cashBuffer.text,
+      toneClass: cashBuffer.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/holdings',
+    });
+  }
+
+  const options = analysis.drivers.find((d) => d.iconKey === 'options');
+  if (options && options.tone !== 'green') {
+    items.push({
+      icon: Zap,
+      title: 'Options leverage elevated',
+      body: options.text,
+      toneClass: options.tone === 'red' ? 'text-num-negative' : 'text-gold-primary',
+      href: '/copilot/risks',
+    });
+  }
+
+  if (items.length < 3 && centralThesis) {
+    items.push({
+      icon: TrendingUp,
+      title: "This week's thesis",
+      body: centralThesis.length > 120 ? `${centralThesis.slice(0, 117)}…` : centralThesis,
+      toneClass: 'text-gold-primary',
+      href: '/copilot/ai-analyst',
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      icon: ShieldCheck,
+      title: 'Portfolio in good shape',
+      body: 'Risk dimensions look balanced. Review the weekly brief for tactical views.',
+      toneClass: 'text-status-success',
+      href: '/copilot/ai-analyst',
+    });
+  }
+
+  return items.slice(0, 3);
+}
+
+function ActionItemsStrip({ analysis }: { analysis: PortfolioRiskAnalysis }) {
+  const { brief } = useSynthesisBrief();
+  const items = buildActionItems(analysis, brief?.central_thesis);
+
+  return (
+    <section className="xl:col-span-12 rounded-[7px] border border-gold-primary/14 bg-[#050505]/92 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Zap className="h-3.5 w-3.5 text-gold-primary" />
+        <p className="text-[10px] uppercase tracking-[0.14em] text-gold-primary">Action Items</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {items.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={i}
+              to={item.href}
+              className="group flex gap-3 rounded-[6px] border border-gold-primary/12 bg-black/30 p-3 transition hover:border-gold-primary/30 hover:bg-gold-primary/[0.04]"
+            >
+              <div className={`flex h-9 w-9 flex-none items-center justify-center rounded-[7px] border border-gold-primary/18 bg-gold-primary/[0.055] ${item.toneClass}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-[12px] font-semibold leading-tight ${item.toneClass}`}>{item.title}</p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink-secondary">{item.body}</p>
+              </div>
+              <ArrowRight className="h-3.5 w-3.5 flex-none self-center text-ink-tertiary transition group-hover:text-gold-primary" />
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
